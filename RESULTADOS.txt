@@ -1,0 +1,24 @@
+| VARIANTE               | TESTE                                          | ESPERADO                   | OBTIDO                             | VEREDITO                           |
+|------------------------|------------------------------------------------|----------------------------|------------------------------------|------------------------------------|
+| —                      | catálogo: RLS habilitada sem policy            | ['sem_policy']             | ["sem_policy"]                     | PASSA                              |
+| —                      | ler tabela com RLS e sem policy                | 0 linhas, SEM erro         | 0 linhas                           | CONFIRMA O P8 §2                   |
+| —                      | sem FORCE, o dono (postgres) ignora a policy   | 3 linhas (todas)           | 3 linhas                           | CONFIRMA A NECESSIDADE DO FORCE    |
+| —                      | FK apontando para cliente de outro tenant      | rejeitado                  | ACEITOU — FK atravessou tenant     | FALHA — invariante 2 não é do banc |
+| V1                     | isolamento por tenant                          | A=2 B=1                    | A=2 B=1                            | PASSA                              |
+| V1                     | forçar tenant_id do outro na query             | 0                          | 0                                  | PASSA                              |
+| V1                     | role de serviço sem contexto                   | 0 linhas (não erro)        | 0 linhas                           | PASSA                              |
+| V1                     | INSERT com tenant_id do outro                  | bloqueado                  | 42501 new row violates row-level s | PASSA                              |
+| V1                     | SET sem LOCAL vaza para a próxima requisição   | 0 / vazio                  | 2 linhas / guc='aaaaaaaa-0000-4000 | FALHA — VAZOU                      |
+| V1                     | SET LOCAL fora de transação                    | 0 linhas (o SET é descarta | 0 linhas                           | PASSA                              |
+| V2a (ingênua)          | leitura de cliente com auth_uid do A           | 2 linhas                   | 54001 stack depth limit exceeded   | FALHA                              |
+| V2a (ingênua)          | recursão 42P17 na policy de usuario_tenant     | não                        | não                                | PASSA                              |
+| V2a (ingênua)          | isolamento: auth_uid do B                      | 1 linhas                   | 54001 stack depth limit exceeded   | FALHA                              |
+| V2a (ingênua)          | função é SECURITY DEFINER (lê sem policy)      | ver ADR                    | false                              | INFO                               |
+| V2b (SECURITY DEFINER) | leitura de cliente com auth_uid do A           | 2 linhas                   | 2 linhas                           | PASSA                              |
+| V2b (SECURITY DEFINER) | recursão 42P17 na policy de usuario_tenant     | não                        | não                                | PASSA                              |
+| V2b (SECURITY DEFINER) | isolamento: auth_uid do B                      | 1 linhas                   | 1 linhas                           | PASSA                              |
+| V2b (SECURITY DEFINER) | função é SECURITY DEFINER (lê sem policy)      | ver ADR                    | true                               | INFO                               |
+| V3                     | isolamento por role/conexão                    | A=2 B=1                    | A=2 B=1                            | PASSA                              |
+| V3                     | aplicação não precisa emitir SET               | sim                        | sim                                | PASSA                              |
+| V3                     | role do tenant A consegue SET para o B         | bloqueado                  | 1 linhas do B                      | FALHA — contexto não é imutável    |
+{"total":21,"falhas":5}
