@@ -1,0 +1,333 @@
+diff --git a/ADR-0002-modelo-cliente-e-tenant.md b/ADR-0002-modelo-cliente-e-tenant.md
+index 31ca06f..6889c52 100644
+--- a/ADR-0002-modelo-cliente-e-tenant.md
++++ b/ADR-0002-modelo-cliente-e-tenant.md
+@@ -142,7 +142,7 @@ Esses dois painéis entregam valor no primeiro dia e transformam um problema inv
+ 
+ O funil de destino tem uma etapa INADIMPLENTES. O estado de inadimplência é **produzido pelo financeiro** — é ele que emite, concilia e envelhece a fatura. Ler essa etapa do CRM seria ler de volta a própria saída, com atraso e sem garantia de que alguém a manteve.
+ 
+-**Decisão:** o conector lê **participação** no funil, nunca a etapa como fonte de estado financeiro. Se a etapa precisar refletir a realidade no CRM, isso é write-back — e write-back colide com a regra 6 do CLAUDE.md, que torna o CRM read-only absoluto. Enquanto F-03 não for resolvida, o financeiro não lê nem escreve etapa.
++**Decisão:** o conector lê **participação** no funil, nunca a etapa como fonte de estado financeiro. Se a etapa precisar refletir a realidade no CRM, isso é write-back — e write-back colide com o PRD §7.8 (`CLAUDE.md` regra 4), que torna o CRM read-only absoluto. Enquanto F-03 não for resolvida, o financeiro não lê nem escreve etapa.
+ 
+ ### Consequências para o schema
+ 
+diff --git a/CLAUDE.md b/CLAUDE.md
+new file mode 100644
+index 0000000..5f38386
+--- /dev/null
++++ b/CLAUDE.md
+@@ -0,0 +1,119 @@
++# CLAUDE.md — regras inegociáveis do Financeiro G3
++
++| Campo | Valor |
++|---|---|
++| **Versão** | 1.0 |
++| **Data** | 24/07/2026 |
++| **Status** | Vigente |
++| **Autor** | Vinicius Leal |
++| **Escopo** | Todo código, schema, migration e spec do projeto Financeiro |
++
++> **Este arquivo é NOVO. Não é reconstrução.**
++>
++> Até 24/07/2026, dez documentos deste repositório citavam "a regra N do `CLAUDE.md`" — dezoito pontos de citação ao todo. **O arquivo nunca existiu.** A numeração citada (6, 7, 10) não tem origem verificável e foi descartada; a numeração abaixo é nova e começa do zero.
++>
++> As normas em si não se perderam: quase todas tinham fonte real no `PRD-v2.2`, que só não estava sendo citado. Onde a fonte existe, ela está marcada. Onde não existe, a regra está marcada como nova — e é decisão de 24/07/2026, não recuperação de nada.
++>
++> **Qualquer citação a "regra N do CLAUDE.md" anterior a esta data é anacrônica.** O patch de 24/07/2026 reapontou as dezoito.
++
++---
++
++## Como este arquivo é usado
++
++É a camada mais alta do projeto. Em conflito, a ordem é: **este arquivo → `PRD-v2.2` → ADRs → SPECs**. Uma regra daqui não é flexibilizada por spec, por prazo ou por conveniência de implementação — é alterada aqui, com versão nova, ou não é alterada.
++
++---
++
++## As dez
++
++### 1. Dinheiro é `Int` em centavos
++
++Em toda camada: banco, API, UI, teste, fixture. **Float é proibido**, inclusive em cálculo intermediário. Coluna monetária carrega o sufixo `_centavos`.
++
++Percentual, `kWh`, potência e geração **mantêm escala decimal e nunca convertem para centavos**. São grandezas físicas e proporções, não dinheiro.
++
++`[derivada — PRD-v2.2 · SPEC-001 §3 e invariantes 5 e 6 · convenção já observada em plans.preco_mensal_centavos no CRM]`
++
++### 2. `tenant_id` desde a primeira migration
++
++`tenant_id uuid NOT NULL` em toda entidade de negócio. Índice único de negócio **sempre composto** com `tenant_id`. **Nenhuma FK atravessa tenant.**
++
++Não existe "adiciono o tenant depois". Retrofit de multi-tenancy é reescrita de schema, de policy e de query ao mesmo tempo.
++
++`[derivada — ADR-0002 r2, "o que do ADR-0001 permanece" · SPEC-001 §3 e invariantes 1 e 2]`
++
++### 3. RLS habilitada sem policy é falha, não configuração
++
++Toda tabela com `tenant_id` recebe `ENABLE ROW LEVEL SECURITY`, `FORCE ROW LEVEL SECURITY` **e ao menos uma policy**.
++
++O motivo é medido, não teórico: no CRM ao lado, 81 das 151 tabelas de `public` têm RLS habilitada e nenhuma policy. Isso não vaza — nega tudo. E **o modo de falha é resultado vazio, não erro de permissão**, então não aparece em log, não quebra teste de fumaça e só é descoberto quando um relatório vem zerado.
++
++Verificação por **consulta ao catálogo**, jamais por inspeção visual ou revisão de PR.
++
++`[nova — evidência em P8 §2, 24/07/2026]`
++
++### 4. O CRM é read-only absoluto
++
++O financeiro **nunca** executa INSERT, UPDATE ou DELETE no CRM, em nenhuma circunstância, por nenhum caminho. E **nunca lê tabela base** — só as views do schema `financeiro.*`, pela role `financeiro_ro`, que não tem `BYPASSRLS`.
++
++Necessidade inversa é **endpoint exposto pelo financeiro e consumido pelo CRM**, nunca o contrário. Write-back exige ADR próprio; não existe exceção pontual, atalho de sprint nem "só esse campo".
++
++`[PRD-v2.2 §7.3 e §7.8]`
++
++### 5. Segredo não mora em coluna nem em variável de ambiente
++
++Segredo **por tenant** — certificado, `client_id`, token, chave de API — vive em armazenamento cifrado e é acessado por **referência** (`credencial_ref`). Nenhuma coluna do schema contém segredo em claro. Violação disto é falha de revisão, não de runtime.
++
++Só segredo **de plataforma** vai para variável de ambiente.
++
++O contraexemplo está no banco ao lado: a tabela `tenants` do CRM guarda `openai_api_key`, `whatsapp_access_token`, `instagram_access_token`, `meta_page_access_token` e `meta_verify_token` em `text` puro. Não herdamos esse padrão.
++
++`[PRD-v2.2 §6 · contraexemplo medido em P8 §4]`
++
++### 6. Identificador de sistema externo nunca se chama `tenant_id`
++
++É `crm_tenant_id`, sempre, em variável, parâmetro, coluna e log. No TypeScript, **tipos nominais distintos** (`TenantId` e `CrmTenantId`).
++
++Os dois são UUID. Trocar um pelo outro não falha em compilação e não estoura em runtime: devolve zero linhas no melhor caso e **dados de outra empresa no pior**. O tipo nominal existe para transformar esse silêncio em erro de compilação.
++
++Toda consulta ao CRM filtra por `crm_tenant_id`, e esse filtro é **invariante com teste automatizado**, não convenção.
++
++`[ADR-0002 r2, mitigações da Decisão 1 · PRD-v2.2 §7.3]`
++
++### 7. Domínio em português, utilitário em inglês
++
++Nome de entidade, coluna, enum e regra de negócio em português: `unidade_consumidora`, `percentual_rateio`, `dono_usina`. Código utilitário, infraestrutura e nomenclatura de framework em inglês.
++
++O vocabulário do `GLOSSARIO.md` é único e vale para spec, código e conversa. Sinônimo em código é dívida de leitura.
++
++`[GLOSSARIO.md, cabeçalho]`
++
++### 8. Invariante sem teste é comentário
++
++Todo invariante declarado em spec tem teste automatizado que falha quando o invariante é violado. Não vale asserção em code review, não vale comentário no schema, não vale confiança no implementador.
++
++`[_TEMPLATE-SPEC §9]`
++
++### 9. Escrita de dado de negócio grava auditoria
++
++Quem, quando, o quê, **antes e depois**. Vale para cadastro, papel, vínculo, regra de split, beneficiário e baixa manual.
++
++Acesso de nível plataforma a dado de tenant grava trilha **na mesma transação da leitura**; falha ao gravar a trilha aborta a leitura.
++
++`[PRD-v2.2 §4.6 · SPEC-001 R2 e R18]`
++
++### 10. Lacuna vira questão, nunca improviso
++
++Contradição entre documentos, ambiguidade de regra ou decisão ausente vira **entrada em `QUESTOES.md`** e na seção de questões abertas da spec.
++
++Não vira improviso do implementador. Não vira decisão autônoma do Claude Code. Não vira valor default escolhido "porque parecia razoável". Quem encontra a lacuna registra e para — a decisão tem dono nomeado.
++
++`[nova — norma órfã: era citada como "regra 10" mas não tem fonte independente em nenhum documento não-reconstruído. Mantida porque é como o projeto já opera de fato]`
++
++---
++
++## Rodapé de revisão
++
++| Versão | Data | O que mudou |
++|---|---|---|
++| **1.0** | **24/07/2026** | Primeira versão real. Substitui um arquivo que nunca existiu e que era citado em 10 dos 12 documentos do repositório. Numeração nova; a antiga (6, 7, 10) foi descartada por não ter origem verificável |
+diff --git a/GLOSSARIO.md b/GLOSSARIO.md
+index c3dfd69..23b3061 100644
+--- a/GLOSSARIO.md
++++ b/GLOSSARIO.md
+@@ -1,7 +1,7 @@
+ # GLOSSARIO.md — Linguagem do projeto
+ 
+ > Vocabulário único do Financeiro G3. Se um termo está aqui, é assim que ele se chama em spec, em código e em conversa.
+-> Nomes de domínio em português; código utilitário em inglês (CLAUDE.md).
++> Nomes de domínio em português; código utilitário em inglês (`CLAUDE.md` regra 7).
+ > Atualizado em 23/07/2026 · **rev. 3** — absorve o P7 (topologia de funis) e o ADR-0002 r2. Mudaram `cliente`, `won`, `inadimplência`, `view de interface` e `upsert`; entraram `carteira`, `funil` e `valor de referência`.
+ 
+ ---
+@@ -76,7 +76,7 @@ Regra de escrita: nada que carregue identificador do CRM se chama `tenant_id`. C
+ 
+ **líquido G3** — o que resta após repasse, comissões e tarifas. Absorve toda diferença de arredondamento do split.
+ 
+-**inadimplência** — visão derivada de faturas vencidas mais o registro de tratativas. **Produzida aqui.** O funil de clientes ativos do CRM tem uma etapa INADIMPLENTES, e ela **não é fonte**: lê-la seria ler a própria saída do financeiro, com atraso e sem garantia de manutenção. Se essa etapa precisar refletir a realidade, é write-back, e write-back colide com a regra 6 do CLAUDE.md (F-03).
++**inadimplência** — visão derivada de faturas vencidas mais o registro de tratativas. **Produzida aqui.** O funil de clientes ativos do CRM tem uma etapa INADIMPLENTES, e ela **não é fonte**: lê-la seria ler a própria saída do financeiro, com atraso e sem garantia de manutenção. Se essa etapa precisar refletir a realidade, é write-back, e write-back colide com o PRD §7.8 (`CLAUDE.md` regra 4) — ver F-03.
+ 
+ ---
+ 
+diff --git a/LEIA-ME-retomada.md b/LEIA-ME-retomada.md
+index 9b32b58..1b383d1 100644
+--- a/LEIA-ME-retomada.md
++++ b/LEIA-ME-retomada.md
+@@ -1,5 +1,7 @@
+ # LEIA-ME — pacote de retomada
+ 
++> **Nota de correção — 24/07/2026.** Este documento trata o `CLAUDE.md` como arquivo existente (ou como pendência de envio). **Ele nunca existiu.** O corpo abaixo fica **intacto**, como registro da passagem de sessão. O `CLAUDE.md` v1.0, de 24/07/2026, é novo e não reconstrói nada. Ver `PATCH-citacoes-2026-07-24.md`.
++
+ > Gerado em 23–24/07/2026, ao fim da sessão 2. Para quem for retomar o projeto, seja uma nova sessão de chat ou o Claude Code.
+ 
+ ---
+diff --git a/P7-TOPOLOGIA-DE-FUNIS.md b/P7-TOPOLOGIA-DE-FUNIS.md
+index 11395b9..1a057f0 100644
+--- a/P7-TOPOLOGIA-DE-FUNIS.md
++++ b/P7-TOPOLOGIA-DE-FUNIS.md
+@@ -1,5 +1,7 @@
+ # P7 — Topologia de funis e origem da carteira
+ 
++> **Nota de correção — 24/07/2026.** Este relatório cita "a regra N do `CLAUDE.md`". **Esse arquivo nunca existiu** — a numeração era de origem não verificável. O corpo abaixo fica **intacto**, como registro do que foi apurado na data. A norma citada tem fonte real no `PRD-v2.2` §7.3 e §7.8, e a numeração vigente é a do `CLAUDE.md` v1.0. Ver `PATCH-citacoes-2026-07-24.md`.
++
+ | Campo | Valor |
+ |---|---|
+ | **Data** | 23/07/2026 |
+diff --git a/P8-REVERIFICACAO-2026-07-24.md b/P8-REVERIFICACAO-2026-07-24.md
+index 3ec40c5..d94b075 100644
+--- a/P8-REVERIFICACAO-2026-07-24.md
++++ b/P8-REVERIFICACAO-2026-07-24.md
+@@ -1,5 +1,7 @@
+ # P8 — Reverificação do CRM, 24/07/2026
+ 
++> **Nota de correção — 24/07/2026.** Este relatório cita "a regra N do `CLAUDE.md`". **Esse arquivo nunca existiu** — a numeração era de origem não verificável. O corpo abaixo fica **intacto**, como registro do que foi apurado na data. A norma citada tem fonte real no `PRD-v2.2` §7.3 e §7.8, e a numeração vigente é a do `CLAUDE.md` v1.0. Ver `PATCH-citacoes-2026-07-24.md`.
++
+ | Campo | Valor |
+ |---|---|
+ | **Método** | Consulta direta ao Postgres de produção via conector Supabase, somente leitura |
+diff --git a/PRD-v2.2.md b/PRD-v2.2.md
+index bfa729d..0cbeb4b 100644
+--- a/PRD-v2.2.md
++++ b/PRD-v2.2.md
+@@ -98,7 +98,11 @@ Agendamento de jobs (webhook Sicoob, retries, reconciliação, sync do CRM) segu
+ 
+ Prisma usa pool com uma role única; a RLS avalia contra o contexto de sessão. **No CRM esse conflito é observável hoje:** uma role de serviço sem contexto de usuário lê zero linhas de qualquer tabela base, e é exatamente por isso que existem views owned-by-postgres lá.
+ 
+-**Spike obrigatório antes do schema definitivo** (ADR-0001): duas tabelas, dois tenants, teste automatizado provando que o tenant A não lê linha do tenant B nem forçando a query. Resultado vira ADR-0003. Se o spike falhar, a estratégia de acesso a dados muda inteira.
++**Spike obrigatório antes das policies definitivas:** duas tabelas, dois tenants, teste automatizado provando que o tenant A não lê linha do tenant B nem forçando a query. Resultado vira ADR-0003.
++
++**O schema base não depende do spike.** `tenant_id`, índices únicos compostos e `FORCE ROW LEVEL SECURITY` sobrevivem às três saídas candidatas — `SET LOCAL` por transação, `auth.uid()` com join, conexão por tenant. Migration de tabela e migration de policy são separadas por isso (SPEC-001 §3.2). Se **nenhuma** das três se sustentar, a estratégia de acesso a dados muda inteira, e aí o schema é revisto junto.
++
++> *Emenda de 24/07/2026.* A redação anterior dizia "spike obrigatório antes do schema definitivo" e atribuía a exigência ao `ADR-0001`. Contradizia a SPEC-001 §3.2, que separa as duas migrations. A ordem correta é a acima.
+ 
+ ---
+ 
+@@ -245,7 +249,7 @@ Com captador sênior, o líquido G3 sobre consumo é **zero** nas duas primeiras
+ ## 6. Integração Sicoob
+ 
+ - OAuth2 com certificado A1 (mTLS). **Sandbox primeiro**; virada para produção é troca de credenciais e endpoint, sem código condicional por ambiente.
+-- **Segredos por tenant** em armazenamento cifrado — cada empresa tem sua conta, seu certificado, seu `client_id`. Segredos da plataforma seguem em variáveis de ambiente (revisão da regra 7 do `CLAUDE.md`).
++- **Segredos por tenant** em armazenamento cifrado — cada empresa tem sua conta, seu certificado, seu `client_id`. Segredos da plataforma seguem em variáveis de ambiente (`CLAUDE.md` regra 5).
+ - **Cobrança v3:** registrar boleto híbrido, consultar situação, webhook de liquidação, baixa e cancelamento. Payloads persistidos no boleto para auditoria.
+ - **Conta corrente:** saldo, extrato e transferências. Fonte primária de conciliação; OFX vira fallback.
+ - **Pagamentos:** Pix por chave, TED, pagamento de boletos. Habilita pagamento em lote de comissões e fornecedores.
+@@ -398,7 +402,7 @@ Nenhuma fase avança sem os critérios da anterior verificados. Antes do go-live
+ |---|---|---|---|
+ | F-01 | A carteira legada (36 clientes) é migrada para o funil de clientes ativos antes do go-live? Sem isso o conector lê zero | piloto sombra, F2 | Vinicius + operação |
+ | F-02 | Quais funis contam como conversão final para a automação? | conector, F1 | Vinicius |
+-| F-03 | Quem mantém a etapa `INADIMPLENTES`? Write-back colide com a regra 6 | forma do conector, F1 | Vinicius |
++| F-03 | Quem mantém a etapa `INADIMPLENTES`? Write-back colide com o §7.8 (`CLAUDE.md` regra 4) | forma do conector, F1 | Vinicius |
+ | F-04 | O conector lê participação no funil ou etapa dentro dele? | gatilho, F2 | Vinicius |
+ | F-05 | Vendas - Integração entra na mesma carteira? | modelo de faturamento | Vinicius |
+ | Q-021 | Faturar pela geração nominal ou pela série real? | fórmula de faturamento, F2 | Vinicius + dev CRM |
+diff --git a/QUESTOES-bloco-para-fusao.md b/QUESTOES-bloco-para-fusao.md
+index da00c5f..a5051b9 100644
+--- a/QUESTOES-bloco-para-fusao.md
++++ b/QUESTOES-bloco-para-fusao.md
+@@ -68,7 +68,7 @@ Isso divide a AUD-05 em duas perguntas:
+ |---|---|---|---|
+ | **F-01** | A carteira legada (36 clientes com rateio) é migrada para o funil `Clientes ativos - Assinatura` antes do go-live? Esses leads nunca passaram por etapa `won`, então automação disparada por `won` não os alcança. **Sem migração, o conector lê zero e o financeiro fatura ninguém** | Vinicius + operação | piloto sombra, F2 |
+ | **F-02** | Quais funis contam como "conversão final" para a automação? Hoje há `won` em Vendas - Assinatura (38), Vendas - Integração (1) e Parceiros (7). Sem lista explícita, o funil de carteira recebe parceiro e obra | Vinicius | SPEC-CONECTOR-CRM |
+-| **F-03** | Quem mantém a etapa `INADIMPLENTES`? O estado é produzido pelo financeiro, e a regra 6 do `CLAUDE.md` torna o CRM read-only absoluto. Três saídas: etapa desatualizada por desenho, atualização manual, ou exceção estreita de write-back | Vinicius | forma do conector, F1 |
++| **F-03** | Quem mantém a etapa `INADIMPLENTES`? O estado é produzido pelo financeiro, e o PRD §7.8 (`CLAUDE.md` regra 4) torna o CRM read-only absoluto. Três saídas: etapa desatualizada por desenho, atualização manual, ou exceção estreita de write-back | Vinicius | forma do conector, F1 |
+ | **F-04** | O conector lê **participação** no funil ou **etapa** dentro dele? A etapa terminal do funil Rateio está vazia com 38 leads dentro — a disciplina de posição não sustenta gatilho | Vinicius + operação | gatilho de faturamento, F2 |
+ | **F-05** | Vendas - Integração entra na mesma carteira? É obra, com economia distinta da assinatura de crédito | Vinicius | modelo de faturamento |
+ 
+diff --git a/RESUMO-SESSAO-2.md b/RESUMO-SESSAO-2.md
+index 4715b08..9cce6a0 100644
+--- a/RESUMO-SESSAO-2.md
++++ b/RESUMO-SESSAO-2.md
+@@ -1,5 +1,7 @@
+ # Resumo da sessão 2 — Financeiro G3 Solar
+ 
++> **Nota de correção — 24/07/2026.** Este documento trata o `CLAUDE.md` como arquivo existente (ou como pendência de envio). **Ele nunca existiu.** O corpo abaixo fica **intacto**, como registro da passagem de sessão. O `CLAUDE.md` v1.0, de 24/07/2026, é novo e não reconstrói nada. Ver `PATCH-citacoes-2026-07-24.md`.
++
+ > Documento de passagem. Sucede o resumo de 23/07/2026.
+ > **Data:** 23–24/07/2026 · **Sessão:** correção pós-auditoria e descoberta da topologia de funis
+ 
+diff --git a/SPEC-001-fundacao.md b/SPEC-001-fundacao.md
+index 4f8616d..8cca58f 100644
+--- a/SPEC-001-fundacao.md
++++ b/SPEC-001-fundacao.md
+@@ -3,7 +3,7 @@
+ | Campo | Valor |
+ |---|---|
+ | **Status** | Rascunho — aguarda aceite |
+-| **Versão** | 2.0 |
++| **Versão** | 2.1 |
+ | **Data** | 24/07/2026 |
+ | **Autor** | Vinicius Leal |
+ | **Fase** | F1 |
+@@ -116,6 +116,8 @@ O spike (ADR-0003) decide **como** a função obtém o tenant: `SET LOCAL` por t
+ 
+ **Consequência honesta:** o schema desta spec é implementável hoje; as policies só ficam definitivas depois do ADR-0003. Migration de tabela e migration de policy são separadas por isso.
+ 
++**Ressalva, registrada em 24/07:** o schema sobrevive às **três** saídas candidatas acima, porque nenhuma delas remove `tenant_id` da tabela. Não sobrevive ao cenário em que nenhuma das três se sustenta e a estratégia de acesso a dados muda inteira — schema por tenant ou banco por tenant apagariam a coluna. O PRD §2.4 foi emendado na mesma data para registrar esta ordem; a redação anterior dizia "spike antes do schema definitivo" e contradizia esta seção.
++
+ ### 3.3 Cadastros
+ 
+ #### `cliente`
+@@ -225,7 +227,7 @@ UNIQUE (tenant_id, unidade_consumidora_id) WHERE status = 'ativo'
+ 
+ > **R18.** Toda escrita de cadastro grava auditoria: quem, quando, o quê, antes e depois.
+ 
+-> **R19.** Nenhuma operação desta spec escreve no CRM, em nenhuma circunstância (PRD §7.8, regra 6 do `CLAUDE.md`).
++> **R19.** Nenhuma operação desta spec escreve no CRM, em nenhuma circunstância (PRD §7.3 e §7.8 · `CLAUDE.md` regra 4).
+ 
+ ## 5. Invariantes
+ 
+@@ -321,7 +323,7 @@ Matriz de papéis: `admin` total; `financeiro` total em corporativo e leitura em
+ | AUD-09 | Origem canônica de CPF/CNPJ | R8 | Vinicius |
+ | AUD-10 | Regra dos 25% — de onde vem, sobre o que incide | `faturas_cheias_pagas` | Vinicius |
+ 
+-**Nenhuma vira improviso do implementador** (regra 10 do `CLAUDE.md`). Só o ADR-0003 é bloqueio duro, e bloqueia as policies, não o schema — as duas migrations são separadas por isso.
++**Nenhuma vira improviso do implementador** (`CLAUDE.md` regra 10). Só o ADR-0003 é bloqueio duro, e bloqueia as policies, não o schema — as duas migrations são separadas por isso.
+ 
+ ## 11. Fora de escopo / evolução futura
+ 
+@@ -329,7 +331,7 @@ Matriz de papéis: `admin` total; `financeiro` total em corporativo e leitura em
+ - **Versionamento de contrato** — reajuste anual provavelmente exigirá vigência por período. Adiado até a F2 mostrar a forma real.
+ - **Deduplicação de cliente por documento entre tenants** — deliberadamente não feita: cruzar documento entre tenants violaria o isolamento que a spec inteira existe para garantir.
+ - **SSO com o CRM** — MT-06. Federação entre dois projetos Supabase; só se a dor de duas senhas justificar.
+-- **Write-back de estado para o CRM** — colide com a regra 6 e com F-03. Se for necessário, é endpoint do financeiro consumido pelo CRM, nunca o inverso.
++- **Write-back de estado para o CRM** — colide com o PRD §7.8 (`CLAUDE.md` regra 4) e com F-03. Se for necessário, é endpoint do financeiro consumido pelo CRM, nunca o inverso.
+ 
+ ---
+ 
+@@ -339,3 +341,4 @@ Matriz de papéis: `admin` total; `financeiro` total em corporativo e leitura em
+ |---|---|---|
+ | 1.0 | 24/07/2026 | Original — só cadastros; plataforma declarada como pré-requisito ausente |
+ | **2.0** | **24/07/2026** | **§4.1 absorvido: tenant, usuário, RBAC dois níveis, conector e o contrato de isolamento. Não haverá SPEC-000** |
++| **2.1** | **24/07/2026** | **§3.2 ganha a ressalva das três saídas do spike. Citações a "regra N do `CLAUDE.md`" reapontadas para o `CLAUDE.md` v1.0 e para o PRD §7.3/§7.8 — ver `PATCH-citacoes-2026-07-24.md`** |
+diff --git a/_TEMPLATE-SPEC.md b/_TEMPLATE-SPEC.md
+index f0f18d8..fc59dab 100644
+--- a/_TEMPLATE-SPEC.md
++++ b/_TEMPLATE-SPEC.md
+@@ -1,6 +1,8 @@
+ # _TEMPLATE-SPEC — anatomia fixa das specs
+ 
+-> **Reconstrução de 24/07/2026.** O original se perdeu. Este template foi remontado a partir das convenções já fixadas em `PRD-v2.2`, `GLOSSARIO`, `ADR-0001`, `ADR-0002` r2 e das regras inegociáveis do `CLAUDE.md`.
++> **Reconstrução de 24/07/2026.** O original se perdeu. Este template foi remontado a partir das convenções já fixadas em `PRD-v2.2`, `GLOSSARIO` e `ADR-0002` r2.
++>
++> *Correção de 24/07/2026:* a redação original citava também o `ADR-0001` e "as regras inegociáveis do `CLAUDE.md`". O `CLAUDE.md` não existia quando este template foi escrito — passou a existir na v1.0, posterior a ele. As convenções herdadas seguem válidas; a atribuição é que estava errada.
+ >
+ > **Adote deliberadamente antes de escrever a SPEC-001.** Toda spec seguinte herda esta anatomia; mudar depois custa reescrita em cascata.
+ 
+@@ -110,7 +112,7 @@ Nomeie os testes que provam as regras e os invariantes. Todo invariante da seç
+ | ID | Pergunta | Bloqueia o quê | Quem responde |
+ |---|---|---|---|
+ 
+-**Regra 10 do `CLAUDE.md`:** contradição ou lacuna vira entrada aqui e em `QUESTOES.md`. Não vira improviso do implementador, e não vira decisão do Claude Code.
++**`CLAUDE.md` regra 10:** contradição ou lacuna vira entrada aqui e em `QUESTOES.md`. Não vira improviso do implementador, e não vira decisão do Claude Code.
+ 
+ ## 11. Fora de escopo / evolução futura
+ 
