@@ -2,8 +2,8 @@
 
 | Campo | Valor |
 |---|---|
-| **Versão** | 1.0 |
-| **Data** | 24/07/2026 |
+| **Versão** | 1.1 |
+| **Data** | 24/07/2026 · rev. 1.1 em 25/07/2026 |
 | **Status** | Vigente |
 | **Autor** | Vinicius Leal |
 | **Escopo** | Todo código, schema, migration e spec do projeto Financeiro |
@@ -36,11 +36,13 @@ Percentual, `kWh`, potência e geração **mantêm escala decimal e nunca conver
 
 ### 2. `tenant_id` desde a primeira migration
 
-`tenant_id uuid NOT NULL` em toda entidade de negócio. Índice único de negócio **sempre composto** com `tenant_id`. **Nenhuma FK atravessa tenant.**
+`tenant_id uuid NOT NULL` em toda entidade de negócio. Índice único de negócio **sempre composto** com `tenant_id`.
 
-Não existe "adiciono o tenant depois". Retrofit de multi-tenancy é reescrita de schema, de policy e de query ao mesmo tempo.
+**Nenhuma FK atravessa tenant — e a garantia é a FK composta `(tenant_id, id)`, não a frase.** Toda referência entre entidades de negócio é composta, e toda tabela referenciada carrega `UNIQUE (tenant_id, id)` redundante com a PK. Sem isso a regra é declaração: **medido em 24/07, o banco aceitou contrato do tenant A apontando para cliente do tenant B.** Com a composta, rejeita com `23503`.
 
-`[derivada — ADR-0002 r2, "o que do ADR-0001 permanece" · SPEC-001 §3 e invariantes 1 e 2]`
+Não existe "adiciono o tenant depois", nem "converto as FKs depois". Retrofit de multi-tenancy é reescrita de schema, de policy e de query ao mesmo tempo.
+
+`[derivada — ADR-0002 r2, "o que do ADR-0001 permanece" · SPEC-001 §3, §3.4 e invariantes 1 e 2 · FK composta medida no ADR-0003, 24/07]`
 
 ### 3. RLS habilitada sem policy é falha, não configuração
 
@@ -117,3 +119,18 @@ Não vira improviso do implementador. Não vira decisão autônoma do Claude Cod
 | Versão | Data | O que mudou |
 |---|---|---|
 | **1.0** | **24/07/2026** | Primeira versão real. Substitui um arquivo que nunca existiu e que era citado em 10 dos 12 documentos do repositório. Numeração nova; a antiga (6, 7, 10) foi descartada por não ter origem verificável |
+| **1.1** | **25/07/2026** | Regra 2 ganha o **mecanismo**: FK composta `(tenant_id, id)` e `UNIQUE (tenant_id, id)` nas referenciadas. Antes a regra afirmava que nenhuma FK atravessa tenant sem dizer o que a impedia — e o spike do `ADR-0003` mediu o banco aceitando a violação |
+
+---
+
+## Tabela de-para — numeração antiga → v1.0
+
+A numeração fantasma (anterior a 24/07/2026) aparece **no corpo intacto** dos relatórios `P7`, `P8` e `RESUMO-SESSAO-2`, por decisão registrada no `PATCH-citacoes-2026-07-24.md`: relatório é registro datado e reescrever o corpo falsificaria o registro. Consequência: quem procurar "regra N" nesses documentos acha a numeração velha. Esta tabela é o de-para.
+
+| Citação antiga | Assunto | Regra vigente |
+|---|---|---|
+| "regra 6" | CRM read-only absoluto | **4** |
+| "regra 7" | Segredo em variável de ambiente — *citada como **errada***. Na v1.0 o segredo por tenant não vai para variável de ambiente, e a norma está **corrigida** | **5** |
+| "regra 10" | Lacuna vira questão | **10** (coincide) |
+
+**Atenção à "regra 7":** na numeração vigente, a regra 7 é *domínio em português, utilitário em inglês* — e está **correta**. Toda citação a "a regra 7 está errada" é anacrônica e se refere à atual regra 5, que já foi corrigida.
