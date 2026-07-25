@@ -2,13 +2,14 @@
 
 | Campo | Valor |
 |---|---|
-| **Status** | Proposta — aguarda aceite |
-| **Data** | 24/07/2026 |
+| **Status** | **Aceita** em 24/07/2026 (decisão B1) · **revisada em 25/07/2026 — r2** |
+| **Data** | 24/07/2026 · r2 em 25/07/2026 |
 | **Decisor** | Vinicius Leal |
 | **Resolve** | Questão bloqueante da `SPEC-001` §3.2 e §10 · exigência do `PRD-v2.2` §2.4 |
-| **Base factual** | Spike executado em 24/07/2026 — 21 testes, PostgreSQL 16.14, `pg.Pool` |
-| **Afeta** | `SPEC-001` (invariante 2 e critério 4 — **mudam**) · migration de policies · F1 inteira |
-| **Artefatos** | `spike-adr0003/` — `01-schema.sql`, `02-variantes.sql`, `spike.mjs`, `run.sh` |
+| **Base factual** | Spike executado em 24/07/2026 — 21 testes, PostgreSQL 16.14, `pg.Pool`<br>Teste de `$transaction` executado em 25/07/2026 — 12 testes, Prisma 7.9.0 + `@prisma/adapter-pg`, PostgreSQL 16.14, role sem `BYPASSRLS` |
+| **Afeta** | `SPEC-001` (invariante 2 e critério 4 — **mudam**; invariantes I-7 e I-8 — **novas**) · migration de policies · configuração do client · F1 inteira |
+| **Artefatos** | `spike-adr0003/` — `01-schema.sql`, `02-variantes.sql`, `spike.mjs`, `run.sh`<br>`spike-transacao/` — testes de `$transaction`, `$extends`, timeout, `maxWait` e custo |
+| **Decisão associada** | **B2** (24/07/2026): a FK composta entra na `SPEC-001` agora — 7 conversões |
 
 ---
 
@@ -111,6 +112,39 @@ Reexecutado o mesmo insert: **rejeitado, `SQLSTATE 23503`.**
 3. **Um único ponto emite o `SET LOCAL`.** Middleware ou extensão do client. Nenhum repositório, serviço ou script emite contexto à mão.
 4. **Teste de vazamento no CI**, com pool de tamanho 1: requisição com contexto, seguida de requisição sem contexto, tem que ler zero. É o teste que pega o item 1 se alguém apagar o `LOCAL`.
 5. **FKs compostas**, conforme acima.
+6. **O middleware reconstrói a operação no client de transação** — `tx[model][operation](args)`, nunca `query(args)`. Medido: a segunda forma devolve zero linhas em silêncio.
+7. **`$transaction` não aninha.** Transação aberta de dentro de transação toma conexão nova e não herda o contexto.
+
+---
+
+## Obrigações de configuração (r2)
+
+A decisão V1 converte **todo acesso a dado de negócio em transação interativa**. Isso tem dois tetos de tempo em valor default e um custo de round trip, todos medidos. Nenhum deles fica em default.
+
+1. **`timeout: 15000` e `maxWait: 5000` explícitos** em toda `$transaction`. Os defaults são 5.000 ms e 2.000 ms.
+   Justificativa medida: uma leitura de 6 s falhou com `P2028` em **6.106 ms** — ou seja, o banco concluiu o trabalho e só então o cliente recusou o commit. **O timeout não cancela a query, recusa o commit.** Para escrita isso significa trabalho feito e desfeito; para leitura, custo pago e erro na mão.
+2. **Pool com teto declarado**, conferido contra o `max_connections` do PostgreSQL compartilhado com o CRM. Medido: com `maxWait` default e pool de 1, uma segunda requisição concorrente falhou em **2.002 ms** com `P2028 — Unable to start a transaction in the given time`. Num VPS de 1 vCPU esse é o modo de falha sob carga, não hipótese.
+3. **Leitura de relatório não usa o middleware genérico.** Caminho próprio: contexto emitido uma vez por bloco e timeout dimensionado ao relatório. Relatório financeiro que passe de 5 s morre no caminho genérico.
+4. **Custo aceito e registrado: 1 round trip vira 4.** Mesma query, 500 iterações, localhost, pool 5, três execuções:
+
+   | Forma | ms/op (faixa) | Fator |
+   |---|--:|--:|
+   | query direta, sem transação | 0,49 – 0,75 | 1,0x |
+   | transação + query, sem `SET LOCAL` | 0,89 – 1,38 | **1,8x** (estável nas três) |
+   | transação + `SET LOCAL` + query | 1,47 – 1,68 | **2,2x – 3,0x** |
+
+   O `BEGIN`/`COMMIT` responde por 1,8x de forma estável; o `SET LOCAL` acrescenta o restante e é o componente que varia. **O número absoluto de localhost não é a régua** — a grandeza que governa é a contagem de round trips, que sai de 1 para 4. Em rede real, multiplique por RTT, não por este ms.
+
+---
+
+## Invariantes que este ADR cria
+
+Vão para a `SPEC-001` §9 com teste automatizado, conforme a regra 8 do `CLAUDE.md`.
+
+| Ref | Invariante | Teste |
+|---|---|---|
+| **I-7** | `$transaction` não aninha | Transação aberta de dentro de transação deve **falhar em desenvolvimento**, não devolver vazio. Medido: pega conexão nova, não herda o contexto e lê zero linhas sem erro — o mesmo modo de falha que a regra 3 do `CLAUDE.md` manda perseguir por catálogo, porque resultado vazio não aparece em log |
+| **I-8** | O middleware reconstrói a operação no client de transação | Teste que quebra se `tx[model][operation](args)` for trocado por `query(args)` |
 
 ---
 
@@ -120,23 +154,35 @@ Reexecutado o mesmo insert: **rejeitado, `SQLSTATE 23503`.**
 
 **Falha silenciosa por ausência de contexto.** Sem `SET LOCAL`, tudo lê zero — sem erro. É o mesmo modo de falha do CRM, e a razão de o item 4 ser obrigatório e não recomendado.
 
+**PgBouncer em modo *transaction* (r2).** Não testado. Muda o escopo de sessão e pode invalidar a variante inteira. Fora do escopo da F1 por decisão; se o PgBouncer entrar no caminho de conexão, **este ADR reabre** antes de qualquer outra coisa.
+
+**A omissão do `LOCAL` não é impedível pelo banco (r2).** Medido sob Prisma: `SET` sem `LOCAL` numa transação, pool de 1, e a requisição seguinte sem contexto leu 2 linhas. O `LOCAL` é a única barreira e o PostgreSQL não tem como exigi-lo. É isso que torna o ponto único de emissão (obrigação 3) e o teste de vazamento (obrigação 4) **obrigatórios, não recomendados**.
+
 ---
 
-## Cobertura do spike — o que não foi testado
+## Cobertura — o que o teste de `$transaction` fechou (r2)
 
-O binário do engine do Prisma (`binaries.prisma.sh`) está fora da allowlist de rede do ambiente. O spike rodou sobre `pg.Pool`.
+O spike de 24/07 rodou sobre `pg.Pool`, porque o binário do engine do Prisma (`binaries.prisma.sh`) está fora da allowlist de rede do ambiente. Isso foi suficiente para tudo que está acima: vazamento de GUC no pool, escopo de `SET LOCAL`, semântica de policy, `FORCE`, recursão e FK são propriedades do PostgreSQL e do protocolo de conexão, não do ORM.
 
-**Isso é suficiente para tudo que está acima:** vazamento de GUC no pool, escopo de `SET LOCAL`, semântica de policy, `FORCE`, recursão e FK são propriedades do PostgreSQL e do protocolo de conexão, não do ORM.
+As três lacunas declaradas em 24/07 foram atacadas em 25/07 com o Prisma 7.9.0 sobre o adapter `@prisma/adapter-pg` — que não usa engine Rust e por isso dispensa o binário bloqueado.
 
-**Fica sem cobertura, e precisa de meia hora num ambiente com rede aberta:**
-
-| Item | Por que importa |
+| Hipótese registrada em 24/07 | Veredito em 25/07 |
 |---|---|
-| `prisma.$transaction()` interativo fixa a mesma conexão física para todas as queries do bloco | Se não fixar, o `SET LOCAL` roda numa conexão e a query em outra — e o resultado é **zero linhas**, não erro |
-| `$extends` / middleware do Prisma consegue injetar o `SET LOCAL` antes de cada operação | É o mecanismo do item 3 |
-| Comportamento sob PgBouncer em modo *transaction* | Muda o escopo de sessão e pode invalidar a variante inteira |
+| `prisma.$transaction()` interativo fixa a mesma conexão física para todas as queries do bloco | **Confirmada.** Quatro queries no mesmo bloco, pool de 5, um único `pg_backend_pid`. Mecanismo verificado no código do adapter: `startTransaction()` chama `pool.connect()` e entrega esse client à transação inteira; `commit()` e `rollback()` chamam `release()` |
+| `$extends` / middleware consegue injetar o `SET LOCAL` antes de cada operação | **Refutada na forma descrita.** Um hook `$allOperations` que emite o `SET LOCAL` e depois chama `query(args)` devolve **zero linhas**: o hook não consegue rebindar a operação para uma transação que ele próprio abriu. A forma que funciona **reconstrói** a operação no client de transação — `tx[model][operation](args)` — e isola corretamente (2 linhas para o tenant A, 1 para o B, em execuções concorrentes) |
+| Comportamento sob PgBouncer em modo *transaction* | **Continua não testado.** Segue como risco aceito, agora explicitamente fora do escopo da F1 |
 
-Nenhum desses três altera a **decisão** — alteram a implementação do middleware. Mas o primeiro é bloqueante para a F1 e deve ser fechado antes da primeira migration de policy.
+Medições auxiliares que sustentam a seção seguinte:
+
+| Medida | Valor |
+|---|---|
+| `SET LOCAL` fora de transação, pool de 5 e de 1 | 0 linhas em ambos — a causa é o `LOCAL`, não o pool |
+| `SET` sem `LOCAL` dentro de transação, pool 1, requisição seguinte sem contexto | **2 linhas.** Vazamento do spike reproduzido sob Prisma |
+| `SET LOCAL` no mesmo cenário | 0 linhas |
+| `INSERT` com `tenant_id` de outro tenant sob contexto válido | rejeitado, `SQLSTATE 42501` |
+| Seis transações concorrentes alternando dois tenants, pool 4 | isolamento correto em todas |
+| `$transaction([...])` em lote | também fixa a conexão |
+| `$transaction` aberta de dentro de outra `$transaction` | conexão nova, **contexto não herdado**, 0 linhas, sem erro |
 
 ---
 
@@ -144,10 +190,11 @@ Nenhum desses três altera a **decisão** — alteram a implementação do middl
 
 | Documento | Ação |
 |---|---|
-| `SPEC-001` | → v2.2: invariante 2 e critério 4 reescritos com FK composta; §3.3 ganha `UNIQUE (tenant_id, id)` nas tabelas referenciadas |
-| `SPEC-001` §9 | dois testes novos: `test_vazamento_contexto_no_pool`, `test_fk_composta_rejeita_cross_tenant` |
-| `PRD-v2.2` §2.4 | critério "isolamento provado por teste" — **atendido**, com a ressalva de cobertura acima |
+| `SPEC-001` | → v2.2: invariante 2 e critério 4 reescritos com FK composta; §3.3 ganha `UNIQUE (tenant_id, id)` nas tabelas referenciadas; **§3.2 ganha o contrato do middleware** (obrigação 6) e as invariantes I-7 e I-8 |
+| `SPEC-001` §9 | quatro testes novos: `test_vazamento_contexto_no_pool`, `test_fk_composta_rejeita_cross_tenant`, `test_transacao_nao_aninha`, `test_middleware_recria_operacao_no_tx` |
+| `PRD-v2.2` §2.4 | critério "isolamento provado por teste" — **atendido**, sem ressalva de cobertura para `$transaction`; a ressalva restante é PgBouncer |
 | `CLAUDE.md` | regra 2 ganha a FK composta; regra 3 fica como está |
+| Configuração do client | `timeout`, `maxWait` e teto de pool explícitos, conforme "Obrigações de configuração" |
 
 ---
 
@@ -156,3 +203,4 @@ Nenhum desses três altera a **decisão** — alteram a implementação do middl
 | Versão | Data | O que mudou |
 |---|---|---|
 | 1.0 | 24/07/2026 | Original. Spike executado, 21 testes, três variantes |
+| **r2** | **25/07/2026** | Status → Aceita (B1). Lacuna do `$transaction` fechada com 12 testes: fixação de conexão **confirmada**, hipótese do `$extends` **refutada na forma descrita** e substituída pela reconstrução da operação no `tx`. Novas: seção de obrigações de configuração (`timeout` 5.000 e `maxWait` 2.000 são default e não servem), invariantes I-7 e I-8, dois riscos aceitos. PgBouncer segue sem cobertura |
