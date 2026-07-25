@@ -3,14 +3,14 @@
 | Campo | Valor |
 |---|---|
 | **Status** | Rascunho — aguarda aceite |
-| **Versão** | 2.1 |
-| **Data** | 24/07/2026 |
+| **Versão** | 2.2 |
+| **Data** | 25/07/2026 |
 | **Autor** | Vinicius Leal |
 | **Fase** | F1 |
-| **Depende de** | **ADR-0003** (spike Prisma + RLS) para o mecanismo de contexto de tenant — ver §3.2 |
+| **Depende de** | **`ADR-0003` r2 — aceita.** O mecanismo de contexto de tenant está decidido e medido; o contrato do middleware e as obrigações de configuração estão na §3.2 |
 | **Bloqueia** | SPEC-002 (conector), faturamento (F2), split (F3) — tudo |
-| **Documentos-fonte** | `PRD-v2.2` §2, §3, §4.1, §4.2, §7.7, §7.8, §8 · `ADR-0001` · `ADR-0002` r2 · `GLOSSARIO` · `P8` §2, §4, §5, §6 |
-| **Questões abertas** | MT-06, AUD-09, AUD-10 e as seis de Q-SPEC001 na §10 |
+| **Documentos-fonte** | `PRD-v2.2` §2, §3, §4.1, §4.2, §7.7, §7.8, §8 · `ADR-0002` r2 · **`ADR-0003` r2** · `ADR-0004` · `GLOSSARIO` · `P8` §2, §4, §5, §6 · `RESUMO-SESSAO-3` §4.3 e §4.3b |
+| **Questões abertas** | MT-06, AUD-09, AUD-10 e as cinco de Q-SPEC001 na §10 |
 
 > **v2.0 — o §4.1 foi absorvido.** A v1.0 tratava só cadastros e declarava a plataforma como pré-requisito inexistente. Decisão de 24/07: esta spec cobre as duas camadas. Não haverá SPEC-000.
 
@@ -34,12 +34,12 @@ Erguer a fundação inteira do financeiro: a camada de plataforma que define **q
 
 ### Não entra
 
-- **A implementação da função de contexto de tenant** — é saída do spike, vira `ADR-0003` (§3.2)
+- **A escolha do mecanismo de contexto de tenant** — decidida no `ADR-0003` r2. Esta spec absorve o contrato resultante (§3.2), não o rediscute
 - **A lógica de sincronização** e o preenchimento de `cliente_estado_crm` — SPEC-002
 - **Fatura, boleto, liquidação, split, inadimplência** — F2 e F3
 - **Cadastros corporativos** (fornecedor, categoria, centro de custo, conta bancária) — F4
 - **Migração da carteira legada** (F-01) — ação de operação dentro do CRM, não código do financeiro
-- **Provisionamento** do projeto Supabase, domínio e host — infraestrutura, PRD §2.3
+- **Provisionamento** do projeto Supabase, domínio e host — `ADR-0004`
 
 ---
 
@@ -112,11 +112,35 @@ CREATE POLICY tenant_isolation ON <t>
 
 **`app.current_tenant_id()` é uma costura declarada, não uma implementação.** O PRD §2.4 e o ADR-0002 §79 registram o problema: Prisma usa pool com role única, a RLS avalia contexto de sessão, e no CRM **uma role de serviço sem contexto de usuário lê zero linhas de qualquer tabela base** — foi o que travou o P1/P2 da auditoria e a razão de existirem as views `financeiro.*` owned por `postgres`.
 
-O spike (ADR-0003) decide **como** a função obtém o tenant: `SET LOCAL` por transação, `auth.uid()` com join, ou conexão por tenant. Esta spec fixa o **contrato** — toda policy invoca essa função e nada mais — para que a decisão do spike troque uma definição e não 40 policies.
+**Decidido pelo `ADR-0003` r2, aceito em 24/07 e medido em 25/07:** a função lê um GUC de sessão que a aplicação define no início de cada transação.
 
-**Consequência honesta:** o schema desta spec é implementável hoje; as policies só ficam definitivas depois do ADR-0003. Migration de tabela e migration de policy são separadas por isso.
+```sql
+CREATE FUNCTION app.current_tenant_id() RETURNS uuid LANGUAGE sql STABLE AS
+$$ SELECT nullif(current_setting('app.tenant_id', true), '')::uuid $$;
+```
 
-**Ressalva, registrada em 24/07:** o schema sobrevive às **três** saídas candidatas acima, porque nenhuma delas remove `tenant_id` da tabela. Não sobrevive ao cenário em que nenhuma das três se sustenta e a estratégia de acesso a dados muda inteira — schema por tenant ou banco por tenant apagariam a coluna. O PRD §2.4 foi emendado na mesma data para registrar esta ordem; a redação anterior dizia "spike antes do schema definitivo" e contradizia esta seção.
+Toda policy invoca essa função e nada mais. O contrato existe para que a implementação troque uma definição, não quarenta policies.
+
+#### O contrato do middleware
+
+Isto não é orientação de implementação — é norma desta spec, com teste na §9. Cada linha corresponde a uma medição do `ADR-0003` r2.
+
+| Regra | Por quê |
+|---|---|
+| `SET LOCAL`, **nunca `SET`** | `SET` sem `LOCAL` sobrevive à devolução da conexão ao pool. Medido: pool de 1, transação com `SET`, requisição seguinte sem contexto **leu 2 linhas** |
+| Todo acesso a dado de negócio dentro de transação explícita | Fora de transação o `SET LOCAL` é descartado no fim do statement. Medido: 0 linhas com pool de 5 **e** com pool de 1 — a causa é o `LOCAL`, não o pool |
+| **Ponto único de emissão.** Nenhum repositório, serviço ou script emite contexto | Um único lugar para errar, um único lugar para testar |
+| O middleware **reconstrói** a operação no client de transação — `tx[model][operation](args)` | Emitir o `SET LOCAL` e chamar `query(args)` do hook devolve **zero linhas em silêncio**: o hook não rebinda a operação para a transação que ele abriu |
+| **`$transaction` não aninha** | Transação aberta de dentro de transação toma conexão nova e **não herda o contexto**. Medido: 0 linhas, sem erro |
+| `timeout` e `maxWait` **explícitos** — recomendado 15.000 ms e 5.000 ms | Os defaults são 5.000 e 2.000 ms. Medido: query de 6 s falha com `P2028` em 6.036 ms, ou seja o banco **conclui o trabalho** e o cliente recusa o commit; e com pool de 1 ocupado, a segunda requisição falha em 2.001 ms |
+| Pool com teto declarado, conferido contra `max_connections` | O financeiro divide o host com o CRM (`ADR-0004`). Pool sem teto é o modo de falha sob carga em 1 vCPU |
+| Leitura de relatório **não** usa o middleware genérico | Contexto emitido uma vez por bloco, timeout dimensionado ao relatório. Relatório que passe de 5 s morre no caminho genérico |
+
+**Custo aceito:** um round trip vira quatro (`BEGIN` · `SET LOCAL` · query · `COMMIT`). Medido em localhost: 1,8x só do `BEGIN`/`COMMIT`, 2,2x a 3,0x no total. Em rede real a régua é a contagem de round trips, não o milissegundo de localhost.
+
+**O que continua sem cobertura:** PgBouncer em modo *transaction*. Muda o escopo de sessão e pode invalidar o desenho inteiro. Está fora do escopo da F1 por decisão; se entrar no caminho de conexão, o `ADR-0003` reabre antes de qualquer outra coisa.
+
+**Migration de tabela e migration de policy seguem separadas**, mas agora por ordem de execução e não por pendência: a de policy vem depois do teste de vazamento da §9 passar.
 
 ### 3.3 Cadastros
 
@@ -143,7 +167,9 @@ UNIQUE (tenant_id, documento)   WHERE documento IS NOT NULL
 
 #### `cliente_estado_crm`
 
-`cliente_id PK/FK` · `tenant_id` · `tem_rateio_ativo` (**vigente**) · `tem_venda_ganha` (**bloqueado por F-02**) · `em_carteira` (**bloqueado por F-01 e F-04**) · `sincronizado_em`.
+`cliente_id PK/FK` · `tenant_id` · `tem_rateio_ativo` (**vigente**) · `tem_venda_ganha` (**bloqueado por F-02**) · `em_carteira` (**ver abaixo**) · `sincronizado_em`.
+
+> **`em_carteira` — reclassificado em 25/07.** A v2.1 registrava "bloqueado por F-01 e F-04". A decisão **C1-b** de 24/07 matou o F-01: as 28 de 36 pessoas em rateio estão homologadas com a assinatura **não iniciada**, logo não existe carteira legada a migrar. O bloqueio remanescente é o **F-04** (o conector lê participação no funil ou etapa dentro dele?) e, mais grave, a sucessora do F-01 registrada no `RESUMO-SESSAO-3` §4.4: **nenhuma etapa do funil marca o cliente pagante.** O estado "desconto na fatura" vive fora do CRM, e o gatilho real é a primeira fatura com desconto da distribuidora — decisão de F2. Enquanto isso, `em_carteira` existe no schema e **nasce e permanece nulo**; nenhum cálculo desta spec o lê.
 
 Escrito **apenas** pelo conector. Nenhuma tela edita. As oito combinações são válidas; nenhuma é erro.
 
@@ -171,7 +197,9 @@ UNIQUE (tenant_id, crm_usina_cliente_id) WHERE crm_usina_cliente_id IS NOT NULL
 
 Ambos **exclusivamente locais**. Nome/razão social · `documento` + `documento_tipo` + `documento_validado` · natureza PF/PJ · dados bancários (`banco`, `agencia`, `conta`, `tipo_conta`, `chave_pix`, `tipo_chave_pix`) · contato · `ativo`.
 
-`originador` acrescenta `tipo enum vendedor_g3|parceiro_indicador|parceiro_captador|parceiro_captador_senior` (**local — não existe no CRM**) e `crm_partner_id uuid NULL` (semente; preenchido em 3% lá).
+`originador` acrescenta `tipo enum vendedor_g3|terceirizado|parceiro_indicador|parceiro_captador|parceiro_captador_senior` (**local — não existe no CRM**) e `crm_partner_id uuid NULL` (semente; preenchido em 3% lá).
+
+> **`terceirizado` entra em 25/07.** A tabela de comissão do `RESUMO-SESSAO-3` §4.3 tem cinco linhas de taxa e o enum da v2.1 tinha quatro valores: faltava `terceirizado` (50%). Sem ele, o terceirizado cairia no PADRAO por ausência de categoria, não por decisão.
 
 `UNIQUE (tenant_id, documento)` nas duas.
 
@@ -182,6 +210,90 @@ Ambos **exclusivamente locais**. Nome/razão social · `documento` + `documento_
 ```sql
 UNIQUE (tenant_id, unidade_consumidora_id) WHERE status = 'ativo'
 ```
+
+#### `regra_comissao`
+
+Percentual de comissão por tipo de originador, versionado por vigência. **Eixo único** — a origem do lead não entra (decisão D3-final, 24/07).
+
+```sql
+CREATE EXTENSION IF NOT EXISTS btree_gist;   -- exigido pelo EXCLUDE abaixo
+
+CREATE TABLE regra_comissao (
+  id               uuid PRIMARY KEY,
+  tenant_id        uuid NOT NULL,
+  originador_tipo  originador_tipo NOT NULL,        -- o MESMO enum de originador.tipo
+  percentual       numeric(5,2) NOT NULL CHECK (percentual >= 0 AND percentual <= 100),
+  vigencia_inicio  date NOT NULL,
+  vigencia_fim     date NULL,
+  CHECK (vigencia_fim IS NULL OR vigencia_fim > vigencia_inicio),
+  CONSTRAINT regra_comissao_sem_sobreposicao EXCLUDE USING gist (
+    tenant_id       WITH =,
+    originador_tipo WITH =,
+    daterange(vigencia_inicio, vigencia_fim, '[)') WITH &&
+  ),
+  UNIQUE (tenant_id, id)
+);
+```
+
+Taxas de partida (`RESUMO-SESSAO-3` §4.3):
+
+| `originador_tipo` | % |
+|---|--:|
+| `vendedor_g3` | 50 |
+| `terceirizado` | 50 |
+| `parceiro_indicador` | 25 |
+| `parceiro_captador` | 50 |
+| `parceiro_captador_senior` | 60 |
+
+#### `tarifa`
+
+Tarifa da distribuidora em R$/kWh, versionada por vigência. **É um preço por unidade, não um valor monetário** — ver R22.
+
+```sql
+CREATE TABLE tarifa (
+  id                    uuid PRIMARY KEY,
+  tenant_id             uuid NOT NULL,
+  distribuidora         text NOT NULL,
+  tarifa_reais_por_kwh  numeric(12,6) NOT NULL CHECK (tarifa_reais_por_kwh > 0),
+  vigencia_inicio       date NOT NULL,
+  vigencia_fim          date NULL,
+  CHECK (vigencia_fim IS NULL OR vigencia_fim > vigencia_inicio),
+  CONSTRAINT tarifa_sem_sobreposicao EXCLUDE USING gist (
+    tenant_id     WITH =,
+    distribuidora WITH =,
+    daterange(vigencia_inicio, vigencia_fim, '[)') WITH &&
+  ),
+  UNIQUE (tenant_id, id)
+);
+```
+
+Valor de partida: **1,130000** para a distribuidora vigente — derivado de `consumo_reais / valor` exato em 5 de 5 ganhos medidos (`RESUMO-SESSAO-3` §4.3b).
+
+**As duas tabelas usam o mesmo mecanismo:** um só padrão de "valor com data" no projeto. Quem entender uma entende a outra.
+
+### 3.4 FK composta — a lista nominal
+
+O `ADR-0003` mediu: **FK simples atravessa tenant e o banco aceita.** Contrato do tenant A apontando para cliente do B foi aceito; com FK composta, rejeitado com `23503`.
+
+Toda referência entre entidades de negócio é `(tenant_id, id)`. São **nove** conversões:
+
+| # | FK | Aponta para |
+|---|---|---|
+| 1 | `cliente_estado_crm (tenant_id, cliente_id)` | `cliente` |
+| 2 | `unidade_consumidora (tenant_id, cliente_id)` | `cliente` |
+| 3 | `unidade_consumidora (tenant_id, usina_id)` | `usina` |
+| 4 | `usina (tenant_id, dono_usina_id)` | `dono_usina` |
+| 5 | `usina_geracao (tenant_id, usina_id)` | `usina` |
+| 6 | `contrato (tenant_id, cliente_id)` | `cliente` |
+| 7 | `contrato (tenant_id, unidade_consumidora_id)` | `unidade_consumidora` |
+| 8 | `contrato (tenant_id, usina_id)` | `usina` |
+| 9 | `contrato (tenant_id, originador_id)` | `originador` |
+
+> **O `ADR-0003` r2 dizia "sete".** A contagem saiu de estimativa, não de leitura. A varredura nominal da §3.3 rende **nove** — o ADR foi corrigido em 25/07. Duas FKs a menos na conta seriam **dois caminhos cross-tenant abertos**, e o defeito só se manifesta com dado de dois tenants em produção. Estimativa não serve aqui; a lista serve.
+
+`UNIQUE (tenant_id, id)` nas **cinco** tabelas referenciadas: `cliente`, `unidade_consumidora`, `usina`, `dono_usina`, `originador`. Redundante com a PK por desenho — é o preço da composta.
+
+**Fora da regra, e por quê:** `tenant_id → tenant(id)` aponta para a tabela raiz, que não tem `tenant_id`. `usuario_tenant.usuario_id → usuario` aponta para entidade de plataforma, também sem `tenant_id`. Nenhuma das duas atravessa nada.
 
 ---
 
@@ -229,6 +341,27 @@ UNIQUE (tenant_id, unidade_consumidora_id) WHERE status = 'ativo'
 
 > **R19.** Nenhuma operação desta spec escreve no CRM, em nenhuma circunstância (PRD §7.3 e §7.8 · `CLAUDE.md` regra 4).
 
+### Comissão e tarifa
+
+> **R20.** A comissão é chaveada por **`originador.tipo`, que é local** — não pelo `vendedor_tipo` do CRM. Precedência: **override do card → `originador.tipo` → PADRAO**. PADRAO é 50%, igual a `vendedor_g3`, e sempre foi: os 303 leads em `PADRAO` já eram 50% (`RESUMO-SESSAO-3`, decisão PADRAO).
+
+> **R21.** `regra_comissao` e `tarifa` **nunca têm vigência sobreposta para a mesma chave**, e a garantia é do banco (`EXCLUDE USING gist`), não da aplicação. O motivo é medido no CRM ao lado: o `Comissionamento` das views usa `LIMIT 1` sem `ORDER BY` no LATERAL, e por isso o mesmo lead pode pagar 25% hoje e 50% amanhã. **É alíquota, não relatório** — não pode depender de qual linha o planejador devolveu primeiro.
+
+> **R22.** **Tarifa é `numeric(12,6)` em R$/kWh, não `Int` em centavos.** A regra 1 do `CLAUDE.md` manda dinheiro em centavos e mantém grandeza física e proporção em escala decimal. Tarifa é **preço por unidade** — dimensionalmente uma taxa, como `percentual_rateio`, não um valor monetário.
+>
+> Medido em PostgreSQL 16.14, com uma tarifa reajustada realista de **1,187650 R$/kWh** sobre **1.234,567 kWh**:
+>
+> | Forma de guardar a tarifa | Valor faturado |
+> |---|--:|
+> | `numeric(12,6)` | **R$ 1.466,23** |
+> | `Int` centavos (119) | R$ 1.469,13 |
+>
+> **R$ 2,90 de divergência numa UC, num mês** — 0,20%, e sempre a favor de cobrar mais. Multiplicado pela carteira e por doze meses, é diferença que o cliente encontra antes de nós. O erro não vem do faturamento: vem de truncar a tarifa na hora de guardar, e nenhum arredondamento posterior recupera o dígito perdido.
+
+> **R23.** O **dinheiro** derivado da tarifa é `Int` em centavos, e o arredondamento acontece **uma vez, no último passo**: `round(consumo_kwh × tarifa_reais_por_kwh × 100)`. Nunca em cálculo intermediário. Os três valores são persistidos — `consumo_kwh`, a `tarifa` da competência e o derivado — porque guardar só o valor em reais faz o histórico divergir do faturado no primeiro reajuste da distribuidora.
+
+> **R24.** `cliente.consumo_referencia_centavos` e `contrato.valor_referencia_centavos` são **semente e valor de referência, não base de faturamento**. O `consumo_reais` do CRM é `consumo_kwh × 1,13`, ou seja já é o produto de uma tarifa que muda. A base de faturamento é sempre `consumo_kwh × tarifa` da competência (R23). Congelar reais como base é herdar uma tarifa velha sem saber.
+
 ## 5. Invariantes
 
 1. Toda entidade de negócio tem `tenant_id` não nulo.
@@ -240,6 +373,11 @@ UNIQUE (tenant_id, unidade_consumidora_id) WHERE status = 'ativo'
 7. `cliente_estado_crm` nunca é escrito por ação de usuário.
 8. Nenhuma coluna do sistema contém credencial em claro.
 9. Nenhuma linha do CRM é modificada por esta spec.
+10. **`$transaction` não aninha.** Transação aberta de dentro de transação não herda o contexto e lê zero — sem erro. *(I-7 do `ADR-0003` r2.)*
+11. **O middleware reconstrói a operação no client de transação.** `tx[model][operation](args)`, nunca `query(args)`. *(I-8 do `ADR-0003` r2.)*
+12. **Nenhuma chave de `regra_comissao` ou `tarifa` tem vigência sobreposta**, e a recusa é do banco.
+
+> **Sobre a invariante 2.** "Nenhuma FK atravessa tenant" deixou de ser afirmação e passou a ter mecanismo: as nove FKs compostas da §3.4. Antes disso a invariante era uma frase — o `ADR-0003` mediu o banco aceitando a violação.
 
 ## 6. Interfaces
 
@@ -287,6 +425,10 @@ Matriz de papéis: `admin` total; `financeiro` total em corporativo e leitura em
 - [ ] Segunda passada do upsert com o mesmo payload não altera linha alguma
 - [ ] Escrita no CRM por qualquer caminho desta spec falha por permissão
 - [ ] Tenant sem conector executa o ciclo completo de cadastro
+- [ ] As **nove** FKs da §3.4 são compostas, e cada uma rejeita a referência cross-tenant com `23503`
+- [ ] Requisição sem contexto, logo após uma requisição com contexto na mesma conexão de pool, lê **zero**
+- [ ] `regra_comissao` e `tarifa` recusam vigência sobreposta **pelo banco**, não pela aplicação
+- [ ] Nenhum `round()` em cálculo intermediário de valor derivado de tarifa
 
 ## 9. Testes obrigatórios
 
@@ -307,17 +449,28 @@ Matriz de papéis: `admin` total; `financeiro` total em corporativo e leitura em
 | `test_contrato_unico_ativo_por_uc` | R14 |
 | `test_estado_crm_nao_editavel` | Inv. 7 |
 | `test_crm_readonly` | Inv. 9 · R19 |
+| `test_vazamento_contexto_no_pool` | Pool de tamanho 1: requisição com contexto seguida de requisição sem contexto tem que ler **zero**. É o teste que pega alguém apagando o `LOCAL` |
+| `test_fk_composta_rejeita_cross_tenant` | §3.4 · Inv. 2 — as nove FKs, uma a uma. Espera `23503` |
+| `test_transacao_nao_aninha` | Inv. 10 — tem que **falhar em desenvolvimento**, não devolver vazio |
+| `test_middleware_recria_operacao_no_tx` | Inv. 11 — quebra se `tx[model][operation](args)` virar `query(args)` |
+| `test_vigencia_nao_sobrepoe` | Inv. 12 · R21 — em `regra_comissao` e em `tarifa` |
+| `test_tarifa_nao_e_centavos` | R22 — falha se a coluna de tarifa for inteira |
+| `test_arredondamento_uma_vez` | R23 — nenhum `round()` em intermediário |
+
+**A verificação da invariante 3 é por consulta ao catálogo** (`pg_class.relrowsecurity`, `relforcerowsecurity` e `pg_policy`), nunca por inspeção visual ou revisão de PR. O modo de falha de RLS sem policy é resultado vazio, não erro: não aparece em log, não quebra teste de fumaça, e só é descoberto quando um relatório vem zerado.
 
 ## 10. Questões abertas
 
 | ID | Pergunta | Bloqueia o quê | Quem responde |
 |---|---|---|---|
-| **ADR-0003** | Como `app.current_tenant_id()` obtém o tenant | as **policies** — não o schema | spike, ~2 dias |
+| ~~**ADR-0003**~~ | ~~Como `app.current_tenant_id()` obtém o tenant~~ | — | **FECHADA em 24/07, r2 em 25/07.** `SET LOCAL` por transação. Contrato na §3.2 |
 | **Q-SPEC001-02** | `data_vencimento` 100% vazia no CRM. Quem preenche, e é por UC ou por contrato? | régua de cobrança da F2 | operação |
 | **Q-SPEC001-03** | Endereço da UC não existe no CRM. Coleta local obrigatória ou opcional? | tela de cadastro | Vinicius |
 | **Q-SPEC001-04** | `percentual_repasse` vive na usina ou só em `regra_split` versionada? Duplicar cria duas verdades | modelo do split (F3) | Vinicius |
 | **Q-SPEC001-05** | Conector sobrescreve `nome`/`telefone` editados localmente? | política de espelho | Vinicius |
-| **Q-SPEC001-06** | Projeto Supabase do financeiro na mesma organização do PRO ou separado? | provisionamento | Vinicius |
+| ~~**Q-SPEC001-06**~~ | ~~Projeto Supabase na mesma organização ou separado?~~ | — | **FECHADA em 24/07** (decisão A2): organização **separada**. Ver `ADR-0004` |
+| **PgBouncer** | O caminho de conexão vai passar por PgBouncer em modo *transaction*? | **reabre o `ADR-0003` inteiro** se sim | Vinicius / infra |
+| **Q-SPEC001-07** | O CRM vai quebrar `vendedor_tipo` em cinco valores? | **nada nesta spec** — R20 tornou isso semente, não chave. Melhora o preenchimento, não desbloqueia | dev do CRM |
 | MT-01 | Usuário em mais de um tenant? | só uma constraint (§3.1) | Vinicius |
 | MT-06 | Auth próprio confirmado, ou SSO com o CRM? | `usuario.auth_user_id` | Vinicius |
 | AUD-09 | Origem canônica de CPF/CNPJ | R8 | Vinicius |
@@ -342,3 +495,4 @@ Matriz de papéis: `admin` total; `financeiro` total em corporativo e leitura em
 | 1.0 | 24/07/2026 | Original — só cadastros; plataforma declarada como pré-requisito ausente |
 | **2.0** | **24/07/2026** | **§4.1 absorvido: tenant, usuário, RBAC dois níveis, conector e o contrato de isolamento. Não haverá SPEC-000** |
 | **2.1** | **24/07/2026** | **§3.2 ganha a ressalva das três saídas do spike. Citações a "regra N do `CLAUDE.md`" reapontadas para o `CLAUDE.md` v1.0 e para o PRD §7.3/§7.8 — ver `PATCH-citacoes-2026-07-24.md`** |
+| **2.2** | **25/07/2026** | **`ADR-0003` r2 absorvido: §3.2 deixa de declarar contrato pendente e passa a fixar o contrato do middleware com nove regras medidas. Nova §3.4 com a lista nominal das FKs compostas — **nove**, não sete como o ADR estimava. Novas tabelas `regra_comissao` e `tarifa`, versionadas por vigência com recusa de sobreposição no banco. `originador.tipo` ganha `terceirizado`. `em_carteira` reclassificado (C1-b matou o F-01). Novas R20 a R24, invariantes 10 a 12 e sete testes. Q-SPEC001-01 e -06 e o ADR-0003 fecham; PgBouncer e Q-SPEC001-07 abrem.** |
