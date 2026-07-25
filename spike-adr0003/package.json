@@ -1,0 +1,8 @@
+{
+  "name": "spike-adr0003",
+  "private": true,
+  "type": "module",
+  "description": "ADR-0003 — spike de contexto de tenant: 21 testes, tres variantes, PostgreSQL 16",
+  "scripts": { "spike": "./run.sh" },
+  "dependencies": { "pg": "^8.16.3" }
+}

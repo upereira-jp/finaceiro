@@ -1,0 +1,30 @@
+// Espelha o subconjunto de 01-schema.sql que o teste precisa.
+// Prisma 7: o datasource NAO carrega url; a conexao vem do adapter no construtor.
+generator client {
+  provider = "prisma-client"
+  output   = "./generated"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model cliente {
+  id        String     @id @db.Uuid
+  tenant_id String     @db.Uuid
+  nome      String
+  contrato  contrato[]
+}
+
+model contrato {
+  id             String  @id @db.Uuid
+  tenant_id      String  @db.Uuid
+  cliente_id     String  @db.Uuid
+  valor_centavos Int
+  cliente        cliente @relation(fields: [cliente_id], references: [id])
+}
+
+model tenant {
+  id   String @id @db.Uuid
+  nome String
+}

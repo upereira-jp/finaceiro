@@ -1,0 +1,21 @@
+ADR-0003 r2 — testes de $transaction / $extends do Prisma sobre RLS
+Executado em 2026-07-25
+PostgreSQL 16.14 · Prisma 7.9.0 · @prisma/adapter-pg · role app_pool (sem BYPASSRLS)
+Schema: spike-adr0003/01-schema.sql (variante V1 — SET LOCAL por transacao)
+PgBouncer em modo transaction NAO foi testado. Segue risco aceito no ADR.
+ID    VEREDITO  DETALHE
+----------------------------------------------------------------------------------------------------------------------
+T1    OK        pool 5, 4 queries no bloco: 1 pid distinto(s), 2 clientes lidos (esperado 1 e 2)
+T7    OK        $transaction([...]) em lote: 2 linhas (esperado 2)
+T2    OK        SET LOCAL fora de transacao, pool 5: 0 linhas (esperado 0 — o escopo morre no fim do statement)
+T2b   OK        SET LOCAL fora de transacao, pool 1: 0 linhas (esperado 0 — o escopo morre no fim do statement)
+T3    OK        $extends chamando query(args): 0 linhas (esperado 0 — o hook nao rebinda a operacao)
+T4b   OK        $extends recriando tx[model][operation]: A=2 B=1 (esperado 2 e 1)
+T4c   OK        INSERT com tenant_id do B sob contexto do A: rejeitado, SQLSTATE 42501
+T4d   OK        6 transacoes concorrentes A/B/A/B/A/B, pool 4: [2,1,2,1,2,1] (esperado [2,1,2,1,2,1])
+T5    VAZOU     SET sem LOCAL, pool 1: requisicao seguinte sem contexto leu 2 linhas (o spike previu vazamento)
+T6    OK        SET LOCAL, pool 1: requisicao seguinte leu 0 linhas (esperado 0)
+T8    CONFIRMADO tx dentro de tx: 0 linhas. 0 = conexao nova, contexto NAO herdado, sem erro -> invariante I-7
+T9    medido    query de 6s dentro de $transaction: P2028 em 6020ms · timeout default = 5000ms — o erro chega DEPOIS de o banco concluir
+T10   medido    pool 1 ocupado por tx longa, segunda requisicao: P2028 em 2001ms — Transaction API error: Unable to start a transaction in the 
+T11   medido    500 iter, localhost, pool 5 — direta 0.67ms · tx 1.20ms (1.8x) · tx+SET LOCAL 1.48ms (2.2x)
