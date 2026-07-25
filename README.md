@@ -18,7 +18,7 @@ Nesta ordem. Cada documento pressupõe o anterior.
 2. **`CLAUDE.md`** — as dez regras inegociáveis. Antes de qualquer linha de código
 3. **`PRD-v2.2.md`** §7 e §8 — fronteira com o CRM
 4. **`adr/ADR-0003-contexto-de-tenant.md`** (r2) — como o isolamento funciona de fato, e a que preço
-5. **`SPEC-001-fundacao.md`** — a spec da F1
+5. **`SPEC-001-fundacao.md`** (v2.2) — a spec da F1. §3.2 é o contrato do middleware; §3.4 é a lista das nove FKs compostas
 6. **`GLOSSARIO.md`** — se um termo está lá, é assim que ele se chama em spec, em código e em conversa
 
 `QUESTOES.md` se consulta sob demanda, e é onde toda lacuna vira entrada (regra 10).
@@ -44,7 +44,7 @@ CLAUDE.md                    regras inegociaveis — camada mais alta
 PRD-v2.2.md                  fonte de verdade do produto
 GLOSSARIO.md                 vocabulario unico (rev. 3)
 QUESTOES.md                  registro unico de questoes abertas, com taxonomia de severidade
-SPEC-001-fundacao.md         spec da F1 (v2.1 — v2.2 pendente, ver abaixo)
+SPEC-001-fundacao.md         spec da F1 (v2.2)
 _TEMPLATE-SPEC.md            anatomia fixa das specs
 RESUMO-SESSAO-2.md           passagem da sessao 2
 RESUMO-SESSAO-3.md           passagem da sessao 3 — comece por aqui
@@ -53,6 +53,7 @@ VIEWS-PROPOSTAS-r2.sql       proposta de DDL para o dev do CRM. NAO executada
 adr/
   ADR-0002-...               modelo de tenant e de cliente, pos-auditoria
   ADR-0003-...               contexto de tenant: SET LOCAL por transacao (r2, aceita)
+  ADR-0004-...               provisionamento: organizacao, dominio e host (aceita)
 
 auditoria/
   P7-...                     topologia de funis do CRM
@@ -78,6 +79,8 @@ Decidido e medido, não opinado. Detalhe em `adr/ADR-0003` r2.
 - `SET LOCAL`, **nunca `SET`**. Medido: `SET` sem `LOCAL` sobrevive à devolução da conexão ao pool e contamina a requisição seguinte
 - Ponto único de emissão do contexto, dentro de `$transaction`, reconstruindo a operação no client de transação
 - `timeout` e `maxWait` explícitos. Os defaults do Prisma são 5.000 ms e 2.000 ms, e nenhum dos dois serve
+- Vigência de `regra_comissao` e `tarifa` sem sobreposição, **recusada pelo banco** (`EXCLUDE USING gist`, exige `btree_gist`). Alíquota não pode depender de qual linha o planejador devolveu primeiro
+- Tarifa em `numeric(12,6)` R$/kWh. Dinheiro em centavos; **taxa não é dinheiro**, e centavos truncariam a tarifa
 - Teste de vazamento no CI, pool de tamanho 1, desde o primeiro dia
 
 ---
@@ -86,12 +89,15 @@ Decidido e medido, não opinado. Detalhe em `adr/ADR-0003` r2.
 
 | Item | Estado |
 |---|---|
-| `SPEC-001` → **v2.2** | Aguarda aceite. Entra: tabelas `regra_comissao` e `tarifa` versionadas por vigência, FK composta com lista nominal fechada, contrato do middleware, invariantes I-7 e I-8 |
-| `ADR-0004-provisionamento` | A escrever. Promove as decisões A2/A3 e as 5 condições do VPS compartilhado, hoje registradas só no `RESUMO-SESSAO-3` |
-| Reunião com o contador | Não ocorreu. Quatro questões fiscais **aceitas como risco** e rebaixadas para bloqueio de F2/F3. A F1 corre livre; a F2 não começa sem isso |
-| Migration no CRM — subtipos de parceiro | Bloqueia o motor de comissão (F3). É item do dev do CRM |
-| Contagem de FKs a converter | O `ADR-0003` diz sete; a leitura do `SPEC-001` §3.3 rende nove. Precisa de passada nominal **antes** da migration — FK esquecida é caminho cross-tenant aberto |
-| PgBouncer em modo *transaction* | Sem cobertura. Se entrar no caminho de conexão, o `ADR-0003` reabre |
+| **Reunião com o contador** | 🔴 Não ocorreu. Quatro questões fiscais **aceitas como risco** e rebaixadas para bloqueio de F2/F3. A F1 corre livre; a F2 não começa sem isso. Os 10 campos a levar estão no `RESUMO-SESSAO-3` §5 |
+| **PgBouncer em modo *transaction*** | 🔴 Sem cobertura. Se entrar no caminho de conexão, o `ADR-0003` **reabre inteiro** |
+| **F-01b** | 🔴 Nenhuma etapa do funil marca o cliente pagante. O gatilho de faturamento não é evento do CRM — decisão de F2 |
+| Dev do CRM — `LIMIT 1` sem `ORDER BY` | 🔴 `VIEWS-PROPOSTAS-r2.sql` §100. É alíquota, não relatório |
+| Dev do CRM — segredos em `text` puro | 🔴 `P8` §4. O repositório foi público até 25/07 e **nomeia as colunas** — rotação, não só migração de coluna |
+| `$transaction` do Prisma | ✅ Fechado em 25/07 — `ADR-0003` r2, `spike-transacao/` |
+| Contagem de FKs | ✅ Fechada — **nove**, lista nominal em `SPEC-001` §3.4 |
+| `SPEC-001` v2.2 | ✅ Escrita em 25/07 |
+| `ADR-0004` | ✅ Escrito em 25/07 |
 
 ---
 
