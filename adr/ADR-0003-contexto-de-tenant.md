@@ -101,7 +101,9 @@ ALTER TABLE contrato ADD CONSTRAINT contrato_cliente_mesmo_tenant
 
 Reexecutado o mesmo insert: **rejeitado, `SQLSTATE 23503`.**
 
-**Custo:** toda tabela referenciada ganha `UNIQUE (tenant_id, id)` redundante com a PK, e toda FK entre entidades de negócio vira composta. Nas onze tabelas da `SPEC-001`, são sete FKs a converter. Não é opcional — sem isso o invariante 2 é uma frase.
+**Custo:** toda tabela referenciada ganha `UNIQUE (tenant_id, id)` redundante com a PK, e toda FK entre entidades de negócio vira composta. **São nove FKs a converter**, e `UNIQUE (tenant_id, id)` em cinco tabelas referenciadas. Não é opcional — sem isso o invariante 2 é uma frase.
+
+> **Correção de 25/07/2026.** A r1 deste ADR dizia **sete**. O número era estimativa, não contagem: a varredura nominal da `SPEC-001` §3.3 rende **nove**. As duas que faltavam eram `unidade_consumidora → usina` e `contrato → originador`. Duas FKs fora da conta são **dois caminhos cross-tenant abertos**, e o defeito só se manifesta com dado de dois tenants em produção. A lista nominal, que é o que serve, está na `SPEC-001` §3.4.
 
 ---
 
@@ -203,4 +205,4 @@ Medições auxiliares que sustentam a seção seguinte:
 | Versão | Data | O que mudou |
 |---|---|---|
 | 1.0 | 24/07/2026 | Original. Spike executado, 21 testes, três variantes |
-| **r2** | **25/07/2026** | Status → Aceita (B1). Lacuna do `$transaction` fechada com 12 testes: fixação de conexão **confirmada**, hipótese do `$extends` **refutada na forma descrita** e substituída pela reconstrução da operação no `tx`. Novas: seção de obrigações de configuração (`timeout` 5.000 e `maxWait` 2.000 são default e não servem), invariantes I-7 e I-8, dois riscos aceitos. PgBouncer segue sem cobertura |
+| **r2** | **25/07/2026** | Contagem de FKs corrigida de sete para **nove** (lista nominal na `SPEC-001` §3.4). Status → Aceita (B1). Lacuna do `$transaction` fechada com 12 testes: fixação de conexão **confirmada**, hipótese do `$extends` **refutada na forma descrita** e substituída pela reconstrução da operação no `tx`. Novas: seção de obrigações de configuração (`timeout` 5.000 e `maxWait` 2.000 são default e não servem), invariantes I-7 e I-8, dois riscos aceitos. PgBouncer segue sem cobertura |
