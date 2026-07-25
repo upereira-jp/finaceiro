@@ -53,23 +53,22 @@ Entregas da F0 conforme `PRD-v2.2` §10:
 | Entrega | Situação |
 |---|---|
 | Auditoria do CRM | ✅ concluída (P0–P6), reverificada em 24/07 (P8), sem deriva |
-| Spike Prisma + RLS | ✅ **executado em 24/07** — `ADR-0003`, 21 testes. Ressalva de cobertura na §"Cobertura" do ADR |
-| Decisões fiscais e de comissão | 🔴 **abertas** — 3 fiscais + 4 de comissão |
-| Provisionamento de infra | 🔴 **aberto** |
+| Spike Prisma + RLS | ✅ **fechado.** `ADR-0003` **r2**, 21 + 12 testes. Só o PgBouncer segue sem cobertura, e está fora do escopo da F1 |
+| Decisões de comissão | ✅ **fechadas em 24/07** — eixo único, PADRAO 50%, tabela desenhada na `SPEC-001` §3.3 |
+| Decisões fiscais | 🔴 **risco aceito, não resolvido.** Rebaixadas de bloqueio de F0 para bloqueio de F2/F3. A reunião com o contador não ocorreu |
+| Provisionamento de infra | ✅ **fechado em 24/07** — `ADR-0004` |
 
 | ID | Nível | Pergunta | Quem responde |
 |---|:--:|---|---|
 | **Q-011** | 🔴 | Retenção sobre comissão a PF — incide, e como? | contador |
 | **Q-002 C** | 🔴 | Escrituração sem emissão de documento fiscal | contador |
 | **Q-003 C** | 🔴 | Crédito de IBS/CBS na operação | contador |
-| **AUD-05** | 🔴 | Comissão: tabela do CRM (2 tiers flat) ou do PRD (escalonada)? | Vinicius |
-| **AUD-05a** | 🟡 | O que `PADRAO` significa — 303 de 335 leads | Vinicius |
-| **AUD-05b** | 🟡 | De onde vem o `30%` — 3 leads apenas | Vinicius |
-| **AUD-06** | 🟡 | Onde mora a senioridade do parceiro | Vinicius / dev CRM |
-| **Q-SPEC001-06** | 🔴 | Projeto Supabase do financeiro na mesma organização do PRO ou separado? | Vinicius |
-| **PRD §2.3** | 🔴 | Provisionamento: projeto, domínio, host da aplicação | Vinicius |
+| **AUD-05b** | 🟡 | De onde vem o `30%` — 3 leads apenas. Sem categoria correspondente na tabela de taxas | Vinicius |
+| **Item 10** | 🔴 | Comissão a sócia é despesa dedutível ou distribuição de lucro? Renata concentra 39 de 48 ganhos (83%) | contador |
 
-**Três vermelhas restantes, todas de decisão — nenhuma de engenharia.** Uma reunião com o contador fecha as três primeiras; uma sessão sua fecha AUD-05 e as duas de infra.
+**Quatro vermelhas restantes, todas do contador.** As de engenharia e as de decisão fecharam em 24–25/07.
+
+**A assimetria do fechamento da F0, registrada e não escondida:** a comissão foi **resolvida**; o fiscal foi **aceito como risco**. As quatro questões acima não foram respondidas — foram rebaixadas para bloqueio de F2/F3. A F1 não toca nenhuma delas e corre inteira. Mas no dia em que a F2 começar, as quatro voltam a ser vermelhas e a reunião vira pré-requisito outra vez, agora sem folga de calendário. **Marcar o contador durante a F1 é o caminho de menor dor.**
 
 ---
 
@@ -83,13 +82,14 @@ Entregas da F0 conforme `PRD-v2.2` §10:
 | MT-01 | 🟡 | Usuário pode pertencer a mais de um tenant? Custo de errar: uma constraint | Vinicius |
 | MT-07 | 🟡 | Quem informa o `crm_tenant_id` ao ativar um conector, e como se valida | Vinicius |
 | AUD-09 | 🟡 | CPF/CNPJ: CRM exige ou o financeiro coleta? | Vinicius |
+| **PgBouncer** | 🔴 | O caminho de conexão vai passar por PgBouncer em modo *transaction*? **Reabre o `ADR-0003` inteiro** se sim — muda o escopo de sessão e pode invalidar o `SET LOCAL` | Vinicius / infra |
 | Q-SPEC001-03 | 🟢 | Endereço da UC: coleta local obrigatória ou opcional? | Vinicius |
 
 ## 5. F2 — faturamento
 
 | ID | Nível | Pergunta | Quem |
 |---|:--:|---|---|
-| **F-01** | 🔴 | Migrar a carteira legada (36 clientes) para o funil de ativos antes do go-live. **Sem isso o conector lê zero** | Vinicius + operação |
+| **F-01b** | 🔴 | **Sucessora do F-01.** Nenhuma etapa do funil marca o cliente pagante — o card sai do `won` à mão, e o estado "desconto na fatura" vive fora do CRM. O gatilho real é a 1ª fatura com desconto da distribuidora. Faturar no `won` do Rateio fatura cedo demais | Vinicius + operação |
 | **Q-021 / AUD-03** | 🔴 | Faturar pela geração nominal ou pela série real? | Vinicius + dev CRM |
 | F-04 | 🟡 | Conector lê participação no funil ou etapa dentro dele? | Vinicius |
 | AUD-04 | 🟡 | Como o financeiro sabe que a competência está fechada? | Vinicius + operação |
@@ -120,6 +120,7 @@ Entregas da F0 conforme `PRD-v2.2` §10:
 |---|:--:|---|
 | **MT-08** | 🟡 | Parametrizar as views `financeiro.*` — hoje o UUID da G3 é literal em 14 pontos. Bloqueia no segundo tenant |
 | AUD-07 | 🟡 | Merge de leads duplicados apaga fisicamente um `id`? Afeta a reconciliação por diferença de conjunto |
+| Q-SPEC001-07 | 🟢 | O CRM vai quebrar `vendedor_tipo` em cinco valores? **Deixou de bloquear** — a `SPEC-001` R20 chaveia a comissão por `originador.tipo`, que é local. Melhora a semente, não desbloqueia nada |
 | — | 🟡 | Aplicar o `VIEWS-PROPOSTAS-r2.sql`, com a correção do `LIMIT 1` sem `ORDER BY` na linha 92 |
 | — | 🟡 | 49 tabelas de backup em `public`, 21 com `tenant_id`, nenhuma com policy. Retenção e destino (`P8` §3) |
 | — | 🔴 | Segredos em `text` puro na tabela `tenants` (`P8` §4) |
@@ -134,6 +135,14 @@ Entregas da F0 conforme `PRD-v2.2` §10:
 | AUD-12 | Q12 | `Q-023` — consumir `financeiro.*` direto; não criar o schema `integracao` |
 | Dado monetário | — | `PRD` §7.5 — `leads.consumo_reais`, 100% preenchido. `valor_venda` morto por desenho |
 | `auditoria_ro` | — | Role removida em 24/07 (`P8` §6). Único item com prazo, encerrado |
-| **ADR-0003** | — | **Spike executado em 24/07 — `SET LOCAL` por transação** |
+| **ADR-0003** | — | **`SET LOCAL` por transação.** Spike em 24/07 (21 testes), lacuna do `$transaction` fechada em 25/07 (12 testes) — r2. Contrato do middleware na `SPEC-001` §3.2 |
+| **AUD-05** | Q5 aud. | Tabela do PRD, escalonada — decisão A1 de 24/07 |
+| **AUD-05a** | — | **`PADRAO` é 50%, e sempre foi.** Os 303 leads em `PADRAO` já eram 50% |
+| **AUD-06** | — | Senioridade é **local**, em `originador.tipo` (`SPEC-001` R20 e R15). Não depende do CRM |
+| **F-01** | — | **Morto pela decisão C1-b.** As 28/36 pessoas em rateio estão homologadas com assinatura não iniciada: não há carteira legada a migrar. Sucessora: F-01b na §5 |
+| **Q-SPEC001-06** | — | Organização Supabase **separada** — decisão A2, `ADR-0004` |
+| **PRD §2.3** | — | Provisionamento decidido — `ADR-0004`: organização separada, `financeiro.blackhaus.io`, mesmo VPS sob cinco condições |
+| Contagem de FKs | — | Sete era estimativa; a varredura nominal rende **nove**. Lista fechada na `SPEC-001` §3.4 |
+| Tarifa | — | `1,13` é **tarifa em R$/kWh**, não fator de consumo. `numeric(12,6)`, não centavos (`SPEC-001` R22) |
 | `CLAUDE.md` | — | Nunca existiu. `CLAUDE.md` v1.0 escrito em 24/07; 18 citações reapontadas |
 | "bloqueio vermelho" | — | Taxonomia definida na §1 deste arquivo |
