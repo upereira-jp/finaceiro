@@ -72,7 +72,8 @@ src/auth/sessao.ts           login, escolha de tenant validada, caminho de plata
 prisma/migrations/           sete, em ordem: schema, isolamento, RBAC, views,
                              tier congelado, vinculo na policy, trilha por transacao
 prisma/seed/                 regra_comissao e tarifa, idempotente
-tests/                       62 verificacoes: isolamento, RBAC, middleware, sessao
+src/dominio/documento.ts     CPF e CNPJ, inclusive alfanumerico (31/07/2026)
+tests/                       91 verificacoes em 5 suites
 ```
 
 Os dois spikes são **reproduzíveis**, não relatos. `RESULTADOS.txt` em cada um é saída de execução real.
@@ -108,9 +109,10 @@ prisma/migrations/20260725120200_rbac_e_trilha/     RBAC dois níveis, RLS de pl
 Rodar tudo num banco limpo e validar:
 
 ```bash
-bash tests/run.sh          # migrations + isolamento (20) + RBAC (15) + seed idempotente
+bash tests/run.sh          # migrations + isolamento (20) + RBAC (15) + regras (12) + seed
 bash tests/middleware.sh   # invariantes do middleware (12)
 bash tests/sessao.sh       # camada de sessão: escolha de tenant e trilha (15)
+node --experimental-strip-types tests/documento.ts   # CPF e CNPJ (17)
 ```
 
 O mesmo roda no CI (`.github/workflows/isolamento.yml`), com PostgreSQL 16 de serviço — `ADR-0004` condição 5 e `SPEC-001` §9 exigem que o teste de vazamento corra fora da máquina de produção desde o primeiro dia.

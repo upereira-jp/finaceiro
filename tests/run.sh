@@ -39,6 +39,11 @@ aplicar fin_rbac
 suite fin_rbac tests/rbac.sql
 
 echo
+echo "=== regras de negocio: rateio, contrato unico, tarifa e comissao (banco fin_regras)"
+aplicar fin_regras
+suite fin_regras tests/regras.sql
+
+echo
 echo "=== seed, duas passadas para provar idempotencia (banco fin_seed)"
 aplicar fin_seed
 $P -d fin_seed -c "INSERT INTO tenant (id,razao_social,cnpj) VALUES ('$TENANT_SEED','Seed','99999999000199')" > /dev/null

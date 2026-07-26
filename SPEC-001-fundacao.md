@@ -3,7 +3,7 @@
 | Campo | Valor |
 |---|---|
 | **Status** | Rascunho — aguarda aceite |
-| **Versão** | 2.7 |
+| **Versão** | 2.8 |
 | **Data** | 25/07/2026 (v2.3 no mesmo dia — ver rodapé) |
 | **Autor** | Vinicius Leal |
 | **Fase** | F1 |
@@ -495,7 +495,10 @@ Matriz de papéis: `admin` total; `financeiro` total em corporativo e leitura em
 | `test_percentual_nao_converte` | Inv. 6 |
 | `test_documento_validacao` | R7, R8, R9 — inclui **CNPJ alfanumerico**, equivalencia com o algoritmo classico em 20.000 casos, e ida e volta em 500 alfanumericos gerados |
 | `test_documento_formato_no_banco` | R7 — o `CHECK` aceita CPF, CNPJ numerico, CNPJ alfanumerico e DV errado (R9), e recusa mascara e comprimento invalido |
-| `test_rateio_teto_e_alerta` | R11 · borda de arredondamento |
+| `test_rateio_teto_e_alerta` | R11 — abaixo passa, 100,0001 passa por tolerância, acima recusa **pelo banco**, e a view `rateio_por_usina` classifica sem erro |
+| `test_contrato_unico_ativo_e_encerrado_coexiste` | R14 — o índice é **parcial**: segunda linha `ativo` recusada, `encerrado` coexiste |
+| `test_um_arredondamento_no_ultimo_passo` | R23 — `app.consumo_centavos()` e `app.tarifa_vigente()`, com reajuste de competência |
+| `test_percentual_pelo_tier_congelado` | R20-b — `app.percentual_comissao()` recebe o tier do contrato, nunca o corrente |
 | `test_upsert_idempotente` | Interface do conector |
 | `test_cliente_espelhado_nao_deleta` | R16 |
 | `test_contrato_unico_ativo_por_uc` | R14 |
@@ -556,6 +559,7 @@ Matriz de papéis: `admin` total; `financeiro` total em corporativo e leitura em
 | 1.0 | 24/07/2026 | Original — só cadastros; plataforma declarada como pré-requisito ausente |
 | **2.0** | **24/07/2026** | **§4.1 absorvido: tenant, usuário, RBAC dois níveis, conector e o contrato de isolamento. Não haverá SPEC-000** |
 | **2.1** | **24/07/2026** | **§3.2 ganha a ressalva das três saídas do spike. Citações a "regra N do `CLAUDE.md`" reapontadas para o `CLAUDE.md` v1.0 e para o PRD §7.3/§7.8 — ver `PATCH-citacoes-2026-07-24.md`** |
+| **2.8** | **26/07/2026** | **R11, R14 e R23 passam da spec ao banco.** Trigger deferido para o teto de rateio (acima de 100 recusa; 100,0001 passa, porque `numeric(7,4)` somado em parcelas pode dar isso sem ninguém errar); `rateio_por_usina` como **primeira view do projeto**, declarando `security_invoker` — a invariante 13 existia antes da primeira view exatamente para este momento. Funções `app.consumo_centavos()`, `app.tarifa_vigente()` e `app.percentual_comissao()`: uma implementação da fórmula, porque duas são duas respostas. Registrada a consequência de constraint deferida — ela protege **no commit**, não dentro da transação |
 | **2.7** | **26/07/2026** | **A R7 estava errada, e o prazo e de cinco dias.** Ela mandava armazenar documento "so com digitos"; a Receita Federal comeca a emitir **CNPJ alfanumerico em 31/07/2026**, com letras nas 12 primeiras posicoes e os dois formatos coexistindo. A regra passa a ser "sem mascara e em maiuscula, letra preservada". `src/dominio/documento.ts` com o modulo 11 adaptado (`ASCII − 48`), `CHECK` de formato na migration 8, e 17 verificacoes — entre elas a equivalencia com o algoritmo classico em 20.000 casos, que e o que garante que CNPJ existente nao quebra |
 | **2.6** | **26/07/2026** | **Dois furos entre auth e middleware, medidos antes da primeira linha da camada de aplicação.** (1) As policies conferiam tenant e **não vínculo**: usuário sem vínculo, com o contexto apontado para o tenant alheio, **lia o dado financeiro**. A checagem existia só na aplicação e nada obrigava um handler a chamá-la. (2) O bootstrap do login era **circular** — a policy de `usuario` exige `app.current_usuario_id()`, que é o que o login procura. Migration 6: `app.tem_vinculo_no_tenant()` nas treze policies e `app.resolver_login()` como única função sem contexto. Invariantes 14 e 15, quatro testes. E o `tests/run.sh` foi corrigido: ele engolia falha de migration em pipeline — o mesmo modo de falha silenciosa que este projeto persegue nas policies, dentro do próprio runner |
 | **2.5** | **26/07/2026** | **R20 estava errada, e o retorno do dev mostrou como.** O `app_settings.g3_partner_rules` do CRM nao e segunda engine de calculo — carimba **tier** no lead na criacao, e o financeiro e quem transforma em R$. Isso expos que a R20 lia a classificacao **corrente** do originador: um captador promovido a senior fazia todo contrato antigo recalcular a 60%. `contrato.originador_tipo_no_fechamento` congela o tier no fechamento, e o campo `Comissionamento` do CRM e a semente. Novo teste; migration 5 |
