@@ -84,3 +84,7 @@ jobs:
         env:
           PGPASSWORD: spike
         run: bash tests/middleware.sh
+      - name: camada de sessao
+        env:
+          PGPASSWORD: spike
+        run: bash tests/sessao.sh

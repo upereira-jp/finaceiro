@@ -109,9 +109,18 @@ CREATE POLICY usuario_tenant_membro ON usuario_tenant
   );
 
 -- ---------------------------------------------------------------- R2, no banco
--- A trilha nao pode depender da aplicacao lembrar de gravar. O gatilho abaixo
--- exige que a linha de log exista ANTES do commit da transacao que leu dado de
--- tenant sob tier de plataforma. Se nao existir, a transacao aborta.
+-- A trilha de ESCRITA nao depende da aplicacao lembrar: o gatilho abaixo exige a
+-- linha de log antes do commit, e aborta se faltar.
+--
+-- LIMITE, e ele foi exagerado na primeira redacao desta migration: PostgreSQL
+-- NAO TEM TRIGGER DE SELECT. Para LEITURA nao ha como o banco cobrar a trilha.
+-- A garantia de leitura e estrutural, na camada de sessao: abrirComoPlataforma()
+-- e o unico caminho que alcanca tenant sem vinculo, e emite a linha antes de
+-- ceder o controle. Se alguem montar um segundo caminho, a garantia cai - e por
+-- isso a invariante 15 existe.
+--
+-- A janela de tempo desta versao foi corrigida na migration 7: conferir
+-- "trilha nos ultimos 60s" tornava a trilha FUNGIVEL entre transacoes.
 --
 -- Implementacao: constraint trigger DEFERRABLE INITIALLY DEFERRED em nivel de
 -- transacao. Roda no commit, ve o que a transacao fez, e recusa.
