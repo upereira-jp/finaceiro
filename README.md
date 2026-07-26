@@ -5,8 +5,8 @@ Sistema financeiro multi-tenant da G3 Solar: faturamento de crédito de energia,
 | Campo | Valor |
 |---|---|
 | **Dono** | Vinicius Leal |
-| **Fase atual** | F0 fechada em 24/07/2026 · **F1 autorizada** (fundação: tenant, auth, RBAC, cadastros) |
-| **Atualizado** | 25/07/2026 |
+| **Fase atual** | F0 fechada · **F1 em execução** — banco, isolamento, RBAC, sessão e regras feitos; camada de aplicação aguarda `prisma db pull` |
+| **Atualizado** | 26/07/2026 |
 
 ---
 
@@ -14,7 +14,7 @@ Sistema financeiro multi-tenant da G3 Solar: faturamento de crédito de energia,
 
 Nesta ordem. Cada documento pressupõe o anterior.
 
-1. **`RESUMO-SESSAO-3.md`** — estado atual, decisões tomadas e o que continua aberto
+1. **`RESUMO-SESSAO-4.md`** — estado atual, os doze achados de segurança e o que continua aberto
 2. **`CLAUDE.md`** — as dez regras inegociáveis. Antes de qualquer linha de código
 3. **`PRD-v2.2.md`** §7 e §8 — fronteira com o CRM
 4. **`adr/ADR-0003-contexto-de-tenant.md`** (r2) — como o isolamento funciona de fato, e a que preço
@@ -48,7 +48,8 @@ SPEC-001-fundacao.md         spec da F1 (v2.3)
 SPEC-002-conector.md         spec do conector (v1.0 — 4.3 travada na AUD-07)
 _TEMPLATE-SPEC.md            anatomia fixa das specs
 RESUMO-SESSAO-2.md           passagem da sessao 2
-RESUMO-SESSAO-3.md           passagem da sessao 3 — comece por aqui
+RESUMO-SESSAO-3.md           passagem da sessao 3
+RESUMO-SESSAO-4.md           passagem da sessao 4 — comece por aqui
 VIEWS-PROPOSTAS-r2.sql       proposta de DDL para o dev do CRM. NAO executada
 
 adr/
