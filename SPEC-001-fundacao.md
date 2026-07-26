@@ -3,7 +3,7 @@
 | Campo | Valor |
 |---|---|
 | **Status** | Rascunho — aguarda aceite |
-| **Versão** | 2.6 |
+| **Versão** | 2.7 |
 | **Data** | 25/07/2026 (v2.3 no mesmo dia — ver rodapé) |
 | **Autor** | Vinicius Leal |
 | **Fase** | F1 |
@@ -351,7 +351,13 @@ Toda referência entre entidades de negócio é `(tenant_id, id)`. São **nove**
 
 ### Cadastros
 
-> **R7.** Documento é armazenado **só com dígitos** e validado por dígito verificador na escrita.
+> **R7. Documento e armazenado sem mascara e em maiuscula — e NUNCA "so com digitos".** CPF: 11 digitos. CNPJ: **12 posicoes alfanumericas (A-Z e 0-9) mais 2 digitos verificadores numericos.** Normalizacao que remove letras **destroi CNPJ valido**. `CHECK` de formato no banco; digito verificador conferido na aplicacao, nunca em constraint — ver R9.
+
+> **R7-b. O CNPJ alfanumerico comeca em 31/07/2026, e a redacao anterior desta regra estava errada.** A v2.6 dizia "armazenado so com digitos". A Receita Federal passa a emitir CNPJ com letras nas 12 primeiras posicoes a partir daquela data; os dois formatos **coexistem e ambos sao plenamente validos**. Um validador de digitos rejeitaria cadastro legitimo a partir de cinco dias depois de esta spec ser escrita.
+>
+> O digito verificador segue **modulo 11**, com uma adaptacao de uma linha: o valor de cada caractere e `codigo ASCII − 48` (`'0'`=0 … `'9'`=9, `'A'`=17 … `'Z'`=42). Logo o algoritmo alfanumerico **reduz ao numerico** quando todos os caracteres sao digitos — e ha teste comparando os dois em 20.000 casos, porque essa equivalencia e a garantia de que nada quebra para os CNPJs que ja existem. Ha tambem teste de ida e volta em 500 CNPJs alfanumericos gerados pela regra.
+>
+> **Consequencia fora daqui:** o campo de documento do CRM tem validacao propria. Se ela for de digitos, rejeita CNPJ valido a partir de 31/07 — item para o dev do CRM, com data.
 
 > **R8.** Documento vindo do CRM entra com `documento_origem = 'crm_semente'` e `documento_validado = false`, **mesmo passando na validação**. Semente não é confirmação — lá ele vive em campo livre com 8–20% de preenchimento.
 
@@ -487,7 +493,8 @@ Matriz de papéis: `admin` total; `financeiro` total em corporativo e leitura em
 | `test_sem_credencial_em_coluna` | Inv. 8 · R6 |
 | `test_dinheiro_em_centavos_int` | Inv. 5 |
 | `test_percentual_nao_converte` | Inv. 6 |
-| `test_documento_validacao` | R7, R8, R9 |
+| `test_documento_validacao` | R7, R8, R9 — inclui **CNPJ alfanumerico**, equivalencia com o algoritmo classico em 20.000 casos, e ida e volta em 500 alfanumericos gerados |
+| `test_documento_formato_no_banco` | R7 — o `CHECK` aceita CPF, CNPJ numerico, CNPJ alfanumerico e DV errado (R9), e recusa mascara e comprimento invalido |
 | `test_rateio_teto_e_alerta` | R11 · borda de arredondamento |
 | `test_upsert_idempotente` | Interface do conector |
 | `test_cliente_espelhado_nao_deleta` | R16 |
@@ -549,6 +556,7 @@ Matriz de papéis: `admin` total; `financeiro` total em corporativo e leitura em
 | 1.0 | 24/07/2026 | Original — só cadastros; plataforma declarada como pré-requisito ausente |
 | **2.0** | **24/07/2026** | **§4.1 absorvido: tenant, usuário, RBAC dois níveis, conector e o contrato de isolamento. Não haverá SPEC-000** |
 | **2.1** | **24/07/2026** | **§3.2 ganha a ressalva das três saídas do spike. Citações a "regra N do `CLAUDE.md`" reapontadas para o `CLAUDE.md` v1.0 e para o PRD §7.3/§7.8 — ver `PATCH-citacoes-2026-07-24.md`** |
+| **2.7** | **26/07/2026** | **A R7 estava errada, e o prazo e de cinco dias.** Ela mandava armazenar documento "so com digitos"; a Receita Federal comeca a emitir **CNPJ alfanumerico em 31/07/2026**, com letras nas 12 primeiras posicoes e os dois formatos coexistindo. A regra passa a ser "sem mascara e em maiuscula, letra preservada". `src/dominio/documento.ts` com o modulo 11 adaptado (`ASCII − 48`), `CHECK` de formato na migration 8, e 17 verificacoes — entre elas a equivalencia com o algoritmo classico em 20.000 casos, que e o que garante que CNPJ existente nao quebra |
 | **2.6** | **26/07/2026** | **Dois furos entre auth e middleware, medidos antes da primeira linha da camada de aplicação.** (1) As policies conferiam tenant e **não vínculo**: usuário sem vínculo, com o contexto apontado para o tenant alheio, **lia o dado financeiro**. A checagem existia só na aplicação e nada obrigava um handler a chamá-la. (2) O bootstrap do login era **circular** — a policy de `usuario` exige `app.current_usuario_id()`, que é o que o login procura. Migration 6: `app.tem_vinculo_no_tenant()` nas treze policies e `app.resolver_login()` como única função sem contexto. Invariantes 14 e 15, quatro testes. E o `tests/run.sh` foi corrigido: ele engolia falha de migration em pipeline — o mesmo modo de falha silenciosa que este projeto persegue nas policies, dentro do próprio runner |
 | **2.5** | **26/07/2026** | **R20 estava errada, e o retorno do dev mostrou como.** O `app_settings.g3_partner_rules` do CRM nao e segunda engine de calculo — carimba **tier** no lead na criacao, e o financeiro e quem transforma em R$. Isso expos que a R20 lia a classificacao **corrente** do originador: um captador promovido a senior fazia todo contrato antigo recalcular a 60%. `contrato.originador_tipo_no_fechamento` congela o tier no fechamento, e o campo `Comissionamento` do CRM e a semente. Novo teste; migration 5 |
 | **2.4** | **26/07/2026** | **Invariante 13 e migration 4.** O dev do CRM corrigiu uma premissa nossa: "RLS sem policy nega tudo, e o modo de falha e resultado vazio" vale para acesso direto e e **falso atraves de view** - a RLS das bases e avaliada contra o dono da view. Medido no nosso schema: view sem `security_invoker` le **todos os tenants** sem contexto, anulando `FORCE` e as treze policies. O financeiro nao tinha view nenhuma, entao a regra existe antes da primeira |

@@ -8,7 +8,9 @@
     "db:pull": "prisma db pull",
     "test:isolamento": "bash tests/run.sh",
     "test:middleware": "node --experimental-strip-types tests/middleware.ts",
-    "test": "npm run test:isolamento && npm run test:middleware"
+    "test:sessao": "bash tests/sessao.sh",
+    "test:documento": "node --experimental-strip-types tests/documento.ts",
+    "test": "npm run test:documento && npm run test:isolamento && npm run test:middleware && npm run test:sessao"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.0",

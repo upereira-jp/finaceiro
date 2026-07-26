@@ -88,3 +88,5 @@ jobs:
         env:
           PGPASSWORD: spike
         run: bash tests/sessao.sh
+      - name: documento (CPF e CNPJ, inclusive alfanumerico)
+        run: node --experimental-strip-types tests/documento.ts

@@ -114,3 +114,42 @@ Eu não sabia que isso existia. E em 24/07 nós decidimos que a comissão é cha
 Por item, as mesmas três linhas: o que encontrou, o que fez, o que ficou aberto.
 
 Prioridade, se tiver que escolher: **o par do merge de 10/07** primeiro (é o único que perde valor com o tempo — log rotaciona), depois a `leads_arquivados`, depois o `g3_partner_rules`. A cadência do sync é uma linha e pode vir junto de qualquer um.
+
+---
+
+# ADENDO URGENTE — 26/07/2026, prazo de 5 dias
+
+## 🔴 CNPJ alfanumérico começa em **31/07/2026**
+
+A Receita Federal inicia a emissão do CNPJ alfanumérico em **31 de julho**. As 12 primeiras posições passam a aceitar letras maiúsculas A-Z junto com dígitos; os 2 dígitos verificadores seguem numéricos. Os dois formatos **coexistem** e ambos são plenamente válidos.
+
+**Eu tinha essa regra errada do meu lado** — a `SPEC-001` R7 mandava armazenar documento "só com dígitos", o que rejeitaria CNPJ válido a partir de sexta. Já corrigido: normalização preserva letra, `CHECK` de formato aceita os dois, e o dígito verificador usa módulo 11 com `valor = ASCII − 48` (`'0'`=0 … `'9'`=9, `'A'`=17 … `'Z'`=42).
+
+**A pergunta para você, e ela tem data:**
+
+1. **O campo de documento do CRM valida formato?** Se a validação for de dígitos — regex, `isdigit`, máscara de input, coluna numérica, qualquer uma — **ela rejeita CNPJ válido a partir de 31/07.**
+2. **Onde mais o CNPJ aparece como identificador no CRM?** `tenants.cnpj`, campos customizados de lead, integrações de nota fiscal, consultas cadastrais, chaves de dedup.
+3. **Alguma coluna de CNPJ é numérica** (`bigint`, `numeric`) em vez de `text`? Aí não é ajuste de validação, é migration.
+
+**Se quiser o algoritmo pronto**, é este — e ele reduz ao clássico quando todos os caracteres são dígitos, o que garante que nenhum CNPJ existente muda de resultado:
+
+```python
+def valor(c): return ord(c) - 48          # '0'->0 ... '9'->9, 'A'->17 ... 'Z'->42
+
+def dv(chars, pesos):
+    s = sum(valor(c) * p for c, p in zip(chars, pesos))
+    r = s % 11
+    return 0 if r < 2 else 11 - r
+
+def cnpj_valido(doc):                      # doc sem máscara, maiúsculo
+    import re
+    if not re.fullmatch(r'[0-9A-Z]{12}[0-9]{2}', doc): return False
+    if re.fullmatch(r'(\d)\1{13}', doc):    return False   # 00000000000000 etc.
+    d1 = dv(doc[:12],  [5,4,3,2,9,8,7,6,5,4,3,2])
+    d2 = dv(doc[:13],  [6,5,4,3,2,9,8,7,6,5,4,3,2])
+    return doc[12] == str(d1) and doc[13] == str(d2)
+```
+
+Do meu lado isso está testado com 3 CNPJs públicos reais, 20.000 casos numéricos comparados contra o algoritmo antigo (zero divergências) e 500 alfanuméricos gerados pela regra (todos aceitos, e todos rejeitados quando corrompo o DV).
+
+**Não é bloqueio do financeiro** — é risco de rejeitar cadastro de cliente novo no CRM a partir de sexta. Se a resposta for "o campo é texto livre e não valida nada", ótimo: nada a fazer.
