@@ -3,14 +3,14 @@
 | Campo | Valor |
 |---|---|
 | **Status** | Rascunho — aguarda aceite |
-| **Versão** | 2.8 |
-| **Data** | 25/07/2026 (v2.3 no mesmo dia — ver rodapé) |
+| **Versão** | 2.9 |
+| **Data** | 26/07/2026 (v2.9 — ver rodapé) |
 | **Autor** | Vinicius Leal |
 | **Fase** | F1 |
 | **Depende de** | **`ADR-0003` r2 — aceita.** O mecanismo de contexto de tenant está decidido e medido; o contrato do middleware e as obrigações de configuração estão na §3.2 |
 | **Bloqueia** | SPEC-002 (conector), faturamento (F2), split (F3) — tudo |
 | **Documentos-fonte** | `PRD-v2.2` §2, §3, §4.1, §4.2, §7.7, §7.8, §8 · `ADR-0002` r2 · **`ADR-0003` r2** · `ADR-0004` · `GLOSSARIO` · `P8` §2, §4, §5, §6 · `RESUMO-SESSAO-3` §4.3 e §4.3b |
-| **Questões abertas** | MT-06, AUD-09, AUD-10 e as cinco de Q-SPEC001 na §10 |
+| **Questões abertas** | MT-06, AUD-09, AUD-10 e as **quatro** de Q-SPEC001 na §10 — a `-04` fechou na v2.9 |
 
 > **v2.0 — o §4.1 foi absorvido.** A v1.0 tratava só cadastros e declarava a plataforma como pré-requisito inexistente. Decisão de 24/07: esta spec cobre as duas camadas. Não haverá SPEC-000.
 
@@ -209,9 +209,11 @@ UNIQUE (tenant_id, crm_usina_cliente_id) WHERE crm_usina_cliente_id IS NOT NULL
 
 #### `usina`
 
-`codigo_geradora` · `apelido` · `distribuidora` · `potencia_kwp numeric NULL` (**100% nula hoje**, P8 §5) · `geracao_nominal_kwh` · `crm_usina_id` · **`dono_usina_id FK NULL`** (local, nasce vazio) · **`percentual_repasse numeric(5,2) default 70.00`** · `data_homologacao` · `regime_fio_b bool default true` · `status`.
+`codigo_geradora` · `apelido` · `distribuidora` · `potencia_kwp numeric NULL` (**100% nula hoje**, P8 §5) · `geracao_nominal_kwh` · `crm_usina_id` · **`dono_usina_id FK NULL`** (local, nasce vazio) · `data_homologacao` · `regime_fio_b bool default true` · `status`.
 
 `UNIQUE (tenant_id, codigo_geradora)`
+
+> **O `percentual_repasse` saiu daqui na v2.9.** Era coluna mutável com `default 70.00`, e renegociar 70 para 65 hoje reprecificava todo repasse já pago — o mesmo furo que a R20-b fechou na comissão, com outro nome. Passa a viver em `regra_repasse`, versionado por vigência. Ver R25 e Q-SPEC001-04.
 
 #### `usina_geracao`
 
@@ -300,7 +302,7 @@ Valor de partida: **1,130000** para a distribuidora vigente — derivado de `con
 
 O `ADR-0003` mediu: **FK simples atravessa tenant e o banco aceita.** Contrato do tenant A apontando para cliente do B foi aceito; com FK composta, rejeitado com `23503`.
 
-Toda referência entre entidades de negócio é `(tenant_id, id)`. São **nove** conversões:
+Toda referência entre entidades de negócio é `(tenant_id, id)`. São **dez** conversões:
 
 | # | FK | Aponta para |
 |---|---|---|
@@ -313,12 +315,52 @@ Toda referência entre entidades de negócio é `(tenant_id, id)`. São **nove**
 | 7 | `contrato (tenant_id, unidade_consumidora_id)` | `unidade_consumidora` |
 | 8 | `contrato (tenant_id, usina_id)` | `usina` |
 | 9 | `contrato (tenant_id, originador_id)` | `originador` |
+| 10 | `regra_repasse (tenant_id, usina_id)` | `usina` |
 
-> **O `ADR-0003` r2 dizia "sete".** A contagem saiu de estimativa, não de leitura. A varredura nominal da §3.3 rende **nove** — o ADR foi corrigido em 25/07. Duas FKs a menos na conta seriam **dois caminhos cross-tenant abertos**, e o defeito só se manifesta com dado de dois tenants em produção. Estimativa não serve aqui; a lista serve.
+> **O `ADR-0003` r2 dizia "sete".** A contagem saiu de estimativa, não de leitura. A varredura nominal da §3.3 rende **nove** — o ADR foi corrigido em 25/07. Duas FKs a menos na conta seriam **dois caminhos cross-tenant abertos**, e o defeito só se manifesta com dado de dois tenants em produção. Estimativa não serve aqui; a lista serve. **A décima entrou na v2.9** com `regra_repasse` — e a lista nominal é o que permitiu somar uma sem recontar as nove.
 
 `UNIQUE (tenant_id, id)` nas **cinco** tabelas referenciadas: `cliente`, `unidade_consumidora`, `usina`, `dono_usina`, `originador`. Redundante com a PK por desenho — é o preço da composta.
 
 **Fora da regra, e por quê:** `tenant_id → tenant(id)` aponta para a tabela raiz, que não tem `tenant_id`. `usuario_tenant.usuario_id → usuario` aponta para entidade de plataforma, também sem `tenant_id`. Nenhuma das duas atravessa nada.
+
+---
+
+#### `regra_repasse`
+
+Percentual de repasse ao dono da usina, versionado por vigência. Substitui `usina.percentual_repasse` (v2.9).
+
+```sql
+CREATE TABLE regra_repasse (
+  id              uuid PRIMARY KEY,
+  tenant_id       uuid NOT NULL,
+  usina_id        uuid NOT NULL,
+  percentual      numeric(5,2) NOT NULL CHECK (percentual >= 0 AND percentual <= 100),
+  vigencia_inicio date NOT NULL,
+  vigencia_fim    date NULL,
+  CHECK (vigencia_fim IS NULL OR vigencia_fim > vigencia_inicio),
+  CONSTRAINT regra_repasse_usina_fk FOREIGN KEY (tenant_id, usina_id)
+    REFERENCES usina (tenant_id, id),
+  CONSTRAINT regra_repasse_sem_sobreposicao EXCLUDE USING gist (
+    tenant_id WITH =, usina_id WITH =,
+    daterange(vigencia_inicio, vigencia_fim, '[)') WITH &&)
+);
+```
+
+**Por usina e não por tenant**, ao contrário do que o `PRD` §182 sugeria com `regra_split`: cada dono negocia o seu. **Por vigência e não congelado no contrato**, ao contrário da R20-b: o eixo de tempo do repasse é a **competência**, porque o contrato é com o consumidor e o repasse é com o dono da usina — duas contrapartes com datas próprias. Contrato fechado em março não fixa o que se deve ao dono da usina em novembro.
+
+Backfill em `-infinity` a partir da coluna antiga, mesma razão da seed de `regra_comissao`: vigência aberta hoje faria recálculo do passado cair na ausência.
+
+#### `distribuidora`
+
+Lista de referência, sem `tenant_id` e portanto fora da invariante 2. `tarifa`, `usina` e `unidade_consumidora` passam a referenciá-la por FK **simples** — a regra 2 do `CLAUDE.md` fala de referência entre entidades **de negócio**, e concessionária não é uma delas.
+
+A seed já havia nomeado o risco e escolhido conviver com ele: *"enquanto for uma, o custo de não ter é zero"*. O custo não é a segunda distribuidora — é a primeira digitação divergente da primeira. `'Equatorial GO'` numa UC é outra concessionária, sem tarifa, e a UC fatura NULL.
+
+#### `auditoria`
+
+Imagem de linha antes e depois de toda escrita de negócio ou de papel. Implementa a regra 9 do `CLAUDE.md`, que até a v2.8 **não tinha implementação nenhuma** — `acesso_plataforma_log` é trilha de acesso (quem olhou), não auditoria (o que mudou).
+
+`tenant_id` **nullable** de propósito: entidade de plataforma não tem tenant, e NULL identifica escrita de plataforma. Sem FK para `tenant`, para sobreviver ao encerramento — mesmo raciocínio do `lead_merges` do dev do CRM. Escrita só pelo gatilho `app.auditar()`, `SECURITY DEFINER` como `auditor_financeiro`; a aplicação tem `SELECT` e nada mais.
 
 ---
 
@@ -339,11 +381,17 @@ Toda referência entre entidades de negócio é `(tenant_id, id)`. São **nove**
 
 > **R1-c. O login é a única chamada sem contexto, e é uma função só.** A policy de `usuario` exige `app.current_usuario_id()` — que é exatamente o que o login está tentando descobrir. Circular, e portanto impossível: medido, `SELECT ... WHERE auth_user_id = ?` devolvia zero. `app.resolver_login(auth_user_id)` quebra o ciclo e é a **única** função do sistema chamada fora de contexto de tenant. Devolve identidade, tier e a lista de tenants a que a pessoa pertence — nenhum dado de negócio.
 
-> **R2.** `plataforma_suporte` que leia dado financeiro de tenant **grava linha em `acesso_plataforma_log` na mesma transação**. Falha ao gravar a trilha aborta a leitura.
+> **R2.** Toda escrita de dado de negócio ou de papel **grava linha em `auditoria`, na própria escrita**, com quem, quando, o quê, tier, `antes` e `depois`. E tier de plataforma que **escreva** em dado de tenant grava também `acesso_plataforma_log` na mesma transação; falha ao gravar a trilha aborta o commit. Para **leitura** não há como o banco cobrar — PostgreSQL não tem trigger de SELECT — e a garantia é estrutural: `abrirComoPlataforma()` é o único caminho sem vínculo (invariante 15).
+
+> **R2-b. A redação anterior era burlável, e foi medido em 26/07 — v2.9.** O gatilho da migration 7 começava com `IF app.current_tier() IS NULL THEN RETURN NULL` e era `DEFERRABLE INITIALLY DEFERRED`: lia o GUC **no commit**, e quem escreve controla o GUC. Medido: tier de plataforma, `UPDATE` em `cliente`, `set_config('app.tier','',true)` antes do commit — **commitou com zero linhas de trilha**. *"A trilha depende do banco"* era falso; dependia de uma variável de sessão no instante da conferência.
+>
+> Correção: o fato *"esta escrita foi sob tier"* passa a viver na linha de `auditoria`, gravada **na escrita** e não apagável, e a conferência usa `xact_id` explícito em vez de `xmin` — que quebraria em subtransação (bloco `EXCEPTION`, savepoint), abortando escrita legítima. Um único gatilho em `auditoria` cobre as dezesseis tabelas, no lugar de treze gatilhos por transação.
+>
+> Cobertura anterior: **quatro** tabelas de treze — `cliente`, `contrato`, `regra_comissao`, `tarifa`. Sem gatilho ficavam `dono_usina` e `originador`, que guardam chave PIX, banco, agência e conta. Medido: chave PIX do dono da usina de outro tenant trocada sob tier, sem trilha e sem registro. A justificativa escrita na migration 7 — *"cobrir as treze custaria treze triggers"* — era conveniência de implementação, que a hierarquia normativa do README não aceita como razão.
 
 > **R3.** `plataforma_admin` cria, suspende e configura tenants; **não** ganha papel de tenant por isso. Para operar dentro de um tenant precisa de vínculo explícito, e o vínculo é auditado.
 
-> **R4.** Mudança de papel em `usuario_tenant` exige `admin` do tenant e gera auditoria.
+> **R4.** Mudança de papel em `usuario_tenant` exige `admin` do tenant e gera auditoria — e desde a v2.9 a auditoria **existe**: `usuario_tenant`, `plataforma_admin` e `usuario` têm gatilho, com `antes` e `depois`. Conceder tier de plataforma é a escrita mais privilegiada do sistema e até a v2.8 não deixava rastro nenhum.
 
 > **R5.** `conector_crm` nasce `ativo = false`. Ativação exige `admin` e `credencial_ref` preenchida.
 
@@ -393,7 +441,7 @@ Toda referência entre entidades de negócio é `(tenant_id, id)`. São **nove**
 >
 > Correcao de tier por **erro de classificacao** e diferente de promocao: e edicao de `admin` com auditoria (R18), e recalcula de proposito.
 
-> **R21.** `regra_comissao` e `tarifa` **nunca têm vigência sobreposta para a mesma chave**, e a garantia é do banco (`EXCLUDE USING gist`), não da aplicação. O motivo é medido no CRM ao lado: o `Comissionamento` das views usa `LIMIT 1` sem `ORDER BY` no LATERAL, e por isso o mesmo lead pode pagar 25% hoje e 50% amanhã. **É alíquota, não relatório** — não pode depender de qual linha o planejador devolveu primeiro.
+> **R21.** `regra_comissao`, `tarifa` e `regra_repasse` **nunca têm vigência sobreposta para a mesma chave**, e a garantia é do banco (`EXCLUDE USING gist`), não da aplicação. O motivo é medido no CRM ao lado: o `Comissionamento` das views usa `LIMIT 1` sem `ORDER BY` no LATERAL, e por isso o mesmo lead pode pagar 25% hoje e 50% amanhã. **É alíquota, não relatório** — não pode depender de qual linha o planejador devolveu primeiro.
 
 > **R22.** **Tarifa é `numeric(12,6)` em R$/kWh, não `Int` em centavos.** A regra 1 do `CLAUDE.md` manda dinheiro em centavos e mantém grandeza física e proporção em escala decimal. Tarifa é **preço por unidade** — dimensionalmente uma taxa, como `percentual_rateio`, não um valor monetário.
 >
@@ -408,12 +456,16 @@ Toda referência entre entidades de negócio é `(tenant_id, id)`. São **nove**
 
 > **R23.** O **dinheiro** derivado da tarifa é `Int` em centavos, e o arredondamento acontece **uma vez, no último passo**: `round(consumo_kwh × tarifa_reais_por_kwh × 100)`. Nunca em cálculo intermediário. Os três valores são persistidos — `consumo_kwh`, a `tarifa` da competência e o derivado — porque guardar só o valor em reais faz o histórico divergir do faturado no primeiro reajuste da distribuidora.
 
+> **R25.** O **percentual de repasse é o vigente na competência**, nunca o corrente da usina. Vive em `regra_repasse`, versionado, com recusa de sobreposição no banco (R21). Renegociar 70% para 65% hoje **não** reprecifica repasse já pago — é a mesma regra da R20-b aplicada à outra ponta do split, e a v2.8 não a tinha: `usina.percentual_repasse` era coluna mutável com `default 70.00`. Fecha a Q-SPEC001-04.
+
+> **R26.** **Ausência de preço levanta exceção, não devolve NULL.** `app.tarifa_vigente()`, `app.percentual_comissao()` e `app.percentual_repasse()` erram com `no_data_found` quando não há regra vigente. A v2.8 devolvia NULL, e `consumo_centavos(x, NULL)` devolve NULL: base de faturamento NULL **soma como nada e `coalesce` como zero** — exatamente o modo de falha silenciosa que este projeto persegue nas policies, dentro da função que calcula dinheiro. Nenhuma das três usa `LIMIT 1`: a garantia de linha única é o `EXCLUDE` da R21, não a cláusula da consulta — foi o que apontamos ao dev do CRM no `VIEWS-PROPOSTAS-r2` §92, e vale para dentro também.
+
 > **R24.** `cliente.consumo_referencia_centavos` e `contrato.valor_referencia_centavos` são **semente e valor de referência, não base de faturamento**. O `consumo_reais` do CRM é `consumo_kwh × 1,13`, ou seja já é o produto de uma tarifa que muda. A base de faturamento é sempre `consumo_kwh × tarifa` da competência (R23). Congelar reais como base é herdar uma tarifa velha sem saber.
 
 ## 5. Invariantes
 
 1. Toda entidade de negócio tem `tenant_id` não nulo.
-2. **Nenhuma FK atravessa tenant.** Vale para as **treze** tabelas com `tenant_id` — as onze da v2.1 mais `regra_comissao` e `tarifa`. As três sem `tenant_id` são `tenant` (raiz), `usuario` e `plataforma_admin` (plataforma), e estão fora da regra por desenho.
+2. **Nenhuma FK atravessa tenant.** Vale para as **quinze** tabelas com `tenant_id` — as treze da v2.2 mais `regra_repasse` e `auditoria` (v2.9). As três sem `tenant_id` são `tenant` (raiz), `usuario` e `plataforma_admin` (plataforma), e estão fora da regra por desenho.
 3. RLS habilitada, **forçada** e com ≥1 policy em toda tabela com `tenant_id`.
 4. Toda policy invoca `app.current_tenant_id()` e nada mais.
 5. Dinheiro é `Int` em centavos. Float proibido.
@@ -428,7 +480,12 @@ Toda referência entre entidades de negócio é `(tenant_id, id)`. São **nove**
 15. **`app.resolver_login()` é a única função chamada sem contexto de tenant.** Qualquer outra que dispense contexto é violação.
 13. **Toda view em `public` ou `app` declara `WITH (security_invoker = true)`.** Sem isso a RLS das tabelas base e avaliada contra o dono da view e nao contra quem consulta: view owned por superusuario le todos os tenants. Medido, mesma sessao sem contexto - tabela direta 0 linhas, view sem a opcao **2 linhas**, view com a opcao 0 linhas.
 
-> **Sobre a invariante 2.** "Nenhuma FK atravessa tenant" deixou de ser afirmação e passou a ter mecanismo: as nove FKs compostas da §3.4. Antes disso a invariante era uma frase — o `ADR-0003` mediu o banco aceitando a violação.
+16. **Nenhuma policy `FOR ALL` sem `WITH CHECK` em tabela com grant de escrita.** Policy sem `WITH CHECK` usa o `USING` como check de escrita — medido em 26/07: `plataforma_admin_self` permitia que um papel `leitura` inserisse a própria linha com tier `plataforma_admin`. É a **classe** do furo, não o caso. Verificada por catálogo (`polcmd = '*' AND polwithcheck IS NULL`).
+17. **Toda tabela de negócio ou de papel tem gatilho de auditoria.** Antes da v2.9 eram quatro de treze, e as quatro escolhidas não incluíam `dono_usina` nem `originador` — onde estão as chaves PIX, isto é, para onde o dinheiro sai.
+18. **`auditoria` e `acesso_plataforma_log` são append-only por privilégio**, não por convenção. O `ALTER DEFAULT PRIVILEGES` da migration 2 reconcede DML em toda tabela nova do schema: append-only tem de ser reimposto tabela por tabela, e a invariante existe para pegar a próxima.
+19. **Lista branca de `SECURITY DEFINER`.** Cinco funções: `membros_do_tenant`, `tem_vinculo_no_tenant`, `resolver_login`, `auditar`, `exigir_trilha_de_plataforma`. Cada uma é leitura sem policy. Um sexto nome quebra o CI — a garantia de leitura da R2 depende de não existir um segundo caminho, e disciplina não é invariante.
+
+> **Sobre a invariante 2.** "Nenhuma FK atravessa tenant" deixou de ser afirmação e passou a ter mecanismo: as dez FKs compostas da §3.4. Antes disso a invariante era uma frase — o `ADR-0003` mediu o banco aceitando a violação.
 
 ## 6. Interfaces
 
@@ -436,7 +493,7 @@ Toda referência entre entidades de negócio é `(tenant_id, id)`. São **nove**
 |---|---|---|---|
 | Auth (login, sessão) | UI | Supabase Auth padrão | — |
 | CRUD de tenant e vínculos | `plataforma_admin` / `admin` | 4xx por campo | PUT sim |
-| CRUD das 7 entidades de cadastro | UI conforme matriz do PRD §3 | 4xx por campo | PUT sim |
+| CRUD das 8 entidades de cadastro | UI conforme matriz do PRD §3 | 4xx por campo | PUT sim |
 | `POST /clientes/:id/validar-documento` | UI | retorna inválido sem gravar | sim |
 | `GET /usinas/:id/rateio` | UI · alerta Σ% | — | sim |
 | Upsert de cadastro espelhado | **conector (SPEC-002)** | log; não interrompe o ciclo | **sim, obrigatório** |
@@ -530,7 +587,7 @@ Matriz de papéis: `admin` total; `financeiro` total em corporativo e leitura em
 | ~~**ADR-0003**~~ | ~~Como `app.current_tenant_id()` obtém o tenant~~ | — | **FECHADA em 24/07, r2 em 25/07.** `SET LOCAL` por transação. Contrato na §3.2 |
 | **Q-SPEC001-02** | `data_vencimento` 100% vazia no CRM. Quem preenche, e é por UC ou por contrato? | régua de cobrança da F2 | operação |
 | **Q-SPEC001-03** | Endereço da UC não existe no CRM. Coleta local obrigatória ou opcional? | tela de cadastro | Vinicius |
-| **Q-SPEC001-04** | `percentual_repasse` vive na usina ou só em `regra_split` versionada? Duplicar cria duas verdades | modelo do split (F3) | Vinicius |
+| ~~**Q-SPEC001-04**~~ | ~~`percentual_repasse` vive na usina ou só em `regra_split` versionada?~~ | — | **FECHADA em 26/07 (v2.9):** `regra_repasse` versionada por usina e por vigência; a coluna da `usina` foi removida. Ver R25 |
 | **Q-SPEC001-05** | Conector sobrescreve `nome`/`telefone` editados localmente? | política de espelho | Vinicius |
 | ~~**Q-SPEC001-06**~~ | ~~Projeto Supabase na mesma organização ou separado?~~ | — | **FECHADA em 24/07** (decisão A2): organização **separada**. Ver `ADR-0004` |
 | **PgBouncer** | O caminho de conexão vai passar por PgBouncer em modo *transaction*? | **reabre o `ADR-0003` inteiro** se sim | Vinicius / infra |
@@ -556,6 +613,7 @@ Matriz de papéis: `admin` total; `financeiro` total em corporativo e leitura em
 
 | Versão | Data | O que mudou |
 |---|---|---|
+| **2.9** | **26/07/2026** | **Quatro furos medidos, e a regra 9 passa a existir.** (1) `plataforma_admin_self` era policy `FOR ALL` sem `WITH CHECK`, e o `USING` valia como check de escrita: papel `leitura` se promovia a `plataforma_admin` e passava a ler todos os tenants. (2) A cobrança da trilha da R2 lia `app.current_tier()` **no commit** — apagar o GUC antes de commitar dispensava a trilha. (3) O gatilho existia em quatro tabelas de treze, e as que faltavam incluíam `dono_usina` e `originador`, onde mora a chave PIX. (4) A regra 9 do `CLAUDE.md` exige *antes e depois* e **não tinha tabela nenhuma**. Migration 10: `auditoria` com imagem de linha e append-only por privilégio, `regra_repasse` versionada no lugar de `usina.percentual_repasse` (Q-SPEC001-04), `distribuidora` com FK no lugar de texto livre, as três funções de preço levantando em vez de devolver NULL. Novas R2-b, R25, R26; invariantes 16 a 19; décima FK composta; **29 verificações** em `tests/auditoria.sql`, todas em par — uma que falha se o furo reabrir, outra se o aperto virar nega-tudo |
 | 1.0 | 24/07/2026 | Original — só cadastros; plataforma declarada como pré-requisito ausente |
 | **2.0** | **24/07/2026** | **§4.1 absorvido: tenant, usuário, RBAC dois níveis, conector e o contrato de isolamento. Não haverá SPEC-000** |
 | **2.1** | **24/07/2026** | **§3.2 ganha a ressalva das três saídas do spike. Citações a "regra N do `CLAUDE.md`" reapontadas para o `CLAUDE.md` v1.0 e para o PRD §7.3/§7.8 — ver `PATCH-citacoes-2026-07-24.md`** |

@@ -39,7 +39,7 @@ Uma questão sem dono nomeado é automaticamente vermelha, por não ter caminho 
 | Fase | 🔴 | 🟡 | 🟢 | Situação |
 |---|--:|--:|--:|---|
 | **F0** | **3** | 1 | 0 | **aberta** — ver §3 |
-| F1 | 2 | 4 | 1 | aguarda F0 |
+| **F1** | **0** | 4 | 1 | **em execução** — as duas vermelhas fecharam em 26/07: F-02 na §9, F-03 por decisão normativa |
 | F2 | 2 | 3 | 2 | — |
 | F3 | 2 | 1 | 0 | — |
 | F6 | 0 | 1 | 1 | — |
@@ -76,8 +76,8 @@ Entregas da F0 conforme `PRD-v2.2` §10:
 
 | ID | Nível | Pergunta | Quem |
 |---|:--:|---|---|
-| **F-02** | 🔴 | Quais funis contam como conversão final? Hoje `won` inclui 7 parceiros | Vinicius |
-| **F-03** | 🔴 | Quem mantém `INADIMPLENTES`? Write-back colide com `PRD` §7.8 | Vinicius |
+| ~~**F-02**~~ | — | ~~Quais funis contam como conversão final?~~ **Resolvida — ver §9.** Estava contada em duplicidade no placar até 26/07 |
+| ~~**F-03**~~ | — | ~~Quem mantém `INADIMPLENTES`?~~ **Resolvida por decisão normativa — ver §9** |
 | MT-06 | 🟡 | Auth próprio ou SSO com o CRM? | Vinicius |
 | MT-01 | 🟡 | Usuário pode pertencer a mais de um tenant? Custo de errar: uma constraint | Vinicius |
 | MT-07 | 🟡 | Quem informa o `crm_tenant_id` ao ativar um conector, e como se valida | Vinicius |
@@ -102,7 +102,7 @@ Entregas da F0 conforme `PRD-v2.2` §10:
 | ID | Nível | Pergunta | Quem |
 |---|:--:|---|---|
 | **Q-022** | 🔴 | Como o contrato é atribuído ao originador, com `partner_id` em 3%? Medir antes o custom field `Comissionamento` | Vinicius |
-| **Q-SPEC001-04** | 🔴 | `percentual_repasse` vive na usina ou só em `regra_split` versionada? Duplicar cria duas verdades | Vinicius |
+| ~~**Q-SPEC001-04**~~ | — | ~~`percentual_repasse` vive na usina ou só em `regra_split` versionada?~~ **Resolvida em 26/07 — ver §9** |
 | AUD-08 | 🟡 | Quem preenche `usinas.dono_lead_id`? Nulo em 3 de 3 — bloqueia repasse | operação |
 
 ## 7. F6 e além
@@ -131,6 +131,13 @@ Entregas da F0 conforme `PRD-v2.2` §10:
 
 | ID | Era | Resolução |
 |---|---|---|
+| **F-03** | — | **Resolvida por decisão normativa, não por escolha nova.** A regra 4 do `CLAUDE.md` e o `PRD` §7.8 proíbem write-back: inadimplência é dado do **financeiro**, e o CRM consome endpoint exposto por ele se quiser exibir. Ficou vermelha por sessões sem que houvesse decisão a tomar — a hierarquia já a tinha respondido |
+| **Q-SPEC001-04** | — | **`regra_repasse` versionada por usina e por vigência**, com `EXCLUDE` no banco; `usina.percentual_repasse` removida. Por usina e não por tenant porque cada dono negocia o seu; por vigência e não congelada no contrato porque o eixo de tempo do repasse é a **competência** — o contrato é com o consumidor, o repasse é com o dono da usina. Migration 10, `SPEC-001` R25 |
+| **Autopromoção a plataforma** | — | **Furo medido em 26/07.** `plataforma_admin_self` era policy `FOR ALL` sem `WITH CHECK`, e o `USING` vale como check de escrita: papel `leitura` inseria a própria linha com tier `plataforma_admin` e passava a ler todos os tenants. Policy virou `FOR SELECT`, escrita revogada da role da aplicação. Invariante 16 pega a **classe** — qualquer policy `FOR ALL` sem `WITH CHECK` em tabela gravável |
+| **Trilha da R2 burlável** | — | **Furo medido em 26/07.** O gatilho lia `app.current_tier()` no COMMIT e quem escreve controla o GUC: apagar `app.tier` antes de commitar dispensava a trilha. Reancorado no `tier` gravado em `auditoria` **na escrita**, com `xact_id` em vez de `xmin` — que quebraria em subtransação. Um gatilho em `auditoria` no lugar de treze |
+| **Cobertura da trilha** | — | **Quatro tabelas de treze, e as quatro erradas.** Sem gatilho ficavam `dono_usina` e `originador`, que guardam chave PIX e conta bancária. Medido: PIX do dono de usina de outro tenant trocado sob tier, sem rastro. Agora dezesseis tabelas, e a invariante 17 confere por catálogo |
+| **Regra 9 sem implementação** | — | **A regra exigia *antes e depois* e não havia tabela nenhuma.** `acesso_plataforma_log` é trilha de acesso, não auditoria, e era apagável pela própria role que a escrevia. `auditoria` com imagem de linha, append-only por privilégio (invariante 18) |
+| **Preço ausente devolvia NULL** | — | `tarifa_vigente` e `percentual_comissao` devolviam NULL na ausência, e `consumo_centavos(x, NULL)` é NULL: base de faturamento que soma como nada e `coalesce` como zero. As três funções levantam `no_data_found`. `distribuidora` virou tabela de referência com FK — o risco que a própria seed havia nomeado e escolhido aceitar |
 | AUD-01 | Q1 | `ADR-0002` r2 — mesma entidade em funis diferentes; disjunção estrutural, não backfill |
 | AUD-12 | Q12 | `Q-023` — consumir `financeiro.*` direto; não criar o schema `integracao` |
 | Dado monetário | — | `PRD` §7.5 — `leads.consumo_reais`, 100% preenchido. `valor_venda` morto por desenho |

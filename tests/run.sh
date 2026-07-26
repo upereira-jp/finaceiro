@@ -1,5 +1,5 @@
 #!/bin/bash
-# Aplica TODAS as migrations num banco limpo, roda o seed e as duas suites SQL.
+# Aplica TODAS as migrations num banco limpo, roda o seed e as quatro suites SQL.
 # SPEC-001 9. Uso: bash tests/run.sh   (espera PostgreSQL 16 em 127.0.0.1:5432)
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -42,6 +42,11 @@ echo
 echo "=== regras de negocio: rateio, contrato unico, tarifa e comissao (banco fin_regras)"
 aplicar fin_regras
 suite fin_regras tests/regras.sql
+
+echo
+echo "=== auditoria, repasse versionado e os quatro furos de 26/07 (banco fin_auditoria)"
+aplicar fin_auditoria
+suite fin_auditoria tests/auditoria.sql
 
 echo
 echo "=== seed, duas passadas para provar idempotencia (banco fin_seed)"

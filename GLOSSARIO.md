@@ -17,6 +17,8 @@ A distribuição do valor liquidado de uma fatura entre dono de usina, originado
 
 No código: `splitDeRepasse`, `split_execucao`, `split_item`. O tributário, se um dia entrar, é `splitPaymentTributario`.
 
+O **percentual** desse repasse não é atributo da usina: vive em `regra_repasse`, versionado por vigência (`SPEC-001` R25). Escrever `usina.percentual_repasse` é citar uma coluna que não existe mais.
+
 ### geração nominal ≠ geração real
 Duas fontes de geração convivem no CRM e produzem números diferentes.
 
@@ -102,6 +104,10 @@ Regra de escrita: nada que carregue identificador do CRM se chama `tenant_id`. C
 
 **crédito** — energia compensada, em kWh. `percentual_rateio ÷ 100 × geração`.
 
+**percentual de repasse** (`regra_repasse.percentual`) — fatia do valor liquidado que vai ao dono da usina. **Versionado por vigência e por usina**, nunca coluna na `usina`: o valor que importa é o vigente na **competência**, não o de hoje. Cada dono negocia o seu; 70% é o mais comum, não uma constante.
+
+**distribuidora** — concessionária, hoje só Equatorial Goiás. É **tabela de referência** com FK a partir de `tarifa`, `usina` e `unidade_consumidora`, não texto livre: `'Equatorial'` e `'Equatorial GO'` digitados em UCs diferentes seriam duas concessionárias, e a segunda não tem tarifa.
+
 **teto alocável** — geração menos margem de segurança (padrão 5%, configurável em `rateio_margem_seguranca_pct`). O CRM impede vincular UC que estoure esse teto **no momento do vínculo**; depois disso, estouro é detectado, não prevenido.
 
 **lista de rateio** — documento enviado periodicamente à distribuidora informando o percentual de cada UC. Hoje montado e enviado à mão por uma pessoa. Tem prazo de corte no mês.
@@ -141,6 +147,12 @@ Regra de escrita: nada que carregue identificador do CRM se chama `tenant_id`. C
 **tenant** — uma empresa dentro do sistema financeiro. **UUID próprio**, gerado aqui, sem relação com o do CRM. Razão social, CNPJ, status, data de ativação.
 
 **`crm_tenant_id`** — o UUID da mesma empresa no CRM. Mora no `conector_crm`, é nullable e só existe para tenant que também usa o intreply. É o **único ponto de tradução** entre os dois sistemas. No CRM, G3 Solar é `d4640f4b-f833-4a80-a4db-ccced1956ae4` — esse valor é do CRM, nunca do financeiro.
+
+**auditoria** (`auditoria`) — imagem de linha **antes e depois** de toda escrita de negócio ou de papel, gravada pelo gatilho `app.auditar()` na própria escrita. Implementa a regra 9 do `CLAUDE.md`. Não confundir com **trilha de acesso**.
+
+**trilha de acesso** (`acesso_plataforma_log`) — registro de que um tier de plataforma **entrou** num tenant, com ação e recurso declarados pela aplicação. Responde *por que olhou*; a auditoria responde *o que mudou*. As duas são append-only por privilégio, não por convenção.
+
+**`auditor_financeiro`** — role dona da `auditoria` e das duas funções `SECURITY DEFINER` que a escrevem e a conferem. Existe para que append-only valha sob `FORCE ROW LEVEL SECURITY` sem depender de `BYPASSRLS`. Não é role de aplicação e não faz login.
 
 **funil** — pipeline do CRM. A G3 tem cinco, e eles **não são intercambiáveis**:
 
