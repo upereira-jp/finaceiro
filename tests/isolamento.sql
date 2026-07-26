@@ -116,7 +116,21 @@ BEGIN
   IF msg IS NULL THEN RAISE NOTICE 'ok  invariante 3: RLS+FORCE+policy em todas as tabelas com tenant_id';
   ELSE RAISE WARNING 'FALHA invariante 3 em: %', msg; falhas:=falhas+1; END IF;
 
+  -- ------------------------------------------- 17  invariante 13
+  SELECT string_agg(v, ', ') INTO msg FROM app.views_sem_security_invoker() AS v;
+  IF msg IS NULL THEN RAISE NOTICE 'ok  invariante 13: nenhuma view sem security_invoker (view sem isso ignora a RLS das bases)';
+  ELSE RAISE WARNING 'FALHA invariante 13, views que furam a RLS: %', msg; falhas := falhas + 1; END IF;
+
+  -- ------------------------------------------- 18  e o furo, provado
+  CREATE VIEW _prova_furo AS SELECT id, tenant_id FROM cliente;
+  SET LOCAL ROLE app_financeiro;
+  SELECT count(*) INTO n FROM _prova_furo;      -- sem contexto
+  RESET ROLE;
+  DROP VIEW _prova_furo;
+  IF n > 0 THEN RAISE NOTICE 'ok  furo confirmado: view sem invoker leu % linha(s) sem contexto - e por isso a 13 existe', n;
+  ELSE RAISE WARNING 'ATENCAO: o furo nao reproduziu; revisar a invariante 13'; falhas := falhas + 1; END IF;
+
   -- ------------------------------------------- veredito
   IF falhas > 0 THEN RAISE EXCEPTION '% teste(s) falharam', falhas;
-  ELSE RAISE NOTICE '--- 16 verificacoes, 0 falhas'; END IF;
+  ELSE RAISE NOTICE '--- 18 verificacoes, 0 falhas'; END IF;
 END $bloco$;

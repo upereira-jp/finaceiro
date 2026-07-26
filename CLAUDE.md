@@ -48,7 +48,17 @@ Não existe "adiciono o tenant depois", nem "converto as FKs depois". Retrofit d
 
 Toda tabela com `tenant_id` recebe `ENABLE ROW LEVEL SECURITY`, `FORCE ROW LEVEL SECURITY` **e ao menos uma policy**.
 
-O motivo é medido, não teórico: no CRM ao lado, 81 das 151 tabelas de `public` têm RLS habilitada e nenhuma policy. Isso não vaza — nega tudo. E **o modo de falha é resultado vazio, não erro de permissão**, então não aparece em log, não quebra teste de fumaça e só é descoberto quando um relatório vem zerado.
+O motivo e medido, nao teorico: no CRM ao lado, **82** das 151 tabelas de `public` tinham RLS habilitada e nenhuma policy (contagem do dev em 26/07; a auditoria de 24/07 dizia 81 e uma nasceu no dia 25). Por acesso direto isso nao vaza - nega tudo. E **o modo de falha do acesso direto e resultado vazio, nao erro de permissao**, entao nao aparece em log, nao quebra teste de fumaca e so e descoberto quando um relatorio vem zerado.
+
+**Qualificacao obrigatoria, medida em 26/07 - e ela vale mais para nos do que para o CRM.** O paragrafo acima vale para acesso **direto** a tabela por role sem `BYPASSRLS`. E **falso atraves de view**: por padrao a RLS das tabelas base e avaliada contra o **dono** da view, nao contra quem consulta. Medido no schema do financeiro, mesma sessao, role sem `BYPASSRLS`, sem contexto de tenant:
+
+| Via | Linhas |
+|---|--:|
+| tabela direta | **0** |
+| view **sem** `security_invoker` | **2** - todos os tenants |
+| view **com** `security_invoker = true` | **0** |
+
+Uma view criada sem essa opcao **anula `FORCE ROW LEVEL SECURITY` e as treze policies de uma vez**. Toda view em `public` ou `app` declara `WITH (security_invoker = true)`, e ha verificacao de catalogo no CI - `SPEC-001` invariante 13.
 
 Verificação por **consulta ao catálogo**, jamais por inspeção visual ou revisão de PR.
 

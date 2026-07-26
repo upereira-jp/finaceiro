@@ -3,7 +3,7 @@
 | Campo | Valor |
 |---|---|
 | **Status** | Rascunho — aguarda aceite |
-| **Versão** | 2.3 |
+| **Versão** | 2.4 |
 | **Data** | 25/07/2026 (v2.3 no mesmo dia — ver rodapé) |
 | **Autor** | Vinicius Leal |
 | **Fase** | F1 |
@@ -400,7 +400,8 @@ Toda referência entre entidades de negócio é `(tenant_id, id)`. São **nove**
 9. Nenhuma linha do CRM é modificada por esta spec.
 10. **`$transaction` não aninha.** Transação aberta de dentro de transação não herda o contexto e lê zero — sem erro. *(I-7 do `ADR-0003` r2.)*
 11. **O contexto é por unidade de trabalho, não por operação.** Uma transação por requisição; o client de transação é propagado, nunca reaberto. Acesso fora de escopo **lança**. *(I-8 do `ADR-0003` r2, revista na v2.3 — a redação anterior prescrevia o padrão por operação, que quebra atomicidade.)*
-12. **Nenhuma chave de `regra_comissao` ou `tarifa` tem vigência sobreposta**, e a recusa é do banco.
+12. **Nenhuma chave de `regra_comissao` ou `tarifa` tem vigencia sobreposta**, e a recusa e do banco.
+13. **Toda view em `public` ou `app` declara `WITH (security_invoker = true)`.** Sem isso a RLS das tabelas base e avaliada contra o dono da view e nao contra quem consulta: view owned por superusuario le todos os tenants. Medido, mesma sessao sem contexto - tabela direta 0 linhas, view sem a opcao **2 linhas**, view com a opcao 0 linhas.
 
 > **Sobre a invariante 2.** "Nenhuma FK atravessa tenant" deixou de ser afirmação e passou a ter mecanismo: as nove FKs compostas da §3.4. Antes disso a invariante era uma frase — o `ADR-0003` mediu o banco aceitando a violação.
 
@@ -485,6 +486,7 @@ Matriz de papéis: `admin` total; `financeiro` total em corporativo e leitura em
 | `test_vigencia_nao_sobrepoe` | Inv. 12 · R21 — em `regra_comissao` e em `tarifa` |
 | `test_tarifa_nao_e_centavos` | R22 — falha se a coluna de tarifa for inteira |
 | `test_arredondamento_uma_vez` | R23 — nenhum `round()` em intermediário |
+| `test_toda_view_com_security_invoker` | Inv. 13 — consulta de catalogo, e a suite **reproduz o furo**: cria uma view sem a opcao e mede que ela le sem contexto |
 
 **A verificação da invariante 3 é por consulta ao catálogo** (`pg_class.relrowsecurity`, `relforcerowsecurity` e `pg_policy`), nunca por inspeção visual ou revisão de PR. O modo de falha de RLS sem policy é resultado vazio, não erro: não aparece em log, não quebra teste de fumaça, e só é descoberto quando um relatório vem zerado.
 
@@ -524,5 +526,6 @@ Matriz de papéis: `admin` total; `financeiro` total em corporativo e leitura em
 | 1.0 | 24/07/2026 | Original — só cadastros; plataforma declarada como pré-requisito ausente |
 | **2.0** | **24/07/2026** | **§4.1 absorvido: tenant, usuário, RBAC dois níveis, conector e o contrato de isolamento. Não haverá SPEC-000** |
 | **2.1** | **24/07/2026** | **§3.2 ganha a ressalva das três saídas do spike. Citações a "regra N do `CLAUDE.md`" reapontadas para o `CLAUDE.md` v1.0 e para o PRD §7.3/§7.8 — ver `PATCH-citacoes-2026-07-24.md`** |
+| **2.4** | **26/07/2026** | **Invariante 13 e migration 4.** O dev do CRM corrigiu uma premissa nossa: "RLS sem policy nega tudo, e o modo de falha e resultado vazio" vale para acesso direto e e **falso atraves de view** - a RLS das bases e avaliada contra o dono da view. Medido no nosso schema: view sem `security_invoker` le **todos os tenants** sem contexto, anulando `FORCE` e as treze policies. O financeiro nao tinha view nenhuma, entao a regra existe antes da primeira |
 | **2.3** | **25/07/2026** | **§3.2 corrigida por medição no mesmo dia.** O contrato prescrevia `$extends` por operação; medido, isso **quebra atomicidade** (duas operações em `txid` distintos; escrita seguida de falha do handler persiste). O padrão primário passa a ser **unidade de trabalho** com `AsyncLocalStorage`, e o `$extends` vira guarda que lança. Também: `set_config` com parâmetro ligado em vez de `SET LOCAL` interpolado (superfície de injeção quando o `tenantId` vem de requisição); **dois pools** em vez de um, com o medido de que relatório saturado não afeta o transacional. Invariante 11 reescrita, cinco testes no lugar de um |
 | **2.2** | **25/07/2026** | **`ADR-0003` r2 absorvido: §3.2 deixa de declarar contrato pendente e passa a fixar o contrato do middleware com nove regras medidas. Nova §3.4 com a lista nominal das FKs compostas — **nove**, não sete como o ADR estimava. Novas tabelas `regra_comissao` e `tarifa`, versionadas por vigência com recusa de sobreposição no banco. `originador.tipo` ganha `terceirizado`. `em_carteira` reclassificado (C1-b matou o F-01). Novas R20 a R24, invariantes 10 a 12 e sete testes. Q-SPEC001-01 e -06 e o ADR-0003 fecham; PgBouncer e Q-SPEC001-07 abrem.** |
