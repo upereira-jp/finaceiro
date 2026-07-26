@@ -67,8 +67,8 @@ BEGIN
         RAISE WARNING 'FALHA FK 8/9 contrato->usina: ACEITOU'; falhas:=falhas+1;
   EXCEPTION WHEN foreign_key_violation THEN RAISE NOTICE 'ok  FK 8/9 contrato -> usina'; END;
 
-  BEGIN INSERT INTO contrato (tenant_id,cliente_id,unidade_consumidora_id,usina_id,originador_id,data_fechamento,valor_referencia_centavos,valor_referencia_origem)
-        VALUES (A,cli_a,uc_a,us_a,org_b,'2026-07-01',10000,'local');
+  BEGIN INSERT INTO contrato (tenant_id,cliente_id,unidade_consumidora_id,usina_id,originador_id,originador_tipo_no_fechamento,data_fechamento,valor_referencia_centavos,valor_referencia_origem)
+        VALUES (A,cli_a,uc_a,us_a,org_b,'parceiro_captador','2026-07-01',10000,'local');
         RAISE WARNING 'FALHA FK 9/9 contrato->originador: ACEITOU'; falhas:=falhas+1;
   EXCEPTION WHEN foreign_key_violation THEN RAISE NOTICE 'ok  FK 9/9 contrato -> originador'; END;
 
@@ -116,12 +116,32 @@ BEGIN
   IF msg IS NULL THEN RAISE NOTICE 'ok  invariante 3: RLS+FORCE+policy em todas as tabelas com tenant_id';
   ELSE RAISE WARNING 'FALHA invariante 3 em: %', msg; falhas:=falhas+1; END IF;
 
-  -- ------------------------------------------- 17  invariante 13
+  -- ------------------------------------------- 17  R20-b tier congelado
+  -- Contrato fechado com o captador. Depois o originador e promovido a senior.
+  -- A comissao do contrato antigo NAO pode mudar.
+  INSERT INTO contrato (tenant_id,cliente_id,unidade_consumidora_id,usina_id,originador_id,
+                        originador_tipo_no_fechamento,data_fechamento,
+                        valor_referencia_centavos,valor_referencia_origem)
+  VALUES (A,cli_a,uc_a,us_a,org_a,'parceiro_captador','2026-03-15',100000,'local');
+  UPDATE originador SET tipo = 'parceiro_captador_senior' WHERE id = org_a;
+  SELECT count(*) INTO n FROM contrato c
+   WHERE c.originador_id = org_a AND c.originador_tipo_no_fechamento = 'parceiro_captador';
+  IF n = 1 THEN RAISE NOTICE 'ok  R20-b: originador promovido a senior, contrato de marco segue com o tier do fechamento';
+  ELSE RAISE WARNING 'FALHA R20-b: o tier do contrato acompanhou a promocao'; falhas := falhas + 1; END IF;
+
+  BEGIN
+    INSERT INTO contrato (tenant_id,cliente_id,unidade_consumidora_id,usina_id,originador_id,
+                          data_fechamento,valor_referencia_centavos,valor_referencia_origem)
+    VALUES (A,cli_a,uc_a,us_a,org_a,'2026-04-15',100000,'local');
+    RAISE WARNING 'FALHA: aceitou contrato com originador e SEM tier congelado'; falhas := falhas + 1;
+  EXCEPTION WHEN check_violation THEN RAISE NOTICE 'ok  R20-b: contrato com originador e sem tier congelado e recusado pelo banco'; END;
+
+  -- ------------------------------------------- 18  invariante 13
   SELECT string_agg(v, ', ') INTO msg FROM app.views_sem_security_invoker() AS v;
   IF msg IS NULL THEN RAISE NOTICE 'ok  invariante 13: nenhuma view sem security_invoker (view sem isso ignora a RLS das bases)';
   ELSE RAISE WARNING 'FALHA invariante 13, views que furam a RLS: %', msg; falhas := falhas + 1; END IF;
 
-  -- ------------------------------------------- 18  e o furo, provado
+  -- ------------------------------------------- 19  e o furo, provado
   CREATE VIEW _prova_furo AS SELECT id, tenant_id FROM cliente;
   SET LOCAL ROLE app_financeiro;
   SELECT count(*) INTO n FROM _prova_furo;      -- sem contexto
@@ -132,5 +152,5 @@ BEGIN
 
   -- ------------------------------------------- veredito
   IF falhas > 0 THEN RAISE EXCEPTION '% teste(s) falharam', falhas;
-  ELSE RAISE NOTICE '--- 18 verificacoes, 0 falhas'; END IF;
+  ELSE RAISE NOTICE '--- 20 verificacoes, 0 falhas'; END IF;
 END $bloco$;

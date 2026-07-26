@@ -3,7 +3,7 @@
 | Campo | Valor |
 |---|---|
 | **Status** | Rascunho — aguarda aceite |
-| **Versão** | 2.4 |
+| **Versão** | 2.5 |
 | **Data** | 25/07/2026 (v2.3 no mesmo dia — ver rodapé) |
 | **Autor** | Vinicius Leal |
 | **Fase** | F1 |
@@ -230,7 +230,7 @@ Ambos **exclusivamente locais**. Nome/razão social · `documento` + `documento_
 
 #### `contrato`
 
-`cliente_id` · `unidade_consumidora_id` · `usina_id` · `originador_id NULL` · `data_fechamento` · **`valor_referencia_centavos int NOT NULL`** · `valor_referencia_origem enum crm_consumo_reais|local` · `status enum rascunho|ativo|suspenso|encerrado` · `faturas_cheias_pagas int default 0`.
+`cliente_id` · `unidade_consumidora_id` · `usina_id` · `originador_id NULL` · **`originador_tipo_no_fechamento originador_tipo NULL`** (congelado — R20-b; nulo só quando não há originador) · `data_fechamento` · **`valor_referencia_centavos int NOT NULL`** · `valor_referencia_origem enum crm_consumo_reais|local` · `status enum rascunho|ativo|suspenso|encerrado` · `faturas_cheias_pagas int default 0`.
 
 ```sql
 UNIQUE (tenant_id, unidade_consumidora_id) WHERE status = 'ativo'
@@ -368,7 +368,13 @@ Toda referência entre entidades de negócio é `(tenant_id, id)`. São **nove**
 
 ### Comissão e tarifa
 
-> **R20.** A comissão é chaveada por **`originador.tipo`, que é local** — não pelo `vendedor_tipo` do CRM. Precedência: **override do card → `originador.tipo` → PADRAO**. PADRAO é 50%, igual a `vendedor_g3`, e sempre foi: os 303 leads em `PADRAO` já eram 50% (`RESUMO-SESSAO-3`, decisão PADRAO).
+> **R20.** A comissao e chaveada pelo **tier congelado no fechamento**, nao pela classificacao corrente do originador. Precedencia: **override do card -> `contrato.originador_tipo_no_fechamento` -> PADRAO.** PADRAO e 50%, igual a `vendedor_g3`, e sempre foi: os 303 leads em `PADRAO` ja eram 50%.
+
+> **R20-b. Por que congelado - o furo que a v2.4 tinha.** A redacao anterior lia `originador.tipo`, que e a classificacao **de hoje**. Consequencia: um captador promovido a senior em junho faria **todo contrato de marco recalcular a 60%**, porque a busca acharia o tier novo. A vigencia de `regra_comissao` nao cobre isso - ela versiona o *percentual de um tier*, nao o *tier de uma pessoa*.
+>
+> O tier vive no contrato porque e um **fato do fechamento**, como a data e o valor. Promocao de parceiro nao reprecifica o passado. O CRM ja carimba esse tier no lead na criacao (campo `Comissionamento`, via `app_settings.g3_partner_rules`) - ele e a semente natural do congelamento, e e a unica coisa daquela configuracao que o financeiro consome.
+>
+> Correcao de tier por **erro de classificacao** e diferente de promocao: e edicao de `admin` com auditoria (R18), e recalcula de proposito.
 
 > **R21.** `regra_comissao` e `tarifa` **nunca têm vigência sobreposta para a mesma chave**, e a garantia é do banco (`EXCLUDE USING gist`), não da aplicação. O motivo é medido no CRM ao lado: o `Comissionamento` das views usa `LIMIT 1` sem `ORDER BY` no LATERAL, e por isso o mesmo lead pode pagar 25% hoje e 50% amanhã. **É alíquota, não relatório** — não pode depender de qual linha o planejador devolveu primeiro.
 
@@ -486,6 +492,7 @@ Matriz de papéis: `admin` total; `financeiro` total em corporativo e leitura em
 | `test_vigencia_nao_sobrepoe` | Inv. 12 · R21 — em `regra_comissao` e em `tarifa` |
 | `test_tarifa_nao_e_centavos` | R22 — falha se a coluna de tarifa for inteira |
 | `test_arredondamento_uma_vez` | R23 — nenhum `round()` em intermediário |
+| `test_tier_congelado_no_fechamento` | R20-b — reclassificar o originador **nao** muda a comissao de contrato antigo. E o teste que pega a promocao reprecificando o passado |
 | `test_toda_view_com_security_invoker` | Inv. 13 — consulta de catalogo, e a suite **reproduz o furo**: cria uma view sem a opcao e mede que ela le sem contexto |
 
 **A verificação da invariante 3 é por consulta ao catálogo** (`pg_class.relrowsecurity`, `relforcerowsecurity` e `pg_policy`), nunca por inspeção visual ou revisão de PR. O modo de falha de RLS sem policy é resultado vazio, não erro: não aparece em log, não quebra teste de fumaça, e só é descoberto quando um relatório vem zerado.
@@ -526,6 +533,7 @@ Matriz de papéis: `admin` total; `financeiro` total em corporativo e leitura em
 | 1.0 | 24/07/2026 | Original — só cadastros; plataforma declarada como pré-requisito ausente |
 | **2.0** | **24/07/2026** | **§4.1 absorvido: tenant, usuário, RBAC dois níveis, conector e o contrato de isolamento. Não haverá SPEC-000** |
 | **2.1** | **24/07/2026** | **§3.2 ganha a ressalva das três saídas do spike. Citações a "regra N do `CLAUDE.md`" reapontadas para o `CLAUDE.md` v1.0 e para o PRD §7.3/§7.8 — ver `PATCH-citacoes-2026-07-24.md`** |
+| **2.5** | **26/07/2026** | **R20 estava errada, e o retorno do dev mostrou como.** O `app_settings.g3_partner_rules` do CRM nao e segunda engine de calculo — carimba **tier** no lead na criacao, e o financeiro e quem transforma em R$. Isso expos que a R20 lia a classificacao **corrente** do originador: um captador promovido a senior fazia todo contrato antigo recalcular a 60%. `contrato.originador_tipo_no_fechamento` congela o tier no fechamento, e o campo `Comissionamento` do CRM e a semente. Novo teste; migration 5 |
 | **2.4** | **26/07/2026** | **Invariante 13 e migration 4.** O dev do CRM corrigiu uma premissa nossa: "RLS sem policy nega tudo, e o modo de falha e resultado vazio" vale para acesso direto e e **falso atraves de view** - a RLS das bases e avaliada contra o dono da view. Medido no nosso schema: view sem `security_invoker` le **todos os tenants** sem contexto, anulando `FORCE` e as treze policies. O financeiro nao tinha view nenhuma, entao a regra existe antes da primeira |
 | **2.3** | **25/07/2026** | **§3.2 corrigida por medição no mesmo dia.** O contrato prescrevia `$extends` por operação; medido, isso **quebra atomicidade** (duas operações em `txid` distintos; escrita seguida de falha do handler persiste). O padrão primário passa a ser **unidade de trabalho** com `AsyncLocalStorage`, e o `$extends` vira guarda que lança. Também: `set_config` com parâmetro ligado em vez de `SET LOCAL` interpolado (superfície de injeção quando o `tenantId` vem de requisição); **dois pools** em vez de um, com o medido de que relatório saturado não afeta o transacional. Invariante 11 reescrita, cinco testes no lugar de um |
 | **2.2** | **25/07/2026** | **`ADR-0003` r2 absorvido: §3.2 deixa de declarar contrato pendente e passa a fixar o contrato do middleware com nove regras medidas. Nova §3.4 com a lista nominal das FKs compostas — **nove**, não sete como o ADR estimava. Novas tabelas `regra_comissao` e `tarifa`, versionadas por vigência com recusa de sobreposição no banco. `originador.tipo` ganha `terceirizado`. `em_carteira` reclassificado (C1-b matou o F-01). Novas R20 a R24, invariantes 10 a 12 e sete testes. Q-SPEC001-01 e -06 e o ADR-0003 fecham; PgBouncer e Q-SPEC001-07 abrem.** |
