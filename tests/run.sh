@@ -1,35 +1,60 @@
 #!/bin/bash
-# Aplica as duas migrations num banco limpo e roda a suite de isolamento.
-# SPEC-001 9. Uso: ./tests/run.sh  (espera PostgreSQL 16 em 127.0.0.1:5432)
+# Aplica TODAS as migrations num banco limpo, roda o seed e as duas suites SQL.
+# SPEC-001 9. Uso: bash tests/run.sh   (espera PostgreSQL 16 em 127.0.0.1:5432)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export PGPASSWORD="${PGPASSWORD:-spike}"
 PGUSER="${PGUSER:-postgres}"
-DB="${DB:-fin_test}"
 P="psql -h 127.0.0.1 -U $PGUSER -q -v ON_ERROR_STOP=1"
+TENANT_SEED='aaaaaaaa-1111-4000-8000-000000000001'
 
-$P -d postgres -c "DROP DATABASE IF EXISTS $DB WITH (FORCE)" -c "CREATE DATABASE $DB" > /dev/null
+aplicar () {   # $1 = nome do banco
+  $P -d postgres -c "DROP DATABASE IF EXISTS $1 WITH (FORCE)" -c "CREATE DATABASE $1" > /dev/null
+  for m in prisma/migrations/*/migration.sql; do
+    $P -d "$1" -f "$m" 2>&1 | grep -v NOTICE || true
+  done
+}
 
-echo "--- migration 1: schema"
-$P -d "$DB" -f prisma/migrations/20260725120000_fundacao_schema/migration.sql > /dev/null
-echo "--- migration 2: isolamento"
-$P -d "$DB" -f prisma/migrations/20260725120100_isolamento_rls/migration.sql > /dev/null
+suite () {     # $1 = banco, $2 = arquivo .sql
+  psql -h 127.0.0.1 -U "$PGUSER" -d "$1" -f "$2" 2>&1 \
+    | sed "s|^psql:$2:[0-9]*: ||" \
+    | grep -E '^(NOTICE|WARNING|ERROR)' \
+    | sed 's/^NOTICE:  //; s/^WARNING:  /FALHA: /'
+}
 
-echo "--- suite de isolamento"
-psql -h 127.0.0.1 -U "$PGUSER" -d "$DB" -f tests/isolamento.sql 2>&1 \
-  | sed 's|^psql:tests/isolamento.sql:[0-9]*: ||' \
-  | grep -E '^(NOTICE|WARNING|ERROR)' \
-  | sed 's/^NOTICE:  //; s/^WARNING:  /FALHA: /'
+echo "=== migrations + suite de isolamento (banco fin_test)"
+aplicar fin_test
+suite fin_test tests/isolamento.sql
 
 echo
-echo "--- catalogo: tabelas com tenant_id sem RLS+FORCE+policy (esperado: nenhuma)"
-$P -d "$DB" -tA -c "
+echo "=== RBAC e trilha (banco fin_rbac, fixture propria)"
+aplicar fin_rbac
+suite fin_rbac tests/rbac.sql
+
+echo
+echo "=== seed, duas passadas para provar idempotencia (banco fin_seed)"
+aplicar fin_seed
+$P -d fin_seed -c "INSERT INTO tenant (id,razao_social,cnpj) VALUES ('$TENANT_SEED','Seed','99999999000199')" > /dev/null
+for i in 1 2; do
+  psql -h 127.0.0.1 -U "$PGUSER" -d fin_seed -q -v ON_ERROR_STOP=1 -v tenant="'$TENANT_SEED'" \
+    -f prisma/seed/regra_comissao_e_tarifa.sql 2>&1 \
+    | grep -E 'NOTICE' | sed "s|^psql:[^ ]* ||; s/NOTICE:  /passada $i: /"
+done
+$P -d fin_seed -tA -c "
+SELECT 'recalculo de 2026-03-15 acha '||count(*)||' regra(s) e '||
+       (SELECT count(*) FROM tarifa WHERE daterange(vigencia_inicio,vigencia_fim,'[)') @> '2026-03-15'::date)||' tarifa(s)'
+FROM regra_comissao WHERE daterange(vigencia_inicio,vigencia_fim,'[)') @> '2026-03-15'::date;"
+
+echo
+echo "=== catalogo (fin_test): tabelas sem RLS+FORCE+policy, esperado nenhuma"
+$P -d fin_test -tA -c "
 SELECT coalesce(string_agg(c.relname,', '),'nenhuma')
 FROM pg_class c
 JOIN pg_namespace n ON n.oid=c.relnamespace AND n.nspname='public'
-JOIN pg_attribute a ON a.attrelid=c.oid AND a.attname='tenant_id' AND a.attnum>0
-WHERE c.relkind='r' AND (NOT c.relrowsecurity OR NOT c.relforcerowsecurity
-  OR NOT EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid=c.oid));"
+WHERE c.relkind='r'
+  AND c.relname NOT LIKE 'app_marcador%'
+  AND (NOT c.relrowsecurity OR NOT c.relforcerowsecurity
+    OR NOT EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid=c.oid));"
 
-echo "--- FKs compostas (esperado: 9)"
-$P -d "$DB" -tA -c "SELECT count(*) FROM pg_constraint WHERE contype='f' AND array_length(conkey,1)=2;"
+echo "=== FKs compostas, esperado 9"
+$P -d fin_test -tA -c "SELECT count(*) FROM pg_constraint WHERE contype='f' AND array_length(conkey,1)=2;"

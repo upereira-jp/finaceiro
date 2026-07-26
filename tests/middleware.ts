@@ -20,8 +20,9 @@ const CONN = 'postgresql://app_pool:spike@127.0.0.1:5432/spike';
 const pools = criarPools(CONN);
 const tx  = new PrismaClient({ adapter: new PrismaPg(pools.transacional) });
 const rel = new PrismaClient({ adapter: new PrismaPg(pools.relatorio) });
-const withTenant  = <T>(t: string, f: (c: any) => Promise<T>) => withTenantEm(tx as any, t, f);
-const withRelator = <T>(t: string, f: (c: any) => Promise<T>) => withTenantRelatorioEm(rel as any, t, f);
+const U = 'eeeeeeee-0000-4000-8000-00000000000e';   // usuario ficticio: o middleware nao valida existencia, a RLS valida
+const withTenant  = <T>(t: string, f: (c: any) => Promise<T>) => withTenantEm(tx as any, { tenantId: t, usuarioId: U }, f);
+const withRelator = <T>(t: string, f: (c: any) => Promise<T>) => withTenantRelatorioEm(rel as any, { tenantId: t, usuarioId: U }, f);
 
 let falhas = 0;
 const ok  = (id: string, d: string) => console.log(`ok   ${id.padEnd(4)} ${d}`);

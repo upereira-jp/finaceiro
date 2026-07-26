@@ -19,7 +19,12 @@ export type ClientTx = {
   [modelo: string]: any;
 };
 
-type Escopo = { tenantId: string; tx: ClientTx; tipo: 'transacional' | 'relatorio' };
+/** Tier de plataforma. NULL para usuario comum de tenant. SPEC-001 R2 e R3. */
+export type Tier = 'plataforma_admin' | 'plataforma_suporte' | null;
+
+export type Identidade = { tenantId: string; usuarioId: string; tier?: Tier };
+
+type Escopo = Identidade & { tx: ClientTx; tipo: 'transacional' | 'relatorio' };
 
 const als = new AsyncLocalStorage<Escopo>();
 
@@ -56,12 +61,19 @@ export class ContextoAninhado extends Error {
  * '<valor>'" nao aceita, e obrigaria interpolar string no SQL. Com tenantId
  * vindo de requisicao, interpolar e superficie de injecao. Aqui nao existe.
  */
-async function emitirContexto(tx: ClientTx, tenantId: string): Promise<void> {
-  await tx.$queryRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`;
+async function emitirContexto(tx: ClientTx, id: Identidade): Promise<void> {
+  await tx.$queryRaw`
+    SELECT set_config('app.tenant_id',  ${id.tenantId},      true),
+           set_config('app.usuario_id', ${id.usuarioId},     true),
+           set_config('app.tier',       ${id.tier ?? ''},    true)`;
 }
 
-function validar(tenantId: string): void {
-  if (!UUID.test(tenantId)) throw new TypeError(`tenantId nao e UUID: ${JSON.stringify(tenantId)}`);
+function validar(id: Identidade): void {
+  if (!UUID.test(id.tenantId))  throw new TypeError(`tenantId nao e UUID: ${JSON.stringify(id.tenantId)}`);
+  if (!UUID.test(id.usuarioId)) throw new TypeError(`usuarioId nao e UUID: ${JSON.stringify(id.usuarioId)}`);
+  if (id.tier != null && id.tier !== 'plataforma_admin' && id.tier !== 'plataforma_suporte') {
+    throw new TypeError(`tier invalido: ${JSON.stringify(id.tier)}`);
+  }
 }
 
 /** O escopo corrente, ou erro. Nunca devolve undefined em silencio. */
@@ -77,6 +89,18 @@ export function tenantCorrente(): string {
   return e.tenantId;
 }
 
+export function usuarioCorrente(): string {
+  const e = als.getStore();
+  if (!e) throw new SemContextoDeTenant();
+  return e.usuarioId;
+}
+
+export function tierCorrente(): Tier {
+  const e = als.getStore();
+  if (!e) throw new SemContextoDeTenant();
+  return e.tier ?? null;
+}
+
 export function dentroDeUnidadeDeTrabalho(): boolean {
   return als.getStore() !== undefined;
 }
@@ -88,16 +112,16 @@ type Executor = {
 function fabricar(tipo: 'transacional' | 'relatorio', opcoesTx: object) {
   return async function withTenantEscopado<T>(
     executor: Executor,
-    tenantId: string,
+    identidade: Identidade,
     trabalho: (tx: ClientTx) => Promise<T>,
   ): Promise<T> {
-    validar(tenantId);
+    validar(identidade);
     const externo = als.getStore();
-    if (externo) throw new ContextoAninhado(externo.tenantId, tenantId);
+    if (externo) throw new ContextoAninhado(externo.tenantId, identidade.tenantId);
 
     return executor.$transaction(async (tx: ClientTx) => {
-      await emitirContexto(tx, tenantId);
-      return als.run({ tenantId, tx, tipo }, () => trabalho(tx));
+      await emitirContexto(tx, identidade);
+      return als.run({ ...identidade, tx, tipo }, () => trabalho(tx));
     }, opcoesTx);
   };
 }
@@ -129,4 +153,67 @@ export function comGuarda<C extends { $extends: (ext: any) => any }>(base: C): C
       },
     },
   });
+}
+
+/**
+ * SPEC-001 R2 - registra a passagem de tier de plataforma por dado de tenant.
+ *
+ * Chame ANTES de ler. Nao e educacao: a constraint trigger
+ * app.exigir_trilha_de_plataforma() confere no COMMIT e ABORTA a transacao se a
+ * linha nao existir. A trilha nao depende de alguem lembrar - depende do banco.
+ */
+export async function registrarAcessoDePlataforma(acao: string, recurso: string): Promise<void> {
+  const e = als.getStore();
+  if (!e) throw new SemContextoDeTenant();
+  if (!e.tier) return;   // usuario de tenant nao gera trilha de plataforma
+  await e.tx.$queryRaw`
+    INSERT INTO acesso_plataforma_log (id, tenant_id, usuario_id, acao, recurso)
+    VALUES (gen_random_uuid(), ${e.tenantId}::uuid, ${e.usuarioId}::uuid, ${acao}, ${recurso})`;
+}
+
+/** SPEC-001 R1 - ausencia de vinculo e indistinguivel de tenant inexistente. */
+export class TenantNaoEncontrado extends Error {
+  readonly status = 404;
+  constructor() {
+    super('Tenant nao encontrado.');   // deliberadamente sem detalhe: 404, nunca 403
+    this.name = 'TenantNaoEncontrado';
+  }
+}
+
+/**
+ * R1 + R3. Confere o vinculo DENTRO do contexto, que e o unico lugar onde a
+ * pergunta faz sentido: sem vinculo, a RLS de usuario_tenant devolve zero, e
+ * zero e indistinguivel de tenant inexistente. A regra sai da RLS, nao de um if.
+ *
+ * R3: tier de plataforma NAO ganha papel por ser plataforma. Precisa de vinculo
+ * explicito, e a passagem fica na trilha.
+ */
+export async function papelNoTenantCorrente(): Promise<string> {
+  const tx = db();
+  const r: any = await tx.$queryRaw`
+    SELECT papel FROM usuario_tenant
+    WHERE usuario_id = app.current_usuario_id()
+      AND tenant_id  = app.current_tenant_id()
+      AND ativo
+    LIMIT 1`;
+  if (!r?.[0]?.papel) throw new TenantNaoEncontrado();
+  return r[0].papel as string;
+}
+
+const PODE: Record<string, ReadonlySet<string>> = {
+  ler:              new Set(['admin', 'financeiro', 'cobranca', 'leitura']),
+  escrever_cadastro:new Set(['admin', 'financeiro']),
+  escrever_carteira:new Set(['admin', 'cobranca']),
+  administrar:      new Set(['admin']),
+};
+
+/** Matriz do PRD 3. Lanca se o papel do vinculo nao cobre a acao. */
+export async function exigir(acao: keyof typeof PODE): Promise<string> {
+  const papel = await papelNoTenantCorrente();
+  if (!PODE[acao].has(papel)) {
+    const e: any = new Error(`Papel "${papel}" nao pode "${acao}".`);
+    e.status = 403; e.name = 'PapelInsuficiente';
+    throw e;
+  }
+  return papel;
 }

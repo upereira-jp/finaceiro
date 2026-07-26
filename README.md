@@ -44,7 +44,8 @@ CLAUDE.md                    regras inegociaveis — camada mais alta
 PRD-v2.2.md                  fonte de verdade do produto
 GLOSSARIO.md                 vocabulario unico (rev. 3)
 QUESTOES.md                  registro unico de questoes abertas, com taxonomia de severidade
-SPEC-001-fundacao.md         spec da F1 (v2.2)
+SPEC-001-fundacao.md         spec da F1 (v2.3)
+SPEC-002-conector.md         spec do conector (v1.0 — 4.3 travada na AUD-07)
 _TEMPLATE-SPEC.md            anatomia fixa das specs
 RESUMO-SESSAO-2.md           passagem da sessao 2
 RESUMO-SESSAO-3.md           passagem da sessao 3 — comece por aqui
@@ -52,6 +53,7 @@ VIEWS-PROPOSTAS-r2.sql       proposta de DDL para o dev do CRM. NAO executada
 
 adr/
   ADR-0002-...               modelo de tenant e de cliente, pos-auditoria
+  ADR-0001-...               estrategia de multi-tenancy: banco unico, RLS por linha (retroativa)
   ADR-0003-...               contexto de tenant: SET LOCAL por transacao (r2, aceita)
   ADR-0004-...               provisionamento: organizacao, dominio e host (aceita)
 
@@ -63,6 +65,12 @@ auditoria/
 
 spike-adr0003/               21 testes, tres variantes de contexto de tenant. ./run.sh
 spike-transacao/             12 testes de $transaction/$extends do Prisma sobre RLS. ./run.sh
+
+src/db/pools.ts              os dois pools: transacional 8/15s, relatorio 2/60s
+src/db/contexto.ts           ponto UNICO de emissao do contexto. RBAC e trilha
+prisma/migrations/           tres, em ordem: schema, isolamento, RBAC e trilha
+prisma/seed/                 regra_comissao e tarifa, idempotente
+tests/                       39 verificacoes: isolamento, RBAC, middleware
 ```
 
 Os dois spikes são **reproduzíveis**, não relatos. `RESULTADOS.txt` em cada um é saída de execução real.
@@ -90,14 +98,16 @@ Decidido e medido, não opinado. Detalhe em `adr/ADR-0003` r2.
 As migrations são **SQL puro**, não geradas por `prisma migrate dev`. Duas, na ordem, conforme a `SPEC-001` §3.2:
 
 ```
-prisma/migrations/20260725120000_fundacao_schema/    tabelas, enums, as 9 FKs compostas
-prisma/migrations/20260725120100_isolamento_rls/     app.current_tenant_id(), RLS FORCE, policies
+prisma/migrations/20260725120000_fundacao_schema/   tabelas, enums, as 9 FKs compostas
+prisma/migrations/20260725120100_isolamento_rls/    app.current_tenant_id(), RLS FORCE, policies
+prisma/migrations/20260725120200_rbac_e_trilha/     RBAC dois níveis, RLS de plataforma, trilha da R2
 ```
 
 Rodar tudo num banco limpo e validar:
 
 ```bash
-./tests/run.sh        # aplica as duas e roda as 16 verificações de isolamento
+bash tests/run.sh          # migrations + isolamento (16) + RBAC (11) + seed idempotente
+bash tests/middleware.sh   # invariantes do middleware (12)
 ```
 
 O mesmo roda no CI (`.github/workflows/isolamento.yml`), com PostgreSQL 16 de serviço — `ADR-0004` condição 5 e `SPEC-001` §9 exigem que o teste de vazamento corra fora da máquina de produção desde o primeiro dia.

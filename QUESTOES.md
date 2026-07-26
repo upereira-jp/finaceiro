@@ -145,4 +145,6 @@ Entregas da F0 conforme `PRD-v2.2` §10:
 | Tarifa | — | `1,13` é **tarifa em R$/kWh**, não fator de consumo. `numeric(12,6)`, não centavos (`SPEC-001` R22) |
 | PgBouncer | — | **Conexão direta (5432), não pooler em modo *transaction*.** Deduzido do `ADR-0004`: processo Node de vida longa não precisa de pooler externo. Reverter a decisão reabre o `ADR-0003` (`SPEC-001` §3.2) |
 | `CLAUDE.md` | — | Nunca existiu. `CLAUDE.md` v1.0 escrito em 24/07; 18 citações reapontadas |
+| `ADR-0001` | — | **Nunca chegou ao repositório**, e a regra 2 do `CLAUDE.md` derivava dele. Escrito retroativamente em 25/07: não reconstrói o original perdido, registra a decisão que o corpus pressupõe, com proveniência por parte. Última citação órfã do corpus |
+| Vazamento em `usuario_tenant` | — | A policy da migration 2 deixava qualquer sessão enumerar **a equipe de qualquer tenant** só apontando o contexto. Corrigido na migration 3: só vê a composição quem pertence |
 | "bloqueio vermelho" | — | Taxonomia definida na §1 deste arquivo |

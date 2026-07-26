@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  migrations-e-rls:
+  migrations-rls-rbac-e-seed:
     runs-on: ubuntu-latest
     services:
       postgres:
