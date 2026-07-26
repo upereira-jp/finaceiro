@@ -3,8 +3,8 @@
 | Campo | Valor |
 |---|---|
 | **Status** | Rascunho — aguarda aceite |
-| **Versão** | 1.0 |
-| **Data** | 25/07/2026 |
+| **Versão** | 1.1 |
+| **Data** | 26/07/2026 |
 | **Autor** | Vinicius Leal |
 | **Fase** | F2 (parcial em F1: o schema de `conector_crm` já existe) |
 | **Depende de** | `SPEC-001` v2.3 (schema, isolamento, middleware) · `ADR-0001` · `ADR-0003` r2 |
@@ -12,7 +12,7 @@
 | **Documentos-fonte** | `PRD-v2.2` §7 e §8 · `P7` (topologia de funis) · `P8` §5 · `VIEWS-PROPOSTAS-r2.sql` · `RESUMO-SESSAO-3` §4.3b e §4.4 |
 | **Questões abertas** | **AUD-07 é bloqueio duro** — ver §10. F-02, F-04, AUD-11 |
 
-> **Uma dependência trava metade desta spec, e é honesto dizer qual.** A reconciliação da §4 assume que o CRM **não apaga fisicamente** um `lead_id` ao fazer merge de duplicados. Se apagar, a regra de "sumiu do conjunto ⇒ desativa" **desativa cliente vivo**. A pergunta está com o dev do CRM (AUD-07). Até a resposta chegar, a §4.3 tem duas redações e a spec **não é implementável na parte de reconciliação** — o resto é.
+> **A AUD-07 foi respondida em 26/07, e a resposta e a pior das duas hipoteses.** O merge nao apaga - marca `removido_do_funil_em` e migra o historico. Mas existem **dois caminhos de DELETE fisico fora do merge**, um deles ROTINEIRO. A secao 4.3 passa a ter uma redacao unica, a defensiva, e ela ficou mais barata do que eu previa por causa de uma view que o dev ofereceu. Detalhe na 4.3.
 
 ---
 
@@ -65,7 +65,13 @@ conector_execucao   id · tenant_id · ciclo_id · iniciado_em · terminado_em
 
 ## 4. Regras de negócio
 
-> **R1.** O conector lê **exclusivamente** as views `financeiro.*`. Nenhuma tabela base do CRM é consultada, nem para conferência. O motivo é medido: das 151 tabelas de `public` do CRM, **81 têm RLS habilitada e nenhuma policy** (`P8` §2) — e o modo de falha é **resultado vazio**, não erro. Ler tabela base é escolher entre depender de credencial que ignora RLS ou receber zero em silêncio.
+> **R1.** O conector le **exclusivamente** as views `financeiro.*`. Nenhuma tabela base do CRM e consultada, nem para conferencia.
+
+> **R1-b. O isolamento do caminho de leitura NAO vem da RLS do CRM - vem de um literal no corpo da view, e o conector nao confia nele.** Medido e confirmado pelo dev em 26/07: as views `financeiro.*` sao owned por `postgres`, nao declaram `security_invoker`, e por isso a RLS das tabelas base e avaliada contra o dono - que tem `BYPASSRLS`. O que restringe o tenant sao **14 ocorrencias literais** do UUID `d4640f4b-...` espalhadas pelo corpo das views. Uma view nova sem o literal, ou com o literal errado, entrega linhas de outro tenant, e **nenhuma policy impede**.
+>
+> Consequencia operacional, obrigatoria: **o conector valida `crm_tenant_id` em toda linha recebida** contra `conector_crm.crm_tenant_id`, e **aborta o ciclo** na primeira divergencia - `status = 'erro'`, nada e gravado, nada e reconciliado. Custa uma comparacao por linha e e a unica defesa que nao depende de a view estar certa.
+
+> **R1-c.** Consequencia boa da mesma descoberta: **view vazia nao e sintoma de RLS**. O modo de falha "resultado vazio porque a policy negou" nao existe nesse desenho. Zero linhas passa a significar "nada mudou" ou "a view quebrou" - e o caso de borda da secao 7 continua valendo por outro motivo: zero e ambiguo, e ambiguidade nao reconcilia.
 
 > **R2.** **Nenhuma escrita no CRM, em nenhuma circunstância.** A credencial usada é de leitura. Se algum dia o CRM precisar de estado do financeiro, o desenho é o CRM **consumir** endpoint nosso — nunca o inverso (`PRD` §7.8).
 
@@ -89,19 +95,48 @@ conector_execucao   id · tenant_id · ciclo_id · iniciado_em · terminado_em
 
 > **R12.** Todo ciclo roda **dentro do contexto de um tenant**, pelo mesmo middleware da `SPEC-001` §3.2. O conector não tem caminho privilegiado: se ele pudesse ler sem contexto, o isolamento teria uma exceção — e exceção de isolamento é ausência de isolamento.
 
+> **R14.** **Funil `Parceiros` fica FORA da base de comissao sobre valor.** Confirmado pelo dev em 26/07: `won` ali significa "parceiro ativado", nao venda, e os 7 ganhos nao tem valor em nenhuma coluna por natureza. Os 48 ganhos sao 40 `Vendas - Assinatura` + 1 `Vendas - Integracao` + 7 `Parceiros`, e os funis de venda tem **zero** ganhos sem valor. O filtro e por funil, e a R9 deixa de disparar.
+
+> **R15.** **O campo `Comissionamento` significa duas coisas diferentes dependendo do funil.** Em card de venda e aliquota. Em card do funil `Parceiros` e **tier do parceiro** - os 7 tem o campo preenchido (6 `PADRAO`, 1 `50%`) e nenhum deles e aliquota de venda alguma. O conector **nunca** le esse campo de card do funil `Parceiros`. Sobrecarga semantica de campo e como se paga o dobro sem ninguem mentir.
+
 > **R13.** Um ciclo é **uma unidade de trabalho por lote**, não uma transação gigante nem uma transação por linha. Transação gigante estoura o `timeout` de 15 s e prende conexão do pool; transação por linha perde atomicidade do lote. Lote de tamanho declarado, com `conector_execucao` atualizado ao fim de cada um.
 
-### 4.3 Reconciliação — **duas redações, aguardando AUD-07**
+### 4.3 Reconciliacao - redacao unica, AUD-07 respondida em 26/07
 
-**Se o CRM NÃO apaga fisicamente no merge** (redação preferida):
+**A resposta do dev, em tres partes:**
 
-> Diferença de conjunto. O que está no espelho e não veio no full-scan recebe `ativo = false`. Reversível: se voltar a aparecer, `ativo = true`.
+1. **O merge nao apaga.** Marca `leads.removido_do_funil_em = now()` e adiciona a tag `mesclado`, e migra
+   todo o historico para o sobrevivente. A linha continua em `public.leads`, mas **sai de
+   `financeiro.vendas_ganhas`**, porque a view filtra `removido_do_funil_em IS NULL`. Do nosso ponto de
+   vista o `id` desaparece do full-scan **sem delete**. Frequencia: 1 na historia (10/07/2026).
+2. **Nao existe ponteiro vitima -> sobrevivente em tabela nenhuma.** O mapeamento so vai para log de
+   aplicacao, efemero. Ver a consequencia na secao 10, item MERGE-01: ela e maior que a reconciliacao.
+3. **Existem dois caminhos de DELETE fisico fora do merge, e um deles e rotineiro:**
 
-**Se o CRM APAGA fisicamente:**
+| Caminho | Natureza |
+|---|---|
+| `DELETE /api/leads/{id}` | gated por permissao (diretoria ou allowlist; hoje so o OutSales). **Sem tombstone e sem trilha em tabela** |
+| Sync "Clientes Ativos" da G3 | **apaga rotineiramente** as copias de leads no funil `Clientes ativos - Assinatura` (`fc9f26a3-...`) quando o lead de origem sai de CONCLUIDOS no Rateio. Sao derivadas por desenho: vem e vao |
 
-> Diferença de conjunto **não pode desativar sozinha**. Ausência passa a exigir confirmação em segundo ciclo consecutivo **e** registro em `conector_execucao.detalhe` para revisão humana antes de desativar. Custa um ciclo de latência e uma fila de revisão — é o preço de não desativar cliente vivo.
+**Portanto: um `id` pode desaparecer fisicamente sem rastro, e o pior caso e o caso real.**
 
-**Não escolho a segunda por precaução.** Ela introduz trabalho manual permanente, e a resposta do dev é de um dia. Mas se a resposta não vier antes de a F2 começar, a segunda entra: latência é reversível, cliente ativo desativado por engano não é.
+**A regra:**
+
+> Ausencia no full-scan **nao desativa sozinha**. O conector classifica a ausencia em tres, e so uma
+> delas exige gente:
+>
+> | Classificacao | Como se distingue | Acao |
+> |---|---|---|
+> | **Arquivado ou mesclado** | aparece em `financeiro.leads_arquivados` (view a ser exposta pelo dev - aceita, ver secao 10) | desativa no mesmo ciclo. E ausencia explicada |
+> | **Copia derivada** | o `id` pertencia ao funil `Clientes ativos - Assinatura` | **nao desativa nada** e nao conta como ausencia. Aquele funil e populacao volatil por desenho |
+> | **Sumiu de verdade** | nao esta em nenhuma das duas | exige **dois ciclos consecutivos** de ausencia, registra em `conector_execucao.detalhe` e entra em fila de revisao humana antes de desativar |
+>
+> Desativacao e sempre reversivel: se o `id` voltar a aparecer, `ativo = true`.
+
+**Por que nao a versao simples.** Sem a classificacao, a rotina do sync "Clientes Ativos" faria o
+conector desativar e reativar clientes a cada ciclo, em volume, e a fila de revisao encheria de ruido
+ate ninguem mais olhar. A view `leads_arquivados` e o que reduz a fila ao que e genuinamente ambiguo -
+os dois caminhos de delete fisico, que sao raros - em vez de tudo que sai da view.
 
 ## 5. Invariantes
 
@@ -113,6 +148,8 @@ conector_execucao   id · tenant_id · ciclo_id · iniciado_em · terminado_em
 6. Todo ciclo corre dentro de contexto de tenant, sem caminho privilegiado.
 7. Ambiguidade de alíquota e valor nulo produzem **recusa contada**, nunca valor gravado.
 8. `recusados > 0` é visível em `conector_execucao` — nunca só em log.
+9. **Toda linha recebida tem o `crm_tenant_id` esperado.** Divergencia aborta o ciclo (R1-b). O isolamento do caminho de leitura nao vem da RLS do CRM.
+10. Nenhum card do funil `Parceiros` entra na base de comissao sobre valor (R14), e nenhum `Comissionamento` de card `Parceiros` e lido (R15).
 
 ## 6. Interfaces
 
@@ -171,19 +208,26 @@ conector_execucao   id · tenant_id · ciclo_id · iniciado_em · terminado_em
 | `test_recusa_visivel_em_execucao` | Inv. 8 |
 | `test_lote_respeita_timeout` | R13 · critério 9 |
 | `test_conector_execucao_com_rls` | critério 8 |
+| `test_tenant_divergente_aborta_ciclo` | Inv. 9 · R1-b — linha com `crm_tenant_id` inesperado para o ciclo inteiro |
+| `test_ausencia_classificada_em_tres` | §4.3 — arquivado desativa, copia derivada nao conta, sumido de verdade vai para fila |
+| `test_parceiros_fora_da_comissao` | Inv. 10 · R14 e R15 |
 
 ## 10. Questões abertas
 
 | ID | Pergunta | Bloqueia o quê | Quem responde |
 |---|---|---|---|
-| **AUD-07** | Merge de duplicados apaga fisicamente um `lead_id`? | **a §4.3 inteira** — reconciliação | dev do CRM |
-| **F-01b** | **O gatilho de faturamento não é evento do CRM.** Nenhuma etapa do funil marca o cliente pagante; o card sai do `won` à mão e o desconto ativa depois, fora do CRM. O gatilho real é a 1ª fatura com desconto da distribuidora | `em_carteira` e o início de faturamento | Vinicius + operação |
-| **F-02** | Quais funis contam como conversão final? Hoje `won` inclui 7 parceiros | lista de funis da view | Vinicius |
-| **F-04** | Conector lê participação no funil ou etapa dentro dele? | `cliente_estado_crm` | Vinicius |
-| **AUD-11** | Sync de 30 min é requisito ou pode relaxar? | agendamento e custo de leitura | Vinicius |
-| **C1** | O par de funil `Vendas-Integração → Donos de Usina` ainda não existe no CRM | leitura de dono de usina | dev do CRM |
+| ~~AUD-07~~ | ~~Merge apaga fisicamente?~~ | — | **RESPONDIDA em 26/07.** Nao apaga, mas ha dois caminhos de delete fisico fora do merge, um rotineiro. Ver 4.3 |
+| ~~F-02~~ | ~~Quais funis contam como conversao final?~~ | — | **RESPONDIDA em 26/07.** `Parceiros` fica fora: `won` ali e "parceiro ativado". Ver R14 |
+| **MERGE-01** | **Merge no CRM orfana o cadastro do financeiro.** Nao existe ponteiro vitima -> sobrevivente em tabela nenhuma. Depois de um merge, o financeiro tem **dois clientes espelhados** para a mesma pessoa, desativa um, e o contrato eventualmente amarrado ao desativado fica apontando para cliente inativo. Nenhum mecanismo funde os dois lados | contrato e faturamento da vitima | **Vinicius + dev do CRM** |
+| **ATIVO-01** | **A decisao C1 esta comprometida.** C1 (24/07) manda ler estado ativo do funil `Clientes ativos - Assinatura`. O dev revelou que os cards daquele funil sao **copias derivadas apagadas rotineiramente** pelo sync da G3. Ler estado de populacao volatil por desenho e ler ruido | `cliente_estado_crm` e o gatilho de faturamento | **Vinicius** |
+| **COMISSAO-02** | **Existe um segundo motor de comissao dentro do CRM.** `app_settings.g3_partner_rules`, com atribuicao por tag `indicado_por:<id>` no lead. A `SPEC-001` R20 decidiu que a comissao e chaveada localmente por `originador.tipo`. Duas engines calculando a mesma coisa e duas verdades | motor de comissao (F3) | **Vinicius** |
+| **F-01b** | O gatilho de faturamento nao e evento do CRM. Nenhuma etapa do funil marca o cliente pagante | `em_carteira` e inicio de faturamento | Vinicius + operacao |
+| **ARQ-01** | **Aceito:** view `financeiro.leads_arquivados` (arquivados e mesclados, com a tag) para distinguir "sumiu da view mas existe marcado" de "sumiu de verdade". E o que reduz a fila de revisao da 4.3 ao genuinamente ambiguo | 4.3 sai de fila cheia para fila minima | dev do CRM - **pedido feito** |
+| **F-04** | Conector le participacao no funil ou etapa dentro dele? | `cliente_estado_crm` | Vinicius |
+| **AUD-11** | Sync de 30 min e requisito ou pode relaxar? | agendamento | Vinicius |
+| **C1-crm** | Par de funil `Vendas-Integracao -> Donos de Usina` ainda nao existe | leitura de dono de usina | dev do CRM |
 
-**Nenhuma vira improviso do implementador** (`CLAUDE.md` regra 10). Só a AUD-07 é bloqueio duro, e bloqueia a §4.3 — não a spec inteira.
+**Nenhuma vira improviso do implementador** (`CLAUDE.md` regra 10). As duas vermelhas novas - MERGE-01 e ATIVO-01 - nasceram da resposta do dev, nao da spec: sao consequencias do CRM que ninguem havia mapeado.
 
 ## 11. Fora de escopo / evolução futura
 
@@ -198,4 +242,5 @@ conector_execucao   id · tenant_id · ciclo_id · iniciado_em · terminado_em
 
 | Versão | Data | O que mudou |
 |---|---|---|
+| **1.1** | **26/07/2026** | **Retorno do dev absorvido.** AUD-07 e F-02 fecham. R1 ganha R1-b (o isolamento do caminho de leitura vem de 14 literais no corpo das views, nao da RLS - o conector valida `crm_tenant_id` por linha e aborta na divergencia) e R1-c (view vazia deixa de ser sintoma de RLS). 4.3 passa a redacao unica com ausencia classificada em tres. Novas R14 e R15, invariantes 9 e 10, tres testes. Duas vermelhas novas: MERGE-01 e ATIVO-01 |
 | 1.0 | 25/07/2026 | Original. Escrita com a AUD-07 aberta e a §4.3 em duas redações declaradas, em vez de escolher a versão defensiva por precaução e criar trabalho manual permanente |
