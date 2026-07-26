@@ -1,0 +1,430 @@
+generator client {
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["partialIndexes"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model acesso_plataforma_log {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id   String   @db.Uuid
+  usuario_id  String   @db.Uuid
+  acao        String
+  recurso     String
+  ocorrido_em DateTime @default(now()) @db.Timestamptz(6)
+  tenant      tenant   @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usuario     usuario  @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([tenant_id, ocorrido_em(sort: Desc)], map: "acesso_plataforma_log_tenant_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model cliente {
+  id                          String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id                   String                @db.Uuid
+  crm_lead_id                 String?               @db.Uuid
+  nome                        String
+  telefone                    String?
+  email                       String?
+  origem                      String?
+  consumo_kwh                 Decimal?              @db.Decimal(14, 4)
+  consumo_referencia_centavos Int?
+  documento                   String?
+  documento_tipo              documento_tipo?
+  documento_validado          Boolean               @default(false)
+  documento_origem            documento_origem?
+  ativo                       Boolean               @default(true)
+  criado_em                   DateTime              @default(now()) @db.Timestamptz(6)
+  tenant                      tenant                @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  cliente_estado_crm          cliente_estado_crm?
+  contrato                    contrato[]
+  unidade_consumidora         unidade_consumidora[]
+
+  @@unique([tenant_id, crm_lead_id], map: "cliente_crm_lead_unico", where: raw("(crm_lead_id IS NOT NULL)"))
+  @@unique([tenant_id, documento], map: "cliente_documento_unico", where: raw("(documento IS NOT NULL)"))
+  @@unique([tenant_id, id], map: "cliente_id_tenant")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model cliente_estado_crm {
+  cliente_id       String    @id @db.Uuid
+  tenant_id        String    @db.Uuid
+  tem_rateio_ativo Boolean?
+  tem_venda_ganha  Boolean?
+  em_carteira      Boolean?
+  sincronizado_em  DateTime? @db.Timestamptz(6)
+  cliente          cliente   @relation(fields: [tenant_id, cliente_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "cec_cliente_fk")
+  tenant           tenant    @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model conector_crm {
+  id                 String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id          String          @unique @db.Uuid
+  tipo               conector_tipo
+  crm_tenant_id      String          @db.Uuid
+  credencial_ref     String
+  ativo              Boolean         @default(false)
+  ultima_execucao_em DateTime?       @db.Timestamptz(6)
+  ultimo_status      conector_status @default(nunca_executou)
+  tenant             tenant          @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model contrato {
+  id                            String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id                     String                  @db.Uuid
+  cliente_id                    String                  @db.Uuid
+  unidade_consumidora_id        String                  @db.Uuid
+  usina_id                      String                  @db.Uuid
+  originador_id                 String?                 @db.Uuid
+  data_fechamento               DateTime                @db.Date
+  valor_referencia_centavos     Int
+  valor_referencia_origem       valor_referencia_origem
+  status                        status_contrato         @default(rascunho)
+  faturas_cheias_pagas          Int                     @default(0)
+  originador_tipo_no_fechamento originador_tipo?
+  cliente                       cliente                 @relation(fields: [tenant_id, cliente_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "contrato_cliente_fk")
+  originador                    originador?             @relation(fields: [tenant_id, originador_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "contrato_originador_fk")
+  tenant                        tenant                  @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  unidade_consumidora           unidade_consumidora     @relation(fields: [tenant_id, unidade_consumidora_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "contrato_uc_fk")
+  usina                         usina                   @relation(fields: [tenant_id, usina_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "contrato_usina_fk")
+
+  @@unique([tenant_id, unidade_consumidora_id], map: "contrato_ativo_unico_por_uc", where: raw("(status = 'ativo'::status_contrato)"))
+  @@unique([tenant_id, id], map: "contrato_id_tenant")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model dono_usina {
+  id                 String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id          String               @db.Uuid
+  nome               String
+  natureza           natureza_pessoa
+  documento          String
+  documento_tipo     documento_tipo
+  documento_validado Boolean              @default(false)
+  banco              String?
+  agencia            String?
+  conta              String?
+  tipo_conta         tipo_conta_bancaria?
+  chave_pix          String?
+  tipo_chave_pix     tipo_chave_pix?
+  telefone           String?
+  email              String?
+  ativo              Boolean              @default(true)
+  tenant             tenant               @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usina              usina[]
+
+  @@unique([tenant_id, documento], map: "dono_usina_documento_unico")
+  @@unique([tenant_id, id], map: "dono_usina_id_tenant")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model originador {
+  id                 String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id          String               @db.Uuid
+  nome               String
+  natureza           natureza_pessoa
+  tipo               originador_tipo
+  crm_partner_id     String?              @db.Uuid
+  documento          String
+  documento_tipo     documento_tipo
+  documento_validado Boolean              @default(false)
+  banco              String?
+  agencia            String?
+  conta              String?
+  tipo_conta         tipo_conta_bancaria?
+  chave_pix          String?
+  tipo_chave_pix     tipo_chave_pix?
+  telefone           String?
+  email              String?
+  ativo              Boolean              @default(true)
+  contrato           contrato[]
+  tenant             tenant               @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([tenant_id, documento], map: "originador_documento_unico")
+  @@unique([tenant_id, id], map: "originador_id_tenant")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model plataforma_admin {
+  usuario_id String          @id @db.Uuid
+  tier       tier_plataforma
+  usuario    usuario         @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This table contains exclusion constraints and requires additional setup for migrations. Visit https://pris.ly/d/exclusion-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model regra_comissao {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id       String          @db.Uuid
+  originador_tipo originador_tipo
+  percentual      Decimal         @db.Decimal(5, 2)
+  vigencia_inicio DateTime        @db.Date
+  vigencia_fim    DateTime?       @db.Date
+  tenant          tenant          @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([tenant_id, id], map: "regra_comissao_id_tenant")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This table contains exclusion constraints and requires additional setup for migrations. Visit https://pris.ly/d/exclusion-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model regra_repasse {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id       String    @db.Uuid
+  usina_id        String    @db.Uuid
+  percentual      Decimal   @db.Decimal(5, 2)
+  vigencia_inicio DateTime  @db.Date
+  vigencia_fim    DateTime? @db.Date
+  tenant          tenant    @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usina           usina     @relation(fields: [tenant_id, usina_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "regra_repasse_usina_fk")
+
+  @@unique([tenant_id, id], map: "regra_repasse_id_tenant")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This table contains exclusion constraints and requires additional setup for migrations. Visit https://pris.ly/d/exclusion-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model tarifa {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id            String    @db.Uuid
+  distribuidora        String
+  tarifa_reais_por_kwh Decimal   @db.Decimal(12, 6)
+  vigencia_inicio      DateTime  @db.Date
+  vigencia_fim         DateTime? @db.Date
+  tenant               tenant    @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([tenant_id, id], map: "tarifa_id_tenant")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model tenant {
+  id                    String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  razao_social          String
+  cnpj                  String                  @unique(map: "tenant_cnpj_unico")
+  status                tenant_status           @default(ativo)
+  data_ativacao         DateTime?               @db.Date
+  criado_em             DateTime                @default(now()) @db.Timestamptz(6)
+  atualizado_em         DateTime                @default(now()) @db.Timestamptz(6)
+  acesso_plataforma_log acesso_plataforma_log[]
+  cliente               cliente[]
+  cliente_estado_crm    cliente_estado_crm[]
+  conector_crm          conector_crm?
+  contrato              contrato[]
+  dono_usina            dono_usina[]
+  originador            originador[]
+  regra_comissao        regra_comissao[]
+  regra_repasse         regra_repasse[]
+  tarifa                tarifa[]
+  unidade_consumidora   unidade_consumidora[]
+  usina                 usina[]
+  usina_geracao         usina_geracao[]
+  usuario_tenant        usuario_tenant[]
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model unidade_consumidora {
+  id                   String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id            String          @db.Uuid
+  cliente_id           String          @db.Uuid
+  numero_uc            String
+  distribuidora        String
+  endereco_logradouro  String?
+  endereco_numero      String?
+  endereco_complemento String?
+  endereco_bairro      String?
+  endereco_municipio   String?
+  endereco_uf          String?
+  endereco_cep         String?
+  titularidade         titularidade_uc @default(propria)
+  usina_id             String?         @db.Uuid
+  percentual_rateio    Decimal?        @db.Decimal(7, 4)
+  data_vencimento      DateTime?       @db.Date
+  status               status_uc       @default(ativa)
+  crm_usina_cliente_id String?         @db.Uuid
+  contrato             contrato?
+  cliente              cliente         @relation(fields: [tenant_id, cliente_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "uc_cliente_fk")
+  usina                usina?          @relation(fields: [tenant_id, usina_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "uc_usina_fk")
+  tenant               tenant          @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([tenant_id, crm_usina_cliente_id], map: "uc_crm_unico", where: raw("(crm_usina_cliente_id IS NOT NULL)"))
+  @@unique([tenant_id, id], map: "uc_id_tenant")
+  @@unique([tenant_id, numero_uc], map: "uc_numero_unico")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model usina {
+  id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id           String                @db.Uuid
+  codigo_geradora     String
+  apelido             String?
+  distribuidora       String
+  potencia_kwp        Decimal?              @db.Decimal(12, 4)
+  geracao_nominal_kwh Decimal?              @db.Decimal(14, 4)
+  crm_usina_id        String?               @db.Uuid
+  dono_usina_id       String?               @db.Uuid
+  data_homologacao    DateTime?             @db.Date
+  regime_fio_b        Boolean               @default(true)
+  status              status_usina          @default(ativa)
+  contrato            contrato[]
+  regra_repasse       regra_repasse[]
+  unidade_consumidora unidade_consumidora[]
+  dono_usina          dono_usina?           @relation(fields: [tenant_id, dono_usina_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "usina_dono_fk")
+  tenant              tenant                @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usina_geracao       usina_geracao[]
+
+  @@unique([tenant_id, codigo_geradora], map: "usina_codigo_unico")
+  @@unique([tenant_id, id], map: "usina_id_tenant")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model usina_geracao {
+  id          String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id   String         @db.Uuid
+  usina_id    String         @db.Uuid
+  competencia DateTime       @db.Date
+  geracao_kwh Decimal        @db.Decimal(14, 4)
+  origem      origem_geracao
+  tenant      tenant         @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usina       usina          @relation(fields: [tenant_id, usina_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "usina_geracao_usina_fk")
+
+  @@unique([tenant_id, usina_id, competencia], map: "usina_geracao_competencia_unica")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model usuario {
+  id                    String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  auth_user_id          String                  @unique @db.Uuid
+  nome                  String
+  email                 String
+  ativo                 Boolean                 @default(true)
+  criado_em             DateTime                @default(now()) @db.Timestamptz(6)
+  acesso_plataforma_log acesso_plataforma_log[]
+  plataforma_admin      plataforma_admin?
+  usuario_tenant        usuario_tenant[]
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model usuario_tenant {
+  id         String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id  String       @db.Uuid
+  usuario_id String       @db.Uuid
+  papel      papel_tenant
+  ativo      Boolean      @default(true)
+  tenant     tenant       @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usuario    usuario      @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([usuario_id, tenant_id], map: "usuario_tenant_unico")
+}
+
+enum conector_status {
+  ok
+  erro
+  nunca_executou
+}
+
+enum conector_tipo {
+  intreply
+}
+
+enum documento_origem {
+  crm_semente
+  coleta_local
+}
+
+enum documento_tipo {
+  cpf
+  cnpj
+}
+
+enum natureza_pessoa {
+  pf
+  pj
+}
+
+enum origem_geracao {
+  crm
+  local
+}
+
+enum originador_tipo {
+  vendedor_g3
+  terceirizado
+  parceiro_indicador
+  parceiro_captador
+  parceiro_captador_senior
+}
+
+enum papel_tenant {
+  admin
+  financeiro
+  cobranca
+  leitura
+}
+
+enum status_contrato {
+  rascunho
+  ativo
+  suspenso
+  encerrado
+}
+
+enum status_uc {
+  ativa
+  suspensa
+  cancelada
+}
+
+enum status_usina {
+  ativa
+  suspensa
+  encerrada
+}
+
+enum tenant_status {
+  ativo
+  suspenso
+  encerrado
+}
+
+enum tier_plataforma {
+  plataforma_admin
+  plataforma_suporte
+}
+
+enum tipo_chave_pix {
+  cpf
+  cnpj
+  email
+  telefone
+  aleatoria
+}
+
+enum tipo_conta_bancaria {
+  corrente
+  poupanca
+}
+
+enum titularidade_uc {
+  propria
+  terceiro
+  em_troca
+}
+
+enum valor_referencia_origem {
+  crm_consumo_reais
+  local
+}
