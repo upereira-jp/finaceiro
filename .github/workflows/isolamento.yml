@@ -6,7 +6,7 @@ name: isolamento
 
 on:
   push:
-    paths: ['prisma/**', 'tests/**', 'spike-transacao/**', '.github/workflows/**']
+    paths: ['prisma/**', 'src/**', 'tests/**', 'spike-transacao/**', 'package.json', '.github/workflows/**']
   pull_request:
   workflow_dispatch:
 
@@ -58,3 +58,29 @@ jobs:
         env:
           PGPASSWORD: spike
         run: bash run.sh
+
+  middleware:
+    # SPEC-001 invariantes 10 e 11. E o unico componente onde erro de uma linha
+    # vaza dado entre empresas - o teste roda em todo push, sem excecao.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: spike
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: cliente psql
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+      - name: dependencias
+        run: npm install
+      - name: invariantes do middleware
+        env:
+          PGPASSWORD: spike
+        run: bash tests/middleware.sh

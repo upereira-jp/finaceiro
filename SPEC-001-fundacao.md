@@ -3,8 +3,8 @@
 | Campo | Valor |
 |---|---|
 | **Status** | Rascunho — aguarda aceite |
-| **Versão** | 2.2 |
-| **Data** | 25/07/2026 |
+| **Versão** | 2.3 |
+| **Data** | 25/07/2026 (v2.3 no mesmo dia — ver rodapé) |
 | **Autor** | Vinicius Leal |
 | **Fase** | F1 |
 | **Depende de** | **`ADR-0003` r2 — aceita.** O mecanismo de contexto de tenant está decidido e medido; o contrato do middleware e as obrigações de configuração estão na §3.2 |
@@ -130,13 +130,26 @@ Isto não é orientação de implementação — é norma desta spec, com teste 
 | `SET LOCAL`, **nunca `SET`** | `SET` sem `LOCAL` sobrevive à devolução da conexão ao pool. Medido: pool de 1, transação com `SET`, requisição seguinte sem contexto **leu 2 linhas** |
 | Todo acesso a dado de negócio dentro de transação explícita | Fora de transação o `SET LOCAL` é descartado no fim do statement. Medido: 0 linhas com pool de 5 **e** com pool de 1 — a causa é o `LOCAL`, não o pool |
 | **Ponto único de emissão.** Nenhum repositório, serviço ou script emite contexto | Um único lugar para errar, um único lugar para testar |
-| O middleware **reconstrói** a operação no client de transação — `tx[model][operation](args)` | Emitir o `SET LOCAL` e chamar `query(args)` do hook devolve **zero linhas em silêncio**: o hook não rebinda a operação para a transação que ele abriu |
-| **`$transaction` não aninha** | Transação aberta de dentro de transação toma conexão nova e **não herda o contexto**. Medido: 0 linhas, sem erro |
+| **O contexto é por UNIDADE DE TRABALHO, não por operação.** Uma transação por requisição, contexto emitido uma vez, o client de transação propagado por `AsyncLocalStorage` | Um `$extends` por operação isola corretamente e **destrói a atomicidade**: medido, duas operações seguidas caem em `txid` diferentes, e uma escrita seguida de falha do handler **persiste**. Ver a correção de desenho abaixo |
+| **`set_config('app.tenant_id', $1, true)`, não `SET LOCAL app.tenant_id = '<valor>'`** | Semântica idêntica — escopo de transação — mas **aceita parâmetro ligado**. `SET LOCAL` não aceita, e obrigaria interpolar o `tenantId` no SQL. Com `tenantId` vindo de requisição, isso é superfície de injeção |
+| O acesso fora de unidade de trabalho **lança**, não devolve vazio | `db()` sem escopo lança `SemContextoDeTenant`; o client base recebe guarda que lança. Transforma "leu zero e ninguém percebeu" em exceção imediata |
+| **Unidade de trabalho não aninha** | Reabrir dentro de uma aberta toma conexão nova e **não herda o contexto**: leitura devolveria zero, sem erro. Lança `ContextoAninhado` |
 | `timeout` e `maxWait` **explícitos** — recomendado 15.000 ms e 5.000 ms | Os defaults são 5.000 e 2.000 ms. Medido: query de 6 s falha com `P2028` em 6.036 ms, ou seja o banco **conclui o trabalho** e o cliente recusa o commit; e com pool de 1 ocupado, a segunda requisição falha em 2.001 ms |
-| Pool com teto declarado, conferido contra `max_connections` | O financeiro divide o host com o CRM (`ADR-0004`). Pool sem teto é o modo de falha sob carga em 1 vCPU |
-| Leitura de relatório **não** usa o middleware genérico | Contexto emitido uma vez por bloco, timeout dimensionado ao relatório. Relatório que passe de 5 s morre no caminho genérico |
+| **Dois pools, não um:** transacional (teto 8, `timeout` 15 s) e relatório (teto 2, `timeout` 60 s), separados | Pool único faz relatório lento consumir os slots, e as requisições seguintes **não entram em fila** — falham com `P2028` em `maxWait`. Não é degradação, é penhasco. Medido: com o pool de relatório saturado, o transacional responde em 3 ms |
+| Teto declarado por variável de ambiente, conferido contra `max_connections` | Regra de ajuste: `teto ≤ (max_connections − reservado_pelo_provedor − 5) / n_instâncias`, limitado a 8 — acima disso não compra nada nesta carga. **No deploy com sobreposição de instâncias o total dobra**; dimensione para o pico |
 
-**Custo aceito:** um round trip vira quatro (`BEGIN` · `SET LOCAL` · query · `COMMIT`). Medido em localhost: 1,8x só do `BEGIN`/`COMMIT`, 2,2x a 3,0x no total. Em rede real a régua é a contagem de round trips, não o milissegundo de localhost.
+#### Correção de desenho — 25/07/2026, medida
+
+A primeira redação desta seção prescrevia um `$extends` **por operação**, que abria uma transação para cada chamada e reconstruía a operação no client de transação. Isso **isola corretamente** — foi medido — e **destrói a atomicidade**:
+
+| Medição | Resultado |
+|---|---|
+| Duas operações seguidas pelo extension por operação | **`txid` diferentes** — duas transações distintas |
+| Escrita seguida de falha do handler | **a linha PERSISTIU** |
+
+Para um sistema que calcula comissão e repasse, um handler que lê, decide e escreve sem atomicidade é defeito estrutural, não detalhe. **O padrão primário é a unidade de trabalho**; o `$extends` fica apenas como **guarda que lança**, nunca como emissor de contexto.
+
+**Custo aceito:** um round trip vira quatro (`BEGIN` · `set_config` · query · `COMMIT`). Medido em localhost: 1,8x só do `BEGIN`/`COMMIT`, 2,2x a 3,0x no total. Em rede real a régua é a contagem de round trips, não o milissegundo de localhost.
 
 #### PgBouncer — fechado em 25/07 por dedução, não por teste
 
@@ -386,7 +399,7 @@ Toda referência entre entidades de negócio é `(tenant_id, id)`. São **nove**
 8. Nenhuma coluna do sistema contém credencial em claro.
 9. Nenhuma linha do CRM é modificada por esta spec.
 10. **`$transaction` não aninha.** Transação aberta de dentro de transação não herda o contexto e lê zero — sem erro. *(I-7 do `ADR-0003` r2.)*
-11. **O middleware reconstrói a operação no client de transação.** `tx[model][operation](args)`, nunca `query(args)`. *(I-8 do `ADR-0003` r2.)*
+11. **O contexto é por unidade de trabalho, não por operação.** Uma transação por requisição; o client de transação é propagado, nunca reaberto. Acesso fora de escopo **lança**. *(I-8 do `ADR-0003` r2, revista na v2.3 — a redação anterior prescrevia o padrão por operação, que quebra atomicidade.)*
 12. **Nenhuma chave de `regra_comissao` ou `tarifa` tem vigência sobreposta**, e a recusa é do banco.
 
 > **Sobre a invariante 2.** "Nenhuma FK atravessa tenant" deixou de ser afirmação e passou a ter mecanismo: as nove FKs compostas da §3.4. Antes disso a invariante era uma frase — o `ADR-0003` mediu o banco aceitando a violação.
@@ -464,7 +477,11 @@ Matriz de papéis: `admin` total; `financeiro` total em corporativo e leitura em
 | `test_vazamento_contexto_no_pool` | Pool de tamanho 1: requisição com contexto seguida de requisição sem contexto tem que ler **zero**. É o teste que pega alguém apagando o `LOCAL` |
 | `test_fk_composta_rejeita_cross_tenant` | §3.4 · Inv. 2 — as nove FKs, uma a uma. Espera `23503` |
 | `test_transacao_nao_aninha` | Inv. 10 — tem que **falhar em desenvolvimento**, não devolver vazio |
-| `test_middleware_recria_operacao_no_tx` | Inv. 11 — quebra se `tx[model][operation](args)` virar `query(args)` |
+| `test_contexto_por_unidade_de_trabalho` | Inv. 11 — três pontos de medição na mesma unidade devem dar **um** `txid` |
+| `test_atomicidade_entre_operacoes` | Escrita seguida de falha do handler tem que ser **revertida**. É o teste que pegou o desenho errado |
+| `test_acesso_fora_de_escopo_lanca` | `db()` sem escopo e client base guardado lançam, em vez de devolver vazio |
+| `test_tenant_id_nao_interpolado` | `tenantId` não-UUID lança antes de tocar o banco; `set_config` com parâmetro ligado |
+| `test_relatorio_nao_esgota_pool_transacional` | Pool de relatório saturado, transacional responde normal |
 | `test_vigencia_nao_sobrepoe` | Inv. 12 · R21 — em `regra_comissao` e em `tarifa` |
 | `test_tarifa_nao_e_centavos` | R22 — falha se a coluna de tarifa for inteira |
 | `test_arredondamento_uma_vez` | R23 — nenhum `round()` em intermediário |
@@ -507,4 +524,5 @@ Matriz de papéis: `admin` total; `financeiro` total em corporativo e leitura em
 | 1.0 | 24/07/2026 | Original — só cadastros; plataforma declarada como pré-requisito ausente |
 | **2.0** | **24/07/2026** | **§4.1 absorvido: tenant, usuário, RBAC dois níveis, conector e o contrato de isolamento. Não haverá SPEC-000** |
 | **2.1** | **24/07/2026** | **§3.2 ganha a ressalva das três saídas do spike. Citações a "regra N do `CLAUDE.md`" reapontadas para o `CLAUDE.md` v1.0 e para o PRD §7.3/§7.8 — ver `PATCH-citacoes-2026-07-24.md`** |
+| **2.3** | **25/07/2026** | **§3.2 corrigida por medição no mesmo dia.** O contrato prescrevia `$extends` por operação; medido, isso **quebra atomicidade** (duas operações em `txid` distintos; escrita seguida de falha do handler persiste). O padrão primário passa a ser **unidade de trabalho** com `AsyncLocalStorage`, e o `$extends` vira guarda que lança. Também: `set_config` com parâmetro ligado em vez de `SET LOCAL` interpolado (superfície de injeção quando o `tenantId` vem de requisição); **dois pools** em vez de um, com o medido de que relatório saturado não afeta o transacional. Invariante 11 reescrita, cinco testes no lugar de um |
 | **2.2** | **25/07/2026** | **`ADR-0003` r2 absorvido: §3.2 deixa de declarar contrato pendente e passa a fixar o contrato do middleware com nove regras medidas. Nova §3.4 com a lista nominal das FKs compostas — **nove**, não sete como o ADR estimava. Novas tabelas `regra_comissao` e `tarifa`, versionadas por vigência com recusa de sobreposição no banco. `originador.tipo` ganha `terceirizado`. `em_carteira` reclassificado (C1-b matou o F-01). Novas R20 a R24, invariantes 10 a 12 e sete testes. Q-SPEC001-01 e -06 e o ADR-0003 fecham; PgBouncer e Q-SPEC001-07 abrem.** |
