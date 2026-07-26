@@ -9,7 +9,7 @@ SET client_min_messages = notice;
 
 DO $bloco$
 DECLARE
-  A uuid; B uuid;
+  A uuid; B uuid; usr uuid;
   cli_a uuid; cli_b uuid; du_a uuid; du_b uuid; us_a uuid; us_b uuid;
   uc_a uuid; uc_b uuid; org_a uuid; org_b uuid;
   falhas int := 0; n int; msg text;
@@ -18,6 +18,13 @@ BEGIN
   -- ---------------------------------------------------------------- fixture
   INSERT INTO tenant (razao_social, cnpj) VALUES ('Tenant A','00000000000191') RETURNING id INTO A;
   INSERT INTO tenant (razao_social, cnpj) VALUES ('Tenant B','00000000000272') RETURNING id INTO B;
+
+  -- Desde a migration 6 a policy exige VINCULO, nao apenas tenant. A fixture
+  -- passa a criar usuario e vinculo: sem isso o teste nao ve o proprio dado, e
+  -- essa quebra foi a prova de que o aperto funcionou.
+  INSERT INTO usuario (auth_user_id, nome, email) VALUES (gen_random_uuid(),'Teste','t@x') RETURNING id INTO usr;
+  INSERT INTO usuario_tenant (tenant_id, usuario_id, papel) VALUES (A, usr, 'admin');
+  INSERT INTO usuario_tenant (tenant_id, usuario_id, papel) VALUES (B, usr, 'admin');
 
   INSERT INTO cliente (tenant_id, nome) VALUES (A,'Cliente A') RETURNING id INTO cli_a;
   INSERT INTO cliente (tenant_id, nome) VALUES (B,'Cliente B') RETURNING id INTO cli_b;
@@ -96,8 +103,9 @@ BEGIN
   ELSE RAISE WARNING 'FALHA: sem contexto leu % linhas', n; falhas:=falhas+1; END IF;
 
   PERFORM set_config('app.tenant_id', A::text, true);   -- true = LOCAL
+  PERFORM set_config('app.usuario_id', usr::text, true);
   SELECT count(*) INTO n FROM cliente;
-  IF n=1 THEN RAISE NOTICE 'ok  com contexto do A, le somente o A';
+  IF n=1 THEN RAISE NOTICE 'ok  com contexto do A e vinculo, le somente o A';
   ELSE RAISE WARNING 'FALHA: com contexto do A leu % linhas (esperado 1)', n; falhas:=falhas+1; END IF;
 
   BEGIN INSERT INTO cliente (tenant_id,nome) VALUES (B,'invasor');

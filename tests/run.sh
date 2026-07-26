@@ -11,7 +11,14 @@ TENANT_SEED='aaaaaaaa-1111-4000-8000-000000000001'
 aplicar () {   # $1 = nome do banco
   $P -d postgres -c "DROP DATABASE IF EXISTS $1 WITH (FORCE)" -c "CREATE DATABASE $1" > /dev/null
   for m in prisma/migrations/*/migration.sql; do
-    $P -d "$1" -f "$m" 2>&1 | grep -v NOTICE || true
+    # Sem pipe para grep: em pipeline o status de saida e do grep, e uma
+    # migration que falha passa em SILENCIO. Foi o que aconteceu em 26/07 - o
+    # mesmo modo de falha que este projeto persegue nas policies, dentro do
+    # proprio runner. Erro vai para arquivo e o script morre.
+    if ! $P -d "$1" -f "$m" > /tmp/mig.log 2>&1; then
+      echo "FALHA na migration $m:"; grep -vE '^(NOTICE|CREATE|ALTER|GRANT|REVOKE|COMMENT|DO|SET)' /tmp/mig.log | head -20
+      exit 1
+    fi
   done
 }
 

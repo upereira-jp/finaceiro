@@ -3,7 +3,7 @@
 | Campo | Valor |
 |---|---|
 | **Status** | Rascunho — aguarda aceite |
-| **Versão** | 2.5 |
+| **Versão** | 2.6 |
 | **Data** | 25/07/2026 (v2.3 no mesmo dia — ver rodapé) |
 | **Autor** | Vinicius Leal |
 | **Fase** | F1 |
@@ -326,7 +326,18 @@ Toda referência entre entidades de negócio é `(tenant_id, id)`. São **nove**
 
 ### Plataforma
 
-> **R1.** Todo acesso a dado de tenant passa por vínculo ativo em `usuario_tenant`. Ausência de vínculo é indistinguível de tenant inexistente — 404, nunca 403, para não vazar existência.
+> **R1.** Todo acesso a dado de tenant passa por vínculo ativo em `usuario_tenant`, **e a exigência é da policy, não da aplicação**. Ausência de vínculo é indistinguível de tenant inexistente — 404, nunca 403, para não vazar existência.
+
+> **R1-b. Por que a policy e não só a aplicação — furo medido em 26/07.** As treze policies diziam `tenant_id = app.current_tenant_id()`. Isso confere o **tenant**, não o **vínculo**. Medido, mesma transação:
+>
+> | Sessão | Clientes lidos |
+> |---|--:|
+> | usuário **com** vínculo no tenant A | 1 |
+> | usuário **sem vínculo nenhum**, mesmo contexto | **1** |
+>
+> A verificação de vínculo existia só na aplicação, e **nada obrigava um handler a chamá-la**: `db().cliente.findMany()` direto lia dado financeiro de outra empresa com a sessão de qualquer usuário autenticado, bastando o `tenantId` errado chegar ao middleware. Defesa em uma camada não é defesa. As policies passam a exigir `app.tem_vinculo_no_tenant()`, e o teste `V1` da suíte de RBAC falha se isso for revertido.
+
+> **R1-c. O login é a única chamada sem contexto, e é uma função só.** A policy de `usuario` exige `app.current_usuario_id()` — que é exatamente o que o login está tentando descobrir. Circular, e portanto impossível: medido, `SELECT ... WHERE auth_user_id = ?` devolvia zero. `app.resolver_login(auth_user_id)` quebra o ciclo e é a **única** função do sistema chamada fora de contexto de tenant. Devolve identidade, tier e a lista de tenants a que a pessoa pertence — nenhum dado de negócio.
 
 > **R2.** `plataforma_suporte` que leia dado financeiro de tenant **grava linha em `acesso_plataforma_log` na mesma transação**. Falha ao gravar a trilha aborta a leitura.
 
@@ -407,6 +418,8 @@ Toda referência entre entidades de negócio é `(tenant_id, id)`. São **nove**
 10. **`$transaction` não aninha.** Transação aberta de dentro de transação não herda o contexto e lê zero — sem erro. *(I-7 do `ADR-0003` r2.)*
 11. **O contexto é por unidade de trabalho, não por operação.** Uma transação por requisição; o client de transação é propagado, nunca reaberto. Acesso fora de escopo **lança**. *(I-8 do `ADR-0003` r2, revista na v2.3 — a redação anterior prescrevia o padrão por operação, que quebra atomicidade.)*
 12. **Nenhuma chave de `regra_comissao` ou `tarifa` tem vigencia sobreposta**, e a recusa e do banco.
+14. **Toda policy de tabela de negócio exige vínculo, não apenas tenant.** `tenant_id = app.current_tenant_id() AND app.tem_vinculo_no_tenant()`. Sem a segunda metade, apontar o contexto para um tenant alheio basta para ler (R1-b).
+15. **`app.resolver_login()` é a única função chamada sem contexto de tenant.** Qualquer outra que dispense contexto é violação.
 13. **Toda view em `public` ou `app` declara `WITH (security_invoker = true)`.** Sem isso a RLS das tabelas base e avaliada contra o dono da view e nao contra quem consulta: view owned por superusuario le todos os tenants. Medido, mesma sessao sem contexto - tabela direta 0 linhas, view sem a opcao **2 linhas**, view com a opcao 0 linhas.
 
 > **Sobre a invariante 2.** "Nenhuma FK atravessa tenant" deixou de ser afirmação e passou a ter mecanismo: as nove FKs compostas da §3.4. Antes disso a invariante era uma frase — o `ADR-0003` mediu o banco aceitando a violação.
@@ -493,6 +506,9 @@ Matriz de papéis: `admin` total; `financeiro` total em corporativo e leitura em
 | `test_tarifa_nao_e_centavos` | R22 — falha se a coluna de tarifa for inteira |
 | `test_arredondamento_uma_vez` | R23 — nenhum `round()` em intermediário |
 | `test_tier_congelado_no_fechamento` | R20-b — reclassificar o originador **nao** muda a comissao de contrato antigo. E o teste que pega a promocao reprecificando o passado |
+| `test_policy_exige_vinculo` | Inv. 14 · R1-b — usuário sem vínculo, contexto apontado para o tenant alheio, tem que ler **zero**. É o teste que pega o furo de 26/07 reabrindo |
+| `test_controle_vinculo_valido_le` | Inv. 14 — e o contrário: com vínculo, lê. Impede que o aperto vire nega-tudo sem ninguém notar |
+| `test_bootstrap_login_sem_contexto` | Inv. 15 · R1-c — `resolver_login` responde sem contexto, e devolve vazio para `auth_user_id` inexistente |
 | `test_toda_view_com_security_invoker` | Inv. 13 — consulta de catalogo, e a suite **reproduz o furo**: cria uma view sem a opcao e mede que ela le sem contexto |
 
 **A verificação da invariante 3 é por consulta ao catálogo** (`pg_class.relrowsecurity`, `relforcerowsecurity` e `pg_policy`), nunca por inspeção visual ou revisão de PR. O modo de falha de RLS sem policy é resultado vazio, não erro: não aparece em log, não quebra teste de fumaça, e só é descoberto quando um relatório vem zerado.
@@ -533,6 +549,7 @@ Matriz de papéis: `admin` total; `financeiro` total em corporativo e leitura em
 | 1.0 | 24/07/2026 | Original — só cadastros; plataforma declarada como pré-requisito ausente |
 | **2.0** | **24/07/2026** | **§4.1 absorvido: tenant, usuário, RBAC dois níveis, conector e o contrato de isolamento. Não haverá SPEC-000** |
 | **2.1** | **24/07/2026** | **§3.2 ganha a ressalva das três saídas do spike. Citações a "regra N do `CLAUDE.md`" reapontadas para o `CLAUDE.md` v1.0 e para o PRD §7.3/§7.8 — ver `PATCH-citacoes-2026-07-24.md`** |
+| **2.6** | **26/07/2026** | **Dois furos entre auth e middleware, medidos antes da primeira linha da camada de aplicação.** (1) As policies conferiam tenant e **não vínculo**: usuário sem vínculo, com o contexto apontado para o tenant alheio, **lia o dado financeiro**. A checagem existia só na aplicação e nada obrigava um handler a chamá-la. (2) O bootstrap do login era **circular** — a policy de `usuario` exige `app.current_usuario_id()`, que é o que o login procura. Migration 6: `app.tem_vinculo_no_tenant()` nas treze policies e `app.resolver_login()` como única função sem contexto. Invariantes 14 e 15, quatro testes. E o `tests/run.sh` foi corrigido: ele engolia falha de migration em pipeline — o mesmo modo de falha silenciosa que este projeto persegue nas policies, dentro do próprio runner |
 | **2.5** | **26/07/2026** | **R20 estava errada, e o retorno do dev mostrou como.** O `app_settings.g3_partner_rules` do CRM nao e segunda engine de calculo — carimba **tier** no lead na criacao, e o financeiro e quem transforma em R$. Isso expos que a R20 lia a classificacao **corrente** do originador: um captador promovido a senior fazia todo contrato antigo recalcular a 60%. `contrato.originador_tipo_no_fechamento` congela o tier no fechamento, e o campo `Comissionamento` do CRM e a semente. Novo teste; migration 5 |
 | **2.4** | **26/07/2026** | **Invariante 13 e migration 4.** O dev do CRM corrigiu uma premissa nossa: "RLS sem policy nega tudo, e o modo de falha e resultado vazio" vale para acesso direto e e **falso atraves de view** - a RLS das bases e avaliada contra o dono da view. Medido no nosso schema: view sem `security_invoker` le **todos os tenants** sem contexto, anulando `FORCE` e as treze policies. O financeiro nao tinha view nenhuma, entao a regra existe antes da primeira |
 | **2.3** | **25/07/2026** | **§3.2 corrigida por medição no mesmo dia.** O contrato prescrevia `$extends` por operação; medido, isso **quebra atomicidade** (duas operações em `txid` distintos; escrita seguida de falha do handler persiste). O padrão primário passa a ser **unidade de trabalho** com `AsyncLocalStorage`, e o `$extends` vira guarda que lança. Também: `set_config` com parâmetro ligado em vez de `SET LOCAL` interpolado (superfície de injeção quando o `tenantId` vem de requisição); **dois pools** em vez de um, com o medido de que relatório saturado não afeta o transacional. Invariante 11 reescrita, cinco testes no lugar de um |

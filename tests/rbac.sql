@@ -6,12 +6,13 @@ SET client_min_messages = notice;
 
 DO $bloco$
 DECLARE
-  A uuid; B uuid; uA uuid; uB uuid; uSup uuid;
+  A uuid; B uuid; uA uuid; uB uuid; uSup uuid; authA uuid;
   falhas int := 0; n int; papel text; msg text;
 BEGIN
   INSERT INTO tenant (razao_social, cnpj) VALUES ('T A','11111111000191') RETURNING id INTO A;
   INSERT INTO tenant (razao_social, cnpj) VALUES ('T B','22222222000272') RETURNING id INTO B;
-  INSERT INTO usuario (auth_user_id, nome, email) VALUES (gen_random_uuid(),'U do A','a@x') RETURNING id INTO uA;
+  authA := gen_random_uuid();
+  INSERT INTO usuario (auth_user_id, nome, email) VALUES (authA,'U do A','a@x') RETURNING id INTO uA;
   INSERT INTO usuario (auth_user_id, nome, email) VALUES (gen_random_uuid(),'U do B','b@x') RETURNING id INTO uB;
   INSERT INTO usuario (auth_user_id, nome, email) VALUES (gen_random_uuid(),'Suporte','s@x') RETURNING id INTO uSup;
   INSERT INTO usuario_tenant (tenant_id, usuario_id, papel) VALUES (A, uA, 'financeiro');
@@ -36,8 +37,8 @@ BEGIN
   ELSE RAISE WARNING 'FALHA R1b viu % tenants', n; falhas := falhas + 1; END IF;
 
   SELECT count(*) INTO n FROM cliente;
-  IF n = 1 THEN RAISE NOTICE 'ok   R1c  dado do B visivel pela RLS de tenant; o vinculo e que nega (aplicacao lanca 404)';
-  ELSE RAISE WARNING 'FALHA R1c leu % clientes', n; falhas := falhas + 1; END IF;
+  IF n = 0 THEN RAISE NOTICE 'ok   R1c  dado do B NAO e visivel: desde a migration 6 a policy exige vinculo, e o banco nega antes da aplicacao';
+  ELSE RAISE WARNING 'FALHA R1c leu % cliente(s) do B sem vinculo - o furo de 26/07 reabriu', n; falhas := falhas + 1; END IF;
 
   -- ---------------------------------------------- vinculo valido resolve papel
   PERFORM set_config('app.tenant_id', A::text, true);
@@ -89,7 +90,34 @@ BEGIN
   IF n = 1 THEN RAISE NOTICE 'ok   P3   sem tier, so o tenant do contexto (1 de 2)';
   ELSE RAISE WARNING 'FALHA P3 viu % de 2 sem tier', n; falhas := falhas + 1; END IF;
 
+  -- ---------------------------------------------- FURO 2, fechado na migration 6
+  PERFORM set_config('app.tier', '', true);
+  PERFORM set_config('app.tenant_id',  A::text, true);
+  PERFORM set_config('app.usuario_id', uB::text, true);   -- usuario do B, contexto do A
+  SELECT count(*) INTO n FROM cliente;
+  IF n = 0 THEN RAISE NOTICE 'ok   V1   usuario do B com contexto apontado para o A: 0 clientes';
+  ELSE RAISE WARNING 'FALHA V1 leu % cliente(s) do A sem vinculo', n; falhas := falhas + 1; END IF;
+
+  PERFORM set_config('app.usuario_id', uA::text, true);
+  SELECT count(*) INTO n FROM cliente;
+  IF n = 1 THEN RAISE NOTICE 'ok   V2   controle: com vinculo, le o proprio dado (a policy nao virou nega-tudo)';
+  ELSE RAISE WARNING 'FALHA V2 usuario com vinculo leu % (esperado 1)', n; falhas := falhas + 1; END IF;
+
+  -- ---------------------------------------------- FURO 1, bootstrap do login
+  PERFORM set_config('app.tenant_id', '', true);
+  PERFORM set_config('app.usuario_id', '', true);
+  -- authA foi capturado na fixture, ANTES do SET ROLE: sem contexto, a propria
+  -- policy de usuario impede ler o auth_user_id - que e exatamente a circularidade
+  -- que resolver_login existe para quebrar.
+  SELECT count(*) INTO n FROM app.resolver_login(authA);
+  IF n >= 1 THEN RAISE NOTICE 'ok   V3   bootstrap: resolver_login devolve identidade SEM contexto (a policy de usuario era circular)';
+  ELSE RAISE WARNING 'FALHA V3 resolver_login vazio - login impossivel'; falhas := falhas + 1; END IF;
+
+  SELECT count(*) INTO n FROM app.resolver_login(gen_random_uuid());
+  IF n = 0 THEN RAISE NOTICE 'ok   V4   resolver_login com auth_user_id inexistente: vazio';
+  ELSE RAISE WARNING 'FALHA V4 devolveu % linhas para auth_user_id inexistente', n; falhas := falhas + 1; END IF;
+
   RESET ROLE;
   IF falhas > 0 THEN RAISE EXCEPTION '% falha(s) em RBAC', falhas;
-  ELSE RAISE NOTICE '--- RBAC: 11 verificacoes, 0 falhas'; END IF;
+  ELSE RAISE NOTICE '--- RBAC: 15 verificacoes, 0 falhas'; END IF;
 END $bloco$;
