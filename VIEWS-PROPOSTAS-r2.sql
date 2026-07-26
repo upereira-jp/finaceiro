@@ -1,4 +1,26 @@
 -- =====================================================================
+-- OBSOLETO COMO ESTADO. Nota de 26/07/2026.
+--
+-- Este arquivo e a PROPOSTA de 24/07, e o dev do CRM informou que ele NAO
+-- EXISTE no host de producao - lá só havia o r1 e a view viva. O defeito do
+-- LIMIT 1 sem ORDER BY estava VIVO em producao, nao apenas proposto aqui.
+--
+-- O estado APLICADO em 26/07 e outro, e o canonico e do lado do CRM:
+--   /root/auditoria/VIEWS-APLICADAS-20260726.sql
+--
+-- Diferencas ja conhecidas em relacao a este arquivo:
+--   - LATERAL do Comissionamento: array_agg ordenado + comissionamento_n_opcoes
+--   - comissionamento_n_opcoes fica no FIM da lista de colunas
+--   - o predicado o.tenant_id = v.tenant_id NAO existe (a coluna nao existe em
+--     custom_field_options; sugestao minha, errada)
+--   - DISTINCT ON com desempate ORDER BY l.id, entered_at DESC, lfp.id DESC
+--   - views novas: geracao_mensal, rateio_creditos, leads_arquivados, lead_merges
+--
+-- Guardado como registro do que foi PEDIDO. Nao use como referencia do que ESTA
+-- no ar: para isso, o arquivo do CRM.
+-- =====================================================================
+
+-- =====================================================================
 -- VIEWS-PROPOSTAS.sql — r2 — Contrato de interface CRM → Financeiro
 -- Auditoria intreply · original 2026-07-23 · revisão r2 2026-07-23
 -- tenant G3 Solar

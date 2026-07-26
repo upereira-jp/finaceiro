@@ -88,9 +88,7 @@ Entregas da F0 conforme `PRD-v2.2` §10:
 
 | ID | Nível | Pergunta | Quem |
 |---|:--:|---|---|
-| **ATIVO-01** | 🔴 | **A decisao C1 esta comprometida.** Os cards do funil `Clientes ativos - Assinatura` sao copias derivadas **apagadas rotineiramente** pelo sync da G3 (dev, 26/07). C1 manda ler estado ativo dali - e ler populacao volatil por desenho | Vinicius |
-| **MERGE-01** | 🔴 | **Merge no CRM orfana o cadastro do financeiro.** Nao ha ponteiro vitima -> sobrevivente em tabela nenhuma; o mapeamento so vive em log efemero. Depois de um merge ha dois clientes espelhados para a mesma pessoa | Vinicius + dev CRM |
-| **COMISSAO-02** | 🔴 | **Segundo motor de comissao dentro do CRM:** `app_settings.g3_partner_rules`, atribuicao por tag `indicado_por:<id>`. A R20 decidiu chavear localmente. Duas engines = duas verdades | Vinicius |
+| **POP-01** | 🟡 | **Tres populacoes, tres numeros, e o faturamento precisa de um denominador.** 29 leads em `Rateio Concluido` · 36 vinculos em `usina_clientes` · 28 de 36 homologadas (sessao 3). Qual e a base de cobranca? | Vinicius + operacao |
 | **F-01b** | 🔴 | **Sucessora do F-01.** Nenhuma etapa do funil marca o cliente pagante — o card sai do `won` à mão, e o estado "desconto na fatura" vive fora do CRM. O gatilho real é a 1ª fatura com desconto da distribuidora. Faturar no `won` do Rateio fatura cedo demais | Vinicius + operação |
 | **Q-021 / AUD-03** | 🔴 | Faturar pela geração nominal ou pela série real? | Vinicius + dev CRM |
 | F-04 | 🟡 | Conector lê participação no funil ou etapa dentro dele? | Vinicius |
@@ -146,6 +144,13 @@ Entregas da F0 conforme `PRD-v2.2` §10:
 | **PRD §2.3** | — | Provisionamento decidido — `ADR-0004`: organização separada, `financeiro.blackhaus.io`, mesmo VPS sob cinco condições |
 | Contagem de FKs | — | Sete era estimativa; a varredura nominal rende **nove**. Lista fechada na `SPEC-001` §3.4 |
 | **AUD-07** | — | **Merge nao apaga** (marca `removido_do_funil_em` + tag). Mas ha dois caminhos de DELETE fisico fora do merge, um **rotineiro** (sync "Clientes Ativos"). `SPEC-002` §4.3 classifica ausencia em tres |
+| **MERGE-01** | — | **Resolvida pelo dev em 26/07.** `public.lead_merges` criada, **sem FK para `leads` de proposito** (a trilha sobrevive a DELETE fisico), com backfill e o codigo gravando antes de arquivar. O par de 10/07 foi recuperado do log pm2, e **os dois lados estao arquivados** — nao ha cliente ativo pendurado. `SPEC-002` R18 funde o espelho em vez de so desativar |
+| **ATIVO-01** | — | **Resolvida por fato, nao por opiniao.** O funil `Clientes ativos - Assinatura` esta **vazio**, e a etapa-fonte (`Desconto Ativo`, won do Rateio) tambem: os 29 concluidos param em `Rateio Concluido`, `stage_type='normal'`, que **nao dispara** a automacao. C1 leria vazio nao por volatilidade, mas porque a operacao nao estaciona ninguem na fonte. **Fonte troca para `financeiro.rateio_clientes`** (36 vinculos), que e o estado real |
+| **COMISSAO-02** | — | **Nao existe segunda engine.** O CRM **nao calcula** comissao: `app_settings.g3_partner_rules` **carimba tier** no lead na criacao, via RPC. A verdade por lead e o campo `Comissionamento`, e quem transforma em R$ e so o financeiro. Uma verdade por lead. **Mas a investigacao expos um furo real na R20** — ver linha seguinte |
+| **R20 lia o tier corrente** | — | **Furo achado em 26/07 pela resposta do dev.** A R20 chaveava a comissao por `originador.tipo`, que e a classificacao de **hoje**: captador promovido a senior faria **todo contrato antigo recalcular a 60%**. Vigencia nao cobre — ela versiona o percentual de um tier, nao o tier de uma pessoa. Corrigido: `contrato.originador_tipo_no_fechamento` congela no fechamento (`SPEC-001` R20-b, migration 5, teste) |
+| Atribuicao de originador | — | `leads.partner_id`, **nunca** a tag `indicado_por` — ela e display e editavel, e ha 1 lead com tag sem `partner_id` (`SPEC-002` R16) |
+| Schema `integracao` | — | **Nao criar.** Os aliases `vw_*` do PRD sao redundantes: consumir `financeiro.*` direto dispensa, e era o que a AUD-12 ja tinha decidido. O `PRD-v2.2` precisa perder a mencao |
+| Senioridade no CRM | — | Aplicada em 25/07 (`+captacao_senior` 60%, `+vendedor_tipos`). **Nao valeu para nada ainda:** 0 leads com a opcao de 60%, e `vendedor_tipos` so carimba lead novo — nada retroativo |
 | **F-02** | — | Funil `Parceiros` fica **fora** da base de comissao: `won` ali e "parceiro ativado", nao venda. 48 ganhos = 40 + 1 + 7 (`SPEC-002` R14) |
 | Tabelas de backup | — | 50, movidas para schema `backup` pelo dev em 26/07: fora do PostgREST, fora do `search_path`, sem grants. Revisao em 26/10/2026 |
 | "RLS sem policy nega tudo" | — | **Premissa corrigida pelo dev em 26/07.** Vale para acesso direto; **falso atraves de view** - a RLS das bases e avaliada contra o dono da view. Virou a invariante 13 da `SPEC-001`, com o furo reproduzido em teste |

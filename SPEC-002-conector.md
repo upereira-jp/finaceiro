@@ -3,7 +3,7 @@
 | Campo | Valor |
 |---|---|
 | **Status** | Rascunho — aguarda aceite |
-| **Versão** | 1.1 |
+| **Versão** | 1.2 |
 | **Data** | 26/07/2026 |
 | **Autor** | Vinicius Leal |
 | **Fase** | F2 (parcial em F1: o schema de `conector_crm` já existe) |
@@ -95,6 +95,15 @@ conector_execucao   id · tenant_id · ciclo_id · iniciado_em · terminado_em
 
 > **R12.** Todo ciclo roda **dentro do contexto de um tenant**, pelo mesmo middleware da `SPEC-001` §3.2. O conector não tem caminho privilegiado: se ele pudesse ler sem contexto, o isolamento teria uma exceção — e exceção de isolamento é ausência de isolamento.
 
+> **R16. Atribuicao de originador vem de `leads.partner_id`, nunca da tag.** Confirmado pelo dev em 26/07: `partner_id` e o campo primario e ja vem exposto em `vendas_ganhas` com `parceiro_nome`. A tag `indicado_por:<partner_id>` e **display e editavel na UI** — hoje sao 11 leads com `partner_id`, 6 com a tag, e **1 com tag sem `partner_id`**. Ler a tag importaria a inconsistencia. `contrato.originador_id` resolve por `partner_id`.
+
+> **R17. O tier do contrato e semeado pelo campo `Comissionamento` do lead e congelado ali.** O `app_settings.g3_partner_rules` do CRM **nao calcula comissao** — carimba tier na criacao do lead, via RPC compartilhada entre backend e Edge Functions. A verdade por lead e o campo, e ele e a semente de `contrato.originador_tipo_no_fechamento` (`SPEC-001` R20-b). Uma verdade por lead; quem transforma em R$ e so o financeiro.
+
+> **R18. Espelho de vitima de merge se funde pelo `lead_merges`, nao so desativa.** O CRM passou a manter `public.lead_merges` (vitima → sobrevivente), **sem FK para `leads` de proposito**, para a trilha sobreviver a DELETE fisico. Exposta em `financeiro.lead_merges`. Quando um `crm_lead_id` aparece como vitima, o financeiro **funde o espelho no sobrevivente**. Sem isso, contrato e UC ficam pendurados em cliente inativo.
+>
+> Ressalva medida: **vitima de merge tem `ultimo_funil` NULL** em `leads_arquivados`, porque as posicoes de funil migram no merge. Logo a classificacao "copia derivada" da §4.3 **nao pode usar `ultimo_funil` para vitima de merge** — a ordem de teste e `lead_merges` primeiro, `leads_arquivados` depois, funil por ultimo.
+
+
 > **R14.** **Funil `Parceiros` fica FORA da base de comissao sobre valor.** Confirmado pelo dev em 26/07: `won` ali significa "parceiro ativado", nao venda, e os 7 ganhos nao tem valor em nenhuma coluna por natureza. Os 48 ganhos sao 40 `Vendas - Assinatura` + 1 `Vendas - Integracao` + 7 `Parceiros`, e os funis de venda tem **zero** ganhos sem valor. O filtro e por funil, e a R9 deixa de disparar.
 
 > **R15.** **O campo `Comissionamento` significa duas coisas diferentes dependendo do funil.** Em card de venda e aliquota. Em card do funil `Parceiros` e **tier do parceiro** - os 7 tem o campo preenchido (6 `PADRAO`, 1 `50%`) e nenhum deles e aliquota de venda alguma. O conector **nunca** le esse campo de card do funil `Parceiros`. Sobrecarga semantica de campo e como se paga o dobro sem ninguem mentir.
@@ -150,6 +159,8 @@ os dois caminhos de delete fisico, que sao raros - em vez de tudo que sai da vie
 8. `recusados > 0` é visível em `conector_execucao` — nunca só em log.
 9. **Toda linha recebida tem o `crm_tenant_id` esperado.** Divergencia aborta o ciclo (R1-b). O isolamento do caminho de leitura nao vem da RLS do CRM.
 10. Nenhum card do funil `Parceiros` entra na base de comissao sobre valor (R14), e nenhum `Comissionamento` de card `Parceiros` e lido (R15).
+11. Atribuicao de originador vem de `partner_id`, nunca de tag (R16).
+12. Vitima de merge **funde**, nao apenas desativa (R18).
 
 ## 6. Interfaces
 
@@ -211,6 +222,9 @@ os dois caminhos de delete fisico, que sao raros - em vez de tudo que sai da vie
 | `test_tenant_divergente_aborta_ciclo` | Inv. 9 · R1-b — linha com `crm_tenant_id` inesperado para o ciclo inteiro |
 | `test_ausencia_classificada_em_tres` | §4.3 — arquivado desativa, copia derivada nao conta, sumido de verdade vai para fila |
 | `test_parceiros_fora_da_comissao` | Inv. 10 · R14 e R15 |
+| `test_atribuicao_por_partner_id` | Inv. 11 · R16 — lead com tag e sem `partner_id` **nao** atribui originador |
+| `test_vitima_de_merge_funde_espelho` | Inv. 12 · R18 — contrato do espelho da vitima migra para o sobrevivente, nao fica em cliente inativo |
+| `test_ordem_de_classificacao_de_ausencia` | R18 — `lead_merges` antes de `leads_arquivados` antes de funil, porque vitima de merge tem `ultimo_funil` NULL |
 
 ## 10. Questões abertas
 
@@ -242,5 +256,6 @@ os dois caminhos de delete fisico, que sao raros - em vez de tudo que sai da vie
 
 | Versão | Data | O que mudou |
 |---|---|---|
+| **1.2** | **26/07/2026** | **Rodada 2 do dev absorvida, e ela resolveu duas vermelhas.** MERGE-01 fecha: o CRM criou `public.lead_merges` com backfill e o codigo gravando, e o par de 10/07 foi recuperado do log — nenhum cliente ativo pendurado. ATIVO-01 fecha por fato: o funil `Clientes ativos - Assinatura` esta **vazio**, e a etapa-fonte tambem, porque os 29 concluidos param em `Rateio Concluido` com `stage_type='normal'`, que nao dispara a automacao. Fonte de estado ativo troca para `financeiro.rateio_clientes`. COMISSAO-02 dissolve: o CRM **nao calcula** comissao, carimba tier — mas isso expos o furo da R20, corrigido na `SPEC-001` v2.5. Novas R16, R17, R18, invariantes 11 e 12, quatro testes |
 | **1.1** | **26/07/2026** | **Retorno do dev absorvido.** AUD-07 e F-02 fecham. R1 ganha R1-b (o isolamento do caminho de leitura vem de 14 literais no corpo das views, nao da RLS - o conector valida `crm_tenant_id` por linha e aborta na divergencia) e R1-c (view vazia deixa de ser sintoma de RLS). 4.3 passa a redacao unica com ausencia classificada em tres. Novas R14 e R15, invariantes 9 e 10, tres testes. Duas vermelhas novas: MERGE-01 e ATIVO-01 |
 | 1.0 | 25/07/2026 | Original. Escrita com a AUD-07 aberta e a §4.3 em duas redações declaradas, em vez de escolher a versão defensiva por precaução e criar trabalho manual permanente |
