@@ -82,7 +82,6 @@ Entregas da F0 conforme `PRD-v2.2` §10:
 | MT-01 | 🟡 | Usuário pode pertencer a mais de um tenant? Custo de errar: uma constraint | Vinicius |
 | MT-07 | 🟡 | Quem informa o `crm_tenant_id` ao ativar um conector, e como se valida | Vinicius |
 | AUD-09 | 🟡 | CPF/CNPJ: CRM exige ou o financeiro coleta? | Vinicius |
-| **PgBouncer** | 🔴 | O caminho de conexão vai passar por PgBouncer em modo *transaction*? **Reabre o `ADR-0003` inteiro** se sim — muda o escopo de sessão e pode invalidar o `SET LOCAL` | Vinicius / infra |
 | Q-SPEC001-03 | 🟢 | Endereço da UC: coleta local obrigatória ou opcional? | Vinicius |
 
 ## 5. F2 — faturamento
@@ -144,5 +143,6 @@ Entregas da F0 conforme `PRD-v2.2` §10:
 | **PRD §2.3** | — | Provisionamento decidido — `ADR-0004`: organização separada, `financeiro.blackhaus.io`, mesmo VPS sob cinco condições |
 | Contagem de FKs | — | Sete era estimativa; a varredura nominal rende **nove**. Lista fechada na `SPEC-001` §3.4 |
 | Tarifa | — | `1,13` é **tarifa em R$/kWh**, não fator de consumo. `numeric(12,6)`, não centavos (`SPEC-001` R22) |
+| PgBouncer | — | **Conexão direta (5432), não pooler em modo *transaction*.** Deduzido do `ADR-0004`: processo Node de vida longa não precisa de pooler externo. Reverter a decisão reabre o `ADR-0003` (`SPEC-001` §3.2) |
 | `CLAUDE.md` | — | Nunca existiu. `CLAUDE.md` v1.0 escrito em 24/07; 18 citações reapontadas |
 | "bloqueio vermelho" | — | Taxonomia definida na §1 deste arquivo |

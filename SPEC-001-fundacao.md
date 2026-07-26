@@ -138,7 +138,19 @@ Isto não é orientação de implementação — é norma desta spec, com teste 
 
 **Custo aceito:** um round trip vira quatro (`BEGIN` · `SET LOCAL` · query · `COMMIT`). Medido em localhost: 1,8x só do `BEGIN`/`COMMIT`, 2,2x a 3,0x no total. Em rede real a régua é a contagem de round trips, não o milissegundo de localhost.
 
-**O que continua sem cobertura:** PgBouncer em modo *transaction*. Muda o escopo de sessão e pode invalidar o desenho inteiro. Está fora do escopo da F1 por decisão; se entrar no caminho de conexão, o `ADR-0003` reabre antes de qualquer outra coisa.
+#### PgBouncer — fechado em 25/07 por dedução, não por teste
+
+A questão era 🔴 porque um pooler em modo *transaction* muda o escopo de sessão e pode invalidar o `SET LOCAL`. A resposta sai do `ADR-0004` e não precisava de reunião:
+
+**A aplicação roda como processo Node de vida longa num VPS** (`ADR-0004`, decisão 3), não em função serverless. Processo de vida longa mantém o seu próprio pool e **não tem motivo para atravessar um pooler externo em modo transaction** — o pooler existe para clientes efêmeros que abrem e fecham conexão a cada requisição.
+
+**Decisão: conexão direta (porta 5432), não o pooler em modo *transaction* (6543).** Consequências que passam a ser obrigação:
+
+- a *connection string* de produção aponta para a porta direta, e isso é item verificável de deploy, não convenção
+- o teto de pool da aplicação é conferido contra o `max_connections` da instância — sem pooler, cada conexão do pool é uma conexão real do PostgreSQL
+- se algum dia parte do sistema for para execução efêmera, **o `ADR-0003` reabre antes** dessa mudança, não depois
+
+**O que continua sem cobertura de teste:** o comportamento sob pooler em modo *transaction*, caso a decisão acima seja revertida. Não foi medido, e a reversão é o gatilho para medir.
 
 **Migration de tabela e migration de policy seguem separadas**, mas agora por ordem de execução e não por pendência: a de policy vem depois do teste de vazamento da §9 passar.
 
@@ -365,7 +377,7 @@ Toda referência entre entidades de negócio é `(tenant_id, id)`. São **nove**
 ## 5. Invariantes
 
 1. Toda entidade de negócio tem `tenant_id` não nulo.
-2. **Nenhuma FK atravessa tenant.** Vale para as onze tabelas com `tenant_id`.
+2. **Nenhuma FK atravessa tenant.** Vale para as **treze** tabelas com `tenant_id` — as onze da v2.1 mais `regra_comissao` e `tarifa`. As três sem `tenant_id` são `tenant` (raiz), `usuario` e `plataforma_admin` (plataforma), e estão fora da regra por desenho.
 3. RLS habilitada, **forçada** e com ≥1 policy em toda tabela com `tenant_id`.
 4. Toda policy invoca `app.current_tenant_id()` e nada mais.
 5. Dinheiro é `Int` em centavos. Float proibido.

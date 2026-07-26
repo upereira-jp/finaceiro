@@ -1,0 +1,60 @@
+# SPEC-001 9 - o teste de isolamento roda no CI desde o primeiro dia.
+# ADR-0004 condicao 5: build e teste FORA da maquina de producao.
+# Os scripts sao chamados com "bash", nao "./": a interface web do GitHub nao
+# preserva o bit de execucao, e este repo ja perdeu o bit duas vezes por isso.
+name: isolamento
+
+on:
+  push:
+    paths: ['prisma/**', 'tests/**', 'spike-transacao/**', '.github/workflows/**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  migrations-e-rls:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: spike
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: cliente psql 16
+        run: |
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client-16
+      - name: migrations + suite de isolamento
+        env:
+          PGPASSWORD: spike
+        run: bash tests/run.sh
+
+  vazamento-no-pool:
+    # SPEC-001 9: test_vazamento_contexto_no_pool. Pool de tamanho 1, que e onde
+    # o SET sem LOCAL aparece. Reusa o spike do ADR-0003 r2.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: spike
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: cliente psql 16
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+      - name: spike de transacao
+        working-directory: spike-transacao
+        env:
+          PGPASSWORD: spike
+        run: bash run.sh

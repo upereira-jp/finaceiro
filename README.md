@@ -85,6 +85,30 @@ Decidido e medido, não opinado. Detalhe em `adr/ADR-0003` r2.
 
 ---
 
+## Como aplicar as migrations
+
+As migrations são **SQL puro**, não geradas por `prisma migrate dev`. Duas, na ordem, conforme a `SPEC-001` §3.2:
+
+```
+prisma/migrations/20260725120000_fundacao_schema/    tabelas, enums, as 9 FKs compostas
+prisma/migrations/20260725120100_isolamento_rls/     app.current_tenant_id(), RLS FORCE, policies
+```
+
+Rodar tudo num banco limpo e validar:
+
+```bash
+./tests/run.sh        # aplica as duas e roda as 16 verificações de isolamento
+```
+
+O mesmo roda no CI (`.github/workflows/isolamento.yml`), com PostgreSQL 16 de serviço — `ADR-0004` condição 5 e `SPEC-001` §9 exigem que o teste de vazamento corra fora da máquina de produção desde o primeiro dia.
+
+**Duas coisas para saber antes de mexer:**
+
+1. **`prisma migrate` precisa do `binaries.prisma.sh`.** O Prisma 7 dispensa o engine Rust em *runtime* quando roda sobre driver adapter, mas a CLI ainda baixa o `schema-engine` para migrar. As migrations acima foram escritas e validadas com `psql` direto contra PostgreSQL 16.14 — o `migrate deploy` funciona na sua máquina e no CI, onde o domínio está liberado.
+2. **`prisma/schema.prisma` não está aqui de propósito.** Gerar à mão dezesseis modelos é convidar divergência silenciosa entre o schema declarado e o schema real. Rode `prisma db pull` depois da migration 1: o schema vem do banco, que é a fonte.
+
+---
+
 ## Pendente
 
 | Item | Estado |
