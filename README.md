@@ -106,6 +106,8 @@ prisma/seed/                 regra_comissao e tarifa, idempotente
 scripts/bootstrap-plataforma-admin.sql
                              PROVISIONAMENTO, nao migration. O primeiro admin de
                              plataforma. Exige -v modo=ensaio ou -v modo=valendo
+scripts/ciclo-crm.ts         COMPOSICAO do ciclo: liga pool do CRM, leitor e
+                             motor. Exige --ensaio ou --valendo. `npm run ciclo`
 scripts/verificar-auth-real.ts
                              auth ponta a ponta contra o Supabase real. Sem token
                              no stdin faz so o preflight do JWKS, que nao pede
