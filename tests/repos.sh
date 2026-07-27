@@ -24,6 +24,8 @@ AUTHLEI='0a0a0002-0000-4000-8000-00000000000b'
 UFIN='aaaa0003-0000-4000-8000-00000000000c'
 UCOB='aaaa0004-0000-4000-8000-00000000000d'
 CLI='cccc0001-0000-4000-8000-00000000000c'
+# crm_tenant_id, NUNCA tenant_id (regra 6). E o do CRM da G3.
+CRMT='d4640f4b-0000-4000-8000-00000000000f'
 UC='eeee0001-0000-4000-8000-00000000000e'
 USI='dddd0001-0000-4000-8000-00000000000d'
 
@@ -62,6 +64,12 @@ INSERT INTO usina (id, tenant_id, codigo_geradora, distribuidora)
   VALUES ('$USI','$A','GER-FIXTURE','Equatorial');
 INSERT INTO unidade_consumidora (id, tenant_id, cliente_id, numero_uc, distribuidora)
   VALUES ('$UC','$A','$CLI','UC-FIXTURE','Equatorial');
+-- Conector do tenant A. Nasce aqui, como postgres, e nao pela suite: a policy de
+-- conector_crm exige contexto + vinculo, e montar fixture pelo client externo e
+-- exatamente o erro que este projeto persegue (escrita fora de transacao nao tem
+-- SET LOCAL e a WITH CHECK recusa).
+INSERT INTO conector_crm (tenant_id, tipo, crm_tenant_id, credencial_ref, ativo)
+  VALUES ('$A','intreply','$CRMT','vault://crm/g3',true);
 SQL
 
 npm install --silent > /dev/null 2>&1
@@ -83,6 +91,7 @@ export TEST_USUARIO_ADMIN="$UADM" TEST_USUARIO_LEITURA="$ULEI"
 export TEST_USUARIO_FINANCEIRO="$UFIN" TEST_USUARIO_COBRANCA="$UCOB"
 export TEST_AUTH_ADMIN="$AUTHADM" TEST_AUTH_LEITURA="$AUTHLEI"
 export TEST_CLIENTE="$CLI" TEST_UC="$UC" TEST_USINA="$USI"
+export TEST_CRM_TENANT="$CRMT"
 
 echo "=== matriz de papeis do PRD 3, celula a celula"
 node --experimental-strip-types tests/matriz-papeis.ts
@@ -110,3 +119,6 @@ node --experimental-strip-types tests/http.ts
 echo
 echo "=== auth proprio: JWT do Supabase e os ataques que o modulo impede"
 node --experimental-strip-types tests/auth-jwt.ts
+echo
+echo "=== conector do CRM: dedup, idempotencia, recusas e reconciliacao"
+node --experimental-strip-types tests/conector.ts

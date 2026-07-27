@@ -68,15 +68,21 @@ model cliente_estado_crm {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model conector_crm {
-  id                 String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenant_id          String          @unique @db.Uuid
+  id                 String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id          String              @unique @db.Uuid
   tipo               conector_tipo
-  crm_tenant_id      String          @db.Uuid
+  crm_tenant_id      String              @db.Uuid
   credencial_ref     String
-  ativo              Boolean         @default(false)
-  ultima_execucao_em DateTime?       @db.Timestamptz(6)
-  ultimo_status      conector_status @default(nunca_executou)
-  tenant             tenant          @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ativo              Boolean             @default(false)
+  ultima_execucao_em DateTime?           @db.Timestamptz(6)
+  ultimo_status      conector_status     @default(nunca_executou)
+  ultimo_ciclo_id    String?             @db.Uuid
+  ultima_leitura_em  DateTime?           @db.Timestamptz(6)
+  ultimo_erro        String?
+  tenant             tenant              @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  conector_execucao  conector_execucao[]
+
+  @@unique([tenant_id, id], map: "conector_id_tenant")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -227,6 +233,7 @@ model tenant {
   cliente               cliente[]
   cliente_estado_crm    cliente_estado_crm[]
   conector_crm          conector_crm?
+  conector_execucao     conector_execucao[]
   contrato              contrato[]
   dono_usina            dono_usina[]
   originador            originador[]
@@ -366,6 +373,32 @@ model distribuidora {
   usina_usina_distribuidoraTodistribuidora                             usina[]               @relation("usina_distribuidoraTodistribuidora")
 }
 
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This table contains exclusion constraints and requires additional setup for migrations. Visit https://pris.ly/d/exclusion-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model conector_execucao {
+  id           String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id    String          @db.Uuid
+  conector_id  String          @db.Uuid
+  ciclo_id     String          @db.Uuid
+  iniciado_em  DateTime        @default(now()) @db.Timestamptz(6)
+  terminado_em DateTime?       @db.Timestamptz(6)
+  lidos        Int             @default(0)
+  criados      Int             @default(0)
+  atualizados  Int             @default(0)
+  desativados  Int             @default(0)
+  recusados    Int             @default(0)
+  status       execucao_status @default(em_andamento)
+  detalhe      Json?
+  conector_crm conector_crm    @relation(fields: [tenant_id, conector_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "execucao_conector_fk")
+  tenant       tenant          @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "execucao_tenant_fk")
+
+  @@unique([tenant_id, id], map: "execucao_id_tenant")
+  @@index([ciclo_id], map: "execucao_ciclo_idx")
+  @@index([tenant_id, iniciado_em(sort: Desc)], map: "execucao_tenant_idx")
+}
+
 enum conector_status {
   ok
   erro
@@ -463,4 +496,11 @@ enum titularidade_uc {
 enum valor_referencia_origem {
   crm_consumo_reais
   local
+}
+
+enum execucao_status {
+  em_andamento
+  ok
+  parcial
+  erro
 }

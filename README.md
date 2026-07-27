@@ -5,7 +5,7 @@ Sistema financeiro multi-tenant da G3 Solar: faturamento de crédito de energia,
 | Campo | Valor |
 |---|---|
 | **Dono** | Vinicius Leal |
-| **Fase atual** | F0 fechada · **F1 em execução** — 12 migrations no Supabase `sa-east-1`, role de runtime criada e provada, composition root, seis repositórios, 37 rotas e **auth próprio**. Falta preencher `SUPABASE_URL` no `.env` para o servidor subir |
+| **Fase atual** | F0 fechada · **F1 em execução, e não fecha só com código nosso.** 15 migrations no Supabase `sa-east-1`, role de runtime, composition root, seis repositórios, 37 rotas, auth próprio medido ponta a ponta contra o Supabase real, conector do CRM construído e testado, e os 8 invariantes de catálogo verdes **contra produção**. Falta: `CRM_DATABASE_URL`, a `Q-VIEWS-01` (🔴, dev do CRM) e a `Q-FASE-01`. Ver a tabela de critérios abaixo |
 | **Atualizado** | 27/07/2026 |
 
 ---
@@ -14,14 +14,14 @@ Sistema financeiro multi-tenant da G3 Solar: faturamento de crédito de energia,
 
 Nesta ordem. Cada documento pressupõe o anterior.
 
-1. **`RESUMO-SESSAO-7.md`** — estado atual, a fila da próxima sessão e as pendências gerais com dono nomeado
+1. **`RESUMO-SESSAO-8.md`** — estado atual, a fila da próxima sessão e as pendências gerais com dono nomeado
 2. **`CLAUDE.md`** — as onze regras inegociáveis. Antes de qualquer linha de código
 3. **`PRD-v2.2.md`** §7 e §8 — fronteira com o CRM
 4. **`adr/ADR-0003-contexto-de-tenant.md`** (r2) — como o isolamento funciona de fato, e a que preço
 5. **`SPEC-001-fundacao.md`** (v2.9) — a spec da F1. §3.2 é o contrato do middleware; §3.4 é a lista das **dez** FKs compostas — as linhas 536 e 565 ainda dizem nove, e é a `Q-SPEC001-08`
 6. **`GLOSSARIO.md`** — se um termo está lá, é assim que ele se chama em spec, em código e em conversa
 
-`QUESTOES.md` se consulta sob demanda, e é onde toda lacuna vira entrada (regra 10). Os `RESUMO-SESSAO-2` a `-6` são a trilha datada: cada um diz o que foi medido, **o que foi retirado depois de medido**, e o que ficou na fila.
+`QUESTOES.md` se consulta sob demanda, e é onde toda lacuna vira entrada (regra 10). Os `RESUMO-SESSAO-2` a `-7` são a trilha datada: cada um diz o que foi medido, **o que foi retirado depois de medido**, e o que ficou na fila.
 
 ---
 
@@ -52,8 +52,11 @@ RESUMO-SESSAO-3.md           passagem da sessao 3
 RESUMO-SESSAO-4.md           passagem da sessao 4
 RESUMO-SESSAO-5.md           passagem da sessao 5 — generate destravado, R14 e os repos
 RESUMO-SESSAO-6.md           passagem da sessao 6 — as 12 migrations e o crash do GRANT
-RESUMO-SESSAO-7.md           passagem da sessao 7 — comece por aqui
-VIEWS-PROPOSTAS-r2.sql       proposta de DDL para o dev do CRM. NAO executada
+RESUMO-SESSAO-7.md           passagem da sessao 7 — role de runtime, 37 rotas, auth
+RESUMO-SESSAO-8.md           passagem da sessao 8 — comece por aqui
+VIEWS-PROPOSTAS-r2.sql       DDL proposta ao dev do CRM. EXECUTADA - as 8 views
+                             existem, e nenhuma tem security_invoker nem coluna
+                             de tenant. Ver Q-VIEWS-01
 .env.example                 formato do .env. Le os comentarios: a porta importa
 
 adr/
@@ -89,12 +92,28 @@ src/http/erros.ts            erro de dominio -> HTTP. 500 nao vaza mensagem inte
 src/auth/jwt.ts              JWT do Supabase por node:crypto. O alg sai da CHAVE, nao do header
 src/auth/autenticador.ts     Bearer -> auth_user_id. Auth PROPRIO (MT-06 resolvida)
 src/dominio/documento.ts     CPF e CNPJ, inclusive alfanumerico (31/07/2026)
-prisma/migrations/           DOZE, em ordem. As tres ultimas: auditoria e repasse
-                             versionado, UNIQUE composto em cliente_estado_crm, R14
+src/crm/conexao.ts           pool do CRM. RECUSA o arranque se a credencial tiver
+                             escrita, BYPASSRLS ou alcance fora de financeiro.*
+src/crm/leitura.ts           PONTO UNICO de leitura. SQL constante, lista fechada
+                             das 8 views. Nao ha funcao que aceite nome de tabela
+src/crm/sincronizacao.ts     o ciclo: dedup, idempotencia, recusas contadas e a
+                             reconciliacao em tres classes. Porta INJETADA
+prisma/migrations/           QUINZE, em ordem. 13 fecha Q-AUDIT-01 e Q-DISTRIB-01;
+                             14 traz conector_execucao; 15 corrige o gatilho de
+                             auditoria que a 14 esqueceu (o teste G2 acusou)
 prisma/schema.prisma         vem do `db pull`. NAO editar a mao - ver regra 11
 prisma/seed/                 regra_comissao e tarifa, idempotente
-tests/catalogo.sql           CAT-1 a CAT-7: as regras 1, 2, 3 e 11 por catalogo
-tests/                       257 verificacoes em 17 suites. `npm test` roda todas
+scripts/bootstrap-plataforma-admin.sql
+                             PROVISIONAMENTO, nao migration. O primeiro admin de
+                             plataforma. Exige -v modo=ensaio ou -v modo=valendo
+scripts/verificar-auth-real.ts
+                             auth ponta a ponta contra o Supabase real. Sem token
+                             no stdin faz so o preflight do JWKS, que nao pede
+                             credencial. `npm run auth:verificar`
+tests/catalogo.sql           CAT-1 a CAT-8: as regras 1, 2, 3 e 11 por catalogo.
+                             Leitura pura - RODE TAMBEM contra producao:
+                             psql "$DIRECT_URL" -f tests/catalogo.sql
+tests/                       276 verificacoes em 18 suites. `npm test` roda todas
 tsconfig.json                `npm run typecheck` = tsc --noEmit. Roda no CI
 ```
 
@@ -121,7 +140,7 @@ Decidido e medido, não opinado. Detalhe em `adr/ADR-0003` r2.
 
 ## Como aplicar as migrations
 
-As migrations são **SQL puro**, não geradas por `prisma migrate dev`. São **doze**, e a ordem importa. As três primeiras montam a fundação, conforme a `SPEC-001` §3.2:
+As migrations são **SQL puro**, não geradas por `prisma migrate dev`. São **quinze**, e a ordem importa. As três primeiras montam a fundação, conforme a `SPEC-001` §3.2:
 
 ```
 prisma/migrations/20260725120000_fundacao_schema/   tabelas, enums, as 10 FKs compostas
@@ -138,7 +157,7 @@ npx prisma migrate deploy    # transacional POR MIGRATION. E o que salva de meia
 Validar num banco limpo:
 
 ```bash
-npm test          # typecheck + as 17 suites, 257 verificacoes
+npm test          # typecheck + as 18 suites, 276 verificacoes
 npm run typecheck # sozinho, tsc --noEmit
 ```
 
@@ -159,13 +178,36 @@ O mesmo roda no CI (`.github/workflows/isolamento.yml`), com PostgreSQL 16 de se
 
 ---
 
+## Onde a F1 está, contra os critérios formais
+
+Medido em 27/07 contra o `PRD-v2.2` §10, não estimado. **Os três critérios de saída da F1:**
+
+| Critério de saída | Evidência | |
+|---|---|---|
+| `migrate reset` limpo | `tests/run.sh` aplica as 15 migrations em banco vazio a cada `npm test`; `EXIT=0` | ✅ |
+| sync idempotente | conector construído e provado contra stub (`N10`), **nunca contra o CRM real** — falta `CRM_DATABASE_URL` | ⚠️ |
+| escrita no CRM falha por permissão | medido por catálogo: `financeiro_ro` tem 0 privilégio de escrita, 0 objeto fora de `financeiro`, 0 acesso a tabela base. **Não automatizado ainda** | ⚠️ |
+
+**As entregas nomeadas da F1:**
+
+| Entrega | Estado |
+|---|---|
+| projeto, auth, RBAC dois níveis | ✅ auth medido contra o Supabase real; RBAC com as 16 células do PRD §3 |
+| schema completo com `tenant_id` | ✅ 13 migrations, 20 tabelas com RLS, 24 policies, **zero** tabela com `tenant_id` sem policy |
+| cadastros | ⚠️ 6 repositórios para 11 modelos de negócio — faltam `dono_usina`, `regra_comissao`, `regra_repasse`, `tarifa`, `cliente_estado_crm` |
+| **conector CRM read-only** | ⚠️ **construído em 27/07** (`src/crm/`, 16 verificações), não ligado ao CRM real. `SPEC-002` segue *"Rascunho — aguarda aceite"* e a fase dele é a `Q-FASE-01` |
+
+**A leitura honesta:** a fundação está pronta e provada, e o conector existe e é testado. O que falta **não é código nosso**: `CRM_DATABASE_URL`, a resposta do dev do CRM sobre as views (`Q-VIEWS-01`, 🔴) e a decisão de fase (`Q-FASE-01`). Quem ler "F1 em execução" sem esta tabela superestima a proximidade do fim.
+
+---
+
 ## Pendente
 
 A lista completa, com dono nomeado, está em `RESUMO-SESSAO-7` §Pendências gerais. O essencial:
 
 | Item | Estado |
 |---|---|
-| **Bootstrap — o primeiro `plataforma_admin`** | 🔴 **Ninguém consegue entrar.** Medido em 27/07: 0 tenants, 0 usuários, 0 `plataforma_admin` — e `app_financeiro` **não tem `INSERT`** nessa tabela, de propósito. Criar tenant exige tier de plataforma, e o tier exige uma linha que a aplicação não alcança. Nasce por `psql`, como a role. SQL em `RESUMO-SESSAO-7` §Fila |
+| **Bootstrap — o primeiro `plataforma_admin`** | 🟡 **Script pronto e provado; falta o `COMMIT`.** `scripts/bootstrap-plataforma-admin.sql`, com `-v modo=ensaio\|valendo` — sem default, porque script de provisionamento que escreve por esquecimento é o modo de falha errado. Conta criada no Supabase Auth (`efcc8e11-…`) e ensaio rodado contra ela: `usuario` + tier criados, `app.resolver_login` devolveu `tier = plataforma_admin`, 2 linhas de trilha, `ROLLBACK` deixou tudo em zero. `app_financeiro` continua sem `INSERT` nessa tabela, de propósito |
 | **Role LOGIN de runtime + `DATABASE_URL`** | ✅ **Fechado em 27/07** — `app_financeiro_login`, `NOSUPERUSER NOBYPASSRLS`. Isolamento provado conectado por ela: usuário de A apontando o contexto para o tenant B lê **0 linhas** e tem a escrita recusada. O composition root recusa o arranque se a role tiver `BYPASSRLS` |
 | **Reunião com o contador** | 🔴 Não ocorreu. Quatro questões fiscais **aceitas como risco** e rebaixadas para bloqueio de F2/F3. A F1 corre livre; a F2 não começa sem isso. Os 10 campos a levar estão no `RESUMO-SESSAO-3` §5 |
 | **PgBouncer em modo *transaction*** | 🔴 Sem cobertura. Se entrar no caminho de conexão, o `ADR-0003` **reabre inteiro**. O `.env.example` manda o runtime para *session mode* por isso |
@@ -174,13 +216,15 @@ A lista completa, com dono nomeado, está em `RESUMO-SESSAO-7` §Pendências ger
 | `Q-CLAUDE11-01` — a regra 11 perdeu o mecanismo | 🟡 Com `previewFeatures = ["partialIndexes"]`, o índice parcial **voltou** a ser chave de `findUnique`. A proteção automática que a regra supõe não existe mais, e o `CAT-1` não cobre este caso |
 | Endpoints com a matriz de papéis | ✅ **Fechados em 27/07** — 37 rotas, 21 verificações. A matriz é aplicada no **repositório**, por `exigir()`, não no handler |
 | `Q-RBAC-01` — matriz implementada ≠ PRD §3 | ✅ **Fechada em 27/07** — `escrever_cadastro` alinhada ao PRD: só `admin`. A matriz agora é fixada célula a célula, e o teste foi verificado nos dois sentidos |
-| **Autenticação (`MT-06`)** | ✅ **Fechada em 27/07 — auth próprio.** Sem SSO com o CRM. JWT do Supabase Auth do projeto do financeiro, verificado com `node:crypto`, sem dependência nova. Falta preencher `SUPABASE_URL` no `.env` |
-| `MT-09` — `rls_auto_enable` do Supabase | 🟡 Habilita RLS **sem policy e sem `FORCE`**. Coberto hoje pelo `CAT-3`; decidir se trata no provisionamento |
+| **Autenticação (`MT-06`)** | ✅ **Fechada em 27/07 — auth próprio, e agora medida contra o Supabase real.** `SUPABASE_URL` preenchida. Token emitido pelo projeto e verificado pelo caminho de produção: `iss` confere, projeto em **JWT signing keys ES256** (não HS256 legado — `SUPABASE_JWT_SECRET` fica ausente de propósito), JWKS responde no caminho que o código monta. `npm run auth:verificar` reproduz |
+| `Q-AUDIT-01` — trilha da concessão de tier sem `registro_id` | ✅ **Fechada em 27/07** — migration 13. `usuario_id` entra no `coalesce` de `app.auditar()` **por último**, então as outras 15 tabelas não mudam. G6 e G7 verificados nos dois sentidos |
+| `Q-DISTRIB-01` — RLS sem policy em `distribuidora` | ✅ **Fechada em 27/07** — migration 13. O `rls_auto_enable` do Supabase havia habilitado RLS na tabela, sem policy: a role de runtime lia **0** linhas. Agora lê 1. `CAT-8` acusa a classe inteira |
+| `MT-09` — `rls_auto_enable` do Supabase | 🟡 **Reclassificado em 27/07: já aconteceu.** A cobertura pelo `CAT-3` que esta linha alegava **não existia** — ele filtra por `tenant_id`. Coberto agora pelo `CAT-8`, que é detecção e não prevenção. Resta decidir se o event trigger é tratado no provisionamento |
 | `Q-SPEC001-08` — `SPEC-001` diz nove e dez | 🟡 Linhas 536 e 565 contra a §3.4. São **dez** |
 | Bug do `GRANT` no Supabase | 🟡 Reportar. Derruba todas as sessões da instância |
 | Dev do CRM — `LIMIT 1` sem `ORDER BY` | 🔴 `VIEWS-PROPOSTAS-r2.sql` §100. É alíquota, não relatório |
 | Dev do CRM — segredos em `text` puro | 🔴 `P8` §4. O repositório foi público até 25/07 e **nomeia as colunas** — rotação, não só migração de coluna |
-| **Banco no Supabase `sa-east-1`** | ✅ **Fechado em 27/07** — 12 migrations, fingerprint 11/11 exato |
+| **Banco no Supabase `sa-east-1`** | ✅ **Fechado em 27/07** — 13 migrations. Os 8 invariantes de catálogo passam **contra produção**, não só contra o banco de teste |
 | **`prisma generate` e os dois primeiros repos** | ✅ **Fechado em 27/07** — cardinalidade LISTA confirmada nos tipos |
 | Verificação de tipo | ✅ Fechada — `tsconfig.json`, `npm run typecheck`, job no CI |
 | `$transaction` do Prisma | ✅ Fechado em 25/07 — `ADR-0003` r2, `spike-transacao/` |

@@ -12,7 +12,7 @@ SET client_min_messages = notice;
 
 DO $bloco$
 DECLARE
-  A uuid; B uuid; uA uuid; uSup uuid; uAdm uuid; usinaA uuid; donoB uuid;
+  A uuid; B uuid; uA uuid; uSup uuid; uAdm uuid; usinaA uuid; donoB uuid; utA uuid;
   falhas int := 0; n int; x numeric; txt text;
 BEGIN
   -- ============================================================== fixture
@@ -344,7 +344,30 @@ BEGIN
   IF txt IS NULL THEN RAISE NOTICE 'ok   G5   inv.3 RLS ENABLE + FORCE + policy em toda tabela com tenant_id';
   ELSE RAISE WARNING 'FALHA G5 inv.3 RLS incompleta: %', txt; falhas := falhas + 1; END IF;
 
+  -- ======================================== Q-AUDIT-01, migration 13
+  -- Conceder tier e a escrita mais privilegiada do sistema, e a regra 9 nomeia
+  -- papel. A trilha tem que dizer A QUEM, na coluna INDEXADA - auditoria_registro_idx
+  -- e (tabela, registro_id). Antes da migration 13 esta linha saia com
+  -- registro_id NULL: plataforma_admin e a unica das dezesseis tabelas auditadas
+  -- sem `id` e sem `cliente_id`, e o coalesce de app.auditar() nao alcancava a
+  -- PK dela, que e usuario_id. Achado num ensaio de bootstrap, nao por teste.
+  SELECT count(*) INTO n FROM auditoria
+   WHERE tabela = 'plataforma_admin' AND operacao = 'I' AND registro_id = uAdm::text;
+  IF n = 1 THEN RAISE NOTICE 'ok   G6   Q-AUDIT-01 a concessao de tier identifica o usuario em registro_id';
+  ELSE RAISE WARNING 'FALHA G6 trilha de plataforma_admin sem registro_id (achou %)', n; falhas := falhas + 1; END IF;
+
+  -- O OUTRO SENTIDO, e e ele que impede a correcao de virar defeito nas outras
+  -- quinze. `usuario_tenant` tem `id` E `usuario_id`. Como `usuario_id` entrou
+  -- por ULTIMO no coalesce, ela tem que continuar identificada pelo PROPRIO id.
+  -- Se alguem reordenar o coalesce, quinze tabelas trocam de chave de auditoria
+  -- em silencio - e este teste e o unico lugar que acusa.
+  SELECT id INTO utA FROM usuario_tenant WHERE usuario_id = uA AND tenant_id = A;
+  SELECT count(*) INTO n FROM auditoria
+   WHERE tabela = 'usuario_tenant' AND operacao = 'I' AND registro_id = utA::text;
+  IF n = 1 THEN RAISE NOTICE 'ok   G7   usuario_tenant segue identificada pelo proprio id, nao pelo usuario_id';
+  ELSE RAISE WARNING 'FALHA G7 usuario_tenant trocou de chave de auditoria (achou %)', n; falhas := falhas + 1; END IF;
+
   -- ==============================================================
   IF falhas > 0 THEN RAISE EXCEPTION '% falha(s) em auditoria e repasse', falhas;
-  ELSE RAISE NOTICE '--- auditoria e repasse: 29 verificacoes, 0 falhas'; END IF;
+  ELSE RAISE NOTICE '--- auditoria e repasse: 31 verificacoes, 0 falhas'; END IF;
 END $bloco$;
