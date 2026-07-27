@@ -14,12 +14,13 @@ Sistema financeiro multi-tenant da G3 Solar: faturamento de crédito de energia,
 
 Nesta ordem. Cada documento pressupõe o anterior.
 
-1. **`RESUMO-SESSAO-8.md`** — estado atual, a fila da próxima sessão e as pendências gerais com dono nomeado
-2. **`CLAUDE.md`** — as onze regras inegociáveis. Antes de qualquer linha de código
-3. **`PRD-v2.2.md`** §7 e §8 — fronteira com o CRM
-4. **`adr/ADR-0003-contexto-de-tenant.md`** (r2) — como o isolamento funciona de fato, e a que preço
-5. **`SPEC-001-fundacao.md`** (v2.9) — a spec da F1. §3.2 é o contrato do middleware; §3.4 é a lista das **dez** FKs compostas — as linhas 536 e 565 ainda dizem nove, e é a `Q-SPEC001-08`
-6. **`GLOSSARIO.md`** — se um termo está lá, é assim que ele se chama em spec, em código e em conversa
+1. **`FECHAR-F1.md`** — o roteiro executável para fechar a fase. Se você veio para terminar a F1, é aqui
+2. **`RESUMO-SESSAO-8.md`** — estado atual, a fila da próxima sessão e as pendências gerais com dono nomeado
+3. **`CLAUDE.md`** — as onze regras inegociáveis. Antes de qualquer linha de código
+4. **`PRD-v2.2.md`** §7 e §8 — fronteira com o CRM
+5. **`adr/ADR-0003-contexto-de-tenant.md`** (r2) — como o isolamento funciona de fato, e a que preço
+6. **`SPEC-001-fundacao.md`** (v2.9) — a spec da F1. §3.2 é o contrato do middleware; §3.4 é a lista das **dez** FKs compostas — as linhas 536 e 565 ainda dizem nove, e é a `Q-SPEC001-08`
+7. **`GLOSSARIO.md`** — se um termo está lá, é assim que ele se chama em spec, em código e em conversa
 
 `QUESTOES.md` se consulta sob demanda, e é onde toda lacuna vira entrada (regra 10). Os `RESUMO-SESSAO-2` a `-7` são a trilha datada: cada um diz o que foi medido, **o que foi retirado depois de medido**, e o que ficou na fila.
 
@@ -43,6 +44,7 @@ Uma regra do `CLAUDE.md` não é flexibilizada por spec, por prazo ou por conven
 CLAUDE.md                    regras inegociaveis — camada mais alta
 PRD-v2.2.md                  fonte de verdade do produto
 GLOSSARIO.md                 vocabulario unico (rev. 3)
+FECHAR-F1.md                 roteiro executavel para fechar a fase 1
 QUESTOES.md                  registro unico de questoes abertas, com taxonomia de severidade
 SPEC-001-fundacao.md         spec da F1 (v2.9)
 SPEC-002-conector.md         spec do conector (v1.0 — 4.3 travada na AUD-07)
