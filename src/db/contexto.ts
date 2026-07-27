@@ -209,9 +209,29 @@ export async function papelNoTenantCorrente(): Promise<string> {
   return (e.papel = r[0].papel as string);
 }
 
+/**
+ * A matriz do PRD-v2.2 §3, nivel tenant. Cada eixo aqui e uma COLUNA de la:
+ *
+ *   | papel      | Carteira | Corporativo | Cadastros | Configuracao |
+ *   | admin      | total    | total       | total     | total        |
+ *   | financeiro | leitura  | total       | leitura   | -            |
+ *   | cobranca   | total    | -           | leitura   | -            |
+ *   | leitura    | leitura  | leitura     | leitura   | -            |
+ *
+ * `escrever_cadastro` era ['admin', 'financeiro'] e CONTRADIZIA a tabela acima,
+ * que da a `financeiro` apenas leitura em Cadastros. A divergencia era
+ * permissiva - o sistema concedia mais do que a especificacao -, e o teste de
+ * RBAC nao a pegava porque conferia a matriz implementada contra ela mesma.
+ * Corrigida em 27/07 por decisao do dono do projeto (Q-RBAC-01, resolvida).
+ *
+ * O criterio da correcao foi a hierarquia normativa do CLAUDE.md: PRD -> ADRs ->
+ * SPECs. Codigo nao esta nessa lista, ele implementa - entao divergencia entre
+ * codigo e PRD e defeito do codigo, nao do PRD. Se a operacao mostrar que
+ * `financeiro` PRECISA cadastrar, o conserto e a §3 do PRD, nunca esta linha.
+ */
 const PODE: Record<string, ReadonlySet<string>> = {
   ler:              new Set(['admin', 'financeiro', 'cobranca', 'leitura']),
-  escrever_cadastro:new Set(['admin', 'financeiro']),
+  escrever_cadastro:new Set(['admin']),
   escrever_carteira:new Set(['admin', 'cobranca']),
   administrar:      new Set(['admin']),
 };

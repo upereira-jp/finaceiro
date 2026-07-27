@@ -5,7 +5,7 @@ Sistema financeiro multi-tenant da G3 Solar: faturamento de crédito de energia,
 | Campo | Valor |
 |---|---|
 | **Dono** | Vinicius Leal |
-| **Fase atual** | F0 fechada · **F1 em execução** — as 12 migrations aplicadas no Supabase `sa-east-1`, client gerado, repositórios de cliente e contrato prontos. Falta a **role LOGIN de runtime**, que bloqueia tudo o que conecta |
+| **Fase atual** | F0 fechada · **F1 em execução** — 12 migrations no Supabase `sa-east-1`, role de runtime criada e provada, composition root, seis repositórios, 37 rotas e **auth próprio**. Falta preencher `SUPABASE_URL` no `.env` para o servidor subir |
 | **Atualizado** | 27/07/2026 |
 
 ---
@@ -14,14 +14,14 @@ Sistema financeiro multi-tenant da G3 Solar: faturamento de crédito de energia,
 
 Nesta ordem. Cada documento pressupõe o anterior.
 
-1. **`RESUMO-SESSAO-6.md`** — estado atual, a fila da próxima sessão e as pendências gerais com dono nomeado
+1. **`RESUMO-SESSAO-7.md`** — estado atual, a fila da próxima sessão e as pendências gerais com dono nomeado
 2. **`CLAUDE.md`** — as onze regras inegociáveis. Antes de qualquer linha de código
 3. **`PRD-v2.2.md`** §7 e §8 — fronteira com o CRM
 4. **`adr/ADR-0003-contexto-de-tenant.md`** (r2) — como o isolamento funciona de fato, e a que preço
 5. **`SPEC-001-fundacao.md`** (v2.9) — a spec da F1. §3.2 é o contrato do middleware; §3.4 é a lista das **dez** FKs compostas — as linhas 536 e 565 ainda dizem nove, e é a `Q-SPEC001-08`
 6. **`GLOSSARIO.md`** — se um termo está lá, é assim que ele se chama em spec, em código e em conversa
 
-`QUESTOES.md` se consulta sob demanda, e é onde toda lacuna vira entrada (regra 10). Os `RESUMO-SESSAO-2` a `-5` são a trilha datada: cada um diz o que foi medido, **o que foi retirado depois de medido**, e o que ficou na fila.
+`QUESTOES.md` se consulta sob demanda, e é onde toda lacuna vira entrada (regra 10). Os `RESUMO-SESSAO-2` a `-6` são a trilha datada: cada um diz o que foi medido, **o que foi retirado depois de medido**, e o que ficou na fila.
 
 ---
 
@@ -51,7 +51,8 @@ RESUMO-SESSAO-2.md           passagem da sessao 2
 RESUMO-SESSAO-3.md           passagem da sessao 3
 RESUMO-SESSAO-4.md           passagem da sessao 4
 RESUMO-SESSAO-5.md           passagem da sessao 5 — generate destravado, R14 e os repos
-RESUMO-SESSAO-6.md           passagem da sessao 6 — comece por aqui
+RESUMO-SESSAO-6.md           passagem da sessao 6 — as 12 migrations e o crash do GRANT
+RESUMO-SESSAO-7.md           passagem da sessao 7 — comece por aqui
 VIEWS-PROPOSTAS-r2.sql       proposta de DDL para o dev do CRM. NAO executada
 .env.example                 formato do .env. Le os comentarios: a porta importa
 
@@ -70,19 +71,30 @@ auditoria/
 spike-adr0003/               21 testes, tres variantes de contexto de tenant. ./run.sh
 spike-transacao/             12 testes de $transaction/$extends do Prisma sobre RLS. ./run.sh
 
+src/app.ts                   COMPOSITION ROOT - o unico lugar que instancia client,
+                             pool e adapter. Recusa o arranque se a role tiver BYPASSRLS
 src/db/pools.ts              os dois pools: transacional 8/15s, relatorio 2/60s
 src/db/contexto.ts           ponto UNICO de emissao do contexto. RBAC e trilha
 src/db/tipado.ts             devolve os 19 modelos aos repos sem contexto.ts conhece-los
 src/auth/sessao.ts           login, escolha de tenant validada, caminho de plataforma
 src/repos/cliente.ts         cadastro, busca por documento, baixa logica
 src/repos/contrato.ts        R14 e a ORDEM da renovacao: encerra o velho antes de inserir
+src/repos/unidade_consumidora.ts  cadastro da UC. NAO edita rateio - ver rateio.ts
+src/repos/usina.ts           usina e geracao mensal. Decimal entra como STRING
+src/repos/originador.ts      documento OBRIGATORIO aqui; R20 congela no contrato
+src/repos/rateio.ts          R11, o teto de 100% por usina. Unico caminho de escrita
+src/http/rotas.ts            as 37 rotas. A matriz de papeis NAO e aplicada aqui
+src/http/servidor.ts         node:http puro. O Autenticador vem de FORA, por injecao
+src/http/erros.ts            erro de dominio -> HTTP. 500 nao vaza mensagem interna
+src/auth/jwt.ts              JWT do Supabase por node:crypto. O alg sai da CHAVE, nao do header
+src/auth/autenticador.ts     Bearer -> auth_user_id. Auth PROPRIO (MT-06 resolvida)
 src/dominio/documento.ts     CPF e CNPJ, inclusive alfanumerico (31/07/2026)
 prisma/migrations/           DOZE, em ordem. As tres ultimas: auditoria e repasse
                              versionado, UNIQUE composto em cliente_estado_crm, R14
 prisma/schema.prisma         vem do `db pull`. NAO editar a mao - ver regra 11
 prisma/seed/                 regra_comissao e tarifa, idempotente
 tests/catalogo.sql           CAT-1 a CAT-7: as regras 1, 2, 3 e 11 por catalogo
-tests/                       154 verificacoes em 10 suites. `npm test` roda todas
+tests/                       257 verificacoes em 17 suites. `npm test` roda todas
 tsconfig.json                `npm run typecheck` = tsc --noEmit. Roda no CI
 ```
 
@@ -126,7 +138,7 @@ npx prisma migrate deploy    # transacional POR MIGRATION. E o que salva de meia
 Validar num banco limpo:
 
 ```bash
-npm test          # typecheck + as 10 suites, 154 verificacoes
+npm test          # typecheck + as 17 suites, 257 verificacoes
 npm run typecheck # sozinho, tsc --noEmit
 ```
 
@@ -149,15 +161,20 @@ O mesmo roda no CI (`.github/workflows/isolamento.yml`), com PostgreSQL 16 de se
 
 ## Pendente
 
-A lista completa, com dono nomeado, está em `RESUMO-SESSAO-6` §Pendências gerais. O essencial:
+A lista completa, com dono nomeado, está em `RESUMO-SESSAO-7` §Pendências gerais. O essencial:
 
 | Item | Estado |
 |---|---|
-| **Role LOGIN de runtime + `DATABASE_URL`** | 🔴 **É o portão.** Sem ela o app só conecta como `postgres`, que tem `rolbypassrls = true` — e o vazamento entre tenants só aparece com o segundo cliente em produção. SQL pronto em `RESUMO-SESSAO-6` §Fila |
+| **Bootstrap — o primeiro `plataforma_admin`** | 🔴 **Ninguém consegue entrar.** Medido em 27/07: 0 tenants, 0 usuários, 0 `plataforma_admin` — e `app_financeiro` **não tem `INSERT`** nessa tabela, de propósito. Criar tenant exige tier de plataforma, e o tier exige uma linha que a aplicação não alcança. Nasce por `psql`, como a role. SQL em `RESUMO-SESSAO-7` §Fila |
+| **Role LOGIN de runtime + `DATABASE_URL`** | ✅ **Fechado em 27/07** — `app_financeiro_login`, `NOSUPERUSER NOBYPASSRLS`. Isolamento provado conectado por ela: usuário de A apontando o contexto para o tenant B lê **0 linhas** e tem a escrita recusada. O composition root recusa o arranque se a role tiver `BYPASSRLS` |
 | **Reunião com o contador** | 🔴 Não ocorreu. Quatro questões fiscais **aceitas como risco** e rebaixadas para bloqueio de F2/F3. A F1 corre livre; a F2 não começa sem isso. Os 10 campos a levar estão no `RESUMO-SESSAO-3` §5 |
 | **PgBouncer em modo *transaction*** | 🔴 Sem cobertura. Se entrar no caminho de conexão, o `ADR-0003` **reabre inteiro**. O `.env.example` manda o runtime para *session mode* por isso |
 | **F-01b** | 🔴 Nenhuma etapa do funil marca o cliente pagante. O gatilho de faturamento não é evento do CRM — decisão de F2 |
-| Repositórios de UC, usina, originador e rateio | 🟡 Próximo trabalho de código, no molde de `src/repos/cliente.ts` |
+| Repositórios de UC, usina, originador e rateio | ✅ **Fechados em 27/07** — 45 verificações novas em 4 suítes |
+| `Q-CLAUDE11-01` — a regra 11 perdeu o mecanismo | 🟡 Com `previewFeatures = ["partialIndexes"]`, o índice parcial **voltou** a ser chave de `findUnique`. A proteção automática que a regra supõe não existe mais, e o `CAT-1` não cobre este caso |
+| Endpoints com a matriz de papéis | ✅ **Fechados em 27/07** — 37 rotas, 21 verificações. A matriz é aplicada no **repositório**, por `exigir()`, não no handler |
+| `Q-RBAC-01` — matriz implementada ≠ PRD §3 | ✅ **Fechada em 27/07** — `escrever_cadastro` alinhada ao PRD: só `admin`. A matriz agora é fixada célula a célula, e o teste foi verificado nos dois sentidos |
+| **Autenticação (`MT-06`)** | ✅ **Fechada em 27/07 — auth próprio.** Sem SSO com o CRM. JWT do Supabase Auth do projeto do financeiro, verificado com `node:crypto`, sem dependência nova. Falta preencher `SUPABASE_URL` no `.env` |
 | `MT-09` — `rls_auto_enable` do Supabase | 🟡 Habilita RLS **sem policy e sem `FORCE`**. Coberto hoje pelo `CAT-3`; decidir se trata no provisionamento |
 | `Q-SPEC001-08` — `SPEC-001` diz nove e dez | 🟡 Linhas 536 e 565 contra a §3.4. São **dez** |
 | Bug do `GRANT` no Supabase | 🟡 Reportar. Derruba todas as sessões da instância |
