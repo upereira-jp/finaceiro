@@ -97,11 +97,9 @@ O achado que mais muda o plano. Schema `financeiro` no CRM com **8 views**, role
 
 **A boa notícia, medida:** `financeiro_ro` está impecável — `NOSUPERUSER`, `NOBYPASSRLS`, **0** privilégio de escrita, **0** objeto fora do schema `financeiro`, **0** acesso a tabela base de `public`. A regra 4 está satisfeita no nível de GRANT.
 
-**As duas ruins:**
-1. **Nenhuma view declara `security_invoker`** — três dizem `=false` explicitamente, cinco omitem — e todas leem tabelas base **com RLS** (de 1 a 9 cada). A RLS do CRM é avaliada contra o **dono**. É o furo que a regra 3 documenta com tabela de medição.
-2. **Nenhuma expõe coluna de tenant.** Todas carregam de 1 a 3 **UUIDs literais** no corpo — o `MT-08`.
+**A ruim, e é uma só:** nenhuma view expõe coluna de tenant. Todas carregam de 1 a 3 **UUIDs literais** no corpo — o `MT-08`. A `SPEC-002` R1-b manda validar `crm_tenant_id` em toda linha recebida, e **não há coluna para validar**. O invariante 9 não tem como ser cumprido.
 
-A `SPEC-002` **R1-b já previa** o item 1 e prescrevia a defesa: validar `crm_tenant_id` em toda linha recebida. Só que sem a coluna do item 2, **essa validação é impossível**. O invariante 9 não tem como ser cumprido.
+**Correção do mesmo dia, registrada porque o erro era meu e quase virou pedido errado ao dev.** A primeira redação desta seção e da `Q-VIEWS-01` acusava também as views de não declararem `security_invoker = true`, tratando isso como o furo da regra 3. **Está errado neste contexto.** Com `security_invoker = true`, privilégios e RLS passam a ser avaliados contra quem consulta — e `financeiro_ro` precisaria de `SELECT` nas **tabelas base** do CRM, que é exatamente o acesso que a regra 4 proíbe e que a medição acima celebra não existir. A view *owned* por `postgres` com filtro literal é **o que permite** ao `financeiro_ro` ler as views e nada mais. A rodada 2 com o dev já havia concluído isso; eu reabri por ter relido o catálogo sem reler a conversa. O `CAT-4` e a regra 3 falam das views do **nosso** schema — não há conflito. O pedido ao dev ficou sendo **um só**: expor `crm_tenant_id`. Ver `PROMPT-dev-crm-rodada3-2026-07-27.md`.
 
 O conector faz o máximo verificável do nosso lado — exige `crm_tenant_id` configurado, confere contra `conector_crm`, aborta se divergir — e **registra `garantia_de_tenant_degradada` em `conector_execucao.detalhe`** (teste `N19`). Isso declara a lacuna; não a fecha. A diferença entre uma garantia e a ausência dela tem que aparecer no registro da execução.
 
@@ -139,7 +137,7 @@ psql "$DIRECT_URL" -v ON_ERROR_STOP=1 -v modo=valendo \
   -f scripts/bootstrap-plataforma-admin.sql
 ```
 
-**2. 🔴 `Q-VIEWS-01` — o pedido ao dev do CRM.** Duas coisas independentes: recriar as 8 views `WITH (security_invoker = true)`, e expor `crm_tenant_id` como coluna. Sem a segunda, o invariante 9 da `SPEC-002` fica sem como ser cumprido e o segundo tenant é risco real.
+**2. 🔴 `Q-VIEWS-01` — o pedido ao dev do CRM.** Uma coisa só: expor `crm_tenant_id` como coluna nas 8 views. Sem ela o invariante 9 da `SPEC-002` fica sem como ser cumprido, e uma view futura sem o literal certo entrega linha de outra empresa sem nada impedir. Prompt pronto em `PROMPT-dev-crm-rodada3-2026-07-27.md`.
 
 **3. 🔴 `CRM_DATABASE_URL` e o primeiro ciclo real.** O conector está provado contra stub — que é mais forte para dedup, merge e view vazia, porque produz sob demanda o que o CRM real não produziria. O que falta é a outra metade: um ciclo de verdade. Formato no `.env.example`.
 
@@ -172,7 +170,7 @@ psql "$DIRECT_URL" -v ON_ERROR_STOP=1 -v modo=valendo \
 | Item | Estado | Dono |
 |---|---|---|
 | `COMMIT` do bootstrap | 🔴 script provado, falta rodar | Vinicius |
-| `Q-VIEWS-01` — views sem `security_invoker` e sem coluna de tenant | 🔴 **bloqueia o invariante 9 da `SPEC-002`** | dev do CRM + Vinicius |
+| `Q-VIEWS-01` — views sem coluna de tenant | 🔴 **bloqueia o invariante 9 da `SPEC-002`**. Prompt pronto para o dev | dev do CRM |
 | `CRM_DATABASE_URL` e o primeiro ciclo real | 🔴 | Vinicius |
 | Rotação da `service_role` do Supabase | 🔴 exposta nesta sessão | Vinicius |
 | Reunião com o contador | 🔴 não ocorreu | Vinicius |
