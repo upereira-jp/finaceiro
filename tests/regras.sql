@@ -75,12 +75,23 @@ BEGIN
       VALUES (T,cli,uc1,us,org,'parceiro_captador','2026-06-15',100000,'local','ativo');
     RAISE WARNING 'FALHA R14 aceitou SEGUNDO contrato ativo na mesma UC'; falhas := falhas + 1;
   EXCEPTION WHEN unique_violation THEN
-    RAISE NOTICE 'ok  R14 segunda linha ativa na mesma UC recusada pelo indice parcial';
+    RAISE NOTICE 'ok  R14 segunda linha ativa na mesma UC recusada por contrato_vigente_unico_por_uc';
+  END;
+  -- R14-b: vigente inclui SUSPENSO. Ate 26/07 o indice era WHERE status='ativo' e
+  -- isto PASSAVA - o banco aceitava um ativo e um suspenso na mesma UC, contra a
+  -- propria regra que o comentario da migration de fundacao declarava.
+  BEGIN
+    INSERT INTO contrato (tenant_id,cliente_id,unidade_consumidora_id,usina_id,originador_id,
+                          originador_tipo_no_fechamento,data_fechamento,valor_referencia_centavos,valor_referencia_origem,status)
+      VALUES (T,cli,uc1,us,org,'parceiro_captador','2026-06-20',111,'local','suspenso');
+    RAISE WARNING 'FALHA R14-b aceitou contrato SUSPENSO numa UC que ja tem vigente'; falhas := falhas + 1;
+  EXCEPTION WHEN unique_violation THEN
+    RAISE NOTICE 'ok  R14-b suspenso tambem ocupa a UC: rateio pausado, vinculo de pe';
   END;
   INSERT INTO contrato (tenant_id,cliente_id,unidade_consumidora_id,usina_id,originador_id,
                         originador_tipo_no_fechamento,data_fechamento,valor_referencia_centavos,valor_referencia_origem,status)
     VALUES (T,cli,uc1,us,org,'parceiro_captador','2026-06-15',100000,'local','encerrado');
-  RAISE NOTICE 'ok  R14 contrato ENCERRADO na mesma UC coexiste (o indice e parcial, nao total)';
+  RAISE NOTICE 'ok  R14 contrato ENCERRADO na mesma UC coexiste: encerrado nao ocupa (uc_vigente e NULL)';
 
   -- ---------------------------------------------------- R23 um arredondamento
   PERFORM set_config('app.tenant_id', T::text, true);

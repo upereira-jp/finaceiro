@@ -123,8 +123,27 @@ END $$;
  * No PostgreSQL 16 quem cria uma role recebe ADMIN OPTION mas NAO recebe SET.
  * Nao afrouxa nada: o dono da migration ja pode dropar tabela e desabilitar
  * trigger. O append-only protege contra app_financeiro, a role de RUNTIME.
+ *
+ * A FORMA e EXECUTE com format('%I', current_user), nao o literal CURRENT_USER.
+ * Medido no Supabase em 27/07/2026, PostgreSQL 17.6: `GRANT <role> TO CURRENT_USER`
+ * derruba o BACKEND. A sessao vizinha recebe "terminating connection because of
+ * crash of another server process ... exited abnormally and possibly corrupted
+ * shared memory"; o postmaster sobrevive e roda recuperacao, entao o
+ * pg_postmaster_start_time nao muda e o sintoma chega ao Prisma so como P1017.
+ *
+ * O recorte, medido statement a statement:
+ *   GRANT/REVOKE de ROLE com CURRENT_USER, CURRENT_ROLE ou SESSION_USER  -> crash
+ *   GRANT de ROLE com nome literal de role                               -> ok
+ *   GRANT de PRIVILEGIO com CURRENT_USER (GRANT SELECT ... TO CURRENT_USER) -> ok
+ *
+ * NAO e o pooler: esconder o statement dentro de EXECUTE, onde nenhum parser de
+ * wire protocol o enxerga, nao evita o crash. Suspeita de hook de ProcessUtility
+ * lendo rolename num rolespec por palavra-chave, onde ele e NULL.
+ *
+ * format('%I', current_user) preserva a intencao - conceder a quem esta rodando a
+ * migration - sem fixar `postgres`, que nao e o dono em todo ambiente.
  */
-GRANT auditor_financeiro TO CURRENT_USER WITH SET TRUE;
+DO $$ BEGIN EXECUTE format('GRANT auditor_financeiro TO %I WITH SET TRUE', current_user); END $$;
 
 CREATE TABLE auditoria (
   id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -443,8 +462,12 @@ GRANT EXECUTE ON FUNCTION app.tarifa_vigente(text, date),
  * MESMA ARMADILHA, herdada da migration 2: sob dono nao-superusuario o criador
  * de app_financeiro tambem nao ganha SET nessa role, e o "SET LOCAL ROLE
  * app_financeiro" das quatro suites nao roda contra um banco Supabase.
+ *
+ * E pela MESMA razao da secao 2 a forma e EXECUTE com format('%I', current_user):
+ * o literal CURRENT_USER derruba o backend do Postgres no Supabase. A evidencia
+ * completa esta no comentario da linha do GRANT de auditor_financeiro.
  */
-GRANT app_financeiro TO CURRENT_USER WITH SET TRUE;
+DO $$ BEGIN EXECUTE format('GRANT app_financeiro TO %I WITH SET TRUE', current_user); END $$;
 
 -- ============================================================ 7. INVARIANTES DE CATALOGO
 -- Nao valem por revisao de PR. Rodam aqui e no CI.
@@ -486,12 +509,26 @@ BEGIN
     RAISE EXCEPTION 'inv.18 log gravavel pela aplicacao: append-only violado';
   END IF;
 
-  -- 19: lista branca de SECURITY DEFINER. Cada uma delas e leitura sem policy.
+  -- 19: lista branca de SECURITY DEFINER. Cada uma das nossas e leitura sem policy.
+  --
+  -- rls_auto_enable NAO E NOSSA: e da plataforma Supabase, em `public`, disparada
+  -- pelo event trigger `ensure_rls` em ddl_command_end. Ela roda
+  -- `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` em toda tabela nova de `public`.
+  -- Entra na lista porque nao a controlamos e nao da para remover: dropar o
+  -- trigger e brigar com a plataforma, que pode recria-lo. Decisao de 27/07/2026.
+  --
+  -- ATENCAO ao que ela faz e ao que NAO faz: habilita RLS, mas nao cria policy e
+  -- nao poe FORCE. E exatamente o estado que a regra 3 chama de falha - o mesmo
+  -- das 82 de 151 tabelas do CRM. Para nos e inocuo porque toda migration declara
+  -- ENABLE + FORCE + policy explicitamente, e o CAT-3 confere isso. Mas uma tabela
+  -- futura em `public` que esqueca a RLS nao fica sem RLS: fica com RLS SEM POLICY,
+  -- negando tudo em silencio, por default da plataforma e nao por desenho nosso.
   SELECT string_agg(p.proname, ', ') INTO m
   FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
   WHERE n.nspname IN ('app','public') AND p.prosecdef
     AND p.proname NOT IN ('membros_do_tenant','tem_vinculo_no_tenant',
-                          'resolver_login','auditar','exigir_trilha_de_plataforma');
+                          'resolver_login','auditar','exigir_trilha_de_plataforma',
+                          'rls_auto_enable');
   IF m IS NOT NULL THEN
     RAISE EXCEPTION 'inv.19 SECURITY DEFINER fora da lista branca: %', m;
   END IF;

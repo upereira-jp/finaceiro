@@ -1,0 +1,19 @@
+{
+  "//": "node --experimental-strip-types APAGA anotacao de tipo, nao confere. Sem `npm run typecheck` no CI os tipos gerados nao valem nada.",
+  "//2": "noUncheckedIndexedAccess fica DESLIGADO por ora: ligado, acusa 11 pontos em codigo que ja passou (r[0] em sessao.ts, documento.ts, contexto.ts e nos testes antigos). CI vermelho no dia 1 vira CI ignorado - o valor do typecheck e pegar erro NOVO. Ligar como tarefa propria, com os 11 no diff.",
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "target": "es2023",
+    "lib": ["es2023"],
+    "types": ["node"],
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true
+  },
+  "include": ["src", "tests"],
+  "exclude": ["node_modules", "src/generated", "spike-transacao", "spike-adr0003"]
+}

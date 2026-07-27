@@ -10,14 +10,15 @@ datasource db {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model acesso_plataforma_log {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenant_id   String   @db.Uuid
-  usuario_id  String   @db.Uuid
+  id          String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id   String              @db.Uuid
+  usuario_id  String              @db.Uuid
   acao        String
   recurso     String
-  ocorrido_em DateTime @default(now()) @db.Timestamptz(6)
-  tenant      tenant   @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  usuario     usuario  @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ocorrido_em DateTime            @default(now()) @db.Timestamptz(6)
+  xact_id     Unsupported("xid8") @default(dbgenerated("pg_current_xact_id()"))
+  tenant      tenant              @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usuario     usuario             @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([tenant_id, ocorrido_em(sort: Desc)], map: "acesso_plataforma_log_tenant_idx")
 }
@@ -61,6 +62,8 @@ model cliente_estado_crm {
   sincronizado_em  DateTime? @db.Timestamptz(6)
   cliente          cliente   @relation(fields: [tenant_id, cliente_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "cec_cliente_fk")
   tenant           tenant    @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([tenant_id, cliente_id], map: "cec_tenant_cliente_unico")
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -92,13 +95,14 @@ model contrato {
   status                        status_contrato         @default(rascunho)
   faturas_cheias_pagas          Int                     @default(0)
   originador_tipo_no_fechamento originador_tipo?
+  uc_vigente                    String?                 @default(dbgenerated("\nCASE\n    WHEN (status = ANY (ARRAY['ativo'::status_contrato, 'suspenso'::status_contrato])) THEN unidade_consumidora_id\n    ELSE NULL::uuid\nEND")) @db.Uuid
   cliente                       cliente                 @relation(fields: [tenant_id, cliente_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "contrato_cliente_fk")
   originador                    originador?             @relation(fields: [tenant_id, originador_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "contrato_originador_fk")
   tenant                        tenant                  @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   unidade_consumidora           unidade_consumidora     @relation(fields: [tenant_id, unidade_consumidora_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "contrato_uc_fk")
   usina                         usina                   @relation(fields: [tenant_id, usina_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "contrato_usina_fk")
 
-  @@unique([tenant_id, unidade_consumidora_id], map: "contrato_ativo_unico_por_uc", where: raw("(status = 'ativo'::status_contrato)"))
+  @@unique([tenant_id, uc_vigente], map: "contrato_vigente_unico_por_uc")
   @@unique([tenant_id, id], map: "contrato_id_tenant")
 }
 
@@ -198,13 +202,14 @@ model regra_repasse {
 /// This table contains exclusion constraints and requires additional setup for migrations. Visit https://pris.ly/d/exclusion-constraints for more info.
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model tarifa {
-  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenant_id            String    @db.Uuid
-  distribuidora        String
-  tarifa_reais_por_kwh Decimal   @db.Decimal(12, 6)
-  vigencia_inicio      DateTime  @db.Date
-  vigencia_fim         DateTime? @db.Date
-  tenant               tenant    @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id                                                String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id                                         String        @db.Uuid
+  distribuidora                                     String
+  tarifa_reais_por_kwh                              Decimal       @db.Decimal(12, 6)
+  vigencia_inicio                                   DateTime      @db.Date
+  vigencia_fim                                      DateTime?     @db.Date
+  distribuidora_tarifa_distribuidoraTodistribuidora distribuidora @relation("tarifa_distribuidoraTodistribuidora", fields: [distribuidora], references: [nome], onDelete: NoAction, onUpdate: NoAction, map: "tarifa_distribuidora_fk")
+  tenant                                            tenant        @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@unique([tenant_id, id], map: "tarifa_id_tenant")
 }
@@ -236,28 +241,29 @@ model tenant {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model unidade_consumidora {
-  id                   String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenant_id            String          @db.Uuid
-  cliente_id           String          @db.Uuid
-  numero_uc            String
-  distribuidora        String
-  endereco_logradouro  String?
-  endereco_numero      String?
-  endereco_complemento String?
-  endereco_bairro      String?
-  endereco_municipio   String?
-  endereco_uf          String?
-  endereco_cep         String?
-  titularidade         titularidade_uc @default(propria)
-  usina_id             String?         @db.Uuid
-  percentual_rateio    Decimal?        @db.Decimal(7, 4)
-  data_vencimento      DateTime?       @db.Date
-  status               status_uc       @default(ativa)
-  crm_usina_cliente_id String?         @db.Uuid
-  contrato             contrato?
-  cliente              cliente         @relation(fields: [tenant_id, cliente_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "uc_cliente_fk")
-  usina                usina?          @relation(fields: [tenant_id, usina_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "uc_usina_fk")
-  tenant               tenant          @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id                                                             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id                                                      String          @db.Uuid
+  cliente_id                                                     String          @db.Uuid
+  numero_uc                                                      String
+  distribuidora                                                  String
+  endereco_logradouro                                            String?
+  endereco_numero                                                String?
+  endereco_complemento                                           String?
+  endereco_bairro                                                String?
+  endereco_municipio                                             String?
+  endereco_uf                                                    String?
+  endereco_cep                                                   String?
+  titularidade                                                   titularidade_uc @default(propria)
+  usina_id                                                       String?         @db.Uuid
+  percentual_rateio                                              Decimal?        @db.Decimal(7, 4)
+  data_vencimento                                                DateTime?       @db.Date
+  status                                                         status_uc       @default(ativa)
+  crm_usina_cliente_id                                           String?         @db.Uuid
+  contrato                                                       contrato[]
+  cliente                                                        cliente         @relation(fields: [tenant_id, cliente_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "uc_cliente_fk")
+  distribuidora_unidade_consumidora_distribuidoraTodistribuidora distribuidora   @relation("unidade_consumidora_distribuidoraTodistribuidora", fields: [distribuidora], references: [nome], onDelete: NoAction, onUpdate: NoAction, map: "uc_distribuidora_fk")
+  usina                                                          usina?          @relation(fields: [tenant_id, usina_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "uc_usina_fk")
+  tenant                                                         tenant          @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@unique([tenant_id, crm_usina_cliente_id], map: "uc_crm_unico", where: raw("(crm_usina_cliente_id IS NOT NULL)"))
   @@unique([tenant_id, id], map: "uc_id_tenant")
@@ -266,24 +272,25 @@ model unidade_consumidora {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model usina {
-  id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenant_id           String                @db.Uuid
-  codigo_geradora     String
-  apelido             String?
-  distribuidora       String
-  potencia_kwp        Decimal?              @db.Decimal(12, 4)
-  geracao_nominal_kwh Decimal?              @db.Decimal(14, 4)
-  crm_usina_id        String?               @db.Uuid
-  dono_usina_id       String?               @db.Uuid
-  data_homologacao    DateTime?             @db.Date
-  regime_fio_b        Boolean               @default(true)
-  status              status_usina          @default(ativa)
-  contrato            contrato[]
-  regra_repasse       regra_repasse[]
-  unidade_consumidora unidade_consumidora[]
-  dono_usina          dono_usina?           @relation(fields: [tenant_id, dono_usina_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "usina_dono_fk")
-  tenant              tenant                @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  usina_geracao       usina_geracao[]
+  id                                               String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id                                        String                @db.Uuid
+  codigo_geradora                                  String
+  apelido                                          String?
+  distribuidora                                    String
+  potencia_kwp                                     Decimal?              @db.Decimal(12, 4)
+  geracao_nominal_kwh                              Decimal?              @db.Decimal(14, 4)
+  crm_usina_id                                     String?               @db.Uuid
+  dono_usina_id                                    String?               @db.Uuid
+  data_homologacao                                 DateTime?             @db.Date
+  regime_fio_b                                     Boolean               @default(true)
+  status                                           status_usina          @default(ativa)
+  contrato                                         contrato[]
+  regra_repasse                                    regra_repasse[]
+  unidade_consumidora                              unidade_consumidora[]
+  distribuidora_usina_distribuidoraTodistribuidora distribuidora         @relation("usina_distribuidoraTodistribuidora", fields: [distribuidora], references: [nome], onDelete: NoAction, onUpdate: NoAction, map: "usina_distribuidora_fk")
+  dono_usina                                       dono_usina?           @relation(fields: [tenant_id, dono_usina_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "usina_dono_fk")
+  tenant                                           tenant                @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usina_geracao                                    usina_geracao[]
 
   @@unique([tenant_id, codigo_geradora], map: "usina_codigo_unico")
   @@unique([tenant_id, id], map: "usina_id_tenant")
@@ -328,6 +335,35 @@ model usuario_tenant {
   usuario    usuario      @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@unique([usuario_id, tenant_id], map: "usuario_tenant_unico")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model auditoria {
+  id          BigInt              @id @default(autoincrement())
+  tenant_id   String?             @db.Uuid
+  tabela      String
+  registro_id String?
+  operacao    String              @db.Char(1)
+  usuario_id  String?             @db.Uuid
+  tier        String?
+  xact_id     Unsupported("xid8") @default(dbgenerated("pg_current_xact_id()"))
+  ocorrido_em DateTime            @default(dbgenerated("clock_timestamp()")) @db.Timestamptz(6)
+  antes       Json?
+  depois      Json?
+
+  @@index([tabela, registro_id], map: "auditoria_registro_idx")
+  @@index([tenant_id, ocorrido_em(sort: Desc)], map: "auditoria_tenant_idx")
+  @@index([xact_id], map: "auditoria_xact_idx")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model distribuidora {
+  nome                                                                 String                @id
+  ativa                                                                Boolean               @default(true)
+  tarifa_tarifa_distribuidoraTodistribuidora                           tarifa[]              @relation("tarifa_distribuidoraTodistribuidora")
+  unidade_consumidora_unidade_consumidora_distribuidoraTodistribuidora unidade_consumidora[] @relation("unidade_consumidora_distribuidoraTodistribuidora")
+  usina_usina_distribuidoraTodistribuidora                             usina[]               @relation("usina_distribuidoraTodistribuidora")
 }
 
 enum conector_status {

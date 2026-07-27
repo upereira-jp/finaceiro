@@ -63,15 +63,8 @@ SELECT 'recalculo de 2026-03-15 acha '||count(*)||' regra(s) e '||
 FROM regra_comissao WHERE daterange(vigencia_inicio,vigencia_fim,'[)') @> '2026-03-15'::date;"
 
 echo
-echo "=== catalogo (fin_test): tabelas sem RLS+FORCE+policy, esperado nenhuma"
-$P -d fin_test -tA -c "
-SELECT coalesce(string_agg(c.relname,', '),'nenhuma')
-FROM pg_class c
-JOIN pg_namespace n ON n.oid=c.relnamespace AND n.nspname='public'
-WHERE c.relkind='r'
-  AND c.relname NOT LIKE 'app_marcador%'
-  AND (NOT c.relrowsecurity OR NOT c.relforcerowsecurity
-    OR NOT EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid=c.oid));"
-
-echo "=== FKs compostas, esperado 9"
-$P -d fin_test -tA -c "SELECT count(*) FROM pg_constraint WHERE contype='f' AND array_length(conkey,1)=2;"
+echo "=== catalogo (fin_test): CLAUDE.md 1, 2, 3 e 11 por consulta ao catalogo"
+# Era um SELECT que IMPRIMIA o nome da tabela em falta e devolvia exit 0: o CI
+# passava verde com a falha na tela. `distribuidora` esteve nessa lista desde a
+# migration 10 sem quebrar nada. Agora e suite com RAISE WARNING, como as outras.
+suite fin_test tests/catalogo.sql

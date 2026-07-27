@@ -24,7 +24,13 @@ export type Tier = 'plataforma_admin' | 'plataforma_suporte' | null;
 
 export type Identidade = { tenantId: string; usuarioId: string; tier?: Tier };
 
-type Escopo = Identidade & { tx: ClientTx; tipo: 'transacional' | 'relatorio' };
+type Escopo = Identidade & {
+  tx: ClientTx;
+  tipo: 'transacional' | 'relatorio';
+  /** Papel do vinculo, resolvido no maximo UMA vez por unidade de trabalho.
+   *  Ver papelNoTenantCorrente(). */
+  papel?: string;
+};
 
 const als = new AsyncLocalStorage<Escopo>();
 
@@ -189,15 +195,18 @@ export class TenantNaoEncontrado extends Error {
  * explicito, e a passagem fica na trilha.
  */
 export async function papelNoTenantCorrente(): Promise<string> {
-  const tx = db();
-  const r: any = await tx.$queryRaw`
+  const e = als.getStore();
+  if (!e) throw new SemContextoDeTenant();
+  if (e.papel !== undefined) return e.papel;
+
+  const r: any = await e.tx.$queryRaw`
     SELECT papel FROM usuario_tenant
     WHERE usuario_id = app.current_usuario_id()
       AND tenant_id  = app.current_tenant_id()
       AND ativo
     LIMIT 1`;
   if (!r?.[0]?.papel) throw new TenantNaoEncontrado();
-  return r[0].papel as string;
+  return (e.papel = r[0].papel as string);
 }
 
 const PODE: Record<string, ReadonlySet<string>> = {
@@ -207,7 +216,15 @@ const PODE: Record<string, ReadonlySet<string>> = {
   administrar:      new Set(['admin']),
 };
 
-/** Matriz do PRD 3. Lanca se o papel do vinculo nao cobre a acao. */
+/**
+ * Matriz do PRD 3. Lanca se o papel do vinculo nao cobre a acao.
+ *
+ * Chame no REPOSITORIO, nao no endpoint. Um repositorio chamavel sem checagem e
+ * o furo; e o custo desapareceu com o cache de escopo em papelNoTenantCorrente:
+ * a query do vinculo sai UMA vez por unidade de trabalho, nao uma por operacao.
+ * O cache e seguro porque o escopo E a transacao - a leitura ja e snapshot, e
+ * papel revogado no meio da propria transacao nao e caso que exista.
+ */
 export async function exigir(acao: keyof typeof PODE): Promise<string> {
   const papel = await papelNoTenantCorrente();
   if (!PODE[acao].has(papel)) {

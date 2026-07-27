@@ -39,7 +39,7 @@ Uma questão sem dono nomeado é automaticamente vermelha, por não ter caminho 
 | Fase | 🔴 | 🟡 | 🟢 | Situação |
 |---|--:|--:|--:|---|
 | **F0** | **3** | 1 | 0 | **aberta** — ver §3 |
-| **F1** | **0** | 4 | 1 | **em execução** — as duas vermelhas fecharam em 26/07: F-02 na §9, F-03 por decisão normativa |
+| **F1** | **0** | 6 | 1 | **em execução** — as duas vermelhas fecharam em 26/07: F-02 na §9, F-03 por decisão normativa. `Q-SPEC001-08` e `MT-09` abertas em 27/07 |
 | F2 | 2 | 3 | 2 | — |
 | F3 | 2 | 1 | 0 | — |
 | F6 | 0 | 1 | 1 | — |
@@ -83,6 +83,8 @@ Entregas da F0 conforme `PRD-v2.2` §10:
 | MT-07 | 🟡 | Quem informa o `crm_tenant_id` ao ativar um conector, e como se valida | Vinicius |
 | AUD-09 | 🟡 | CPF/CNPJ: CRM exige ou o financeiro coleta? | Vinicius |
 | Q-SPEC001-03 | 🟢 | Endereço da UC: coleta local obrigatória ou opcional? | Vinicius |
+| MT-09 | 🟡 | **O Supabase habilita RLS sozinho, e habilita do jeito que a regra 3 chama de falha.** O projeto traz o event trigger `ensure_rls` (`ddl_command_end`) e a funcao `SECURITY DEFINER` `public.rls_auto_enable`, que roda `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` em toda tabela nova de `public`. Ela **nao cria policy e nao poe FORCE** — exatamente o estado das 82 de 151 tabelas do CRM, que nega tudo em silencio. Consequencia: uma tabela futura que esqueca a RLS nao fica *sem* RLS, fica com **RLS sem policy**, por default da plataforma e nao por desenho nosso. Mitigado hoje pelo CAT-3, que acusa tabela com `tenant_id` sem RLS+FORCE+policy. Entrou na lista branca do invariante 19 em 27/07 porque nao controlamos nem podemos remover a funcao. Decidir: aceitar como risco coberto pelo CAT-3, ou tratar no provisionamento (`ADR-0004`) | Vinicius |
+| Q-SPEC001-08 | 🟡 | **A `SPEC-001` se contradiz na contagem de FKs compostas.** A §3.4 linha 320 registra que *"**A décima** entrou na v2.9 com `regra_repasse`"*, mas duas linhas adiante o documento continua na contagem antiga: linha 536 — *"As **nove** FKs da §3.4 são compostas, e cada uma rejeita a referência cross-tenant com `23503`"* — e linha 565 — *"`test_fk_composta_rejeita_cross_tenant` \| §3.4 · Inv. 2 — as **nove** FKs, uma a uma"*. Medido em 27/07 contra o banco com as 12 migrations: são **dez**, e dez é o correto. A décima é `regra_repasse_usina_fk`. Consequência pela regra 8: o checklist e a tabela de testes cobrem nove, então a décima é invariante sem teste nomeado. **Correção é do autor da SPEC — não editar** | Vinicius |
 
 ## 5. F2 — faturamento
 

@@ -2,22 +2,29 @@
   "name": "financeiro",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.18" },
+  "engines": {
+    "node": ">=22.18"
+  },
   "scripts": {
     "db:migrate": "prisma migrate deploy",
     "db:pull": "prisma db pull",
-    "test:isolamento": "bash tests/run.sh",
-    "test:middleware": "node --experimental-strip-types tests/middleware.ts",
-    "test:sessao": "bash tests/sessao.sh",
+    "typecheck": "tsc --noEmit",
     "test:documento": "node --experimental-strip-types tests/documento.ts",
-    "test": "npm run test:documento && npm run test:isolamento && npm run test:middleware && npm run test:sessao"
+    "test:isolamento": "bash tests/run.sh",
+    "test:middleware": "bash tests/middleware.sh",
+    "test:sessao": "bash tests/sessao.sh",
+    "test:repos": "bash tests/repos.sh",
+    "test": "npm run typecheck && npm run test:documento && npm run test:isolamento && npm run test:middleware && npm run test:sessao && npm run test:repos"
   },
   "dependencies": {
-    "@prisma/adapter-pg": "^7.9.0",
-    "@prisma/client": "^7.9.0",
+    "@prisma/adapter-pg": "7.9.0",
+    "@prisma/client": "7.9.0",
     "pg": "^8.16.3"
   },
   "devDependencies": {
-    "prisma": "^7.9.0"
+    "@types/node": "^22",
+    "dotenv": "^17",
+    "prisma": "7.9.0",
+    "typescript": "^5.9"
   }
 }

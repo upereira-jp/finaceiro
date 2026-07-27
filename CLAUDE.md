@@ -24,7 +24,7 @@
 
 ---
 
-## As dez
+## As onze
 
 ### 1. Dinheiro é `Int` em centavos
 
@@ -144,3 +144,18 @@ A numeração fantasma (anterior a 24/07/2026) aparece **no corpo intacto** dos 
 | "regra 10" | Lacuna vira questão | **10** (coincide) |
 
 **Atenção à "regra 7":** na numeração vigente, a regra 7 é *domínio em português, utilitário em inglês* — e está **correta**. Toda citação a "a regra 7 está errada" é anacrônica e se refere à atual regra 5, que já foi corrigida.
+
+### 11. Índice parcial não gera relação, e não é caminho de navegação
+
+Nenhum índice único parcial pode cobrir **exatamente** o conjunto de colunas de uma FK.
+
+O motivo é medido, não teórico. O `db pull` do Prisma 7.9 **ignora o predicado** ao inferir cardinalidade: `contrato_ativo_unico_por_uc`, que era `UNIQUE (tenant_id, unidade_consumidora_id) WHERE status = 'ativo'`, virou uma relação **to-one** em `unidade_consumidora`. Numa UC com quatro contratos, a relação devolveu um suspenso de **R$ 111,00** onde o vigente valia **R$ 789,00** — sem erro, sem log. O cenário é a primeira renovação: mês 6, produção.
+
+O conserto não é editar o `schema.prisma`. Editar **compila** — o validador do 7.9 aceita a lista mesmo com o parcial presente, ao contrário da introspecção —, mas todo `db pull` reverte em silêncio. Invariante que depende de alguém lembrar não é invariante. O conserto é no banco: coluna gerada e índice único **cheio** sobre um conjunto que não é o da FK.
+
+Duas consequências de rotina:
+
+- Nenhum repositório navega por índice parcial. O Prisma já exclui parcial das chaves de `findUnique` — verificado no DMMF —, e uma leitura que depende de predicado usa `findFirst` com o predicado explícito, ou uma chave única cheia.
+- Verificação por **consulta ao catálogo** (`tests/catalogo.sql`, CAT-1 e CAT-2), jamais por revisão de PR. As duas coisas que este arquivo pegou em 26/07 eram invisíveis em code review e triviais no catálogo.
+
+`[nova — medido em PostgreSQL 17.6 e no DMMF do Prisma 7.9, 26/07/2026]`
