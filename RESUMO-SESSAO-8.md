@@ -4,9 +4,9 @@
 |---|---|
 | **Foco** | Fechar a fila da sessão 7, evidenciar em que fase o projeto está, e construir o conector do CRM |
 | **Método** | Nada afirmado sem medição; toda prova de escrita em `BEGIN … ROLLBACK`; teste novo verificado **nos dois sentidos**; contradição encontrada vira entrada em `QUESTOES.md`, nunca conserto silencioso |
-| **Achados** | 8, todos medidos. Quatro viraram questão nova, quatro viraram correção com teste |
-| **Resultado** | Auth fechado ponta a ponta. Conector construído, testado e com o **invariante 9 cumprido**. **A F1 não fechou** — falta executar a §11, que exige credenciais |
-| **Testes** | **283 verificações em 18 suítes**, `EXIT=0`. Os 8 invariantes de catálogo passam **também contra produção** |
+| **Achados** | 10, todos medidos. Cinco viraram questão nova, cinco viraram correção com teste |
+| **Resultado** | Auth fechado. Conector construído e ligado ao CRM real. **Passos 1 a 4 da §11 EXECUTADOS.** A F1 não fechou por **uma** razão, e ela é de código: a `Q-LOTE-01` |
+| **Testes** | **285 verificações em 18 suítes**, `EXIT=0`. Os 8 invariantes de catálogo passam **também contra produção** |
 
 > **Este documento contém o roteiro completo para fechar a F1 — §11.** Ele
 > absorveu o `FECHAR-F1.md`, que existiu por algumas horas e foi removido: dois
@@ -108,9 +108,12 @@ conveniência de teste: o motor não conhece `pg`, não monta SQL e não sabe o 
 de nenhuma tabela do CRM.
 
 Coberto: R3 idempotência, R4 dedup antes do upsert, R6 nunca deleta, R8/R9 recusas
-contadas, R13 lote, R14/R15 funil `Parceiros` fora da base de valor, R18 fusão de
-vítima de merge, §4.3 classificação em três na ordem `lead_merges →
-leads_arquivados → funil`, §7 view vazia termina em `erro` e **não reconcilia**.
+contadas, R14/R15 funil `Parceiros` fora da base de valor, R18 fusão de vítima de
+merge, §4.3 classificação em três na ordem `lead_merges → leads_arquivados →
+funil`, §7 view vazia termina em `erro` e **não reconcilia**.
+
+**NÃO coberto, e o primeiro ciclo real cobrou:** a **R13** (lote). Ver a
+`Q-LOTE-01` na §11 — é o que bloqueia a F1.
 
 ### O erro que o teste `N10` pegou, e ele valia a sessão
 
@@ -224,12 +227,12 @@ matriz de papeis       18      composition root        8
 repos/cliente          13      repos/contrato         10
 repos/uc               12      repos/usina+originador 15
 rateio                 10      HTTP                   21
-auth JWT               23      conector               23   NOVA
+auth JWT               23      conector               25   NOVA
 tsc --noEmit           limpo
 ```
 
-**283 verificações em 18 suítes**, `EXIT=0` — 26 novas nesta sessão (2 de
-auditoria, 1 de catálogo, 23 do conector). Contagem pela convenção do projeto:
+**285 verificações em 18 suítes**, `EXIT=0` — 28 novas nesta sessão (2 de
+auditoria, 1 de catálogo, 25 do conector). Contagem pela convenção do projeto:
 chamadas a `chk()` e invariantes de catálogo.
 
 Os 8 invariantes de catálogo passam **também contra produção**, o que nenhuma
@@ -237,127 +240,97 @@ sessão anterior havia feito.
 
 ---
 
-## 11. ROTEIRO PARA FECHAR A F1
-
-Todos os passos exigem credencial que o Claude Code não tem. **É o trabalho da
-próxima sessão.**
+## 11. O roteiro, e o que foi EXECUTADO em 27/07
 
 > **Vocabulário, porque é onde a regra 6 se paga.** O `tenant` do passo 2 é a
 > empresa dentro do **financeiro**. Não tem relação com o tenant do CRM. O
 > identificador deles, `crm_tenant_id`, aparece em **uma** coluna de **uma**
 > tabela (`conector_crm`) e é usado por **um** módulo.
 
-### Antes de começar
+| Passo | Estado |
+|---|---|
+| 1 — primeiro `plataforma_admin` | ✅ **feito**, com `COMMIT` |
+| 2 — tenant, vínculo e conector | ✅ **feito**, com `COMMIT` |
+| 3 — `CRM_DATABASE_URL` | ✅ **feito** — conectou como `financeiro_ro` |
+| 4 — ciclo em ensaio | ✅ **rodou**, e achou a `Q-VALOR-01` e a `Q-LOTE-01` |
+| **5 — ciclo valendo, duas vezes** | 🔴 **BLOQUEADO pela `Q-LOTE-01`** |
+| 6 — verificação final | ⏳ depois do 5 |
 
-Todo script de provisionamento exige `modo=ensaio` ou `modo=valendo`, sem default.
-**Rode sempre o ensaio primeiro** — ele executa tudo, mostra o resultado e dá
-`ROLLBACK`.
+### Estado do banco de produção ao fim da sessão
+
+```
+usuarios=1  admins=1  tenants=1  vinculos=1  conectores=1
+clientes=0  execucoes=0
+```
+
+Nenhum cliente espelhado ainda: o passo 5 nunca rodou, e o ensaio do passo 4
+sempre terminou em `ROLLBACK`.
+
+### Identificadores que a próxima sessão vai precisar
+
+| O quê | Valor |
+|---|---|
+| `auth_user_id` (Supabase Auth do financeiro) | `efcc8e11-e2cf-4079-a649-92798fefdfc7` |
+| `tenant_id` (**nosso**, G3 Solar) | `eac198c0-b0c1-4b13-9b4d-6ac1a6eb011d` |
+| `crm_tenant_id` (**deles**) | `d4640f4b-f833-4a80-a4db-ccced1956ae4` |
+| CNPJ da G3 Solar | `66714022000121` |
+
+### O que o primeiro ciclo real mediu
+
+```
+lidos .......... 48        (40 Vendas-Assinatura + 1 Vendas-Integracao + 7 Parceiros)
+criados ........ 1         ANTES da Q-VALOR-01
+recusados ...... 40        ANTES da Q-VALOR-01
+garantia de tenant degradada: false     <- invariante 9 rodando
+```
+
+Depois da `Q-VALOR-01` os 41 ganhos de venda passaram a ser aceitos — e foi aí
+que a `Q-LOTE-01` apareceu, porque 41 clientes não cabem numa transação de 15 s.
+
+### O que falta para o passo 5 — é código, e não depende de ninguém de fora
+
+**`Q-LOTE-01`, vermelha.** A `SPEC-002` R13 manda processar **por lote**, cada um
+em transação própria, com `conector_execucao` atualizado ao fim de cada.
+`executarCiclo()` foi escrito com o ciclo inteiro numa transação, e morreu com
+`P2028` aos 15.330 ms.
+
+A causa é **latência, não CPU**: ~5 idas ao banco por cliente × 41 ≈ 205 viagens
+até `sa-east-1`. Junto disso há uma ineficiência que é minha:
+`escreverEstadoCrm()` reconsulta o cliente por `crm_lead_id` embora
+`espelharCliente()` já tenha o `id` em mãos — uma viagem desperdiçada por cliente.
+
+**Não foi contornado subindo o `timeout`.** O critério §8 da `SPEC-002` é *"ciclo
+com 1.000 linhas não estoura o timeout de 15 s"*, e afrouxar o limite para caber
+48 linhas entregaria um conector que quebra no primeiro mês de crescimento.
+
+Falta também o teste obrigatório `test_lote_respeita_timeout` da §9.
+
+### Depois que a `Q-LOTE-01` fechar
 
 ```bash
-cd /workspaces/finaceiro
 set -a && . ./.env && set +a
+
+# ensaio primeiro, sempre
+npm run ciclo -- --ensaio  --auth-user efcc8e11-e2cf-4079-a649-92798fefdfc7
+
+# valendo, DUAS vezes - a segunda e o criterio de saida
+npm run ciclo -- --valendo --auth-user efcc8e11-e2cf-4079-a649-92798fefdfc7
+npm run ciclo -- --valendo --auth-user efcc8e11-e2cf-4079-a649-92798fefdfc7
+
+# verificacao final
+npm test
+psql "$DIRECT_URL" -f tests/catalogo.sql
 ```
 
-### Passo 1 — o primeiro `plataforma_admin`
+**A segunda execução tem que sair com `criados: 0` e `atualizados: 0`.** É o
+critério de saída *sync idempotente*, não conferência extra.
 
-Nasce por `psql` porque `app_financeiro` **não tem `INSERT`** em
-`plataforma_admin` (revogado na migration 10 §4, depois do furo de autopromoção).
-A conta no Supabase Auth já existe: `efcc8e11-e2cf-4079-a649-92798fefdfc7`.
-
-```bash
-psql "$DIRECT_URL" -v ON_ERROR_STOP=1 -v modo=ensaio \
-  -v auth_user_id='efcc8e11-e2cf-4079-a649-92798fefdfc7' \
-  -v nome='Vinicius Leal' -v email='lealvbl@gmail.com' \
-  -f scripts/bootstrap-plataforma-admin.sql
-# e depois o mesmo com modo=valendo
-```
-
-**Confirma:** o script imprime `app.resolver_login()` com `tier = plataforma_admin`
-e duas linhas de trilha.
-
-### Passo 2 — o tenant do financeiro, o vínculo e o conector
-
-**Confira o CNPJ antes** — tem `UNIQUE` e identifica a empresa. Só dígitos.
-
-```bash
-psql "$DIRECT_URL" -v ON_ERROR_STOP=1 -v modo=ensaio \
-  -v auth_user_id='efcc8e11-e2cf-4079-a649-92798fefdfc7' \
-  -v razao_social='G3 Solar' \
-  -v cnpj='<14 digitos, sem mascara>' \
-  -v crm_tenant_id='d4640f4b-f833-4a80-a4db-ccced1956ae4' \
-  -v credencial_ref='vault://crm/financeiro_ro' \
-  -f scripts/provisionar-tenant.sql
-# e depois o mesmo com modo=valendo
-```
-
-**Confirma:** `resolver_login` passa a devolver `tier=plataforma_admin` **e** uma
-linha com `papel = admin` no tenant. É por esse vínculo que o ciclo abre contexto
-— sem ele, `policy_exige_vinculo` recusa e a leitura devolve zero.
-
-> `credencial_ref` é **referência**, não segredo (regra 5). A senha vai no passo 3.
-
-### Passo 3 — a credencial de leitura do CRM
-
-**Não cole a senha em conversa nenhuma.** Escreva direto no `.env`:
-
-```bash
-printf '\nCRM_DATABASE_URL="postgresql://financeiro_ro:SENHA@HOST.pooler.supabase.com:5432/postgres"\nPOOL_CRM=2\n' >> .env
-```
-
-Host e porta saem do botão Connect do dashboard do CRM — **session pooler na
-5432**, pelo mesmo motivo do `DIRECT_URL`: a 6543 é transaction pooler e pendura
-sem mensagem útil.
-
-### Passo 4 — o primeiro ciclo, em ensaio
-
-```bash
-npm run ciclo -- --ensaio --auth-user efcc8e11-e2cf-4079-a649-92798fefdfc7
-```
-
-**A leitura do CRM acontece de verdade e os contadores são reais.** O `ROLLBACK`
-desfaz só a gravação. Espere algo próximo de:
-
-```
-CRM:  conectado como "financeiro_ro"
-      views legiveis: 8
-      views com coluna de tenant: 8          <- invariante 9 vai rodar
-      privilegio de infraestrutura (Q-PGNET-01): net.http_request_queue (ESCRITA), ...
---- resultado ---
-  status ......... ok
-  lidos .......... 48
-  criados ........ 41                        <- 48 menos os 7 de Parceiros
-  recusados ...... 0
-  garantia de tenant degradada: false        <- tem que ser false
-```
-
-| Sinal | O que significa |
+| Sinal no ciclo | O que significa |
 |---|---|
 | `garantia de tenant degradada: true` | alguma view perdeu `crm_tenant_id`. **Pare** e fale com o dev |
-| `status: erro` com "zero linhas" | a view veio vazia. **Não reconciliou nada, de propósito** (§7) — é o caso que apagaria a carteira |
-| `recusados > 0` | alíquota ambígua ou ganho sem valor. O motivo vem impresso; conserta-se no CRM |
-| `fila de revisao humana` | ausência que não é arquivo nem cópia derivada. Exige olhar |
-
-### Passo 5 — o ciclo valendo, e a prova de idempotência
-
-```bash
-npm run ciclo -- --valendo --auth-user efcc8e11-e2cf-4079-a649-92798fefdfc7
-npm run ciclo -- --valendo --auth-user efcc8e11-e2cf-4079-a649-92798fefdfc7   # de novo
-```
-
-**A segunda execução é o critério de saída da F1**, não conferência extra. Tem que
-sair com `criados: 0` e `atualizados: 0`. Número diferente de zero significa que a
-idempotência (R3) não vale contra dados reais — e o modo de falha é silencioso.
-Foi assim que o `N10` pegou a comparação de `Decimal` como texto.
-
-### Passo 6 — fechar a verificação
-
-```bash
-npm test                                     # 283 verificacoes, EXIT=0
-psql "$DIRECT_URL" -f tests/catalogo.sql     # os 8 invariantes CONTRA PRODUCAO
-```
-
-O segundo **não** roda no `npm test`: a suíte usa PostgreSQL local, sem o event
-trigger da plataforma. Foi essa divergência que escondeu a `Q-DISTRIB-01`.
+| `status: erro` com "zero linhas" | view veio vazia. **Não reconciliou nada, de propósito** (§7) |
+| `recusados > 0` | o motivo vem impresso; conserta-se no CRM |
+| `fila de revisao humana` | ausência que não é arquivo nem cópia derivada |
 
 ---
 
@@ -366,7 +339,7 @@ trigger da plataforma. Foi essa divergência que escondeu a `Q-DISTRIB-01`.
 | Critério de saída (`PRD` §10) | Estado |
 |---|---|
 | `migrate reset` limpo | ✅ já fechado — 15 migrations em banco vazio a cada `npm test` |
-| sync idempotente | **fecha no passo 5**, segunda passada com 0 criados e 0 atualizados |
+| sync idempotente | 🔴 **bloqueado pela `Q-LOTE-01`** — o ciclo não completa contra volume real |
 | escrita no CRM falha por permissão | ✅ já fechado — `N21` (guarda de arranque) e `N25` (sessão read-only) |
 
 **Duas coisas que não são critério de saída, e o dono decide se seguram a fase:**
@@ -381,8 +354,11 @@ trigger da plataforma. Foi essa divergência que escondeu a `Q-DISTRIB-01`.
 
 ## 13. Higiene, depois de fechar
 
-- **Rotacionar a `service_role` do Supabase do financeiro.** Foi colada na conversa
-  desta sessão e tem poder total no projeto.
+- ~~Rotacionar a `service_role` do Supabase do financeiro~~ — ✅ **feito em 27/07**.
+- **A senha do `financeiro_ro` foi trocada duas vezes** durante a sessão, e uma
+  versão dela chegou a aparecer no histórico da conversa. A que está no `.env`
+  hoje é posterior a isso, mas vale conferir com o dev do CRM que ninguém guardou
+  a antiga em lugar nenhum.
 - `git rm --cached financeiro-sessao-5.patch` — versionado na raiz desde antes de
   o `.gitignore` cobrir `*.patch`.
 - Apagar o projeto Supabase antigo (`us-west-2`).
@@ -394,8 +370,10 @@ trigger da plataforma. Foi essa divergência que escondeu a `Q-DISTRIB-01`.
 
 | Item | Estado | Dono |
 |---|---|---|
-| Roteiro da §11 (passos 1 a 6) | 🔴 **é o trabalho da próxima sessão** | Vinicius |
-| Rotação da `service_role` | 🔴 exposta nesta sessão | Vinicius |
+| **`Q-LOTE-01`** — R13 não implementada, ciclo estoura o `timeout` | 🔴 **bloqueia a F1. É o primeiro trabalho da próxima sessão** | — |
+| Passo 5 da §11 — ciclo valendo, duas vezes | 🔴 depende da `Q-LOTE-01` | Vinicius |
+| `Q-VALOR-01` — redação de R9/R14 na `SPEC-002` e o `consumo_referencia_centavos` | 🟡 decidida e implementada; falta o texto da spec | Vinicius |
+| ~~Rotação da `service_role`~~ | ✅ feita em 27/07 | — |
 | `Q-FASE-01` — conector é F1 ou F2 | 🟡 | Vinicius |
 | `Q-PROV-01` — criar tenant sem caminho de aplicação | 🟡 três opções | Vinicius |
 | `Q-PGNET-01` — `pg_net` concede `arwdDxtm` a PUBLIC | 🟡 tratado do nosso lado | dev do CRM |
@@ -437,6 +415,14 @@ privilégio herdado. As três foram para a carta do dev, em vez de sumirem.
 formato real.** O defeito não era lógica: era `'850.0000'` contra `850`. Nenhuma
 revisão de PR pegaria, nenhum log acusaria, e o sintoma em produção seria um
 contador dizendo exatamente o que se espera de um sincronizador.
+
+**E a lição da última hora vale por si: fixture de duas linhas não é volume.** A
+suíte do conector passava inteira, com 25 verificações e os dois sentidos, e as
+duas coisas que o primeiro ciclo real achou — a `Q-VALOR-01` e a `Q-LOTE-01` —
+eram invisíveis para ela. Uma exigia os dados de verdade (40 ganhos sem
+`valor_venda`); a outra exigia a **quantidade** de verdade (41 clientes não cabem
+numa transação de 15 s). Nenhuma das duas é bug de lógica, e nenhuma apareceria
+em revisão de PR.
 
 **O que se manteve:** toda prova de escrita em `BEGIN … ROLLBACK`, e todo teste
 novo verificado nos dois sentidos — passa contra o código correto e **acusa contra
