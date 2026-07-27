@@ -14,7 +14,7 @@ Sistema financeiro multi-tenant da G3 Solar: faturamento de crédito de energia,
 
 Nesta ordem. Cada documento pressupõe o anterior.
 
-1. **`RESUMO-SESSAO-8.md`** — estado atual, e a **§11 é o roteiro executável para fechar a F1**. Se você veio para terminar a fase, é lá, a fila da próxima sessão e as pendências gerais com dono nomeado
+1. **`RESUMO-SESSAO-8.md`** — estado atual, pendências com dono nomeado, e a **§11: o roteiro executável para fechar a F1**. Se você veio para terminar a fase, é lá
 2. **`CLAUDE.md`** — as onze regras inegociáveis. Antes de qualquer linha de código
 3. **`PRD-v2.2.md`** §7 e §8 — fronteira com o CRM
 4. **`adr/ADR-0003-contexto-de-tenant.md`** (r2) — como o isolamento funciona de fato, e a que preço
