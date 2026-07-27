@@ -126,12 +126,36 @@ export function motivoDeRecusa(l: VendaGanha): string | null {
   if (Number(l.comissionamento_n_opcoes ?? 0) > 1) {
     return `comissionamento ambiguo: ${l.comissionamento_n_opcoes} opcoes`;
   }
-  // R9 - valor nulo nao e zero. R14 desarma esta regra para o funil Parceiros,
-  // onde ganho significa "parceiro ativado" e nao ter valor e a natureza da
-  // coisa, nao uma falta. Sem a R14 os 7 ganhos de Parceiros entrariam em
-  // recusa todo ciclo e a contagem viraria ruido permanente.
-  if (l.valor_venda == null && l.valor_posicao == null) {
-    return 'ganho sem valor em nenhuma coluna';
+  /*
+   * R9 - valor nulo nao e zero. Mas O QUE CONTA COMO VALOR depende do funil, e
+   * isso foi medido no primeiro ciclo real, em 27/07:
+   *
+   *   Vendas - Assinatura   40 ganhos   0 com valor_venda   40 com consumo_kwh
+   *   Vendas - Integracao    1 ganho    1 com valor_venda    0 com consumo_kwh
+   *   Parceiros              7 ganhos   0 com valor_venda    0 com consumo_kwh
+   *
+   * A SPEC-002 R14 afirmava que "os funis de venda tem ZERO ganhos sem valor".
+   * Era falso: 40 dos 41 ganhos de venda nao tem valor_venda nem valor_posicao.
+   * O conector recusou os 40 - fez o certo, recusar em vez de adivinhar -, e a
+   * contagem de recusas foi o que trouxe o problema a tona, que e exatamente o
+   * que a invariante 8 existe para fazer.
+   *
+   * A LEITURA DO NEGOCIO, e ela ja estava na propria spec: assinatura de credito
+   * de energia nao tem "valor da venda", tem CONSUMO MENSAL. A R10 manda faturar
+   * por `consumo_kwh x tarifa` e trata valor do CRM como semente, nao verdade.
+   * Exigir valor_venda num funil de assinatura e cobrar o campo errado.
+   *
+   * Decisao do dono, 27/07: `consumo_kwh` conta como valor. A recusa exige
+   * ausencia dos TRES. Os 7 de Parceiros seguem fora pela R14, acima.
+   *
+   * PENDENTE, e nao foi improvisado aqui: a R10 tambem manda gravar
+   * `consumo_referencia_centavos` como semente a partir de `consumo_reais`. Nao
+   * implementei porque converter reais em centavos exige decidir arredondamento,
+   * e a R23 proibe round() em intermediario. Registrado na Q-VALOR-01.
+   */
+  const temConsumo = l.consumo_kwh != null && String(l.consumo_kwh).trim() !== '';
+  if (l.valor_venda == null && l.valor_posicao == null && !temConsumo) {
+    return 'ganho sem valor e sem consumo_kwh';
   }
   return null;
 }

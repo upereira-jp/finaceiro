@@ -96,11 +96,33 @@ const L3 = 'aaaa3333-0000-4000-8000-00000000cc03';
 
 // ====================================================== N5 recusas (R8/R9)
 {
+  // R8 sozinha: aliquota ambigua e recusa mesmo com valor e consumo presentes.
+  // O eixo do VALOR ficou nos N5b/N5c, depois da decisao de 27/07.
   const ambigua = motivoDeRecusa(venda({ lead_id: L1, comissionamento_n_opcoes: '3' }));
-  const semValor = motivoDeRecusa(venda({ lead_id: L1, valor_venda: null, valor_posicao: null }));
   const boa = motivoDeRecusa(venda({ lead_id: L1 }));
-  chk('N5', ambigua !== null && semValor !== null && boa === null,
-      'R8 aliquota ambigua e R9 valor nulo sao recusa; linha completa passa');
+  chk('N5', ambigua !== null && /ambiguo/.test(ambigua) && boa === null,
+      'R8 aliquota ambigua e recusa; linha completa passa');
+}
+
+// ====================================================== N5b valor por consumo
+{
+  // Medido no primeiro ciclo real (27/07): 40 dos 41 ganhos de funil de venda
+  // nao tem valor_venda nem valor_posicao, e TODOS tem consumo_kwh. Assinatura
+  // de credito de energia nao tem "valor da venda" - tem consumo mensal, e a
+  // R10 ja mandava faturar por consumo_kwh x tarifa.
+  const soConsumo = motivoDeRecusa(venda({
+    lead_id: L1, valor_venda: null, valor_posicao: null, consumo_kwh: '850.0000',
+  }));
+  chk('N5b', soConsumo === null,
+      'ganho de assinatura sem valor mas COM consumo_kwh passa (decisao de 27/07)');
+
+  // O outro sentido: sem nenhum dos tres continua sendo recusa. Sem isto a
+  // correcao viraria "aceita tudo", que e o defeito que a R9 existe para evitar.
+  const nada = motivoDeRecusa(venda({
+    lead_id: L1, valor_venda: null, valor_posicao: null, consumo_kwh: null,
+  }));
+  chk('N5c', nada !== null && /consumo/.test(nada),
+      `sem valor E sem consumo continua recusado (${nada ?? 'NAO recusou'})`);
 }
 
 // ====================================================== N6 ordem da ausencia (R18)
