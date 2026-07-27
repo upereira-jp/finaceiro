@@ -56,6 +56,7 @@ const lancou = async (f: () => Promise<unknown>): Promise<any> => {
 
 // ------------------------------------------------------------- fixtures
 const venda = (o: Partial<VendaGanha> & { lead_id: string }): VendaGanha => ({
+  crm_tenant_id: CRM_TENANT,
   codigo: 'V-' + o.lead_id.slice(0, 4), nome: 'Cliente ' + o.lead_id.slice(0, 4),
   telefone: null, email: null, funil: 'Vendas - Assinatura', etapa: 'GANHO',
   ganho_em: new Date('2026-06-01T12:00:00Z'),
@@ -109,7 +110,7 @@ const L3 = 'aaaa3333-0000-4000-8000-00000000cc03';
   // sistema resolve sozinho viraria trabalho de gente.
   const merges = new Map([[L1, L2]]);
   const arq = new Map<string, LeadArquivado>([[L1, {
-    lead_id: L1, codigo: null, nome: null, telefone: null,
+    crm_tenant_id: CRM_TENANT, lead_id: L1, codigo: null, nome: null, telefone: null,
     removido_do_funil_em: new Date(), tags: ['mesclado'], mesclado: true,
     ultimo_funil: null, ultima_etapa: null, ultima_entrada_etapa: null,
   }]]);
@@ -121,7 +122,7 @@ const L3 = 'aaaa3333-0000-4000-8000-00000000cc03';
 // ====================================================== N7 copia derivada
 {
   const arq = new Map<string, LeadArquivado>([[L3, {
-    lead_id: L3, codigo: null, nome: null, telefone: null,
+    crm_tenant_id: CRM_TENANT, lead_id: L3, codigo: null, nome: null, telefone: null,
     removido_do_funil_em: new Date(), tags: null, mesclado: false,
     ultimo_funil: 'Clientes ativos - Assinatura', ultima_etapa: null, ultima_entrada_etapa: null,
   }]]);
@@ -190,7 +191,7 @@ const L3 = 'aaaa3333-0000-4000-8000-00000000cc03';
 {
   const r = await emA(() => executarCiclo(porta(
     [venda({ lead_id: L1 })],
-    [{ lead_id: L2, codigo: null, nome: null, telefone: null,
+    [{ crm_tenant_id: CRM_TENANT, lead_id: L2, codigo: null, nome: null, telefone: null,
        removido_do_funil_em: new Date(), tags: null, mesclado: false,
        ultimo_funil: 'Vendas - Assinatura', ultima_etapa: null, ultima_entrada_etapa: null }],
   )));
@@ -228,6 +229,67 @@ const L3 = 'aaaa3333-0000-4000-8000-00000000cc03';
   chk('N19', r.garantiaDeTenantDegradada === true
        && JSON.stringify(linha[0]?.detalhe ?? {}).includes('garantia_de_tenant_degradada'),
       'SPEC-002 R1-b nao cumprida fica REGISTRADA em conector_execucao, nao escondida');
+}
+
+// ============================ N20-N24: a PORTA DE LEITURA de verdade
+// Ate aqui a porta era stub. Estes cinco exercitam src/crm/leitura.ts e
+// src/crm/conexao.ts contra um schema `financeiro` real (falso no conteudo, com
+// a forma das views do CRM) e pela role somente-leitura crm_ro_teste.
+{
+  const { criarLeitorCrm, TenantDivergenteNoCrm, LeituraForaDoContrato } =
+    await import('../src/crm/leitura.ts');
+  const { conferirRoleDeLeitura, RoleDoCrmInsegura, criarPoolCrm } =
+    await import('../src/crm/conexao.ts');
+
+  const poolCrm = criarPoolCrm(process.env.TEST_CRM_URL!, 2);
+
+  // N20 - a guarda de arranque ACEITA a role limpa, e diz quais views tem tenant.
+  const diag = await conferirRoleDeLeitura(poolCrm);
+  chk('N20', diag.usuario === 'crm_ro_teste' && diag.viewsComColunaDeTenant.includes('vendas_ganhas'),
+      `conferirRoleDeLeitura aceita role somente-leitura e detecta a coluna de tenant (${diag.usuario})`);
+
+  // N21 - e RECUSA a role com poder de escrita. O outro sentido, que e o que
+  // importa: uma guarda que so sabe aceitar nao guarda nada.
+  const poolGordo = criarPoolCrm(process.env.TEST_DATABASE_URL!, 1);
+  const eGordo = await lancou(() => conferirRoleDeLeitura(poolGordo));
+  chk('N21', eGordo instanceof RoleDoCrmInsegura && /ESCREVER/.test(String(eGordo.message)),
+      `regra 4 credencial com escrita em schema de negocio nao arranca (${eGordo?.name ?? 'NAO recusou'})`);
+  // A guarda tem que enxergar privilegio HERDADO por participacao em role, que
+  // e como app_financeiro_login tem escrita: por ser membro de app_financeiro.
+  // A primeira versao filtrava information_schema por grantee = current_user e
+  // nao via nada disso - passava a credencial errada.
+  chk('N21b', eGordo instanceof RoleDoCrmInsegura && /public\./.test(String(eGordo.message)),
+      'a recusa NOMEIA o objeto de negocio alcancavel, e o privilegio e herdado por role');
+  await poolGordo.end();
+
+  // N22 - leitura real: o SQL constante roda e devolve as colunas nomeadas.
+  const semValidar = criarLeitorCrm({ pool: poolCrm, crmTenantId: CRM_TENANT });
+  const r0 = await semValidar.vendasGanhas();
+  chk('N22', r0.linhas.length === 2 && r0.garantiaDegradada === true,
+      `sem a view na lista de validacao, le e marca garantia DEGRADADA (${r0.linhas.length} linhas)`);
+
+  // N23 - INVARIANTE 9: com a validacao ligada, a linha de outra empresa aborta.
+  // E o test_tenant_divergente_aborta_ciclo da SPEC-002 §9.
+  const validando = criarLeitorCrm({
+    pool: poolCrm, crmTenantId: CRM_TENANT, viewsComColunaDeTenant: ['vendas_ganhas'],
+  });
+  const eDiv = await lancou(() => validando.vendasGanhas());
+  chk('N23', eDiv instanceof TenantDivergenteNoCrm && /ffffffff/.test(String(eDiv.message)),
+      `inv.9 linha com crm_tenant_id de outra empresa ABORTA a leitura (${eDiv?.name ?? 'NAO abortou'})`);
+
+  // N24 - e o caminho legitimo continua passando. Aperto que quebra o caminho
+  // bom nao e correcao, e outro defeito.
+  await verificador.query(`DELETE FROM financeiro._vg WHERE crm_tenant_id <> $1`, [CRM_TENANT]);
+  const r1 = await validando.vendasGanhas();
+  chk('N24', r1.linhas.length === 1 && r1.garantiaDegradada === false,
+      `so linhas do tenant certo: le normal e a garantia NAO e degradada (${r1.linhas.length})`);
+
+  // Regra 4 em runtime: a sessao e read-only, entao nem um INSERT direto passa.
+  const eEscrita = await lancou(() => poolCrm.query(`INSERT INTO financeiro._vg (codigo) VALUES ('X')`));
+  chk('N25', eEscrita !== null && /read-only|permission|permissao/i.test(String(eEscrita?.message)),
+      `inv.1 escrita no CRM falha (${String(eEscrita?.message ?? 'NAO falhou').slice(0, 40)})`);
+
+  await poolCrm.end();
 }
 
 await verificador.end();

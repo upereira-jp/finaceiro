@@ -70,6 +70,36 @@ INSERT INTO unidade_consumidora (id, tenant_id, cliente_id, numero_uc, distribui
 -- SET LOCAL e a WITH CHECK recusa).
 INSERT INTO conector_crm (tenant_id, tipo, crm_tenant_id, credencial_ref, ativo)
   VALUES ('$A','intreply','$CRMT','vault://crm/g3',true);
+
+-- Schema `financeiro` FALSO, com a forma real das views do CRM. Serve para
+-- exercitar src/crm/leitura.ts de verdade - o SQL constante, o LIMIT ligado e a
+-- validacao por linha da invariante 9 - sem depender de credencial do CRM.
+-- Uma linha certa e uma DIVERGENTE, que e o que o teste precisa provocar.
+CREATE SCHEMA financeiro;
+CREATE TABLE financeiro._vg (
+  codigo text, lead_id uuid, nome text, telefone text, email text, funil text,
+  etapa text, ganho_em timestamptz, valor_venda numeric, valor_posicao numeric,
+  parceria_tipo text, comissionamento text, partner_id uuid, parceiro_nome text,
+  vendedor_origem text, responsavel_atual text, consumo_kwh numeric,
+  consumo_reais numeric, created_at timestamptz, comissionamento_n_opcoes bigint,
+  crm_tenant_id uuid);
+INSERT INTO financeiro._vg VALUES
+  ('V-1','aaaa1111-0000-4000-8000-00000000cc01','Certo',NULL,NULL,'Vendas - Assinatura',
+   'GANHO',now(),1000,NULL,NULL,'PADRAO',NULL,NULL,NULL,NULL,850,NULL,now(),1,'$CRMT'),
+  ('V-2','aaaa2222-0000-4000-8000-00000000cc02','De outra empresa',NULL,NULL,'Vendas - Assinatura',
+   'GANHO',now(),1000,NULL,NULL,'PADRAO',NULL,NULL,NULL,NULL,850,NULL,now(),1,
+   'ffffffff-0000-4000-8000-0000000000ff');
+CREATE VIEW financeiro.vendas_ganhas AS SELECT * FROM financeiro._vg;
+
+-- Role de leitura do CRM falso: so SELECT, so no schema financeiro. E o perfil
+-- que conferirRoleDeLeitura() tem que ACEITAR.
+DO \$\$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='crm_ro_teste') THEN
+    CREATE ROLE crm_ro_teste LOGIN PASSWORD 'spike' NOSUPERUSER NOBYPASSRLS;
+  END IF;
+END \$\$;
+GRANT USAGE ON SCHEMA financeiro TO crm_ro_teste;
+GRANT SELECT ON financeiro.vendas_ganhas TO crm_ro_teste;
 SQL
 
 npm install --silent > /dev/null 2>&1
@@ -92,6 +122,8 @@ export TEST_USUARIO_FINANCEIRO="$UFIN" TEST_USUARIO_COBRANCA="$UCOB"
 export TEST_AUTH_ADMIN="$AUTHADM" TEST_AUTH_LEITURA="$AUTHLEI"
 export TEST_CLIENTE="$CLI" TEST_UC="$UC" TEST_USINA="$USI"
 export TEST_CRM_TENANT="$CRMT"
+# Conexao ao schema `financeiro` falso, pela role somente-leitura.
+export TEST_CRM_URL="postgresql://crm_ro_teste:spike@127.0.0.1:5432/fin_repos"
 
 echo "=== matriz de papeis do PRD 3, celula a celula"
 node --experimental-strip-types tests/matriz-papeis.ts

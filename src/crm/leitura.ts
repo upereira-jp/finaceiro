@@ -13,24 +13,28 @@
 //     mencionar schema que nao seja `financeiro`.
 //
 // ------------------------------------------------------------------------
-// A INVARIANTE 9 ESTA DEGRADADA, E ISSO ESTA DECLARADO EM VEZ DE ESCONDIDO.
+// A INVARIANTE 9 ESTA CUMPRIDA DESDE 27/07 - E QUASE NAO ESTEVE.
 //
 // A `SPEC-002` R1-b manda validar `crm_tenant_id` em TODA LINHA recebida, porque
 // o isolamento das views nao vem da RLS do CRM - vem de literais UUID no corpo
-// das views, e uma view nova sem o literal entrega linhas de outro tenant.
+// das views, e uma view nova sem o literal, ou com o literal errado, entrega
+// linhas de outro tenant sem que nenhuma policy impeca.
 //
-// Medido em 27/07 contra o CRM: **nenhuma das oito views expoe coluna de
-// tenant**. A validacao por linha que a R1-b exige e impossivel hoje. O que este
-// modulo faz no lugar:
-//   1. exige `crmTenantId` na construcao do leitor - nao ha leitura sem ele;
-//   2. confere no arranque quais views expoem a coluna (conexao.ts);
-//   3. valida por linha nas que expoem, e marca `garantiaDegradada` nas que nao;
-//   4. o ciclo grava isso em `conector_execucao.detalhe` - visivel em tabela,
-//      nunca so em log, como manda a invariante 8.
+// Medido em 27/07, PRIMEIRA leitura: nenhuma das oito views expunha coluna de
+// tenant, e a validacao por linha era impossivel. O conector rodou nesse estado
+// registrando `garantia_de_tenant_degradada` em `conector_execucao.detalhe` -
+// declarando a lacuna em vez de escondendo.
 //
-// Isto NAO substitui a R1-b. E o maximo verificavel do nosso lado enquanto o
-// dev do CRM nao expuser a coluna - ver `Q-VIEWS-01`. A diferenca entre uma
-// garantia e a sua ausencia tem que aparecer no registro da execucao.
+// Medido no MESMO dia, depois do ajuste do dev do CRM: as oito expoem
+// `crm_tenant_id uuid`, com UM valor distinto e ZERO nulos em cada, e o mesmo
+// valor nas oito. A validacao por linha abaixo passou a rodar de verdade.
+//
+// O QUE NAO SE PEDIU, e vale registrar porque quase se pediu: `security_invoker
+// = true` nas views. Teria quebrado a leitura inteira - com ele os privilegios
+// passam a ser avaliados contra quem consulta, e `financeiro_ro` precisaria de
+// SELECT nas TABELAS BASE do CRM, que e o acesso que a regra 4 proibe. A view
+// owned por `postgres` com filtro literal e o que permite ao `financeiro_ro`
+// ler as views e NADA MAIS.
 
 import type { Pool } from 'pg';
 import type { ViewDoCrm } from './conexao.ts';
@@ -65,36 +69,36 @@ const SQL: Record<ViewDoCrm, string> = {
     SELECT codigo, lead_id, nome, telefone, email, funil, etapa, ganho_em,
            valor_venda, valor_posicao, parceria_tipo, comissionamento,
            partner_id, parceiro_nome, vendedor_origem, responsavel_atual,
-           consumo_kwh, consumo_reais, created_at, comissionamento_n_opcoes
+           consumo_kwh, consumo_reais, created_at, comissionamento_n_opcoes, crm_tenant_id
       FROM financeiro.vendas_ganhas`,
   usinas: `
     SELECT usina_id, codigo_geradora, apelido, localizacao, potencia_kwp,
            geracao_kwh_mensal, distribuidora, status, data_instalacao,
-           dono_lead_codigo, dono_lead_nome
+           dono_lead_codigo, dono_lead_nome, crm_tenant_id
       FROM financeiro.usinas`,
   rateio_clientes: `
     SELECT contrato_id, codigo_geradora, usina, lead_codigo, cliente, telefone,
            percentual_rateio, uc, troca_titularidade, numero_protocolo,
-           data_cadastro, data_vencimento, observacoes, created_at
+           data_cadastro, data_vencimento, observacoes, created_at, crm_tenant_id
       FROM financeiro.rateio_clientes`,
   rateio_creditos: `
     SELECT contrato_id, usina_id, lead_id, percentual_rateio,
-           geracao_nominal_kwh, creditos_kwh_mes
+           geracao_nominal_kwh, creditos_kwh_mes, crm_tenant_id
       FROM financeiro.rateio_creditos`,
   geracao_mensal: `
     SELECT id, usina_id, codigo_geradora, usina, competencia, geracao_kwh,
-           created_at, updated_at
+           created_at, updated_at, crm_tenant_id
       FROM financeiro.geracao_mensal`,
   parceiros: `
     SELECT partner_id, nome, email, status, aprovado_em, revogado_em,
-           lead_origem_id, lead_origem_codigo, created_at
+           lead_origem_id, lead_origem_codigo, created_at, crm_tenant_id
       FROM financeiro.parceiros`,
   leads_arquivados: `
     SELECT lead_id, codigo, nome, telefone, removido_do_funil_em, tags,
-           mesclado, ultimo_funil, ultima_etapa, ultima_entrada_etapa
+           mesclado, ultimo_funil, ultima_etapa, ultima_entrada_etapa, crm_tenant_id
       FROM financeiro.leads_arquivados`,
   lead_merges: `
-    SELECT vitima_id, sobrevivente_id, mesclado_em, origem
+    SELECT vitima_id, sobrevivente_id, mesclado_em, origem, crm_tenant_id
       FROM financeiro.lead_merges`,
 };
 
@@ -102,7 +106,7 @@ export type OpcoesDoLeitor = {
   pool: Pool;
   /** De `conector_crm.crm_tenant_id`. NUNCA `tenant_id` - regra 6. */
   crmTenantId: string;
-  /** De `conferirRoleDeLeitura()`. Vazio hoje: nenhuma view expoe a coluna. */
+  /** De `conferirRoleDeLeitura()`. Desde 27/07 sao as oito - ver cabecalho. */
   viewsComColunaDeTenant?: readonly string[];
   /** Teto de linhas por leitura. R13 - lote declarado, nao transacao gigante. */
   lote?: number;
@@ -135,7 +139,9 @@ export function criarLeitorCrm(o: OpcoesDoLeitor) {
     const r = await o.pool.query(`${sql} LIMIT $1`, [lote]);
     const linhas = r.rows as T[];
 
-    // Invariante 9, na parte que da para cumprir hoje.
+    // INVARIANTE 9. Uma comparacao por linha, e e a unica defesa que nao
+    // depende de a view estar certa. Divergiu, aborta o ciclo INTEIRO: nada
+    // gravado, nada reconciliado (R1-b).
     if (comTenant.has(view)) {
       for (const l of linhas) {
         const veio = (l as any).crm_tenant_id ?? (l as any).tenant_id;
@@ -172,6 +178,7 @@ export type LeitorCrm = ReturnType<typeof criarLeitorCrm>;
 // Quem transforma em centavos e o motor do ciclo, uma vez, no fim.
 
 export type VendaGanha = {
+  crm_tenant_id: string;
   codigo: string; lead_id: string; nome: string;
   telefone: string | null; email: string | null;
   funil: string; etapa: string; ganho_em: Date;
@@ -184,6 +191,7 @@ export type VendaGanha = {
 };
 
 export type UsinaDoCrm = {
+  crm_tenant_id: string;
   usina_id: string; codigo_geradora: string | null; apelido: string | null;
   localizacao: string | null; potencia_kwp: string | null;
   geracao_kwh_mensal: string | null; distribuidora: string | null;
@@ -192,6 +200,7 @@ export type UsinaDoCrm = {
 };
 
 export type RateioCliente = {
+  crm_tenant_id: string;
   contrato_id: string; codigo_geradora: string | null; usina: string | null;
   lead_codigo: string | null; cliente: string | null; telefone: string | null;
   percentual_rateio: string | null; uc: string | null;
@@ -201,24 +210,28 @@ export type RateioCliente = {
 };
 
 export type RateioCredito = {
+  crm_tenant_id: string;
   contrato_id: string; usina_id: string; lead_id: string;
   percentual_rateio: string | null; geracao_nominal_kwh: string | null;
   creditos_kwh_mes: string | null;
 };
 
 export type GeracaoMensal = {
+  crm_tenant_id: string;
   id: string; usina_id: string; codigo_geradora: string | null;
   usina: string | null; competencia: Date; geracao_kwh: string | null;
   created_at: Date; updated_at: Date;
 };
 
 export type ParceiroDoCrm = {
+  crm_tenant_id: string;
   partner_id: string; nome: string | null; email: string | null;
   status: string | null; aprovado_em: Date | null; revogado_em: Date | null;
   lead_origem_id: string | null; lead_origem_codigo: string | null; created_at: Date;
 };
 
 export type LeadArquivado = {
+  crm_tenant_id: string;
   lead_id: string; codigo: string | null; nome: string | null;
   telefone: string | null; removido_do_funil_em: Date | null;
   tags: string[] | null; mesclado: boolean | null;
@@ -227,5 +240,6 @@ export type LeadArquivado = {
 };
 
 export type LeadMerge = {
+  crm_tenant_id: string;
   vitima_id: string; sobrevivente_id: string; mesclado_em: Date; origem: string | null;
 };

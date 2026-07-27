@@ -41,13 +41,28 @@ export const VIEWS_DO_CRM = [
 
 export type ViewDoCrm = (typeof VIEWS_DO_CRM)[number];
 
+/*
+ * Schemas de infraestrutura da plataforma, nominais. Nao guardam dado de
+ * negocio, e o que a role tem neles vem de grant a PUBLIC feito por extensao -
+ * nao e concessao de ninguem e nao se remove sem desinstalar a extensao.
+ * NOMINAL de proposito: lista que cresce por conveniencia vira lista que nao
+ * significa nada, e este projeto ja tem o precedente do invariante 17.
+ */
+const SCHEMAS_DE_INFRAESTRUTURA = new Set(['extensions', 'net', 'graphql', 'graphql_public', 'pgbouncer', 'vault']);
+
 export type DiagnosticoDaRole = {
   usuario: string;
+  /**
+   * Privilegio herdado de extensao, em schema de infraestrutura. NAO derruba o
+   * arranque e NAO e silenciado: quem chama registra. Medido no CRM em 27/07 -
+   * pg_net concede arwdDxtm a PUBLIC em net.http_request_queue.
+   */
+  privilegiosDeInfraestrutura: string[];
   /** Views de `financeiro` que a role enxerga. Tem que ser as oito. */
   viewsLegiveis: string[];
   /**
-   * Views que expoem coluna de tenant. Medido em 27/07: NENHUMA.
-   * Ver `SPEC-002` R1-b e a nota em leitura.ts - e o que degrada a invariante 9.
+   * Views que expoem coluna de tenant - e o que liga a validacao por linha da
+   * invariante 9. Medido em 27/07 depois do ajuste do dev: as OITO.
    */
   viewsComColunaDeTenant: string[];
 };
@@ -78,9 +93,9 @@ export function criarPoolCrm(connectionString: string, teto = 2): Pool {
  * As quatro perguntas sao as que a regra 4 faz, e nenhuma delas se responde por
  * revisao de codigo:
  *   1. a role e SUPERUSER ou tem BYPASSRLS?
- *   2. ela tem QUALQUER privilegio de escrita, em qualquer schema?
- *   3. ela alcanca tabela base fora do schema `financeiro`?
- *   4. ela enxerga as oito views?
+ *   2. ela pode ESCREVER em algum objeto de schema de negocio?
+ *   3. ela alcanca algum objeto de negocio fora das views `financeiro.*`?
+ *   4. ela enxerga as oito views, e quais expoem coluna de tenant?
  */
 export async function conferirRoleDeLeitura(pool: Pool): Promise<DiagnosticoDaRole> {
   const c = await pool.connect();
@@ -93,22 +108,61 @@ export async function conferirRoleDeLeitura(pool: Pool): Promise<DiagnosticoDaRo
     if (p.rolsuper)     throw new RoleDoCrmInsegura(p.usuario, 'e SUPERUSER');
     if (p.rolbypassrls) throw new RoleDoCrmInsegura(p.usuario, 'tem BYPASSRLS');
 
-    // 2 e 3. `information_schema.table_privileges` ja resolve as roles herdadas
-    // para o grantee corrente, entao isto cobre privilegio vindo por membership.
-    const poder = await c.query<{ escrita: string; fora: string }>(
-      `SELECT
-         (SELECT count(*) FROM information_schema.table_privileges
-           WHERE grantee = current_user
-             AND privilege_type IN ('INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES'))::text AS escrita,
-         (SELECT count(*) FROM information_schema.table_privileges
-           WHERE grantee = current_user AND table_schema <> 'financeiro')::text AS fora`);
-    const q = poder.rows[0]!;
-    if (Number(q.escrita) > 0) {
-      throw new RoleDoCrmInsegura(p.usuario, `tem ${q.escrita} privilegio(s) de ESCRITA`);
+    /*
+     * 2 e 3. AS DUAS ARMADILHAS DESTA CONFERENCIA, e a primeira versao caiu nas
+     * duas. Ficam registradas porque cada uma sozinha torna a guarda decorativa.
+     *
+     * ARMADILHA 1 - `information_schema.table_privileges` filtrado por
+     * `grantee = current_user` NAO ve privilegio herdado por participacao em
+     * role: ele aparece com o nome da ROLE concedida, nao do usuario. Uma
+     * credencial que ganhasse escrita por `GRANT algum_papel TO financeiro_ro`
+     * passaria batido. O teste N21 pegou. `has_table_privilege()` resolve, porque
+     * considera privilegio disponivel por participacao.
+     *
+     * ARMADILHA 2 - com `has_table_privilege()` a conferencia fica CERTA e, na
+     * primeira execucao contra o CRM real, acusou 2 objetos com escrita e 4 com
+     * leitura fora de `financeiro`. Nenhum e do dev do CRM: sao grants a PUBLIC
+     * feitos por EXTENSAO. Medido em 27/07:
+     *   net.http_request_queue, net._http_response  -> arwdDxtm a PUBLIC (pg_net)
+     *   extensions.pg_stat_statements(_info)        -> r a PUBLIC
+     * Recusar o arranque por causa disso deixaria o conector sem subir nunca, e a
+     * guarda seria removida na primeira pressa - que e como guarda morre.
+     *
+     * O CRITERIO, ENTAO, NAO E "zero privilegio": e ONDE. Escrita em schema que
+     * guarda dado de negocio derruba o arranque. Privilegio herdado de extensao
+     * em schema de infraestrutura e DECLARADO e devolvido no diagnostico, para
+     * quem chama registrar - nunca silenciado. A regra 4 fala de nao modificar o
+     * CRM; `net.http_request_queue` nao e o CRM, mas tambem nao e nada: quem
+     * escreve la faz o banco emitir HTTP. Por isso aparece, em vez de sumir.
+     */
+    const infra = await c.query<{ schema: string; objeto: string; escreve: boolean }>(
+      `SELECT n.nspname AS schema, c.relname AS objeto,
+              (has_table_privilege(c.oid,'INSERT') OR has_table_privilege(c.oid,'UPDATE')
+               OR has_table_privilege(c.oid,'DELETE') OR has_table_privilege(c.oid,'TRUNCATE')) AS escreve
+         FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relkind IN ('r','v','m','p','f')
+          AND n.nspname NOT IN ('pg_catalog','information_schema')
+          AND (has_table_privilege(c.oid,'SELECT') OR has_table_privilege(c.oid,'INSERT')
+            OR has_table_privilege(c.oid,'UPDATE') OR has_table_privilege(c.oid,'DELETE')
+            OR has_table_privilege(c.oid,'TRUNCATE'))
+        ORDER BY 1,2`);
+
+    const deNegocio = infra.rows.filter((r) => !SCHEMAS_DE_INFRAESTRUTURA.has(r.schema));
+    const escritaDeNegocio = deNegocio.filter((r) => r.escreve);
+    if (escritaDeNegocio.length > 0) {
+      const lista = escritaDeNegocio.slice(0, 5).map((r) => `${r.schema}.${r.objeto}`).join(', ');
+      throw new RoleDoCrmInsegura(p.usuario, `pode ESCREVER em ${escritaDeNegocio.length} objeto(s): ${lista}`);
     }
-    if (Number(q.fora) > 0) {
-      throw new RoleDoCrmInsegura(p.usuario, `alcanca ${q.fora} objeto(s) fora do schema financeiro`);
+    const leituraForaDasViews = deNegocio.filter((r) => r.schema !== 'financeiro');
+    if (leituraForaDasViews.length > 0) {
+      const lista = leituraForaDasViews.slice(0, 5).map((r) => `${r.schema}.${r.objeto}`).join(', ');
+      throw new RoleDoCrmInsegura(p.usuario,
+        `alcanca ${leituraForaDasViews.length} objeto(s) fora das views financeiro.*: ${lista}. ` +
+        'A regra 4 proibe ler TABELA BASE do CRM');
     }
+    const privilegiosDeInfraestrutura = infra.rows
+      .filter((r) => SCHEMAS_DE_INFRAESTRUTURA.has(r.schema))
+      .map((r) => `${r.schema}.${r.objeto}${r.escreve ? ' (ESCRITA)' : ''}`);
 
     // 4. E, de quebra, quais views expoem coluna de tenant - o que a SPEC-002
     // R1-b assume que existe e que hoje NAO existe em nenhuma. Nao e erro de
@@ -125,6 +179,7 @@ export async function conferirRoleDeLeitura(pool: Pool): Promise<DiagnosticoDaRo
 
     return {
       usuario: p.usuario,
+      privilegiosDeInfraestrutura,
       viewsLegiveis: views.rows.map((r) => r.view),
       viewsComColunaDeTenant: views.rows.filter((r) => r.tem_tenant).map((r) => r.view),
     };

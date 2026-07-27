@@ -5,7 +5,7 @@ Sistema financeiro multi-tenant da G3 Solar: faturamento de crédito de energia,
 | Campo | Valor |
 |---|---|
 | **Dono** | Vinicius Leal |
-| **Fase atual** | F0 fechada · **F1 em execução, e não fecha só com código nosso.** 15 migrations no Supabase `sa-east-1`, role de runtime, composition root, seis repositórios, 37 rotas, auth próprio medido ponta a ponta contra o Supabase real, conector do CRM construído e testado, e os 8 invariantes de catálogo verdes **contra produção**. Falta: `CRM_DATABASE_URL`, a `Q-VIEWS-01` (🔴, dev do CRM — prompt pronto) e a `Q-FASE-01`. Ver a tabela de critérios abaixo |
+| **Fase atual** | F0 fechada · **F1 em execução, e não fecha só com código nosso.** 15 migrations no Supabase `sa-east-1`, role de runtime, composition root, seis repositórios, 37 rotas, auth próprio medido ponta a ponta contra o Supabase real, conector do CRM construído e testado, e os 8 invariantes de catálogo verdes **contra produção**. A `Q-VIEWS-01` fechou no mesmo dia e o **invariante 9 está cumprido**. Falta `CRM_DATABASE_URL` e o primeiro ciclo real. Ver a tabela de critérios abaixo |
 | **Atualizado** | 27/07/2026 |
 
 ---
@@ -55,7 +55,7 @@ RESUMO-SESSAO-6.md           passagem da sessao 6 — as 12 migrations e o crash
 RESUMO-SESSAO-7.md           passagem da sessao 7 — role de runtime, 37 rotas, auth
 RESUMO-SESSAO-8.md           passagem da sessao 8 — comece por aqui
 VIEWS-PROPOSTAS-r2.sql       DDL proposta ao dev do CRM. EXECUTADA - as 8 views
-                             existem. Falta expor crm_tenant_id. Ver Q-VIEWS-01
+                             existem e expoem crm_tenant_id desde 27/07 (Q-VIEWS-01)
 PROMPT-dev-crm-rodada3-...   o pedido em aberto ao dev do CRM (27/07)
 .env.example                 formato do .env. Le os comentarios: a porta importa
 
@@ -113,7 +113,7 @@ scripts/verificar-auth-real.ts
 tests/catalogo.sql           CAT-1 a CAT-8: as regras 1, 2, 3 e 11 por catalogo.
                              Leitura pura - RODE TAMBEM contra producao:
                              psql "$DIRECT_URL" -f tests/catalogo.sql
-tests/                       276 verificacoes em 18 suites. `npm test` roda todas
+tests/                       283 verificacoes em 18 suites. `npm test` roda todas
 tsconfig.json                `npm run typecheck` = tsc --noEmit. Roda no CI
 ```
 
@@ -157,7 +157,7 @@ npx prisma migrate deploy    # transacional POR MIGRATION. E o que salva de meia
 Validar num banco limpo:
 
 ```bash
-npm test          # typecheck + as 18 suites, 276 verificacoes
+npm test          # typecheck + as 18 suites, 283 verificacoes
 npm run typecheck # sozinho, tsc --noEmit
 ```
 
@@ -195,9 +195,9 @@ Medido em 27/07 contra o `PRD-v2.2` §10, não estimado. **Os três critérios d
 | projeto, auth, RBAC dois níveis | ✅ auth medido contra o Supabase real; RBAC com as 16 células do PRD §3 |
 | schema completo com `tenant_id` | ✅ 13 migrations, 20 tabelas com RLS, 24 policies, **zero** tabela com `tenant_id` sem policy |
 | cadastros | ⚠️ 6 repositórios para 11 modelos de negócio — faltam `dono_usina`, `regra_comissao`, `regra_repasse`, `tarifa`, `cliente_estado_crm` |
-| **conector CRM read-only** | ⚠️ **construído em 27/07** (`src/crm/`, 16 verificações), não ligado ao CRM real. `SPEC-002` segue *"Rascunho — aguarda aceite"* e a fase dele é a `Q-FASE-01` |
+| **conector CRM read-only** | ⚠️ **construído em 27/07** (`src/crm/`, 23 verificações), invariante 9 cumprido, não ligado ao CRM real. `SPEC-002` segue *"Rascunho — aguarda aceite"* e a fase dele é a `Q-FASE-01` |
 
-**A leitura honesta:** a fundação está pronta e provada, e o conector existe e é testado. O que falta **não é código nosso**: `CRM_DATABASE_URL`, a coluna `crm_tenant_id` nas views do CRM (`Q-VIEWS-01`, 🔴) e a decisão de fase (`Q-FASE-01`). Quem ler "F1 em execução" sem esta tabela superestima a proximidade do fim.
+**A leitura honesta:** a fundação está pronta e provada, e o conector existe e é testado. O que falta **não é código nosso**: `CRM_DATABASE_URL`, o primeiro ciclo real e a decisão de fase (`Q-FASE-01`). Quem ler "F1 em execução" sem esta tabela superestima a proximidade do fim.
 
 ---
 

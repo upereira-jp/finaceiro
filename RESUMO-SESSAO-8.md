@@ -5,7 +5,7 @@
 | **Foco** | Abrir o bootstrap, medir o auth contra o Supabase real e — depois de evidenciar a fase — construir o conector do CRM |
 | **Método** | Nada afirmado sem medição; toda prova de escrita em `BEGIN … ROLLBACK`; teste novo verificado **nos dois sentidos**; contradição encontrada vira entrada em `QUESTOES.md`, nunca conserto silencioso |
 | **Achados** | 5, todos medidos. Três viraram questão nova, dois viraram correção com teste |
-| **Resultado** | Auth fechado ponta a ponta. Conector construído e testado. **A F1 NÃO fechou** — dois dos três critérios de saída dependem de terceiros |
+| **Resultado** | Auth fechado ponta a ponta. Conector construído, testado e **com o invariante 9 cumprido** — o dev do CRM entregou a coluna no mesmo dia. **A F1 não fechou:** falta `CRM_DATABASE_URL` e o primeiro ciclo real |
 
 ---
 
@@ -91,7 +91,7 @@ A correção compara sem passar por IEEE 754, porque a regra 1 proíbe float at�
 - **`G2` acusou** a falta do gatilho de auditoria. Eu havia justificado a ausência com "encheria a auditoria de imagem de contador"; a conta real é **~48 linhas por dia por tenant**. Era estimativa sem número. Migration 15 faz o código obedecer ao invariante, em vez de afrouxar a lista branca — que é como, antes da migration 10, a cobertura de trilha era de 4 tabelas em 13 e as 4 não incluíam onde moram as chaves PIX.
 - **Editei a migration 14 depois de aplicada**, que é exatamente o que a 15 diz para não fazer: o `_prisma_migrations` guarda checksum e o `deploy` seguinte acusaria drift. Revertido antes de causar dano; o `deploy` seguinte passou limpo.
 
-## 7. `Q-VIEWS-01` — as views existem, e não cumprem o que a `SPEC-002` pressupõe
+## 7. `Q-VIEWS-01` — aberta e fechada no mesmo dia
 
 O achado que mais muda o plano. Schema `financeiro` no CRM com **8 views**, role `financeiro_ro` existindo.
 
@@ -116,11 +116,11 @@ matriz de papeis       18      composition root        8
 repos/cliente          13      repos/contrato         10
 repos/uc               12      repos/usina+originador 15
 rateio                 10      HTTP                   21
-auth JWT               23      conector               16   NOVA
+auth JWT               23      conector               23   NOVA
 tsc --noEmit           limpo
 ```
 
-`npm test` sai com `EXIT=0`. **276 verificações em 18 suítes** — 19 novas nesta sessão (2 de auditoria, 1 de catálogo, 16 do conector).
+`npm test` sai com `EXIT=0`. **283 verificações em 18 suítes** — 26 novas nesta sessão (2 de auditoria, 1 de catálogo, 23 do conector).
 
 Os 8 invariantes de catálogo passam **também contra produção**, o que nenhuma sessão anterior havia feito.
 
@@ -137,7 +137,7 @@ psql "$DIRECT_URL" -v ON_ERROR_STOP=1 -v modo=valendo \
   -f scripts/bootstrap-plataforma-admin.sql
 ```
 
-**2. 🔴 `Q-VIEWS-01` — o pedido ao dev do CRM.** Uma coisa só: expor `crm_tenant_id` como coluna nas 8 views. Sem ela o invariante 9 da `SPEC-002` fica sem como ser cumprido, e uma view futura sem o literal certo entrega linha de outra empresa sem nada impedir. Prompt pronto em `PROMPT-dev-crm-rodada3-2026-07-27.md`.
+**2. ✅ `Q-VIEWS-01` — fechada no mesmo dia** pelo dev do CRM. Ver §8.
 
 **3. 🔴 `CRM_DATABASE_URL` e o primeiro ciclo real.** O conector está provado contra stub — que é mais forte para dedup, merge e view vazia, porque produz sob demanda o que o CRM real não produziria. O que falta é a outra metade: um ciclo de verdade. Formato no `.env.example`.
 
@@ -158,7 +158,7 @@ psql "$DIRECT_URL" -v ON_ERROR_STOP=1 -v modo=valendo \
 | Critério de saída (`PRD` §10) | Estado |
 |---|---|
 | `migrate reset` limpo | ✅ 15 migrations em banco vazio a cada `npm test` |
-| sync idempotente | ⚠️ provado contra stub (`N10`), **nunca contra o CRM real** |
+| sync idempotente | ⚠️ provado contra stub (`N10`) e a porta de leitura provada contra schema real (`N20`–`N25`), mas **nenhum ciclo rodou contra o CRM** — falta `CRM_DATABASE_URL` |
 | escrita no CRM falha por permissão | ✅ medido por catálogo; ⚠️ **não automatizado** (item 4 da fila) |
 
 **A F1 não está fechada, e não fecha só com código nosso.** A fundação está pronta e provada. O conector existe e é testado. O que falta é `CRM_DATABASE_URL`, a resposta do dev do CRM sobre as views, e a decisão de fase.
@@ -170,7 +170,8 @@ psql "$DIRECT_URL" -v ON_ERROR_STOP=1 -v modo=valendo \
 | Item | Estado | Dono |
 |---|---|---|
 | `COMMIT` do bootstrap | 🔴 script provado, falta rodar | Vinicius |
-| `Q-VIEWS-01` — views sem coluna de tenant | 🔴 **bloqueia o invariante 9 da `SPEC-002`**. Prompt pronto para o dev | dev do CRM |
+| **`Q-VIEWS-01`** | ✅ **fechada hoje** pelo dev do CRM — invariante 9 cumprido, N23/N24 | — |
+| `Q-PGNET-01` — `pg_net` concede `arwdDxtm` a PUBLIC no CRM | 🟡 tratado do nosso lado; endurecimento é do dev | dev do CRM |
 | `CRM_DATABASE_URL` e o primeiro ciclo real | 🔴 | Vinicius |
 | Rotação da `service_role` do Supabase | 🔴 exposta nesta sessão | Vinicius |
 | Reunião com o contador | 🔴 não ocorreu | Vinicius |
@@ -200,3 +201,18 @@ psql "$DIRECT_URL" -v ON_ERROR_STOP=1 -v modo=valendo \
 **O `N10` é o argumento mais forte a favor de testar idempotência com dados reais de formato.** O defeito não era lógica: era `'850.0000'` contra `850`. Nenhuma revisão de PR pegaria, nenhum log acusaria, e o sintoma em produção seria um contador dizendo exatamente o que se espera de um sincronizador.
 
 **O que se manteve:** toda prova de escrita em `BEGIN … ROLLBACK`, e todo teste novo verificado nos dois sentidos — passa contra o código correto e **acusa contra a violação plantada**. Um invariante que só sabe passar não é invariante.
+
+
+---
+
+## 8. O fecho da `Q-VIEWS-01`, e o furo que ele revelou na minha própria guarda
+
+O dev do CRM entregou no mesmo dia. Conferido, não aceito de palavra: as **8 views** expõem `crm_tenant_id uuid`, com **1** valor distinto e **0** nulos em cada, o **mesmo** valor nas oito, coluna no fim da lista (restrição do `CREATE OR REPLACE VIEW`) — e **`security_invoker` não foi ligado**, que era a armadilha da §7.
+
+A validação por linha da R1-b passou a rodar. **Testes N23 e N24**, nos dois sentidos: linha plantada de outro tenant aborta a leitura com `TenantDivergenteNoCrm`; o caminho legítimo segue passando e a garantia deixa de ser degradada. É o `test_tenant_divergente_aborta_ciclo` da `SPEC-002` §9.
+
+**E aí o teste N21 pegou um furo na guarda que eu mesmo tinha escrito.** `conferirRoleDeLeitura()` filtrava `information_schema.table_privileges` por `grantee = current_user` — e essa view **não enxerga privilégio herdado por participação em role**, porque ele aparece com o nome da role concedida. Uma credencial que ganhasse escrita por `GRANT algum_papel TO financeiro_ro` passaria pela guarda inteira.
+
+Refeito com `has_table_privilege()`, e a medição contra o CRM real mudou: `financeiro_ro` tem **escrita efetiva em 2 objetos** e leitura em 4 fora de `financeiro`. Nenhum é concessão do dev — são grants a `PUBLIC` da extensão `pg_net` (`net.http_request_queue`, `net._http_response`) e do `pg_stat_statements`.
+
+**Isso obrigou a repensar o critério, e a lição é sobre guarda que morre.** "Zero privilégio" recusaria o arranque para sempre, e uma guarda que impede o sistema de subir é removida na primeira pressa. O critério passou a ser **onde**: escrita em schema de negócio derruba o arranque; privilégio de extensão em schema de infraestrutura é **devolvido no diagnóstico** para quem chama registrar — nunca silenciado. Registrado como `Q-PGNET-01`, e corrige um número que eu já tinha escrito ao dev na mesma carta.
