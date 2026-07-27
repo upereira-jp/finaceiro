@@ -1,0 +1,1363 @@
+diff --git a/.env.example b/.env.example
+new file mode 100644
+index 0000000..a679bb0
+--- /dev/null
++++ b/.env.example
+@@ -0,0 +1,23 @@
++# Copie para .env e preencha. O .env nunca entra no git.
++#
++# UMA linha de cada. O dotenv monta o objeto linha a linha: com a chave repetida,
++# a ULTIMA ocorrencia vence, e o comando conecta num banco que voce nao esperava.
++#
++# Os hosts saem do botao Connect do dashboard, copiados. O prefixo aws-N varia por
++# projeto - nao vale adivinhar.
++
++# CLI: migrate deploy, db pull, generate. Conexao DIRETA.
++#   - Direct connection (db.<ref>.supabase.co:5432) e IPv6-only sem o add-on IPv4.
++#     Em Codespaces, CI e a maioria das redes IPv4 ela NAO conecta.
++#   - Session Pooler (<host>.pooler.supabase.com:5432) e o caminho em IPv4.
++#   - Porta 6543 NAO serve para migration.
++DIRECT_URL="postgresql://postgres.<REF>:<SENHA>@<HOST>.pooler.supabase.com:5432/postgres"
++
++# Runtime: o que entra em criarPools(). Role LOGIN membro de app_financeiro,
++# SEM BYPASSRLS. Nao use `postgres`: rolbypassrls = true anula RLS e FORCE RLS.
++# app_financeiro e NOLOGIN de proposito - e preciso provisionar a role de login.
++DATABASE_URL="postgresql://<ROLE_LOGIN>.<REF>:<SENHA>@<HOST>.pooler.supabase.com:6543/postgres?pgbouncer=true"
++
++# Tetos de pool. Ver src/db/pools.ts para a regra de ajuste.
++POOL_TRANSACIONAL=8
++POOL_RELATORIO=2
+diff --git a/.github/workflows/isolamento.yml b/.github/workflows/isolamento.yml
+index 85ad329..86e7342 100644
+--- a/.github/workflows/isolamento.yml
++++ b/.github/workflows/isolamento.yml
+@@ -90,3 +90,46 @@ jobs:
+         run: bash tests/sessao.sh
+       - name: documento (CPF e CNPJ, inclusive alfanumerico)
+         run: node --experimental-strip-types tests/documento.ts
++
++  tipos:
++    # `node --experimental-strip-types` APAGA anotacao de tipo, nao confere. Sem
++    # este job os tipos gerados nao valem nada: ate 26/07 o projeto nao tinha
++    # NENHUMA verificacao de tipo, e o `db()` de contexto.ts declara
++    # [modelo: string]: any - um nome de coluna errado compilava.
++    runs-on: ubuntu-latest
++    steps:
++      - uses: actions/checkout@v4
++      - uses: actions/setup-node@v4
++        with: { node-version: '22' }
++      - run: npm install
++      - name: prisma generate (raiz e spike)
++        run: |
++          npx prisma generate
++          npx prisma generate --schema=spike-transacao/schema.prisma
++      - name: tsc --noEmit
++        run: npm run typecheck
++
++  repositorios:
++    # Roda por app_financeiro_login, SEM BYPASSRLS: a unica configuracao em que as
++    # 24 policies sao avaliadas. Por `postgres` (rolbypassrls = true) daria verde
++    # com a RLS desligada, que e o modo de falha que este projeto persegue.
++    runs-on: ubuntu-latest
++    services:
++      postgres:
++        image: postgres:16
++        env:
++          POSTGRES_PASSWORD: spike
++        ports: ['5432:5432']
++        options: >-
++          --health-cmd pg_isready --health-interval 5s
++          --health-timeout 5s --health-retries 10
++    steps:
++      - uses: actions/checkout@v4
++      - uses: actions/setup-node@v4
++        with: { node-version: '22' }
++      - name: cliente psql 16
++        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
++      - name: suites de repositorio
++        env:
++          PGPASSWORD: spike
++        run: bash tests/repos.sh
+diff --git a/.gitignore b/.gitignore
+index 8072c62..1cfeea9 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -1,6 +1,7 @@
+ node_modules/
+ .env
+ .env.*
++!.env.example
+ *.local
+ dist/
+ build/
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 3ae694d..51f7f57 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -24,7 +24,7 @@
+ 
+ ---
+ 
+-## As dez
++## As onze
+ 
+ ### 1. Dinheiro é `Int` em centavos
+ 
+@@ -144,3 +144,18 @@ A numeração fantasma (anterior a 24/07/2026) aparece **no corpo intacto** dos
+ | "regra 10" | Lacuna vira questão | **10** (coincide) |
+ 
+ **Atenção à "regra 7":** na numeração vigente, a regra 7 é *domínio em português, utilitário em inglês* — e está **correta**. Toda citação a "a regra 7 está errada" é anacrônica e se refere à atual regra 5, que já foi corrigida.
++
++### 11. Índice parcial não gera relação, e não é caminho de navegação
++
++Nenhum índice único parcial pode cobrir **exatamente** o conjunto de colunas de uma FK.
++
++O motivo é medido, não teórico. O `db pull` do Prisma 7.9 **ignora o predicado** ao inferir cardinalidade: `contrato_ativo_unico_por_uc`, que era `UNIQUE (tenant_id, unidade_consumidora_id) WHERE status = 'ativo'`, virou uma relação **to-one** em `unidade_consumidora`. Numa UC com quatro contratos, a relação devolveu um suspenso de **R$ 111,00** onde o vigente valia **R$ 789,00** — sem erro, sem log. O cenário é a primeira renovação: mês 6, produção.
++
++O conserto não é editar o `schema.prisma`. Editar **compila** — o validador do 7.9 aceita a lista mesmo com o parcial presente, ao contrário da introspecção —, mas todo `db pull` reverte em silêncio. Invariante que depende de alguém lembrar não é invariante. O conserto é no banco: coluna gerada e índice único **cheio** sobre um conjunto que não é o da FK.
++
++Duas consequências de rotina:
++
++- Nenhum repositório navega por índice parcial. O Prisma já exclui parcial das chaves de `findUnique` — verificado no DMMF —, e uma leitura que depende de predicado usa `findFirst` com o predicado explícito, ou uma chave única cheia.
++- Verificação por **consulta ao catálogo** (`tests/catalogo.sql`, CAT-1 e CAT-2), jamais por revisão de PR. As duas coisas que este arquivo pegou em 26/07 eram invisíveis em code review e triviais no catálogo.
++
++`[nova — medido em PostgreSQL 17.6 e no DMMF do Prisma 7.9, 26/07/2026]`
+diff --git a/RESUMO-SESSAO-5.md b/RESUMO-SESSAO-5.md
+new file mode 100644
+index 0000000..8f03801
+--- /dev/null
++++ b/RESUMO-SESSAO-5.md
+@@ -0,0 +1,85 @@
++# RESUMO-SESSAO-5 — 26/07/2026
++
++| Campo | Valor |
++|---|---|
++| **Foco** | Fechar a F1: destravar o `prisma generate`, corrigir a R14, e os dois primeiros repositórios |
++| **Método** | Postgres 17 local com as migrations aplicadas do zero, validador WASM do Prisma 7.9, DMMF inspecionado |
++| **Achados** | 6, todos medidos |
++
++---
++
++## 1. A F1 não estava sem vermelhas: o `prisma generate` nunca rodou
++
++O `schema.prisma` commitado em `f3d91ff` **não valida**. `cliente_estado_crm` tem `PRIMARY KEY (cliente_id)` e nenhum `UNIQUE (tenant_id, cliente_id)`; a introspecção infere 1-1 pelo `cliente_id` e emite a relação pelo par composto, e o Prisma recusa o schema inteiro:
++
++```
++P1012  A one-to-one relation must use unique fields on the defining side.
++```
++
++A tabela escapou da regra 2 porque a PK dela **se chama `cliente_id`, não `id`** — o padrão foi conferido por nome de coluna, não por papel. Sem client gerado não havia repositório que não fosse escrito contra `any`, que era exatamente o motivo de a sessão 4 ter parado aqui.
++
++Migration `20260726160000_cec_unique_composto`.
++
++## 2. A R14 do banco e a R14 do comentário eram regras diferentes
++
++O índice era `WHERE status = 'ativo'`; o enum tem quatro estados. Medido em PG 17.6: **o banco aceitava um ativo e um suspenso na mesma UC.** A regra que o negócio quer é *um contrato vigente por UC*, vigente = `ativo` ou `suspenso`. Rascunho segue livre.
++
++Migration `20260726170000_r14_vigente_unico`. Pré-checagem na base real: nenhuma violação, aplica direto.
++
++## 3. O índice parcial tipava a relação como 1-1, e a relação devolvia o contrato errado
++
++O `db pull` do 7.9 ignora o predicado ao inferir cardinalidade. Como o unique cobria exatamente as colunas de `contrato_uc_fk`, `unidade_consumidora.contrato` virou to-one. Reproduzido:
++
++```
++contrato ATIVO de verdade:   0f00000a…  R$ 789,00
++o que a relacao devolveu:    0f000003…  suspenso, R$ 111,00
++plano: Bitmap Heap Scan, sem ORDER BY
++```
++
++Sem erro e sem log, no primeiro mês em que uma UC tiver duas linhas — ou seja, na primeira renovação.
++
++**Editar o `schema.prisma` compila** — o validador aceita a lista mesmo com o parcial presente, ao contrário da introspecção — mas todo `db pull` reverte em silêncio. Por isso a correção é coluna gerada e unique **cheio** sobre `(tenant_id, uc_vigente)`, conjunto que não é o da FK. De brinde, `findUnique(tenant_id_uc_vigente)` = "o contrato vigente desta UC", garantido pelo banco.
++
++Confirmado nos tipos gerados: `ContratoListRelationFilter`, `contratoCreateNestedManyWithoutUnidade_consumidoraInput`, e a chave composta nova em `"id" | "tenant_id_uc_vigente" | "tenant_id_id"`.
++
++Virou **regra 11 do `CLAUDE.md`** e `CAT-1`/`CAT-2` em `tests/catalogo.sql`.
++
++## 4. Índice único não é DEFERRABLE: a renovação tem ordem obrigatória
++
++Medido: inserir o novo contrato ativo **antes** de encerrar o velho dá `23505` na mesma transação, mesmo que ela fosse terminar consistente. Com UC limpa o teste passa dos dois jeitos — por isso a ordem está escrita em `src/repos/contrato.ts` e coberta por `K8` e `K9`, em vez de virar convenção que alguém lembra.
++
++## 5. O projeto não tinha nenhuma verificação de tipo
++
++`node --experimental-strip-types` **apaga** anotação de tipo, não confere, e `package.json` não tinha `typescript`. Somado ao `[modelo: string]: any` de `ClientTx`, um nome de coluna errado compilava antes e depois do `generate`.
++
++`src/db/tipado.ts` devolve os 17 modelos aos repositórios sem obrigar `contexto.ts` a conhecê-los, e o job `tipos` do CI roda `tsc --noEmit`. O primeiro `typecheck` já pegou um erro escrito nesta sessão: `valor_referencia_origem` tem dois valores, não três. O repositório agora **importa o enum** em vez de reescrevê-lo.
++
++## 6. O teste de catálogo imprimia a falha e devolvia exit 0
++
++O `run.sh` conferia RLS+FORCE+policy com um `SELECT` que imprimia o nome da tabela em falta. `distribuidora` — lista de referência pública, sem `tenant_id` e sem RLS, deliberado — esteve nessa lista desde a migration 10 **sem quebrar o build**. Mesmo modo de falha que o projeto persegue nas policies: sinal que não interrompe.
++
++Agora é `tests/catalogo.sql`, suíte com `RAISE WARNING`, 6 invariantes, critério por **ter `tenant_id`** e não por nome. Verificado nos dois sentidos: contra o banco corrigido passa; contra o banco sem as migrations 11 e 12 acusa `CAT-1`, `CAT-2` e `CAT-6` nomeando os objetos.
++
++---
++
++## Estado dos testes
++
++```
++repos/cliente    13 checks   todas passaram
++repos/contrato   10 checks   todas passaram
++catalogo          6 invariantes, nenhuma falha
++regras           R14, R14-b (nova) e encerrado coexistindo
++tsc --noEmit     limpo
++```
++
++## Fila da próxima sessão
++
++1. Recriar o projeto Supabase em **`sa-east-1`** e aplicar as 12 com `migrate deploy`. A migration 10 está pela metade no projeto atual (`us-west-2`): faltam `auditoria`, `distribuidora`, `app.auditar()`, os 16 triggers `auditar_*`, `acesso_plataforma_log.xact_id`, 3 FKs e 4 policies. Todo objeto ausente tem um `GRANT`/`OWNER TO` de role colado nele. Aplicar por SQL Editor foi a causa; `migrate deploy` é transacional por migration.
++2. Provisionar a **role LOGIN de runtime**, membro de `app_financeiro`, sem `BYPASSRLS`. Ela não nasce em nenhuma migration, e sem ela a única opção de conexão é `postgres`, que tem `rolbypassrls = true` e anula as 24 policies.
++3. Repositórios de UC, usina, originador e rateio; endpoints com a matriz de papéis.
++4. Contador — o `originador_tipo` não distingue sócio, e `originador_tipo_no_fechamento` congela a classificação em cada contrato fechado.
++5. POP-01 — o denominador é a base de contratos vigentes com UC homologada, não nenhum dos três números do CRM.
++
++## Nota de método
++
++Duas conclusões desta sessão foram retiradas depois de medidas: a de que a migration 10 tinha parado sequencialmente numa linha (`app.tarifa_vigente`, linha 404, existe; `app.auditar`, linha 195, não — não foi parada, foram blocos), e a de que as roles de aplicação não existiam (a consulta filtrava `rolbypassrls or rolsuper`, e as três são NOLOGIN sem bypassrls **por design** — nunca iam aparecer). As duas eram inferências plausíveis sobre evidência insuficiente. O padrão que se repetiu: o inventário por contagem fecha, a hipótese sobre a causa não.
+diff --git a/package.json b/package.json
+index 3c12fa0..21f744c 100644
+--- a/package.json
++++ b/package.json
+@@ -2,22 +2,29 @@
+   "name": "financeiro",
+   "private": true,
+   "type": "module",
+-  "engines": { "node": ">=22.18" },
++  "engines": {
++    "node": ">=22.18"
++  },
+   "scripts": {
+     "db:migrate": "prisma migrate deploy",
+     "db:pull": "prisma db pull",
++    "typecheck": "tsc --noEmit",
++    "test:documento": "node --experimental-strip-types tests/documento.ts",
+     "test:isolamento": "bash tests/run.sh",
+     "test:middleware": "node --experimental-strip-types tests/middleware.ts",
+     "test:sessao": "bash tests/sessao.sh",
+-    "test:documento": "node --experimental-strip-types tests/documento.ts",
+-    "test": "npm run test:documento && npm run test:isolamento && npm run test:middleware && npm run test:sessao"
++    "test:repos": "bash tests/repos.sh",
++    "test": "npm run typecheck && npm run test:documento && npm run test:isolamento && npm run test:middleware && npm run test:sessao && npm run test:repos"
+   },
+   "dependencies": {
+-    "@prisma/adapter-pg": "^7.9.0",
+-    "@prisma/client": "^7.9.0",
++    "@prisma/adapter-pg": "7.9.0",
++    "@prisma/client": "7.9.0",
+     "pg": "^8.16.3"
+   },
+   "devDependencies": {
+-    "prisma": "^7.9.0"
++    "@types/node": "^22",
++    "dotenv": "^17",
++    "prisma": "7.9.0",
++    "typescript": "^5.9"
+   }
+ }
+diff --git a/prisma.config.ts b/prisma.config.ts
+index 4279827..e2471bd 100644
+--- a/prisma.config.ts
++++ b/prisma.config.ts
+@@ -1,7 +1,21 @@
++// O CLI e o RUNTIME nao usam a mesma conexao, e confundir as duas custa caro.
++//
++// Este arquivo e lido SO pelo CLI: `migrate deploy`, `db pull`, `generate`. Ele
++// precisa de conexao DIRETA. O pooler em modo transacao (porta 6543) nao suporta
++// os prepared statements que o Migrate exige - o comando nao falha com mensagem
++// util, ele PENDURA por minutos e desiste.
++//
++// O runtime nao passa por aqui: src/db/pools.ts monta os dois pools e o client
++// recebe a connection string via PrismaPg. A role de runtime tem que ser membro
++// de app_financeiro e NAO pode ter BYPASSRLS, ou as 24 policies viram enfeite.
++//
++// `import 'dotenv/config'` nao e opcional no Prisma 7: sem ele o .env nao e
++// carregado e env('DIRECT_URL') volta vazio.
++import 'dotenv/config';
+ import { defineConfig, env } from 'prisma/config';
+ 
+ export default defineConfig({
+   schema: 'prisma/schema.prisma',
+   migrations: { path: 'prisma/migrations' },
+-  datasource: { url: env('DATABASE_URL') },
+-});
+\ No newline at end of file
++  datasource: { url: env('DIRECT_URL') },
++});
+diff --git a/prisma/migrations/20260726160000_cec_unique_composto/migration.sql b/prisma/migrations/20260726160000_cec_unique_composto/migration.sql
+new file mode 100644
+index 0000000..1972664
+--- /dev/null
++++ b/prisma/migrations/20260726160000_cec_unique_composto/migration.sql
+@@ -0,0 +1,20 @@
++-- CLAUDE.md regra 2 aplicada a cliente_estado_crm.
++--
++-- A regra manda UNIQUE composto com tenant_id em toda tabela referenciada, e a
++-- tabela escapou porque a PK dela se chama cliente_id, nao id: o padrao foi
++-- conferido por NOME DE COLUNA, nao por papel.
++--
++-- Consequencia medida em 26/07: o `db pull` ve cliente_id unico (e PK), infere
++-- relacao 1-1, e emite a relacao pelos campos compostos (tenant_id, cliente_id)
++-- - que nao tem unique. O Prisma entao RECUSA o schema inteiro:
++--
++--   P1012  A one-to-one relation must use unique fields on the defining side.
++--          --> prisma/schema.prisma:62  (model cliente_estado_crm)
++--
++-- Nao ha client gerado enquanto isto nao existir, e portanto nao ha repositorio
++-- que nao seja escrito contra `any`. Esta migration destrava o generate.
++--
++-- A relacao E 1-1 de verdade: um estado de CRM por cliente. O UNIQUE apenas diz
++-- ao banco o que o desenho ja assumia.
++ALTER TABLE cliente_estado_crm
++  ADD CONSTRAINT cec_tenant_cliente_unico UNIQUE (tenant_id, cliente_id);
+diff --git a/prisma/migrations/20260726170000_r14_vigente_unico/migration.sql b/prisma/migrations/20260726170000_r14_vigente_unico/migration.sql
+new file mode 100644
+index 0000000..2b1b016
+--- /dev/null
++++ b/prisma/migrations/20260726170000_r14_vigente_unico/migration.sql
+@@ -0,0 +1,49 @@
++-- R14, corrigida em duas frentes: a REGRA estava furada e a TIPAGEM mentia.
++--
++-- 1. A REGRA. O comentario da migration de fundacao diz "uma UC tem no maximo um
++--    contrato ativo" e o indice era `WHERE status = 'ativo'`. O enum tem quatro
++--    estados. Medido em PG 17: o banco ACEITAVA um ativo e um suspenso na mesma
++--    UC ao mesmo tempo. Contrato suspenso e UC comprometida - rateio pausado,
++--    vinculo de pe - entao a regra que o negocio quer e "um contrato VIGENTE por
++--    UC", vigente = ativo OU suspenso. Rascunho segue livre: varias propostas em
++--    rascunho na mesma UC e legitimo.
++--
++--    Sem esta correcao o furo aparece tarde e mal: a UC com contrato suspenso
++--    aceita um novo ativo, e no dia em que alguem reativar o suspenso o erro sai
++--    como 23505 de indice - regra de negocio vazando como violacao de constraint.
++--
++-- 2. A TIPAGEM. O `db pull` do Prisma 7.9 ignora o predicado do indice parcial ao
++--    inferir cardinalidade. Como o unique cobria EXATAMENTE o conjunto de colunas
++--    da FK contrato_uc_fk, ele tipou unidade_consumidora.contrato como to-one.
++--    Medido: numa UC com quatro contratos, a relacao devolveu um suspenso de
++--    R$ 111,00 quando o vigente valia R$ 789,00. Sem erro, sem log. O cenario e
++--    a primeira renovacao - mes 6, producao.
++--
++--    Coluna gerada em vez de indice parcial porque e a unica forma que sobrevive
++--    ao `db pull`. Editar o schema na mao compila, mas todo pull reverte em
++--    silencio, e este projeto nao aceita invariante que dependa de alguem
++--    lembrar. Com a coluna, o unique e CHEIO e o conjunto (tenant_id, uc_vigente)
++--    NAO e o conjunto da FK: a relacao volta a ser 1-N para sempre.
++--
++--    De brinde, o Prisma passa a gerar findUnique(tenant_id_uc_vigente), que e
++--    "o contrato vigente desta UC" garantido pelo banco.
++--
++-- ORDEM OBRIGATORIA NA RENOVACAO, medida: indice unico nao e DEFERRABLE. Encerre
++-- o contrato velho ANTES de inserir o novo, na mesma transacao. A ordem invertida
++-- da 23505 e passa em teste com UC limpa. Ver src/repos/contrato.ts.
++--
++-- PRE-CHECAGEM antes de aplicar em banco com dado (conferida em 26/07: nenhuma):
++--   SELECT tenant_id, unidade_consumidora_id, count(*),
++--          array_agg(status::text ORDER BY data_fechamento)
++--   FROM contrato WHERE status IN ('ativo','suspenso')
++--   GROUP BY 1,2 HAVING count(*) > 1;
++ALTER TABLE contrato ADD COLUMN uc_vigente uuid
++  GENERATED ALWAYS AS (
++    CASE WHEN status IN ('ativo','suspenso') THEN unidade_consumidora_id END
++  ) STORED;
++
++CREATE UNIQUE INDEX contrato_vigente_unico_por_uc ON contrato (tenant_id, uc_vigente);
++DROP INDEX contrato_ativo_unico_por_uc;
++
++COMMENT ON COLUMN contrato.uc_vigente IS
++  'R14. Espelha unidade_consumidora_id enquanto o contrato ocupa a UC (ativo ou suspenso), NULL caso contrario. Coluna GERADA: nunca escrever.';
+diff --git a/prisma/schema.prisma b/prisma/schema.prisma
+index c99579c..35673cb 100644
+--- a/prisma/schema.prisma
++++ b/prisma/schema.prisma
+@@ -61,6 +61,8 @@ model cliente_estado_crm {
+   sincronizado_em  DateTime? @db.Timestamptz(6)
+   cliente          cliente   @relation(fields: [tenant_id, cliente_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "cec_cliente_fk")
+   tenant           tenant    @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
++
++  @@unique([tenant_id, cliente_id], map: "cec_tenant_cliente_unico")
+ }
+ 
+ /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+@@ -92,13 +94,14 @@ model contrato {
+   status                        status_contrato         @default(rascunho)
+   faturas_cheias_pagas          Int                     @default(0)
+   originador_tipo_no_fechamento originador_tipo?
++  uc_vigente                    String?                 @db.Uuid
+   cliente                       cliente                 @relation(fields: [tenant_id, cliente_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "contrato_cliente_fk")
+   originador                    originador?             @relation(fields: [tenant_id, originador_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "contrato_originador_fk")
+   tenant                        tenant                  @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+   unidade_consumidora           unidade_consumidora     @relation(fields: [tenant_id, unidade_consumidora_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "contrato_uc_fk")
+   usina                         usina                   @relation(fields: [tenant_id, usina_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "contrato_usina_fk")
+ 
+-  @@unique([tenant_id, unidade_consumidora_id], map: "contrato_ativo_unico_por_uc", where: raw("(status = 'ativo'::status_contrato)"))
++  @@unique([tenant_id, uc_vigente], map: "contrato_vigente_unico_por_uc")
+   @@unique([tenant_id, id], map: "contrato_id_tenant")
+ }
+ 
+@@ -254,7 +257,7 @@ model unidade_consumidora {
+   data_vencimento      DateTime?       @db.Date
+   status               status_uc       @default(ativa)
+   crm_usina_cliente_id String?         @db.Uuid
+-  contrato             contrato?
++  contrato             contrato[]
+   cliente              cliente         @relation(fields: [tenant_id, cliente_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "uc_cliente_fk")
+   usina                usina?          @relation(fields: [tenant_id, usina_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "uc_usina_fk")
+   tenant               tenant          @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+diff --git a/src/db/contexto.ts b/src/db/contexto.ts
+index 802d022..e9ee241 100644
+--- a/src/db/contexto.ts
++++ b/src/db/contexto.ts
+@@ -24,7 +24,13 @@ export type Tier = 'plataforma_admin' | 'plataforma_suporte' | null;
+ 
+ export type Identidade = { tenantId: string; usuarioId: string; tier?: Tier };
+ 
+-type Escopo = Identidade & { tx: ClientTx; tipo: 'transacional' | 'relatorio' };
++type Escopo = Identidade & {
++  tx: ClientTx;
++  tipo: 'transacional' | 'relatorio';
++  /** Papel do vinculo, resolvido no maximo UMA vez por unidade de trabalho.
++   *  Ver papelNoTenantCorrente(). */
++  papel?: string;
++};
+ 
+ const als = new AsyncLocalStorage<Escopo>();
+ 
+@@ -189,15 +195,18 @@ export class TenantNaoEncontrado extends Error {
+  * explicito, e a passagem fica na trilha.
+  */
+ export async function papelNoTenantCorrente(): Promise<string> {
+-  const tx = db();
+-  const r: any = await tx.$queryRaw`
++  const e = als.getStore();
++  if (!e) throw new SemContextoDeTenant();
++  if (e.papel !== undefined) return e.papel;
++
++  const r: any = await e.tx.$queryRaw`
+     SELECT papel FROM usuario_tenant
+     WHERE usuario_id = app.current_usuario_id()
+       AND tenant_id  = app.current_tenant_id()
+       AND ativo
+     LIMIT 1`;
+   if (!r?.[0]?.papel) throw new TenantNaoEncontrado();
+-  return r[0].papel as string;
++  return (e.papel = r[0].papel as string);
+ }
+ 
+ const PODE: Record<string, ReadonlySet<string>> = {
+@@ -207,7 +216,15 @@ const PODE: Record<string, ReadonlySet<string>> = {
+   administrar:      new Set(['admin']),
+ };
+ 
+-/** Matriz do PRD 3. Lanca se o papel do vinculo nao cobre a acao. */
++/**
++ * Matriz do PRD 3. Lanca se o papel do vinculo nao cobre a acao.
++ *
++ * Chame no REPOSITORIO, nao no endpoint. Um repositorio chamavel sem checagem e
++ * o furo; e o custo desapareceu com o cache de escopo em papelNoTenantCorrente:
++ * a query do vinculo sai UMA vez por unidade de trabalho, nao uma por operacao.
++ * O cache e seguro porque o escopo E a transacao - a leitura ja e snapshot, e
++ * papel revogado no meio da propria transacao nao e caso que exista.
++ */
+ export async function exigir(acao: keyof typeof PODE): Promise<string> {
+   const papel = await papelNoTenantCorrente();
+   if (!PODE[acao].has(papel)) {
+diff --git a/src/db/tipado.ts b/src/db/tipado.ts
+new file mode 100644
+index 0000000..9e5f299
+--- /dev/null
++++ b/src/db/tipado.ts
+@@ -0,0 +1,24 @@
++// O UNICO arquivo do sistema que conhece o client gerado.
++//
++// POR QUE ELE EXISTE. contexto.ts declara `ClientTx` com index signature
++// `[modelo: string]: any` - de proposito, porque aquele modulo cuida do ciclo de
++// vida da transacao e nao deve conhecer os 17 modelos. O preco e que
++// `db().cliente.create({ data: { nome_erradoo: 'x' } })` COMPILA, antes e depois
++// do `prisma generate`. Os tipos gerados nunca chegariam ao repositorio.
++//
++// Uma indirecao de uma linha resolve os dois lados: contexto.ts segue agnostico,
++// e os repositorios ganham os 17 modelos.
++//
++// Se o `generate` mudar o caminho ou o nome do namespace, e aqui - e so aqui -
++// que se conserta. O caminho vem de `output` no generator do schema.prisma
++// ('../src/generated/prisma', relativo a prisma/).
++import type { Prisma } from '../generated/prisma/client.ts';
++import { db } from './contexto.ts';
++
++/**
++ * O client de transacao da unidade de trabalho corrente, TIPADO.
++ *
++ * Lanca SemContextoDeTenant fora de withTenant(), igual ao db() cru: sem
++ * contexto, toda leitura devolveria zero sem erro.
++ */
++export const dbt = (): Prisma.TransactionClient => db() as Prisma.TransactionClient;
+diff --git a/src/repos/cliente.ts b/src/repos/cliente.ts
+new file mode 100644
+index 0000000..a271bc9
+--- /dev/null
++++ b/src/repos/cliente.ts
+@@ -0,0 +1,140 @@
++// Repositorio de cliente. CLAUDE.md 1 (centavos), 2 (tenant nunca vem do
++// chamador), 11 (indice parcial nao e caminho de navegacao). R7-R9 ficam em
++// dominio/documento.ts e nao sao reimplementadas aqui.
++
++import { dbt } from '../db/tipado.ts';
++import { tenantCorrente, exigir } from '../db/contexto.ts';
++import { classificar, type OrigemDocumento } from '../dominio/documento.ts';
++
++export type NovoCliente = {
++  nome: string;
++  telefone?: string | null;
++  email?: string | null;
++  origem?: string | null;
++  crm_lead_id?: string | null;
++  documento_bruto?: string | null;
++  documento_origem?: OrigemDocumento;
++  /** Decimal como STRING. Number aqui e a porta de entrada do float numa
++   *  grandeza fisica - CLAUDE.md 1 proibe float ate em calculo intermediario. */
++  consumo_kwh?: string | null;
++  consumo_referencia_centavos?: number | null;
++};
++
++export type EdicaoCliente = Partial<Omit<NovoCliente, 'crm_lead_id'>>;
++
++/** CLAUDE.md 1: se chegou float, morre aqui - nao no fechamento do mes. */
++function centavos(v: number | null | undefined, campo: string): number | null {
++  if (v == null) return null;
++  if (!Number.isInteger(v)) throw new TypeError(`${campo} deve ser Int em centavos, recebeu ${v}`);
++  return v;
++}
++
++const limpar = (v: string | null | undefined) => {
++  const s = v?.trim();
++  return s ? s : null;
++};
++
++export async function criar(e: NovoCliente) {
++  await exigir('escrever_cadastro');
++  const d = classificar(e.documento_bruto, e.documento_origem ?? 'coleta_local');
++
++  return dbt().cliente.create({
++    data: {
++      // NUNCA do chamador, e a defesa nao e a policy WITH CHECK - e nao existir
++      // parametro. Este e o unico ponto do cadastro onde uma escrita poderia
++      // atravessar tenant, e o que nao entra na assinatura nao vaza.
++      tenant_id: tenantCorrente(),
++      nome: e.nome.trim(),
++      telefone: limpar(e.telefone),
++      email: limpar(e.email)?.toLowerCase() ?? null,
++      origem: limpar(e.origem),
++      crm_lead_id: e.crm_lead_id ?? null,
++      documento: d.documento,
++      documento_tipo: d.documento_tipo,
++      documento_validado: d.documento_validado,   // R8: semente do CRM entra FALSE
++      documento_origem: d.documento_origem,
++      consumo_kwh: e.consumo_kwh ?? null,
++      consumo_referencia_centavos: centavos(e.consumo_referencia_centavos, 'consumo_referencia_centavos'),
++    },
++  });
++}
++
++/**
++ * CLAUDE.md 11 na pratica.
++ *
++ * `cliente_documento_unico` e PARCIAL (WHERE documento IS NOT NULL). O Prisma 7.9
++ * exclui indice parcial das chaves de findUnique - verificado no DMMF, as chaves
++ * de cliente sao so [tenant_id+id] - entao nem existe findUnique por documento.
++ * E se existisse nao deveria ser usado: com documento nulo a chave nao e unica.
++ *
++ * findFirst com o predicado explicito, e null nunca chega ao banco. O tenant sai
++ * da RLS, nao de um WHERE.
++ */
++export async function porDocumento(bruto: string | null | undefined) {
++  await exigir('ler');
++  const { documento } = classificar(bruto, 'coleta_local');
++  if (documento === null) return null;
++  return dbt().cliente.findFirst({ where: { documento } });
++}
++
++export async function porId(id: string) {
++  await exigir('ler');
++  return dbt().cliente.findFirst({ where: { id } });
++}
++
++/** Lead do CRM -> cliente local. Tambem parcial: crm_lead_id nulo nao localiza. */
++export async function porLeadDoCrm(crmLeadId: string | null | undefined) {
++  await exigir('ler');
++  if (!crmLeadId) return null;
++  return dbt().cliente.findFirst({ where: { crm_lead_id: crmLeadId } });
++}
++
++export async function listar(opcoes: { ativo?: boolean; limite?: number } = {}) {
++  await exigir('ler');
++  return dbt().cliente.findMany({
++    where: opcoes.ativo === undefined ? {} : { ativo: opcoes.ativo },
++    orderBy: [{ nome: 'asc' }],
++    take: Math.min(opcoes.limite ?? 100, 500),
++  });
++}
++
++/**
++ * R8 continua valendo na edicao: documento reenviado com origem 'crm_semente'
++ * NAO passa a valer, mesmo com digito correto. Por isso a reclassificacao passa
++ * pelo dominio em vez de um UPDATE direto no campo.
++ */
++export async function editar(id: string, e: EdicaoCliente) {
++  await exigir('escrever_cadastro');
++
++  const dados: Record<string, unknown> = {};
++  if (e.nome !== undefined)     dados.nome = e.nome.trim();
++  if (e.telefone !== undefined) dados.telefone = limpar(e.telefone);
++  if (e.email !== undefined)    dados.email = limpar(e.email)?.toLowerCase() ?? null;
++  if (e.origem !== undefined)   dados.origem = limpar(e.origem);
++  if (e.consumo_kwh !== undefined) dados.consumo_kwh = e.consumo_kwh ?? null;
++  if (e.consumo_referencia_centavos !== undefined) {
++    dados.consumo_referencia_centavos =
++      centavos(e.consumo_referencia_centavos, 'consumo_referencia_centavos');
++  }
++  if (e.documento_bruto !== undefined) {
++    const d = classificar(e.documento_bruto, e.documento_origem ?? 'coleta_local');
++    dados.documento = d.documento;
++    dados.documento_tipo = d.documento_tipo;
++    dados.documento_validado = d.documento_validado;
++    dados.documento_origem = d.documento_origem;
++  }
++  if (Object.keys(dados).length === 0) return;
++
++  // updateMany e nao update: `update` usa chave unica e lanca P2025 quando a RLS
++  // esconde a linha - erro de "nao existe" que na verdade e "outro tenant".
++  // updateMany devolve count 0 e a decisao sobre o 404 fica aqui.
++  const r = await dbt().cliente.updateMany({ where: { id }, data: dados });
++  if (r.count === 0) throw Object.assign(new Error('Cliente nao encontrado.'), { status: 404 });
++}
++
++/** Baixa logica. Nunca DELETE: contrato, UC e comissao apontam para ca. */
++export async function desativar(id: string) {
++  await exigir('escrever_cadastro');
++  const r = await dbt().cliente.updateMany({ where: { id }, data: { ativo: false } });
++  if (r.count === 0) throw Object.assign(new Error('Cliente nao encontrado.'), { status: 404 });
++}
+diff --git a/src/repos/contrato.ts b/src/repos/contrato.ts
+new file mode 100644
+index 0000000..30ab165
+--- /dev/null
++++ b/src/repos/contrato.ts
+@@ -0,0 +1,175 @@
++// Repositorio de contrato. A R14 mora aqui do lado de fora e no indice
++// contrato_vigente_unico_por_uc do lado de dentro - o banco recusa, este arquivo
++// so garante que a ordem das operacoes nao provoque a recusa a toa.
++
++import { dbt } from '../db/tipado.ts';
++import { tenantCorrente, exigir } from '../db/contexto.ts';
++import { podeAtivarContrato } from '../dominio/documento.ts';
++import type { valor_referencia_origem as ValorReferenciaOrigem } from '../generated/prisma/enums.ts';
++
++export type NovoContrato = {
++  cliente_id: string;
++  unidade_consumidora_id: string;
++  usina_id: string;
++  originador_id?: string | null;
++  data_fechamento: Date;
++  valor_referencia_centavos: number;
++  valor_referencia_origem: ValorReferenciaOrigem;
++};
++
++export class ContratoVigenteJaExiste extends Error {
++  readonly status = 409;
++  constructor(ucId: string) {
++    super(
++      `A unidade consumidora ${ucId} ja tem contrato vigente. R14: uma UC tem no ` +
++      'maximo um contrato vigente, e vigente inclui suspenso. Encerre o atual antes.'
++    );
++    this.name = 'ContratoVigenteJaExiste';
++  }
++}
++
++export class DocumentoNaoValidado extends Error {
++  readonly status = 422;
++  constructor() {
++    super('R9: contrato so ativa com documento validado do cliente.');
++    this.name = 'DocumentoNaoValidado';
++  }
++}
++
++/**
++ * O contrato que ocupa a UC hoje, ou null.
++ *
++ * findUnique de verdade, garantido pelo banco: (tenant_id, uc_vigente) e unique
++ * CHEIO desde a migration r14_vigente_unico. Antes dela isto era um findFirst
++ * sobre status='ativo' e a resposta dependia da ordem do heap.
++ */
++export async function vigenteDaUC(unidadeConsumidoraId: string) {
++  await exigir('ler');
++  return dbt().contrato.findUnique({
++    where: {
++      tenant_id_uc_vigente: {
++        tenant_id: tenantCorrente(),
++        uc_vigente: unidadeConsumidoraId,
++      },
++    },
++  });
++}
++
++/** Historico completo da UC: rascunhos, encerrados e o vigente. */
++export async function historicoDaUC(unidadeConsumidoraId: string) {
++  await exigir('ler');
++  return dbt().contrato.findMany({
++    where: { unidade_consumidora_id: unidadeConsumidoraId },
++    orderBy: [{ data_fechamento: 'desc' }],
++  });
++}
++
++/** Nasce em rascunho. Rascunho nao ocupa a UC, entao nao disputa a R14. */
++export async function rascunhar(e: NovoContrato) {
++  await exigir('escrever_cadastro');
++  if (!Number.isInteger(e.valor_referencia_centavos)) {
++    throw new TypeError(`valor_referencia_centavos deve ser Int, recebeu ${e.valor_referencia_centavos}`);
++  }
++
++  const originador = e.originador_id
++    ? await dbt().originador.findFirst({ where: { id: e.originador_id } })
++    : null;
++
++  return dbt().contrato.create({
++    data: {
++      tenant_id: tenantCorrente(),
++      cliente_id: e.cliente_id,
++      unidade_consumidora_id: e.unidade_consumidora_id,
++      usina_id: e.usina_id,
++      originador_id: e.originador_id ?? null,
++      // R20: o tipo do originador CONGELA no fechamento. Ler depois de mudar o
++      // cadastro pagaria a taxa de hoje num contrato de ontem.
++      originador_tipo_no_fechamento: originador?.tipo ?? null,
++      data_fechamento: e.data_fechamento,
++      valor_referencia_centavos: e.valor_referencia_centavos,
++      valor_referencia_origem: e.valor_referencia_origem,
++      status: 'rascunho',
++    },
++  });
++}
++
++/**
++ * Rascunho -> ativo. Aqui a UC passa a ser ocupada e a R14 vale.
++ *
++ * O 23505 do indice e traduzido para erro de negocio: violacao de constraint
++ * chegando na API como 500 e o mesmo problema que este projeto persegue nas
++ * policies - o modo de falha nao conta o que aconteceu.
++ */
++export async function ativar(contratoId: string) {
++  await exigir('escrever_cadastro');
++  const tx = dbt();
++
++  const c = await tx.contrato.findFirst({
++    where: { id: contratoId },
++    include: { cliente: true },
++  });
++  if (!c) throw Object.assign(new Error('Contrato nao encontrado.'), { status: 404 });
++  if (!podeAtivarContrato(c.cliente)) throw new DocumentoNaoValidado();   // R9
++
++  try {
++    await tx.contrato.update({ where: { id: contratoId }, data: { status: 'ativo' } });
++  } catch (err: any) {
++    if (err?.code === 'P2002') throw new ContratoVigenteJaExiste(c.unidade_consumidora_id);
++    throw err;
++  }
++}
++
++/**
++ * Renovacao: encerra o vigente e assina o novo na MESMA unidade de trabalho.
++ *
++ * A ORDEM E OBRIGATORIA e foi medida em PG 17. Indice unico nao e DEFERRABLE:
++ * inserir o novo ativo antes de encerrar o velho da 23505 no INSERT, mesmo que a
++ * transacao fosse terminar consistente. Com UC limpa o teste passa dos dois
++ * jeitos - por isso a ordem esta escrita aqui e coberta por teste proprio, em vez
++ * de virar convencao que alguem lembra.
++ *
++ * O chamador ja esta dentro de withTenant(), entao isto E atomico.
++ */
++export async function renovar(e: NovoContrato) {
++  await exigir('escrever_cadastro');
++  const tx = dbt();
++
++  const atual = await tx.contrato.findUnique({
++    where: {
++      tenant_id_uc_vigente: {
++        tenant_id: tenantCorrente(),
++        uc_vigente: e.unidade_consumidora_id,
++      },
++    },
++  });
++
++  // 1. LIBERA a UC. Antes do insert, sempre.
++  if (atual) {
++    await tx.contrato.update({ where: { id: atual.id }, data: { status: 'encerrado' } });
++  }
++
++  // 2. So agora ocupa.
++  const novo = await rascunhar(e);
++  await ativar(novo.id);
++  return novo;
++}
++
++/** Suspenso continua ocupando a UC: rateio pausado, vinculo de pe. */
++export async function suspender(contratoId: string) {
++  await exigir('escrever_cadastro');
++  const r = await dbt().contrato.updateMany({
++    where: { id: contratoId, status: 'ativo' },
++    data: { status: 'suspenso' },
++  });
++  if (r.count === 0) throw Object.assign(new Error('Contrato ativo nao encontrado.'), { status: 404 });
++}
++
++/** Encerrar LIBERA a UC: uc_vigente vira NULL sozinha, e a coluna e gerada. */
++export async function encerrar(contratoId: string) {
++  await exigir('escrever_cadastro');
++  const r = await dbt().contrato.updateMany({
++    where: { id: contratoId, status: { in: ['ativo', 'suspenso'] } },
++    data: { status: 'encerrado' },
++  });
++  if (r.count === 0) throw Object.assign(new Error('Contrato vigente nao encontrado.'), { status: 404 });
++}
+diff --git a/tests/catalogo.sql b/tests/catalogo.sql
+new file mode 100644
+index 0000000..b2d3f71
+--- /dev/null
++++ b/tests/catalogo.sql
+@@ -0,0 +1,104 @@
++-- Invariantes verificadas por CONSULTA AO CATALOGO, nunca por revisao de PR.
++-- CLAUDE.md 2, 3 e 11. Uso: psql -d <db> -f tests/catalogo.sql
++--
++-- Existe porque tres furos de 26/07 eram todos invisiveis em code review e todos
++-- triviais no catalogo: o indice parcial que virou relacao 1-1, a tabela sem
++-- UNIQUE composto que derrubou o `prisma generate`, e a tabela de referencia que
++-- fazia o teste de RLS imprimir falha sem quebrar o build.
++\set ON_ERROR_STOP on
++\set QUIET on
++SET client_min_messages = notice;
++
++DO $bloco$
++DECLARE falhas int := 0; n int; nomes text;
++BEGIN
++  -- ------------------------------------------------------------------ CAT-1
++  -- CLAUDE.md 11. O `db pull` do Prisma 7.9 ignora o predicado do indice parcial
++  -- ao inferir cardinalidade: unique parcial cobrindo EXATAMENTE as colunas de
++  -- uma FK vira relacao to-one, e a relacao passa a devolver linha arbitraria.
++  -- Medido: R$ 111,00 de um suspenso onde o vigente valia R$ 789,00.
++  SELECT count(*), string_agg(DISTINCT i.indexrelid::regclass::text, ', ')
++    INTO n, nomes
++  FROM pg_index i
++  JOIN pg_class t ON t.oid = i.indrelid
++  JOIN pg_namespace ns ON ns.oid = t.relnamespace AND ns.nspname = 'public'
++  WHERE i.indisunique AND i.indpred IS NOT NULL
++    AND EXISTS (
++      SELECT 1 FROM pg_constraint c
++      WHERE c.conrelid = i.indrelid AND c.contype = 'f'
++        AND (SELECT array_agg(x ORDER BY x) FROM unnest(c.conkey) x)
++          = (SELECT array_agg(y ORDER BY y) FROM unnest(i.indkey::smallint[]) y)
++    );
++  IF n = 0 THEN RAISE NOTICE 'ok  CAT-1 nenhum indice parcial cobre exatamente o conjunto de colunas de uma FK';
++  ELSE RAISE WARNING 'FALHA CAT-1 indice parcial sobre conjunto de FK (vira relacao 1-1 no db pull): %', nomes; falhas := falhas + 1; END IF;
++
++  -- ------------------------------------------------------------------ CAT-2
++  -- CLAUDE.md 2, na forma que pega o furo real: FK composta (tenant_id, X) onde X
++  -- e unico SOZINHO mas o par nao e. A introspecacao infere 1-1 pelo X, emite a
++  -- relacao pelo par, e o Prisma recusa o schema inteiro com P1012. Foi o que
++  -- aconteceu com cliente_estado_crm, cuja PK se chama cliente_id e nao id.
++  SELECT count(*), string_agg(c.conrelid::regclass::text || '.' || c.conname, ', ')
++    INTO n, nomes
++  FROM pg_constraint c
++  JOIN pg_class t ON t.oid = c.conrelid
++  JOIN pg_namespace ns ON ns.oid = t.relnamespace AND ns.nspname = 'public'
++  WHERE c.contype = 'f' AND array_length(c.conkey, 1) = 2
++    AND 'tenant_id' = (SELECT attname FROM pg_attribute WHERE attrelid = c.conrelid AND attnum = c.conkey[1])
++    AND EXISTS (SELECT 1 FROM pg_index i WHERE i.indrelid = c.conrelid AND i.indisunique
++                  AND i.indnatts = 1 AND i.indkey[0] = c.conkey[2])
++    AND NOT EXISTS (SELECT 1 FROM pg_index i WHERE i.indrelid = c.conrelid AND i.indisunique
++                      AND i.indnatts = 2 AND i.indkey[0] = c.conkey[1] AND i.indkey[1] = c.conkey[2]);
++  IF n = 0 THEN RAISE NOTICE 'ok  CAT-2 toda FK composta tem UNIQUE composto do lado definidor';
++  ELSE RAISE WARNING 'FALHA CAT-2 FK composta sem UNIQUE composto (P1012 no generate): %', nomes; falhas := falhas + 1; END IF;
++
++  -- ------------------------------------------------------------------ CAT-3
++  -- CLAUDE.md 3. O criterio e TER tenant_id, nao o nome da tabela: `distribuidora`
++  -- e lista de referencia publica sem tenant_id e sem RLS, de proposito, e o teste
++  -- antigo a acusava por nome. Acusacao errada treina o time a ignorar o teste.
++  SELECT count(*), string_agg(c.relname, ', ') INTO n, nomes
++  FROM pg_class c
++  JOIN pg_namespace ns ON ns.oid = c.relnamespace AND ns.nspname = 'public'
++  WHERE c.relkind = 'r'
++    AND EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = c.oid AND a.attname = 'tenant_id' AND a.attnum > 0)
++    AND (NOT c.relrowsecurity OR NOT c.relforcerowsecurity
++         OR NOT EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = c.oid));
++  IF n = 0 THEN RAISE NOTICE 'ok  CAT-3 toda tabela com tenant_id tem RLS, FORCE e ao menos uma policy';
++  ELSE RAISE WARNING 'FALHA CAT-3 tabela com tenant_id sem RLS+FORCE+policy: %', nomes; falhas := falhas + 1; END IF;
++
++  -- ------------------------------------------------------------------ CAT-4
++  -- Invariante 13: view sem security_invoker avalia a RLS contra o DONO e anula
++  -- FORCE ROW LEVEL SECURITY e as policies de uma vez. Medido: 2 linhas de todos
++  -- os tenants por uma view, 0 pela tabela.
++  SELECT count(*), string_agg(c.relname, ', ') INTO n, nomes
++  FROM pg_class c
++  JOIN pg_namespace ns ON ns.oid = c.relnamespace AND ns.nspname IN ('public','app')
++  WHERE c.relkind = 'v'
++    AND NOT coalesce((SELECT option_value::boolean FROM pg_options_to_table(c.reloptions)
++                      WHERE option_name = 'security_invoker'), false);
++  IF n = 0 THEN RAISE NOTICE 'ok  CAT-4 toda view declara security_invoker = true';
++  ELSE RAISE WARNING 'FALHA CAT-4 view sem security_invoker (anula a RLS das tabelas base): %', nomes; falhas := falhas + 1; END IF;
++
++  -- ------------------------------------------------------------------ CAT-5
++  -- CLAUDE.md 1: dinheiro e Int em centavos. Float e proibido em toda camada, e
++  -- coluna monetaria carrega o sufixo. As duas metades sao verificaveis.
++  SELECT count(*), string_agg(table_name || '.' || column_name || ':' || data_type, ', ')
++    INTO n, nomes
++  FROM information_schema.columns
++  WHERE table_schema = 'public'
++    AND ((column_name LIKE '%\_centavos' AND data_type NOT IN ('integer','bigint'))
++      OR (data_type IN ('double precision','real')));
++  IF n = 0 THEN RAISE NOTICE 'ok  CAT-5 coluna _centavos e inteira e nao existe float em nenhuma tabela';
++  ELSE RAISE WARNING 'FALHA CAT-5 dinheiro fora do contrato Int/centavos: %', nomes; falhas := falhas + 1; END IF;
++
++  -- ------------------------------------------------------------------ CAT-6
++  -- R14 no catalogo: a coluna que carrega a regra e GERADA. Se alguem a tornar
++  -- gravavel, o repositorio passa a poder mentir sobre qual contrato ocupa a UC.
++  SELECT count(*) INTO n FROM information_schema.columns
++  WHERE table_schema = 'public' AND table_name = 'contrato'
++    AND column_name = 'uc_vigente' AND is_generated = 'ALWAYS';
++  IF n = 1 THEN RAISE NOTICE 'ok  CAT-6 contrato.uc_vigente e GENERATED ALWAYS - a R14 nao depende da aplicacao';
++  ELSE RAISE WARNING 'FALHA CAT-6 contrato.uc_vigente nao e coluna gerada'; falhas := falhas + 1; END IF;
++
++  IF falhas = 0 THEN RAISE NOTICE 'catalogo: 6 invariantes, nenhuma falha';
++  ELSE RAISE WARNING 'catalogo: % FALHA(S)', falhas; END IF;
++END $bloco$;
+diff --git a/tests/regras.sql b/tests/regras.sql
+index 2f6c542..2612bc5 100644
+--- a/tests/regras.sql
++++ b/tests/regras.sql
+@@ -75,12 +75,23 @@ BEGIN
+       VALUES (T,cli,uc1,us,org,'parceiro_captador','2026-06-15',100000,'local','ativo');
+     RAISE WARNING 'FALHA R14 aceitou SEGUNDO contrato ativo na mesma UC'; falhas := falhas + 1;
+   EXCEPTION WHEN unique_violation THEN
+-    RAISE NOTICE 'ok  R14 segunda linha ativa na mesma UC recusada pelo indice parcial';
++    RAISE NOTICE 'ok  R14 segunda linha ativa na mesma UC recusada por contrato_vigente_unico_por_uc';
++  END;
++  -- R14-b: vigente inclui SUSPENSO. Ate 26/07 o indice era WHERE status='ativo' e
++  -- isto PASSAVA - o banco aceitava um ativo e um suspenso na mesma UC, contra a
++  -- propria regra que o comentario da migration de fundacao declarava.
++  BEGIN
++    INSERT INTO contrato (tenant_id,cliente_id,unidade_consumidora_id,usina_id,originador_id,
++                          originador_tipo_no_fechamento,data_fechamento,valor_referencia_centavos,valor_referencia_origem,status)
++      VALUES (T,cli,uc1,us,org,'parceiro_captador','2026-06-20',111,'local','suspenso');
++    RAISE WARNING 'FALHA R14-b aceitou contrato SUSPENSO numa UC que ja tem vigente'; falhas := falhas + 1;
++  EXCEPTION WHEN unique_violation THEN
++    RAISE NOTICE 'ok  R14-b suspenso tambem ocupa a UC: rateio pausado, vinculo de pe';
+   END;
+   INSERT INTO contrato (tenant_id,cliente_id,unidade_consumidora_id,usina_id,originador_id,
+                         originador_tipo_no_fechamento,data_fechamento,valor_referencia_centavos,valor_referencia_origem,status)
+     VALUES (T,cli,uc1,us,org,'parceiro_captador','2026-06-15',100000,'local','encerrado');
+-  RAISE NOTICE 'ok  R14 contrato ENCERRADO na mesma UC coexiste (o indice e parcial, nao total)';
++  RAISE NOTICE 'ok  R14 contrato ENCERRADO na mesma UC coexiste: encerrado nao ocupa (uc_vigente e NULL)';
+ 
+   -- ---------------------------------------------------- R23 um arredondamento
+   PERFORM set_config('app.tenant_id', T::text, true);
+diff --git a/tests/repos-cliente.ts b/tests/repos-cliente.ts
+new file mode 100644
+index 0000000..4dfc63f
+--- /dev/null
++++ b/tests/repos-cliente.ts
+@@ -0,0 +1,134 @@
++// SPEC-001 R7-R9 + CLAUDE.md 1, 2 e 11 - repositorio de cliente contra banco real.
++// Uso: bash tests/repos.sh   (nao rode solto: depende do banco que o .sh monta)
++
++import pg from 'pg';
++import { PrismaPg } from '@prisma/adapter-pg';
++import { PrismaClient } from '../src/generated/prisma/client.ts';
++import { withTenantEm, SemContextoDeTenant } from '../src/db/contexto.ts';
++import { criarPools } from '../src/db/pools.ts';
++import * as cliente from '../src/repos/cliente.ts';
++
++const CONN = process.env.TEST_DATABASE_URL ?? 'postgresql://app_financeiro_login:spike@127.0.0.1:5432/fin_repos';
++const A = process.env.TEST_TENANT_A!;
++const B = process.env.TEST_TENANT_B!;
++const U = process.env.TEST_USUARIO_ADMIN!;
++const L = process.env.TEST_USUARIO_LEITURA!;
++
++const pools = criarPools(CONN);
++const prisma = new PrismaClient({ adapter: new PrismaPg(pools.transacional) });
++const emA = <T>(f: () => Promise<T>, usuarioId = U) =>
++  withTenantEm(prisma as any, { tenantId: A, usuarioId }, () => f());
++const emB = <T>(f: () => Promise<T>) =>
++  withTenantEm(prisma as any, { tenantId: B, usuarioId: U }, () => f());
++
++let falhas = 0;
++const chk = (id: string, cond: boolean, d: string) => {
++  if (!cond) falhas++;
++  console.log(`${cond ? 'ok   ' : 'FALHA'} ${id.padEnd(4)} ${d}`);
++};
++const lancou = async (f: () => Promise<unknown>): Promise<any> => {
++  try { await f(); return null; } catch (e) { return e; }
++};
++
++// ------------------------------------------------- C1 sem contexto nao escreve
++{
++  const e = await lancou(() => cliente.criar({ nome: 'Fora de contexto' }));
++  chk('C1', e instanceof SemContextoDeTenant,
++      `criar() fora de withTenant lanca SemContextoDeTenant (veio ${e?.constructor?.name ?? 'nada'})`);
++}
++
++// ------------------------------------------------- C2 tenant vem do contexto
++{
++  const c = await emA(() => cliente.criar({ nome: 'Tenant do contexto' }));
++  chk('C2', c.tenant_id === A, `linha nasce com tenant_id do escopo, nao de parametro (${c.tenant_id === A})`);
++}
++
++// ------------------------------------------------- C3 R8: semente do CRM
++{
++  const c = await emA(() => cliente.criar({
++    nome: 'Semente CRM', documento_bruto: '529.982.247-25', documento_origem: 'crm_semente',
++  }));
++  chk('C3', c.documento === '52998224725' && c.documento_validado === false,
++      'R8 documento do CRM com DV valido entra normalizado e NAO validado');
++}
++
++// ------------------------------------------------- C4 R9: invalido nao bloqueia
++{
++  const c = await emA(() => cliente.criar({
++    nome: 'Documento ruim', documento_bruto: '11111111111', documento_origem: 'coleta_local',
++  }));
++  chk('C4', c.documento === '11111111111' && c.documento_validado === false,
++      'R9 documento invalido NAO impede o cadastro - so a ativacao do contrato');
++}
++
++// ------------------------------------------------- C5 unico por tenant
++{
++  await emA(() => cliente.criar({ nome: 'Primeiro', documento_bruto: '00000000000191' }));
++  const e = await lancou(() => emA(() => cliente.criar({ nome: 'Segundo', documento_bruto: '00.000.000/0001-91' })));
++  chk('C5', e?.code === 'P2002',
++      `documento repetido no mesmo tenant recusado, mesmo com formatacao diferente (${e?.code ?? 'passou'})`);
++}
++
++// ------------------------------------------------- C6 o indice E parcial
++{
++  await emA(() => cliente.criar({ nome: 'Sem doc 1' }));
++  const e = await lancou(() => emA(() => cliente.criar({ nome: 'Sem doc 2' })));
++  chk('C6', e === null,
++      'DOIS clientes sem documento coexistem - se falhar, alguem trocou o parcial por unique cheio e proibiu cadastro sem documento');
++}
++
++// ------------------------------------------------- C7 isolamento por tenant
++{
++  const e = await lancou(() => emB(() => cliente.criar({ nome: 'Mesmo doc, outro tenant', documento_bruto: '00000000000191' })));
++  chk('C7', e === null, 'mesmo documento no tenant B e aceito: a unicidade e por tenant, nao global');
++}
++
++// ------------------------------------------------- C8 RBAC no repositorio
++{
++  const e = await lancou(() => emA(() => cliente.criar({ nome: 'Nao deveria entrar' }), L));
++  chk('C8', e?.name === 'PapelInsuficiente' && e?.status === 403,
++      `papel 'leitura' nao cria cadastro (${e?.name ?? 'passou'})`);
++}
++
++// ------------------------------------------------- C9 CLAUDE.md 11
++{
++  const r = await emA(() => cliente.porDocumento(null));
++  const r2 = await emA(() => cliente.porDocumento('   '));
++  chk('C9', r === null && r2 === null,
++      'porDocumento(null) e ("") devolvem null sem consultar - o indice parcial nao e caminho de navegacao');
++}
++
++// ------------------------------------------------- C10 normalizacao na busca
++{
++  const achado = await emA(() => cliente.porDocumento('00.000.000/0001-91'));
++  chk('C10', achado?.documento === '00000000000191',
++      'busca com documento formatado acha o normalizado');
++}
++
++// ------------------------------------------------- C11 centavos e Int
++{
++  const e = await lancou(() => emA(() => cliente.criar({ nome: 'Float', consumo_referencia_centavos: 100.5 })));
++  chk('C11', e instanceof TypeError, `CLAUDE.md 1: float em centavos morre no repositorio (${e?.constructor?.name})`);
++}
++
++// ------------------------------------------------- C12 baixa e logica
++{
++  const c = await emA(() => cliente.criar({ nome: 'Para desativar' }));
++  await emA(() => cliente.desativar(c.id));
++  const depois = await emA(() => cliente.porId(c.id));
++  chk('C12', depois !== null && depois.ativo === false, 'desativar faz baixa logica, nunca DELETE');
++}
++
++// ------------------------------------------------- C13 404 atravessa tenant
++{
++  const c = await emA(() => cliente.criar({ nome: 'Do tenant A' }));
++  const e = await lancou(() => emB(() => cliente.desativar(c.id)));
++  chk('C13', e?.status === 404,
++      'editar cliente de outro tenant e 404, nunca 403: ausencia de vinculo e indistinguivel de inexistencia');
++}
++
++await prisma.$disconnect();
++await pools.transacional.end();
++await pools.relatorio.end();
++console.log(falhas === 0 ? '\nrepos/cliente: todas passaram' : `\nrepos/cliente: ${falhas} FALHA(S)`);
++process.exit(falhas === 0 ? 0 : 1);
+diff --git a/tests/repos-contrato.ts b/tests/repos-contrato.ts
+new file mode 100644
+index 0000000..1a2bfc5
+--- /dev/null
++++ b/tests/repos-contrato.ts
+@@ -0,0 +1,130 @@
++// R14 e a ordem da renovacao. Uso: bash tests/repos.sh
++//
++// A suite existe por causa de um achado de 26/07: o indice parcial
++// `WHERE status = 'ativo'` fazia o `db pull` tipar unidade_consumidora.contrato
++// como to-one, e a relacao devolvia contrato ARBITRARIO. Medido: R$ 111,00 de um
++// suspenso onde o vigente valia R$ 789,00. Nenhum teste pegava, porque toda UC
++// dos testes tinha um contrato so. K1 e K2 existem para nunca mais.
++
++import pg from 'pg';
++import { PrismaPg } from '@prisma/adapter-pg';
++import { PrismaClient } from '../src/generated/prisma/client.ts';
++import { withTenantEm } from '../src/db/contexto.ts';
++import { criarPools } from '../src/db/pools.ts';
++import { dbt } from '../src/db/tipado.ts';
++import * as contrato from '../src/repos/contrato.ts';
++
++const CONN = process.env.TEST_DATABASE_URL ?? 'postgresql://app_financeiro_login:spike@127.0.0.1:5432/fin_repos';
++const A  = process.env.TEST_TENANT_A!;
++const U  = process.env.TEST_USUARIO_ADMIN!;
++const CLI = process.env.TEST_CLIENTE!;
++const UC  = process.env.TEST_UC!;
++const USI = process.env.TEST_USINA!;
++
++const pools = criarPools(CONN);
++const prisma = new PrismaClient({ adapter: new PrismaPg(pools.transacional) });
++const em = <T>(f: () => Promise<T>) => withTenantEm(prisma as any, { tenantId: A, usuarioId: U }, () => f());
++
++let falhas = 0;
++const chk = (id: string, cond: boolean, d: string) => {
++  if (!cond) falhas++;
++  console.log(`${cond ? 'ok   ' : 'FALHA'} ${id.padEnd(4)} ${d}`);
++};
++const lancou = async (f: () => Promise<unknown>): Promise<any> => {
++  try { await f(); return null; } catch (e) { return e; }
++};
++const novo = (valor: number) => ({
++  cliente_id: CLI, unidade_consumidora_id: UC, usina_id: USI,
++  data_fechamento: new Date('2026-01-10'),
++  valor_referencia_centavos: valor,
++  valor_referencia_origem: 'local' as const,
++});
++
++// ------------------------------------------------- K1 a relacao e 1-N
++{
++  // dbt() e nao o client base: fora da transacao nao ha contexto de tenant, e a
++  // RLS devolve zero linhas sem erro - o teste passaria a testar nada.
++  const uc = await em(() => dbt().unidade_consumidora.findFirst({
++    where: { id: UC }, include: { contrato: true },
++  }));
++  chk('K1', Array.isArray(uc?.contrato),
++      'unidade_consumidora.contrato e LISTA. Se vier objeto, o db pull voltou a tipar 1-1 e o valor lido da UC e arbitrario');
++}
++
++// ------------------------------------------------- K2 rascunho nao ocupa a UC
++{
++  await em(() => contrato.rascunhar(novo(11100)));
++  await em(() => contrato.rascunhar(novo(22200)));
++  const vigente = await em(() => contrato.vigenteDaUC(UC));
++  chk('K2', vigente === null, 'dois rascunhos na mesma UC coexistem e nenhum e vigente');
++}
++
++// ------------------------------------------------- K3 um vigente por UC
++let primeiro: any;
++{
++  primeiro = await em(() => contrato.rascunhar(novo(78900)));
++  await em(() => contrato.ativar(primeiro.id));
++  const v = await em(() => contrato.vigenteDaUC(UC));
++  chk('K3', v?.id === primeiro.id && v?.valor_referencia_centavos === 78900,
++      'vigenteDaUC devolve o contrato ativo por chave unica do banco, nao por LIMIT 1');
++}
++
++// ------------------------------------------------- K4 segundo ativo recusado
++{
++  const outro: any = await em(() => contrato.rascunhar(novo(99900)));
++  const e = await lancou(() => em(() => contrato.ativar(outro.id)));
++  chk('K4', e?.name === 'ContratoVigenteJaExiste' && e?.status === 409,
++      `segundo contrato ativo na UC vira erro de negocio 409, nao 23505 cru (${e?.name ?? 'passou'})`);
++}
++
++// ------------------------------------------------- K5 suspenso AINDA ocupa
++{
++  await em(() => contrato.suspender(primeiro.id));
++  const outro: any = await em(() => contrato.rascunhar(novo(44400)));
++  const e = await lancou(() => em(() => contrato.ativar(outro.id)));
++  chk('K5', e?.name === 'ContratoVigenteJaExiste',
++      'R14 corrigida: com um SUSPENSO na UC, novo ativo e recusado. Antes da migration r14_vigente_unico isto PASSAVA');
++  const v = await em(() => contrato.vigenteDaUC(UC));
++  chk('K6', v?.id === primeiro.id && v?.status === 'suspenso',
++      'o suspenso continua sendo o vigente da UC - rateio pausado, vinculo de pe');
++}
++
++// ------------------------------------------------- K7 encerrar libera
++{
++  await em(() => contrato.encerrar(primeiro.id));
++  const v = await em(() => contrato.vigenteDaUC(UC));
++  chk('K7', v === null, 'encerrar libera a UC: uc_vigente vira NULL sozinha, a coluna e gerada');
++}
++
++// ------------------------------------------------- K8 renovacao na ordem certa
++{
++  const a: any = await em(() => contrato.rascunhar(novo(50000)));
++  await em(() => contrato.ativar(a.id));
++  const b: any = await em(() => contrato.renovar(novo(60000)));
++  const v = await em(() => contrato.vigenteDaUC(UC));
++  chk('K8', v?.id === b.id && v?.valor_referencia_centavos === 60000,
++      'renovar encerra o velho ANTES de inserir o novo, na mesma transacao - indice unico nao e DEFERRABLE');
++}
++
++// ------------------------------------------------- K9 a ordem invertida quebra
++{
++  const e = await lancou(() => em(async () => {
++    const c: any = await contrato.rascunhar(novo(70000));
++    await contrato.ativar(c.id);            // ocupa antes de liberar: proposital
++  }));
++  chk('K9', e?.name === 'ContratoVigenteJaExiste',
++      'a ordem invertida FALHA - e a prova de que a ordem em renovar() nao e estilo, e requisito');
++}
++
++// ------------------------------------------------- K10 historico preservado
++{
++  const h: any[] = await em(() => contrato.historicoDaUC(UC));
++  chk('K10', h.length >= 6 && h.filter(c => c.uc_vigente !== null).length === 1,
++      `a UC guarda o historico inteiro (${h.length} contratos) com exatamente um ocupando a UC`);
++}
++
++await prisma.$disconnect();
++await pools.transacional.end();
++await pools.relatorio.end();
++console.log(falhas === 0 ? '\nrepos/contrato: todas passaram' : `\nrepos/contrato: ${falhas} FALHA(S)`);
++process.exit(falhas === 0 ? 0 : 1);
+diff --git a/tests/repos.sh b/tests/repos.sh
+new file mode 100755
+index 0000000..12dab52
+--- /dev/null
++++ b/tests/repos.sh
+@@ -0,0 +1,73 @@
++#!/bin/bash
++# Monta o banco fin_repos com as migrations e uma fixture de duas empresas, e roda
++# as suites dos repositorios de cliente e contrato.
++#
++# Roda pela role app_financeiro_login, SEM BYPASSRLS. Isso nao e detalhe de teste:
++# e a unica configuracao em que as 24 policies sao avaliadas. Testar por `postgres`
++# (rolbypassrls = true) daria verde com a RLS desligada.
++#
++# Uso: bash tests/repos.sh   (espera PostgreSQL em 127.0.0.1:5432)
++set -euo pipefail
++cd "$(dirname "$0")/.."
++export PGPASSWORD="${PGPASSWORD:-spike}"
++PGUSER="${PGUSER:-postgres}"
++P="psql -h 127.0.0.1 -U $PGUSER -q -v ON_ERROR_STOP=1"
++
++A='11110000-0000-4000-8000-00000000000a'
++B='22220000-0000-4000-8000-00000000000b'
++UADM='aaaa0001-0000-4000-8000-00000000000a'
++ULEI='aaaa0002-0000-4000-8000-00000000000b'
++CLI='cccc0001-0000-4000-8000-00000000000c'
++UC='eeee0001-0000-4000-8000-00000000000e'
++USI='dddd0001-0000-4000-8000-00000000000d'
++
++$P -d postgres -c "DROP DATABASE IF EXISTS fin_repos WITH (FORCE)" -c "CREATE DATABASE fin_repos" > /dev/null
++for m in prisma/migrations/*/migration.sql; do
++  # Sem pipe para grep: em pipeline o status de saida e do grep e a migration
++  # falha em silencio. Foi assim que metade da migration 10 nao entrou em 26/07.
++  if ! $P -d fin_repos -f "$m" > /tmp/mig.log 2>&1; then
++    echo "FALHA na migration $m:"; grep -vE '^(NOTICE|CREATE|ALTER|GRANT|REVOKE|COMMENT|DO|SET|INSERT|DROP)' /tmp/mig.log | head -20; exit 1
++  fi
++done
++
++$P -d fin_repos > /dev/null <<SQL
++DO \$\$ BEGIN
++  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='app_financeiro_login') THEN
++    CREATE ROLE app_financeiro_login LOGIN PASSWORD 'spike' IN ROLE app_financeiro;
++  END IF;
++END \$\$;
++
++INSERT INTO tenant (id, razao_social, cnpj) VALUES
++  ('$A','Empresa A','11111111000111'), ('$B','Empresa B','22222222000122');
++INSERT INTO usuario (id, auth_user_id, nome, email) VALUES
++  ('$UADM', gen_random_uuid(), 'Admin',   'adm@x'),
++  ('$ULEI', gen_random_uuid(), 'Leitura', 'lei@x');
++INSERT INTO usuario_tenant (tenant_id, usuario_id, papel) VALUES
++  ('$A','$UADM','admin'), ('$A','$ULEI','leitura'), ('$B','$UADM','admin');
++INSERT INTO cliente (id, tenant_id, nome, documento, documento_tipo, documento_validado, documento_origem)
++  VALUES ('$CLI','$A','Cliente da fixture','11144477735','cpf',true,'coleta_local');
++INSERT INTO usina (id, tenant_id, codigo_geradora, distribuidora)
++  VALUES ('$USI','$A','GER-FIXTURE','Equatorial');
++INSERT INTO unidade_consumidora (id, tenant_id, cliente_id, numero_uc, distribuidora)
++  VALUES ('$UC','$A','$CLI','UC-FIXTURE','Equatorial');
++SQL
++
++npm install --silent > /dev/null 2>&1
++# O generate precisa do schema-engine. Em ambiente sem acesso a binaries.prisma.sh
++# o stub resolve: generate nao consulta banco, so precisa do binario existir.
++if [ ! -d src/generated/prisma ]; then
++  printf '#!/bin/sh\necho "{}"\n' > /tmp/stub-schema-engine && chmod +x /tmp/stub-schema-engine
++  PRISMA_SCHEMA_ENGINE_BINARY=/tmp/stub-schema-engine PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1 \
++    npx prisma generate > /dev/null
++fi
++
++export TEST_DATABASE_URL="postgresql://app_financeiro_login:spike@127.0.0.1:5432/fin_repos"
++export TEST_TENANT_A="$A" TEST_TENANT_B="$B"
++export TEST_USUARIO_ADMIN="$UADM" TEST_USUARIO_LEITURA="$ULEI"
++export TEST_CLIENTE="$CLI" TEST_UC="$UC" TEST_USINA="$USI"
++
++echo "=== repositorio de cliente"
++node --experimental-strip-types tests/repos-cliente.ts
++echo
++echo "=== repositorio de contrato: R14 e a ordem da renovacao"
++node --experimental-strip-types tests/repos-contrato.ts
+diff --git a/tests/run.sh b/tests/run.sh
+index e15f052..b7dca4a 100755
+--- a/tests/run.sh
++++ b/tests/run.sh
+@@ -63,15 +63,11 @@ SELECT 'recalculo de 2026-03-15 acha '||count(*)||' regra(s) e '||
+ FROM regra_comissao WHERE daterange(vigencia_inicio,vigencia_fim,'[)') @> '2026-03-15'::date;"
+ 
+ echo
+-echo "=== catalogo (fin_test): tabelas sem RLS+FORCE+policy, esperado nenhuma"
+-$P -d fin_test -tA -c "
+-SELECT coalesce(string_agg(c.relname,', '),'nenhuma')
+-FROM pg_class c
+-JOIN pg_namespace n ON n.oid=c.relnamespace AND n.nspname='public'
+-WHERE c.relkind='r'
+-  AND c.relname NOT LIKE 'app_marcador%'
+-  AND (NOT c.relrowsecurity OR NOT c.relforcerowsecurity
+-    OR NOT EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid=c.oid));"
++echo "=== catalogo (fin_test): CLAUDE.md 1, 2, 3 e 11 por consulta ao catalogo"
++# Era um SELECT que IMPRIMIA o nome da tabela em falta e devolvia exit 0: o CI
++# passava verde com a falha na tela. `distribuidora` esteve nessa lista desde a
++# migration 10 sem quebrar nada. Agora e suite com RAISE WARNING, como as outras.
++suite fin_test tests/catalogo.sql
+ 
+ echo "=== FKs compostas, esperado 9"
+ $P -d fin_test -tA -c "SELECT count(*) FROM pg_constraint WHERE contype='f' AND array_length(conkey,1)=2;"
+diff --git a/tsconfig.json b/tsconfig.json
+new file mode 100644
+index 0000000..5ecb21b
+--- /dev/null
++++ b/tsconfig.json
+@@ -0,0 +1,19 @@
++{
++  "//": "node --experimental-strip-types APAGA anotacao de tipo, nao confere. Sem `npm run typecheck` no CI os tipos gerados nao valem nada.",
++  "//2": "noUncheckedIndexedAccess fica DESLIGADO por ora: ligado, acusa 11 pontos em codigo que ja passou (r[0] em sessao.ts, documento.ts, contexto.ts e nos testes antigos). CI vermelho no dia 1 vira CI ignorado - o valor do typecheck e pegar erro NOVO. Ligar como tarefa propria, com os 11 no diff.",
++  "compilerOptions": {
++    "module": "nodenext",
++    "moduleResolution": "nodenext",
++    "target": "es2023",
++    "lib": ["es2023"],
++    "types": ["node"],
++    "strict": true,
++    "noEmit": true,
++    "allowImportingTsExtensions": true,
++    "erasableSyntaxOnly": true,
++    "verbatimModuleSyntax": true,
++    "skipLibCheck": true
++  },
++  "include": ["src", "tests"],
++  "exclude": ["node_modules", "src/generated", "spike-transacao", "spike-adr0003"]
++}
