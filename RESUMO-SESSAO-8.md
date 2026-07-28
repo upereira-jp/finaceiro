@@ -1091,3 +1091,42 @@ A `0003` tem **um cliente a 100 % do rateio** e **zero competências de geraçã
 espelhadas — o `GERACAO-01`, que o dev levantou. Com o espelho completo, isso
 deixou de ser observação e virou **linha visível no banco**: há crédito prometido
 sobre geração que ninguém lançou. A F2 não pode tratar essa ausência como zero.
+
+---
+
+## 24. ADENDO — a usina tem duas medidas, e o sistema controla uma
+
+Esclarecimento do dono, 28/07:
+
+> *"existem dois fatores diferentes: o quanto ela será usada e o quanto ela já foi
+> usada, funcionando para evitar overbooking"*
+
+Traduzido para o que existe hoje:
+
+| Medida | O que é | Controlado? |
+|---|---|---|
+| **Quanto SERÁ usada** | Σ `percentual_rateio` das UCs contratadas | ✅ `SPEC-001` R11 — trigger deferido rejeita acima de 100 %, e `rateio_por_usina` classifica |
+| **Quanto JÁ FOI usada** | crédito consumido contra a geração da competência | 🔴 **não existe controle nenhum** |
+
+**As duas juntas é que evitam overbooking. Hoje só a primeira existe.**
+
+E há um sintoma dessa confusão **dentro do código**: a mensagem de erro da R11 em
+`repos/rateio.ts` diz *"isso alocaria credito que a usina nao gera"* — misturando
+**alocação** com **geração**, que é exatamente a distinção que o dono acaba de
+separar. A frase estava lá desde a migration e ninguém tinha percebido que ela
+descreve duas coisas como se fossem uma.
+
+**O caso concreto já está no banco, e ele só ficou visível hoje** porque o espelho
+fechou: a usina `0003` tem **1 UC com 100 % alocado** e **zero geração lançada**.
+Pela R11 ela está `completo` e passa — não há invariante que note que não há nada
+atrás. Antes desta sessão isso era invisível; agora é uma linha consultável.
+
+Registrado como **`RATEIO-USO-01`**, vermelha, bloqueando a F2 — porque sem a
+decisão a base de faturamento é ambígua entre **contrato** e **medição**. Três
+opções registradas, nenhuma escolhida por mim; a terceira é a `Q-021` do `PRD` §11
+e tem dimensão fiscal, que entrou na `PAUTA-contador.md` §10.
+
+**Nota:** o `GERACAO-01` fica mais pesado com isso. O dev confirmou que o CRM **não
+distingue "não gerou" de "não foi lançado"** — então o segundo invariante, se for
+escolhido, precisa decidir o que fazer com ausência de série antes de poder
+comparar consumo com geração.
