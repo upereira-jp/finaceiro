@@ -1,9 +1,28 @@
-// O motor do ciclo. SPEC-002 §4 e §4.3.
+// O motor do ciclo. SPEC-002 §4, §4.3 e R13.
 //
-// Roda DENTRO de withTenant (R12, invariante 6): o conector nao tem caminho
-// privilegiado, porque excecao de isolamento e ausencia de isolamento. Se ele
-// pudesse ler sem contexto, a policy nao valeria para ele e a garantia inteira
+// Roda DENTRO de contexto de tenant (R12, invariante 6): o conector nao tem
+// caminho privilegiado, porque excecao de isolamento e ausencia de isolamento. Se
+// ele pudesse ler sem contexto, a policy nao valeria para ele e a garantia inteira
 // passaria a depender deste arquivo estar certo.
+//
+// O QUE MUDOU EM 27/07, E POR QUE E INVERSAO E NAO AJUSTE (Q-LOTE-01).
+//
+// A primeira versao rodava DENTRO de um withTenant do chamador: o ciclo inteiro
+// numa transacao. Passou em 25 verificacoes com fixture de duas linhas e morreu no
+// primeiro ciclo real, com P2028 aos 15.330 ms - 41 clientes, ~5 idas ao banco por
+// cliente, ~205 viagens ate sa-east-1. A causa e LATENCIA, nao CPU, e por isso
+// nenhum teste de logica a pegaria.
+//
+// A R13 sempre disse o que fazer: "um ciclo e uma unidade de trabalho POR LOTE,
+// nao uma transacao gigante nem uma transacao por linha". Cumprir isso exige que o
+// motor ABRA as transacoes, e nao seja passageiro de uma. Dai a inversao: o
+// `AbrirLote` e injetado, pela mesma razao que a `PortaDeLeitura` e - o motor nao
+// conhece `pg`, nao conhece o PrismaClient e nao emite contexto de tenant. Quem
+// emite continua sendo `src/db/contexto.ts`, ponto unico, uma vez por lote.
+//
+// NAO FOI CONTORNADO SUBINDO O TIMEOUT. O criterio §8 e "ciclo com 1.000 linhas
+// nao estoura o timeout de 15 s", e afrouxar o limite para caber 48 linhas
+// entregaria um conector que quebra no primeiro mes de crescimento.
 //
 // A PORTA DE LEITURA E INJETADA, e nao e conveniencia de teste - e o que torna
 // as invariantes 1 e 2 verificaveis. O motor nao conhece `pg`, nao monta SQL e
@@ -12,22 +31,83 @@
 // enxerga as oito views.
 
 import { dbt } from '../db/tipado.ts';
-import { tenantCorrente, exigir } from '../db/contexto.ts';
+import { tenantCorrente, exigir, dentroDeUnidadeDeTrabalho } from '../db/contexto.ts';
 import type {
-  VendaGanha, LeadArquivado, LeadMerge, ResultadoDeLeitura,
+  VendaGanha, LeadArquivado, LeadMerge, UsinaDoCrm, GeracaoMensal, ResultadoDeLeitura,
 } from './leitura.ts';
 
-/** O que o ciclo precisa do CRM. Deliberadamente menor que `LeitorCrm`. */
+/**
+ * O que o ciclo precisa do CRM. Deliberadamente menor que `LeitorCrm`.
+ *
+ * Cinco das oito views. As tres que faltam - `rateio_clientes`, `rateio_creditos`
+ * e `parceiros` - alimentariam `unidade_consumidora`, e ela esta BLOQUEADA por
+ * medicao, nao por preguica: a UC pendura em `cliente`, e dos 36 `lead_id` do
+ * rateio ZERO aparecem em `vendas_ganhas`, enquanto por nome os dois conjuntos
+ * coincidem em 24 pessoas. Espelhar UC hoje criaria 24 clientes duplicados que o
+ * dedup da R4 nao pega, porque os `lead_id` sao genuinamente diferentes. Ver
+ * `F-01 (medida)` e `Q-ESCOPO-01` em QUESTOES.md.
+ */
 export type PortaDeLeitura = {
   crmTenantId: string;
   vendasGanhas():    Promise<ResultadoDeLeitura<VendaGanha>>;
   leadsArquivados(): Promise<ResultadoDeLeitura<LeadArquivado>>;
   leadMerges():      Promise<ResultadoDeLeitura<LeadMerge>>;
+  usinas():          Promise<ResultadoDeLeitura<UsinaDoCrm>>;
+  geracaoMensal():   Promise<ResultadoDeLeitura<GeracaoMensal>>;
 };
+
+/**
+ * UMA transacao com contexto de tenant emitido, por chamada. R13.
+ *
+ * A unica implementacao de producao e `app.withTenant(...)` - ver
+ * `scripts/ciclo-crm.ts`. O motor nao sabe montar isto, e e proposital: um motor
+ * que soubesse abrir contexto seria um segundo emissor, e a SPEC-001 §3.2 existe
+ * para nao haver um segundo.
+ */
+export type AbrirLote = <T>(trabalho: () => Promise<T>) => Promise<T>;
+
+/**
+ * O tamanho declarado que a R13 pede. Nao e numero redondo por estetica.
+ *
+ * O que limita o lote e VIAGEM AO BANCO, nao linha. Com a leitura e a escrita em
+ * bloco (um `findMany` por tabela, um `createMany` por tabela), o custo de um
+ * lote nao cresce com o tamanho dele - EXCETO por uma viagem por cliente que
+ * REALMENTE mudou, porque cada um muda para um valor diferente e nao ha update em
+ * bloco possivel. E esse unico termo que fixa o numero.
+ *
+ * MEDIDO pelos N27, N29 e N30 (a extensao do Prisma conta toda operacao que sai
+ * para o banco, inclusive o `set_config` do contexto):
+ *
+ *   lote de 50, nada mudou ......  4 viagens
+ *   lote de 50, 50 criados ......  6 viagens
+ *   lote de 50, 50 atualizados .. 54 viagens   <- o pior caso
+ *
+ * A 75 ms por viagem - a latencia ate `sa-east-1` que a Q-LOTE-01 registrou, 15.330
+ * ms para ~205 viagens - o pior lote custa 4,05 s, com folga de 3,7x sobre o
+ * timeout de 15 s do pool transacional. Um lote de 200 daria ~15,3 s no mesmo pior
+ * caso, que e exatamente o penhasco em que a Q-LOTE-01 caiu.
+ */
+export const TAMANHO_DO_LOTE = 50;
 
 /** O funil cujo `won` NAO e venda. R14 e R15. */
 const FUNIL_PARCEIROS = 'Parceiros';
-/** Populacao volatil por desenho: some e volta a cada sync da G3. §4.3. */
+/**
+ * Populacao volatil por desenho: some e volta a cada sync da G3. §4.3.
+ *
+ * ATENCAO - ESTE TRATAMENTO ESTA SOB REVISAO (`Q-ATIVOS-01`, aberta em 27/07).
+ *
+ * Classificar este funil como "copia derivada" (nao desativa, nao conta) veio da
+ * resposta do dev em 26/07, e a medicao que a sustentou continua valida. Mas o
+ * dono esclareceu em 27/07 que `Clientes ativos` e o **destino projetado do ganho
+ * de rateio** - e a fonte de onde o financeiro deve puxar cliente ativo. Se isso
+ * se confirmar depois de o CRM corrigir o `stage_type` da etapa de ganho, este
+ * `continue` passa a IGNORAR exatamente a populacao que deveria ser lida.
+ *
+ * NAO FOI ALTERADO DE PROPOSITO: o funil esta vazio hoje, entao mudar agora seria
+ * implementar contra um estado futuro, sem teste possivel e desfazendo por
+ * deducao a classificacao que a medicao justificou. A regra 10 manda registrar e
+ * parar - ver `Q-ATIVOS-01`.
+ */
 const FUNIL_COPIA_DERIVADA = 'Clientes ativos - Assinatura';
 
 export class CicloJaEmAndamento extends Error {
@@ -46,7 +126,42 @@ export class ConectorInativo extends Error {
   }
 }
 
+/**
+ * A guarda da inversao. Chamar `executarCiclo` de dentro de um `withTenant` e o
+ * erro natural de quem conhecia a assinatura antiga - e o sintoma seria
+ * `ContextoAninhado` no primeiro lote, longe da causa. Aqui ele para na porta,
+ * com o motivo.
+ */
+export class CicloDentroDeTransacao extends Error {
+  constructor() {
+    super(
+      'executarCiclo() abre as PROPRIAS transacoes, uma por lote (SPEC-002 R13), e ' +
+      'nao pode ser chamado de dentro de withTenant(). Chame-o fora e passe o ' +
+      'abridor de lote: executarCiclo(porta, (t) => app.withTenant(sessao, tenantId, () => t())).'
+    );
+    this.name = 'CicloDentroDeTransacao';
+  }
+}
+
 export type Recusa = { lead_id: string; codigo: string; motivo: string };
+
+export type Entidade = 'cliente' | 'usina' | 'usina_geracao';
+export type ContagemDeEntidade = { lidos: number; criados: number; atualizados: number; recusados: number };
+
+/**
+ * Por que os contadores de `conector_execucao` continuam sendo UM conjunto e a
+ * quebra por entidade vai no `detalhe`.
+ *
+ * A alternativa era migration nova com cinco colunas por entidade. Nao vale: os
+ * contadores da tabela existem para a invariante 8 - "`recusados > 0` e visivel
+ * em tabela, nunca so em log" -, e essa pergunta ("alguem precisa olhar o CRM?")
+ * e respondida pelo TOTAL. Quem quer saber *o que* foi recusado ja precisa abrir
+ * o `detalhe`, onde o motivo de cada recusa esta desde a migration 14.
+ *
+ * O criterio da R3 tambem sobrevive inteiro: "segunda passada com 0 criados e 0
+ * atualizados" vale para a soma exatamente como valeria para cada parcela.
+ */
+const zerado = (): ContagemDeEntidade => ({ lidos: 0, criados: 0, atualizados: 0, recusados: 0 });
 
 export type ResultadoDoCiclo = {
   cicloId: string;
@@ -57,6 +172,18 @@ export type ResultadoDoCiclo = {
   /** Ausencias que exigem gente. §4.3, terceira classificacao. */
   filaDeRevisao: string[];
   garantiaDeTenantDegradada: boolean;
+  /** A quebra dos contadores por entidade. Vai para `conector_execucao.detalhe`. */
+  porEntidade: Record<Entidade, ContagemDeEntidade>;
+  /** R13 - quantas transacoes o ciclo abriu. Uma delas gigante e o defeito. */
+  transacoes: number;
+  /** Maior numero de leads que uma unica transacao carregou. Nunca > tamanho do lote. */
+  maiorLote: number;
+  /**
+   * `false` quando o fechamento nao encontrou a linha de `conector_execucao` -
+   * o que e o normal do ensaio, onde cada lote leva ROLLBACK e a linha de
+   * abertura nunca chegou a existir. Em modo valendo, `false` aqui e defeito.
+   */
+  execucaoGravada: boolean;
 };
 
 const texto = (v: string | null | undefined) => {
@@ -87,6 +214,16 @@ function mesmoDecimal(a: unknown, b: unknown): boolean {
     return t.includes('.') ? t.replace(/0+$/, '').replace(/\.$/, '') : t;
   };
   return n(a) === n(b);
+}
+
+/** Fatia em lotes de tamanho declarado. R13. */
+export function emLotes<T>(itens: readonly T[], tamanho: number): T[][] {
+  if (!Number.isInteger(tamanho) || tamanho < 1) {
+    throw new TypeError(`tamanho de lote invalido: ${JSON.stringify(tamanho)}`);
+  }
+  const out: T[][] = [];
+  for (let i = 0; i < itens.length; i += tamanho) out.push(itens.slice(i, i + tamanho));
+  return out;
 }
 
 /**
@@ -164,6 +301,42 @@ export function motivoDeRecusa(l: VendaGanha): string | null {
 export const ehCardDeParceiro = (l: VendaGanha) => l.funil === FUNIL_PARCEIROS;
 
 /**
+ * O que faz uma usina do CRM ser RECUSADA em vez de adivinhada.
+ *
+ * NAO E REGRA NOVA - e o invariante 7 aplicado a outra entidade: "ambiguidade e
+ * valor nulo produzem recusa contada, nunca valor gravado". Decisao do dono em
+ * 27/07, depois da medicao.
+ *
+ * O CASO QUE MOTIVOU, e ele e 3 de 3: as tres usinas do CRM vem com
+ * `distribuidora = ''` - string vazia, `length = 0`, nao NULL. Do nosso lado a
+ * coluna e NOT NULL com FK para a tabela de referencia, que hoje tem UMA linha
+ * (`Equatorial`). Assumir `Equatorial` porque e a unica seria o mesmo formato do
+ * erro que a `Q-VALOR-01` pegou: um default que parecia razoavel. Recusar custa
+ * tres linhas em `conector_execucao.recusados` - e foi exatamente essa contagem
+ * que fez o dev do CRM corrigir as views no mesmo dia.
+ *
+ * A distribuidora tambem e conferida contra a tabela de referencia, e isso nao e
+ * zelo: sem a conferencia, um nome fora da lista viraria `23503` no meio do lote
+ * e derrubaria o lote inteiro, transformando um dado ruim de UMA usina em falha
+ * de todas. Recusa nomeada e melhor que erro de integridade.
+ */
+export function motivoDeRecusaDeUsina(
+  u: UsinaDoCrm, distribuidorasCadastradas: ReadonlySet<string>,
+): string | null {
+  const codigo = texto(u.codigo_geradora);
+  if (!codigo) return 'usina sem codigo_geradora - e a chave de negocio do espelho';
+
+  const distribuidora = texto(u.distribuidora);
+  if (!distribuidora) {
+    return `usina ${codigo}: distribuidora vazia no CRM, e a coluna e obrigatoria no financeiro`;
+  }
+  if (!distribuidorasCadastradas.has(distribuidora)) {
+    return `usina ${codigo}: distribuidora "${distribuidora}" nao esta cadastrada no financeiro`;
+  }
+  return null;
+}
+
+/**
  * §4.3 - a classificacao da ausencia, e A ORDEM IMPORTA (R18).
  *
  * `lead_merges` PRIMEIRO, `leads_arquivados` depois, funil por ultimo. Vitima de
@@ -196,70 +369,172 @@ export function classificarAusencia(
 
 // --------------------------------------------------------------- o ciclo
 
-export async function executarCiclo(porta: PortaDeLeitura): Promise<ResultadoDoCiclo> {
-  await exigir('administrar');
-  const db = dbt();
-  const tenantId = tenantCorrente();
+export type OpcoesDoCiclo = {
+  /** R13, lote declarado. O default e `TAMANHO_DO_LOTE`; o teste usa outros. */
+  tamanhoDoLote?: number;
+};
 
-  const conector = await db.conector_crm.findFirst({ where: { tenant_id: tenantId } });
-  if (!conector) throw new ConectorInativo('nenhum conector cadastrado para este tenant');
-  if (!conector.ativo) throw new ConectorInativo('conector marcado como inativo');
-  if (!conector.credencial_ref) throw new ConectorInativo('credencial_ref vazia (SPEC-001 R5)');
-
-  // Regra 6, e e o ponto em que ela deixa de ser convenção: o identificador do
-  // CRM confere com o que o leitor foi construido para exigir. Se divergir, a
-  // porta esta apontada para outro tenant do CRM.
-  if (porta.crmTenantId !== conector.crm_tenant_id) {
-    throw new ConectorInativo(
-      `a porta de leitura esta em crm_tenant_id ${porta.crmTenantId} e o conector espera ${conector.crm_tenant_id}`
-    );
-  }
-
-  const cicloId = crypto.randomUUID();
-  let execucao;
-  try {
-    execucao = await db.conector_execucao.create({
-      data: { tenant_id: tenantId, conector_id: conector.id, ciclo_id: cicloId },
-    });
-  } catch (e: any) {
-    // 23P01 do EXCLUDE da migration 14. O banco recusou o segundo ciclo, e a
-    // traducao para erro de negocio e o que impede isso de virar 500.
-    if (e?.code === 'P2010' || String(e?.meta?.code ?? e?.code) === '23P01') throw new CicloJaEmAndamento();
-    throw e;
-  }
+export async function executarCiclo(
+  porta: PortaDeLeitura,
+  abrirLote: AbrirLote,
+  opcoes: OpcoesDoCiclo = {},
+): Promise<ResultadoDoCiclo> {
+  if (dentroDeUnidadeDeTrabalho()) throw new CicloDentroDeTransacao();
+  const tamanho = opcoes.tamanhoDoLote ?? TAMANHO_DO_LOTE;
 
   const r: ResultadoDoCiclo = {
-    cicloId, status: 'ok', lidos: 0, criados: 0, atualizados: 0,
-    desativados: 0, recusados: 0, recusas: [], filaDeRevisao: [],
-    garantiaDeTenantDegradada: false,
+    cicloId: crypto.randomUUID(), status: 'ok',
+    lidos: 0, criados: 0, atualizados: 0, desativados: 0, recusados: 0,
+    recusas: [], filaDeRevisao: [], garantiaDeTenantDegradada: false,
+    porEntidade: { cliente: zerado(), usina: zerado(), usina_geracao: zerado() },
+    transacoes: 0, maiorLote: 0, execucaoGravada: false,
+  };
+
+  /** Toda transacao do ciclo passa por aqui, e por isso `transacoes` e confiavel. */
+  const lote = <T>(trabalho: () => Promise<T>): Promise<T> => {
+    r.transacoes++;
+    return abrirLote(trabalho);
+  };
+
+  // ---------------------------------------------------- transacao 1: abertura
+  //
+  // Curta de proposito: papel, conferencias e a linha de `conector_execucao`. E
+  // ela que COMMITA o `em_andamento`, e so depois disso o EXCLUDE da migration
+  // 14 passa a valer de verdade contra um segundo ciclo concorrente - na versao
+  // de transacao unica a linha nascia e morria dentro da mesma transacao, e a
+  // §7 ("o segundo nao inicia") era letra morta fora de um teste.
+  const execucaoId = crypto.randomUUID();
+  const abertura = await lote(async () => {
+    await exigir('administrar');
+    const db = dbt();
+    const tenantId = tenantCorrente();
+
+    const conector = await db.conector_crm.findFirst({ where: { tenant_id: tenantId } });
+    if (!conector) throw new ConectorInativo('nenhum conector cadastrado para este tenant');
+    if (!conector.ativo) throw new ConectorInativo('conector marcado como inativo');
+    if (!conector.credencial_ref) throw new ConectorInativo('credencial_ref vazia (SPEC-001 R5)');
+
+    // Regra 6, e e o ponto em que ela deixa de ser convenção: o identificador do
+    // CRM confere com o que o leitor foi construido para exigir. Se divergir, a
+    // porta esta apontada para outro tenant do CRM.
+    if (porta.crmTenantId !== conector.crm_tenant_id) {
+      throw new ConectorInativo(
+        `a porta de leitura esta em crm_tenant_id ${porta.crmTenantId} e o conector espera ${conector.crm_tenant_id}`
+      );
+    }
+
+    try {
+      await db.conector_execucao.create({
+        data: { id: execucaoId, tenant_id: tenantId, conector_id: conector.id, ciclo_id: r.cicloId },
+      });
+    } catch (e: any) {
+      // 23P01 do EXCLUDE da migration 14. O banco recusou o segundo ciclo, e a
+      // traducao para erro de negocio e o que impede isso de virar 500.
+      if (e?.code === 'P2010' || String(e?.meta?.code ?? e?.code) === '23P01') throw new CicloJaEmAndamento();
+      throw e;
+    }
+    return { tenantId, conectorId: conector.id };
+  });
+
+  const { tenantId, conectorId } = abertura;
+
+  /** Contadores ao fim de CADA lote. R13, e e o que sobrevive a um ciclo que morre. */
+  const gravarContadores = async () => {
+    await dbt().conector_execucao.updateMany({
+      where: { tenant_id: tenantId, id: execucaoId },
+      data: {
+        lidos: r.lidos, criados: r.criados, atualizados: r.atualizados,
+        desativados: r.desativados, recusados: r.recusados,
+      },
+    });
   };
 
   const fechar = async (detalhe: Record<string, unknown>) => {
-    await db.conector_execucao.update({
-      where: { id: execucao.id },
-      data: {
-        terminado_em: new Date(), status: r.status,
-        lidos: r.lidos, criados: r.criados, atualizados: r.atualizados,
-        desativados: r.desativados, recusados: r.recusados,
-        detalhe: detalhe as any,
-      },
-    });
-    await db.conector_crm.update({
-      where: { id: conector.id },
-      data: {
-        ultimo_ciclo_id: cicloId,
-        ultima_leitura_em: new Date(),
-        ultimo_status: r.status === 'ok' ? 'ok' : 'erro',
-        ultima_execucao_em: new Date(),
-        ultimo_erro: r.status === 'ok' ? null : (detalhe.erro as string ?? 'ciclo nao concluiu'),
-      },
+    await lote(async () => {
+      const db = dbt();
+      const n = await db.conector_execucao.updateMany({
+        where: { tenant_id: tenantId, id: execucaoId },
+        data: {
+          terminado_em: new Date(), status: r.status,
+          lidos: r.lidos, criados: r.criados, atualizados: r.atualizados,
+          desativados: r.desativados, recusados: r.recusados,
+          detalhe: detalhe as any,
+        },
+      });
+      r.execucaoGravada = n.count > 0;
+      await db.conector_crm.updateMany({
+        where: { tenant_id: tenantId, id: conectorId },
+        data: {
+          ultimo_ciclo_id: r.cicloId,
+          ultima_leitura_em: new Date(),
+          ultimo_status: r.status === 'ok' ? 'ok' : 'erro',
+          ultima_execucao_em: new Date(),
+          /*
+           * `conector_status` so tem ok|erro|nunca_executou, entao 'parcial' cai em
+           * 'erro' - e a mensagem tinha que parar de dizer "ciclo nao concluiu",
+           * porque um ciclo parcial CONCLUIU: ele recusou linhas e registrou o
+           * motivo. A distincao deixou de ser teorica em 27/07, quando o espelho de
+           * usina entrou: com as 3 usinas sem distribuidora no CRM, TODO ciclo passa
+           * a ser parcial ate o dev corrigir, e "nao concluiu" mandaria procurar uma
+           * falha que nao existe.
+           */
+          ultimo_erro: r.status === 'ok' ? null
+            : (detalhe.erro as string
+               ?? `ciclo concluiu PARCIAL: ${r.recusados} recusa(s) e ${r.filaDeRevisao.length} em fila de revisao. `
+                  + 'O motivo de cada uma esta em conector_execucao.detalhe.'),
+        },
+      });
     });
     return r;
   };
 
+  try {
+    return await processar(porta, r, tenantId, tamanho, lote, gravarContadores, fechar);
+  } catch (e: any) {
+    /*
+     * §7, linha "ciclo morre no meio": o que ja foi processado esta COMMITADO por
+     * lote, e o registro tem que dizer isso. Fechar aqui e o que impede a linha
+     * de ficar `em_andamento` para sempre - e o EXCLUDE da migration 14 travaria
+     * o conector no proximo ciclo, permanentemente.
+     *
+     * O erro original e RELANCADO: fechar o registro nao e tratar a falha. Se o
+     * proprio fechamento falhar, o erro do fechamento nao pode esconder o
+     * primeiro - dai o catch aninhado.
+     */
+    const houveTrabalho = r.criados + r.atualizados + r.desativados > 0;
+    r.status = houveTrabalho ? 'parcial' : 'erro';
+    try {
+      await fechar({
+        erro: `ciclo interrompido: ${e?.name ?? 'Error'}: ${e?.message ?? String(e)}`,
+        recusas: r.recusas,
+        fila_de_revisao: r.filaDeRevisao,
+        commitado_por_lote: houveTrabalho,
+        garantia_de_tenant_degradada: r.garantiaDeTenantDegradada,
+      });
+    } catch (aoFechar: any) {
+      e.aoFechar = aoFechar;
+    }
+    throw e;
+  }
+}
+
+async function processar(
+  porta: PortaDeLeitura,
+  r: ResultadoDoCiclo,
+  tenantId: string,
+  tamanho: number,
+  lote: AbrirLote,
+  gravarContadores: () => Promise<void>,
+  fechar: (detalhe: Record<string, unknown>) => Promise<ResultadoDoCiclo>,
+): Promise<ResultadoDoCiclo> {
+  // A leitura do CRM acontece FORA de transacao nossa, de proposito: e rede para
+  // outro banco, e segurar a nossa conexao enquanto ela corre e o desperdicio que
+  // a Q-LOTE-01 pagou. O pool transacional tem teto; conexao presa em espera de
+  // rede alheia e conexao que falta para o resto do sistema.
   const vendas = await porta.vendasGanhas();
   r.garantiaDeTenantDegradada = vendas.garantiaDegradada;
   r.lidos = vendas.linhas.length;
+  r.porEntidade.cliente.lidos = vendas.linhas.length;
 
   /*
    * §7 - VIEW VAZIA NAO RECONCILIA, e este e o teste que impede o conector de
@@ -281,36 +556,55 @@ export async function executarCiclo(porta: PortaDeLeitura): Promise<ResultadoDoC
   // R4 - dedup ANTES do upsert.
   const unicos = deduplicarPorLead(vendas.linhas);
 
+  // A triagem e em memoria e nao custa viagem: separa o que vira cadastro do que
+  // e recusa (R8/R9) e do que e card de Parceiros (R14/R15). So o primeiro grupo
+  // entra em lote - recusa e card de parceiro nao tocam o banco.
   const vistosNoCrm = new Set<string>();
+  const aEspelhar: VendaGanha[] = [];
   for (const l of unicos) {
     vistosNoCrm.add(l.lead_id);
-
-    // R14/R15: card de Parceiros nao entra na base de valor e nao tem
-    // `comissionamento` lido. Nao e recusa - e outra natureza de card.
     if (ehCardDeParceiro(l)) continue;
-
     const motivo = motivoDeRecusa(l);
     if (motivo) {
       r.recusados++;
+      r.porEntidade.cliente.recusados++;
       r.recusas.push({ lead_id: l.lead_id, codigo: l.codigo, motivo });
       continue;   // R8/R9: sem valor gravado, nunca palpite
     }
-
-    const efeito = await espelharCliente(l, tenantId);
-    if (efeito === 'criado') r.criados++;
-    else if (efeito === 'atualizado') r.atualizados++;
+    aEspelhar.push(l);
   }
 
+  // ------------------------------------------------- os lotes de cadastro (R13)
+  for (const bloco of emLotes(aEspelhar, tamanho)) {
+    r.maiorLote = Math.max(r.maiorLote, bloco.length);
+    await lote(async () => {
+      await espelharLote(bloco, tenantId, r);
+      await gravarContadores();
+    });
+  }
+
+  // --------------------------------------- usina e usina_geracao (§2 "Entra")
+  //
+  // A ORDEM E OBRIGATORIA: `usina_geracao` tem FK composta para `usina`, entao a
+  // usina precisa estar COMMITADA antes. Nao e preferencia - com os dois no mesmo
+  // lote, uma geracao de usina recusada derrubaria o lote inteiro com 23503.
+  await espelharUsinas(porta, r, tenantId, tamanho, lote, gravarContadores);
+  await espelharGeracao(porta, r, tenantId, tamanho, lote, gravarContadores);
+
   // ------------------------------------------------- reconciliacao (§4.3)
+  // Outra leitura fora de transacao, pelo mesmo motivo.
   const [merges, arquivados] = await Promise.all([porta.leadMerges(), porta.leadsArquivados()]);
   const mapaMerge = new Map(merges.linhas.map((m) => [m.vitima_id, m.sobrevivente_id]));
   const mapaArq   = new Map(arquivados.linhas.map((a) => [a.lead_id, a]));
 
-  const espelhados = await db.cliente.findMany({
-    where: { tenant_id: tenantId, crm_lead_id: { not: null }, ativo: true },
-    select: { id: true, crm_lead_id: true },
-  });
+  const espelhados: { id: string; crm_lead_id: string | null }[] = await lote(async () =>
+    dbt().cliente.findMany({
+      where: { tenant_id: tenantId, crm_lead_id: { not: null }, ativo: true },
+      select: { id: true, crm_lead_id: true },
+    }));
 
+  type Ausente = { clienteId: string; leadId: string; sobreviventeLead?: string };
+  const aDesativar: Ausente[] = [];
   for (const c of espelhados) {
     const leadId = c.crm_lead_id!;
     if (vistosNoCrm.has(leadId)) continue;
@@ -319,13 +613,19 @@ export async function executarCiclo(porta: PortaDeLeitura): Promise<ResultadoDoC
     if (cls.classe === 'copia_derivada') continue;      // nao desativa e nao conta
     if (cls.classe === 'sumiu') { r.filaDeRevisao.push(leadId); continue; }
 
-    if (cls.classe === 'mesclado') {
-      await fundirEspelho(c.id, leadId, cls.sobreviventeId, tenantId);
-    }
-    // R6 - NUNCA deleta. Ausencia explicada vira ativo = false, e e reversivel:
-    // se o id voltar a aparecer, o upsert reativa.
-    await db.cliente.update({ where: { id: c.id }, data: { ativo: false } });
-    r.desativados++;
+    aDesativar.push({
+      clienteId: c.id, leadId,
+      sobreviventeLead: cls.classe === 'mesclado' ? cls.sobreviventeId : undefined,
+    });
+  }
+
+  for (const bloco of emLotes(aDesativar, tamanho)) {
+    r.maiorLote = Math.max(r.maiorLote, bloco.length);
+    await lote(async () => {
+      await desativarLote(bloco, tenantId);
+      r.desativados += bloco.length;
+      await gravarContadores();
+    });
   }
 
   if (r.recusados > 0 || r.filaDeRevisao.length > 0) r.status = 'parcial';
@@ -333,6 +633,8 @@ export async function executarCiclo(porta: PortaDeLeitura): Promise<ResultadoDoC
   return fechar({
     recusas: r.recusas,
     fila_de_revisao: r.filaDeRevisao,
+    lotes: { tamanho, transacoes: r.transacoes, maior_lote: r.maiorLote },
+    por_entidade: r.porEntidade,
     garantia_de_tenant_degradada: r.garantiaDeTenantDegradada,
     ...(r.garantiaDeTenantDegradada ? {
       nota: 'Nenhuma view do CRM expoe coluna de tenant: a validacao por linha da ' +
@@ -354,47 +656,263 @@ export async function executarCiclo(porta: PortaDeLeitura): Promise<ResultadoDoC
  * `documento` fica de fora de proposito - o CRM e semente, e sobrescrever
  * documento validado localmente com o do CRM seria o conector vencendo campo
  * local.
+ *
+ * POR QUE EM BLOCO, e nao um cliente por vez (Q-LOTE-01). A versao anterior
+ * gastava 5 viagens por cliente - `findFirst`, `create`, `findFirst` de novo
+ * dentro de `escreverEstadoCrm`, `findFirst` do estado, `create` do estado - e a
+ * terceira era pura ineficiencia: `escreverEstadoCrm` reconsultava o cliente por
+ * `crm_lead_id` com o `id` ja em maos. Aqui sao DUAS leituras e ate QUATRO
+ * escritas por lote inteiro, mais uma viagem por cliente que realmente mudou.
+ * O `id` e gerado aqui, do nosso lado, exatamente para que `createMany` sirva:
+ * sem ele nao ha como saber os ids recem-criados sem uma releitura.
  */
-async function espelharCliente(l: VendaGanha, tenantId: string): Promise<'criado' | 'atualizado' | 'igual'> {
+async function espelharLote(
+  bloco: VendaGanha[], tenantId: string, r: ResultadoDoCiclo,
+): Promise<void> {
   const db = dbt();
-  const espelho = {
-    nome: l.nome,
-    telefone: texto(l.telefone),
-    email: texto(l.email),
-    origem: texto(l.funil),
-    consumo_kwh: l.consumo_kwh,   // string: Decimal nunca vira number (regra 1)
-  };
+  const leadIds = bloco.map((l) => l.lead_id);
 
-  const atual = await db.cliente.findFirst({
-    where: { tenant_id: tenantId, crm_lead_id: l.lead_id },
-    select: { id: true, nome: true, telefone: true, email: true, origem: true,
-              consumo_kwh: true, ativo: true },
+  const atuais = await db.cliente.findMany({
+    where: { tenant_id: tenantId, crm_lead_id: { in: leadIds } },
+    select: { id: true, crm_lead_id: true, nome: true, telefone: true, email: true,
+              origem: true, consumo_kwh: true, ativo: true },
   });
+  const porLead = new Map(atuais.map((c) => [c.crm_lead_id!, c]));
 
-  if (!atual) {
-    await db.cliente.create({
-      data: { tenant_id: tenantId, crm_lead_id: l.lead_id, ...espelho },
-    });
-    await escreverEstadoCrm(l.lead_id, tenantId);
-    return 'criado';
+  const aCriar: any[] = [];
+  const aAtualizar: { id: string; espelho: Record<string, unknown> }[] = [];
+  const clientesDoLote: string[] = [];
+
+  for (const l of bloco) {
+    const espelho = {
+      nome: l.nome,
+      telefone: texto(l.telefone),
+      email: texto(l.email),
+      origem: texto(l.funil),
+      consumo_kwh: l.consumo_kwh,   // string: Decimal nunca vira number (regra 1)
+    };
+
+    const atual = porLead.get(l.lead_id);
+    if (!atual) {
+      const id = crypto.randomUUID();
+      aCriar.push({ id, tenant_id: tenantId, crm_lead_id: l.lead_id, ...espelho });
+      clientesDoLote.push(id);
+      continue;
+    }
+    clientesDoLote.push(atual.id);
+
+    const mudou =
+      atual.nome !== espelho.nome ||
+      atual.telefone !== espelho.telefone ||
+      atual.email !== espelho.email ||
+      atual.origem !== espelho.origem ||
+      !mesmoDecimal(atual.consumo_kwh, espelho.consumo_kwh) ||
+      atual.ativo !== true;   // reaparecer no CRM reativa (§4.3, ultima linha)
+
+    if (mudou) aAtualizar.push({ id: atual.id, espelho });
+    // senao: R3, zero escritas, inclusive timestamp
   }
 
-  const mudou =
-    atual.nome !== espelho.nome ||
-    atual.telefone !== espelho.telefone ||
-    atual.email !== espelho.email ||
-    atual.origem !== espelho.origem ||
-    !mesmoDecimal(atual.consumo_kwh, espelho.consumo_kwh) ||
-    atual.ativo !== true;   // reaparecer no CRM reativa (§4.3, ultima linha)
+  if (aCriar.length) await db.cliente.createMany({ data: aCriar });
+  for (const u of aAtualizar) {
+    // Uma viagem por cliente que mudou, e nao ha como evitar: cada um muda para
+    // um valor diferente. E o unico termo do custo que cresce com o lote, e o
+    // que fixa `TAMANHO_DO_LOTE`.
+    await db.cliente.updateMany({
+      where: { tenant_id: tenantId, id: u.id },
+      data: { ...u.espelho, ativo: true },
+    });
+  }
 
-  if (!mudou) return 'igual';   // R3: zero escritas, inclusive timestamp
+  r.criados += aCriar.length;
+  r.atualizados += aAtualizar.length;
+  r.porEntidade.cliente.criados += aCriar.length;
+  r.porEntidade.cliente.atualizados += aAtualizar.length;
 
-  await db.cliente.update({
-    where: { id: atual.id },
-    data: { ...espelho, ativo: true },
-  });
-  await escreverEstadoCrm(l.lead_id, tenantId);
-  return 'atualizado';
+  await garantirEstadoCrm(clientesDoLote, tenantId);
+}
+
+/**
+ * Espelho de `usina`. `SPEC-002` §2 "Entra", implementado em 27/07.
+ *
+ * A CHAVE E `codigo_geradora`, nao `crm_usina_id`, e a escolha e da regra 11:
+ * `usina_codigo_unico` e um indice unico CHEIO sobre `(tenant_id,
+ * codigo_geradora)`, enquanto `crm_usina_id` nao tem unicidade nenhuma. Navegar
+ * por uma coluna sem unique seria pedir para o espelho duplicar em silencio.
+ * `crm_usina_id` vai junto, como campo espelho, para a rastreabilidade.
+ *
+ * CAMPO ESPELHO x CAMPO LOCAL (`SPEC-001` §3.3), e a separacao aqui e por medicao:
+ *
+ *   espelho -> codigo_geradora, apelido, distribuidora, crm_usina_id,
+ *              geracao_nominal_kwh (de `geracao_kwh_mensal`), potencia_kwp, status
+ *   local   -> dono_usina_id, data_homologacao, regime_fio_b
+ *
+ * `dono_usina_id` fica LOCAL porque nao ha de onde vir: `dono_lead_codigo` e
+ * `dono_lead_nome` vieram 0 de 3 na medicao de 27/07 - e a `C1-crm` ja registrava
+ * que o par de funil `Vendas-Integracao -> Donos de Usina` nao existe. Espelhar
+ * um campo que a origem nao tem e como o `potencia_kwp` viria: nulo, mas com a
+ * aparencia de que alguem cuidou dele.
+ */
+async function espelharUsinas(
+  porta: PortaDeLeitura, r: ResultadoDoCiclo, tenantId: string, tamanho: number,
+  lote: AbrirLote, gravarContadores: () => Promise<void>,
+): Promise<void> {
+  const usinas = await porta.usinas();
+  if (usinas.garantiaDegradada) r.garantiaDeTenantDegradada = true;
+  r.lidos += usinas.linhas.length;
+  r.porEntidade.usina.lidos = usinas.linhas.length;
+  if (usinas.linhas.length === 0) return;   // §7 nao se aplica: usina nao reconcilia
+
+  // A lista de referencia sai numa viagem, uma vez por ciclo - e nao por usina.
+  const cadastradas = new Set<string>(await lote(async () =>
+    (await dbt().distribuidora.findMany({ select: { nome: true } })).map((d) => d.nome)));
+
+  const boas: UsinaDoCrm[] = [];
+  for (const u of usinas.linhas) {
+    const motivo = motivoDeRecusaDeUsina(u, cadastradas);
+    if (motivo) {
+      r.recusados++;
+      r.porEntidade.usina.recusados++;
+      r.recusas.push({ lead_id: u.usina_id, codigo: texto(u.codigo_geradora) ?? '(sem codigo)', motivo });
+      continue;
+    }
+    boas.push(u);
+  }
+
+  for (const bloco of emLotes(boas, tamanho)) {
+    r.maiorLote = Math.max(r.maiorLote, bloco.length);
+    await lote(async () => {
+      const db = dbt();
+      const codigos = bloco.map((u) => texto(u.codigo_geradora)!);
+      const atuais = await db.usina.findMany({
+        where: { tenant_id: tenantId, codigo_geradora: { in: codigos } },
+        select: { id: true, codigo_geradora: true, apelido: true, distribuidora: true,
+                  potencia_kwp: true, geracao_nominal_kwh: true, crm_usina_id: true, status: true },
+      });
+      const porCodigo = new Map(atuais.map((u) => [u.codigo_geradora, u]));
+
+      const aCriar: any[] = [];
+      for (const u of bloco) {
+        const codigo = texto(u.codigo_geradora)!;
+        const espelho = {
+          apelido: texto(u.apelido),
+          distribuidora: texto(u.distribuidora)!,
+          potencia_kwp: u.potencia_kwp,               // string|null: Decimal nunca vira number
+          geracao_nominal_kwh: u.geracao_kwh_mensal,  // idem
+          crm_usina_id: u.usina_id,
+          status: (u.status === 'suspensa' || u.status === 'encerrada' ? u.status : 'ativa') as any,
+        };
+        const atual = porCodigo.get(codigo);
+        if (!atual) { aCriar.push({ tenant_id: tenantId, codigo_geradora: codigo, ...espelho }); continue; }
+
+        const mudou =
+          atual.apelido !== espelho.apelido ||
+          atual.distribuidora !== espelho.distribuidora ||
+          !mesmoDecimal(atual.potencia_kwp, espelho.potencia_kwp) ||
+          !mesmoDecimal(atual.geracao_nominal_kwh, espelho.geracao_nominal_kwh) ||
+          atual.crm_usina_id !== espelho.crm_usina_id ||
+          atual.status !== espelho.status;
+        if (!mudou) continue;   // R3: zero escritas
+
+        await db.usina.updateMany({ where: { tenant_id: tenantId, id: atual.id }, data: espelho });
+        r.atualizados++; r.porEntidade.usina.atualizados++;
+      }
+      if (aCriar.length) {
+        await db.usina.createMany({ data: aCriar });
+        r.criados += aCriar.length; r.porEntidade.usina.criados += aCriar.length;
+      }
+      await gravarContadores();
+    });
+  }
+}
+
+/**
+ * Espelho de `usina_geracao`. `SPEC-002` §2 "Entra".
+ *
+ * `origem` nasce `'crm'` - o enum ja previa os dois valores, entao nao houve
+ * decisao a tomar aqui. E o que separa a serie que veio do CRM da que alguem
+ * digitou, que e a diferenca que a F2 vai precisar para conferir fatura.
+ *
+ * GERACAO DE USINA NAO ESPELHADA E RECUSA CONTADA, nao erro. Hoje isso e o caso
+ * NORMAL e nao a excecao: as 3 usinas sao recusadas por distribuidora vazia,
+ * entao as 8 linhas de geracao nao tem onde pousar. Gravar sem a usina e
+ * impossivel (FK composta), e engolir em silencio esconderia justamente o efeito
+ * em cascata da recusa anterior.
+ */
+async function espelharGeracao(
+  porta: PortaDeLeitura, r: ResultadoDoCiclo, tenantId: string, tamanho: number,
+  lote: AbrirLote, gravarContadores: () => Promise<void>,
+): Promise<void> {
+  const geracao = await porta.geracaoMensal();
+  if (geracao.garantiaDegradada) r.garantiaDeTenantDegradada = true;
+  r.lidos += geracao.linhas.length;
+  r.porEntidade.usina_geracao.lidos = geracao.linhas.length;
+  if (geracao.linhas.length === 0) return;
+
+  const codigos = [...new Set(geracao.linhas.map((g) => texto(g.codigo_geradora)).filter(Boolean) as string[])];
+  const usinas: { id: string; codigo_geradora: string }[] = codigos.length === 0 ? [] : await lote(async () =>
+    dbt().usina.findMany({
+      where: { tenant_id: tenantId, codigo_geradora: { in: codigos } },
+      select: { id: true, codigo_geradora: true },
+    }));
+  const porCodigo = new Map(usinas.map((u) => [u.codigo_geradora, u.id]));
+
+  const boas: { usinaId: string; competencia: Date; geracao_kwh: string }[] = [];
+  for (const g of geracao.linhas) {
+    const codigo = texto(g.codigo_geradora);
+    const usinaId = codigo ? porCodigo.get(codigo) : undefined;
+    if (!usinaId) {
+      r.recusados++;
+      r.porEntidade.usina_geracao.recusados++;
+      r.recusas.push({
+        lead_id: g.usina_id, codigo: codigo ?? '(sem codigo)',
+        motivo: `geracao de ${g.competencia instanceof Date ? g.competencia.toISOString().slice(0, 10) : g.competencia}: ` +
+                `a usina ${codigo ?? '(sem codigo)'} nao esta espelhada no financeiro`,
+      });
+      continue;
+    }
+    if (g.geracao_kwh == null) {
+      r.recusados++;
+      r.porEntidade.usina_geracao.recusados++;
+      r.recusas.push({ lead_id: g.usina_id, codigo: codigo!, motivo: 'geracao_kwh nula - valor nulo nao e zero (R9)' });
+      continue;
+    }
+    boas.push({ usinaId, competencia: new Date(g.competencia), geracao_kwh: g.geracao_kwh });   // nao-nulo: a recusa acima garante
+  }
+
+  for (const bloco of emLotes(boas, tamanho)) {
+    r.maiorLote = Math.max(r.maiorLote, bloco.length);
+    await lote(async () => {
+      const db = dbt();
+      const atuais = await db.usina_geracao.findMany({
+        where: { tenant_id: tenantId, usina_id: { in: bloco.map((b) => b.usinaId) } },
+        select: { id: true, usina_id: true, competencia: true, geracao_kwh: true },
+      });
+      const chave = (u: string, c: Date) => `${u}|${c.toISOString().slice(0, 10)}`;
+      const por = new Map(atuais.map((a) => [chave(a.usina_id, a.competencia), a]));
+
+      const aCriar: any[] = [];
+      for (const b of bloco) {
+        const atual = por.get(chave(b.usinaId, b.competencia));
+        if (!atual) {
+          aCriar.push({ tenant_id: tenantId, usina_id: b.usinaId, competencia: b.competencia,
+                        geracao_kwh: b.geracao_kwh, origem: 'crm' });
+          continue;
+        }
+        if (mesmoDecimal(atual.geracao_kwh, b.geracao_kwh)) continue;   // R3
+        await db.usina_geracao.updateMany({
+          where: { tenant_id: tenantId, id: atual.id },
+          data: { geracao_kwh: b.geracao_kwh, origem: 'crm' },
+        });
+        r.atualizados++; r.porEntidade.usina_geracao.atualizados++;
+      }
+      if (aCriar.length) {
+        await db.usina_geracao.createMany({ data: aCriar });
+        r.criados += aCriar.length; r.porEntidade.usina_geracao.criados += aCriar.length;
+      }
+      await gravarContadores();
+    });
+  }
 }
 
 /**
@@ -403,64 +921,84 @@ async function espelharCliente(l: VendaGanha, tenantId: string): Promise<'criado
  * `em_carteira` nasce e permanece NULL ate a decisao de F2: nenhuma etapa de
  * funil marca o cliente pagante hoje (F-01b), e inventar um default aqui seria
  * exatamente o improviso que a regra 10 proibe.
+ *
+ * CONVERGENTE, e essa e a diferenca para a versao anterior: antes o estado so era
+ * escrito quando o cliente era criado ou atualizado, entao um cliente cujo
+ * cadastro nao mudou e cujo estado faltava nunca ganhava um. Agora a pergunta e
+ * "existe e diz a verdade?", que e a pergunta certa - e continua idempotente,
+ * porque na segunda passada tudo existe e nada e escrito. `sincronizado_em`
+ * acompanha a MUDANCA, nao o ciclo: senao toda passada "atualizaria" a linha.
  */
-async function escreverEstadoCrm(leadId: string, tenantId: string): Promise<void> {
+async function garantirEstadoCrm(clienteIds: string[], tenantId: string): Promise<void> {
+  if (clienteIds.length === 0) return;
   const db = dbt();
-  const cliente = await db.cliente.findFirst({
-    where: { tenant_id: tenantId, crm_lead_id: leadId },
-    select: { id: true },
-  });
-  if (!cliente) return;
 
-  const atual = await db.cliente_estado_crm.findFirst({
-    where: { tenant_id: tenantId, cliente_id: cliente.id },
+  const existentes = await db.cliente_estado_crm.findMany({
+    where: { tenant_id: tenantId, cliente_id: { in: clienteIds } },
+    select: { cliente_id: true, tem_venda_ganha: true },
   });
+  const por = new Map(existentes.map((e) => [e.cliente_id, e]));
 
-  if (!atual) {
-    await db.cliente_estado_crm.create({
-      data: {
-        tenant_id: tenantId, cliente_id: cliente.id,
-        tem_venda_ganha: true, tem_rateio_ativo: null, em_carteira: null,
-        sincronizado_em: new Date(),
-      },
-    });
-    return;
-  }
-  // R3 outra vez: so mexe se o booleano mudou. `sincronizado_em` acompanha a
-  // mudanca, nao o ciclo - senao toda passada "atualizaria" a linha.
-  if (atual.tem_venda_ganha !== true) {
-    await db.cliente_estado_crm.update({
-      where: { cliente_id: cliente.id },
+  const aCriar = clienteIds
+    .filter((id) => !por.has(id))
+    .map((cliente_id) => ({
+      tenant_id: tenantId, cliente_id,
+      tem_venda_ganha: true, tem_rateio_ativo: null, em_carteira: null,
+      sincronizado_em: new Date(),
+    }));
+  const aMarcar = clienteIds.filter((id) => por.get(id)?.tem_venda_ganha === false
+                                         || por.get(id)?.tem_venda_ganha === null);
+
+  if (aCriar.length) await db.cliente_estado_crm.createMany({ data: aCriar });
+  if (aMarcar.length) {
+    await db.cliente_estado_crm.updateMany({
+      where: { tenant_id: tenantId, cliente_id: { in: aMarcar } },
       data: { tem_venda_ganha: true, sincronizado_em: new Date() },
     });
   }
 }
 
 /**
- * R18 - vitima de merge FUNDE, nao apenas desativa.
+ * R6 - NUNCA deleta. Ausencia explicada vira `ativo = false`, e e reversivel: se
+ * o id voltar a aparecer, o proximo ciclo reativa.
  *
- * Sem isto, contrato e UC do espelho da vitima ficam pendurados num cliente
- * inativo: o dado nao some, mas some do lugar onde alguem procuraria. A fusao
- * move os vinculos para o espelho do sobrevivente quando ele existe.
+ * R18 - vitima de merge FUNDE, nao apenas desativa. Sem isto, contrato e UC do
+ * espelho da vitima ficam pendurados num cliente inativo: o dado nao some, mas
+ * some do lugar onde alguem procuraria.
+ *
+ * Sobrevivente ainda nao espelhado: nao ha para onde mover. Desativa so, e o
+ * proximo ciclo funde - o mapa de merge nao expira.
  */
-async function fundirEspelho(
-  clienteVitimaId: string, _leadVitima: string, leadSobrevivente: string, tenantId: string,
+async function desativarLote(
+  bloco: { clienteId: string; leadId: string; sobreviventeLead?: string }[],
+  tenantId: string,
 ): Promise<void> {
   const db = dbt();
-  const sobrevivente = await db.cliente.findFirst({
-    where: { tenant_id: tenantId, crm_lead_id: leadSobrevivente },
-    select: { id: true },
-  });
-  // Sobrevivente ainda nao espelhado: nao ha para onde mover. Desativa so, e o
-  // proximo ciclo funde - o mapa de merge nao expira.
-  if (!sobrevivente) return;
 
-  await db.contrato.updateMany({
-    where: { tenant_id: tenantId, cliente_id: clienteVitimaId },
-    data: { cliente_id: sobrevivente.id },
-  });
-  await db.unidade_consumidora.updateMany({
-    where: { tenant_id: tenantId, cliente_id: clienteVitimaId },
-    data: { cliente_id: sobrevivente.id },
+  const vitimas = bloco.filter((a) => a.sobreviventeLead);
+  if (vitimas.length) {
+    const sobreviventes = await db.cliente.findMany({
+      where: { tenant_id: tenantId, crm_lead_id: { in: vitimas.map((v) => v.sobreviventeLead!) } },
+      select: { id: true, crm_lead_id: true },
+    });
+    const porLead = new Map(sobreviventes.map((c) => [c.crm_lead_id!, c.id]));
+
+    for (const v of vitimas) {
+      const destino = porLead.get(v.sobreviventeLead!);
+      if (!destino) continue;
+      await db.contrato.updateMany({
+        where: { tenant_id: tenantId, cliente_id: v.clienteId },
+        data: { cliente_id: destino },
+      });
+      await db.unidade_consumidora.updateMany({
+        where: { tenant_id: tenantId, cliente_id: v.clienteId },
+        data: { cliente_id: destino },
+      });
+    }
+  }
+
+  await db.cliente.updateMany({
+    where: { tenant_id: tenantId, id: { in: bloco.map((a) => a.clienteId) } },
+    data: { ativo: false },
   });
 }

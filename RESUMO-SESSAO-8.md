@@ -14,6 +14,18 @@
 > `LEIA-ME-retomada.md` pelo mesmo motivo. Se você veio para terminar a fase, vá
 > direto à §11.
 
+> ## ADENDO de 27/07, depois do fechamento acima — a `Q-LOTE-01` fechou
+>
+> **O corpo abaixo é registro datado e não foi reescrito** — ele descreve o estado
+> em que a sessão foi fechada, e reescrevê-lo falsificaria o registro (mesma
+> decisão do `PATCH-citacoes-2026-07-24.md`). O que mudou desde então está na
+> **§16**, e as três linhas de estado que ficariam ativamente erradas — §11 passo
+> 5, §12 e §14 — estão marcadas *in loco* com "**ATUALIZADO**".
+>
+> Em uma frase: **a R13 foi implementada em lotes, o `test_lote_respeita_timeout`
+> existe e a F1 não tem mais bloqueio vermelho.** O passo 5 está desbloqueado e
+> **não foi executado** — ele grava em produção e é decisão do dono.
+
 ---
 
 ## 1. O auth fechou, e as três perguntas foram respondidas
@@ -253,7 +265,7 @@ sessão anterior havia feito.
 | 2 — tenant, vínculo e conector | ✅ **feito**, com `COMMIT` |
 | 3 — `CRM_DATABASE_URL` | ✅ **feito** — conectou como `financeiro_ro` |
 | 4 — ciclo em ensaio | ✅ **rodou**, e achou a `Q-VALOR-01` e a `Q-LOTE-01` |
-| **5 — ciclo valendo, duas vezes** | 🔴 **BLOQUEADO pela `Q-LOTE-01`** |
+| **5 — ciclo valendo, duas vezes** | 🟢 **ATUALIZADO — desbloqueado.** A `Q-LOTE-01` fechou (§16). Não executado: grava em produção |
 | 6 — verificação final | ⏳ depois do 5 |
 
 ### Estado do banco de produção ao fim da sessão
@@ -339,7 +351,7 @@ critério de saída *sync idempotente*, não conferência extra.
 | Critério de saída (`PRD` §10) | Estado |
 |---|---|
 | `migrate reset` limpo | ✅ já fechado — 15 migrations em banco vazio a cada `npm test` |
-| sync idempotente | 🔴 **bloqueado pela `Q-LOTE-01`** — o ciclo não completa contra volume real |
+| sync idempotente | 🟡 **ATUALIZADO — desbloqueado.** Provado em 1.000 linhas pelo `N30`; falta rodar contra o CRM real (passo 5) |
 | escrita no CRM falha por permissão | ✅ já fechado — `N21` (guarda de arranque) e `N25` (sessão read-only) |
 
 **Duas coisas que não são critério de saída, e o dono decide se seguram a fase:**
@@ -370,8 +382,8 @@ critério de saída *sync idempotente*, não conferência extra.
 
 | Item | Estado | Dono |
 |---|---|---|
-| **`Q-LOTE-01`** — R13 não implementada, ciclo estoura o `timeout` | 🔴 **bloqueia a F1. É o primeiro trabalho da próxima sessão** | — |
-| Passo 5 da §11 — ciclo valendo, duas vezes | 🔴 depende da `Q-LOTE-01` | Vinicius |
+| ~~**`Q-LOTE-01`** — R13 não implementada~~ | ✅ **ATUALIZADO — fechada em 27/07.** Lotes com transação própria, `N26`–`N31`, três plantios. Ver §16 | — |
+| Passo 5 da §11 — ciclo valendo, duas vezes | 🟡 **ATUALIZADO — desbloqueado**, aguardando o dono | Vinicius |
 | `Q-VALOR-01` — redação de R9/R14 na `SPEC-002` e o `consumo_referencia_centavos` | 🟡 decidida e implementada; falta o texto da spec | Vinicius |
 | ~~Rotação da `service_role`~~ | ✅ feita em 27/07 | — |
 | `Q-FASE-01` — conector é F1 ou F2 | 🟡 | Vinicius |
@@ -427,3 +439,414 @@ em revisão de PR.
 **O que se manteve:** toda prova de escrita em `BEGIN … ROLLBACK`, e todo teste
 novo verificado nos dois sentidos — passa contra o código correto e **acusa contra
 a violação plantada**. Um invariante que só sabe passar não é invariante.
+
+---
+
+## 16. ADENDO — a `Q-LOTE-01`, fechada em 27/07
+
+> Escrito depois do fechamento do corpo acima, na continuação da mesma sessão. O
+> corpo não foi reescrito; só a §11 passo 5, a §12 e a §14 ganharam marca de
+> **ATUALIZADO** nas linhas que ficariam ativamente erradas.
+
+### O que mudou é uma inversão, não um ajuste
+
+A R13 sempre disse o que fazer — *"um ciclo é uma unidade de trabalho por **lote**,
+não uma transação gigante nem uma transação por linha"*. Cumprir isso exige que o
+motor **abra** as transações, e não seja passageiro de uma. `executarCiclo()`
+rodava dentro de um `withTenant` do chamador; agora recebe um `AbrirLote`
+injetado, **pela mesma razão que já recebia a `PortaDeLeitura`**: o motor não
+conhece `pg`, não conhece o `PrismaClient` e não emite contexto de tenant. Quem
+emite continua sendo `src/db/contexto.ts`, ponto único, **uma vez por lote**.
+
+A forma do ciclo passou a ser: abertura (papel, conferências, linha de
+`conector_execucao`) → lotes de cadastro → reconciliação → fechamento. **A leitura
+do CRM saiu de dentro da transação** — era rede para outro banco segurando conexão
+do nosso pool, que tem teto.
+
+### O tamanho do lote é 50, e o número saiu de medição
+
+O que limita o lote é **viagem ao banco**, não linha. Com leitura e escrita em
+bloco (`findMany`/`createMany`), medido pela extensão do Prisma nos `N27`/`N29`/`N30`:
+
+| Lote de 50 | Viagens |
+|---|--:|
+| nada mudou (a segunda passada) | **4** |
+| 50 criados | **6** |
+| 50 atualizados — o pior caso | **54** |
+
+A 75 ms por viagem — a latência que a própria `Q-LOTE-01` registrou, 15.330 ms
+para ~205 viagens até `sa-east-1` — o pior lote custa **4,05 s**, folga de 3,7×
+sobre os 15 s. **Um lote de 200 daria ~15,3 s no mesmo pior caso**, que é o
+penhasco de onde a questão veio.
+
+As ~5 viagens por cliente viraram ~0. A reconsulta desperdiçada em
+`escreverEstadoCrm()` **desapareceu junto com a função**: o `id` do cliente passou
+a ser gerado do nosso lado, exatamente para que `createMany` sirva.
+
+### O teste mede viagens, não relógio — e é esse o ponto
+
+`test_lote_respeita_timeout` (`SPEC-002` §9) são os `N26`–`N31`. **Cronômetro local
+daria verde para o código que morreu em produção**: as mesmas 205 viagens que
+levaram 15.330 ms contra `sa-east-1` levam menos de um segundo contra o
+`127.0.0.1`. O que se mede é o que generaliza — **viagens por transação**, contadas
+por uma extensão do Prisma (que pega inclusive o que o autor esqueceu de contar) e
+projetadas contra a latência medida.
+
+**Três plantios, porque um invariante que só sabe passar não é invariante:**
+
+| Plantio | Quem acusa |
+|---|---|
+| lote em 1.000 (a transação única que morreu) | `N29` falha; o `N28` mede 1.004 viagens = **75.300 ms** projetados |
+| contadores gravados só no fim | `N31` acusa: `0 → 0 → 0` em vez de `0 → 50 → 100 → 150 → 200` |
+| guarda de reentrância removida | `N19c` acusa (`ContextoAninhado` no lugar de `CicloDentroDeTransacao`) |
+
+**Limite honesto do `N27`, registrado porque quase passou batido:** sozinho ele
+passa **mesmo com o lote em 1.000**, porque criar em massa é barato — 1.000
+clientes saem em 20 `createMany`. Quem acusa a transação gigante é o `N29`, onde a
+carga é de **atualização**, a única que não tem forma em bloco. Um teste de volume
+que só exercita criação daria verde para a `Q-LOTE-01`.
+
+### O que a correção criou, e virou questão em vez de improviso
+
+A abertura agora **commita** `em_andamento` antes dos lotes — é o que a R13 exige,
+e é o que finalmente faz o `EXCLUDE` da migration 14 valer contra um segundo ciclo
+concorrente de verdade. O preço: um ciclo morto por `kill` deixa o registro preso,
+e o `EXCLUDE` trava o conector. **O caminho normal está coberto** — exceção em
+qualquer fase fecha o registro em `parcial` (§7) ou `erro`, na transação seguinte,
+e o erro original é relançado. **A morte que não passa por `catch` não está**, e
+escolher um prazo de expiração seria decidir no código quanto tempo um ciclo
+legítimo pode demorar. Virou **`Q-CICLO-ORFAO-01`** (🟡, três opções), não default
+escolhido "porque parecia razoável".
+
+### O ensaio mudou de forma, e a diferença está impressa
+
+`--ensaio` dá **ROLLBACK por lote**, não um ROLLBACK só. Mantém a promessa (nada é
+gravado) e o caminho (o ensaio exercita o código do valendo — a lição desta
+sessão). A consequência é honesta e vai no rodapé do relatório do script: no
+ensaio nenhum lote enxerga o que o anterior escreveu, então a reconciliação só vê
+o espelho que **já estava gravado**, e `desativados` do ensaio não antecipa o do
+valendo.
+
+### Estado dos testes
+
+```
+conector               35   (eram 25: +N19b/N19c, +N26a/N26..N31)
+294 verificações em 18 suítes, EXIT=0
+```
+
+### O que falta para a F1 — e não é mais código
+
+A `Q-LOTE-01` era a única vermelha da F1. **Passo 5 da §11 está desbloqueado e não
+foi executado**: ele grava em produção, e a decisão é do dono. Os comandos estão
+na §11, inalterados.
+
+---
+
+## 17. ADENDO — o passo 5 rodou, e a spec foi reconciliada
+
+### O banco novo, verificado antes de qualquer coisa
+
+O antigo (`us-west-2`) só sai depois de o novo provar que está inteiro. Medido em
+`sa-east-1`, PostgreSQL **17.6**:
+
+| Verificação | Medido |
+|---|--:|
+| Migrations aplicadas / presas | **15 / 0** (2 revertidas são as tentativas falhas da 10) |
+| Tabelas com `tenant_id` | **16 — todas** com RLS **e** `FORCE` **e** policy |
+| Policies | **26**, em 20 tabelas |
+| RLS com zero policies | só `_prisma_migrations` — lista branca do `CAT-8` |
+| Role de runtime | `app_financeiro_login`, `rolsuper=f`, `rolbypassrls=f` |
+| Gatilhos `auditar_*` | **17** |
+| `CAT-1` … `CAT-8` contra produção | **8/8** |
+
+E o isolamento medido, não afirmado: **sem contexto → 0** linhas; **contexto certo
+→ 1**; **contexto de outro tenant, com usuário válido → 0**.
+
+CRM: `financeiro_ro`, sem `BYPASSRLS`, **8 views legíveis, 8 com `crm_tenant_id`,
+0 privilégio de escrita em objeto de negócio**.
+
+### O passo 5 — o critério de saída, contra o CRM real
+
+```
+ensaio    lidos 48   criados 41   recusados 0   garantia degradada: false
+valendo 1 lidos 48   criados 41   recusados 0   4 transacoes, maior lote 41 de 50   5,7 s
+valendo 2 lidos 48   criados  0   atualizados 0                                     5,2 s
+```
+
+**`criados: 0, atualizados: 0` na segunda passada** — *sync idempotente* cumprido.
+E conferido no banco, não aceito do contador: 41 clientes, 41 `cliente_estado_crm`,
+e **um único instante distinto de `criado_em`** nas 41 linhas, o que prova que a
+segunda passada não tocou timestamp. `em_carteira` NULL nas 41, como a R7 manda.
+
+Onde a `Q-LOTE-01` morria com `P2028` aos 15.330 ms, o ciclo agora fecha em **5,7 s**.
+
+A trilha da regra 9, por consulta: 41 `INSERT` em `cliente` e 41 em
+`cliente_estado_crm`, todos com `registro_id`, `usuario_id` e `depois`. E **4
+`UPDATE` em `conector_execucao` para 2 ciclos** — a gravação de contadores por
+lote da R13, visível na auditoria.
+
+### Três testes obrigatórios que não existiam
+
+| Teste | O que se descobriu |
+|---|---|
+| `test_vitima_de_merge_funde_espelho` → **`N32`–`N34`** | o código da fusão **existia desde a construção e nada provava que ela acontece**. O `N6` provava só a ordem da classificação |
+| `test_conector_so_le_views_financeiro` → **`N35`/`N36`** | o cabeçalho da suíte **afirmava** que os testes `N1`/`N2` cobriam o invariante 2. **Eles nunca existiram** — e o `LeituraForaDoContrato` estava importado e nunca asserido |
+| `test_estado_crm_so_conector` → **`N37`** | não há o que o banco imponha; a garantia é estrutural, e agora é verificada: **um único escritor em `src/`** |
+
+O `N35` atende o critério §8 na forma que ele pede — *"verificado por **log de
+query**, não por revisão"*: um pool interposto grava tudo que sai para o CRM e
+confere objeto por objeto. Três plantios, todos acusando: fusão removida →
+`N32`; consulta que **executa** e referencia `pg_catalog` → `N35`; segundo
+escritor de `cliente_estado_crm` → `N37`.
+
+> Vale registrar o plantio que **não** serviu: apontar a leitura para a tabela
+> base `financeiro._vg` morreu por **permissão negada** antes de chegar ao
+> detector. É a regra 4 funcionando — mas prova de guarda não é prova de teste, e
+> o plantio teve que ser refeito com um objeto que a role consegue ler.
+
+### A `SPEC-002` foi para a v1.3 — a spec estava atrás do código
+
+Em SDD isso é a inversão que não se tolera: três fatos medidos viviam só em
+comentário de código e em `QUESTOES.md`.
+
+- **R9** ganha a redação da `Q-VALOR-01` — `consumo_kwh` conta como valor.
+- **R14** perde a frase *"os funis de venda têm zero ganhos sem valor"*, **medida
+  falsa**: eram 40 de 41. Ela ficou tachada, não apagada.
+- **R13** ganha o **tamanho declarado (50)** e a conta de viagens que o fixa.
+- **§8** sai de 9 critérios em aberto para **9 marcados com o teste nomeado**.
+- **§9** ganha o teste de cada linha — e é onde a coisa fica desconfortável.
+
+### O que a reconciliação expôs: `Q-ESCOPO-01`, vermelha
+
+Ao nomear o teste de cada regra, uma linha não teve como ser preenchida. O
+`test_atribuicao_por_partner_id` (R16) **não é teste faltando — é funcionalidade
+faltando**, e puxar esse fio deu no seguinte, medido:
+
+> A **§2 "Entra"** declara upsert em `cliente`, `unidade_consumidora`, `usina` e
+> `usina_geracao`. O conector espelha **só `cliente`**. Das 8 views que
+> `leitura.ts` sabe ler, o ciclo chama **3**.
+
+Não é dívida cosmética: a R16 não tem onde acontecer porque o conector não cria
+`contrato`, e **é este o bloqueio real da F2** — a base de faturamento é
+`consumo_kwh × tarifa` por UC, e sem espelho de usina e de geração não há o que
+faturar. Três opções registradas, nenhuma escolhida por mim.
+
+### Onde a F1 está, de verdade
+
+| Critério de saída (`PRD` §10) | Estado |
+|---|---|
+| `migrate reset` limpo | ✅ 15 migrations em banco vazio a cada `npm test` |
+| sync idempotente | ✅ **contra o CRM real, duas execuções** |
+| escrita no CRM falha por permissão | ✅ `N21`/`N21b`/`N25` + 0 privilégio medido |
+
+**Os três critérios formais estão cumpridos.** O que segura a fase agora não é
+critério do PRD — é a entrega nomeada *"conector CRM read-only"* estar a 1/4 do
+que a própria spec declara (`Q-ESCOPO-01`) e a `Q-FASE-01` sem decisão.
+
+### Testes
+
+```
+conector               41   (eram 25 no fim da sessao 8)
+300 verificacoes em 18 suites (292 chk + 8 de catalogo), EXIT=0
+```
+
+---
+
+## 18. ADENDO — as duas decisões, e o muro que a medição encontrou
+
+### As decisões do dono, 27/07
+
+**`Q-FASE-01` → o `PRD` §10 vence: o conector é entrega da F1.** O critério foi a
+hierarquia do `CLAUDE.md`: a `SPEC-002` está *abaixo* do PRD, então era o cabeçalho
+dela que divergia. A alternativa fecharia a F1 no mesmo dia — e teria sido
+**alterar o PRD para acomodar o estado do código**, o precedente que esta sessão
+já havia recusado três vezes (`CAT-2`, `G2`, `N21`). Resolvida.
+
+**`Q-ESCOPO-01` → completar o escopo declarado da §2.** É a opção que não deixa a
+spec mentindo. E foi ao medir para implementar que o chão cedeu.
+
+### O que a medição das quatro views achou
+
+Volume: `usinas` **3**, `rateio_clientes` **36**, `rateio_creditos` **36**,
+`geracao_mensal` **8**, `parceiros` **9**.
+
+| Entidade | Estado |
+|---|---|
+| `usina_geracao` | 🟢 **pronta.** 8 linhas, junção por `codigo_geradora`, e o enum `origem_geracao` já tem o valor `crm`. Depende só de `usina` |
+| `usina` | 🟡 **uma decisão.** `distribuidora` vem **string vazia** nas 3 (`length = 0`), e `usina.distribuidora` é `NOT NULL` com FK para a tabela de referência, que tem **uma** linha. Também: `potencia_kwp` 0/3, `data_instalacao` 0/3, `dono_lead_codigo` 0/3 — este último confirma a `C1-crm` |
+| `unidade_consumidora` | 🔴 **bloqueada, e não por pouco** |
+
+### O muro: a carteira legada e o funil de vendas não se tocam
+
+> Dos **36** `lead_id` de `rateio_creditos`, **ZERO** aparecem em `vendas_ganhas`.
+> Por **nome**, os dois conjuntos coincidem em **42 pares, 24 pessoas distintas**.
+
+A mesma pessoa é **dois leads** no CRM — um na carteira de rateio, outro no funil
+de vendas. `RENATA LUCY…`, `THIAGO GONCALVES TAQUARY`, `ATAIDE DE MELO OLIVEIRA`
+e mais 21.
+
+A UC pendura em `cliente`. Espelhar `unidade_consumidora` a partir de
+`rateio_clientes` criaria 36 clientes, **24 deles duplicatas de gente já
+espelhada** — e o dedup da R4 **não pega**, porque ele é por `crm_lead_id` e os
+ids são genuinamente diferentes. Não há improviso seguro aqui: casar por nome é
+heurística sobre dado de dinheiro.
+
+**Isto é a `F-01` do `PRD` §11 — que era pergunta de planejamento — virando
+pré-requisito medido.** Registrada em `QUESTOES.md` como `F-01 (medida)`,
+vermelha, com o número.
+
+Dois achados menores do mesmo levantamento: **`data_vencimento` 0 de 36** (a §7 já
+previa) e **uma UC repetida** — `000041446801282` em dois contratos (`G3-0141` e
+`G3-0312`), na mesma usina. E um bom: a soma de `percentual_rateio` por usina é
+**100,0 · 99,78 · 91,2** — a R11 está satisfeita nos dados de hoje.
+
+### Por que parei aqui em vez de implementar
+
+Duas das três entidades dependem de decisão que não é minha, e a terceira depende
+de operação no CRM. Escrever o espelho de UC hoje significaria escolher entre
+criar 24 duplicatas ou inventar um casamento por nome — e a regra 10 existe
+exatamente para este momento. **Nada foi improvisado; a lacuna virou questão com
+dono nomeado.**
+
+---
+
+## 19. ADENDO — `usina` e `usina_geracao` espelhadas, e a recusa que virou o produto
+
+Decisão do dono, 27/07: **usina sem distribuidora é recusa contada, nunca default.**
+Não é regra nova — é o **invariante 7** aplicado a outra entidade. A alternativa
+(assumir `Equatorial`, a única cadastrada) teria acertado na prática e seria o
+mesmo formato do erro que a `Q-VALOR-01` pegou: um default que parecia razoável.
+
+### O que entrou
+
+`espelharUsinas` e `espelharGeracao`, nos mesmos lotes da R13. A `PortaDeLeitura`
+passou de 3 para **5 das 8 views**. As 3 que faltam alimentariam
+`unidade_consumidora`, bloqueada pela `F-01 (medida)`.
+
+**A ordem entre as duas é obrigatória, não preferência:** `usina_geracao` tem FK
+composta para `usina`, então a usina precisa estar **commitada** antes. No mesmo
+lote, uma geração órfã derrubaria o lote inteiro com `23503`.
+
+A chave do espelho de usina é **`codigo_geradora`**, não `crm_usina_id` — regra 11:
+`usina_codigo_unico` é índice único **cheio**, e `crm_usina_id` não tem unicidade
+nenhuma. Navegar por coluna sem unique é pedir para o espelho duplicar em silêncio.
+
+A `SPEC-002` ganhou a **§3.1** — campo espelho x campo local por entidade, com as
+regras **R19** e **R20**. Era exatamente a lacuna que a `Q-ESCOPO-01` nomeava:
+"completar o escopo" era inexecutável enquanto a spec não descesse ao nível de
+coluna.
+
+### O ciclo real, com as entidades novas
+
+```
+lidos 59 (48 vendas + 3 usinas + 8 geracoes)   criados 0   atualizados 0
+recusados 11   status parcial   6 transacoes, maior lote 41 de 50
+
+  0001 · 0002 · 0003   distribuidora vazia no CRM, e a coluna e obrigatoria
+  8 linhas de geracao  a usina nao esta espelhada no financeiro   <- cascata
+```
+
+**As 11 recusas são o produto, não o defeito.** Foi exatamente essa contagem que
+fez o dev do CRM corrigir as views no mesmo dia na `Q-VALOR-01`. O motivo de cada
+uma está em `conector_execucao.detalhe`, com a quebra por entidade:
+
+```json
+{"cliente":       {"lidos":48,"criados":0,"atualizados":0,"recusados":0},
+ "usina":         {"lidos":3, "criados":0,"atualizados":0,"recusados":3},
+ "usina_geracao": {"lidos":8, "criados":0,"atualizados":0,"recusados":8}}
+```
+
+**A quebra vai no `detalhe`, não em colunas novas**, e a escolha tem motivo: os
+contadores da tabela existem para a invariante 8 — *"`recusados > 0` é visível em
+tabela"* —, e essa pergunta é respondida pelo **total**. Quem quer saber *o quê* já
+precisa abrir o `detalhe`. Uma migration com cinco colunas por entidade não
+compraria nada.
+
+**E a idempotência sobreviveu:** segunda passada com as entidades novas ainda sai
+`criados: 0, atualizados: 0`.
+
+### Uma imprecisão que só apareceu porque o ciclo passou a ser parcial
+
+`conector_status` só tem `ok|erro|nunca_executou`, então `parcial` cai em `erro` —
+e a mensagem dizia *"ciclo nao concluiu"*. **Um ciclo parcial concluiu:** ele
+recusou linhas e registrou o motivo. Era teórico até hoje; com as 3 usinas sem
+distribuidora, **todo** ciclo passa a ser parcial até o dev corrigir, e "não
+concluiu" mandaria procurar uma falha que não existe. Mensagem trocada por
+*"concluiu PARCIAL: N recusa(s)… o motivo está em `conector_execucao.detalhe`"*.
+
+### Testes
+
+`N38`–`N44`, sete novos, **três plantios verificados**:
+
+| Plantio | Quem acusa |
+|---|---|
+| default `Equatorial` em vez de recusar — o improviso que a decisão rejeitou | `N41` (`rec=1` em vez de 2, e a usina gravada) |
+| geração órfã engolida em silêncio | `N43` (`rec=0`) |
+| `potencia_kwp` nula virando `'0'` | `N39` |
+
+> Registro de um plantio que **não** serviu: remover só a guarda, deixando o
+> espelho intacto, **estoura no Prisma** (`Argument distribuidora is missing`) em
+> vez de acusar limpo. Informativo — mostra que a remoção parcial não grava lixo
+> em silêncio — mas não prova o teste. Teve que ser refeito com o improviso
+> **completo**, que é o que a decisão de fato rejeitou.
+
+**307 verificações em 18 suítes** (299 `chk()` + 8 de catálogo), `EXIT=0`.
+
+### Para a próxima carta ao dev do CRM
+
+1. **`financeiro.usinas.distribuidora` vem `''` nas 3** — string vazia, não NULL. É o que bloqueia o espelho de usina e, em cascata, o de geração.
+2. **`dono_lead_codigo` e `dono_lead_nome` vêm nulos nas 3** — confirma a `C1-crm`; sem eles não há como ligar `usina.dono_usina_id`.
+3. **UC repetida:** `000041446801282` em dois contratos (`G3-0141` e `G3-0312`), mesma usina.
+4. **A `F-01`, com número** — 36 leads de rateio, **zero** em `vendas_ganhas`, e **24 pessoas** duplicadas entre os dois conjuntos. Esta é de operação, não do dev.
+
+---
+
+## 20. ADENDO — a `ATIVO-01` foi encerrada por um sintoma
+
+Esclarecimento do dono, no fim de 27/07, e ele corrige uma conclusão minha e do
+registro da sessão anterior.
+
+**A ausência de `vendas_ganhas` para os 36 do rateio não é defeito nem dado
+faltando.** A carteira legada nunca passou pelo funil de vendas como ganho — era
+esperado que fosse assim. O que não existe é um **vínculo ainda não criado**, e o
+dono nomeou onde ele nasce:
+
+> *"quando dar ganho em rateio vai para clientes ativos"*
+
+Ou seja: o caminho de ligação **não** é casar rateio com `vendas_ganhas`. É o funil
+`Clientes ativos`, e é de lá que o financeiro deve puxar cliente ativo.
+
+### O que isso reabre
+
+A **`ATIVO-01`** foi fechada em 26/07 "por fato": o funil `Clientes ativos -
+Assinatura` estava **vazio**, logo a fonte de estado ativo trocaria para
+`financeiro.rateio_clientes`. **A medição estava certa; a conclusão, não.** O
+funil está vazio porque a etapa-fonte (`Rateio Concluido`) tem
+`stage_type='normal'` e **não dispara a automação** — isso é configuração do CRM,
+não desenho. Encerrar a questão pelo estado vazio foi **tomar ausência de dado
+como resposta de desenho**.
+
+### A consequência está no código, e ela é uma inversão
+
+A §4.3 classifica `Clientes ativos - Assinatura` como **cópia derivada** — *não
+desativa e não conta*. Se o funil vira **fonte de verdade do cliente ativo**, esse
+`continue` passa a **ignorar exatamente a população que deveria ser lida**.
+
+As duas coisas podem ser verdadeiras ao mesmo tempo — população mantida por sync
+*e* fonte de estado —, e é por isso que não dá para decidir por dedução.
+
+**Nada foi alterado no código.** O funil está vazio hoje; mudar agora seria
+implementar contra um estado futuro, sem teste possível, desfazendo por dedução a
+classificação que a medição do dev justificou. Virou **`Q-ATIVOS-01`** (🔴), com
+comentário de aviso na própria constante `FUNIL_COPIA_DERIVADA`, e a ordem das
+ações registrada: **primeiro o dev corrige o `stage_type`**, depois se mede o
+funil populado, e só então se reescreve a §4.3.
+
+### Nota de método
+
+Esta é a segunda vez na sessão em que **uma questão fechada "por fato" estava
+fechada cedo demais** — a primeira foi o `CAT-3`, cujo comentário nomeava
+`distribuidora` como exemplo do que ignorar, com a premissa falsa em produção. O
+padrão é o mesmo: **medir o estado atual e concluir sobre o desenho.** Estado vazio
+não distingue "não é aqui que o dado mora" de "o dado ainda não chegou aqui" — e a
+diferença entre as duas é a diferença entre trocar de fonte e consertar o CRM.

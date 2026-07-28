@@ -17,18 +17,30 @@
 //
 // `--ensaio` e `--valendo` sao OBRIGATORIOS e nao ha default, pelo mesmo motivo
 // do bootstrap: um ciclo que grava porque alguem esqueceu uma flag e o modo de
-// falha errado. No ensaio o trabalho inteiro roda dentro da transacao e leva
-// ROLLBACK no fim - a leitura do CRM acontece de verdade, os contadores sao
-// reais, e nada e gravado. E como toda prova de escrita deste projeto rodou.
+// falha errado. A leitura do CRM acontece de verdade nos dois, os contadores sao
+// reais, e no ensaio nada e gravado. E como toda prova de escrita deste projeto
+// rodou.
+//
+// O ENSAIO MUDOU DE FORMA COM A R13, e a diferenca e honesta em vez de escondida.
+// Antes o ciclo inteiro era uma transacao e o ROLLBACK era um so. Agora cada LOTE
+// tem transacao propria (Q-LOTE-01), entao o ensaio da ROLLBACK em cada uma - o
+// que mantem a promessa ("nada e gravado") e o caminho ("o ensaio exercita
+// exatamente o codigo do valendo", que era a licao da sessao 8).
+//
+// A consequencia esta impressa no rodape do relatorio: no ensaio nenhum lote
+// enxerga o que o anterior escreveu, entao a reconciliacao so ve o que JA estava
+// gravado antes do ciclo. Num banco sem espelho, `desativados` do ensaio e
+// sempre 0. Nao e defeito do ensaio; e o preco de nao gravar.
 
 import { iniciar, encerrarApp } from '../src/app.ts';
 import { crmDoAmbiente, conferirRoleDeLeitura } from '../src/crm/conexao.ts';
 import { criarLeitorCrm } from '../src/crm/leitura.ts';
-import { executarCiclo } from '../src/crm/sincronizacao.ts';
+import { executarCiclo, TAMANHO_DO_LOTE, type AbrirLote } from '../src/crm/sincronizacao.ts';
 
-class EnsaioConcluido extends Error {
-  readonly resultado: unknown;
-  constructor(resultado: unknown) { super('ensaio'); this.name = 'EnsaioConcluido'; this.resultado = resultado; }
+/** Sai da transacao do lote por excecao: e o unico ROLLBACK que o Prisma expoe. */
+class RollbackDoEnsaio extends Error {
+  readonly valor: unknown;
+  constructor(valor: unknown) { super('ensaio'); this.name = 'RollbackDoEnsaio'; this.valor = valor; }
 }
 
 const arg = (nome: string): string | undefined => {
@@ -102,20 +114,36 @@ async function main(): Promise<void> {
     viewsComColunaDeTenant: diag.viewsComColunaDeTenant,
   });
 
-  // 4. O ciclo, dentro da transacao do contexto.
+  /*
+   * 4. O ABRIDOR DE LOTE - a unica peca que este script contribui ao ciclo.
+   *
+   * O motor abre UMA transacao por lote (R13) e nao sabe montar contexto de
+   * tenant: quem monta e `app.withTenant`, o mesmo caminho de qualquer
+   * requisicao. Um script que emitisse contexto por fora seria um segundo
+   * caminho de isolamento, e a SPEC-001 §3.2 existe para nao haver um segundo.
+   */
+  const valendoLote: AbrirLote = (trabalho) =>
+    a.withTenant(sessao, tenantProposto, () => trabalho()) as any;
+
+  const ensaioLote: AbrirLote = async (trabalho) => {
+    try {
+      return await a.withTenant(sessao, tenantProposto, async () => {
+        throw new RollbackDoEnsaio(await trabalho());
+      }) as any;
+    } catch (e) {
+      if (e instanceof RollbackDoEnsaio) return e.valor as any;
+      throw e;
+    }
+  };
+
   let resultado: any;
   try {
-    resultado = await a.withTenant(sessao, tenantProposto, async () => {
-      const r = await executarCiclo(leitor);
-      // ENSAIO: lancar aqui reverte a transacao inteira - inclusive
-      // conector_execucao. A leitura do CRM ja aconteceu e os numeros sao
-      // reais; o que nao acontece e a gravacao.
-      if (ensaio) throw new EnsaioConcluido(r);
-      return r;
-    });
+    resultado = await executarCiclo(leitor, ensaio ? ensaioLote : valendoLote);
   } catch (e) {
-    if (e instanceof EnsaioConcluido) resultado = e.resultado;
-    else { console.error('\nCICLO FALHOU:', e); await poolCrm.end(); await encerrarApp(); process.exit(1); }
+    console.error('\nCICLO FALHOU:', e);
+    console.error('\nO registro em conector_execucao foi fechado com o que ja havia sido');
+    console.error('commitado por lote (SPEC-002 §7). O proximo ciclo e idempotente e recompoe.');
+    await poolCrm.end(); await encerrarApp(); process.exit(1);
   }
 
   console.log('--- resultado ---');
@@ -133,10 +161,23 @@ async function main(): Promise<void> {
     console.log(`  fila de revisao humana (§4.3): ${resultado.filaDeRevisao.join(', ')}`);
   }
   console.log(`  garantia de tenant degradada: ${resultado.garantiaDeTenantDegradada}`);
+  // R13 visivel: se `maiorLote` empatar com `lidos`, o ciclo voltou a ser
+  // transacao unica e o P2028 volta com o crescimento.
+  console.log(`  lotes .......... ${resultado.transacoes} transacoes, maior lote ` +
+              `${resultado.maiorLote} de ${TAMANHO_DO_LOTE}`);
 
-  console.log(ensaio
-    ? '\n== ROLLBACK (--ensaio). Nada foi gravado. =='
-    : '\n== COMMIT. O espelho esta atualizado. ==');
+  if (ensaio) {
+    console.log('\n== ROLLBACK por LOTE (--ensaio). Nada foi gravado. ==');
+    console.log('   Cada lote teve transacao propria e nenhuma commitou, entao a');
+    console.log('   reconciliacao enxergou so o espelho que JA estava gravado antes');
+    console.log('   do ciclo - `desativados` do ensaio nao antecipa o do valendo.');
+  } else {
+    console.log('\n== COMMIT por LOTE. O espelho esta atualizado. ==');
+    if (!resultado.execucaoGravada) {
+      console.error('   ATENCAO: o fechamento nao encontrou a linha de conector_execucao.');
+      console.error('   Em modo valendo isso e defeito - o registro do ciclo nao existe.');
+    }
+  }
 
   await poolCrm.end();
   await encerrarApp();

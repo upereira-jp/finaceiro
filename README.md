@@ -5,7 +5,7 @@ Sistema financeiro multi-tenant da G3 Solar: faturamento de crédito de energia,
 | Campo | Valor |
 |---|---|
 | **Dono** | Vinicius Leal |
-| **Fase atual** | F0 fechada · **F1 em execução, e não fecha só com código nosso.** 15 migrations no Supabase `sa-east-1`, role de runtime, composition root, seis repositórios, 37 rotas, auth próprio medido ponta a ponta contra o Supabase real, conector do CRM construído e testado, e os 8 invariantes de catálogo verdes **contra produção**. A `Q-VIEWS-01` fechou no mesmo dia e o **invariante 9 está cumprido**. Falta `CRM_DATABASE_URL` e o primeiro ciclo real. Ver a tabela de critérios abaixo |
+| **Fase atual** | F0 fechada · **F1 em execução, e não fecha só com código nosso.** 15 migrations no Supabase `sa-east-1`, role de runtime, composition root, seis repositórios, 37 rotas, auth próprio medido ponta a ponta contra o Supabase real, conector do CRM construído e testado, e os 8 invariantes de catálogo verdes **contra produção**. A `Q-VIEWS-01` fechou no mesmo dia e o **invariante 9 está cumprido**. O ciclo rodou **valendo, duas vezes**, contra o CRM real e os três critérios formais fecharam; a `Q-ESCOPO-01` (conector entrega 1 de 4 entidades) é a vermelha que resta. Ver a tabela de critérios abaixo |
 | **Atualizado** | 27/07/2026 |
 
 ---
@@ -191,8 +191,8 @@ Medido em 27/07 contra o `PRD-v2.2` §10, não estimado. **Os três critérios d
 | Critério de saída | Evidência | |
 |---|---|---|
 | `migrate reset` limpo | `tests/run.sh` aplica as 15 migrations em banco vazio a cada `npm test`; `EXIT=0` | ✅ |
-| sync idempotente | conector construído e provado contra stub (`N10`), **nunca contra o CRM real** — falta `CRM_DATABASE_URL` | ⚠️ |
-| escrita no CRM falha por permissão | medido por catálogo: `financeiro_ro` tem 0 privilégio de escrita, 0 objeto fora de `financeiro`, 0 acesso a tabela base. **Não automatizado ainda** | ⚠️ |
+| sync idempotente | ✅ **cumprido contra o CRM real em 27/07.** Duas execuções valendo: 48 lidos, 41 criados na 1ª, **0 criados e 0 atualizados na 2ª**, com um único instante de `criado_em` nas 41 linhas. Também provado em 1.000 linhas pelo `N30` | ✅ |
+| escrita no CRM falha por permissão | automatizado em 27/07: `N21`/`N21b` (a guarda de arranque recusa credencial com escrita, inclusive privilégio **herdado por role**) e `N25` (a sessão é read-only). A medição por catálogo que dizia "0 privilégio de escrita" veio de método fraco — ver `Q-PGNET-01` | ✅ |
 
 **As entregas nomeadas da F1:**
 
@@ -201,9 +201,11 @@ Medido em 27/07 contra o `PRD-v2.2` §10, não estimado. **Os três critérios d
 | projeto, auth, RBAC dois níveis | ✅ auth medido contra o Supabase real; RBAC com as 16 células do PRD §3 |
 | schema completo com `tenant_id` | ✅ 13 migrations, 20 tabelas com RLS, 24 policies, **zero** tabela com `tenant_id` sem policy |
 | cadastros | ⚠️ 6 repositórios para 11 modelos de negócio — faltam `dono_usina`, `regra_comissao`, `regra_repasse`, `tarifa`, `cliente_estado_crm` |
-| **conector CRM read-only** | ⚠️ **construído em 27/07** (`src/crm/`, 23 verificações), invariante 9 cumprido, não ligado ao CRM real. `SPEC-002` segue *"Rascunho — aguarda aceite"* e a fase dele é a `Q-FASE-01` |
+| **conector CRM read-only** | ⚠️ **3 das 4 entidades da `SPEC-002` §2.** `cliente`, `usina` e `usina_geracao` espelhadas (48 verificações, R13 em lotes, rodado valendo contra o CRM real). **`unidade_consumidora` segue bloqueada pela `F-01 (medida)`** — 36 leads de rateio, zero em `vendas_ganhas`, 24 pessoas duplicadas entre os conjuntos. Hoje as 3 usinas são **recusadas** por virem sem distribuidora do CRM (R19): a contagem é o sinal, não o defeito |
 
-**A leitura honesta:** a fundação está pronta e provada, e o conector existe e é testado. O que falta **não é código nosso**: `CRM_DATABASE_URL`, o primeiro ciclo real e a decisão de fase (`Q-FASE-01`). Quem ler "F1 em execução" sem esta tabela superestima a proximidade do fim.
+**A leitura honesta, atualizada no fim de 27/07:** **os três critérios formais de saída da F1 estão cumpridos** — o ciclo rodou valendo, duas vezes, contra o CRM real. O que segura a fase não é critério do `PRD` §10; é a **entrega nomeada** *"conector CRM read-only"* estar a um quarto do que a própria `SPEC-002` §2 declara (**`Q-ESCOPO-01`**, vermelha) e a `Q-FASE-01` sem decisão.
+
+Essa vermelha só apareceu porque a `SPEC-002` foi reconciliada com o medido (v1.3) e cada teste obrigatório teve que ser nomeado ao lado da sua regra — uma linha não teve como ser preenchida. **É o método funcionando, não uma surpresa:** a spec estava atrás do código, e é a spec que manda.
 
 ---
 
