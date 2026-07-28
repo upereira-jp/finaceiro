@@ -15,7 +15,7 @@
 > | **Conector** | as 4 entidades da `SPEC-002` §2 espelhadas, rodando contra o CRM real |
 > | **Espelho em produção** | 76 clientes · 3 usinas · 35 UCs · 8 competências de geração |
 > | **Idempotência** | ensaio de 28/07: `lidos 95, criados 0, atualizados 0`, 1 recusa (`UC-DUP-01`) |
-> | **Divergências de distribuidora** | **0 nas 35 UCs.** O sinal nasce silencioso, que é o estado correto |
+> | **Divergências de distribuidora** | **0 nas 35 UCs** — ou seja, ninguém editou o campo. **Não** é evidência de que a herança está certa (§2) |
 > | **Testes** | **318 verificações em 18 suítes**, `EXIT=0` · catálogo 8/8 contra produção |
 >
 > **O que falta continua não sendo código:**
@@ -24,7 +24,7 @@
 > |---|---|
 > | Reunião com o contador — **`PAUTA-contador.md`**, 10 perguntas fechadas | Vinicius + contador |
 > | `RATEIO-USO-01` 🔴 — a usina tem duas medidas, o sistema controla uma | Vinicius + contador |
-> | `Q-UC-DISTRIB-01` — a **pergunta normativa** segue aberta; o **risco de silêncio** fechou hoje | Vinicius |
+> | `Q-UC-DISTRIB-01` — a **pergunta normativa** segue aberta, e o sinal é cego para ela (§2). O que fechou hoje foi o risco vizinho: edição humana do campo local | Vinicius |
 > | `UC-DUP-01` — conferir `000041446801282` contra o rateio oficial | operação |
 >
 > **Não executado, de propósito:** `npm run ciclo --valendo`. O ensaio mostrou
@@ -83,9 +83,28 @@ vai para o `detalhe` e para a saída do script **sem** mexer no `status`.
 E o sinal **não sobrescreve**, que seria a `R5` ao contrário: a linha é válida e o
 campo é do usuário.
 
-**Efeito colateral útil:** se a resposta normativa for *"pode haver UC de outra
-concessionária"*, o sistema já está pronto — a UC passa a exigir cadastro local como
-a usina, e este sinal é exatamente o que lista as que precisam de correção.
+### O que o sinal NÃO cobre — e por isso a questão não some
+
+A conferência roda só no `UPDATE`. Uma UC que **nasce** pela `R21` herda o valor da
+usina por construção e **não pode divergir de si mesma**:
+
+| Caso | O sinal pega? |
+|---|---|
+| Humano edita a UC e põe outra concessionária | ✅ sim — é o risco que esta sessão fechou |
+| A `R21` está **errada de origem** | ❌ **não.** Nasce coerente e fica silenciosa para sempre |
+
+O segundo caso é a `Q-UC-DISTRIB-01`, e ele **não é conferível internamente**: o CRM
+não expõe distribuidora em `rateio_clientes`, então não há segunda fonte contra a
+qual comparar. Comparar o valor derivado com ele mesmo não prova nada. Só a norma
+responde.
+
+**Corolário, e ele muda a leitura da §5:** as zero divergências medidas em produção
+dizem que ninguém editou o campo — **não** que a herança está certa. Seriam zero do
+mesmo jeito se as 35 UCs estivessem todas erradas.
+
+Se a resposta normativa for *"pode haver UC de outra concessionária"*, a UC passa a
+exigir cadastro local como a usina, e este sinal acusa cada caso **à medida que a
+operação digitar o valor real** — ele não acha as erradas sozinho.
 
 Virou `SPEC-002` **R21-b** e **invariante 13**, com linha nova na §7 e teste
 obrigatório na §9. A spec foi para a **v1.4**.
@@ -140,10 +159,11 @@ divergencias: nenhuma
 A única recusa continua sendo a `UC-DUP-01` (`000041446801282` em dois contratos), e
 ela segue sendo **o único ruído em 95 linhas lidas**.
 
-**Zero divergências nas 35 UCs** é o resultado esperado e vale como linha de base:
-as três usinas são `Equatorial` e as UCs herdaram dela no `INSERT`. O sinal nasce
-silencioso — se um dia acender, é porque alguém mexeu, que é exatamente o caso que
-ele existe para não deixar passar.
+**Zero divergências nas 35 UCs** é o resultado esperado, e é preciso ler o que ele
+diz: as três usinas são `Equatorial` e as 35 UCs herdaram dela no `INSERT`, então o
+zero significa **ninguém editou o campo**. Ele **não** é evidência de que a herança
+da `R21` está certa — ver a §2. Vale como linha de base: se um dia acender, é porque
+alguém mexeu, que é exatamente o caso que o sinal existe para não deixar passar.
 
 Os 8 invariantes de catálogo foram rodados contra produção depois: `8 invariantes,
 nenhuma falha`. Nenhuma migration nova nesta sessão — a rodada é conferência, não
