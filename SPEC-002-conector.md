@@ -102,7 +102,25 @@ conector_execucao   id · tenant_id · ciclo_id · iniciado_em · terminado_em
 
 > **R20 (nova).** **Geração de usina não espelhada é recusa contada, não erro silencioso.** Gravar sem a usina é impossível (FK composta), e engolir esconderia o efeito **em cascata** da recusa anterior — que hoje é o caso normal, não a exceção: com as 3 usinas recusadas, as 8 linhas de geração não têm onde pousar. Teste `N43`; o plantio do silêncio acusa.
 
-**`unidade_consumidora`** — 🔴 **não especificada, e é deliberado.** Ver `F-01 (medida)` e `Q-ESCOPO-01`. A UC pendura em `cliente`, e o vínculo entre a carteira de rateio e os leads espelhados **não existe por `lead_id`**: dos 36 de `rateio_creditos`, **zero** aparecem em `vendas_ganhas`; por nome, os conjuntos coincidem em **24 pessoas**. Escrever esta seção hoje significaria escolher entre criar 24 clientes duplicados ou casar por nome — heurística sobre dado de dinheiro. A seção nasce quando a `F-01` fechar.
+**`unidade_consumidora`** — especificada em 28/07, com a decisão da `F-01`: **espelho fiel**. Chave: **`numero_uc`**, e a escolha é da **regra 11** — o candidato natural seria `crm_usina_cliente_id`, mas o único índice dele (`uc_crm_unico`) é **parcial**, e "nenhum repositório navega por índice parcial". `uc_numero_unico` é cheio. Fonte: `rateio_clientes` × `rateio_creditos`, unidas por `contrato_id` (casou 36/36 na medição).
+
+| Coluna | Origem | Nota |
+|---|---|---|
+| `numero_uc` | **CRM** | chave do espelho, de `rateio_clientes.uc` |
+| `cliente_id` | **CRM** | via `rateio_creditos.lead_id`. **O cliente é criado se não existir** — é a decisão de espelho fiel |
+| `usina_id` | **CRM** | via `codigo_geradora` |
+| `percentual_rateio`, `data_vencimento` | **CRM** | `data_vencimento` veio **0 de 36**; o dev confirmou: campo disponível, a operação nunca digitou |
+| `crm_usina_cliente_id` | **CRM** | rastreabilidade, **não** chave (índice parcial) |
+| `distribuidora` | **derivada da usina** | ver `R21` |
+| endereço, `titularidade`, `status` | **local** | o CRM não expõe |
+
+> **R21 (nova).** **A UC herda a distribuidora da usina vinculada; sem usina espelhada, é recusa contada.** O CRM não expõe distribuidora em `rateio_clientes`, e a coluna é `NOT NULL` com FK. O conector **não escolhe valor**: ele propaga o que o usuário cadastrou na usina. **Precisa de confirmação** — `Q-UC-DISTRIB-01`. Teste `N46`; o plantio da distribuidora fixa acusa.
+
+> **R22 (nova).** **UC repetida entre contratos é recusa contada, e o conector não escolhe qual vale.** Medido: `000041446801282` em dois contratos, leads diferentes, mesma usina, mesmo percentual, digitados com 39 minutos de diferença na carga manual de 14/07 — o dev leu o modelo e concluiu que é erro de digitação, confirmando que **nosso modelo de UC única por tenant está certo**. Escolher qual das duas vale é o palpite que a R8 proíbe. Teste `N49`; sem a guarda, o `23505` derruba o lote inteiro — foi o que o plantio mostrou.
+
+> **R23 (nova).** **Contrato de rateio que muda de UC é recusa contada.** `uc_crm_unico` é parcial e a regra 11 proíbe navegar por ele — mas ele **existe no banco e viola com `23505`**, e um `23505` no meio de um `createMany` derruba o lote inteiro. Conferido por `findMany` com predicado explícito, que é o que a regra 11 manda usar, e a violação vira recusa nomeada.
+
+> **R24 (nova).** **`cliente_estado_crm.tem_rateio_ativo` é escrito pelo espelho de UC.** Era a coluna que nascia `NULL` desde a migration e que nenhum caminho preenchia. Teste `N47`.
 
 ## 4. Regras de negócio
 

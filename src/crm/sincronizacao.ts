@@ -33,19 +33,27 @@
 import { dbt } from '../db/tipado.ts';
 import { tenantCorrente, exigir, dentroDeUnidadeDeTrabalho } from '../db/contexto.ts';
 import type {
-  VendaGanha, LeadArquivado, LeadMerge, UsinaDoCrm, GeracaoMensal, ResultadoDeLeitura,
+  VendaGanha, LeadArquivado, LeadMerge, UsinaDoCrm, GeracaoMensal,
+  RateioCliente, RateioCredito, ResultadoDeLeitura,
 } from './leitura.ts';
 
 /**
  * O que o ciclo precisa do CRM. Deliberadamente menor que `LeitorCrm`.
  *
- * Cinco das oito views. As tres que faltam - `rateio_clientes`, `rateio_creditos`
- * e `parceiros` - alimentariam `unidade_consumidora`, e ela esta BLOQUEADA por
- * medicao, nao por preguica: a UC pendura em `cliente`, e dos 36 `lead_id` do
- * rateio ZERO aparecem em `vendas_ganhas`, enquanto por nome os dois conjuntos
- * coincidem em 24 pessoas. Espelhar UC hoje criaria 24 clientes duplicados que o
- * dedup da R4 nao pega, porque os `lead_id` sao genuinamente diferentes. Ver
- * `F-01 (medida)` e `Q-ESCOPO-01` em QUESTOES.md.
+ * SETE das oito views. A que falta e `parceiros`, que alimentaria `originador` -
+ * F3, fora do escopo desta spec.
+ *
+ * `rateio_clientes` e `rateio_creditos` entraram em 28/07, com a decisao do dono
+ * sobre a `F-01`: **espelho fiel**. Dos 36 `lead_id` do rateio, ZERO aparecem em
+ * `vendas_ganhas`, e por nome os dois conjuntos coincidem em 24 pessoas - ou seja,
+ * espelhar cria 24 clientes que sao a mesma pessoa que um ja espelhado.
+ *
+ * ISSO E DELIBERADO, e o argumento e que a duplicidade E FIEL: ela existe no CRM,
+ * e o conector espelha, nao conserta a origem. Quando o dedup do CRM (em
+ * desenvolvimento) mesclar os pares, `lead_merges` avisa e `fundirEspelho`
+ * consolida sozinho - maquinaria que ja existe e e testada (N32-N34). E nao ha
+ * risco de faturar duas vezes: a cobranca segue UC e contrato, e so o lead de
+ * rateio tem UC.
  */
 export type PortaDeLeitura = {
   crmTenantId: string;
@@ -54,6 +62,8 @@ export type PortaDeLeitura = {
   leadMerges():      Promise<ResultadoDeLeitura<LeadMerge>>;
   usinas():          Promise<ResultadoDeLeitura<UsinaDoCrm>>;
   geracaoMensal():   Promise<ResultadoDeLeitura<GeracaoMensal>>;
+  rateioClientes():  Promise<ResultadoDeLeitura<RateioCliente>>;
+  rateioCreditos():  Promise<ResultadoDeLeitura<RateioCredito>>;
 };
 
 /**
@@ -145,7 +155,7 @@ export class CicloDentroDeTransacao extends Error {
 
 export type Recusa = { lead_id: string; codigo: string; motivo: string };
 
-export type Entidade = 'cliente' | 'usina' | 'usina_geracao';
+export type Entidade = 'cliente' | 'usina' | 'usina_geracao' | 'unidade_consumidora';
 export type ContagemDeEntidade = { lidos: number; criados: number; atualizados: number; recusados: number };
 
 /**
@@ -378,7 +388,8 @@ export async function executarCiclo(
     cicloId: crypto.randomUUID(), status: 'ok',
     lidos: 0, criados: 0, atualizados: 0, desativados: 0, recusados: 0,
     recusas: [], filaDeRevisao: [], garantiaDeTenantDegradada: false,
-    porEntidade: { cliente: zerado(), usina: zerado(), usina_geracao: zerado() },
+    porEntidade: { cliente: zerado(), usina: zerado(), usina_geracao: zerado(),
+                   unidade_consumidora: zerado() },
     transacoes: 0, maiorLote: 0, execucaoGravada: false,
   };
 
@@ -582,6 +593,10 @@ async function processar(
   // lote, uma geracao de usina recusada derrubaria o lote inteiro com 23503.
   await espelharUsinas(porta, r, tenantId, tamanho, lote, gravarContadores);
   await espelharGeracao(porta, r, tenantId, tamanho, lote, gravarContadores);
+  // Depois das usinas pelo mesmo motivo da geracao: a UC herda a distribuidora
+  // da usina e referencia ela por FK composta. E `vistosNoCrm` recebe os leads do
+  // rateio para que a reconciliacao nao os classifique como ausentes.
+  await espelharUnidades(porta, r, tenantId, tamanho, lote, gravarContadores, vistosNoCrm);
 
   // ------------------------------------------------- reconciliacao (§4.3)
   // Outra leitura fora de transacao, pelo mesmo motivo.
@@ -822,6 +837,254 @@ async function espelharUsinas(
         r.atualizados++; r.porEntidade.usina.atualizados++;
       }
       await gravarContadores();
+    });
+  }
+}
+
+/**
+ * Espelho de `unidade_consumidora`. `SPEC-002` §2 "Entra", implementado em 28/07
+ * depois da decisao da `F-01`: espelho fiel.
+ *
+ * A CHAVE E `numero_uc`, e a escolha e da REGRA 11. O candidato natural seria
+ * `crm_usina_cliente_id`, que guarda o `contrato_id` do rateio - mas o unico
+ * indice dele, `uc_crm_unico`, e PARCIAL (`WHERE crm_usina_cliente_id IS NOT
+ * NULL`), e a regra 11 e explicita: "nenhum repositorio navega por indice
+ * parcial". `uc_numero_unico` sobre `(tenant_id, numero_uc)` e cheio. O
+ * `crm_usina_cliente_id` vai junto como campo espelho, para rastreabilidade.
+ *
+ * A DISTRIBUIDORA E HERDADA DA USINA, e este e o ponto que precisa de confirmacao
+ * do dono - esta registrado como `Q-UC-DISTRIB-01`.
+ *
+ * O CRM nao expoe distribuidora em `rateio_clientes` (as colunas sao outras), e
+ * do nosso lado a coluna e `NOT NULL` com FK, igual a da usina. Duas saidas
+ * existiam: recusar toda UC - o que entregaria nada - ou derivar. Derivei da
+ * usina vinculada, e a diferenca para um default e que o conector **nao escolhe
+ * valor nenhum**: ele propaga o que o usuario ja cadastrou na usina. Se a usina
+ * nao estiver espelhada, a UC e recusa contada, em cascata.
+ *
+ * A base para acreditar que a heranca vale: geracao compartilhada compensa
+ * credito dentro da mesma area de concessao, entao UC e usina do mesmo rateio
+ * estariam na mesma distribuidora. **Nao afirmo isso como fato verificado** - e o
+ * motivo da questao. Se houver caso em que nao vale, a UC passa a exigir cadastro
+ * local, como a usina.
+ */
+async function espelharUnidades(
+  porta: PortaDeLeitura, r: ResultadoDoCiclo, tenantId: string, tamanho: number,
+  lote: AbrirLote, gravarContadores: () => Promise<void>, vistosNoCrm: Set<string>,
+): Promise<void> {
+  const [clientes, creditos] = await Promise.all([porta.rateioClientes(), porta.rateioCreditos()]);
+  if (clientes.garantiaDegradada || creditos.garantiaDegradada) r.garantiaDeTenantDegradada = true;
+  r.lidos += clientes.linhas.length;
+  r.porEntidade.unidade_consumidora.lidos = clientes.linhas.length;
+  if (clientes.linhas.length === 0) return;
+
+  // `rateio_creditos` e quem tem o `lead_id`; `rateio_clientes` tem a UC. A ponte
+  // e `contrato_id`, e ela casou 36/36 na medicao de 27/07.
+  const porContrato = new Map(creditos.linhas.map((c) => [c.contrato_id, c]));
+
+  type Alvo = {
+    leadId: string; numeroUc: string; nome: string | null; telefone: string | null;
+    percentual: string | null; vencimento: Date | null; codigoGeradora: string | null;
+    contratoId: string;
+  };
+  const alvos: Alvo[] = [];
+  const vistosUc = new Set<string>();
+
+  for (const rc of clientes.linhas) {
+    const credito = porContrato.get(rc.contrato_id);
+    const numeroUc = texto(rc.uc);
+    const recusar = (motivo: string) => {
+      r.recusados++;
+      r.porEntidade.unidade_consumidora.recusados++;
+      r.recusas.push({ lead_id: credito?.lead_id ?? rc.contrato_id, codigo: texto(rc.lead_codigo) ?? '(sem codigo)', motivo });
+    };
+
+    if (!credito) { recusar(`contrato ${rc.contrato_id} de rateio_clientes nao tem par em rateio_creditos - sem lead_id nao ha cliente`); continue; }
+    if (!numeroUc) { recusar(`contrato ${rc.contrato_id}: numero de UC vazio`); continue; }
+
+    /*
+     * A UC REPETIDA VIRA RECUSA CONTADA, e nao um 23505 no meio do lote.
+     *
+     * Medido em 27/07 e confirmado pelo dev em 28/07: `000041446801282` aparece em
+     * DOIS contratos de rateio, de leads diferentes, mesma usina, mesmo percentual,
+     * digitados com 39 minutos de diferenca na carga manual de 14/07. A leitura do
+     * dev e erro de digitacao de um dos dois numeros - e ele confirmou que o nosso
+     * modelo de UC unica por tenant esta certo. Escolher qual das duas vale seria
+     * exatamente o palpite que a R8 proibe. Ver `UC-DUP-01`.
+     */
+    if (vistosUc.has(numeroUc)) {
+      recusar(`UC ${numeroUc} aparece em mais de um contrato de rateio no mesmo ciclo. `
+            + 'O conector nao escolhe qual vale (UC-DUP-01): confira contra o rateio oficial da distribuidora.');
+      continue;
+    }
+    vistosUc.add(numeroUc);
+
+    alvos.push({
+      leadId: credito.lead_id, numeroUc,
+      nome: texto(rc.cliente), telefone: texto(rc.telefone),
+      percentual: rc.percentual_rateio, vencimento: rc.data_vencimento,
+      codigoGeradora: texto(rc.codigo_geradora), contratoId: rc.contrato_id,
+    });
+    // Lead de rateio conta como visto: sem isto a reconciliacao da §4.3 o trataria
+    // como ausente do CRM e o mandaria para a fila de revisao humana no mesmo ciclo
+    // em que ele foi criado.
+    vistosNoCrm.add(credito.lead_id);
+  }
+
+  for (const bloco of emLotes(alvos, tamanho)) {
+    r.maiorLote = Math.max(r.maiorLote, bloco.length);
+    await lote(async () => {
+      const db = dbt();
+
+      // As usinas vinculadas, para herdar a distribuidora e o vinculo.
+      const codigos = [...new Set(bloco.map((a) => a.codigoGeradora).filter(Boolean) as string[])];
+      const usinas = codigos.length === 0 ? [] : await db.usina.findMany({
+        where: { tenant_id: tenantId, codigo_geradora: { in: codigos } },
+        select: { id: true, codigo_geradora: true, distribuidora: true },
+      });
+      const porCodigo = new Map(usinas.map((u) => [u.codigo_geradora, u]));
+
+      // Os clientes que ja existem, por lead. Espelho fiel: quem nao existir nasce.
+      const leads = [...new Set(bloco.map((a) => a.leadId))];
+      const jaExistem = await db.cliente.findMany({
+        where: { tenant_id: tenantId, crm_lead_id: { in: leads } },
+        select: { id: true, crm_lead_id: true },
+      });
+      const clientePorLead = new Map(jaExistem.map((c) => [c.crm_lead_id!, c.id]));
+
+      const clientesACriar: any[] = [];
+      for (const a of bloco) {
+        if (clientePorLead.has(a.leadId)) continue;
+        const id = crypto.randomUUID();
+        clientePorLead.set(a.leadId, id);
+        // Minimo honesto: `origem` e `consumo_kwh` NAO existem em rateio_clientes,
+        // e inventar rotulo para origem seria improviso. Ficam nulos ate o lead
+        // aparecer em vendas_ganhas, e ai o espelho de venda completa.
+        clientesACriar.push({ id, tenant_id: tenantId, crm_lead_id: a.leadId,
+                              nome: a.nome ?? '(sem nome no CRM)', telefone: a.telefone });
+      }
+      if (clientesACriar.length) {
+        await db.cliente.createMany({ data: clientesACriar });
+        r.criados += clientesACriar.length;
+        r.porEntidade.cliente.criados += clientesACriar.length;
+      }
+
+      const numeros = bloco.map((a) => a.numeroUc);
+      const atuais = await db.unidade_consumidora.findMany({
+        where: { tenant_id: tenantId, numero_uc: { in: numeros } },
+        select: { id: true, numero_uc: true, cliente_id: true, usina_id: true,
+                  percentual_rateio: true, data_vencimento: true, crm_usina_cliente_id: true },
+      });
+      const porNumero = new Map(atuais.map((u) => [u.numero_uc, u]));
+
+      /*
+       * O `uc_crm_unico` E PARCIAL, E MESMO ASSIM PRECISA SER RESPEITADO.
+       *
+       * A regra 11 proibe NAVEGAR por indice parcial - e por isso a chave do
+       * espelho e `numero_uc`, que tem indice cheio. Mas o parcial existe no
+       * banco e viola com 23505, e um 23505 no meio de um `createMany` derruba o
+       * LOTE INTEIRO: um contrato que mudou de UC no CRM viraria falha de todas
+       * as UCs do lote. Entao ele e conferido aqui, por `findMany` com predicado
+       * explicito - que e o que a regra 11 manda usar -, e a violacao vira recusa
+       * contada com o motivo. Mesmo desenho da distribuidora fora da tabela de
+       * referencia: recusa nomeada e melhor que erro de integridade.
+       */
+      const contratos = bloco.map((a) => a.contratoId);
+      const jaVinculados = await db.unidade_consumidora.findMany({
+        where: { tenant_id: tenantId, crm_usina_cliente_id: { in: contratos } },
+        select: { numero_uc: true, crm_usina_cliente_id: true },
+      });
+      const ucDoContrato = new Map(jaVinculados.map((u) => [u.crm_usina_cliente_id!, u.numero_uc]));
+
+      const aCriar: any[] = [];
+      for (const a of bloco) {
+        const usina = a.codigoGeradora ? porCodigo.get(a.codigoGeradora) : undefined;
+        if (!usina) {
+          // Cascata da recusa da usina - mesmo desenho da geracao. Hoje e o caso
+          // normal, porque as 3 usinas ainda nao foram cadastradas localmente.
+          r.recusados++;
+          r.porEntidade.unidade_consumidora.recusados++;
+          r.recusas.push({
+            lead_id: a.leadId, codigo: a.numeroUc,
+            motivo: `UC ${a.numeroUc}: a usina ${a.codigoGeradora ?? '(sem codigo)'} nao esta espelhada no `
+                  + 'financeiro. A UC herda a distribuidora dela (Q-UC-DISTRIB-01), entao nao ha o que herdar.',
+          });
+          continue;
+        }
+        const ucAnterior = ucDoContrato.get(a.contratoId);
+        if (ucAnterior !== undefined && ucAnterior !== a.numeroUc) {
+          r.recusados++;
+          r.porEntidade.unidade_consumidora.recusados++;
+          r.recusas.push({
+            lead_id: a.leadId, codigo: a.numeroUc,
+            motivo: `contrato de rateio ${a.contratoId} ja esta vinculado a UC ${ucAnterior} e agora aponta `
+                  + `para ${a.numeroUc}. O conector nao move vinculo de contrato entre UCs: uma das duas `
+                  + 'leituras esta errada, e escolher seria palpite.',
+          });
+          continue;
+        }
+        const clienteId = clientePorLead.get(a.leadId)!;
+        const espelho = {
+          cliente_id: clienteId,
+          usina_id: usina.id,
+          percentual_rateio: a.percentual,
+          data_vencimento: a.vencimento,
+          crm_usina_cliente_id: a.contratoId,
+        };
+        const atual = porNumero.get(a.numeroUc);
+        if (!atual) {
+          aCriar.push({ tenant_id: tenantId, numero_uc: a.numeroUc,
+                        distribuidora: usina.distribuidora, ...espelho });
+          continue;
+        }
+        const mudou =
+          atual.cliente_id !== espelho.cliente_id ||
+          atual.usina_id !== espelho.usina_id ||
+          !mesmoDecimal(atual.percentual_rateio, espelho.percentual_rateio) ||
+          String(atual.data_vencimento ?? '') !== String(espelho.data_vencimento ?? '') ||
+          atual.crm_usina_cliente_id !== espelho.crm_usina_cliente_id;
+        if (!mudou) continue;   // R3
+        // `distribuidora` NAO entra no update: campo local, o usuario vence (R5).
+        await db.unidade_consumidora.updateMany({
+          where: { tenant_id: tenantId, id: atual.id }, data: espelho,
+        });
+        r.atualizados++; r.porEntidade.unidade_consumidora.atualizados++;
+      }
+      if (aCriar.length) {
+        await db.unidade_consumidora.createMany({ data: aCriar });
+        r.criados += aCriar.length;
+        r.porEntidade.unidade_consumidora.criados += aCriar.length;
+      }
+
+      // R7: `tem_rateio_ativo` finalmente tem quem o escreva. Era a coluna que
+      // nascia NULL desde a migration e nenhum caminho preenchia.
+      await marcarRateioAtivo([...new Set(bloco.map((a) => clientePorLead.get(a.leadId)!))], tenantId);
+      await gravarContadores();
+    });
+  }
+}
+
+/** R7 e invariante 5: so o conector escreve `cliente_estado_crm`. */
+async function marcarRateioAtivo(clienteIds: string[], tenantId: string): Promise<void> {
+  if (clienteIds.length === 0) return;
+  const db = dbt();
+  const existentes = await db.cliente_estado_crm.findMany({
+    where: { tenant_id: tenantId, cliente_id: { in: clienteIds } },
+    select: { cliente_id: true, tem_rateio_ativo: true },
+  });
+  const por = new Map(existentes.map((e) => [e.cliente_id, e]));
+
+  const aCriar = clienteIds.filter((id) => !por.has(id)).map((cliente_id) => ({
+    tenant_id: tenantId, cliente_id, tem_rateio_ativo: true,
+    tem_venda_ganha: null, em_carteira: null, sincronizado_em: new Date(),
+  }));
+  const aMarcar = clienteIds.filter((id) => por.has(id) && por.get(id)!.tem_rateio_ativo !== true);
+
+  if (aCriar.length) await db.cliente_estado_crm.createMany({ data: aCriar });
+  if (aMarcar.length) {
+    await db.cliente_estado_crm.updateMany({
+      where: { tenant_id: tenantId, cliente_id: { in: aMarcar } },
+      data: { tem_rateio_ativo: true, sincronizado_em: new Date() },
     });
   }
 }

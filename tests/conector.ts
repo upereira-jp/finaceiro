@@ -32,7 +32,8 @@ import {
   CicloDentroDeTransacao, TAMANHO_DO_LOTE,
   type PortaDeLeitura, type AbrirLote,
 } from '../src/crm/sincronizacao.ts';
-import type { VendaGanha, LeadArquivado, LeadMerge, UsinaDoCrm, GeracaoMensal } from '../src/crm/leitura.ts';
+import type { VendaGanha, LeadArquivado, LeadMerge, UsinaDoCrm, GeracaoMensal,
+              RateioCliente, RateioCredito } from '../src/crm/leitura.ts';
 
 const CONN = process.env.TEST_DATABASE_URL!;
 const A = process.env.TEST_TENANT_A!;
@@ -92,6 +93,7 @@ const venda = (o: Partial<VendaGanha> & { lead_id: string }): VendaGanha => ({
 const porta = (
   vendas: VendaGanha[], arquivados: LeadArquivado[] = [], merges: LeadMerge[] = [],
   degradada = true, usinas: UsinaDoCrm[] = [], geracao: GeracaoMensal[] = [],
+  rateioCli: RateioCliente[] = [], rateioCre: RateioCredito[] = [],
 ): PortaDeLeitura => ({
   crmTenantId: CRM_TENANT,
   vendasGanhas:    async () => ({ linhas: vendas, garantiaDegradada: degradada }),
@@ -99,6 +101,24 @@ const porta = (
   leadMerges:      async () => ({ linhas: merges, garantiaDegradada: degradada }),
   usinas:          async () => ({ linhas: usinas, garantiaDegradada: degradada }),
   geracaoMensal:   async () => ({ linhas: geracao, garantiaDegradada: degradada }),
+  rateioClientes:  async () => ({ linhas: rateioCli, garantiaDegradada: degradada }),
+  rateioCreditos:  async () => ({ linhas: rateioCre, garantiaDegradada: degradada }),
+});
+
+/* Fixtures do rateio, com a forma real: `data_vencimento`, `troca_titularidade` e
+ * `numero_protocolo` nulos em 36 de 36 (o dev confirmou: campos disponiveis, a
+ * operacao nunca digitou). A ponte entre as duas views e `contrato_id`. */
+const rateioCliCrm = (o: Partial<RateioCliente> & { contrato_id: string }): RateioCliente => ({
+  crm_tenant_id: CRM_TENANT, codigo_geradora: 'GER-CRM-01', usina: 'Usina de teste',
+  lead_codigo: 'G3-0001', cliente: 'Cliente do rateio', telefone: null,
+  percentual_rateio: '5.5000', uc: '000000000000001', troca_titularidade: null,
+  numero_protocolo: null, data_cadastro: null, data_vencimento: null,
+  observacoes: null, created_at: new Date('2026-07-14'), ...o,
+});
+const rateioCreCrm = (o: Partial<RateioCredito> & { contrato_id: string; lead_id: string }): RateioCredito => ({
+  crm_tenant_id: CRM_TENANT, usina_id: 'dddd1111-0000-4000-8000-00000000aa01',
+  percentual_rateio: '5.5000', geracao_nominal_kwh: '10800.0000', creditos_kwh_mes: '594.0000',
+  ...o,
 });
 
 /* Fixture de usina do CRM, com a FORMA REAL medida em 27/07: `potencia_kwp`,
@@ -553,6 +573,95 @@ const L3 = 'aaaa3333-0000-4000-8000-00000000cc03';
       ]), loteEmA());
     chk('N44', r2.porEntidade.usina_geracao.criados === 0 && r2.porEntidade.usina_geracao.atualizados === 0,
         `R3 usina_geracao: segunda passada nao escreve (c=${r2.porEntidade.usina_geracao.criados} a=${r2.porEntidade.usina_geracao.atualizados})`);
+  }
+}
+
+// ============ N45-N50: espelho de `unidade_consumidora` (SPEC-002 §2 · F-01)
+//
+// Decisao do dono em 28/07, depois da resposta do dev: ESPELHO FIEL. Dos 36 leads
+// de rateio, zero aparecem em `vendas_ganhas`, e por nome 24 sao a mesma pessoa
+// que um lead ja espelhado. Espelhar cria essas duplicatas - e isso e deliberado,
+// porque a duplicidade EXISTE no CRM e o conector espelha em vez de consertar a
+// origem. Quando o dedup do CRM mesclar, `lead_merges` avisa e a fusao ja testada
+// nos N32-N34 consolida sozinha.
+{
+  const LR1 = 'aaaa8001-0000-4000-8000-00000000rr01'.replace('rr','cc');
+  const LR2 = 'aaaa8002-0000-4000-8000-00000000rr02'.replace('rr','cc');
+  const CT1 = 'bbbb8001-0000-4000-8000-00000000cc81';
+  const CT2 = 'bbbb8002-0000-4000-8000-00000000cc82';
+  const CT3 = 'bbbb8003-0000-4000-8000-00000000cc83';
+  const UC_A = '000000000000801';
+  const UC_B = '000000000000802';
+
+  // ---- N45: a UC nasce, o cliente do rateio nasce junto, e a distribuidora e
+  // HERDADA da usina cadastrada localmente ('Equatorial GO', nao 'Equatorial').
+  {
+    const r = await executarCiclo(porta([venda({ lead_id: L1 })], [], [], true,
+      [usinaCrm({ usina_id: 'dddd1111-0000-4000-8000-00000000aa01', codigo_geradora: 'GER-CRM-01' })], [],
+      [rateioCliCrm({ contrato_id: CT1, uc: UC_A, cliente: 'Fulano do Rateio', percentual_rateio: '5.5000' })],
+      [rateioCreCrm({ contrato_id: CT1, lead_id: LR1 })]), loteEmA());
+
+    const [uc] = await sql(`SELECT u.numero_uc, u.distribuidora, u.percentual_rateio::text, u.crm_usina_cliente_id,
+                                   c.nome AS cliente_nome, c.crm_lead_id, us.codigo_geradora
+                              FROM unidade_consumidora u
+                              JOIN cliente c ON c.id = u.cliente_id
+                              LEFT JOIN usina us ON us.id = u.usina_id
+                             WHERE u.tenant_id=$1::uuid AND u.numero_uc=$2`, A, UC_A);
+    chk('N45', uc?.cliente_nome === 'Fulano do Rateio' && uc?.crm_lead_id === LR1
+         && uc?.codigo_geradora === 'GER-CRM-01' && uc?.crm_usina_cliente_id === CT1,
+        `§2 UC espelhada com cliente criado do rateio e vinculo de usina (cliente=${uc?.cliente_nome})`);
+
+    // A HERANCA, que e o ponto que precisa de confirmacao (Q-UC-DISTRIB-01): a
+    // distribuidora nao vem do CRM - ele nem a expoe em rateio_clientes - e nao e
+    // escolhida pelo conector. Ela e PROPAGADA da usina que alguem cadastrou.
+    chk('N46', uc?.distribuidora === 'Equatorial GO',
+        `Q-UC-DISTRIB-01 a UC herda a distribuidora da usina vinculada, nao um default (veio "${uc?.distribuidora}")`);
+
+    // R7: `tem_rateio_ativo` era a coluna que nascia NULL e ninguem preenchia.
+    const [est] = await sql(`SELECT e.tem_rateio_ativo, e.tem_venda_ganha FROM cliente_estado_crm e
+                               JOIN cliente c ON c.id = e.cliente_id
+                              WHERE c.tenant_id=$1::uuid AND c.crm_lead_id=$2::uuid`, A, LR1);
+    chk('N47', est?.tem_rateio_ativo === true,
+        `R7 cliente de rateio ganha tem_rateio_ativo = true (veio ${est?.tem_rateio_ativo})`);
+  }
+
+  // ---- N48: R3 na UC.
+  {
+    const r = await executarCiclo(porta([venda({ lead_id: L1 })], [], [], true,
+      [usinaCrm({ usina_id: 'dddd1111-0000-4000-8000-00000000aa01', codigo_geradora: 'GER-CRM-01' })], [],
+      [rateioCliCrm({ contrato_id: CT1, uc: UC_A, cliente: 'Fulano do Rateio', percentual_rateio: '5.5000' })],
+      [rateioCreCrm({ contrato_id: CT1, lead_id: LR1 })]), loteEmA());
+    chk('N48', r.porEntidade.unidade_consumidora.criados === 0 && r.porEntidade.unidade_consumidora.atualizados === 0
+         && r.porEntidade.cliente.criados === 0,
+        `R3 UC: segunda passada nao cria nem atualiza (uc c=${r.porEntidade.unidade_consumidora.criados} a=${r.porEntidade.unidade_consumidora.atualizados})`);
+  }
+
+  // ---- N49: A UC REPETIDA - o caso real medido em producao (UC-DUP-01).
+  // Duas linhas de rateio, leads diferentes, MESMA UC. O conector nao escolhe
+  // qual vale: recusa contada, e a primeira sobrevive sem 23505 no meio do lote.
+  {
+    const r = await executarCiclo(porta([venda({ lead_id: L1 })], [], [], true,
+      [usinaCrm({ usina_id: 'dddd1111-0000-4000-8000-00000000aa01', codigo_geradora: 'GER-CRM-01' })], [],
+      [ rateioCliCrm({ contrato_id: CT3, uc: UC_B, cliente: 'Primeiro' }),
+        rateioCliCrm({ contrato_id: CT2, uc: UC_B, cliente: 'Segundo' }) ],
+      [ rateioCreCrm({ contrato_id: CT3, lead_id: LR1 }),
+        rateioCreCrm({ contrato_id: CT2, lead_id: LR2 }) ]), loteEmA());
+    const n = await sql(`SELECT count(*)::int n FROM unidade_consumidora WHERE tenant_id=$1::uuid AND numero_uc=$2`, A, UC_B);
+    const [linha] = await sql(`SELECT detalhe FROM conector_execucao WHERE tenant_id=$1::uuid AND ciclo_id=$2::uuid`, A, r.cicloId);
+    chk('N49', n[0].n === 1 && r.porEntidade.unidade_consumidora.recusados === 1
+         && /UC-DUP-01/.test(JSON.stringify(linha?.detalhe ?? {})),
+        `UC-DUP-01 mesma UC em dois contratos: UMA gravada, a outra recusada com o motivo (gravadas=${n[0].n}, rec=${r.porEntidade.unidade_consumidora.recusados})`);
+  }
+
+  // ---- N50: cascata - UC de usina nao espelhada nao tem de quem herdar.
+  {
+    const r = await executarCiclo(porta([venda({ lead_id: L1 })], [], [], true, [], [],
+      [rateioCliCrm({ contrato_id: 'bbbb8009-0000-4000-8000-00000000cc89', uc: '000000000000899',
+                      codigo_geradora: 'GER-INEXISTENTE' })],
+      [rateioCreCrm({ contrato_id: 'bbbb8009-0000-4000-8000-00000000cc89', lead_id: LR2 })]), loteEmA());
+    const n = await sql(`SELECT count(*)::int n FROM unidade_consumidora WHERE tenant_id=$1::uuid AND numero_uc='000000000000899'`, A);
+    chk('N50', n[0].n === 0 && r.porEntidade.unidade_consumidora.recusados === 1,
+        `cascata: UC de usina nao espelhada e recusa contada, nao UC sem distribuidora (rec=${r.porEntidade.unidade_consumidora.recusados})`);
   }
 }
 

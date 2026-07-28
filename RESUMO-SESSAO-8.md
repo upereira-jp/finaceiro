@@ -945,3 +945,70 @@ Vale contra o instinto de "perguntar depois, implementar agora": eu já tinha
 implementado a R19 na leitura errada, com teste e plantio, e o teste **passava**.
 Um invariante bem testado sobre uma premissa falsa é exatamente tão errado quanto
 um sem teste — e mais caro de desfazer, porque parece verificado.
+
+---
+
+## 22. ADENDO — `unidade_consumidora` espelhada, e a F1 sem vermelhas
+
+Decisão do dono, 28/07, e ela só ficou possível **depois** da resposta do dev:
+**espelho fiel**. Os 36 leads de rateio são espelhados pelo próprio `crm_lead_id`.
+
+A duplicidade — 24 pessoas que existem como dois leads — **passa a ser fiel**: ela
+está no CRM, e o conector espelha em vez de consertar a origem. Quando o dedup do
+CRM mesclar os pares, `lead_merges` avisa e `fundirEspelho` consolida sozinho, com
+a maquinaria já testada nos `N32`–`N34`. **E não há risco de faturar duas vezes:**
+a cobrança segue UC e contrato, e só o lead de rateio tem UC.
+
+### Quatro regras novas, e três delas nasceram de um erro de integridade evitado
+
+| | |
+|---|---|
+| **R21** | A UC **herda a distribuidora da usina** vinculada. O conector não escolhe valor — propaga o que o usuário cadastrou. **Precisa de confirmação:** `Q-UC-DISTRIB-01` |
+| **R22** | UC repetida entre contratos é recusa contada. **Sem a guarda, o `23505` derruba o lote inteiro** — foi o que o plantio mostrou |
+| **R23** | Contrato de rateio que muda de UC é recusa contada. O `uc_crm_unico` é parcial e a regra 11 proíbe navegar por ele, **mas ele existe no banco e viola** |
+| **R24** | `cliente_estado_crm.tem_rateio_ativo` finalmente tem quem o escreva — nascia `NULL` desde a migration e nenhum caminho preenchia |
+
+**A chave do espelho é `numero_uc`, não `crm_usina_cliente_id`**, e a escolha é da
+regra 11: o índice do segundo é **parcial**. Foi a regra pagando de novo.
+
+**A R23 apareceu porque a suíte morreu.** O teste reutilizou um `contrato_id` e o
+`uc_crm_unico` violou — eu ia corrigir só a fixture, mas o mesmo caminho existe em
+produção: um contrato que mude de UC no CRM derrubaria o lote inteiro. Corrigi os
+dois. *Bug de teste que denuncia bug de código é o teste ganhando duas vezes.*
+
+### O ciclo real
+
+```
+lidos 95   criados 35   atualizados 0   recusados 47   7 transacoes
+
+cliente ............ lidos 48   criados 35   recusados  0
+usina .............. lidos  3   criados  0   recusados  3
+usina_geracao ...... lidos  8   criados  0   recusados  8
+unidade_consumidora  lidos 36   criados  0   recusados 36
+```
+
+Segunda passada: **`criados: 0, atualizados: 0`** — idempotente com as quatro
+entidades. Estado em produção: **76 clientes espelhados**, 35 com
+`tem_rateio_ativo`, 41 com `tem_venda_ganha`.
+
+**As 47 recusas são uma cascata com uma única raiz:** as 3 usinas não estão
+cadastradas localmente. Sem usina, não há distribuidora para a UC herdar (R21) nem
+onde pousar a geração. **Um cadastro de 3 linhas destrava 35 UCs e 8 competências
+de geração.**
+
+### Onde a F1 está
+
+**A `Q-ESCOPO-01` fechou:** as quatro entidades da §2 estão implementadas, e a
+`PortaDeLeitura` foi de 3 para **7 das 8 views** (falta `parceiros`, que alimenta
+`originador` — F3).
+
+**A F1 não tem mais nenhuma vermelha.** O que resta é dado e cadastro, não código:
+
+| | Quem |
+|---|---|
+| Cadastrar as 3 usinas com a distribuidora | operação (3 linhas) |
+| `Q-UC-DISTRIB-01` — confirmar a herança da distribuidora | Vinicius |
+| `Q-ATIVOS-01` — mover cards ou mudar o gatilho da automação | Vinicius + operação |
+| `UC-DUP-01` — conferir a UC repetida contra o rateio oficial | operação |
+
+**313 verificações em 18 suítes** (305 `chk()` + 8 de catálogo), `EXIT=0`.
