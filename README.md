@@ -6,7 +6,8 @@ Sistema financeiro multi-tenant da G3 Solar: faturamento de crédito de energia,
 |---|---|
 | **Dono** | Vinicius Leal |
 | **Fase atual** | F0 fechada · F1 com os três critérios formais cumpridos · **F2 e F3 construídas em 28/07, depois de a `PAUTA-contador.md` voltar respondida.** 18 migrations, `fatura`, `boleto`, `liquidacao`, `split_execucao` e `split_item` no banco, dois motores puros, a `PortaDeCobranca` injetada e **431 verificações** em 21 suítes. O que segura a F2 agora é **um certificado A1**, não código: o critério do `PRD` §10 é *"boleto liquidado no sandbox baixa a fatura"*, e o ciclo inteiro está provado contra o adaptador falso. Ver `RESUMO-SESSAO-10.md`. Histórico da F1 preservado abaixo: **F1 em execução, e não fecha só com código nosso.** 15 migrations no Supabase `sa-east-1`, role de runtime, composition root, seis repositórios, 37 rotas, auth próprio medido ponta a ponta contra o Supabase real, conector do CRM construído e testado, e os 8 invariantes de catálogo verdes **contra produção**. A `Q-VIEWS-01` fechou no mesmo dia e o **invariante 9 está cumprido**. O ciclo rodou **valendo, duas vezes**, contra o CRM real e os três critérios formais fecharam; a `Q-ESCOPO-01` (conector entrega 1 de 4 entidades) é a vermelha que resta. Ver a tabela de critérios abaixo |
-| **Atualizado** | 28/07/2026 · fim da sessão 10 |
+| **Atualizado** | 28/07/2026 · fim da sessão 11 |
+| **No ar** | **`https://financeiro.blackhaus.io`** — systemd, Node 22 isolado, TLS até 26/10. Mesmo VPS do CRM, **sem alterar uma linha da configuração dele**. Ver `RESUMO-SESSAO-11.md` |
 
 ---
 
@@ -14,7 +15,8 @@ Sistema financeiro multi-tenant da G3 Solar: faturamento de crédito de energia,
 
 Nesta ordem. Cada documento pressupõe o anterior.
 
-1. **`RESUMO-SESSAO-10.md`** — estado atual e a fila com dono nomeado. A sessão em que a `PAUTA-contador.md` voltou e a carteira foi construída
+1. **`RESUMO-SESSAO-11.md`** — **comece por aqui.** Estado atual e a fila com dono nomeado. A sessão do deploy: a paleta da G3, o sistema em produção, dois logins e duas questões novas
+2. **`RESUMO-SESSAO-10.md`** — a sessão anterior, em que a `PAUTA-contador.md` voltou e a carteira foi construída
 2. **`SPEC-003-carteira.md`** — a spec da F2 e da F3. A §3 rastreia qual resposta do contador produziu qual coluna
 3. **`RESUMO-SESSAO-9.md`** — a sessão anterior. O roteiro que fechou a F1 está na **§11 do `RESUMO-SESSAO-8.md`**, e ele já foi executado por inteiro
 2. **`CLAUDE.md`** — as onze regras inegociáveis. Antes de qualquer linha de código
@@ -61,8 +63,12 @@ RESUMO-SESSAO-7.md           passagem da sessao 7 — role de runtime, 37 rotas,
 RESUMO-SESSAO-8.md           passagem da sessao 8 — a §11 e o roteiro que fechou
                              a F1, ja executado por inteiro
 RESUMO-SESSAO-9.md           passagem da sessao 9 — o sinal da Q-UC-DISTRIB-01
-RESUMO-SESSAO-10.md          passagem da sessao 10 — comece por aqui. A PAUTA
-                             respondida e a carteira inteira
+RESUMO-SESSAO-10.md          passagem da sessao 10 — a PAUTA respondida e a
+                             carteira inteira
+RESUMO-SESSAO-11.md          passagem da sessao 11 — COMECE POR AQUI. A paleta
+                             da G3, o deploy em producao ao lado do CRM sem
+                             tocar nele, os dois logins e as duas questoes que
+                             o caminho da Sicoob fez aparecer
 PAUTA-contador.md            as 10 perguntas fechadas, RESPONDIDAS em 28/07. O
                              corpo fica intacto; a tabela do fim e o de-para
 VIEWS-PROPOSTAS-r2.sql       DDL proposta ao dev do CRM. EXECUTADA - as 8 views
@@ -156,6 +162,12 @@ scripts/bootstrap-plataforma-admin.sql
 scripts/provisionar-tenant.sql
                              PROVISIONAMENTO do primeiro tenant DO FINANCEIRO
                              (nao do CRM), o vinculo admin e o conector_crm
+scripts/provisionar-usuario.sql
+                             PROVISIONAMENTO do SEGUNDO usuario em diante, num
+                             tenant que ja existe. Nao havia caminho: os outros
+                             dois scripts cobrem so o primeiro, e nao ha rota de
+                             gestao de usuario. Guarda o e-mail CONFIRMADO -
+                             sem isso a linha nasce certa e a pessoa nao loga
 scripts/ciclo-crm.ts         COMPOSICAO do ciclo: liga pool do CRM, leitor e
                              motor. Exige --ensaio ou --valendo. `npm run ciclo`
 scripts/faturar.ts           COMPOSICAO do lote de faturamento. Exige --ensaio ou
