@@ -9,24 +9,18 @@
 // operacional do usuario - operacao trabalha o dia todo nisto.
 
 import type { ReactNode, CSSProperties } from 'react';
+import { VARIAVEIS_CSS, TIPOGRAFIA } from './tema.ts';
 
+// NENHUMA COR LITERAL DAQUI PARA BAIXO. Tudo sai de `tema.ts`, via custom
+// property. E o que faz "trocar a paleta" ser trocar um arquivo em vez de cacar
+// hexadecimal em oito telas - e a paleta de hoje esta marcada la como
+// PROVISORIA, porque foi escolhida por quem escreveu o codigo e nao pela G3.
 export const ESTILO = `
-  :root {
-    --fundo: #ffffff; --fundo2: #f6f7f9; --texto: #16181d; --fraco: #6b7280;
-    --borda: #e3e6ea; --acento: #1f6feb; --erro: #b42318; --erro-fundo: #fef3f2;
-    --ok: #067647; --alerta: #b54708; --alerta-fundo: #fffaeb;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --fundo: #0f1115; --fundo2: #161a21; --texto: #e6e8ec; --fraco: #9aa3af;
-      --borda: #262c36; --acento: #4c8dff; --erro: #ff6b6b; --erro-fundo: #2a1416;
-      --ok: #4ade80; --alerta: #fbbf24; --alerta-fundo: #2a2113;
-    }
-  }
+  ${VARIAVEIS_CSS}
   * { box-sizing: border-box; }
   body {
     margin: 0; background: var(--fundo); color: var(--texto);
-    font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font: ${TIPOGRAFIA.base}/${TIPOGRAFIA.linha} ${TIPOGRAFIA.familia};
   }
   a { color: var(--acento); }
   .barra {
@@ -36,32 +30,32 @@ export const ESTILO = `
   }
   .barra nav { display: flex; gap: 4px; flex-wrap: wrap; }
   .barra nav a {
-    padding: 6px 10px; border-radius: 6px; text-decoration: none; color: var(--fraco); font-size: 14px;
+    padding: 6px 10px; border-radius: var(--raio); text-decoration: none; color: var(--fraco); font-size: 14px;
   }
   .barra nav a.ativo { background: var(--fundo); color: var(--texto); box-shadow: inset 0 0 0 1px var(--borda); }
-  .conteudo { max-width: 1100px; margin: 0 auto; padding: 24px 20px 80px; }
+  .conteudo { max-width: var(--largura); margin: 0 auto; padding: 24px 20px 80px; }
   h1 { font-size: 22px; margin: 0 0 4px; }
   h2 { font-size: 17px; margin: 28px 0 10px; }
   .sub { color: var(--fraco); margin: 0 0 20px; font-size: 14px; }
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
   th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--borda); vertical-align: top; }
   th { color: var(--fraco); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
-  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-  .rolagem { overflow-x: auto; border: 1px solid var(--borda); border-radius: 8px; }
-  .cartao { border: 1px solid var(--borda); border-radius: 8px; padding: 16px; background: var(--fundo2); }
-  .campos { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+  td.num, th.num { text-align: right; font-variant-numeric: ${TIPOGRAFIA.numero}; }
+  .rolagem { overflow-x: auto; border: 1px solid var(--borda); border-radius: var(--raio-cartao); }
+  .cartao { border: 1px solid var(--borda); border-radius: var(--raio-cartao); padding: 16px; background: var(--fundo2); }
+  .campos { display: grid; gap: var(--gap); grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
   label { display: block; font-size: 13px; color: var(--fraco); margin-bottom: 4px; }
   input, select {
-    width: 100%; padding: 8px 10px; border: 1px solid var(--borda); border-radius: 6px;
+    width: 100%; padding: 8px 10px; border: 1px solid var(--borda); border-radius: var(--raio);
     background: var(--fundo); color: var(--texto); font: inherit; font-size: 14px;
   }
   button {
-    padding: 8px 14px; border-radius: 6px; border: 1px solid var(--borda);
+    padding: 8px 14px; border-radius: var(--raio); border: 1px solid var(--borda);
     background: var(--fundo); color: var(--texto); font: inherit; font-size: 14px; cursor: pointer;
   }
-  button.primario { background: var(--acento); border-color: var(--acento); color: #fff; }
+  button.primario { background: var(--acento); border-color: var(--acento); color: var(--acento-texto); }
   button:disabled { opacity: .5; cursor: default; }
-  .aviso { padding: 10px 12px; border-radius: 6px; font-size: 14px; margin: 12px 0; }
+  .aviso { padding: 10px 12px; border-radius: var(--raio); font-size: 14px; margin: 12px 0; }
   .aviso.erro { background: var(--erro-fundo); color: var(--erro); border: 1px solid currentColor; }
   .aviso.ok { background: var(--fundo2); color: var(--ok); border: 1px solid currentColor; }
   .marca { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }

@@ -6,7 +6,7 @@ Sistema financeiro multi-tenant da G3 Solar: faturamento de crédito de energia,
 |---|---|
 | **Dono** | Vinicius Leal |
 | **Fase atual** | F0 fechada · F1 com os três critérios formais cumpridos · **F2 e F3 construídas em 28/07, depois de a `PAUTA-contador.md` voltar respondida.** 18 migrations, `fatura`, `boleto`, `liquidacao`, `split_execucao` e `split_item` no banco, dois motores puros, a `PortaDeCobranca` injetada e **431 verificações** em 21 suítes. O que segura a F2 agora é **um certificado A1**, não código: o critério do `PRD` §10 é *"boleto liquidado no sandbox baixa a fatura"*, e o ciclo inteiro está provado contra o adaptador falso. Ver `RESUMO-SESSAO-10.md`. Histórico da F1 preservado abaixo: **F1 em execução, e não fecha só com código nosso.** 15 migrations no Supabase `sa-east-1`, role de runtime, composition root, seis repositórios, 37 rotas, auth próprio medido ponta a ponta contra o Supabase real, conector do CRM construído e testado, e os 8 invariantes de catálogo verdes **contra produção**. A `Q-VIEWS-01` fechou no mesmo dia e o **invariante 9 está cumprido**. O ciclo rodou **valendo, duas vezes**, contra o CRM real e os três critérios formais fecharam; a `Q-ESCOPO-01` (conector entrega 1 de 4 entidades) é a vermelha que resta. Ver a tabela de critérios abaixo |
-| **Atualizado** | 28/07/2026 |
+| **Atualizado** | 28/07/2026 · fim da sessão 10 |
 
 ---
 
@@ -124,6 +124,12 @@ scripts/servir.ts            O ENTRYPOINT. `npm start` (producao) / `npm run ser
 web/                         A SPA: React + Vite, tsconfig proprio. `npm run web:dev`
                              (5173, com proxy para a 3000) e `npm run web:build`.
                              Oito telas, na ORDEM das camadas da prontidao
+web/src/tema.ts              CORES E TIPOGRAFIA, num lugar so. A paleta de hoje e
+                             PROVISORIA e foi escolhida por quem escreveu o codigo,
+                             nao pela G3 - trocar e trocar este arquivo. Nenhuma
+                             tela tem cor literal
+web/src/dinheiro.ts          a regra 1 no browser: reais viram centavos por TEXTO,
+                             sem multiplicar por 100 e sem float
 src/http/erros.ts            erro de dominio -> HTTP. 500 nao vaza mensagem interna
 src/auth/jwt.ts              JWT do Supabase por node:crypto. O alg sai da CHAVE, nao do header
 src/auth/autenticador.ts     Bearer -> auth_user_id. Auth PROPRIO (MT-06 resolvida)

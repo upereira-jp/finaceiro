@@ -5,7 +5,7 @@
 | **Foco** | A `PAUTA-contador.md` voltou respondida. **A F2 e a F3 foram construídas com as respostas na mão** |
 | **Método** | Nada afirmado sem medição; lacuna vira questão, nunca default (regra 10); invariante nos dois sentidos. **Uma afirmação minha foi corrigida por medição, e um defeito meu foi pego por teste** |
 | **Resultado** | `SPEC-003-carteira.md`, migrations 16 a 18, dois motores puros, seis repositórios, a porta de cobrança e 28 rotas |
-| **Testes** | **431 verificações em 21 suítes**, `EXIT=0`. Eram 318. Catálogo 8/8 |
+| **Testes** | **443 verificações em 21 suítes**, `EXIT=0`. Eram 318. Catálogo 8/8 contra produção |
 
 > # ESTADO ATUAL — 28/07/2026
 >
@@ -16,6 +16,8 @@
 > | **O que segura a F2** | **um certificado A1**, não código. O critério do `PRD` §10 é *"boleto liquidado no sandbox baixa a fatura automaticamente"*, e o ciclo está provado contra o **adaptador falso** — `Q-SICOOB-01` |
 > | **Invariante do centavo** | constraint deferida no banco + 2.000 combinações no motor. 22 delas deram líquido G3 **negativo**, que é o que o `PRD` §5.6 prevê |
 > | **Contra produção** | as **18 migrations aplicadas**, catálogo **8/8**, e o ensaio de faturamento rodado. **Zero faturas a criar em qualquer competência, e o motivo não é código** — ver §11 |
+> | **A aplicação sobe** | `npm start`. O entrypoint não existia até hoje: as 78 rotas nunca tinham rodado como processo (§14) |
+> | **Tem tela** | SPA em React + Vite, oito telas, servida pelo próprio servidor sob a mesma origem. `SUPABASE_ANON_KEY` no `.env`, `/api/publico/config` respondendo |
 >
 > **A fila, e ela mudou de forma:**
 >
@@ -277,3 +279,86 @@ Não é flake. `lerCorpo` lança **no meio do stream**, assim que o acumulado pa
 **E o servidor de estáticos é controle de segurança, então ganhou teste.** Chegar ao caso que *discrimina* custou duas tentativas, e as duas ficam registradas no próprio teste porque enganam: `/..%2f..%2f` não discrimina (a string ainda tem `..` literal, o filtro ingênuo também barra), e `%2e%2e%2f%2e%2e%2f` não discrimina (dois níveis resolvem para `/`, e o 404 vem de arquivo inexistente, não de contenção). O que discrimina é **um** nível com ponto e barra codificados: não há `..` nenhum no texto, o `new URL` não decodifica isso no pathname, o arquivo existe — e só a resolução de caminho absoluto pega. **Com o filtro por texto plantado, o `H24` falha e o segredo sai na resposta.**
 
 **443 verificações**, `EXIT=0`.
+
+---
+
+# PARA A PRÓXIMA SESSÃO
+
+## O que você vai trazer, e onde ele entra
+
+Você disse que vai passar **o script das cores e os modelos das telas**. O lugar está preparado e é **um arquivo**: `web/src/tema.ts`.
+
+A paleta que está lá **foi escolhida por mim, não pela G3** — cinza neutro com azul de acento, para as telas serem legíveis hoje. Nenhum valor saiu de manual de identidade. Está marcada como **PROVISÓRIA** no cabeçalho do arquivo, e **não há uma cor literal em nenhuma das oito telas**: tudo sai de custom property. Trocar a paleta é trocar `tema.ts`.
+
+**Quatro coisas que a substituição precisa preservar**, e nenhuma é gosto:
+
+1. **Contraste.** `--texto` sobre `--fundo` e sobre `--fundo2` em pelo menos 4.5:1. Operação lê isso o dia inteiro.
+2. **Os três estados da prontidão são semânticos.** `ok` verde, `pendente` vermelho e **`nao_medido` âmbar**. O terceiro existe porque *zero sobre universo vazio não é pronto* — pintá-lo de verde faria a tela autorizar o que não conferiu, e isso foi um defeito real desta sessão. Se a marca não tiver âmbar, ele precisa de outra forma de se distinguir do verde; nunca de virar verde.
+3. **Cor não pode ser o único sinal.** Hoje cada marca carrega o texto do estado junto. Mantenha, ou daltônico perde a informação inteira.
+4. **Os dois temas.** `prefers-color-scheme` decide, e as duas metades andam juntas.
+
+`acentoTexto` é token separado de propósito: se o acento da marca for claro, texto branco em cima dele fica ilegível — e um `#fff` cravado no CSS é justamente o valor que ninguém lembra de trocar junto.
+
+## As oito telas como estão hoje
+
+Para você dizer o que muda, e em que ordem. A navegação segue a **ordem das camadas da prontidão** — é a ordem em que o trabalho destrava o próximo passo.
+
+| # | Tela | O que faz hoje |
+|---|---|---|
+| 1 | **Prontidão** | As nove camadas, com contagem, dono e a questão que destrava. É a tela de abertura |
+| 2 | **Clientes** | Lista o que o conector espelhou; cadastra o que não vem do CRM |
+| 3 | **Unidades** | Lista as UCs e edita **dia de vencimento** e **percentual de rateio** — a camada `vencimento` fecha aqui |
+| 4 | **Contratos** | Cria e ativa. É a camada que bloqueia tudo, e a única que só existe aqui |
+| 5 | **Usinas** | Vincula o dono e abre vigência de repasse |
+| 6 | **Donos** | Cadastro de quem recebe o repasse. Exige PIX ou conta completa |
+| 7 | **Tarifas** | R$/kWh por distribuidora, versionado por vigência |
+| 8 | **Carteira** | Ensaio e composição do lote, e a posição por competência |
+
+O que **não** existe em tela: emissão de boleto, baixa, extrato de split e inadimplência. Todos têm rota pronta; falta a tela — e três deles não têm o que mostrar até haver fatura.
+
+## O estado real, em uma frase
+
+**O sistema está construído e não consegue emitir uma fatura, e o motivo não é código.** Faltam quatro cadastros e um certificado.
+
+| O que falta | Quem | Onde se faz agora |
+|---|---|---|
+| **Contratos** — 35 de 35 | Vinicius + operação | tela *Contratos* |
+| **Dia de vencimento** — 35 de 35 | operação | tela *Unidades* |
+| **Dono de usina** — 3 de 3 | operação | tela *Donos* |
+| **Regra de repasse** — 3 de 3 | Vinicius | tela *Usinas* |
+| **Tarifa vigente** | Vinicius | tela *Tarifas* (o valor derivado é 1,130000 R$/kWh) |
+| **Certificado A1 + credencial Sicoob** | Vinicius | `Q-SICOOB-01` |
+
+Fechadas as quatro primeiras, `npm run faturar -- --prontidao` para de acusar e a primeira fatura passa a ser possível. **A ordem importa:** fechar `contrato_ativo` é o que torna as três camadas *não medidas* mensuráveis.
+
+## Duas decisões que ficaram para depois, e não são pequenas
+
+**Onde mora o segredo do tenant.** `credencial_ref` é ponteiro para *armazenamento cifrado*, e **esse armazenamento não existe** — não há cofre nem resolvedor. É pré-requisito do adaptador Sicoob real, e é decisão de arquitetura (Supabase Vault, `pgsodium`, gerenciador externo), provavelmente com ADR próprio. **Não é implementação: é escolha.**
+
+**A `F-05`, registrada e ainda aberta.** Cobrar **obra/integração** não cabe no modelo atual: `fatura` exige `contrato_id`, `unidade_consumidora_id`, `usina_id` e `geracao_kwh_competencia NOT NULL`, e uma venda de instalação não tem nenhum dos quatro. Seria um segundo tipo de documento, com boleto próprio e fora do motor de split de energia. Só volta a bloquear no dia da primeira cobrança de obra.
+
+## Deploy: VPS da Hostinger, compartilhado
+
+Decidido nesta sessão, a concluir na próxima. O que já se sabe que precisa ser conferido lá:
+
+- **Processo Node persistente** (systemd ou PM2) — o desenho depende de pool de conexão vivo. Serverless empurraria para o *transaction pooler* na 6543 e **reabriria o `ADR-0003` inteiro**
+- **`DATABASE_URL` no session pooler da 5432**, nunca a 6543 — está no `.env.example`, e a razão está medida
+- **TLS no subdomínio** (Let's Encrypt), e proxy reverso se o VPS já servir outra coisa — ele é compartilhado
+- **`SUPABASE_ANON_KEY` e `SUPABASE_URL` no ambiente do processo**, não em arquivo versionado
+- **Mais tarde, o certificado A1 em disco** para o mTLS da Sicoob — o que reforça a escolha por processo persistente
+- Latência medida até `sa-east-1`: **75 ms por viagem**. É o número que dimensionou o lote do conector em 50, e vale conferir do VPS
+
+## Como rodar hoje
+
+```bash
+npm test                    # 443 verificações, 21 suítes
+npm run web:build           # constrói a SPA em web/dist
+npm start                   # sobe API + SPA na mesma origem, porta 3000
+
+# desenvolvimento com recarga:
+npm run servir              # API na 3000
+npm run web:dev             # SPA na 5173, com proxy para a 3000
+
+npm run faturar -- --prontidao --competencia 2026-07 --auth-user <uuid>
+npm run ciclo   -- --ensaio --auth-user <uuid>
+```
