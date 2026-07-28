@@ -10,6 +10,11 @@
 
 > # ESTADO ATUAL — 28/07/2026, fim da sessão
 >
+> > **SUPERADA pelo `RESUMO-SESSAO-9.md`.** Esta caixa foi o estado corrente até o
+> > fim da sessão 8 e fica como registro datado. O que mudou depois: `SPEC-002`
+> > v1.4 (R21-b, invariante 13) e 318 verificações. **A fila abaixo continua
+> > válida** — nenhum item dela foi fechado na sessão 9.
+>
 > **Leia esta caixa e pule para a §11 só se precisar do histórico.** O corpo deste
 > documento é registro datado e não foi reescrito; as §16–§24 são adendos que
 > corrigem partes dele. Se você chegou agora, o que vale é o que está aqui.

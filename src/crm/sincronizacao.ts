@@ -155,6 +155,20 @@ export class CicloDentroDeTransacao extends Error {
 
 export type Recusa = { lead_id: string; codigo: string; motivo: string };
 
+/**
+ * Sinal que NAO impede a escrita e que mesmo assim nao pode ficar em silencio.
+ *
+ * A diferenca para `Recusa` e semantica e importa: recusa significa "nada foi
+ * gravado"; divergencia significa "foi gravado, e ha algo que alguem precisa
+ * olhar". Misturar as duas faria a contagem de recusas - que e a invariante 8 -
+ * medir duas coisas diferentes.
+ *
+ * O precedente e `garantia_de_tenant_degradada`: vai para `conector_execucao.detalhe`
+ * e para a saida do script, e NAO muda o `status` do ciclo. Declarar a lacuna em
+ * vez de esconde-la.
+ */
+export type Divergencia = { entidade: Entidade; chave: string; sinal: string };
+
 export type Entidade = 'cliente' | 'usina' | 'usina_geracao' | 'unidade_consumidora';
 export type ContagemDeEntidade = { lidos: number; criados: number; atualizados: number; recusados: number };
 
@@ -184,6 +198,8 @@ export type ResultadoDoCiclo = {
   garantiaDeTenantDegradada: boolean;
   /** A quebra dos contadores por entidade. Vai para `conector_execucao.detalhe`. */
   porEntidade: Record<Entidade, ContagemDeEntidade>;
+  /** Sinais que nao impedem a escrita. Ver `Divergencia`. */
+  divergencias: Divergencia[];
   /** R13 - quantas transacoes o ciclo abriu. Uma delas gigante e o defeito. */
   transacoes: number;
   /** Maior numero de leads que uma unica transacao carregou. Nunca > tamanho do lote. */
@@ -387,7 +403,7 @@ export async function executarCiclo(
   const r: ResultadoDoCiclo = {
     cicloId: crypto.randomUUID(), status: 'ok',
     lidos: 0, criados: 0, atualizados: 0, desativados: 0, recusados: 0,
-    recusas: [], filaDeRevisao: [], garantiaDeTenantDegradada: false,
+    recusas: [], filaDeRevisao: [], divergencias: [], garantiaDeTenantDegradada: false,
     porEntidade: { cliente: zerado(), usina: zerado(), usina_geracao: zerado(),
                    unidade_consumidora: zerado() },
     transacoes: 0, maiorLote: 0, execucaoGravada: false,
@@ -511,6 +527,11 @@ export async function executarCiclo(
         erro: `ciclo interrompido: ${e?.name ?? 'Error'}: ${e?.message ?? String(e)}`,
         recusas: r.recusas,
         fila_de_revisao: r.filaDeRevisao,
+        // Junto das recusas, e pelo mesmo motivo. O lote que ja passou esta
+        // COMMITADO: uma divergencia vista antes da interrupcao e um sinal
+        // gravado no banco, e omiti-la aqui a perderia justamente no ciclo que
+        // deu errado - onde o silencio custa mais.
+        divergencias: r.divergencias,
         commitado_por_lote: houveTrabalho,
         garantia_de_tenant_degradada: r.garantiaDeTenantDegradada,
       });
@@ -640,6 +661,7 @@ async function processar(
   return fechar({
     recusas: r.recusas,
     fila_de_revisao: r.filaDeRevisao,
+    divergencias: r.divergencias,
     lotes: { tamanho, transacoes: r.transacoes, maior_lote: r.maiorLote },
     por_entidade: r.porEntidade,
     garantia_de_tenant_degradada: r.garantiaDeTenantDegradada,
@@ -972,7 +994,7 @@ async function espelharUnidades(
       const numeros = bloco.map((a) => a.numeroUc);
       const atuais = await db.unidade_consumidora.findMany({
         where: { tenant_id: tenantId, numero_uc: { in: numeros } },
-        select: { id: true, numero_uc: true, cliente_id: true, usina_id: true,
+        select: { id: true, numero_uc: true, cliente_id: true, usina_id: true, distribuidora: true,
                   percentual_rateio: true, data_vencimento: true, crm_usina_cliente_id: true },
       });
       const porNumero = new Map(atuais.map((u) => [u.numero_uc, u]));
@@ -1036,6 +1058,37 @@ async function espelharUnidades(
           aCriar.push({ tenant_id: tenantId, numero_uc: a.numeroUc,
                         distribuidora: usina.distribuidora, ...espelho });
           continue;
+        }
+
+        /*
+         * O SINAL DA `Q-UC-DISTRIB-01`, e ele existe porque confirmar uma vez nao
+         * dura.
+         *
+         * A R21 deriva a distribuidora da UC da usina vinculada, supondo que a
+         * compensacao de credito acontece dentro da mesma area de concessao. A
+         * suposicao NAO foi verificada contra a norma - e o motivo da questao.
+         *
+         * Mas ha um risco que independe da norma: `distribuidora` e campo LOCAL, e
+         * o conector nao o toca no update (R5, o usuario vence). Alguem pode editar
+         * a UC amanha e por outra distribuidora, e ate hoje nada notaria - o
+         * silencio duraria ate alguem abrir um relatorio.
+         *
+         * Entao a suposicao vira SINAL, em vez de esperar confirmacao: divergiu,
+         * aparece em `conector_execucao.detalhe`. Nao recusa - a linha e valida e o
+         * campo e do usuario - e nao sobrescreve, que seria a R5 ao contrario.
+         *
+         * Efeito colateral util: se a resposta normativa for "pode haver UC de
+         * outra concessionaria", o sistema ja esta pronto - a UC passa a exigir
+         * cadastro local da distribuidora, como a usina, e este sinal e o que acha
+         * as que precisam de correcao.
+         */
+        if (atual.distribuidora !== usina.distribuidora) {
+          r.divergencias.push({
+            entidade: 'unidade_consumidora', chave: a.numeroUc,
+            sinal: `distribuidora da UC e "${atual.distribuidora}" e a da usina `
+                 + `${a.codigoGeradora} e "${usina.distribuidora}". A R21 supoe que sao a mesma `
+                 + '(Q-UC-DISTRIB-01). Nada foi sobrescrito: distribuidora e campo local.',
+          });
         }
         const mudou =
           atual.cliente_id !== espelho.cliente_id ||

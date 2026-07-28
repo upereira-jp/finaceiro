@@ -14,14 +14,14 @@ Sistema financeiro multi-tenant da G3 Solar: faturamento de crédito de energia,
 
 Nesta ordem. Cada documento pressupõe o anterior.
 
-1. **`RESUMO-SESSAO-8.md`** — estado atual, pendências com dono nomeado, e a **§11: o roteiro executável para fechar a F1**. Se você veio para terminar a fase, é lá
+1. **`RESUMO-SESSAO-9.md`** — estado atual e a fila com dono nomeado. O roteiro que fechou a F1 está na **§11 do `RESUMO-SESSAO-8.md`**, e ele já foi executado por inteiro
 2. **`CLAUDE.md`** — as onze regras inegociáveis. Antes de qualquer linha de código
 3. **`PRD-v2.2.md`** §7 e §8 — fronteira com o CRM
 4. **`adr/ADR-0003-contexto-de-tenant.md`** (r2) — como o isolamento funciona de fato, e a que preço
 5. **`SPEC-001-fundacao.md`** (v2.9) — a spec da F1. §3.2 é o contrato do middleware; §3.4 é a lista das **dez** FKs compostas — as linhas 536 e 565 ainda dizem nove, e é a `Q-SPEC001-08`
 6. **`GLOSSARIO.md`** — se um termo está lá, é assim que ele se chama em spec, em código e em conversa
 
-`QUESTOES.md` se consulta sob demanda, e é onde toda lacuna vira entrada (regra 10). Os `RESUMO-SESSAO-2` a `-7` são a trilha datada: cada um diz o que foi medido, **o que foi retirado depois de medido**, e o que ficou na fila.
+`QUESTOES.md` se consulta sob demanda, e é onde toda lacuna vira entrada (regra 10). Os `RESUMO-SESSAO-2` a `-8` são a trilha datada: cada um diz o que foi medido, **o que foi retirado depois de medido**, e o que ficou na fila.
 
 ---
 
@@ -53,8 +53,10 @@ RESUMO-SESSAO-4.md           passagem da sessao 4
 RESUMO-SESSAO-5.md           passagem da sessao 5 — generate destravado, R14 e os repos
 RESUMO-SESSAO-6.md           passagem da sessao 6 — as 12 migrations e o crash do GRANT
 RESUMO-SESSAO-7.md           passagem da sessao 7 — role de runtime, 37 rotas, auth
-RESUMO-SESSAO-8.md           passagem da sessao 8 — comece por aqui. A §11 e o
-                             roteiro executavel para fechar a F1
+RESUMO-SESSAO-8.md           passagem da sessao 8 — a §11 e o roteiro que fechou
+                             a F1, ja executado por inteiro
+RESUMO-SESSAO-9.md           passagem da sessao 9 — comece por aqui. O sinal da
+                             Q-UC-DISTRIB-01 (SPEC-002 R21-b)
 VIEWS-PROPOSTAS-r2.sql       DDL proposta ao dev do CRM. EXECUTADA - as 8 views
                              existem e expoem crm_tenant_id desde 27/07 (Q-VIEWS-01)
 PROMPT-dev-crm-rodada3-...   o pedido em aberto ao dev do CRM (27/07)
@@ -119,7 +121,7 @@ scripts/verificar-auth-real.ts
 tests/catalogo.sql           CAT-1 a CAT-8: as regras 1, 2, 3 e 11 por catalogo.
                              Leitura pura - RODE TAMBEM contra producao:
                              psql "$DIRECT_URL" -f tests/catalogo.sql
-tests/                       283 verificacoes em 18 suites. `npm test` roda todas
+tests/                       318 verificacoes em 18 suites. `npm test` roda todas
 tsconfig.json                `npm run typecheck` = tsc --noEmit. Roda no CI
 ```
 
@@ -163,7 +165,7 @@ npx prisma migrate deploy    # transacional POR MIGRATION. E o que salva de meia
 Validar num banco limpo:
 
 ```bash
-npm test          # typecheck + as 18 suites, 283 verificacoes
+npm test          # typecheck + as 18 suites, 318 verificacoes
 npm run typecheck # sozinho, tsc --noEmit
 ```
 
@@ -201,7 +203,7 @@ Medido em 27/07 contra o `PRD-v2.2` §10, não estimado. **Os três critérios d
 | projeto, auth, RBAC dois níveis | ✅ auth medido contra o Supabase real; RBAC com as 16 células do PRD §3 |
 | schema completo com `tenant_id` | ✅ 13 migrations, 20 tabelas com RLS, 24 policies, **zero** tabela com `tenant_id` sem policy |
 | cadastros | ⚠️ 6 repositórios para 11 modelos de negócio — faltam `dono_usina`, `regra_comissao`, `regra_repasse`, `tarifa`, `cliente_estado_crm` |
-| **conector CRM read-only** | ✅ **as 4 entidades da `SPEC-002` §2 espelhadas** — `cliente`, `usina`, `usina_geracao` e `unidade_consumidora`, com a `PortaDeLeitura` em 7 das 8 views. Rodado valendo contra o CRM real: 76 clientes, 3 usinas, 35 UCs, 8 competências de geração, e 2ª passada em 0/0. 48 verificações |
+| **conector CRM read-only** | ✅ **as 4 entidades da `SPEC-002` §2 espelhadas** — `cliente`, `usina`, `usina_geracao` e `unidade_consumidora`, com a `PortaDeLeitura` em 7 das 8 views. Rodado valendo contra o CRM real: 76 clientes, 3 usinas, 35 UCs, 8 competências de geração, e 2ª passada em 0/0. **57 verificações** — as quatro últimas (`N51`–`N54`) são o sinal da `R21-b`: divergência entre campo derivado e campo local vira registro em `conector_execucao.detalhe`, sem recusar e sem sobrescrever |
 
 **A leitura honesta, atualizada no fim de 27/07:** **os três critérios formais de saída da F1 estão cumpridos** — o ciclo rodou valendo, duas vezes, contra o CRM real. O que segura a fase não é critério do `PRD` §10; é a **entrega nomeada** *"conector CRM read-only"* estar a um quarto do que a própria `SPEC-002` §2 declara (**`Q-ESCOPO-01`**, vermelha) e a `Q-FASE-01` sem decisão.
 

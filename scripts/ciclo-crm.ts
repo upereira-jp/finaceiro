@@ -157,6 +157,12 @@ async function main(): Promise<void> {
     console.log('  recusas:');
     for (const r of resultado.recusas) console.log(`    ${r.codigo} (${r.lead_id}): ${r.motivo}`);
   }
+  if (resultado.divergencias?.length) {
+    // Nao muda o status e por isso PRECISA aparecer: sinal que nao interrompe
+    // nada e o que mais facilmente vira silencio.
+    console.log(`  divergencias (nao impedem a escrita, mas alguem precisa olhar): ${resultado.divergencias.length}`);
+    for (const d of resultado.divergencias) console.log(`    ${d.entidade} ${d.chave}: ${d.sinal}`);
+  }
   if (resultado.filaDeRevisao?.length) {
     console.log(`  fila de revisao humana (§4.3): ${resultado.filaDeRevisao.join(', ')}`);
   }

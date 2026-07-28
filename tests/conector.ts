@@ -653,6 +653,81 @@ const L3 = 'aaaa3333-0000-4000-8000-00000000cc03';
         `UC-DUP-01 mesma UC em dois contratos: UMA gravada, a outra recusada com o motivo (gravadas=${n[0].n}, rec=${r.porEntidade.unidade_consumidora.recusados})`);
   }
 
+  // ---- N51/N52: o SINAL da Q-UC-DISTRIB-01.
+  //
+  // A R21 supoe que UC e usina estao sempre na mesma distribuidora. A suposicao
+  // NAO foi verificada contra a norma - e o motivo da questao. Mas ha um risco
+  // que independe da norma: `distribuidora` e campo LOCAL e o conector nao o toca
+  // no update (R5), entao um humano pode edita-lo e ate aqui nada notaria.
+  //
+  // O sinal nao recusa e nao sobrescreve. Ele so impede o silencio.
+  {
+    // Caminho limpo primeiro: sem divergencia, zero sinais. Sem este, o N51
+    // poderia estar acusando qualquer coisa em vez da divergencia.
+    const semDiv = await executarCiclo(porta([venda({ lead_id: L1 })], [], [], true,
+      [usinaCrm({ usina_id: 'dddd1111-0000-4000-8000-00000000aa01', codigo_geradora: 'GER-CRM-01' })], [],
+      [rateioCliCrm({ contrato_id: CT1, uc: UC_A, cliente: 'Fulano do Rateio' })],
+      [rateioCreCrm({ contrato_id: CT1, lead_id: LR1 })]), loteEmA());
+    chk('N51', semDiv.divergencias.length === 0,
+        `Q-UC-DISTRIB-01 UC e usina na mesma distribuidora: zero sinais (${semDiv.divergencias.length})`);
+
+    // Agora a edicao humana: alguem troca a distribuidora da UC no cadastro local.
+    // O `Equatorial` existe na tabela de referencia, entao a FK aceita - e e por
+    // isso que a divergencia e possivel e nao e pega por constraint.
+    await sql(`UPDATE unidade_consumidora SET distribuidora='Equatorial'
+                WHERE tenant_id=$1::uuid AND numero_uc=$2`, A, UC_A);
+
+    const comDiv = await executarCiclo(porta([venda({ lead_id: L1 })], [], [], true,
+      [usinaCrm({ usina_id: 'dddd1111-0000-4000-8000-00000000aa01', codigo_geradora: 'GER-CRM-01' })], [],
+      [rateioCliCrm({ contrato_id: CT1, uc: UC_A, cliente: 'Fulano do Rateio' })],
+      [rateioCreCrm({ contrato_id: CT1, lead_id: LR1 })]), loteEmA());
+
+    const [depois] = await sql(`SELECT distribuidora FROM unidade_consumidora
+                                 WHERE tenant_id=$1::uuid AND numero_uc=$2`, A, UC_A);
+    const [linha] = await sql(`SELECT detalhe FROM conector_execucao WHERE tenant_id=$1::uuid AND ciclo_id=$2::uuid`,
+                              A, comDiv.cicloId);
+    const d = comDiv.divergencias[0];
+    chk('N52', comDiv.divergencias.length === 1 && d?.entidade === 'unidade_consumidora'
+         && d?.chave === UC_A && /Q-UC-DISTRIB-01/.test(d?.sinal ?? '')
+         && /divergencias/.test(JSON.stringify(linha?.detalhe ?? {})),
+        `Q-UC-DISTRIB-01 divergencia entre UC e usina vira SINAL em conector_execucao (${comDiv.divergencias.length})`);
+
+    // As duas metades que separam sinal de recusa e de sobrescrita:
+    chk('N53', depois?.distribuidora === 'Equatorial' && comDiv.porEntidade.unidade_consumidora.recusados === 0
+         && comDiv.status !== 'erro',
+        `R5 o sinal NAO sobrescreve o campo local ("${depois?.distribuidora}") e NAO vira recusa (rec=${comDiv.porEntidade.unidade_consumidora.recusados})`);
+
+    // ---- N54: o sinal SOBREVIVE ao ciclo que morre depois de te-lo visto.
+    //
+    // `divergencias` so chega ao `detalhe` pelo `fechar()`, e o `fechar()` do
+    // caminho de ERRO e outro trecho de codigo - ele levava `recusas` e nao levava
+    // `divergencias`. O lote da UC ja esta COMMITADO quando a interrupcao chega,
+    // entao a divergencia e fato gravado no banco; perde-la aqui apagaria o sinal
+    // exatamente no ciclo em que alguem vai olhar.
+    //
+    // A interrupcao entra por `leadMerges()`, que a §4.3 le DEPOIS do espelho de UC.
+    {
+      const p = porta([venda({ lead_id: L1 })], [], [], true,
+        [usinaCrm({ usina_id: 'dddd1111-0000-4000-8000-00000000aa01', codigo_geradora: 'GER-CRM-01' })], [],
+        [rateioCliCrm({ contrato_id: CT1, uc: UC_A, cliente: 'Fulano do Rateio' })],
+        [rateioCreCrm({ contrato_id: CT1, lead_id: LR1 })]);
+      p.leadMerges = async () => { throw new Error('queda simulada na reconciliacao'); };
+
+      let caiu = false;
+      try { await executarCiclo(p, loteEmA()); } catch { caiu = true; }
+
+      const [linha] = await sql(`SELECT status, detalhe FROM conector_execucao
+                                   WHERE tenant_id=$1::uuid ORDER BY terminado_em DESC NULLS LAST LIMIT 1`, A);
+      const det = JSON.stringify(linha?.detalhe ?? {});
+      chk('N54', caiu && /queda simulada/.test(det) && /divergencias/.test(det) && new RegExp(UC_A).test(det),
+          `o ciclo interrompido ainda grava a divergencia ja vista (status=${linha?.status})`);
+    }
+
+    // Devolve o estado para nao contaminar os testes seguintes.
+    await sql(`UPDATE unidade_consumidora SET distribuidora='Equatorial GO'
+                WHERE tenant_id=$1::uuid AND numero_uc=$2`, A, UC_A);
+  }
+
   // ---- N50: cascata - UC de usina nao espelhada nao tem de quem herdar.
   {
     const r = await executarCiclo(porta([venda({ lead_id: L1 })], [], [], true, [], [],

@@ -3,8 +3,8 @@
 | Campo | Valor |
 |---|---|
 | **Status** | Rascunho — **aguarda aceite do autor.** Reconciliada com o medido em 27/07 (v1.3); o aceite em si é decisão do dono, não de quem implementou |
-| **Versão** | 1.3 |
-| **Data** | 26/07/2026 · rev. 1.3 em 27/07/2026 |
+| **Versão** | 1.4 |
+| **Data** | 26/07/2026 · rev. 1.4 em 28/07/2026 |
 | **Autor** | Vinicius Leal |
 | **Fase** | **F1.** Resolvido em 27/07 pela `Q-FASE-01`: o `PRD-v2.2` §10 vence, porque a hierarquia do `CLAUDE.md` põe o PRD acima das SPECs. O cabeçalho anterior dizia *"F2 (parcial em F1)"* e era ele que divergia |
 | **Depende de** | `SPEC-001` v2.3 (schema, isolamento, middleware) · `ADR-0001` · `ADR-0003` r2 |
@@ -115,6 +115,8 @@ conector_execucao   id · tenant_id · ciclo_id · iniciado_em · terminado_em
 | endereço, `titularidade`, `status` | **local** | o CRM não expõe |
 
 > **R21 (nova).** **A UC herda a distribuidora da usina vinculada; sem usina espelhada, é recusa contada.** O CRM não expõe distribuidora em `rateio_clientes`, e a coluna é `NOT NULL` com FK. O conector **não escolhe valor**: ele propaga o que o usuário cadastrou na usina. **Precisa de confirmação** — `Q-UC-DISTRIB-01`. Teste `N46`; o plantio da distribuidora fixa acusa.
+
+> **R21-b (nova, 28/07).** **A herança da R21 só vale no nascimento da UC. Depois disso, divergência entre a distribuidora da UC e a da usina é SINAL — não recusa e não sobrescrita.** A R21 propaga o valor da usina **no INSERT**; no UPDATE `distribuidora` fica de fora, porque é **campo local** e a R5 diz que o usuário vence. A consequência era silêncio: alguém edita a UC amanhã, põe outra concessionária, e nada notaria até um relatório vir errado. O sinal fecha esse buraco sem violar a R5 — a linha continua válida, o campo não é tocado, e a divergência vai para `conector_execucao.detalhe` e para a saída do script. **A diferença para `Recusa` é semântica e importa:** recusa significa "nada foi gravado" e é o que a invariante 8 conta; divergência significa "foi gravado, e alguém precisa olhar". Misturá-las faria a contagem de recusas medir duas coisas. O precedente é `garantia_de_tenant_degradada`, que também registra sem mudar o `status`. Testes `N51` (caminho limpo, zero sinais), `N52` (o sinal chega ao `detalhe`), `N53` (não sobrescreve e não recusa) e `N54` (o sinal sobrevive ao ciclo interrompido). **Efeito colateral útil:** se a resposta normativa da `Q-UC-DISTRIB-01` for *"pode haver UC de outra concessionária"*, o sistema já está pronto — a UC passa a exigir cadastro local como a usina, e este sinal é o que acha as que precisam de correção.
 
 > **R22 (nova).** **UC repetida entre contratos é recusa contada, e o conector não escolhe qual vale.** Medido: `000041446801282` em dois contratos, leads diferentes, mesma usina, mesmo percentual, digitados com 39 minutos de diferença na carga manual de 14/07 — o dev leu o modelo e concluiu que é erro de digitação, confirmando que **nosso modelo de UC única por tenant está certo**. Escolher qual das duas vale é o palpite que a R8 proíbe. Teste `N49`; sem a guarda, o `23505` derruba o lote inteiro — foi o que o plantio mostrou.
 
@@ -228,6 +230,7 @@ os dois caminhos de delete fisico, que sao raros - em vez de tudo que sai da vie
 10. Nenhum card do funil `Parceiros` entra na base de comissao sobre valor (R14), e nenhum `Comissionamento` de card `Parceiros` e lido (R15).
 11. Atribuicao de originador vem de `partner_id`, nunca de tag (R16).
 12. Vitima de merge **funde**, nao apenas desativa (R18).
+13. **Suposição não confirmada que o conector propaga vira sinal registrado, nunca silêncio** (R21-b). Divergência entre campo derivado e campo local aparece em `conector_execucao.detalhe` — e **não** é contada como recusa, porque a linha foi gravada.
 
 ## 6. Interfaces
 
@@ -253,6 +256,7 @@ os dois caminhos de delete fisico, que sao raros - em vez de tudo que sai da vie
 | Ambiguidade | `comissionamento_n_opcoes > 1` | Recusa contada; sem valor gravado (R8) |
 | Ambiguidade | Ganho com valor nulo | Recusa contada (R9) |
 | Concorrência | Conector e usuário no mesmo cliente | Campo espelho: conector vence. Campo local: usuário vence (R5) |
+| Concorrência | Usuário edita a `distribuidora` da UC para valor diferente do da usina | **Sinal, não recusa e não sobrescrita** (R21-b). A linha é gravada, o campo local é preservado, e a divergência vai para `conector_execucao.detalhe`. O `status` do ciclo **não** muda |
 | Concorrência | Dois ciclos do mesmo conector se sobrepõem | Segundo não inicia. `conector_crm` guarda ciclo em andamento |
 | Origem ausente | Cliente espelhado some do CRM | §4.3 — depende de AUD-07 |
 | Falha | Ciclo morre no meio | `status = 'parcial'`; o que foi processado está commitado por lote (R13); próximo ciclo é idempotente e recompõe |
@@ -294,6 +298,7 @@ os dois caminhos de delete fisico, que sao raros - em vez de tudo que sai da vie
 | `test_atribuicao_por_partner_id` | Inv. 11 · R16 — 🔴 **NÃO EXISTE, e não é teste faltando: é funcionalidade faltando.** O conector não cria `contrato`, então não há atribuição de originador para testar. Ver `Q-ESCOPO-01` na §10 |
 | `test_vitima_de_merge_funde_espelho` | Inv. 12 · R18 — **`N32`/`N33`/`N34`**. Escrito em 27/07: o código existia desde a construção e **nenhum teste provava que a fusão acontece** — o `N6` provava só a ordem da classificação |
 | `test_ordem_de_classificacao_de_ausencia` | R18 — `N6` |
+| `test_divergencia_de_distribuidora_vira_sinal` | Inv. 13 · R21-b — **`N51`–`N54`**. O `N51` fixa o caminho limpo (sem ele o `N52` poderia estar acusando qualquer coisa); o `N53` separa sinal de recusa e de sobrescrita; o `N54` cobre o `fechar()` do caminho de **erro**, que é outro trecho de código e levava `recusas` sem levar `divergencias`. Os dois sentidos verificados por plantio |
 
 ## 10. Questões abertas
 
@@ -327,6 +332,7 @@ os dois caminhos de delete fisico, que sao raros - em vez de tudo que sai da vie
 
 | Versão | Data | O que mudou |
 |---|---|---|
+| **1.4** | **28/07/2026** | **A suposição da R21 deixou de esperar confirmação e virou sinal.** Nova **R21-b**: divergência entre a `distribuidora` da UC (campo local, R5) e a da usina vinculada aparece em `conector_execucao.detalhe` — sem recusar e sem sobrescrever. Novo **invariante 13**, nova linha na §7, novo teste obrigatório (`N51`–`N54`). O `N54` nasceu de um buraco encontrado ao escrevê-lo: o `fechar()` do caminho de **erro** levava `recusas` e não levava `divergencias`, então o sinal se perderia justamente no ciclo interrompido. **Medido contra produção em 28/07: zero divergências nas 35 UCs** — o sinal nasce silencioso, que é o estado correto |
 | **1.3** | **27/07/2026** | **Reconciliação com o medido — a spec estava atrás do código, e em SDD isso é a inversão que não se tolera.** A **R9** ganha a redação da `Q-VALOR-01`: `consumo_kwh` conta como valor, e a recusa exige ausência dos três. A **R14** perde a afirmação *"os funis de venda têm zero ganhos sem valor"*, **medida falsa** — eram 40 de 41. A **R13** ganha o **tamanho declarado (50)** e a conta de viagens que o fixa, que até aqui só existiam em comentário de código. A **§8** sai de 9 critérios em aberto para **9 marcados com o teste nomeado**, incluindo o "por log de query" que nunca fora atendido. A **§9** ganha o teste de cada linha — e expõe duas verdades desconfortáveis: `test_vitima_de_merge_funde_espelho` **não existia para código que existia**, e `test_atribuicao_por_partner_id` não é teste faltando, é a `Q-ESCOPO-01`. Duas questões novas: **`Q-ESCOPO-01`** (🔴, o conector entrega 1 de 4 entidades) e **`Q-CICLO-ORFAO-01`** (🟡) |
 | **1.2** | **26/07/2026** | **Rodada 2 do dev absorvida, e ela resolveu duas vermelhas.** MERGE-01 fecha: o CRM criou `public.lead_merges` com backfill e o codigo gravando, e o par de 10/07 foi recuperado do log — nenhum cliente ativo pendurado. ATIVO-01 fecha por fato: o funil `Clientes ativos - Assinatura` esta **vazio**, e a etapa-fonte tambem, porque os 29 concluidos param em `Rateio Concluido` com `stage_type='normal'`, que nao dispara a automacao. Fonte de estado ativo troca para `financeiro.rateio_clientes`. COMISSAO-02 dissolve: o CRM **nao calcula** comissao, carimba tier — mas isso expos o furo da R20, corrigido na `SPEC-001` v2.5. Novas R16, R17, R18, invariantes 11 e 12, quatro testes |
 | **1.1** | **26/07/2026** | **Retorno do dev absorvido.** AUD-07 e F-02 fecham. R1 ganha R1-b (o isolamento do caminho de leitura vem de 14 literais no corpo das views, nao da RLS - o conector valida `crm_tenant_id` por linha e aborta na divergencia) e R1-c (view vazia deixa de ser sintoma de RLS). 4.3 passa a redacao unica com ausencia classificada em tres. Novas R14 e R15, invariantes 9 e 10, tres testes. Duas vermelhas novas: MERGE-01 e ATIVO-01 |
