@@ -68,15 +68,21 @@ model cliente_estado_crm {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model conector_crm {
-  id                 String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenant_id          String          @unique @db.Uuid
+  id                 String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id          String              @unique @db.Uuid
   tipo               conector_tipo
-  crm_tenant_id      String          @db.Uuid
+  crm_tenant_id      String              @db.Uuid
   credencial_ref     String
-  ativo              Boolean         @default(false)
-  ultima_execucao_em DateTime?       @db.Timestamptz(6)
-  ultimo_status      conector_status @default(nunca_executou)
-  tenant             tenant          @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ativo              Boolean             @default(false)
+  ultima_execucao_em DateTime?           @db.Timestamptz(6)
+  ultimo_status      conector_status     @default(nunca_executou)
+  ultimo_ciclo_id    String?             @db.Uuid
+  ultima_leitura_em  DateTime?           @db.Timestamptz(6)
+  ultimo_erro        String?
+  tenant             tenant              @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  conector_execucao  conector_execucao[]
+
+  @@unique([tenant_id, id], map: "conector_id_tenant")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -101,6 +107,8 @@ model contrato {
   tenant                        tenant                  @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   unidade_consumidora           unidade_consumidora     @relation(fields: [tenant_id, unidade_consumidora_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "contrato_uc_fk")
   usina                         usina                   @relation(fields: [tenant_id, usina_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "contrato_usina_fk")
+  fatura                        fatura[]
+  split_execucao                split_execucao[]
 
   @@unique([tenant_id, uc_vigente], map: "contrato_vigente_unico_por_uc")
   @@unique([tenant_id, id], map: "contrato_id_tenant")
@@ -126,6 +134,7 @@ model dono_usina {
   email              String?
   ativo              Boolean              @default(true)
   tenant             tenant               @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  split_item         split_item[]
   usina              usina[]
 
   @@unique([tenant_id, documento], map: "dono_usina_documento_unico")
@@ -155,6 +164,7 @@ model originador {
   ativo              Boolean              @default(true)
   contrato           contrato[]
   tenant             tenant               @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  split_item         split_item[]
 
   @@unique([tenant_id, documento], map: "originador_documento_unico")
   @@unique([tenant_id, id], map: "originador_id_tenant")
@@ -177,7 +187,9 @@ model regra_comissao {
   percentual      Decimal         @db.Decimal(5, 2)
   vigencia_inicio DateTime        @db.Date
   vigencia_fim    DateTime?       @db.Date
+  parcela         Int             @db.SmallInt
   tenant          tenant          @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  split_item      split_item[]
 
   @@unique([tenant_id, id], map: "regra_comissao_id_tenant")
 }
@@ -186,14 +198,15 @@ model regra_comissao {
 /// This table contains exclusion constraints and requires additional setup for migrations. Visit https://pris.ly/d/exclusion-constraints for more info.
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model regra_repasse {
-  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenant_id       String    @db.Uuid
-  usina_id        String    @db.Uuid
-  percentual      Decimal   @db.Decimal(5, 2)
-  vigencia_inicio DateTime  @db.Date
-  vigencia_fim    DateTime? @db.Date
-  tenant          tenant    @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  usina           usina     @relation(fields: [tenant_id, usina_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "regra_repasse_usina_fk")
+  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id       String       @db.Uuid
+  usina_id        String       @db.Uuid
+  percentual      Decimal      @db.Decimal(5, 2)
+  vigencia_inicio DateTime     @db.Date
+  vigencia_fim    DateTime?    @db.Date
+  tenant          tenant       @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usina           usina        @relation(fields: [tenant_id, usina_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "regra_repasse_usina_fk")
+  split_item      split_item[]
 
   @@unique([tenant_id, id], map: "regra_repasse_id_tenant")
 }
@@ -224,14 +237,21 @@ model tenant {
   criado_em             DateTime                @default(now()) @db.Timestamptz(6)
   atualizado_em         DateTime                @default(now()) @db.Timestamptz(6)
   acesso_plataforma_log acesso_plataforma_log[]
+  boleto                boleto[]
   cliente               cliente[]
   cliente_estado_crm    cliente_estado_crm[]
+  conector_cobranca     conector_cobranca?
   conector_crm          conector_crm?
+  conector_execucao     conector_execucao[]
   contrato              contrato[]
   dono_usina            dono_usina[]
+  fatura                fatura[]
+  liquidacao            liquidacao[]
   originador            originador[]
   regra_comissao        regra_comissao[]
   regra_repasse         regra_repasse[]
+  split_execucao        split_execucao[]
+  split_item            split_item[]
   tarifa                tarifa[]
   unidade_consumidora   unidade_consumidora[]
   usina                 usina[]
@@ -260,6 +280,7 @@ model unidade_consumidora {
   status                                                         status_uc       @default(ativa)
   crm_usina_cliente_id                                           String?         @db.Uuid
   contrato                                                       contrato[]
+  fatura                                                         fatura[]
   cliente                                                        cliente         @relation(fields: [tenant_id, cliente_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "uc_cliente_fk")
   distribuidora_unidade_consumidora_distribuidoraTodistribuidora distribuidora   @relation("unidade_consumidora_distribuidoraTodistribuidora", fields: [distribuidora], references: [nome], onDelete: NoAction, onUpdate: NoAction, map: "uc_distribuidora_fk")
   usina                                                          usina?          @relation(fields: [tenant_id, usina_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "uc_usina_fk")
@@ -285,6 +306,7 @@ model usina {
   regime_fio_b                                     Boolean               @default(true)
   status                                           status_usina          @default(ativa)
   contrato                                         contrato[]
+  fatura                                           fatura[]
   regra_repasse                                    regra_repasse[]
   unidade_consumidora                              unidade_consumidora[]
   distribuidora_usina_distribuidoraTodistribuidora distribuidora         @relation("usina_distribuidoraTodistribuidora", fields: [distribuidora], references: [nome], onDelete: NoAction, onUpdate: NoAction, map: "usina_distribuidora_fk")
@@ -364,6 +386,204 @@ model distribuidora {
   tarifa_tarifa_distribuidoraTodistribuidora                           tarifa[]              @relation("tarifa_distribuidoraTodistribuidora")
   unidade_consumidora_unidade_consumidora_distribuidoraTodistribuidora unidade_consumidora[] @relation("unidade_consumidora_distribuidoraTodistribuidora")
   usina_usina_distribuidoraTodistribuidora                             usina[]               @relation("usina_distribuidoraTodistribuidora")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This table contains exclusion constraints and requires additional setup for migrations. Visit https://pris.ly/d/exclusion-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model conector_execucao {
+  id           String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id    String          @db.Uuid
+  conector_id  String          @db.Uuid
+  ciclo_id     String          @db.Uuid
+  iniciado_em  DateTime        @default(now()) @db.Timestamptz(6)
+  terminado_em DateTime?       @db.Timestamptz(6)
+  lidos        Int             @default(0)
+  criados      Int             @default(0)
+  atualizados  Int             @default(0)
+  desativados  Int             @default(0)
+  recusados    Int             @default(0)
+  status       execucao_status @default(em_andamento)
+  detalhe      Json?
+  conector_crm conector_crm    @relation(fields: [tenant_id, conector_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "execucao_conector_fk")
+  tenant       tenant          @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "execucao_tenant_fk")
+
+  @@unique([tenant_id, id], map: "execucao_id_tenant")
+  @@index([ciclo_id], map: "execucao_ciclo_idx")
+  @@index([tenant_id, iniciado_em(sort: Desc)], map: "execucao_tenant_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model boleto {
+  id                        String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id                 String        @db.Uuid
+  fatura_id                 String        @db.Uuid
+  nosso_numero              String?
+  linha_digitavel           String?
+  codigo_barras             String?
+  pix_copia_e_cola          String?
+  pix_txid                  String?
+  valor_registrado_centavos Int
+  vencimento                DateTime      @db.Date
+  status                    status_boleto @default(pendente)
+  sicoob_numero_contrato    String?
+  sicoob_nosso_numero       String?
+  registrado_em             DateTime?     @db.Timestamptz(6)
+  baixado_em                DateTime?     @db.Timestamptz(6)
+  tentativas                Int           @default(0)
+  ultimo_erro               String?
+  payload_envio             Json?
+  payload_retorno           Json?
+  criado_em                 DateTime      @default(now()) @db.Timestamptz(6)
+  fatura                    fatura        @relation(fields: [tenant_id, fatura_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "boleto_fatura_fk")
+  tenant                    tenant        @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([tenant_id, fatura_id], map: "boleto_fatura_unico")
+  @@unique([tenant_id, id], map: "boleto_id_tenant")
+  @@index([tenant_id, status], map: "boleto_pendente_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model fatura {
+  id                                    String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id                             String              @db.Uuid
+  contrato_id                           String              @db.Uuid
+  unidade_consumidora_id                String              @db.Uuid
+  usina_id                              String              @db.Uuid
+  competencia                           DateTime            @db.Date
+  geracao_kwh_competencia               Decimal             @db.Decimal(14, 4)
+  percentual_rateio_aplicado            Decimal             @db.Decimal(7, 4)
+  consumo_kwh                           Decimal             @db.Decimal(14, 4)
+  tarifa_reais_por_kwh                  Decimal             @db.Decimal(12, 6)
+  valor_consumo_centavos                Int
+  valor_tarifas_concessionaria_centavos Int                 @default(0)
+  valor_juros_multa_centavos            Int                 @default(0)
+  valor_total_centavos                  Int?                @default(dbgenerated("((valor_consumo_centavos + valor_tarifas_concessionaria_centavos) + valor_juros_multa_centavos)"))
+  status                                status_fatura       @default(rascunho)
+  flag_fatura_cheia                     Boolean
+  vencimento                            DateTime            @db.Date
+  emitida_em                            DateTime?           @db.Timestamptz(6)
+  cancelada_em                          DateTime?           @db.Timestamptz(6)
+  motivo_cancelamento                   String?
+  criado_em                             DateTime            @default(now()) @db.Timestamptz(6)
+  competencia_faturada                  DateTime?           @default(dbgenerated("\nCASE\n    WHEN (status <> 'cancelada'::status_fatura) THEN competencia\n    ELSE NULL::date\nEND")) @db.Date
+  boleto                                boleto?
+  contrato                              contrato            @relation(fields: [tenant_id, contrato_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "fatura_contrato_fk")
+  tenant                                tenant              @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  unidade_consumidora                   unidade_consumidora @relation(fields: [tenant_id, unidade_consumidora_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "fatura_uc_fk")
+  usina                                 usina               @relation(fields: [tenant_id, usina_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "fatura_usina_fk")
+  liquidacao                            liquidacao?
+  split_execucao                        split_execucao[]
+
+  @@unique([tenant_id, unidade_consumidora_id, competencia_faturada], map: "fatura_competencia_unica_por_uc")
+  @@unique([tenant_id, id], map: "fatura_id_tenant")
+  @@index([tenant_id, competencia, status], map: "fatura_competencia_idx")
+  @@index([tenant_id, contrato_id], map: "fatura_contrato_idx")
+  @@index([tenant_id, vencimento], map: "fatura_vencimento_idx", where: raw("(status = ANY (ARRAY['emitida'::status_fatura, 'vencida'::status_fatura]))"))
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model liquidacao {
+  id                       String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id                String            @db.Uuid
+  fatura_id                String            @db.Uuid
+  data_liquidacao          DateTime          @db.Date
+  valor_liquidado_centavos Int
+  juros_centavos           Int               @default(0)
+  multa_centavos           Int               @default(0)
+  origem                   origem_liquidacao
+  id_externo               String?
+  observacao               String?
+  criado_em                DateTime          @default(now()) @db.Timestamptz(6)
+  fatura                   fatura            @relation(fields: [tenant_id, fatura_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "liquidacao_fatura_fk")
+  tenant                   tenant            @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  split_execucao           split_execucao?
+
+  @@unique([tenant_id, origem, id_externo], map: "liquidacao_externa_unica")
+  @@unique([tenant_id, fatura_id], map: "liquidacao_fatura_unica")
+  @@unique([tenant_id, id], map: "liquidacao_id_tenant")
+  @@index([tenant_id, data_liquidacao], map: "liquidacao_data_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model split_execucao {
+  id                       String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id                String       @db.Uuid
+  liquidacao_id            String       @db.Uuid
+  fatura_id                String       @db.Uuid
+  contrato_id              String       @db.Uuid
+  competencia              DateTime     @db.Date
+  valor_liquidado_centavos Int
+  base_consumo_centavos    Int
+  base_repasse_centavos    Int
+  parcela_comissao         Int?         @db.SmallInt
+  executado_em             DateTime     @default(now()) @db.Timestamptz(6)
+  contrato                 contrato     @relation(fields: [tenant_id, contrato_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "split_execucao_contrato_fk")
+  fatura                   fatura       @relation(fields: [tenant_id, fatura_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "split_execucao_fatura_fk")
+  liquidacao               liquidacao   @relation(fields: [tenant_id, liquidacao_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "split_execucao_liquidacao_fk")
+  tenant                   tenant       @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  split_item               split_item[]
+
+  @@unique([tenant_id, id], map: "split_execucao_id_tenant")
+  @@unique([tenant_id, liquidacao_id], map: "split_execucao_por_liquidacao_unica")
+  @@index([tenant_id, competencia], map: "split_execucao_competencia_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model split_item {
+  id                    String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id             String          @db.Uuid
+  split_execucao_id     String          @db.Uuid
+  tipo                  tipo_split_item
+  dono_usina_id         String?         @db.Uuid
+  originador_id         String?         @db.Uuid
+  base_calculo_centavos Int
+  percentual_aplicado   Decimal?        @db.Decimal(5, 2)
+  valor_centavos        Int
+  regra_repasse_id      String?         @db.Uuid
+  regra_comissao_id     String?         @db.Uuid
+  dono_usina            dono_usina?     @relation(fields: [tenant_id, dono_usina_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "split_item_dono_fk")
+  split_execucao        split_execucao  @relation(fields: [tenant_id, split_execucao_id], references: [tenant_id, id], onDelete: Cascade, onUpdate: NoAction, map: "split_item_execucao_fk")
+  originador            originador?     @relation(fields: [tenant_id, originador_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "split_item_originador_fk")
+  regra_comissao        regra_comissao? @relation(fields: [tenant_id, regra_comissao_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "split_item_regra_comissao_fk")
+  regra_repasse         regra_repasse?  @relation(fields: [tenant_id, regra_repasse_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "split_item_regra_repasse_fk")
+  tenant                tenant          @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([tenant_id, id], map: "split_item_id_tenant")
+  @@unique([tenant_id, split_execucao_id, tipo], map: "split_item_um_por_tipo")
+  @@index([tenant_id, tipo, dono_usina_id, originador_id], map: "split_item_beneficiario_idx")
+  @@index([tenant_id, split_execucao_id], map: "split_item_execucao_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model conector_cobranca {
+  id                    String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id             String            @unique @db.Uuid
+  provedor              provedor_cobranca @default(sicoob)
+  credencial_ref        String
+  numero_contrato       String?
+  numero_convenio       String?
+  agencia               String?
+  conta                 String?
+  certificado_expira_em DateTime?         @db.Date
+  ativo                 Boolean           @default(false)
+  sandbox               Boolean           @default(true)
+  ultima_emissao_em     DateTime?         @db.Timestamptz(6)
+  ultimo_erro           String?
+  criado_em             DateTime          @default(now()) @db.Timestamptz(6)
+  tenant                tenant            @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([tenant_id, id], map: "conector_cobranca_id_tenant")
 }
 
 enum conector_status {
@@ -463,4 +683,46 @@ enum titularidade_uc {
 enum valor_referencia_origem {
   crm_consumo_reais
   local
+}
+
+enum execucao_status {
+  em_andamento
+  ok
+  parcial
+  erro
+}
+
+enum origem_liquidacao {
+  webhook_sicoob
+  conciliacao
+  manual
+}
+
+enum status_boleto {
+  pendente
+  registrado
+  liquidado
+  baixado
+  cancelado
+  erro
+}
+
+enum status_fatura {
+  rascunho
+  emitida
+  paga
+  vencida
+  cancelada
+  negociada
+}
+
+enum tipo_split_item {
+  repasse_usina
+  comissao
+  repasse_concessionaria
+  liquido_g3
+}
+
+enum provedor_cobranca {
+  sicoob
 }

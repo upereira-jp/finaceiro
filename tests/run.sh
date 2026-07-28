@@ -49,6 +49,11 @@ aplicar fin_auditoria
 suite fin_auditoria tests/auditoria.sql
 
 echo
+echo "=== carteira: fatura, boleto, liquidacao e a invariante do centavo (banco fin_carteira)"
+aplicar fin_carteira
+suite fin_carteira tests/carteira.sql
+
+echo
 echo "=== seed, duas passadas para provar idempotencia (banco fin_seed)"
 aplicar fin_seed
 $P -d fin_seed -c "INSERT INTO tenant (id,razao_social,cnpj) VALUES ('$TENANT_SEED','Seed','99999999000199')" > /dev/null

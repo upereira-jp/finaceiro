@@ -121,6 +121,35 @@ BEGIN
   IF n = 0 THEN RAISE NOTICE 'ok  CAT-7 nenhuma FK de uma coluna aponta para tabela com tenant_id';
   ELSE RAISE WARNING 'FALHA CAT-7 FK simples para entidade de negocio (atravessa tenant): %', nomes; falhas := falhas + 1; END IF;
 
-  IF falhas = 0 THEN RAISE NOTICE 'catalogo: 7 invariantes, nenhuma falha';
+  -- ------------------------------------------------------------------ CAT-8
+  -- CLAUDE.md 3, agora SEM o filtro por tenant_id - e o filtro era o furo.
+  --
+  -- O CAT-3 so olha tabela COM tenant_id, e o comentario dele nomeia
+  -- `distribuidora` como exemplo do que ignorar, "sem tenant_id e sem RLS, de
+  -- proposito". Medido em 27/07 contra producao: aquela premissa e FALSA la. O
+  -- event trigger rls_auto_enable do Supabase (MT-09) habilitou RLS na tabela
+  -- sozinho, sem policy e sem FORCE, e a role de runtime passou a ler zero
+  -- linhas dela. RLS com zero policies nega tudo em silencio, tenha a tabela
+  -- tenant_id ou nao - a regra 3 nao fala de tenant_id, fala de RLS sem policy.
+  --
+  -- LISTA BRANCA NOMINAL, nunca por padrao de nome: `_prisma_migrations` e
+  -- bookkeeping do proprio Prisma, escrita e lida so pelo dono do schema pela
+  -- DIRECT_URL. Entra aqui porque nao a controlamos, do mesmo modo que o
+  -- invariante 19 admite o rls_auto_enable.
+  --
+  -- ATENCAO AO ALCANCE: a suite roda em PG16 local, que NAO tem o event trigger
+  -- da plataforma. Este invariante verde localmente nao prova producao. Rode-o
+  -- tambem la, que e leitura pura:  psql "$DIRECT_URL" -f tests/catalogo.sql
+  SELECT count(*), string_agg(c.relname, ', ') INTO n, nomes
+  FROM pg_class c
+  JOIN pg_namespace ns ON ns.oid = c.relnamespace AND ns.nspname = 'public'
+  WHERE c.relkind = 'r'
+    AND c.relrowsecurity
+    AND NOT EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = c.oid)
+    AND c.relname <> '_prisma_migrations';
+  IF n = 0 THEN RAISE NOTICE 'ok  CAT-8 nenhuma tabela com RLS habilitada e zero policies';
+  ELSE RAISE WARNING 'FALHA CAT-8 RLS habilitada sem policy - nega tudo em silencio: %', nomes; falhas := falhas + 1; END IF;
+
+  IF falhas = 0 THEN RAISE NOTICE 'catalogo: 8 invariantes, nenhuma falha';
   ELSE RAISE WARNING 'catalogo: % FALHA(S)', falhas; END IF;
 END $bloco$;

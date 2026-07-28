@@ -12,7 +12,7 @@ SET client_min_messages = notice;
 
 DO $bloco$
 DECLARE
-  A uuid; B uuid; uA uuid; uSup uuid; uAdm uuid; usinaA uuid; donoB uuid;
+  A uuid; B uuid; uA uuid; uSup uuid; uAdm uuid; usinaA uuid; donoB uuid; utA uuid;
   falhas int := 0; n int; x numeric; txt text;
 BEGIN
   -- ============================================================== fixture
@@ -46,8 +46,9 @@ BEGIN
   -- Segunda concessionaria cadastrada e SEM tarifa: e o caso real da ausencia -
   -- distribuidora nova entra no cadastro antes de alguem lancar a tarifa dela.
   INSERT INTO distribuidora (nome) VALUES ('CELG') ON CONFLICT DO NOTHING;
-  INSERT INTO regra_comissao (tenant_id, originador_tipo, percentual, vigencia_inicio)
-    VALUES (A,'vendedor_g3',50.00,'-infinity');
+  -- 25 + 25, e nao 50: desde a migration 17 a linha e por PARCELA (PRD 5.4).
+  INSERT INTO regra_comissao (tenant_id, originador_tipo, percentual, parcela, vigencia_inicio)
+    VALUES (A,'vendedor_g3',25.00,1,'-infinity'), (A,'vendedor_g3',25.00,2,'-infinity');
 
   -- Duas vigencias de repasse na MESMA usina: e o que prova versionamento em vez
   -- de valor corrente. 70% ate 01/06, 65% depois.
@@ -235,15 +236,15 @@ BEGIN
   ELSE RAISE WARNING 'FALHA E2 tarifa vigente devolveu %', coalesce(x::text,'NULL'); falhas := falhas + 1; END IF;
 
   BEGIN
-    SELECT app.percentual_comissao('parceiro_captador_senior', date '2026-03-01') INTO x;
+    SELECT app.percentual_comissao('parceiro_captador_senior', 1::smallint, date '2026-03-01') INTO x;
     RAISE WARNING 'FALHA E3 comissao sem regra devolveu %', coalesce(x::text,'NULL');
     falhas := falhas + 1;
   EXCEPTION WHEN no_data_found THEN
     RAISE NOTICE 'ok   E3   comissao sem regra vigente levanta, nao devolve NULL';
   END;
 
-  SELECT app.percentual_comissao('vendedor_g3', date '2026-03-01') INTO x;
-  IF x = 50.00 THEN RAISE NOTICE 'ok   E4   comissao com regra vigente devolve 50,00';
+  SELECT app.percentual_comissao('vendedor_g3', 1::smallint, date '2026-03-01') INTO x;
+  IF x = 25.00 THEN RAISE NOTICE 'ok   E4   comissao com regra vigente devolve 25,00 na 1a parcela';
   ELSE RAISE WARNING 'FALHA E4 devolveu %', coalesce(x::text,'NULL'); falhas := falhas + 1; END IF;
 
   -- ============================================================== F. repasse versionado
@@ -344,7 +345,30 @@ BEGIN
   IF txt IS NULL THEN RAISE NOTICE 'ok   G5   inv.3 RLS ENABLE + FORCE + policy em toda tabela com tenant_id';
   ELSE RAISE WARNING 'FALHA G5 inv.3 RLS incompleta: %', txt; falhas := falhas + 1; END IF;
 
+  -- ======================================== Q-AUDIT-01, migration 13
+  -- Conceder tier e a escrita mais privilegiada do sistema, e a regra 9 nomeia
+  -- papel. A trilha tem que dizer A QUEM, na coluna INDEXADA - auditoria_registro_idx
+  -- e (tabela, registro_id). Antes da migration 13 esta linha saia com
+  -- registro_id NULL: plataforma_admin e a unica das dezesseis tabelas auditadas
+  -- sem `id` e sem `cliente_id`, e o coalesce de app.auditar() nao alcancava a
+  -- PK dela, que e usuario_id. Achado num ensaio de bootstrap, nao por teste.
+  SELECT count(*) INTO n FROM auditoria
+   WHERE tabela = 'plataforma_admin' AND operacao = 'I' AND registro_id = uAdm::text;
+  IF n = 1 THEN RAISE NOTICE 'ok   G6   Q-AUDIT-01 a concessao de tier identifica o usuario em registro_id';
+  ELSE RAISE WARNING 'FALHA G6 trilha de plataforma_admin sem registro_id (achou %)', n; falhas := falhas + 1; END IF;
+
+  -- O OUTRO SENTIDO, e e ele que impede a correcao de virar defeito nas outras
+  -- quinze. `usuario_tenant` tem `id` E `usuario_id`. Como `usuario_id` entrou
+  -- por ULTIMO no coalesce, ela tem que continuar identificada pelo PROPRIO id.
+  -- Se alguem reordenar o coalesce, quinze tabelas trocam de chave de auditoria
+  -- em silencio - e este teste e o unico lugar que acusa.
+  SELECT id INTO utA FROM usuario_tenant WHERE usuario_id = uA AND tenant_id = A;
+  SELECT count(*) INTO n FROM auditoria
+   WHERE tabela = 'usuario_tenant' AND operacao = 'I' AND registro_id = utA::text;
+  IF n = 1 THEN RAISE NOTICE 'ok   G7   usuario_tenant segue identificada pelo proprio id, nao pelo usuario_id';
+  ELSE RAISE WARNING 'FALHA G7 usuario_tenant trocou de chave de auditoria (achou %)', n; falhas := falhas + 1; END IF;
+
   -- ==============================================================
   IF falhas > 0 THEN RAISE EXCEPTION '% falha(s) em auditoria e repasse', falhas;
-  ELSE RAISE NOTICE '--- auditoria e repasse: 29 verificacoes, 0 falhas'; END IF;
+  ELSE RAISE NOTICE '--- auditoria e repasse: 31 verificacoes, 0 falhas'; END IF;
 END $bloco$;

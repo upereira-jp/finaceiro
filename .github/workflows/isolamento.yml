@@ -80,13 +80,21 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
       - name: dependencias
         run: npm install
+      # DIRECT_URL com valor DESCARTAVEL, e o motivo esta no job `tipos`: o
+      # `generate` nao conecta, mas o prisma.config.ts resolve env('DIRECT_URL')
+      # no carregamento e ABORTA se a variavel nao existir. Estes dois scripts
+      # chamam `prisma generate` porque `src/generated/` esta no .gitignore -
+      # sem a variavel eles morriam em PrismaConfigEnvError antes do primeiro
+      # teste, e o job ficava vermelho por configuracao, nao por regressao.
       - name: invariantes do middleware
         env:
           PGPASSWORD: spike
+          DIRECT_URL: postgresql://ninguem@127.0.0.1:5432/naoconecta
         run: bash tests/middleware.sh
       - name: camada de sessao
         env:
           PGPASSWORD: spike
+          DIRECT_URL: postgresql://ninguem@127.0.0.1:5432/naoconecta
         run: bash tests/sessao.sh
       - name: documento (CPF e CNPJ, inclusive alfanumerico)
         run: node --experimental-strip-types tests/documento.ts
@@ -136,4 +144,7 @@ jobs:
       - name: suites de repositorio
         env:
           PGPASSWORD: spike
+          # Ver o comentario no job `middleware`: valor descartavel, so para o
+          # prisma.config.ts carregar. O `generate` nao conecta.
+          DIRECT_URL: postgresql://ninguem@127.0.0.1:5432/naoconecta
         run: bash tests/repos.sh

@@ -1,0 +1,17 @@
+{
+  "//": "Extensao explicita no import (allowImportingTsExtensions): o mesmo estilo do servidor, onde ela e OBRIGATORIA por causa do --experimental-strip-types. Duas convencoes de import no mesmo repo fariam mover codigo entre as metades quebrar. tsconfig PROPRIO: O da raiz nao inclui web/ e nao deve: la o alvo e Node e as libs sao de servidor, aqui e o browser. Um tsconfig unico obrigaria a afrouxar os dois.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "skipLibCheck": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true
+  },
+  "include": ["src", "vite.config.ts"]
+}
