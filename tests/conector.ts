@@ -456,90 +456,98 @@ const L3 = 'aaaa3333-0000-4000-8000-00000000cc03';
       `inv.5 um unico escritor de cliente_estado_crm em src/: ${escritores.join(', ') || 'NENHUM'}`);
 }
 
-// ============ N38-N43: espelho de `usina` e `usina_geracao` (SPEC-002 §2 "Entra")
+// ============ N38-N44: espelho de `usina` e `usina_geracao` (SPEC-002 §2 "Entra")
 //
-// Implementado em 27/07 depois da decisao da `Q-ESCOPO-01`. A fixture usa a FORMA
-// REAL medida contra o CRM: `potencia_kwp` nula nas tres, `dono_lead_codigo` nulo
-// nas tres, e a `distribuidora` como o campo que decide entre espelhar e recusar.
+// REESCRITOS EM 28/07, depois da resposta do dev do CRM, e a reescrita e o ponto.
+//
+// A primeira versao testava "usina sem distribuidora e recusa ate o CRM
+// preencher". O dev respondeu que **nao existe tabela de referencia de
+// distribuidoras no CRM** e que tratar como cadastro local nosso esta correto -
+// entao a distribuidora nunca vai vir de la, e a R19 estava cobrando de quem nao
+// tem o dado. Reclassificada para CAMPO LOCAL, e daí segue que o conector nao
+// cria usina: ele espelha as que alguem cadastrou.
 {
   const U1 = 'dddd1111-0000-4000-8000-00000000aa01';
   const U2 = 'dddd2222-0000-4000-8000-00000000aa02';
 
-  // ---- N38: usina com distribuidora CADASTRADA e espelhada.
+  /*
+   * A usina nasce por CADASTRO LOCAL, com a distribuidora que so nos temos.
+   *
+   * O VALOR LOCAL E DIFERENTE DO QUE O CRM MANDA, DE PROPOSITO, e isso e correcao
+   * de um teste fraco: na primeira versao o local era 'Equatorial' e o plantio da
+   * sobrescrita tambem gravava 'Equatorial' - o teste passava com a violacao
+   * plantada, porque escrever o mesmo valor e indistinguivel de nao escrever.
+   * Com valores distintos, qualquer escrita do conector no campo local aparece.
+   */
+  const USINA_LOCAL = 'dddd9001-0000-4000-8000-00000000dd91';
+  await sql(`INSERT INTO distribuidora (nome) VALUES ('Equatorial GO') ON CONFLICT DO NOTHING`);
+  await sql(`INSERT INTO usina (id, tenant_id, codigo_geradora, distribuidora, apelido)
+             VALUES ($1::uuid,$2::uuid,'GER-CRM-01','Equatorial GO','apelido antigo')`, USINA_LOCAL, A);
+
+  // ---- N38: o conector espelha os campos de espelho da usina ja cadastrada.
   {
     const r = await executarCiclo(porta([venda({ lead_id: L1 })], [], [], true,
-      [usinaCrm({ usina_id: U1, codigo_geradora: 'GER-CRM-01', apelido: 'Solar 1' })]), loteEmA());
-    const [u] = await sql(`SELECT id, apelido, distribuidora, potencia_kwp, geracao_nominal_kwh,
+      [usinaCrm({ usina_id: U1, codigo_geradora: 'GER-CRM-01', apelido: 'Solar 1', distribuidora: 'Equatorial' })]), loteEmA());
+    const [u] = await sql(`SELECT apelido, distribuidora, potencia_kwp, geracao_nominal_kwh,
                                   crm_usina_id, status::text, dono_usina_id
-                             FROM usina WHERE tenant_id=$1::uuid AND codigo_geradora='GER-CRM-01'`, A);
-    chk('N38', u !== undefined && u.apelido === 'Solar 1' && u.distribuidora === 'Equatorial'
-         && u.crm_usina_id === U1 && String(u.geracao_nominal_kwh) === '10800.0000'
-         && r.porEntidade.usina.criados === 1,
-        `§2 usina espelhada do CRM (apelido=${u?.apelido}, distribuidora=${u?.distribuidora}, criados=${r.porEntidade.usina.criados})`);
+                             FROM usina WHERE id=$1::uuid`, USINA_LOCAL);
+    chk('N38', u?.apelido === 'Solar 1' && u?.crm_usina_id === U1
+         && String(u?.geracao_nominal_kwh) === '10800.0000' && r.porEntidade.usina.atualizados === 1,
+        `§2 usina cadastrada localmente recebe o espelho do CRM (apelido=${u?.apelido}, atualizados=${r.porEntidade.usina.atualizados})`);
 
-    // Campo LOCAL nao e tocado pelo conector: `dono_usina_id` nao tem de onde vir
-    // (dono_lead_codigo veio 0 de 3), e `potencia_kwp` chega nula do CRM. Nulo
-    // gravado como nulo e honesto; nulo virando zero seria a R9 ao contrario.
-    chk('N39', u?.dono_usina_id === null && u?.potencia_kwp === null,
-        'SPEC-001 §3.3 campo local intacto: dono_usina_id e potencia_kwp seguem nulos, nao viram zero');
+    // O TESTE QUE A RESPOSTA DO DEV TORNOU NECESSARIO, e ele e a R5 pura: o CRM
+    // mandou `distribuidora = ''` - que e o que ele manda de verdade, nas tres -
+    // e o valor LOCAL tem que sobreviver intacto. Sem isto, o primeiro ciclo
+    // apagaria a distribuidora de toda usina cadastrada, e a FK recusaria a
+    // escrita ou pior: gravaria vazio onde havia dado bom.
+    // O CRM mandou 'Equatorial' - um nome VALIDO, que existe na tabela de
+    // referencia - e o local e 'Equatorial GO'. Campo local vence mesmo quando a
+    // origem tem dado bom: e isso que separa "campo local" de "fallback".
+    chk('N39', u?.distribuidora === 'Equatorial GO' && u?.dono_usina_id === null && u?.potencia_kwp === null,
+        `R5 campo LOCAL vence: distribuidora segue "${u?.distribuidora}" com o CRM mandando "Equatorial"`);
   }
 
   // ---- N40: R3 em usina - segunda passada nao escreve.
   {
     const r = await executarCiclo(porta([venda({ lead_id: L1 })], [], [], true,
-      [usinaCrm({ usina_id: U1, codigo_geradora: 'GER-CRM-01', apelido: 'Solar 1' })]), loteEmA());
+      [usinaCrm({ usina_id: U1, codigo_geradora: 'GER-CRM-01', apelido: 'Solar 1', distribuidora: '' })]), loteEmA());
     chk('N40', r.porEntidade.usina.criados === 0 && r.porEntidade.usina.atualizados === 0,
         `R3 usina: segunda passada 0 criados, 0 atualizados (c=${r.porEntidade.usina.criados} a=${r.porEntidade.usina.atualizados})`);
   }
 
-  // ---- N41: A RECUSA CONTADA, e ela e o caso real de hoje - 3 de 3 usinas do
-  // CRM vem com distribuidora vazia. Decisao do dono em 27/07: invariante 7
-  // aplicado a outra entidade, nunca um default que "parecia razoavel".
+  // ---- N41: usina do CRM SEM cadastro local vira recusa contada, e o conector
+  // NUNCA cria. Hoje este e o caso real das tres usinas de producao.
   {
-    const r = await executarCiclo(porta([venda({ lead_id: L1 })], [], [], true, [
-      usinaCrm({ usina_id: U2, codigo_geradora: 'GER-VAZIA', distribuidora: '' }),
-      usinaCrm({ usina_id: U2, codigo_geradora: 'GER-DESCONHECIDA', distribuidora: 'Cemig' }),
-    ]), loteEmA());
-    const nenhuma = await sql(`SELECT count(*)::int n FROM usina WHERE tenant_id=$1::uuid
-                                AND codigo_geradora IN ('GER-VAZIA','GER-DESCONHECIDA')`, A);
+    const r = await executarCiclo(porta([venda({ lead_id: L1 })], [], [], true,
+      [usinaCrm({ usina_id: U2, codigo_geradora: 'GER-NAO-CADASTRADA' })]), loteEmA());
+    const n = await sql(`SELECT count(*)::int n FROM usina WHERE tenant_id=$1::uuid AND codigo_geradora='GER-NAO-CADASTRADA'`, A);
     const [linha] = await sql(`SELECT detalhe FROM conector_execucao WHERE tenant_id=$1::uuid AND ciclo_id=$2::uuid`, A, r.cicloId);
-    const d = JSON.stringify(linha?.detalhe ?? {});
-    chk('N41', r.porEntidade.usina.recusados === 2 && nenhuma[0].n === 0
-         && /distribuidora vazia/.test(d) && /nao esta cadastrada/.test(d),
-        `inv.7 usina sem distribuidora e com distribuidora fora da tabela: 2 recusas contadas, 0 gravadas (rec=${r.porEntidade.usina.recusados})`);
-
-    // POR QUE A CONFERENCIA CONTRA A TABELA DE REFERENCIA IMPORTA: sem ela,
-    // 'Cemig' viraria 23503 no meio do lote e derrubaria o lote INTEIRO - um dado
-    // ruim de uma usina viraria falha de todas. Recusa nomeada > erro de FK.
+    chk('N41', r.porEntidade.usina.recusados === 1 && r.porEntidade.usina.criados === 0 && n[0].n === 0
+         && /nao esta cadastrada no financeiro/.test(JSON.stringify(linha?.detalhe ?? {})),
+        `R19 usina sem cadastro local: recusa contada, ZERO criadas (rec=${r.porEntidade.usina.recusados}, criadas=${n[0].n})`);
     chk('N42', r.status === 'parcial',
         `recusa de usina marca o ciclo como parcial, nao como ok (veio ${r.status})`);
   }
 
-  // ---- N43: usina_geracao, e a cascata da recusa.
+  // ---- N43/N44: usina_geracao, e a cascata da recusa.
   {
     const r = await executarCiclo(porta([venda({ lead_id: L1 })], [], [], true,
-      [usinaCrm({ usina_id: U1, codigo_geradora: 'GER-CRM-01', apelido: 'Solar 1' })],
+      [usinaCrm({ usina_id: U1, codigo_geradora: 'GER-CRM-01', apelido: 'Solar 1', distribuidora: '' })],
       [ geracaoCrm({ usina_id: U1, codigo_geradora: 'GER-CRM-01', competencia: new Date('2026-06-01'), geracao_kwh: '10299.0000' }),
         geracaoCrm({ usina_id: U1, codigo_geradora: 'GER-CRM-01', competencia: new Date('2026-07-01'), geracao_kwh: '10324.0000' }),
-        // orfa: a usina nao esta espelhada. Hoje este e o caso NORMAL, porque as
-        // 3 usinas reais sao recusadas por distribuidora vazia.
         geracaoCrm({ usina_id: U2, codigo_geradora: 'GER-INEXISTENTE', competencia: new Date('2026-06-01') }),
       ]), loteEmA());
 
-    // Escopada A ESTA usina: a suite de repositorios roda antes e ja deixou
-    // geracao no tenant A. Consulta larga aqui mediria o teste do vizinho.
     const g = await sql(`SELECT ug.competencia::text, ug.geracao_kwh::text, ug.origem::text
-                           FROM usina_geracao ug JOIN usina u ON u.id = ug.usina_id
-                          WHERE ug.tenant_id=$1::uuid AND u.codigo_geradora='GER-CRM-01'
-                          ORDER BY ug.competencia`, A);
+                           FROM usina_geracao ug WHERE ug.tenant_id=$1::uuid AND ug.usina_id=$2::uuid
+                          ORDER BY ug.competencia`, A, USINA_LOCAL);
     chk('N43', g.length === 2 && g[0].origem === 'crm' && g[0].geracao_kwh === '10299.0000'
          && r.porEntidade.usina_geracao.criados === 2 && r.porEntidade.usina_geracao.recusados === 1,
         `§2 geracao espelhada com origem='crm' (${g.length} linhas), e a orfa vira recusa contada ` +
         `(rec=${r.porEntidade.usina_geracao.recusados})`);
 
-    // R3 outra vez, agora na geracao.
     const r2 = await executarCiclo(porta([venda({ lead_id: L1 })], [], [], true,
-      [usinaCrm({ usina_id: U1, codigo_geradora: 'GER-CRM-01', apelido: 'Solar 1' })],
+      [usinaCrm({ usina_id: U1, codigo_geradora: 'GER-CRM-01', apelido: 'Solar 1', distribuidora: '' })],
       [ geracaoCrm({ usina_id: U1, codigo_geradora: 'GER-CRM-01', competencia: new Date('2026-06-01'), geracao_kwh: '10299.0000' }),
         geracaoCrm({ usina_id: U1, codigo_geradora: 'GER-CRM-01', competencia: new Date('2026-07-01'), geracao_kwh: '10324.0000' }),
       ]), loteEmA());

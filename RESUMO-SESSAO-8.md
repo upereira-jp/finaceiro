@@ -850,3 +850,98 @@ fechada cedo demais** — a primeira foi o `CAT-3`, cujo comentário nomeava
 padrão é o mesmo: **medir o estado atual e concluir sobre o desenho.** Estado vazio
 não distingue "não é aqui que o dado mora" de "o dado ainda não chegou aqui" — e a
 diferença entre as duas é a diferença entre trocar de fonte e consertar o CRM.
+
+---
+
+## 21. ADENDO — a resposta do dev do CRM (rodada 4), e o que ela mudou de desenho
+
+Nove itens perguntados, nove respondidos, e a resposta foi melhor que a pergunta:
+em vários pontos o dev **leu o modelo dele antes de opinar** e descartou hipóteses
+por evidência, não por impressão.
+
+### O item que mudou código: `distribuidora` não é dado deles
+
+> *"A view é projeção direta, sem `coalesce` — o `''` está em `public.usinas.distribuidora`
+> mesmo. (…) **Não há tabela de referência de distribuidoras do nosso lado.**
+> Tratar como cadastro local de vocês está correto."*
+
+**A R19 nasceu de uma premissa errada minha.** Em 27/07 ela dizia *"usina sem
+distribuidora é recusa contada"*, supondo que o CRM deveria preencher e ainda não
+preenchia. **Não deveria.** A distribuidora é dado **nosso** — logo é **campo
+local** (`SPEC-001` §3.3), e campo local o usuário vence.
+
+E daí segue, necessariamente: como a coluna é `NOT NULL` com FK e o conector nunca
+a escreve, **o conector não cria usina**. Ele espelha as que alguém cadastrou.
+
+A recusa continua existindo e continua contada. O que mudou foi **de quem ela
+cobra ação** — antes cobrava do dev, que é o endereço errado. Agora diz *"cadastre
+a usina e o próximo ciclo espelha o resto"*.
+
+**O `N39` quase não valeu nada, e vale registrar.** Ele prova que o campo local
+sobrevive ao ciclo. Na primeira versão o valor local era `Equatorial` e o plantio
+da sobrescrita gravava `Equatorial` — **o teste passou com a violação plantada**,
+porque escrever o mesmo valor é indistinguível de não escrever. Corrigido para
+valores distintos (`Equatorial GO` local, `Equatorial` vindo do CRM), e aí o
+plantio acusa. *Um teste que não distingue os dois lados não é teste — é um
+`assert true` com nome bonito.*
+
+### O item 6: o dev corrigiu a própria premissa dele, e eu tinha construído em cima
+
+O funil Rateio tem **duas** etapas coexistindo desde 29/06:
+
+| Etapa | Tipo | Cards | Posição |
+|---|---|--:|--:|
+| `Rateio Concluído` | `normal` | **28** | 7 |
+| `Desconto Ativo` | **`won`** | **0** | 8 |
+
+**A automação "Rateio → Clientes Ativos" está habilitada** e dispara na entrada em
+`Desconto Ativo`. O histórico registra **zero entradas em `Desconto Ativo` na vida
+do funil**.
+
+Ninguém parou a automação: **ela está armada e nunca disparou**, porque a operação
+trata `Rateio Concluído` como terminal e não move o card. O desenho — etapa `won`
+separada, automação ligada apontando para ela — **diz que a expectativa era
+avançar**. A prática nunca acompanhou.
+
+Classificação do dev, e é a honesta: **drift operacional, não decisão.** Isso
+confirma o que o dono já havia dito e fecha a metade da `Q-ATIVOS-01` que era do
+CRM. Resta decisão do dono: (a) a operação passa a mover os cards, ou (b) a
+automação passa a escutar `Rateio Concluído`. **Até uma das duas acontecer, a §4.3
+não se mexe** — medir o funil populado vem antes.
+
+### Três achados novos que vieram de brinde
+
+**`UC-DUP-01`** — a UC repetida é **provável erro de digitação**, e o dev descartou
+as alternativas por leitura do modelo: não é troca de titularidade (não há status
+nem data-fim em `usina_clientes`; as duas linhas estão vivas) e não é "dois
+beneficiários por UC" (a unicidade lá é `(tenant_id, lead_id)`). Dois leads
+distintos, mesmo percentual (5,5 %), **39 minutos de diferença em 14/07** — o dia
+da carga manual de 28 dos 36 contratos, pelo mesmo usuário. **Ele confirmou que o
+nosso modelo de UC única por tenant está certo.**
+
+**`GERACAO-01`** — a série é digitação manual da fatura, sem sinal de "competência
+completa": o sistema deles **não distingue "não gerou" de "não foi lançado"**. E o
+cruzamento é dele: **a `0003` é justamente a usina com um cliente a 100 % do
+rateio** — crédito prometido sobre geração nenhuma lançada. Para a F2 isso vira
+regra: **ausência de série não é zero**, mesmo modo de falha da R9 numa entidade
+nova.
+
+**`RATEIO-TETO-01`** — o percentual é digitado à mão lá, então 99,78 % e 91,20 %
+são transcrição, não resíduo do sistema. E o CRM **deliberadamente não força fechar
+100**: política anti-overbooking com margem default de 5 %. **A nossa R11 é teto
+duro em 100.** Hoje não colide, mas a margem deles pode em tese admitir soma que a
+nossa constraint recusaria. Recomendação do dev, adotada: **a F2 trata a sobra como
+"não alocado" e não a classifica** até a operação dizer se é capacidade a vender ou
+erro de transcrição.
+
+### Nota de método
+
+**Duas premissas erradas caíram nesta rodada, e nenhuma era de código** — eram de
+leitura. A minha (distribuidora é dado do CRM) e a do próprio dev (a automação
+estaria parada). As duas sobreviveram semanas porque ninguém tinha perguntado
+diretamente; caíram em uma carta.
+
+Vale contra o instinto de "perguntar depois, implementar agora": eu já tinha
+implementado a R19 na leitura errada, com teste e plantio, e o teste **passava**.
+Um invariante bem testado sobre uma premissa falsa é exatamente tão errado quanto
+um sem teste — e mais caro de desfazer, porque parece verificado.

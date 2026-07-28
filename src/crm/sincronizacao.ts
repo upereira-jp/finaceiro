@@ -301,38 +301,30 @@ export function motivoDeRecusa(l: VendaGanha): string | null {
 export const ehCardDeParceiro = (l: VendaGanha) => l.funil === FUNIL_PARCEIROS;
 
 /**
- * O que faz uma usina do CRM ser RECUSADA em vez de adivinhada.
+ * O que faz uma usina do CRM ser recusada ANTES de procurar o espelho.
  *
- * NAO E REGRA NOVA - e o invariante 7 aplicado a outra entidade: "ambiguidade e
- * valor nulo produzem recusa contada, nunca valor gravado". Decisao do dono em
- * 27/07, depois da medicao.
+ * Sobrou uma conferencia so - a chave de negocio existe? -, porque a
+ * `distribuidora` SAIU deste teste em 28/07, e a saida dela e a parte interessante.
  *
- * O CASO QUE MOTIVOU, e ele e 3 de 3: as tres usinas do CRM vem com
- * `distribuidora = ''` - string vazia, `length = 0`, nao NULL. Do nosso lado a
- * coluna e NOT NULL com FK para a tabela de referencia, que hoje tem UMA linha
- * (`Equatorial`). Assumir `Equatorial` porque e a unica seria o mesmo formato do
- * erro que a `Q-VALOR-01` pegou: um default que parecia razoavel. Recusar custa
- * tres linhas em `conector_execucao.recusados` - e foi exatamente essa contagem
- * que fez o dev do CRM corrigir as views no mesmo dia.
+ * O QUE MUDOU, E POR QUE E RECLASSIFICACAO E NAO AFROUXAMENTO. Em 27/07 a R19
+ * nasceu como "usina sem distribuidora e recusa contada", supondo que o CRM
+ * deveria preencher o campo e ainda nao preenchia. A resposta do dev em 28/07
+ * mostrou que a PREMISSA estava errada: a view e projecao direta, o `''` esta na
+ * coluna de origem, o campo e input de texto livre inicializado com `""` - e, o
+ * que decide, NAO EXISTE TABELA DE REFERENCIA DE DISTRIBUIDORAS NO CRM.
  *
- * A distribuidora tambem e conferida contra a tabela de referencia, e isso nao e
- * zelo: sem a conferencia, um nome fora da lista viraria `23503` no meio do lote
- * e derrubaria o lote inteiro, transformando um dado ruim de UMA usina em falha
- * de todas. Recusa nomeada e melhor que erro de integridade.
+ * A distribuidora nao e um dado deles que esta faltando. E um dado NOSSO. Logo e
+ * CAMPO LOCAL (`SPEC-001` §3.3), e campo local o usuario vence: o conector nunca
+ * a escreve, nem na criacao. Como a coluna e `NOT NULL` com FK, segue que **o
+ * conector nao cria usina** - ele espelha as que alguem cadastrou. Ver
+ * `espelharUsinas`.
+ *
+ * A recusa continua existindo e continua contada; o que mudou foi de QUEM ela
+ * cobra acao. Antes cobrava do dev do CRM, e era o endereco errado.
  */
-export function motivoDeRecusaDeUsina(
-  u: UsinaDoCrm, distribuidorasCadastradas: ReadonlySet<string>,
-): string | null {
+export function motivoDeRecusaDeUsina(u: UsinaDoCrm): string | null {
   const codigo = texto(u.codigo_geradora);
   if (!codigo) return 'usina sem codigo_geradora - e a chave de negocio do espelho';
-
-  const distribuidora = texto(u.distribuidora);
-  if (!distribuidora) {
-    return `usina ${codigo}: distribuidora vazia no CRM, e a coluna e obrigatoria no financeiro`;
-  }
-  if (!distribuidorasCadastradas.has(distribuidora)) {
-    return `usina ${codigo}: distribuidora "${distribuidora}" nao esta cadastrada no financeiro`;
-  }
   return null;
 }
 
@@ -763,13 +755,9 @@ async function espelharUsinas(
   r.porEntidade.usina.lidos = usinas.linhas.length;
   if (usinas.linhas.length === 0) return;   // §7 nao se aplica: usina nao reconcilia
 
-  // A lista de referencia sai numa viagem, uma vez por ciclo - e nao por usina.
-  const cadastradas = new Set<string>(await lote(async () =>
-    (await dbt().distribuidora.findMany({ select: { nome: true } })).map((d) => d.nome)));
-
   const boas: UsinaDoCrm[] = [];
   for (const u of usinas.linhas) {
-    const motivo = motivoDeRecusaDeUsina(u, cadastradas);
+    const motivo = motivoDeRecusaDeUsina(u);
     if (motivo) {
       r.recusados++;
       r.porEntidade.usina.recusados++;
@@ -786,28 +774,44 @@ async function espelharUsinas(
       const codigos = bloco.map((u) => texto(u.codigo_geradora)!);
       const atuais = await db.usina.findMany({
         where: { tenant_id: tenantId, codigo_geradora: { in: codigos } },
-        select: { id: true, codigo_geradora: true, apelido: true, distribuidora: true,
+        select: { id: true, codigo_geradora: true, apelido: true,
                   potencia_kwp: true, geracao_nominal_kwh: true, crm_usina_id: true, status: true },
       });
       const porCodigo = new Map(atuais.map((u) => [u.codigo_geradora, u]));
 
-      const aCriar: any[] = [];
       for (const u of bloco) {
         const codigo = texto(u.codigo_geradora)!;
+        // `distribuidora` NAO entra: campo local, o usuario vence (R5).
         const espelho = {
           apelido: texto(u.apelido),
-          distribuidora: texto(u.distribuidora)!,
           potencia_kwp: u.potencia_kwp,               // string|null: Decimal nunca vira number
           geracao_nominal_kwh: u.geracao_kwh_mensal,  // idem
           crm_usina_id: u.usina_id,
           status: (u.status === 'suspensa' || u.status === 'encerrada' ? u.status : 'ativa') as any,
         };
         const atual = porCodigo.get(codigo);
-        if (!atual) { aCriar.push({ tenant_id: tenantId, codigo_geradora: codigo, ...espelho }); continue; }
+        if (!atual) {
+          /*
+           * NAO CRIA, E NAO E LIMITACAO - E A R19 DEPOIS DE 28/07.
+           *
+           * `distribuidora` e campo local, `NOT NULL` e com FK. Criar aqui exigiria
+           * o conector ESCOLHER um valor - o improviso que a regra 10 proibe e que
+           * a decisao do dono ja havia rejeitado na forma "default Equatorial". A
+           * usina nasce de cadastro local; o conector mantem o espelho dela fresco.
+           */
+          r.recusados++;
+          r.porEntidade.usina.recusados++;
+          r.recusas.push({
+            lead_id: u.usina_id, codigo,
+            motivo: `usina ${codigo} nao esta cadastrada no financeiro. O conector nao cria usina: `
+                  + 'distribuidora e cadastro local (o CRM nao tem tabela de referencia) e a coluna '
+                  + 'e obrigatoria. Cadastre a usina e o proximo ciclo espelha o resto.',
+          });
+          continue;
+        }
 
         const mudou =
           atual.apelido !== espelho.apelido ||
-          atual.distribuidora !== espelho.distribuidora ||
           !mesmoDecimal(atual.potencia_kwp, espelho.potencia_kwp) ||
           !mesmoDecimal(atual.geracao_nominal_kwh, espelho.geracao_nominal_kwh) ||
           atual.crm_usina_id !== espelho.crm_usina_id ||
@@ -816,10 +820,6 @@ async function espelharUsinas(
 
         await db.usina.updateMany({ where: { tenant_id: tenantId, id: atual.id }, data: espelho });
         r.atualizados++; r.porEntidade.usina.atualizados++;
-      }
-      if (aCriar.length) {
-        await db.usina.createMany({ data: aCriar });
-        r.criados += aCriar.length; r.porEntidade.usina.criados += aCriar.length;
       }
       await gravarContadores();
     });

@@ -72,15 +72,26 @@ conector_execucao   id · tenant_id · ciclo_id · iniciado_em · terminado_em
 | Coluna | Origem | Nota |
 |---|---|---|
 | `codigo_geradora` | **CRM** | chave de negócio do espelho |
-| `apelido`, `distribuidora` | **CRM** | |
+| `apelido` | **CRM** | |
 | `geracao_nominal_kwh` | **CRM** | de `usinas.geracao_kwh_mensal` |
 | `potencia_kwp` | **CRM** | **0 de 3 preenchidos** (27/07). Nulo é gravado como nulo — nulo virando zero é a R9 ao contrário |
 | `status` | **CRM** | `ativa` nas 3; valor fora do enum cai para `ativa` |
 | `crm_usina_id` | **CRM** | rastreabilidade, não chave |
-| `dono_usina_id` | **local por ausência** | `dono_lead_codigo` e `dono_lead_nome` vieram **0 de 3**. A `C1-crm` já registrava que o par de funil `Vendas-Integração → Donos de Usina` não existe |
+| `distribuidora` | **local** | **Reclassificado em 28/07 pela resposta do dev.** Não é dado do CRM faltando: **não existe tabela de referência de distribuidoras lá**, o campo é input de texto livre inicializado com `""`, e o dev confirmou que "tratar como cadastro local de vocês está correto" |
+| `dono_usina_id` | **local por ausência** | `dono_lead_codigo` e `dono_lead_nome` vieram **0 de 3** porque `usinas.dono_lead_id` é NULL nas 3 e o `LEFT JOIN` produz os dois nulos juntos. O dev acrescentou uma nuance: o **mecanismo existe** (o formulário tem picker de dono, a rota cria e vincula lead-dono) e o funil `Vendas - Integração` existe — o que não existe é a **etapa** "Donos de Usina" e qualquer uso do campo. Segue como `C1-crm` |
 | `data_homologacao`, `regime_fio_b` | **local** | o CRM não tem o conceito |
 
-> **R19 (nova).** **Usina sem distribuidora é recusa contada, nunca default.** As 3 usinas do CRM vêm com `distribuidora = ''` — string vazia, não NULL —, e a coluna é `NOT NULL` com FK para a tabela de referência. Assumir `Equatorial` porque é a única cadastrada seria o mesmo formato do erro que a `Q-VALOR-01` pegou. **Não é regra nova de fato: é o invariante 7 aplicado a outra entidade.** A distribuidora também é conferida contra a tabela de referência antes de gravar — sem isso, um nome fora da lista viraria `23503` no meio do lote e transformaria dado ruim de **uma** usina em falha de **todas**. Decisão do dono, 27/07. Testes `N41`/`N42`, e o plantio do default acusa.
+> **R19 (nova, e reescrita em 28/07).** **O conector não cria usina — ele espelha as que já existem. Usina do CRM sem cadastro local é recusa contada.**
+>
+> *Redação de 27/07, superada:* "usina sem distribuidora é recusa contada, nunca default", supondo que o CRM deveria preencher o campo e ainda não preenchia.
+>
+> **A premissa estava errada, e quem mostrou foi o dev em 28/07:** a view é projeção direta (o `''` está na coluna de origem), o campo é input de texto livre inicializado com `""`, e — o que decide — **não existe tabela de referência de distribuidoras no CRM**. A distribuidora não é um dado deles que está faltando; é um dado **nosso**. Logo é **campo local**, e campo local o usuário vence (R5). O conector nunca a escreve, nem na criação — e como a coluna é `NOT NULL` com FK, **segue que ele não cria usina**.
+>
+> A recusa continua existindo e continua contada. O que mudou foi **de quem ela cobra ação**: antes cobrava do dev do CRM, e era o endereço errado. Agora diz *"cadastre a usina e o próximo ciclo espelha o resto"*.
+>
+> Testes `N38` (espelha o que é espelho), **`N39` (o campo local vence mesmo quando o CRM manda um nome válido e diferente)**, `N41`/`N42` (recusa contada, zero criadas). Os dois plantios acusam: sobrescrever o campo local derruba o `N39`; criar a usina derruba o `N41`.
+>
+> **Nota sobre o `N39`, porque ele quase não valeu nada:** na primeira versão o valor local era `Equatorial` e o plantio da sobrescrita gravava `Equatorial` — o teste passava **com a violação plantada**, porque escrever o mesmo valor é indistinguível de não escrever. Corrigido para valores distintos (`Equatorial GO` local, `Equatorial` vindo do CRM).
 
 **`usina_geracao`** — chave: `(tenant_id, usina_id, competencia)`, que já é única. Junção com o CRM por `codigo_geradora`.
 
