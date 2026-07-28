@@ -2,157 +2,196 @@
 
 | Campo | Valor |
 |---|---|
-| **Data do documento** | 28/07/2026 |
+| **Data** | 28/07/2026 |
 | **Para** | contador da G3 Solar |
-| **Preparado por** | Vinicius Leal |
+| **De** | Vinicius Leal |
 | **Bloqueia** | **F2** (faturamento) e **F3** (split e comissão) |
-| **Status das questões** | 4 vermelhas, aceitas como risco em 24/07 e rebaixadas para bloqueio de F2/F3 |
+
+> **Como responder:** cada pergunta tem **opções fechadas**. Marque uma. Se
+> nenhuma servir, use a linha *"outra"* e descreva. **Não preciso de parecer
+> fundamentado** — preciso da escolha, porque cada uma corresponde a um desenho
+> diferente de tabela. Onde a escolha depender de informação que só você tem,
+> diga qual informação falta.
+>
+> **Tempo estimado:** 10 perguntas, todas de múltipla escolha.
 
 ---
 
-## Por que esta reunião é agora, e não depois
+## Por que agora
 
-O sistema financeiro tem hoje **20 tabelas, todas da fase de fundação**. Cliente, unidade consumidora, usina, geração, contrato, regras de comissão e repasse — tudo isso existe e está rodando contra o CRM real.
+O sistema tem **20 tabelas, todas de cadastro**, rodando contra o CRM real: cliente, unidade consumidora, usina, geração, contrato.
 
-**O que ainda não existe: `fatura` e `split_item`.** As tabelas que carregam dinheiro faturado e dinheiro repartido não foram escritas.
+**As tabelas `fatura` e `split_item` — as que carregam dinheiro faturado e dinheiro repartido — ainda não foram escritas.** Cada resposta abaixo define colunas dessas duas.
 
-É por isso que a reunião vale agora. As respostas abaixo **definem colunas dessas duas tabelas**. Respondidas hoje, custam uma conversa. Respondidas depois de a fase de faturamento estar escrita, custam migração de schema, reescrita de regra e reprocessamento de dado financeiro já emitido.
+Respondidas agora: uma conversa. Respondidas depois: migração de schema, reescrita de regra e reprocessamento de dado financeiro já emitido.
 
-O critério que este projeto usa para classificar uma questão como bloqueante é literal: *"é vermelha se a resposta errada obriga a reescrever schema, policy ou contrato de integração"*. Seis das onze perguntas abaixo se enquadram.
+## O negócio, em um parágrafo
 
----
-
-## Contexto do negócio, em uma página
-
-A G3 Solar opera **geração compartilhada de energia solar**. Três usinas geram crédito; esse crédito é rateado entre unidades consumidoras de clientes, que passam a pagar menos na conta da distribuidora. A G3 fatura o cliente pelo crédito repassado.
-
-Há três fluxos de dinheiro:
-
-1. **Receita** — o cliente paga a G3 pelo crédito de energia.
-2. **Comissão** — o vendedor ou parceiro que trouxe o cliente recebe percentual.
-3. **Repasse** — o dono da usina recebe pela energia que a usina dele gerou.
-
-As perguntas abaixo tratam dos três.
+A G3 opera **geração compartilhada de energia solar**. Três usinas geram crédito; o crédito é rateado entre unidades consumidoras de clientes, que passam a pagar menos na conta da distribuidora. A G3 fatura o cliente pelo crédito repassado. Há três fluxos de dinheiro: **receita** (cliente → G3), **comissão** (G3 → vendedor/parceiro) e **repasse** (G3 → dono da usina).
 
 ---
 
-## Bloco 1 — Respostas que definem **coluna**
+# As perguntas
 
-### 1. Regime de caixa ou competência para reconhecer a receita
-*(`Q9` da lista de 24/07)*
+## 1. Reconhecimento da receita
 
-**O que se pergunta:** a receita da venda de crédito de energia é reconhecida na **emissão** da cobrança ou no **recebimento**?
+**A receita da venda de crédito de energia é reconhecida quando?**
 
-**Por que trava:** define *quando* a receita passa a existir.
+- [ ] **A — Competência.** Na emissão da cobrança, no mês de referência do crédito.
+- [ ] **B — Caixa.** No recebimento efetivo.
+- [ ] Outra: ____________________
 
-**Consequência no sistema:** hoje toda a modelagem gira em torno de **competência** — o mês de referência do crédito. Se a resposta for **caixa**, o evento que cria a receita deixa de ser a nossa emissão e passa a ser a **confirmação de pagamento vinda do banco**. Isso não muda uma coluna: muda o modelo de eventos inteiro do faturamento, e o momento em que o sistema pode dizer "esta receita existe".
-
-### 2. Retenções sobre comissão e repasse — PF e PJ
-*(`Q-011`, `Q5`, `Q6`, `Q8`)*
-
-**O que se pergunta:** sobre comissão paga a **pessoa física**, incide IRRF, INSS, ISS? Com que alíquota, sobre que base, e **quem recolhe**? E sobre **pessoa jurídica** — quais retenções, e a nota é exigida antes do pagamento?
-
-**Por que trava:** se há retenção, quem recebe não recebe o bruto — e o sistema precisa saber disso antes de gravar o primeiro pagamento.
-
-**Consequência no sistema, e é a mais estrutural de todas:** o sistema tem uma regra que hoje diz *"a soma dos itens de repartição é igual ao valor liquidado, ao centavo"*. **Com retenção, essa regra fica falsa** — a soma dos líquidos não fecha o total, porque uma parte foi para o fisco.
-
-A tabela de repartição passa a precisar de **valor bruto**, **retenção** e **valor líquido**, com a quebra por tributo, e a regra vira: *bruto = liquidado* e *líquido + retenções = bruto*.
-
-**Sem esta resposta, eu não sei quantas colunas essa tabela tem.**
-
-### 3. Repasse ao dono da usina: despesa, custo ou repasse de terceiros?
-*(`Q7`)*
-
-**O que se pergunta:** o dinheiro que vai ao dono da usina é despesa da G3, custo da operação, ou repasse de valor que nunca foi da G3?
-
-**Por que trava:** muda se o dinheiro **chega a ser receita** nossa.
-
-**Consequência no sistema:** três desenhos diferentes de DRE e três leituras diferentes de "quanto a G3 fatura".
-
-- **Repasse de terceiros** → o valor não transita como receita em momento nenhum. A receita bruta da G3 cai, e pode ser preciso segregar conta.
-- **Custo** → entra na formação da margem por usina.
-- **Despesa** → fica abaixo da linha e não afeta margem.
-
-### 4. Crédito de IBS/CBS e natureza da receita
-*(`Q-003 C`, `Q4`)*
-
-**O que se pergunta:** na comercialização de crédito de energia há crédito de IBS/CBS a apropriar, e sobre que base? E a natureza da receita é **energia**, **serviço** ou **locação de ativo**?
-
-**Por que trava:** 2026 é ano de transição da reforma tributária, e a natureza define CNAE e retenção.
-
-**Consequência no sistema:** determina se a fatura carrega colunas de tributo recuperável e se a linha de fatura precisa de um campo de natureza. Se houver crédito a apropriar, aparece uma conta a receber que hoje não existe no modelo.
+| Se A | Se B |
+|---|---|
+| O sistema já está desenhado assim. Nada muda. | O evento que cria a receita passa a ser a **confirmação de pagamento vinda do banco**, não a nossa emissão. Muda o modelo de eventos inteiro do faturamento. |
 
 ---
 
-## Bloco 2 — Respostas que definem **fluxo**
+## 2. Retenção sobre comissão a **pessoa física**
 
-### 5. Escriturar receita sem emissão de documento fiscal
-*(`Q-002 C`)*
+**Sobre a comissão paga a PF, incide retenção?**
 
-**O que se pergunta:** hoje a G3 cobra sem emitir nota. Isso é sustentável? Se não, que documento passa a ser exigido, e em que momento?
+- [ ] **A — Não incide nenhuma.**
+- [ ] **B — Incide.** Marque quais: ☐ IRRF ☐ INSS ☐ ISS ☐ outra: ______
 
-**Por que trava:** é a maior variável de **escopo** da fase de faturamento.
+**Se B, preciso de três coisas por tributo:** alíquota ______ · base de cálculo ______ · quem recolhe ☐ G3 ☐ o prestador
 
-**Consequência no sistema:** define se o faturamento precisa de **integração de nota fiscal** — com prefeitura ou SEFAZ — ou se o boleto é o instrumento. A diferença entre as duas respostas é de semanas de trabalho.
+| Se A | Se B |
+|---|---|
+| A tabela de repartição guarda **um** valor por item. | A tabela precisa de **valor bruto**, **retenção** e **valor líquido**, com quebra por tributo. |
 
-### 6. Nota do prestador PJ antes do pagamento da comissão
-
-**Consequência no sistema:** se for exigida, o pagamento ganha um estado **"bloqueado aguardando nota"**, e o motor de repartição não pode liquidar direto. É uma máquina de estados a mais no fluxo.
-
----
-
-## Bloco 3 — Respostas que definem **classificação**
-
-### 7. Regime tributário de cada operação
-*(`Q1`)*
-
-Simples, Presumido ou Real. **Consequência:** a empresa ganha um campo de regime, e as tabelas de alíquota passam a ser versionadas por vigência — como as tabelas de tarifa e de comissão já são.
-
-### 8. Comissão à sócia: despesa dedutível ou distribuição de lucro?
-*(`Item 10`)*
-
-**O dado, medido e não estimado: a Renata é responsável por 39 dos 48 ganhos — 83 %.**
-
-**Por que trava:** com essa concentração, a classificação move o resultado da empresa.
-
-**Consequência no sistema:** se for **distribuição de lucro**, esses 39 ganhos **não geram item de comissão** — saem do motor de comissão para o de distribuição. Não é ajuste de alíquota: é outra entidade, outro momento e outra base tributável.
+> **Por que esta é a mais estrutural de todas:** o sistema tem hoje a regra *"a soma dos itens de repartição é igual ao valor liquidado, ao centavo"*. **Com retenção essa regra fica falsa** — a soma dos líquidos não fecha o total, porque parte foi para o fisco. A regra teria de virar *"bruto = liquidado"* e *"líquido + retenções = bruto"*. **Sem sua resposta eu não sei quantas colunas essa tabela tem.**
 
 ---
 
-## Bloco 4 — Duas perguntas que a estrutura do sistema obriga, e que não estavam na lista de 24/07
+## 3. Comissão a **pessoa jurídica**
 
-### 9. Onde o arredondamento acontece, e quem fica com o centavo da sobra
+**3a. Incide retenção?**
+- [ ] Não · [ ] Sim — quais: ______________
 
-O sistema proíbe número de ponto flutuante em **todo** cálculo de dinheiro, inclusive intermediário — dinheiro é inteiro, em centavos. E há a regra de que a soma dos itens de repartição fecha com o valor liquidado **ao centavo**.
+**3b. A nota fiscal do prestador é exigida ANTES do pagamento?**
+- [ ] **A — Não.** Paga-se e a nota vem depois.
+- [ ] **B — Sim.** Sem nota, não se paga.
 
-**As duas coisas não coexistem sem uma regra de arredondamento declarada.** Se cada parcela for arredondada isoladamente, sobra ou falta centavo.
+| Se A | Se B |
+|---|---|
+| O motor de repartição liquida direto. | O pagamento ganha o estado **"bloqueado aguardando nota"** — uma máquina de estados a mais no fluxo. |
 
-**Preciso da regra:** arredonda-se no total e distribui-se o resíduo, ou arredonda-se por parcela e alguém absorve a diferença? E **quem** absorve — a G3, o originador ou o dono da usina?
+---
 
-Sem essa resposta, ou a regra do centavo cai, ou o programador escolhe sozinho — e escolher sozinho é exatamente o que este projeto proíbe em decisão de dinheiro.
+## 4. Repasse ao dono da usina
 
-### 10. Faturar pelo **alocado** ou pelo **gerado**?
+**O dinheiro que vai ao dono da usina é, contabilmente:**
 
-Esta é a que a operação levantou em 28/07, e ela tem duas medidas diferentes que hoje o sistema **não separa**:
+- [ ] **A — Repasse de terceiros.** Nunca foi receita da G3; só transitou.
+- [ ] **B — Custo.** Compõe o custo da energia vendida.
+- [ ] **C — Despesa operacional.** Fica abaixo da linha.
+- [ ] Outra: ____________________
 
-| Medida | O que é | O sistema controla? |
+| A | B | C |
 |---|---|---|
-| **Quanto a usina *será* usada** | soma dos percentuais de rateio contratados com os clientes | ✅ sim — há trava que rejeita acima de 100 % |
-| **Quanto a usina *já foi* usada** | crédito efetivamente consumido contra a geração do mês | ❌ **não existe controle** |
+| O valor **não entra na receita** em momento nenhum. A receita bruta da G3 cai, e pode ser preciso segregar conta. | Entra na formação da **margem por usina**. | Não afeta margem. |
 
-**As duas juntas é que evitam overbooking.** Hoje só a primeira existe.
+**4b. Há retenção na fonte sobre o repasse?** ☐ PF: ______ ☐ PJ: ______ ☐ Não incide
 
-**A pergunta fiscal:** se a alocação diz 100 % mas a geração do mês foi menor, fatura-se pelo **alocado** ou pelo **gerado**? E se já se faturou pelo alocado e a geração não veio, o ajuste é **nota de crédito**, **abatimento na competência seguinte** ou **estorno de receita**?
+---
 
-**Consequência no sistema:** define se a base de faturamento é o contrato ou a medição — e, no caso do estorno, se a receita reconhecida pode ser desfeita, o que volta à pergunta 1 (caixa ou competência).
+## 5. Documento fiscal
+
+**Hoje a G3 cobra sem emitir nota. Isso é sustentável?**
+
+- [ ] **A — Sim**, com a escrituração atual.
+- [ ] **B — Não.** Passa a ser exigido: ☐ NFS-e ☐ NF-e ☐ outro: ______
+  Momento da emissão: ☐ na cobrança ☐ no recebimento ☐ mensal consolidada
+
+| Se A | Se B |
+|---|---|
+| O boleto é o instrumento. O faturamento fica no escopo previsto. | O sistema precisa de **integração com prefeitura ou SEFAZ**. É a maior variável de escopo da fase — semanas de diferença. |
+
+---
+
+## 6. Natureza da receita e tributos da reforma
+
+**6a. A receita da venda de crédito de energia é:**
+- [ ] Energia · [ ] Serviço · [ ] Locação de ativo · [ ] Outra: ______
+
+**6b. Há crédito de IBS/CBS a apropriar nessa operação?**
+- [ ] Não · [ ] Sim — base: ____________________
+
+**6c. Regime tributário da operação:**
+- [ ] Simples · [ ] Lucro Presumido · [ ] Lucro Real
+
+**Consequência:** 6a define CNAE e retenção; 6b define se a fatura carrega colunas de tributo recuperável e se aparece uma conta a receber de crédito que hoje não existe no modelo; 6c define quais tabelas de alíquota o sistema versiona por vigência.
+
+---
+
+## 7. Comissão à sócia
+
+**Dado medido, não estimado: a Renata é responsável por 39 dos 48 ganhos — 83 %.**
+
+**A comissão paga a ela é:**
+
+- [ ] **A — Comissão**, despesa dedutível como a dos demais.
+- [ ] **B — Distribuição de lucro.**
+- [ ] **C — Depende** de ____________________
+
+| Se A | Se B |
+|---|---|
+| Nada muda — entra no motor de comissão como qualquer outro. | Esses 39 ganhos **não geram item de comissão**. Saem do motor de comissão para o de distribuição: outra entidade, outro momento, outra base tributável. |
+
+> Com 83 % de concentração, essa escolha move o resultado da empresa.
+
+---
+
+## 8. Arredondamento e o centavo da sobra
+
+O sistema proíbe número de ponto flutuante em **todo** cálculo de dinheiro — valores são inteiros, em centavos. E há a regra de que a soma dos itens de repartição fecha com o valor liquidado **ao centavo**. **As duas não coexistem sem uma regra de arredondamento declarada.**
+
+**8a. Onde se arredonda?**
+- [ ] **A — No total**, distribuindo o resíduo entre as parcelas.
+- [ ] **B — Por parcela**, e alguém absorve a diferença.
+
+**8b. Se B, quem absorve o resíduo?**
+- [ ] A G3 · [ ] O originador · [ ] O dono da usina · [ ] A maior parcela · [ ] Outra: ______
+
+> Sem esta resposta, ou a regra do centavo cai, ou o programador escolhe sozinho — e escolher sozinho em cálculo de dinheiro é o que este projeto proíbe.
+
+---
+
+## 9. Faturar pelo alocado ou pelo gerado
+
+A usina tem **duas medidas diferentes**, e hoje o sistema só controla a primeira:
+
+| Medida | O que é | Controlado? |
+|---|---|---|
+| Quanto a usina **será** usada | soma dos percentuais de rateio contratados | ✅ trava rejeita acima de 100 % |
+| Quanto a usina **já foi** usada | crédito consumido contra a geração do mês | ❌ **sem controle** |
+
+**9a. A base de faturamento do mês é:**
+- [ ] **A — O percentual alocado** no contrato.
+- [ ] **B — A geração efetivamente medida** no mês.
+- [ ] **C — O menor dos dois.**
+
+**9b. Se faturou pelo alocado e a geração veio menor, o ajuste é:**
+- [ ] Nota de crédito · [ ] Abatimento na competência seguinte · [ ] Estorno de receita · [ ] Não se ajusta
+
+> **Atenção à circularidade:** se a resposta de 9b for **estorno**, ela volta à pergunta 1 — estornar receita já reconhecida depende de qual regime está em vigor.
 
 > **O caso concreto já está no banco:** a usina `0003` tem **um único cliente com 100 % do rateio** e **zero geração lançada**. Se houver faturamento sobre ela, é receita sobre energia que ninguém registrou ter sido gerada.
 
 ---
 
-## Dados medidos, para a conversa ser concreta
+## 10. Uma pergunta aberta, e é a única
 
-Tudo abaixo saiu do banco em 28/07, não de estimativa.
+**Há algo no desenho acima que te preocupa e que eu não perguntei?**
+
+____________________________________________
+
+---
+
+# Dados medidos, para a conversa ser concreta
+
+Tudo abaixo saiu do banco em 28/07.
 
 | | |
 |---|--:|
@@ -164,7 +203,7 @@ Tudo abaixo saiu do banco em 28/07, não de estimativa.
 | Usinas | 3 |
 | Ganhos com consumo em kWh (base de faturamento) | 40 de 41 |
 
-**Rateio alocado por usina:**
+**Rateio alocado por usina, contra geração lançada:**
 
 | Usina | UCs | Alocado | Geração lançada |
 |---|--:|--:|---|
@@ -172,32 +211,32 @@ Tudo abaixo saiu do banco em 28/07, não de estimativa.
 | `0002` | 14 | 91,20 % | 7 meses (jan–jul/2026) |
 | `0003` | 1 | **100,00 %** | **nenhuma** |
 
-Duas anomalias que valem a pena levantar na reunião:
+**Duas anomalias que valem a pena levantar:**
 
 1. **A `0003`** — capacidade toda alocada, geração nenhuma lançada.
-2. **Uma unidade consumidora aparece em dois contratos de rateio** (`000041446801282`). O desenvolvedor do CRM verificou o modelo e concluiu que é erro de digitação na carga manual de 14/07 — precisa de conferência contra o rateio oficial da distribuidora.
+2. **Uma unidade consumidora aparece em dois contratos de rateio** (`000041446801282`). O desenvolvedor do CRM verificou o modelo e concluiu que é erro de digitação na carga manual de 14/07. Precisa de conferência contra o rateio oficial da distribuidora.
 
 ---
 
-## Checklist de resposta
+# Resumo em uma tabela
 
 | # | Pergunta | Resposta |
 |---|---|---|
 | 1 | Caixa ou competência | |
-| 2 | Retenções sobre comissão PF (IRRF/INSS/ISS): incide, alíquota, base, quem recolhe | |
-| 2b | Retenções sobre comissão PJ, e nota exigida antes do pagamento | |
-| 3 | Repasse ao dono da usina: despesa, custo ou repasse de terceiros | |
-| 4 | Crédito de IBS/CBS, base, e natureza da receita | |
-| 5 | Escriturar sem documento fiscal: sustentável? Se não, qual documento | |
-| 6 | Regime tributário de cada operação | |
-| 7 | Comissão à sócia: despesa dedutível ou distribuição de lucro | |
-| 8 | Regra de arredondamento e quem absorve o resíduo do centavo | |
-| 9 | Faturar pelo alocado ou pelo gerado; e o ajuste quando divergir | |
+| 2 | Retenção sobre comissão PF | |
+| 3 | Retenção PJ · nota antes do pagamento | |
+| 4 | Repasse ao dono: terceiros, custo ou despesa | |
+| 5 | Documento fiscal exigido | |
+| 6 | Natureza da receita · IBS/CBS · regime | |
+| 7 | Comissão à sócia: despesa ou lucro | |
+| 8 | Arredondamento e quem absorve o resíduo | |
+| 9 | Faturar pelo alocado ou pelo gerado · ajuste | |
+| 10 | O que eu não perguntei | |
 
 ---
 
-## Uma observação de método, para calibrar a urgência
+## Nota sobre urgência
 
-Estas quatro questões fiscais foram **aceitas como risco** em 24/07 e rebaixadas de bloqueio da fase de fundação para bloqueio das fases de faturamento e comissão. **Aquilo funcionou** — a fundação correu inteira sem tocá-las e está pronta.
+Estas questões foram **aceitas como risco** em 24/07 e rebaixadas de bloqueio da fase de fundação para bloqueio das fases de faturamento e comissão. **Aquilo funcionou** — a fundação correu inteira sem tocá-las e está pronta e testada.
 
-Mas a fundação **acabou de ficar sem nenhum bloqueio vermelho**. No dia em que o faturamento começar, as quatro voltam a ser bloqueio — agora sem folga de calendário, e com a diferença de que o schema que elas definem estará prestes a ser escrito.
+Mas a fundação **acabou de ficar sem nenhum bloqueio**. No dia em que o faturamento começar, estas voltam a ser bloqueio — agora sem folga de calendário, e com o schema que elas definem prestes a ser escrito.

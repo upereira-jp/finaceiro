@@ -8,6 +8,40 @@
 | **Resultado** | Auth fechado. Conector construído e ligado ao CRM real. **Passos 1 a 4 da §11 EXECUTADOS.** A F1 não fechou por **uma** razão, e ela é de código: a `Q-LOTE-01` |
 | **Testes** | **285 verificações em 18 suítes**, `EXIT=0`. Os 8 invariantes de catálogo passam **também contra produção** |
 
+> # ESTADO ATUAL — 28/07/2026, fim da sessão
+>
+> **Leia esta caixa e pule para a §11 só se precisar do histórico.** O corpo deste
+> documento é registro datado e não foi reescrito; as §16–§24 são adendos que
+> corrigem partes dele. Se você chegou agora, o que vale é o que está aqui.
+>
+> | | |
+> |---|---|
+> | **F1** | **sem bloqueio vermelho.** Os três critérios do `PRD` §10 cumpridos |
+> | **Conector** | as **4 entidades** da `SPEC-002` §2 espelhadas, rodando valendo contra o CRM real |
+> | **Espelho em produção** | 76 clientes · 3 usinas · 35 UCs · 8 competências de geração |
+> | **Idempotência** | 2ª passada: `criados 0, atualizados 0` |
+> | **Testes** | **313 verificações em 18 suítes**, `EXIT=0`. Os 8 invariantes de catálogo passam **contra produção** |
+> | **Banco** | `sa-east-1`, PG 17.6, 15 migrations, 16 tabelas com `tenant_id` **todas** com RLS+FORCE+policy |
+>
+> **O que falta não é código:**
+>
+> | Item | Quem |
+> |---|---|
+> | Reunião com o contador — **`PAUTA-contador.md`**, 10 perguntas fechadas | Vinicius + contador |
+> | `RATEIO-USO-01` 🔴 — a usina tem duas medidas, o sistema controla uma | Vinicius + contador |
+> | `Q-ATIVOS-01` — mover os cards ou mudar o gatilho da automação | Vinicius + operação |
+> | `Q-UC-DISTRIB-01` — confirmar que a UC herda a distribuidora da usina | Vinicius |
+> | `UC-DUP-01` — conferir `000041446801282` contra o rateio oficial | operação |
+> | Push do branch `sessao-8-conector` e PR | Vinicius |
+> | Apagar o projeto Supabase antigo (`us-west-2`) | Vinicius |
+>
+> **Próxima fase:** a F2 não começa sem o contador. As quatro questões fiscais
+> voltam a ser bloqueio no dia em que ela abrir, e o schema que elas definem
+> (`fatura`, `split_item`) ainda não existe — que é o que torna a reunião barata
+> agora e cara depois.
+
+---
+
 > **Este documento contém o roteiro completo para fechar a F1 — §11.** Ele
 > absorveu o `FECHAR-F1.md`, que existiu por algumas horas e foi removido: dois
 > documentos com o mesmo roteiro divergem, e este projeto já removeu o

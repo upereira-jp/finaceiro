@@ -201,7 +201,7 @@ Medido em 27/07 contra o `PRD-v2.2` §10, não estimado. **Os três critérios d
 | projeto, auth, RBAC dois níveis | ✅ auth medido contra o Supabase real; RBAC com as 16 células do PRD §3 |
 | schema completo com `tenant_id` | ✅ 13 migrations, 20 tabelas com RLS, 24 policies, **zero** tabela com `tenant_id` sem policy |
 | cadastros | ⚠️ 6 repositórios para 11 modelos de negócio — faltam `dono_usina`, `regra_comissao`, `regra_repasse`, `tarifa`, `cliente_estado_crm` |
-| **conector CRM read-only** | ⚠️ **3 das 4 entidades da `SPEC-002` §2.** `cliente`, `usina` e `usina_geracao` espelhadas (48 verificações, R13 em lotes, rodado valendo contra o CRM real). **`unidade_consumidora` segue bloqueada pela `F-01 (medida)`** — 36 leads de rateio, zero em `vendas_ganhas`, 24 pessoas duplicadas entre os conjuntos. Hoje as 3 usinas são **recusadas** por virem sem distribuidora do CRM (R19): a contagem é o sinal, não o defeito |
+| **conector CRM read-only** | ✅ **as 4 entidades da `SPEC-002` §2 espelhadas** — `cliente`, `usina`, `usina_geracao` e `unidade_consumidora`, com a `PortaDeLeitura` em 7 das 8 views. Rodado valendo contra o CRM real: 76 clientes, 3 usinas, 35 UCs, 8 competências de geração, e 2ª passada em 0/0. 48 verificações |
 
 **A leitura honesta, atualizada no fim de 27/07:** **os três critérios formais de saída da F1 estão cumpridos** — o ciclo rodou valendo, duas vezes, contra o CRM real. O que segura a fase não é critério do `PRD` §10; é a **entrega nomeada** *"conector CRM read-only"* estar a um quarto do que a própria `SPEC-002` §2 declara (**`Q-ESCOPO-01`**, vermelha) e a `Q-FASE-01` sem decisão.
 
