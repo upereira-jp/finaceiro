@@ -38,6 +38,11 @@ for m in prisma/migrations/*/migration.sql; do
   fi
 done
 
+# HEREDOC NAO CITADO de proposito: ele PRECISA expandir \$A, \$CLI e os demais
+# uuid da fixture. O preco e que bash tambem expande crase e \$(...) aqui dentro,
+# e uma crase de comentario SQL vira execucao de comando - "financeiro: command
+# not found" no CI, por causa de um `financeiro` entre crases num comentario.
+# Aspas em vez de crase dentro deste bloco, sempre.
 $P -d fin_repos > /dev/null <<SQL
 DO \$\$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='app_financeiro_login') THEN
@@ -71,7 +76,7 @@ INSERT INTO unidade_consumidora (id, tenant_id, cliente_id, numero_uc, distribui
 INSERT INTO conector_crm (tenant_id, tipo, crm_tenant_id, credencial_ref, ativo)
   VALUES ('$A','intreply','$CRMT','vault://crm/g3',true);
 
--- Schema `financeiro` FALSO, com a forma real das views do CRM. Serve para
+-- Schema "financeiro" FALSO, com a forma real das views do CRM. Serve para
 -- exercitar src/crm/leitura.ts de verdade - o SQL constante, o LIMIT ligado e a
 -- validacao por linha da invariante 9 - sem depender de credencial do CRM.
 -- Uma linha certa e uma DIVERGENTE, que e o que o teste precisa provocar.

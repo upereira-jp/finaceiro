@@ -241,3 +241,17 @@ Não é `ok`: ninguém mediu nada. É exatamente o que o `RESUMO-SESSAO-9` §2 r
 | geração · tarifa · comissão | **não medido** — o universo depende de contrato | — |
 
 **Nada disso é código.** E o caminho é sequencial: fechar `contrato_ativo` faz as três não-medidas passarem a ser mensuráveis, e só então se sabe o tamanho real do que resta.
+
+## 13. O CI estava vermelho, e não era desta sessão
+
+O PR #2 abriu com dois jobs falhando — `middleware` e `repositorios`. **O PR #1 falha nos mesmos dois**, então não foi a carteira que quebrou: já estava assim.
+
+Duas causas, e as duas são de configuração:
+
+**1. `PrismaConfigEnvError: Cannot resolve environment variable: DIRECT_URL`.** `src/generated/` está no `.gitignore`, então `tests/repos.sh`, `middleware.sh` e `sessao.sh` chamam `prisma generate` quando o client não existe — e o `prisma.config.ts` resolve `env('DIRECT_URL')` no carregamento e **aborta** se a variável não existir, mesmo que o `generate` não conecte. O job `tipos` já sabia disso e já passava a variável com valor descartável, com o comentário explicando; os outros dois nunca receberam. Os três jobs agora passam.
+
+**2. `tests/repos.sh: line 41: financeiro: command not found`.** O heredoc da fixture é **não citado** de propósito — ele precisa expandir `$A`, `$CLI` e os demais UUIDs. O preço é que o bash também expande crase ali dentro, e um comentário SQL dizia *"Schema \`financeiro\` FALSO"*: a crase virou execução de comando. Trocado por aspas, com a armadilha registrada acima do bloco.
+
+**Reproduzido antes de dar como resolvido:** apagando `src/generated/` e rodando com a variável descartável, o mesmo caminho do CI passa inteiro.
+
+*Vale como nota de método: os dois jobs estavam vermelhos e o trabalho seguiu por duas sessões sem que isso aparecesse, porque a suíte local passa — o `src/generated/` já existe aqui e o `.env` também. **Verde local não é verde no CI**, e a diferença entre os dois é exatamente o que o CI existe para pegar.*
