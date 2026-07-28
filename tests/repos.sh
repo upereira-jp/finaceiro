@@ -146,6 +146,9 @@ echo
 echo "=== rateio: R11, o teto por usina"
 node --experimental-strip-types tests/repos-rateio.ts
 echo
+echo "=== carteira ponta a ponta: compor, emitir, boleto, baixa e split"
+node --experimental-strip-types tests/repos-carteira.ts
+echo
 echo "=== HTTP: rotas, matriz de papeis e traducao de erro"
 node --experimental-strip-types tests/http.ts
 echo

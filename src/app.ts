@@ -18,6 +18,7 @@ import {
   resolverLogin, abrirUnidadeDeTrabalho, abrirRelatorio, abrirComoPlataforma,
   type Sessao, type VinculoDaSessao,
 } from './auth/sessao.ts';
+import { COBRANCA_NAO_CONFIGURADA, type PortaDeCobranca } from './sicoob/porta.ts';
 
 export class RoleDeRuntimeInsegura extends Error {
   constructor(usuario: string, motivo: string) {
@@ -41,7 +42,18 @@ export class SemDatabaseUrl extends Error {
 
 export type App = ReturnType<typeof criarApp>;
 
-export function criarApp(connectionString: string) {
+/**
+ * A porta de cobranca chega AQUI e em nenhum outro lugar - e o mesmo desenho da
+ * `PortaDeLeitura` do conector do CRM, e pela mesma razao: nenhum repositorio
+ * importa adaptador concreto, entao todo o caminho do dinheiro e exercitavel sem
+ * certificado A1, sem credencial de sandbox e sem rede.
+ *
+ * O DEFAULT E O ADAPTADOR QUE RECUSA, e nao um que finge funcionar. Sem
+ * credencial, `registrar boleto` levanta 503 com o motivo nomeado, e o resto do
+ * sistema - composicao, emissao, baixa manual, split - roda inteiro. A F2 nao
+ * fica bloqueada esperando um certificado, e tambem nao emite boleto de mentira.
+ */
+export function criarApp(connectionString: string, cobranca: PortaDeCobranca = COBRANCA_NAO_CONFIGURADA) {
   const pools = criarPools(connectionString);
 
   // Dois clients porque sao dois pools. O de relatorio tem teto e timeout
@@ -78,6 +90,7 @@ export function criarApp(connectionString: string) {
     tetos: { transacional: TETO_TRANSACIONAL, relatorio: TETO_RELATORIO },
     protegido,
     conferirRoleDeRuntime,
+    cobranca,
 
     /** R1-c: a unica chamada feita fora de contexto de tenant. */
     login: (authUserId: string): Promise<Sessao> => resolverLogin(protegido as any, authUserId),

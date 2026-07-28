@@ -19,6 +19,12 @@ import * as usina from '../repos/usina.ts';
 import * as originador from '../repos/originador.ts';
 import * as rateio from '../repos/rateio.ts';
 import * as contrato from '../repos/contrato.ts';
+import * as donoUsina from '../repos/dono_usina.ts';
+import * as regras from '../repos/regras.ts';
+import * as fatura from '../repos/fatura.ts';
+import * as boleto from '../repos/boleto.ts';
+import * as liquidacao from '../repos/liquidacao.ts';
+import * as split from '../repos/split.ts';
 
 export type Requisicao = {
   metodo: string;
@@ -326,5 +332,272 @@ export const ROTAS: Rota[] = [
       unidade_consumidora_id: req.params.id,
       data_fechamento: data(req.corpo?.data_fechamento, 'data_fechamento'),
     }))),
+  },
+
+  // ------------------------------------------------------------ donos de usina
+  // Para quem vai o repasse. Entra agora porque a R12 - "dono nulo bloqueia a
+  // execucao de repasse" - deixou de ser hipotetica quando o split passou a
+  // existir. AUD-08: nulo em 3 de 3 usinas em 28/07.
+  {
+    metodo: 'GET', padrao: '/donos-usina',
+    handler: (req, app) => emTenant(app, req, async () => ok(await donoUsina.listar({
+      ativo: req.query.get('ativo') == null ? undefined : req.query.get('ativo') === 'true',
+      limite: limite(req.query),
+    }))),
+  },
+  {
+    metodo: 'POST', padrao: '/donos-usina',
+    handler: (req, app) => emTenant(app, req, async () => criado(await donoUsina.criar(req.corpo))),
+  },
+  {
+    metodo: 'GET', padrao: '/donos-usina/:id',
+    handler: (req, app) => emTenant(app, req, async () => {
+      const d = await donoUsina.porId(req.params.id);
+      return d ? ok(d) : { status: 404, corpo: { erro: 'NaoEncontrado', mensagem: 'Dono de usina nao encontrado.' } };
+    }),
+  },
+  {
+    metodo: 'PATCH', padrao: '/donos-usina/:id',
+    handler: (req, app) => emTenant(app, req, async () => ok(await donoUsina.editar(req.params.id, req.corpo))),
+  },
+  {
+    metodo: 'DELETE', padrao: '/donos-usina/:id',
+    handler: (req, app) => emTenant(app, req, async () => { await donoUsina.desativar(req.params.id); return semConteudo(); }),
+  },
+  {
+    metodo: 'GET', padrao: '/usinas-sem-dono',
+    handler: (req, app) => emTenant(app, req, async () => ok(await donoUsina.usinasSemDono())),
+  },
+
+  // -------------------------------------------------------- valores com data
+  // As tres tabelas versionadas. NAO ha rota de edicao, e a ausencia e o
+  // desenho: o PRD 4.6 manda "nunca editada no lugar". A unica escrita e abrir
+  // vigencia nova, que fecha a anterior na mesma transacao.
+  {
+    metodo: 'GET', padrao: '/tarifas/:distribuidora',
+    handler: (req, app) => emTenant(app, req, async () => ok(await regras.tarifasDe(req.params.distribuidora))),
+  },
+  {
+    metodo: 'POST', padrao: '/tarifas',
+    handler: (req, app) => emTenant(app, req, async () => criado(await regras.abrirVigenciaDeTarifa({
+      ...req.corpo, vigencia_inicio: data(req.corpo?.vigencia_inicio, 'vigencia_inicio'),
+    }))),
+  },
+  {
+    metodo: 'GET', padrao: '/regras-comissao/:tipo',
+    handler: (req, app) => emTenant(app, req, async () => ok(await regras.comissoesDe(req.params.tipo as any))),
+  },
+  {
+    metodo: 'POST', padrao: '/regras-comissao',
+    handler: (req, app) => emTenant(app, req, async () => criado(await regras.abrirVigenciaDeComissao({
+      ...req.corpo, vigencia_inicio: data(req.corpo?.vigencia_inicio, 'vigencia_inicio'),
+    }))),
+  },
+  {
+    metodo: 'GET', padrao: '/usinas/:id/repasse',
+    handler: (req, app) => emTenant(app, req, async () => ok(await regras.repassesDa(req.params.id))),
+  },
+  {
+    metodo: 'POST', padrao: '/usinas/:id/repasse',
+    handler: (req, app) => emTenant(app, req, async () => criado(await regras.abrirVigenciaDeRepasse({
+      usina_id: req.params.id,
+      percentual: req.corpo?.percentual,
+      vigencia_inicio: data(req.corpo?.vigencia_inicio, 'vigencia_inicio'),
+    }))),
+  },
+
+  // ------------------------------------------------------------- faturamento
+  /*
+   * ENSAIO E VALENDO SAO ROTAS DIFERENTES, e nao um parametro booleano.
+   *
+   * O precedente e o `npm run ciclo`, que exige `--ensaio` ou `--valendo` sem
+   * default: um lote de faturamento toca a carteira inteira, e um flag com
+   * default errado emite cobranca para 35 clientes. Caminhos separados nao tem
+   * default para errar.
+   */
+  {
+    metodo: 'POST', padrao: '/faturamento/:competencia/ensaio',
+    handler: (req, app) => emTenant(app, req, async () => ok(await fatura.ensaiarLote(req.params.competencia))),
+  },
+  {
+    metodo: 'POST', padrao: '/faturamento/:competencia/compor',
+    handler: (req, app) => emTenant(app, req, async () => criado(await fatura.comporLote(req.params.competencia, {
+      tarifas_concessionaria_centavos: req.corpo?.tarifas_concessionaria_centavos,
+    }))),
+  },
+  {
+    metodo: 'POST', padrao: '/faturamento/:competencia/emitir',
+    handler: (req, app) => emTenant(app, req, async () => ok(await fatura.emitirLote(req.params.competencia))),
+  },
+  {
+    metodo: 'GET', padrao: '/faturamento/:competencia',
+    handler: (req, app) => emTenant(app, req, async () => ok(await fatura.daCompetencia(req.params.competencia, {
+      limite: limite(req.query),
+    }))),
+  },
+  {
+    // Varredura da carteira inteira: caminho de RELATORIO, pool e timeout
+    // proprios. Leitura pesada nao disputa slot com a emissao.
+    metodo: 'GET', padrao: '/carteira',
+    handler: (req, app) => emRelatorio(app, req, async () => ok(await fatura.posicao(req.query.get('competencia') ?? undefined))),
+  },
+  {
+    metodo: 'GET', padrao: '/carteira/uso-das-usinas',
+    handler: (req, app) => emRelatorio(app, req, async () => ok(await fatura.usoDasUsinas(req.query.get('competencia') ?? undefined))),
+  },
+  {
+    metodo: 'POST', padrao: '/carteira/marcar-vencidas',
+    handler: (req, app) => emTenant(app, req, async () => ok(await fatura.marcarVencidas())),
+  },
+
+  // ----------------------------------------------------------------- faturas
+  {
+    metodo: 'GET', padrao: '/faturas/:id',
+    handler: (req, app) => emTenant(app, req, async () => {
+      const f = await fatura.porId(req.params.id);
+      return f ? ok(f) : { status: 404, corpo: { erro: 'NaoEncontrado', mensagem: 'Fatura nao encontrada.' } };
+    }),
+  },
+  {
+    metodo: 'POST', padrao: '/faturas/:id/emitir',
+    handler: (req, app) => emTenant(app, req, async () => ok(await fatura.emitir(req.params.id))),
+  },
+  {
+    metodo: 'PUT', padrao: '/faturas/:id/tarifas-concessionaria',
+    handler: (req, app) => emTenant(app, req, async () => {
+      await fatura.lancarTarifasDaConcessionaria(req.params.id, req.corpo?.valor_centavos);
+      return semConteudo();
+    }),
+  },
+  {
+    metodo: 'POST', padrao: '/faturas/:id/cancelar',
+    handler: (req, app) => emTenant(app, req, async () => {
+      await fatura.cancelar(req.params.id, req.corpo?.motivo);
+      return semConteudo();
+    }),
+  },
+  {
+    metodo: 'GET', padrao: '/unidades-consumidoras/:id/faturas',
+    handler: (req, app) => emTenant(app, req, async () => ok(await fatura.daUnidadeConsumidora(req.params.id, limite(req.query)))),
+  },
+
+  // ----------------------------------------------------------------- boletos
+  {
+    metodo: 'POST', padrao: '/conector-cobranca',
+    handler: (req, app) => emTenant(app, req, async () => criado(await boleto.cadastrarConector({
+      ...req.corpo,
+      certificado_expira_em: dataOuNull(req.corpo?.certificado_expira_em, 'certificado_expira_em'),
+    }))),
+  },
+  {
+    metodo: 'GET', padrao: '/conector-cobranca/certificado',
+    handler: (req, app) => emTenant(app, req, async () => ok(await boleto.certificadoVenceEm())),
+  },
+  {
+    // A porta vem do composition root. O handler nao sabe se atras dela ha
+    // Sicoob, adaptador falso ou o que recusa por falta de credencial.
+    metodo: 'POST', padrao: '/faturas/:id/boleto',
+    handler: (req, app) => emTenant(app, req, async () => {
+      /*
+       * O registro NAO levanta quando a Sicoob recusa - ele devolve o resultado,
+       * porque a gravacao da falha precisa commitar junto (ver
+       * ResultadoDoRegistro em src/repos/boleto.ts). E aqui que isso vira status
+       * HTTP: 502, e nao 201. Sem esta traducao, a rota devolveria sucesso para
+       * uma emissao que nao aconteceu.
+       */
+      const r = await boleto.registrar(req.params.id, app.cobranca);
+      return r.registrado
+        ? criado(r.boleto)
+        : { status: 502, corpo: { erro: 'CobrancaFalhou', mensagem: r.erro, boleto: r.boleto } };
+    }),
+  },
+  {
+    metodo: 'GET', padrao: '/faturas/:id/boleto',
+    handler: (req, app) => emTenant(app, req, async () => {
+      const b = await boleto.porFatura(req.params.id);
+      return b ? ok(b) : { status: 404, corpo: { erro: 'NaoEncontrado', mensagem: 'Fatura sem boleto.' } };
+    }),
+  },
+  {
+    metodo: 'POST', padrao: '/faturas/:id/boleto/baixar',
+    handler: (req, app) => emTenant(app, req, async () =>
+      ok(await boleto.baixarNoBanco(req.params.id, req.corpo?.motivo ?? 'baixa solicitada', app.cobranca))),
+  },
+  {
+    // PRD 6: consulta ativa diaria dos boletos em aberto, para capturar
+    // liquidacao cujo webhook falhou. Leitura de todos os abertos: relatorio.
+    metodo: 'GET', padrao: '/boletos/situacao',
+    handler: (req, app) => emRelatorio(app, req, async () => ok(await boleto.situacaoDosEmAberto(app.cobranca, limite(req.query)))),
+  },
+
+  // ------------------------------------------------------------- liquidacoes
+  /*
+   * O UNICO GATILHO DO SPLIT (PRD 5.2). As tres rotas abaixo entram todas em
+   * liquidacao.baixar(), que roda a reparticao na mesma transacao - nao ha rota
+   * que reparta dinheiro sem que ele tenha entrado.
+   *
+   * O webhook e idempotente por `id_externo`: o mesmo evento chegando duas vezes
+   * devolve a baixa que ja existe, em vez de 409. Fila de webhook reprocessa por
+   * erro, e transformar repeticao em erro faria a fila reprocessar para sempre.
+   */
+  {
+    metodo: 'POST', padrao: '/liquidacoes/webhook-sicoob',
+    handler: (req, app) => emTenant(app, req, async () => ok(await liquidacao.baixar({
+      ...req.corpo,
+      origem: 'webhook_sicoob',
+      data_liquidacao: data(req.corpo?.data_liquidacao, 'data_liquidacao'),
+    }))),
+  },
+  {
+    metodo: 'POST', padrao: '/liquidacoes/conciliacao',
+    handler: (req, app) => emTenant(app, req, async () => ok(await liquidacao.baixar({
+      ...req.corpo,
+      origem: 'conciliacao',
+      data_liquidacao: data(req.corpo?.data_liquidacao, 'data_liquidacao'),
+    }))),
+  },
+  {
+    // Baixa manual. Sem `id_externo` - nao ha evento externo -, e o unico
+    // (tenant, origem, id_externo) nao conflita porque NULL nao conflita com
+    // NULL. Quem baixou fica na trilha da regra 9.
+    metodo: 'POST', padrao: '/faturas/:id/baixa-manual',
+    handler: (req, app) => emTenant(app, req, async () => ok(await liquidacao.baixar({
+      fatura_id: req.params.id,
+      valor_liquidado_centavos: req.corpo?.valor_liquidado_centavos,
+      juros_centavos: req.corpo?.juros_centavos,
+      multa_centavos: req.corpo?.multa_centavos,
+      observacao: req.corpo?.observacao,
+      origem: 'manual',
+      data_liquidacao: data(req.corpo?.data_liquidacao, 'data_liquidacao'),
+    }))),
+  },
+  {
+    metodo: 'GET', padrao: '/liquidacoes/pendentes-de-split',
+    handler: (req, app) => emTenant(app, req, async () => ok(await liquidacao.pendentesDeSplit())),
+  },
+  {
+    // A fila da R12: a usina ganhou dono, o split pendente pode rodar. Mesma
+    // funcao do caminho normal - o unico por liquidacao impede repartir duas vezes.
+    metodo: 'POST', padrao: '/liquidacoes/:id/repartir',
+    handler: (req, app) => emTenant(app, req, async () => ok(await liquidacao.repartirPendente(req.params.id))),
+  },
+
+  // ------------------------------------------------------------------- split
+  {
+    metodo: 'GET', padrao: '/liquidacoes/:id/split',
+    handler: (req, app) => emTenant(app, req, async () => {
+      const s = await split.porLiquidacao(req.params.id);
+      return s ? ok(s) : { status: 404, corpo: { erro: 'NaoEncontrado', mensagem: 'Esta liquidacao ainda nao foi repartida.' } };
+    }),
+  },
+  {
+    metodo: 'GET', padrao: '/repasses',
+    handler: (req, app) => emRelatorio(app, req, async () => ok(await split.repassesPorDono(
+      req.query.get('competencia') ? data(req.query.get('competencia'), 'competencia') : undefined))),
+  },
+  {
+    metodo: 'GET', padrao: '/comissoes',
+    handler: (req, app) => emRelatorio(app, req, async () => ok(await split.comissoesPorOriginador(
+      req.query.get('competencia') ? data(req.query.get('competencia'), 'competencia') : undefined))),
   },
 ];
