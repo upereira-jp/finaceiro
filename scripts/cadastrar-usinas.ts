@@ -27,11 +27,27 @@
 import { iniciar, encerrarApp } from '../src/app.ts';
 import { criar, porCodigo } from '../src/repos/usina.ts';
 
-/** As tres da gestao de usinas do CRM, confirmadas pelo dono em 28/07. */
+/**
+ * As da gestao de usinas do CRM, confirmadas pelo dono - as tres primeiras em
+ * 28/07, a quarta no mesmo dia, depois que o ciclo a recusou.
+ *
+ * O CODIGO E COPIADO DO CRM LITERALMENTE, e o "04" nao e engano de digitacao
+ * aqui. `codigo_geradora` e a chave pela qual o conector casa o espelho
+ * (src/crm/sincronizacao.ts, e a escolha e da regra 11: o unico de negocio e
+ * (tenant_id, codigo_geradora), enquanto crm_usina_id nao tem unicidade). Lido
+ * da view em 28/07, a coluna do CRM traz exatamente:
+ *
+ *     0001    0002    0003    04
+ *
+ * Normalizar para "0004" aqui faria o cadastro parecer certo e o ciclo seguinte
+ * recusar a usina de novo, por nao achar o codigo. A inconsistencia de formato e
+ * do CRM e o conserto e la - enquanto nao for consertado, o espelho copia.
+ */
 const USINAS = [
   { codigo_geradora: '0001', distribuidora: 'Equatorial' },
   { codigo_geradora: '0002', distribuidora: 'Equatorial' },
   { codigo_geradora: '0003', distribuidora: 'Equatorial' },
+  { codigo_geradora: '04', distribuidora: 'Equatorial' },
 ];
 
 class RollbackDoEnsaio extends Error {
