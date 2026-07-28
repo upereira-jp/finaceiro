@@ -9,6 +9,8 @@
     "db:migrate": "prisma migrate deploy",
     "db:pull": "prisma db pull",
     "typecheck": "tsc --noEmit",
+    "web:dev": "npm --prefix web run dev",
+    "web:build": "npm --prefix web install --silent && npm --prefix web run build",
     "start": "node --experimental-strip-types --env-file-if-exists=.env scripts/servir.ts",
     "servir": "node --experimental-strip-types --env-file=.env scripts/servir.ts",
     "ciclo": "node --experimental-strip-types --env-file=.env scripts/ciclo-crm.ts",

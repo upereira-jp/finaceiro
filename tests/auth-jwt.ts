@@ -211,7 +211,8 @@ await new Promise<void>((r) => servidor.listen(0, r));
 const porta = (servidor.address() as AddressInfo).port;
 
 const pedir = (headers: Record<string, string>): Promise<{ status: number; corpo: any }> =>
-  fetch(`http://127.0.0.1:${porta}/sessao`, { headers })
+  // A API mora sob /api desde 28/07, para dividir origem com a SPA sem CORS.
+  fetch(`http://127.0.0.1:${porta}/api/sessao`, { headers })
     .then(async (r) => ({ status: r.status, corpo: (await r.json()) as any }));
 
 // ------------------------------------------------- J19 Bearer valido entra

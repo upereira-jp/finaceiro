@@ -116,7 +116,14 @@ src/dominio/split.ts         PRD 5.3 a 5.5, funcao PURA. O liquido G3 e subtraca
 src/sicoob/porta.ts          a interface. Nenhum tipo aceita segredo - so credencial_ref
 src/sicoob/falso.ts          adaptador determinista, com memoria. Sem rede
 src/http/rotas.ts            as 37 rotas. A matriz de papeis NAO e aplicada aqui
-src/http/servidor.ts         node:http puro. O Autenticador vem de FORA, por injecao
+src/http/servidor.ts         node:http puro. O Autenticador vem de FORA, por injecao.
+                             A API mora sob /api; todo o resto e a SPA. Travessia
+                             barrada por RESOLUCAO de caminho, nao por filtro de ".."
+scripts/servir.ts            O ENTRYPOINT. `npm start` (producao) / `npm run servir`
+                             (local). Sobe a API e serve web/dist se existir
+web/                         A SPA: React + Vite, tsconfig proprio. `npm run web:dev`
+                             (5173, com proxy para a 3000) e `npm run web:build`.
+                             Oito telas, na ORDEM das camadas da prontidao
 src/http/erros.ts            erro de dominio -> HTTP. 500 nao vaza mensagem interna
 src/auth/jwt.ts              JWT do Supabase por node:crypto. O alg sai da CHAVE, nao do header
 src/auth/autenticador.ts     Bearer -> auth_user_id. Auth PROPRIO (MT-06 resolvida)

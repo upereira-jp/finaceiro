@@ -263,3 +263,17 @@ Não é flake. `lerCorpo` lança **no meio do stream**, assim que o acumulado pa
 `Connection: close` no 413 transforma o encerramento em contrato. Não há como drenar um corpo de tamanho arbitrário com segurança, então fechar é a resposta certa — a diferença é que agora ela é declarada em vez de ser efeito colateral do socket morrendo.
 
 **Limite honesto do `H18b`, e ele fica escrito no próprio teste:** o plantio **não reproduz** na máquina de desenvolvimento. Removido o `Connection: close`, o H18b continua passando aqui — o socket morre e o undici reabre rápido o bastante. Não é, portanto, verificação nos dois sentidos como as demais deste projeto. **Quem acusa é o CI**, onde a corrida acontece de fato.
+
+## 14. O entrypoint que não existia, e as telas
+
+**`iniciarServidor()` existia, era coberto por 22 verificações, e ninguém o chamava.** As 78 rotas nunca tinham rodado como processo — só dentro da suíte, que sobe o servidor com autenticador falso na porta 0. É o mesmo buraco que o cabeçalho do `ciclo-crm.ts` registrou em 27/07 sobre o conector: *"peça testada que ninguém consegue executar não é sistema"*. Terceira vez que o padrão aparece.
+
+`scripts/servir.ts` decide três coisas e só: **quem** autentica (o JWT do Supabase do financeiro, MT-06), **onde** estão os estáticos (`web/dist`, se existir — sem o build sobe como API pura, em vez de obrigar a buildar o front para mexer no back) e **como morre** (SIGTERM fecha o servidor e devolve o pool; sem isso cada deploy deixa transação aberta segurando linha até o timeout).
+
+**A API passou a morar sob `/api`.** Não é arrumação: com origens diferentes aparece CORS, e CORS onde a credencial é um Bearer significa decidir `Access-Control-Allow-Origin` e `credentials` — superfície nova, num caminho onde errar vaza sessão. Mesma origem não tem o que permitir, e é um artefato só para versionar, hospedar e apontar o subdomínio.
+
+**A SPA** é React + Vite em `web/`, oito telas **na ordem das camadas da prontidão** — porque quem abre o sistema hoje precisa fechar quatro camadas de cadastro para a primeira fatura existir, e a barra de navegação é a ordem em que o trabalho destrava o próximo passo. A regra 1 vale nela também: `web/src/dinheiro.ts` converte reais para centavos **por texto**, sem multiplicar por 100 — `Number('8,15'.replace(',','.')) * 100` dá `814.9999999999999`, e o arredondamento salva *quase* sempre.
+
+**E o servidor de estáticos é controle de segurança, então ganhou teste.** Chegar ao caso que *discrimina* custou duas tentativas, e as duas ficam registradas no próprio teste porque enganam: `/..%2f..%2f` não discrimina (a string ainda tem `..` literal, o filtro ingênuo também barra), e `%2e%2e%2f%2e%2e%2f` não discrimina (dois níveis resolvem para `/`, e o 404 vem de arquivo inexistente, não de contenção). O que discrimina é **um** nível com ponto e barra codificados: não há `..` nenhum no texto, o `new URL` não decodifica isso no pathname, o arquivo existe — e só a resolução de caminho absoluto pega. **Com o filtro por texto plantado, o `H24` falha e o segredo sai na resposta.**
+
+**443 verificações**, `EXIT=0`.

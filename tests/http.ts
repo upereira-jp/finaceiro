@@ -9,6 +9,9 @@
 import { criarServidor } from '../src/http/servidor.ts';
 import { criarApp } from '../src/app.ts';
 import type { AddressInfo } from 'node:net';
+import { mkdtemp, writeFile, mkdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const CONN = process.env.TEST_DATABASE_URL!;
 const A = process.env.TEST_TENANT_A!;
@@ -261,6 +264,80 @@ let clienteCriado = '';
     corpo: { codigo_geradora: 'GER-H21', distribuidora: 'Equatorial', potencia_kwp: '1234.5678' } });
   chk('H21', typeof g.corpo.potencia_kwp === 'string' && g.corpo.potencia_kwp === '1234.5678',
       `numeric sai do JSON como STRING - float em JSON e o que a regra 1 proibe (veio ${typeof g.corpo.potencia_kwp})`);
+}
+
+// ------------------------------------------------- H22 a SPA e a travessia
+{
+  /*
+   * O servidor de estaticos e um CONTROLE DE SEGURANCA, e controle sem teste e
+   * comentario (regra 8). Servidor proprio, com raiz de mentira, porque o
+   * `servidor` la de cima e API pura - que e como as outras 21 verificacoes o
+   * querem.
+   */
+  const raiz = await mkdtemp(join(tmpdir(), 'fin-spa-'));
+  await writeFile(join(raiz, 'index.html'), '<!doctype html><title>spa</title>');
+  await mkdir(join(raiz, 'assets'), { recursive: true });
+  await writeFile(join(raiz, 'assets', 'app-abc123.js'), 'console.log(1)');
+  // O alvo da travessia: existe, tem extensao, e esta FORA da raiz.
+  const segredo = join(raiz, '..', `segredo-${process.pid}.json`);
+  await writeFile(segredo, '{"senha":"nao deveria sair"}');
+
+  const comSpa = criarServidor({
+    app, autenticador: async () => { throw Object.assign(new Error('x'), { status: 401 }); }, estaticos: raiz,
+  });
+  await new Promise<void>((r) => comSpa.listen(0, r));
+  const p2 = (comSpa.address() as AddressInfo).port;
+  const pegar = async (c: string) => {
+    const r = await fetch(`http://127.0.0.1:${p2}${c}`);
+    return { status: r.status, texto: await r.text() };
+  };
+
+  const raizHtml = await pegar('/');
+  chk('H22', raizHtml.status === 200 && raizHtml.texto.includes('<title>spa</title>'),
+      'a raiz serve o index.html da SPA');
+
+  const rotaDeCliente = await pegar('/contratos');
+  chk('H23', rotaDeCliente.status === 200 && rotaDeCliente.texto.includes('spa'),
+      'caminho sem extensao cai no index.html: /contratos e uma TELA, nao um arquivo');
+
+  /*
+   * OS PONTOS TAMBEM CODIFICADOS, e este e o unico caso que DISCRIMINA.
+   *
+   * VERIFICADO NOS DOIS SENTIDOS por plantio, e chegar ao caso certo custou duas
+   * tentativas que ficam registradas porque as duas ENGANAM:
+   *
+   *   /..%2f..%2f...   nao discrimina - a string ainda tem ".." literal, entao
+   *                    o filtro ingenuo tambem barra e o plantio passa verde.
+   *   /%2e%2e%2f%2e%2e%2f...  nao discrimina - dois niveis resolvem para "/", e
+   *                    o arquivo plantado esta em /tmp: o plantio da 404 por
+   *                    arquivo inexistente, nao por contencao.
+   *
+   * O que discrimina e UM nivel com ponto e barra codificados: nao ha ".."
+   * nenhum no texto, o `new URL` nao decodifica nada disso no pathname, o filtro
+   * deixa passar, o arquivo EXISTE, e so a resolucao de caminho ABSOLUTO pega.
+   * Com o filtro plantado, esta verificacao FALHA e o segredo sai na resposta.
+   */
+  const escapou = await pegar('/%2e%2e%2fsegredo-' + process.pid + '.json');
+  chk('H24', !escapou.texto.includes('nao deveria sair'),
+      `travessia com PONTO e barra codificados nao sai da raiz (veio ${escapou.status}) - filtrar ".." no texto deixaria passar exatamente esta`);
+
+  const literal = await pegar('/../segredo-' + process.pid + '.json');
+  chk('H24b', !literal.texto.includes('nao deveria sair'),
+      'travessia com ".." literal tambem nao sai - aqui quem normaliza e o proprio new URL()');
+
+  const asset = await pegar('/assets/app-abc123.js');
+  chk('H25', asset.status === 200 && asset.texto.includes('console.log'),
+      'arquivo com extensao dentro da raiz e servido normalmente (o aperto nao virou nega-tudo)');
+
+  // A API continua respondendo no mesmo servidor, sob /api - e a prova de que a
+  // divisao nao engoliu uma das duas metades.
+  const apiNoMesmo = await pegar('/api/clientes');
+  chk('H26', apiNoMesmo.status === 401,
+      `a API responde sob /api no MESMO servidor que serve a SPA (veio ${apiNoMesmo.status})`);
+
+  await new Promise<void>((r) => comSpa.close(() => r()));
+  await rm(raiz, { recursive: true, force: true });
+  await rm(segredo, { force: true });
 }
 
 console.log(`\n${falhas === 0 ? 'TODAS PASSARAM' : `${falhas} FALHA(S)`}`);
