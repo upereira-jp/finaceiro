@@ -75,6 +75,9 @@ adr/
   ADR-0001-...               estrategia de multi-tenancy: banco unico, RLS por linha (retroativa)
   ADR-0003-...               contexto de tenant: SET LOCAL por transacao (r2, aceita)
   ADR-0004-...               provisionamento: organizacao, dominio e host (aceita)
+  ADR-0005-...               onde mora o segredo do tenant (PROPOSTA, aguarda
+                             decisao). Pre-requisito do adaptador Sicoob real:
+                             a credencial_ref aponta para um cofre que nao existe
 
 auditoria/
   P7-...                     topologia de funis do CRM
