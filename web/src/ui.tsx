@@ -13,8 +13,9 @@ import { VARIAVEIS_CSS, TIPOGRAFIA } from './tema.ts';
 
 // NENHUMA COR LITERAL DAQUI PARA BAIXO. Tudo sai de `tema.ts`, via custom
 // property. E o que faz "trocar a paleta" ser trocar um arquivo em vez de cacar
-// hexadecimal em oito telas - e a paleta de hoje esta marcada la como
-// PROVISORIA, porque foi escolhida por quem escreveu o codigo e nao pela G3.
+// hexadecimal em oito telas - e foi o que se pagou em 28/07, quando a paleta da
+// G3 chegou e a troca inteira coube num arquivo. O que continua derivado la (os
+// tres estados semanticos e o tema escuro) esta marcado como tal.
 export const ESTILO = `
   ${VARIAVEIS_CSS}
   * { box-sizing: border-box; }
@@ -22,7 +23,11 @@ export const ESTILO = `
     margin: 0; background: var(--fundo); color: var(--texto);
     font: ${TIPOGRAFIA.base}/${TIPOGRAFIA.linha} ${TIPOGRAFIA.familia};
   }
-  a { color: var(--acento); }
+  /* --acento-forte, e nao --acento: link e TEXTO, e o laranja da marca como
+     texto da 2.35:1 no branco - reprova a restricao 1 do tema. A paleta da G3
+     reserva o #F39200 para elemento preenchido e para hover, nao para texto em
+     repouso. O valor aqui e o mesmo laranja escurecido, medido em 4.79:1. */
+  a { color: var(--acento-forte); }
   .barra {
     display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
     padding: 10px 20px; border-bottom: 1px solid var(--borda); background: var(--fundo2);

@@ -270,11 +270,29 @@ export function criarServidor(o: OpcoesDoServidor): http.Server {
  * A ordem importa: subir primeiro e conferir depois deixaria uma janela em que o
  * processo aceita requisicao conectado por uma role com BYPASSRLS.
  */
-export async function iniciarServidor(o: OpcoesDoServidor & { porta?: number }): Promise<http.Server> {
+export async function iniciarServidor(
+  o: OpcoesDoServidor & { porta?: number; host?: string },
+): Promise<http.Server> {
   const { usuario } = await o.app.conferirRoleDeRuntime();
   const s = criarServidor(o);
   const porta = o.porta ?? Number(process.env.PORT ?? 3000);
-  await new Promise<void>((resolve) => s.listen(porta, resolve));
-  console.log(`[financeiro] ouvindo na ${porta}, conectado como "${usuario}"`);
+  /*
+   * LOOPBACK POR PADRAO, e o default e que importa.
+   *
+   * `listen(porta)` sem host escuta em 0.0.0.0 - toda interface. Em VPS publico
+   * isso publica a porta na internet ao lado do proxy, e quem chega por ela
+   * chega SEM TLS e SEM as regras do nginx. A credencial deste sistema e um
+   * Bearer no cabecalho: em texto claro, e a sessao inteira que viaja aberta.
+   *
+   * Medido em 28/07 no servidor de producao: o CRM ao lado expoe o backend em
+   * 0.0.0.0:8000, alcancavel de fora. Nao herdamos o padrao.
+   *
+   * Quem precisar escutar em toda interface - contêiner com rede propria, por
+   * exemplo - pede explicitamente por HOST. O default nao decide por esse caso;
+   * decide pelo caso em que esquecer custa caro.
+   */
+  const host = o.host ?? process.env.HOST ?? '127.0.0.1';
+  await new Promise<void>((resolve) => s.listen(porta, host, resolve));
+  console.log(`[financeiro] ouvindo em ${host}:${porta}, conectado como "${usuario}"`);
   return s;
 }
