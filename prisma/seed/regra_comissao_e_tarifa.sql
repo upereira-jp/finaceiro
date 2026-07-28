@@ -18,18 +18,46 @@
 BEGIN;
 
 -- ---------------------------------------------------------------- comissao
-INSERT INTO regra_comissao (id, tenant_id, originador_tipo, percentual, vigencia_inicio)
-SELECT gen_random_uuid(), :tenant::uuid, t.tipo, t.pct, '-infinity'::date
+--
+-- DUAS LINHAS POR TIPO desde a migration 17, e a segunda coluna nao e detalhe:
+-- o PRD 5.4 nao paga a comissao de uma vez, paga ESCALONADA pela 1a e pela 2a
+-- fatura cheia paga do contrato. Da 3a em diante e zero, e o zero e a ausencia
+-- de linha com parcela 3 - conferida em app.percentual_comissao, que devolve
+-- zero por regra em vez de levantar.
+--
+--   tipo                      total   1a      2a
+--   vendedor_g3                50%    25%     25%
+--   terceirizado               50%    25%     25%   <- Q-COMIS-TERC-01
+--   parceiro_indicador         25%    25%      0%   <- o "-" do PRD e zero DECLARADO
+--   parceiro_captador          50%    30%     20%
+--   parceiro_captador_senior   60%    30%     30%
+--
+-- `terceirizado` nao esta na tabela do PRD. O total de 50% e o que este seed ja
+-- afirmava e nao muda; a quebra espelha o vendedor_g3, que e o tipo de mesmo
+-- total, e fica registrada como Q-COMIS-TERC-01. O total e fato, a repartição
+-- entre as duas parcelas e suposicao - e ela esta escrita aqui em vez de
+-- escondida no motor.
+--
+-- `parceiro_indicador` parcela 2 com 0,00 e DECLARACAO, nao lacuna: sem a linha
+-- a funcao levantaria no_data_found na 2a fatura cheia de todo contrato de
+-- indicador, transformando "nao ha o que pagar" em incidente mensal.
+INSERT INTO regra_comissao (id, tenant_id, originador_tipo, percentual, parcela, vigencia_inicio)
+SELECT gen_random_uuid(), :tenant::uuid, t.tipo, t.pct, t.parcela, '-infinity'::date
 FROM (VALUES
-  ('vendedor_g3'::originador_tipo,              50.00),   -- = PADRAO, a taxa da casa
-  ('terceirizado'::originador_tipo,             50.00),
-  ('parceiro_indicador'::originador_tipo,       25.00),
-  ('parceiro_captador'::originador_tipo,        50.00),
-  ('parceiro_captador_senior'::originador_tipo, 60.00)
-) AS t(tipo, pct)
+  ('vendedor_g3'::originador_tipo,              25.00, 1::smallint),
+  ('vendedor_g3'::originador_tipo,              25.00, 2::smallint),
+  ('terceirizado'::originador_tipo,             25.00, 1::smallint),
+  ('terceirizado'::originador_tipo,             25.00, 2::smallint),
+  ('parceiro_indicador'::originador_tipo,       25.00, 1::smallint),
+  ('parceiro_indicador'::originador_tipo,        0.00, 2::smallint),
+  ('parceiro_captador'::originador_tipo,        30.00, 1::smallint),
+  ('parceiro_captador'::originador_tipo,        20.00, 2::smallint),
+  ('parceiro_captador_senior'::originador_tipo, 30.00, 1::smallint),
+  ('parceiro_captador_senior'::originador_tipo, 30.00, 2::smallint)
+) AS t(tipo, pct, parcela)
 WHERE NOT EXISTS (
   SELECT 1 FROM regra_comissao r
-  WHERE r.tenant_id = :tenant::uuid AND r.originador_tipo = t.tipo
+  WHERE r.tenant_id = :tenant::uuid AND r.originador_tipo = t.tipo AND r.parcela = t.parcela
 );
 
 -- ---------------------------------------------------------------- tarifa
@@ -54,7 +82,7 @@ BEGIN
   SELECT count(*) INTO nr FROM regra_comissao;
   SELECT count(*) INTO nt FROM tarifa;
   RAISE NOTICE 'seed: % regra(s) de comissao, % tarifa(s)', nr, nt;
-  IF nr < 5 THEN RAISE EXCEPTION 'esperadas 5 regras de comissao, ha %', nr; END IF;
+  IF nr < 10 THEN RAISE EXCEPTION 'esperadas 10 regras de comissao (5 tipos x 2 parcelas), ha %', nr; END IF;
 END $$;
 
 COMMIT;

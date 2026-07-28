@@ -80,8 +80,11 @@ BEGIN
   EXCEPTION WHEN foreign_key_violation THEN RAISE NOTICE 'ok  FK 9/9 contrato -> originador'; END;
 
   -- ------------------------------------------- 10  vigencia sobreposta
-  INSERT INTO regra_comissao (tenant_id,originador_tipo,percentual,vigencia_inicio) VALUES (A,'parceiro_captador',50,'2026-01-01');
-  BEGIN INSERT INTO regra_comissao (tenant_id,originador_tipo,percentual,vigencia_inicio) VALUES (A,'parceiro_captador',60,'2026-06-01');
+  -- `parcela` entrou na migration 17 (PRD 5.4). O EXCLUDE agora inclui a
+  -- parcela, entao o par sobreposto tem de ser da MESMA parcela para o teste
+  -- continuar medindo o que media: sobreposicao de vigencia, nao de dimensao.
+  INSERT INTO regra_comissao (tenant_id,originador_tipo,percentual,parcela,vigencia_inicio) VALUES (A,'parceiro_captador',30,1,'2026-01-01');
+  BEGIN INSERT INTO regra_comissao (tenant_id,originador_tipo,percentual,parcela,vigencia_inicio) VALUES (A,'parceiro_captador',20,1,'2026-06-01');
         RAISE WARNING 'FALHA vigencia sobreposta em regra_comissao: ACEITOU'; falhas:=falhas+1;
   EXCEPTION WHEN exclusion_violation THEN RAISE NOTICE 'ok  regra_comissao recusa vigencia sobreposta'; END;
 

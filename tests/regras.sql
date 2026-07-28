@@ -20,10 +20,13 @@ BEGIN
     VALUES (T,'Equatorial',1.130000,'-infinity','2026-07-01');
   INSERT INTO tarifa (tenant_id,distribuidora,tarifa_reais_por_kwh,vigencia_inicio)
     VALUES (T,'Equatorial',1.187650,'2026-07-01');
-  INSERT INTO regra_comissao (tenant_id,originador_tipo,percentual,vigencia_inicio)
-    VALUES (T,'parceiro_captador',50,'-infinity');
-  INSERT INTO regra_comissao (tenant_id,originador_tipo,percentual,vigencia_inicio)
-    VALUES (T,'parceiro_captador_senior',60,'-infinity');
+  -- A quebra do PRD 5.4: captador 30+20, senior 30+30. Desde a migration 17 a
+  -- linha e por PARCELA, e a 2a e a que distingue os dois tiers - na 1a ambos
+  -- pagam 30, e um teste que nao distingue nao prova nada.
+  INSERT INTO regra_comissao (tenant_id,originador_tipo,percentual,parcela,vigencia_inicio)
+    VALUES (T,'parceiro_captador',30,1,'-infinity'), (T,'parceiro_captador',20,2,'-infinity');
+  INSERT INTO regra_comissao (tenant_id,originador_tipo,percentual,parcela,vigencia_inicio)
+    VALUES (T,'parceiro_captador_senior',30,1,'-infinity'), (T,'parceiro_captador_senior',30,2,'-infinity');
 
   -- ---------------------------------------------------- R11 abaixo do teto passa
   INSERT INTO unidade_consumidora (tenant_id,cliente_id,numero_uc,distribuidora,usina_id,percentual_rateio)
@@ -115,13 +118,13 @@ BEGIN
 
   -- ---------------------------------------------------- R20-b tier congelado
   UPDATE originador SET tipo = 'parceiro_captador_senior' WHERE id = org;
-  SELECT app.percentual_comissao(k.originador_tipo_no_fechamento, k.data_fechamento) INTO v
+  SELECT app.percentual_comissao(k.originador_tipo_no_fechamento, 2::smallint, k.data_fechamento) INTO v
   FROM contrato k WHERE k.status = 'ativo' AND k.originador_id = org;
-  IF v = 50 THEN RAISE NOTICE 'ok  R20-b originador promovido a senior (60), contrato de marco segue pagando %', v;
+  IF v = 20 THEN RAISE NOTICE 'ok  R20-b originador promovido a senior (2a parcela 30), contrato de marco segue pagando %', v;
   ELSE RAISE WARNING 'FALHA R20-b contrato de marco passou a pagar %', v; falhas := falhas + 1; END IF;
 
-  SELECT app.percentual_comissao('parceiro_captador_senior','2026-08-15') INTO v;
-  IF v = 60 THEN RAISE NOTICE 'ok  R20-b contrato NOVO com tier senior paga % - a promocao vale daqui em diante', v;
+  SELECT app.percentual_comissao('parceiro_captador_senior', 2::smallint, '2026-08-15') INTO v;
+  IF v = 30 THEN RAISE NOTICE 'ok  R20-b contrato NOVO com tier senior paga % na 2a - a promocao vale daqui em diante', v;
   ELSE RAISE WARNING 'FALHA R20-b tier senior paga %', v; falhas := falhas + 1; END IF;
 
   IF falhas > 0 THEN RAISE EXCEPTION '% falha(s) em regras', falhas;

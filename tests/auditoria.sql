@@ -46,8 +46,9 @@ BEGIN
   -- Segunda concessionaria cadastrada e SEM tarifa: e o caso real da ausencia -
   -- distribuidora nova entra no cadastro antes de alguem lancar a tarifa dela.
   INSERT INTO distribuidora (nome) VALUES ('CELG') ON CONFLICT DO NOTHING;
-  INSERT INTO regra_comissao (tenant_id, originador_tipo, percentual, vigencia_inicio)
-    VALUES (A,'vendedor_g3',50.00,'-infinity');
+  -- 25 + 25, e nao 50: desde a migration 17 a linha e por PARCELA (PRD 5.4).
+  INSERT INTO regra_comissao (tenant_id, originador_tipo, percentual, parcela, vigencia_inicio)
+    VALUES (A,'vendedor_g3',25.00,1,'-infinity'), (A,'vendedor_g3',25.00,2,'-infinity');
 
   -- Duas vigencias de repasse na MESMA usina: e o que prova versionamento em vez
   -- de valor corrente. 70% ate 01/06, 65% depois.
@@ -235,15 +236,15 @@ BEGIN
   ELSE RAISE WARNING 'FALHA E2 tarifa vigente devolveu %', coalesce(x::text,'NULL'); falhas := falhas + 1; END IF;
 
   BEGIN
-    SELECT app.percentual_comissao('parceiro_captador_senior', date '2026-03-01') INTO x;
+    SELECT app.percentual_comissao('parceiro_captador_senior', 1::smallint, date '2026-03-01') INTO x;
     RAISE WARNING 'FALHA E3 comissao sem regra devolveu %', coalesce(x::text,'NULL');
     falhas := falhas + 1;
   EXCEPTION WHEN no_data_found THEN
     RAISE NOTICE 'ok   E3   comissao sem regra vigente levanta, nao devolve NULL';
   END;
 
-  SELECT app.percentual_comissao('vendedor_g3', date '2026-03-01') INTO x;
-  IF x = 50.00 THEN RAISE NOTICE 'ok   E4   comissao com regra vigente devolve 50,00';
+  SELECT app.percentual_comissao('vendedor_g3', 1::smallint, date '2026-03-01') INTO x;
+  IF x = 25.00 THEN RAISE NOTICE 'ok   E4   comissao com regra vigente devolve 25,00 na 1a parcela';
   ELSE RAISE WARNING 'FALHA E4 devolveu %', coalesce(x::text,'NULL'); falhas := falhas + 1; END IF;
 
   -- ============================================================== F. repasse versionado
