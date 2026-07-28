@@ -1012,3 +1012,82 @@ de geração.**
 | `UC-DUP-01` — conferir a UC repetida contra o rateio oficial | operação |
 
 **313 verificações em 18 suítes** (305 `chk()` + 8 de catálogo), `EXIT=0`.
+
+---
+
+## 23. ADENDO — as 3 usinas cadastradas, e o espelho fecha
+
+O dono confirmou em 28/07 que as três usinas existem na gestão de usinas do CRM e
+autorizou o cadastro local. **Era o único ponto que segurava a cascata inteira.**
+
+### Feito pelo caminho da aplicação, não por `psql`
+
+`scripts/cadastrar-usinas.ts` (`npm run usinas`), com `--ensaio`/`--valendo` como
+todo script de escrita deste projeto. Entra por `app.login()`, roda dentro de
+`app.withTenant()` e escreve por `repos/usina.criar()`, que chama
+`exigir('escrever_cadastro')`. **Um `INSERT` por `psql` pularia a matriz de papéis,
+a policy `WITH CHECK` e o gatilho de auditoria** — e a regra 9 manda gravar quem,
+quando, antes e depois.
+
+**O cadastro é deliberadamente mínimo: só `codigo_geradora` e `distribuidora`.**
+Tudo o mais é campo espelho, e quem preenche é o ciclo. Digitar aqui o que a
+integração busca sozinha criaria a dúvida de qual dos dois vence na divergência.
+
+O resultado é a separação espelho/local visível numa linha só:
+
+| `codigo_geradora` | `distribuidora` | `apelido` | `geracao_nominal_kwh` | `crm_usina_id` |
+|---|---|---|--:|---|
+| `0001` | **Equatorial** *(local)* | 1.707.852.012-59 | 10800,0000 | ✅ |
+| `0002` | **Equatorial** *(local)* | 401269001287 | 10000,0000 | ✅ |
+| `0003` | **Equatorial** *(local)* | 4.077.023.012-90 | 10000,0000 | ✅ |
+
+*(o `apelido` vindo do CRM é um documento, não um nome — é o que está lá)*
+
+### O ciclo depois do cadastro
+
+```
+lidos 95   criados 43   atualizados 3   recusados 1     <- eram 47
+```
+
+**De 47 recusas para 1.** As 43 criações são 35 UCs + 8 competências de geração; os
+3 atualizados são as usinas recebendo os campos de espelho. Segunda passada:
+**`criados: 0, atualizados: 0`**.
+
+### O espelho, completo
+
+| | |
+|---|--:|
+| clientes espelhados | **76** |
+| usinas | **3** |
+| unidades consumidoras | **35** |
+| competências de geração | **8** |
+| `tem_rateio_ativo` | **35** |
+
+**Rateio por usina, com a R11 satisfeita:**
+
+| usina | UCs | soma |
+|---|--:|--:|
+| `0001` | 20 | 94,28 % |
+| `0002` | 14 | 91,20 % |
+| `0003` | 1 | 100,00 % |
+
+A `0001` tem **20** UCs e 94,28 %, não as 21 e 99,78 % medidas no CRM — a diferença
+é exatamente a UC recusada (5,50 %). **Os números fecham**, e o que falta é o dado
+que o dev já apontou como provável erro de digitação.
+
+### A única recusa que restou
+
+> `UC 000041446801282 aparece em mais de um contrato de rateio no mesmo ciclo. O
+> conector nao escolhe qual vale (UC-DUP-01): confira contra o rateio oficial da
+> distribuidora.`
+
+É a `UC-DUP-01`, e ela agora é **o único ruído em 95 linhas lidas**. Antes estava
+enterrada em 47 recusas; agora é a coisa que sobra na tela. *Contagem de recusas
+que cai até virar sinal é o que a invariante 8 existe para produzir.*
+
+### Nota: a geração da `0003` continua vazia, e agora isso importa mais
+
+A `0003` tem **um cliente a 100 % do rateio** e **zero competências de geração**
+espelhadas — o `GERACAO-01`, que o dev levantou. Com o espelho completo, isso
+deixou de ser observação e virou **linha visível no banco**: há crédito prometido
+sobre geração que ninguém lançou. A F2 não pode tratar essa ausência como zero.

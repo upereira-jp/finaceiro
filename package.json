@@ -16,7 +16,8 @@
     "test:middleware": "bash tests/middleware.sh",
     "test:sessao": "bash tests/sessao.sh",
     "test:repos": "bash tests/repos.sh",
-    "test": "npm run typecheck && npm run test:documento && npm run test:isolamento && npm run test:middleware && npm run test:sessao && npm run test:repos"
+    "test": "npm run typecheck && npm run test:documento && npm run test:isolamento && npm run test:middleware && npm run test:sessao && npm run test:repos",
+    "usinas": "node --experimental-strip-types --env-file=.env scripts/cadastrar-usinas.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.9.0",
