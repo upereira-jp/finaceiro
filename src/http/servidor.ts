@@ -13,6 +13,8 @@
 // fora de contexto de tenant (R1-c).
 
 import http from 'node:http';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { App, Sessao } from '../app.ts';
 import { ROTAS, type Requisicao, type Resultado } from './rotas.ts';
@@ -28,7 +30,91 @@ export type OpcoesDoServidor = {
   maxCorpoBytes?: number;
   /** Onde vai o detalhe do 500. Nunca na resposta. */
   log?: (mensagem: string, erro: unknown) => void;
+  /**
+   * Prefixo da API. Tudo fora dele vai para os estaticos.
+   *
+   * O PREFIXO EXISTE PARA A SPA E A API DIVIDIREM UMA ORIGEM SO, e isso nao e
+   * arrumacao: com origens diferentes aparece CORS, e CORS num sistema onde a
+   * credencial e um Bearer significa decidir `Access-Control-Allow-Origin` e
+   * `credentials` - superficie nova, num caminho onde errar vaza sessao. Mesma
+   * origem nao tem esse problema porque nao ha o que permitir.
+   *
+   * De brinde, e um artefato so para versionar, hospedar e apontar o subdominio.
+   */
+  prefixoApi?: string;
+  /**
+   * Diretorio da SPA construida. Ausente, o servidor e so API - que e como as
+   * suites de teste o usam, e como ele roda em desenvolvimento com o Vite
+   * servindo o front na porta dele.
+   */
+  estaticos?: string;
 };
+
+/**
+ * Config PUBLICA para o front subir: a URL do Supabase e a chave publicavel.
+ *
+ * NAO VIOLA A REGRA 5, e vale dizer por que: a `anon key` do Supabase e
+ * publica por desenho - ela vai no browser de qualquer jeito, e quem protege o
+ * dado atras dela e a RLS, nao o segredo da chave. O que a regra 5 proibe e
+ * segredo POR TENANT em coluna ou em variavel de ambiente; isto e config de
+ * PLATAFORMA, que a propria regra manda ficar em variavel de ambiente.
+ *
+ * Servida pela API em vez de embutida no build por um motivo pratico: um build
+ * so serve qualquer ambiente, e trocar de projeto Supabase nao exige recompilar
+ * o front.
+ */
+function configPublica(): Resultado {
+  const url = process.env.SUPABASE_URL;
+  const chave = process.env.SUPABASE_ANON_KEY ?? process.env.SUPABASE_PUBLISHABLE_KEY;
+  if (!url || !chave) {
+    return { status: 503, corpo: {
+      erro: 'ConfigAusente',
+      mensagem: 'SUPABASE_URL e SUPABASE_ANON_KEY nao estao no ambiente. Sem elas o front nao ' +
+        'consegue autenticar, e o servidor prefere dizer isso a servir uma tela que nao loga.',
+    } };
+  }
+  return { status: 200, corpo: { supabaseUrl: url, supabaseAnonKey: chave } };
+}
+
+/** Tipos por extensao. Lista fechada: extensao desconhecida sai como octet-stream
+ *  em vez de ganhar um tipo adivinhado que o browser vai interpretar. */
+const TIPOS: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+  '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json',
+};
+
+/**
+ * Serve a SPA. Caminho que nao existe cai no index.html - e roteamento de
+ * cliente, nao 404: `/contratos` e uma tela, nao um arquivo.
+ *
+ * A TRAVESSIA E BARRADA POR RESOLUCAO, nao por inspecao da string. `path.resolve`
+ * normaliza `..`, `%2e%2e` ja veio decodificado pela URL, e o que sobra e
+ * comparar o caminho ABSOLUTO resolvido com a raiz. Filtrar ".." no texto e o
+ * jeito que falha - sempre falta uma codificacao.
+ */
+async function servirEstatico(raiz: string, caminho: string, res: ServerResponse): Promise<void> {
+  const pedido = path.resolve(raiz, '.' + decodeURIComponent(caminho));
+  const dentro = pedido === raiz || pedido.startsWith(raiz + path.sep);
+
+  const alvo = dentro && path.extname(pedido) ? pedido : path.join(raiz, 'index.html');
+  try {
+    const conteudo = await fs.readFile(alvo);
+    const tipo = TIPOS[path.extname(alvo).toLowerCase()] ?? 'application/octet-stream';
+    // Os arquivos com hash no nome sao imutaveis; o index.html nunca, ou o
+    // deploy novo nao chega ao browser que ja tem o antigo em cache.
+    const cache = alvo.endsWith('index.html') ? 'no-cache' : 'public, max-age=31536000, immutable';
+    res.writeHead(200, { 'content-type': tipo, 'cache-control': cache });
+    res.end(conteudo);
+  } catch {
+    res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+    res.end('nao encontrado');
+  }
+}
 
 type RotaCompilada = {
   metodo: string;
@@ -120,13 +206,31 @@ function responder(res: ServerResponse, r: Resultado): void {
 export function criarServidor(o: OpcoesDoServidor): http.Server {
   const max = o.maxCorpoBytes ?? 1_000_000;
   const log = o.log ?? ((m, e) => console.error(m, e));
+  const prefixo = o.prefixoApi ?? '/api';
+  const raizEstatica = o.estaticos ? path.resolve(o.estaticos) : null;
 
   return http.createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://interno');
-    const caminho = url.pathname;
     const metodo = (req.method ?? 'GET').toUpperCase();
 
+    // A API mora sob o prefixo; todo o resto e a SPA. Sem estaticos configurados
+    // o servidor e so API, que e como as suites o usam.
+    const naApi = url.pathname === prefixo || url.pathname.startsWith(prefixo + '/');
+    if (!naApi) {
+      if (raizEstatica) return servirEstatico(raizEstatica, url.pathname, res);
+      return responder(res, { status: 404, corpo: {
+        erro: 'RotaNaoEncontrada',
+        mensagem: `${metodo} ${url.pathname} - a API responde sob ${prefixo}`,
+      } });
+    }
+    const caminho = url.pathname.slice(prefixo.length) || '/';
+
     try {
+      // Publica: e o que o front precisa ANTES de ter credencial. Fica antes do
+      // autenticador de proposito - pedir token para descobrir como autenticar
+      // seria circular.
+      if (metodo === 'GET' && caminho === '/publico/config') return responder(res, configPublica());
+
       const achou = casar(metodo, caminho);
       if (!achou) {
         const status = caminhoExisteEmOutroMetodo(caminho) ? 405 : 404;

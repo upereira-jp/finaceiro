@@ -55,7 +55,10 @@ async function chamar(
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (o.auth !== undefined) headers['x-auth-user-id'] = o.auth;
   if (o.tenant !== undefined) headers['x-tenant-id'] = o.tenant;
-  const r = await fetch(`http://127.0.0.1:${porta}${caminho}`, {
+  // A API mora sob /api desde 28/07, para dividir origem com a SPA sem CORS. O
+  // prefixo entra aqui e nao em cada chamada: as verificacoes falam de rota de
+  // negocio, e um prefixo repetido 21 vezes viraria ruido.
+  const r = await fetch(`http://127.0.0.1:${porta}/api${caminho}`, {
     method: metodo, headers,
     body: o.corpoBruto ?? (o.corpo === undefined ? undefined : JSON.stringify(o.corpo)),
   });

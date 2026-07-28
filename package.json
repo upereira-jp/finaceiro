@@ -9,6 +9,8 @@
     "db:migrate": "prisma migrate deploy",
     "db:pull": "prisma db pull",
     "typecheck": "tsc --noEmit",
+    "start": "node --experimental-strip-types --env-file-if-exists=.env scripts/servir.ts",
+    "servir": "node --experimental-strip-types --env-file=.env scripts/servir.ts",
     "ciclo": "node --experimental-strip-types --env-file=.env scripts/ciclo-crm.ts",
     "faturar": "node --experimental-strip-types --env-file=.env scripts/faturar.ts",
     "auth:verificar": "node --experimental-strip-types --env-file=.env scripts/verificar-auth-real.ts",
