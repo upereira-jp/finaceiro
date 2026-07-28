@@ -29,11 +29,14 @@
 > |---|---|
 > | Reunião com o contador — **`PAUTA-contador.md`**, 10 perguntas fechadas | Vinicius + contador |
 > | `RATEIO-USO-01` 🔴 — a usina tem duas medidas, o sistema controla uma | Vinicius + contador |
-> | `Q-ATIVOS-01` — mover os cards ou mudar o gatilho da automação | Vinicius + operação |
 > | `Q-UC-DISTRIB-01` — confirmar que a UC herda a distribuidora da usina | Vinicius |
 > | `UC-DUP-01` — conferir `000041446801282` contra o rateio oficial | operação |
-> | Push do branch `sessao-8-conector` e PR | Vinicius |
-> | Apagar o projeto Supabase antigo (`us-west-2`) | Vinicius |
+>
+> **Encerrado em 28/07:** PR **#1** aberto · projeto Supabase antigo apagado, com os
+> 8 invariantes de catálogo reverificados contra produção depois · senha antiga do
+> `financeiro_ro` confirmada como não guardada por ninguém · `Q-ATIVOS-01` decidida
+> (não mover os cards) e rebaixada para 🟡, porque o espelho de UC tornou o funil
+> `Clientes ativos` desnecessário como fonte de estado ativo.
 >
 > **Próxima fase:** a F2 não começa sem o contador. As quatro questões fiscais
 > voltam a ser bloqueio no dia em que ela abrir, e o schema que elas definem
