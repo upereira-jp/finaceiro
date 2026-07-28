@@ -15,7 +15,7 @@
 > | **F2 e F3** | **construídas.** Compor → emitir → boleto → o banco pagar → baixar → repartir, ponta a ponta, contra banco real e pela role sem `BYPASSRLS` |
 > | **O que segura a F2** | **um certificado A1**, não código. O critério do `PRD` §10 é *"boleto liquidado no sandbox baixa a fatura automaticamente"*, e o ciclo está provado contra o **adaptador falso** — `Q-SICOOB-01` |
 > | **Invariante do centavo** | constraint deferida no banco + 2.000 combinações no motor. 22 delas deram líquido G3 **negativo**, que é o que o `PRD` §5.6 prevê |
-> | **Contra produção** | **nada foi executado.** Nenhuma migration nova foi aplicada em produção nesta sessão, e nenhuma fatura foi composta lá. É decisão do dono |
+> | **Contra produção** | as **18 migrations aplicadas**, catálogo **8/8**, e o ensaio de faturamento rodado. **Zero faturas a criar em qualquer competência, e o motivo não é código** — ver §11 |
 >
 > **A fila, e ela mudou de forma:**
 >
@@ -170,3 +170,37 @@ As três coisas boas desta sessão têm a mesma origem, e ela não é diligênci
 A pauta foi respondida **antes** de a primeira migration existir, e por isso quatro respostas viraram colunas em vez de virarem migração de schema em tabela com dinheiro gravado. As três lacunas foram fechadas **antes** também — e a que não foi fechada virou questão com dono nomeado, em vez de virar um default escolhido "porque parecia razoável".
 
 E as duas correções — o exemplo errado no comentário e o `throw` que desfazia a própria gravação — apareceram porque **escrever o teste veio antes de acreditar no código**. Nenhuma das duas quebraria nada hoje: a primeira só erraria com uma taxa abaixo de 1%, a segunda só apareceria quando alguém fosse consultar a fila de retentativa e a encontrasse vazia. As duas são exatamente o modo de falha que este projeto persegue desde a regra 3 — **o silêncio que só aparece no relatório.**
+
+## 11. O ensaio contra produção, e o que ele achou
+
+As migrations 16 a 18 foram aplicadas em `sa-east-1` por autorização do dono. Puramente aditivas: `regra_comissao` estava **vazia** lá, então o backfill da 17 — a única parte que tocaria dado existente — não reescreveu linha nenhuma. Os 8 invariantes de catálogo passam contra produção **com as tabelas novas**.
+
+O ciclo do CRM em ensaio, antes: `lidos 96, criados 1, recusados 1`. A recusa continua sendo a `UC-DUP-01`, único ruído em 96 linhas.
+
+**O ensaio de faturamento devolveu zero em todas as competências com geração lançada** — 2026-06 e 2026-07, e o mesmo valeria para as outras seis:
+
+```
+faturas a criar . 0
+recusadas ....... 35
+   35  sem_contrato_vigente
+```
+
+**Isso não é defeito, e a triagem está fazendo exatamente o que foi desenhada para fazer.** Medido no banco em seguida:
+
+| | |
+|---|--:|
+| unidades consumidoras espelhadas | **35** |
+| com rateio (usina + percentual) | **35** |
+| **contratos** | **0** |
+| UCs com `data_vencimento` | **0** |
+| tarifas cadastradas | **0** |
+| donos de usina | **0** |
+| regras de repasse | **0** |
+
+**São quatro camadas ausentes, e nenhuma delas é código.** O `contrato` é entidade **local** — a `SPEC-002` §2 espelha `cliente`, `usina`, `usina_geracao` e `unidade_consumidora`, e contrato não está na lista, por desenho: ele carrega o tier congelado do originador (R20-b) e o contador de faturas cheias, que são decisões do financeiro e não do CRM.
+
+Se os contratos existissem, as 35 cairiam na camada seguinte: `data_vencimento` está **100% vazia**, que é a `Q-SPEC001-02`, e a triagem recusaria por `sem_vencimento` em vez de escolher um dia. Se o vencimento existisse, a composição levantaria por falta de tarifa (R26). E se a fatura nascesse e fosse paga, o split pararia na R12 — zero donos de usina, que é a `AUD-08`.
+
+**A ordem em que as camadas aparecem é a da §4 da `SPEC-003` (R32), e ela é a ordem de utilidade do diagnóstico:** devolver `sem_geracao_lancada` mandaria a operação lançar geração para descobrir depois que faltava o contrato. O ensaio devolve o problema de verdade, que é o primeiro.
+
+**O que isso muda na leitura da fase:** a F2 não está esperando código. Está esperando **quatro cadastros operacionais** — contratos, dia de vencimento, tarifa e dono de usina — e um **certificado A1**. O ensaio é barato e repetível: `npm run faturar -- --ensaio --competencia AAAA-MM --auth-user <uuid>` roda a triagem contra o dado real sem escrever nada, e é o instrumento para acompanhar essas quatro camadas fechando.

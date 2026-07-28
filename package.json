@@ -10,6 +10,7 @@
     "db:pull": "prisma db pull",
     "typecheck": "tsc --noEmit",
     "ciclo": "node --experimental-strip-types --env-file=.env scripts/ciclo-crm.ts",
+    "faturar": "node --experimental-strip-types --env-file=.env scripts/faturar.ts",
     "auth:verificar": "node --experimental-strip-types --env-file=.env scripts/verificar-auth-real.ts",
     "test:documento": "node --experimental-strip-types tests/documento.ts",
     "test:dominio": "node --experimental-strip-types tests/dominio-carteira.ts",

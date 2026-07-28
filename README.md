@@ -139,6 +139,9 @@ scripts/provisionar-tenant.sql
                              (nao do CRM), o vinculo admin e o conector_crm
 scripts/ciclo-crm.ts         COMPOSICAO do ciclo: liga pool do CRM, leitor e
                              motor. Exige --ensaio ou --valendo. `npm run ciclo`
+scripts/faturar.ts           COMPOSICAO do lote de faturamento. Exige --ensaio ou
+                             --valendo E --competencia: nao ha "mes corrente" por
+                             default. `npm run faturar`
 scripts/verificar-auth-real.ts
                              auth ponta a ponta contra o Supabase real. Sem token
                              no stdin faz so o preflight do JWKS, que nao pede
