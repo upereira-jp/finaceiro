@@ -2,6 +2,7 @@
 // de composicao do lote.
 //
 // USO
+//   npm run faturar -- --prontidao --competencia 2026-07 --auth-user <uuid> [--tenant <uuid>]
 //   npm run faturar -- --ensaio  --competencia 2026-07 --auth-user <uuid> [--tenant <uuid>]
 //   npm run faturar -- --valendo --competencia 2026-07 --auth-user <uuid> [--tenant <uuid>]
 //
@@ -28,6 +29,7 @@
 
 import { iniciar, encerrarApp } from '../src/app.ts';
 import * as fatura from '../src/repos/fatura.ts';
+import { prontidao } from '../src/repos/prontidao.ts';
 import { emReais } from '../src/dominio/centavos.ts';
 
 const arg = (nome: string): string | undefined => {
@@ -36,11 +38,56 @@ const arg = (nome: string): string | undefined => {
 };
 const tem = (nome: string) => process.argv.includes(`--${nome}`);
 
+/**
+ * O relatorio de PRONTIDAO, e ele responde outra pergunta que a do ensaio.
+ *
+ * O ensaio diz "esta UC entra?" e devolve UM motivo por UC - a triagem da R32
+ * para no primeiro que impede de existir, de proposito. Isso e o certo para
+ * diagnosticar uma UC e insuficiente para planejar: o primeiro ensaio contra
+ * producao devolveu "35 sem_contrato_vigente" e havia mais tres camadas vazias
+ * atras, que so apareceriam uma a uma, um ensaio por vez.
+ *
+ * Este mostra as nove de uma vez, e nao decide nenhuma delas.
+ */
+async function relatorioDeProntidao(a: any, sessao: any, tenantProposto: string | undefined, competencia: string) {
+  const p = await a.withTenant(sessao, tenantProposto, () => prontidao(competencia));
+
+  console.log('--- prontidao para faturar ---');
+  console.log(`  competencia .... ${p.competencia}`);
+  console.log(`  UCs ativas ..... ${p.ucs_ativas}`);
+  console.log(`  pode faturar ... ${p.pode_faturar ? 'SIM' : 'NAO'}`);
+  console.log(`  pode repartir .. ${p.pode_repartir ? 'SIM' : 'NAO'}\n`);
+
+  const larg = Math.max(...p.camadas.map((c: any) => c.camada.length));
+  for (const c of p.camadas) {
+    const marca = c.situacao === 'nao_medido' ? '?'
+                : c.situacao === 'ok' ? 'ok'
+                : c.efeito === 'bloqueia_fatura' ? 'FALTA' : 'split';
+    console.log(`  ${marca.padEnd(6)} ${c.camada.padEnd(larg)}  ${String(c.faltam).padStart(4)} de ${String(c.total).padStart(4)}` +
+                `${c.faltam === 0 ? '' : `   [${c.dono}${c.questao ? ` · ${c.questao}` : ''}]`}`);
+  }
+
+  const pendentes = p.camadas.filter((c: any) => c.situacao !== 'ok');
+  if (pendentes.length > 0) {
+    console.log('\n--- o que cada pendencia significa ---');
+    for (const c of pendentes) {
+      const cabeca = c.situacao === 'nao_medido'
+        ? `${c.camada} (NAO MEDIDO - o universo depende de contrato, e nao ha contrato)`
+        : `${c.camada} (${c.faltam} de ${c.total})`;
+      console.log(`\n  ${cabeca}:\n    ${c.explicacao}`);
+    }
+  } else {
+    console.log('\n  Nenhuma camada pendente. `--ensaio` mostra quantas faturas sairiam.');
+  }
+  console.log('\n== PRONTIDAO. Leitura pura, nada foi gravado. ==');
+}
+
 async function main(): Promise<void> {
+  const prontidaoSo = tem('prontidao');
   const ensaio = tem('ensaio');
   const valendo = tem('valendo');
-  if (ensaio === valendo) {
-    console.error('ERRO: informe --ensaio (nao escreve) ou --valendo (grava as faturas), e so um dos dois.');
+  if (!prontidaoSo && ensaio === valendo) {
+    console.error('ERRO: informe --prontidao (o que falta), --ensaio (nao escreve) ou --valendo (grava).');
     process.exit(2);
   }
 
@@ -62,13 +109,20 @@ async function main(): Promise<void> {
   const competencia = /^\d{4}-\d{2}$/.test(comp) ? `${comp}-01` : comp;
   const tenantProposto = arg('tenant');
 
-  console.log(`\n== modo: ${ensaio ? 'ENSAIO (nao escreve)' : 'VALENDO (grava)'} · competencia ${competencia} ==\n`);
+  const modo = prontidaoSo ? 'PRONTIDAO (leitura pura)' : ensaio ? 'ENSAIO (nao escreve)' : 'VALENDO (grava)';
+  console.log(`\n== modo: ${modo} · competencia ${competencia} ==\n`);
 
   // iniciar() recusa o arranque se a role de runtime tiver BYPASSRLS.
   const a = await iniciar();
   const sessao = await a.login(authUserId);
   console.log(`financeiro: ${sessao.nome} <${sessao.email}>, tier=${sessao.tier ?? '(nenhum)'}, ` +
               `tenants=${sessao.tenants.map((t) => t.papel).join(',') || '(nenhum)'}\n`);
+
+  if (prontidaoSo) {
+    await relatorioDeProntidao(a, sessao, tenantProposto, competencia);
+    await encerrarApp();
+    return;
+  }
 
   const r = await a.withTenant(sessao, tenantProposto, () =>
     ensaio ? fatura.ensaiarLote(competencia) : fatura.comporLote(competencia));

@@ -30,6 +30,7 @@ import * as fatura from '../src/repos/fatura.ts';
 import * as boleto from '../src/repos/boleto.ts';
 import * as liquidacao from '../src/repos/liquidacao.ts';
 import * as split from '../src/repos/split.ts';
+import { prontidao } from '../src/repos/prontidao.ts';
 import { CobrancaFalsa } from '../src/sicoob/falso.ts';
 import { COBRANCA_NAO_CONFIGURADA, CobrancaNaoConfigurada } from '../src/sicoob/porta.ts';
 
@@ -398,9 +399,39 @@ let liquidacaoJulho: string;
       'a retentativa REAPROVEITA a linha em vez de criar um segundo boleto (PRD 6)');
 }
 
+// ---------------------------------------------------- K18 prontidao: nao medido nao e ok
+{
+  /*
+   * O TESTE NASCEU DE UM DEFEITO ACHADO EM PRODUCAO, em 28/07. Tres camadas -
+   * geracao da competencia, tarifa vigente e regra de comissao - tem por
+   * universo as UCs CONTRATADAS. Num tenant sem contrato nenhum o universo e
+   * vazio, e "0 de 0" saiu marcado como `ok`: o relatorio mostrava verde sobre
+   * o que nao tinha medido, e verde autoriza.
+   *
+   * O tenant B da fixture nao tem nada, e por isso e o sujeito certo.
+   */
+  const pB = await emB(() => prontidao('2026-07-01'));
+  const derivadas = pB.camadas.filter((c) =>
+    ['geracao_da_competencia', 'tarifa_vigente', 'regra_de_comissao'].includes(c.camada));
+
+  chk('K18a', derivadas.length === 3 && derivadas.every((c) => c.situacao === 'nao_medido' && c.total === 0),
+      'camada de universo vazio volta NAO_MEDIDO, nunca ok - zero sobre nada nao e "pronto", e a mesma licao do "zero divergencias" do conector');
+  chk('K18b', pB.pode_faturar === false && pB.pode_repartir === false,
+      'e `pode_faturar` exige ok, nunca nao_medido: contar o nao medido como pronto seria o relatorio autorizando o que nao conferiu');
+
+  const pA = await emA(() => prontidao('2026-07-01'));
+  const porNome = (n: string) => pA.camadas.find((c) => c.camada === n)!;
+  chk('K18c', porNome('geracao_da_competencia').situacao === 'ok' && porNome('geracao_da_competencia').total > 0,
+      `com contrato e geracao lancada a mesma camada volta ok sobre universo real (${porNome('geracao_da_competencia').total} usina(s))`);
+  chk('K18d', porNome('dono_da_usina').efeito === 'bloqueia_split' && porNome('contrato_ativo').efeito === 'bloqueia_fatura',
+      'dono de usina bloqueia o SPLIT e contrato bloqueia a FATURA - a distincao e a mesma de recusa e alerta (R33)');
+  chk('K18e', pA.camadas.filter((c) => c.situacao === 'pendente').every((c) => c.dono.length > 0),
+      'toda camada pendente carrega dono nomeado - questao sem dono e automaticamente vermelha (QUESTOES 1)');
+}
+
 console.log();
 if (falhas > 0) { console.log(`--- carteira: ${falhas} FALHA(S)`); await pools.transacional.end(); await pools.relatorio.end(); process.exit(1); }
-console.log('--- carteira ponta a ponta: 31 verificacoes, 0 falhas');
+console.log('--- carteira ponta a ponta: 36 verificacoes, 0 falhas');
 await prisma.$disconnect();
 await pools.transacional.end();
 await pools.relatorio.end();

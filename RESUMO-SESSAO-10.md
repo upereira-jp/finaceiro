@@ -204,3 +204,40 @@ Se os contratos existissem, as 35 cairiam na camada seguinte: `data_vencimento` 
 **A ordem em que as camadas aparecem é a da §4 da `SPEC-003` (R32), e ela é a ordem de utilidade do diagnóstico:** devolver `sem_geracao_lancada` mandaria a operação lançar geração para descobrir depois que faltava o contrato. O ensaio devolve o problema de verdade, que é o primeiro.
 
 **O que isso muda na leitura da fase:** a F2 não está esperando código. Está esperando **quatro cadastros operacionais** — contratos, dia de vencimento, tarifa e dono de usina — e um **certificado A1**. O ensaio é barato e repetível: `npm run faturar -- --ensaio --competencia AAAA-MM --auth-user <uuid>` roda a triagem contra o dado real sem escrever nada, e é o instrumento para acompanhar essas quatro camadas fechando.
+
+## 12. O instrumento que o ensaio pediu, e o defeito que ele tinha
+
+O ensaio devolveu `35 sem_contrato_vigente` e **isso é tudo o que ele podia dizer**. A R32 manda a triagem parar no primeiro motivo que impede de existir, e está certa — devolver `sem_geracao_lancada` mandaria a operação lançar geração para descobrir depois que faltava o contrato. Mas atrás dos 35 contratos ausentes havia mais camadas vazias, e elas só apareceriam **uma a uma, um ensaio por vez**, cada uma depois de dias de trabalho da operação.
+
+Daí `src/repos/prontidao.ts`, e ele responde outra pergunta:
+
+| | |
+|---|---|
+| `ensaiarLote()` | *"esta UC entra?"* — por UC, primeiro motivo |
+| `prontidao()` | *"o que falta ao todo?"* — por **camada**, todas de uma vez |
+
+Nove camadas, cada uma com contagem, universo, efeito (`bloqueia_fatura` ou `bloqueia_split`), **dono nomeado** e a questão que a destrava. Ele conta e não decide nada: vencimento, tarifa e dono da usina têm dono de decisão, e nenhum deles é o programador.
+
+**Rodado contra produção, ele mostrou um defeito nele mesmo.** Três camadas — geração da competência, tarifa vigente e regra de comissão — têm por universo as UCs **contratadas**. Com zero contratos, o universo é vazio, e `0 de 0` saía marcado como **`ok`**:
+
+```
+  ?      geracao_da_competencia     0 de    0     <- era "ok"
+  ?      tarifa_vigente             0 de    0     <- era "ok"
+  ?      regra_de_comissao          0 de    0     <- era "ok"
+```
+
+Não é `ok`: ninguém mediu nada. É exatamente o que o `RESUMO-SESSAO-9` §2 registrou no conector — *"zero divergências significa que ninguém editou o campo, **não** que a herança está certa"* — e é pior aqui, porque **um relatório de prontidão que mostra verde sobre universo vazio autoriza**. Virou terceiro estado, `nao_medido`, e `pode_faturar` passou a exigir `ok` em vez de "sem pendência". Testes `K18a`–`K18e`, nos dois sentidos: tenant sem contrato devolve `nao_medido`, tenant com contrato e geração devolve `ok` sobre universo real.
+
+**A leitura de produção, com o instrumento certo:**
+
+| camada | estado | dono |
+|---|---|---|
+| `contrato_ativo` | **35 de 35 faltam** | Vinicius + operação · `Q-022` |
+| `rateio` | ok, 0 de 35 | — |
+| `vencimento` | **35 de 35 faltam** | operação · `Q-SPEC001-02` |
+| `dono_da_usina` | 3 de 3 — trava o **split**, não a fatura | operação · `AUD-08` |
+| `regra_de_repasse` | 3 de 3 — trava o split | Vinicius |
+| `cobranca_sicoob` | 1 de 1 | Vinicius · `Q-SICOOB-01` |
+| geração · tarifa · comissão | **não medido** — o universo depende de contrato | — |
+
+**Nada disso é código.** E o caminho é sequencial: fechar `contrato_ativo` faz as três não-medidas passarem a ser mensuráveis, e só então se sabe o tamanho real do que resta.

@@ -25,6 +25,7 @@ import * as fatura from '../repos/fatura.ts';
 import * as boleto from '../repos/boleto.ts';
 import * as liquidacao from '../repos/liquidacao.ts';
 import * as split from '../repos/split.ts';
+import { prontidao } from '../repos/prontidao.ts';
 
 export type Requisicao = {
   metodo: string;
@@ -415,6 +416,14 @@ export const ROTAS: Rota[] = [
    * default errado emite cobranca para 35 clientes. Caminhos separados nao tem
    * default para errar.
    */
+  {
+    // O que FALTA para a competencia poder ser faturada, todas as camadas de uma
+    // vez. Responde outra pergunta que a do ensaio: aquele diz se uma UC entra,
+    // este diz onde esta o trabalho. Leitura pesada de nove subconsultas:
+    // caminho de relatorio.
+    metodo: 'GET', padrao: '/faturamento/:competencia/prontidao',
+    handler: (req, app) => emRelatorio(app, req, async () => ok(await prontidao(req.params.competencia))),
+  },
   {
     metodo: 'POST', padrao: '/faturamento/:competencia/ensaio',
     handler: (req, app) => emTenant(app, req, async () => ok(await fatura.ensaiarLote(req.params.competencia))),

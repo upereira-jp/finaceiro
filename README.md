@@ -96,6 +96,9 @@ src/repos/contrato.ts        R14 e a ORDEM da renovacao: encerra o velho antes d
 src/repos/unidade_consumidora.ts  cadastro da UC. NAO edita rateio - ver rateio.ts
 src/repos/usina.ts           usina e geracao mensal. Decimal entra como STRING
 src/repos/originador.ts      documento OBRIGATORIO aqui; R20 congela no contrato
+src/repos/prontidao.ts       o que FALTA para uma competencia poder ser faturada.
+                             Nove camadas de uma vez, com dono nomeado. Conta e
+                             NAO decide. `nao_medido` nao e `ok`
 src/repos/rateio.ts          R11, o teto de 100% por usina. Unico caminho de escrita
 src/repos/dono_usina.ts      para quem vai o repasse. Exige PIX ou conta completa
 src/repos/regras.ts          tarifa, regra_comissao e regra_repasse. NAO ha editar:
