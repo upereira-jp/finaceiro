@@ -86,7 +86,28 @@ async function lerCorpo(req: IncomingMessage, max: number): Promise<any> {
   }
 }
 
+/**
+ * CONEXAO FECHADA NO 413, e nao e educacao com o cliente - e correcao de um bug
+ * medido no CI em 28/07.
+ *
+ * `lerCorpo` lanca NO MEIO do stream, assim que o acumulado passa do teto: e o
+ * certo, porque acumular para depois recusar seria aceitar o ataque que o teto
+ * existe para impedir. A consequencia e que o corpo da requisicao NAO e drenado.
+ * O Node responde e destroi o socket, porque nao pode reusar uma conexao com
+ * bytes nao lidos pendurados - e o cliente, que mantem keep-alive, so descobre
+ * isso na requisicao SEGUINTE, que morre com ECONNRESET.
+ *
+ * O sintoma foi exatamente esse: o teste do 413 passava e o teste seguinte, de
+ * outra rota, falhava com `TypeError: fetch failed / read ECONNRESET`. Passava
+ * localmente e falhava no CI, que e a assinatura de corrida de timing.
+ *
+ * `Connection: close` transforma o encerramento em contrato: o cliente sabe que
+ * aquela conexao acabou e abre outra. Nao ha como drenar um corpo de tamanho
+ * arbitrario com seguranca, entao fechar e a resposta certa - e agora ela e
+ * declarada em vez de ser um efeito colateral do socket morrendo.
+ */
 function responder(res: ServerResponse, r: Resultado): void {
+  if (r.status === 413) res.setHeader('connection', 'close');
   if (r.status === 204 || r.corpo === undefined) { res.writeHead(r.status); res.end(); return; }
   // BigInt aparece em count do Postgres e quebra JSON.stringify sem replacer.
   // Decimal do Prisma tem toJSON proprio e sai como string - o que e o certo:

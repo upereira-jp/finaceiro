@@ -255,3 +255,11 @@ Duas causas, e as duas são de configuração:
 **Reproduzido antes de dar como resolvido:** apagando `src/generated/` e rodando com a variável descartável, o mesmo caminho do CI passa inteiro.
 
 *Vale como nota de método: os dois jobs estavam vermelhos e o trabalho seguiu por duas sessões sem que isso aparecesse, porque a suíte local passa — o `src/generated/` já existe aqui e o `.env` também. **Verde local não é verde no CI**, e a diferença entre os dois é exatamente o que o CI existe para pegar.*
+
+**E consertar isso destravou uma terceira falha, que estava escondida atrás das duas.** Com os jobs voltando a rodar, o `repositorios` foi mais longe e morreu em `tests/http.ts` com `TypeError: fetch failed / read ECONNRESET` — no **H20**, logo depois do H18, que é o teste do corpo grande demais.
+
+Não é flake. `lerCorpo` lança **no meio do stream**, assim que o acumulado passa do teto — o que é o certo, porque acumular para depois recusar seria aceitar o ataque que o teto existe para impedir. A consequência é que o corpo **não é drenado**: o Node responde e destrói o socket, porque não pode reusar conexão com bytes pendurados, e o cliente com *keep-alive* só descobre isso **na requisição seguinte**. O teste do 413 passava verde e o teste de outra rota é que morria.
+
+`Connection: close` no 413 transforma o encerramento em contrato. Não há como drenar um corpo de tamanho arbitrário com segurança, então fechar é a resposta certa — a diferença é que agora ela é declarada em vez de ser efeito colateral do socket morrendo.
+
+**Limite honesto do `H18b`, e ele fica escrito no próprio teste:** o plantio **não reproduz** na máquina de desenvolvimento. Removido o `Connection: close`, o H18b continua passando aqui — o socket morre e o undici reabre rápido o bastante. Não é, portanto, verificação nos dois sentidos como as demais deste projeto. **Quem acusa é o CI**, onde a corrida acontece de fato.

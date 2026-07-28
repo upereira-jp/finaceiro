@@ -208,6 +208,29 @@ let clienteCriado = '';
 {
   const r = await comoAdmin('POST', '/clientes', { corpoBruto: JSON.stringify({ nome: 'x'.repeat(1_100_000) }) });
   chk('H18', r.status === 413, `corpo acima do teto da 413 (veio ${r.status})`);
+
+  /*
+   * H18b nasceu de uma falha REAL do CI, em 28/07, e nao de uma hipotese.
+   *
+   * `lerCorpo` lanca no meio do stream, entao o corpo nao e drenado e o socket
+   * nao pode ser reusado. Antes do `Connection: close`, o cliente com keep-alive
+   * so descobria isso na requisicao SEGUINTE - o H20 morria com ECONNRESET e o
+   * H18, o culpado, passava verde. Passava aqui e falhava no CI, que e a
+   * assinatura de corrida de timing.
+   *
+   * Esta verificacao e o H20 deixarem de depender de sorte: a chamada logo apos
+   * o 413 tem de responder.
+   *
+   * LIMITE HONESTO DESTA VERIFICACAO, medido: o PLANTIO NAO REPRODUZ AQUI.
+   * Removido o `Connection: close` do servidor, o H18b continua passando na
+   * maquina de desenvolvimento - o socket morre e o undici reabre rapido o
+   * bastante. Entao ela NAO e uma verificacao nos dois sentidos como as demais
+   * deste projeto: quem acusa e o CI, onde a corrida acontece. Fica aqui como
+   * regressao - se o `Connection: close` sair, o vermelho volta la e nao aqui.
+   */
+  const depois = await comoAdmin('GET', '/clientes');
+  chk('H18b', depois.status === 200,
+      `a requisicao logo apos o 413 responde (veio ${depois.status}) - o 413 fecha a conexao com Connection: close em vez de deixar o socket morrer sozinho`);
 }
 
 // ------------------------------------------------- H19 500 nao vaza mensagem interna
