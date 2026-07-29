@@ -12,7 +12,7 @@
 > | | |
 > |---|---|
 > | **No ar** | `https://financeiro.blackhaus.io` — HTTP/2, TLS válido, as 8 rotas por caminho respondendo 200 |
-> | **Produção vs. `main`** | o bundle servido é `index-4nVmkQDw.js`, **byte a byte o que `main` constrói**. A revisão de UX de hoje já está no ar |
+> | **Produção vs. `main`** | **em dia com `main`** (`095f3fd`). Conferido por hash do bundle, não por data de commit — o build do VPS e o local dão a mesma saída. Antes do deploy de hoje era `index-4nVmkQDw.js`, o commit da UX; agora é `index-DzZYJ0Ak.js` |
 > | **Catálogo contra produção** | **8 de 8 verdes** — CAT-1 a CAT-8, executados hoje |
 > | **Suíte** | **448 verificações**, 22 suítes, `EXIT=0` |
 > | **Correção desta sessão** | **no ar.** `index-DzZYJ0Ak.js`, mesmo hash do build local — reprodutível, não inferido |
