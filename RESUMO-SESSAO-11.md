@@ -4,7 +4,7 @@
 |---|---|
 | **Foco** | A paleta da G3 substituiu a provisória, e **o sistema foi para produção** — `https://financeiro.blackhaus.io`, no mesmo VPS do CRM, sem tocar no CRM |
 | **Método** | Nada afirmado sem medição. **Duas hipóteses minhas foram derrubadas por medição durante a sessão**, e as duas mudaram o que eu ia fazer |
-| **Resultado** | Deploy completo com TLS · 2 questões novas · `ADR-0005` proposto · 2 logins provisionados · CRM sincronizado · tarifa e comissão carregadas |
+| **Resultado** | Deploy completo com TLS e por `git pull` · 2 questões novas · `ADR-0005` proposto · 2 logins provisionados · CRM sincronizado · tarifa e comissão carregadas |
 | **Commits** | `712507b`, `c5e10a2`, `e0f1db0`, `1996e89` — empurrados para `main` |
 
 > # ESTADO ATUAL — fim de 28/07/2026
@@ -18,6 +18,7 @@
 > | **Superusuário** | **não existe no VPS.** `DIRECT_URL` ficou de fora do `/etc/financeiro.env` de propósito |
 > | **Logins** | **dois**, ambos `admin` (as quatro capacidades). Testados ponta a ponta contra produção |
 > | **Dados** | 39 UCs, 4 usinas, tarifa e 10 regras de comissão carregadas. Conector idempotente em 3 passadas |
+> | **Deploy** | `/opt/financeiro/app` é **checkout git** rastreando `origin/main`, com os 87 commits de histórico. Ciclo `pull → build → restart` exercitado ponta a ponta (§12) |
 > | **O que segura a primeira fatura** | **39 contratos**, e não é código. Nunca foi o deploy |
 >
 > **A fila:**
@@ -211,10 +212,40 @@ De quebra corrige uma suposição do `RESUMO-SESSAO-10`: **o A1 não precisa ir 
 
 | O quê | Por quê |
 |---|---|
-| **`/opt/financeiro/app` não é checkout git** | A conversão foi bloqueada por guarda de segurança (`git reset --hard` é destrutivo). Precisa da sua aprovação — sem ela, o deploy continua sendo transferência de árvore |
 | **Senha de root não trocada** | É sua. Ela circulou nesta sessão e a do login do Vinicius é variação dela |
 | **Nenhuma decisão de questão aberta** | Regra 10 |
 | **Nada mexido no CRM** | Regra 4. O que achei foi comunicado, não corrigido |
+
+---
+
+## 12. `/opt/financeiro/app` virou checkout git
+
+Fechado no fim da sessão, depois de aprovação explícita — a primeira tentativa foi **bloqueada por guarda de segurança**, porque `git reset --hard` é destrutivo e o diretório serve produção. A guarda estava certa.
+
+Feito em passos separados, com backup antes (`/root/financeiro-app-backup-20260729-001319.tgz`).
+
+**O passo que deu confiança foi comparar antes de tocar em arquivo.** `git reset --mixed` move índice e `HEAD` sem alterar a árvore, e o `status` mostrou:
+
+```
+ M QUESTOES.md          M README.md
+ D RESUMO-SESSAO-11.md  D adr/ADR-0005-...  D scripts/provisionar-usuario.sql
+```
+
+**Nenhuma diferença em `src/` ou `web/`** — o código em execução já era idêntico ao remoto, e as cinco diferenças eram documentos e o script novo. Por isso o `checkout` não exigiu reinício e **o serviço não caiu em momento algum**.
+
+Três correções apareceram no caminho, e nenhuma era óbvia antes de tentar:
+
+| O quê | Por quê importava |
+|---|---|
+| `safe.directory` | O diretório é do usuário `financeiro` e o git roda como root — `fatal: dubious ownership` |
+| **Clone raso** | O `--depth=1` deixaria o servidor com **um** commit de histórico. Completado para **87**. Num projeto que trata proveniência como este, servidor sem histórico é meio caminho de volta ao problema que o `README` documenta |
+| **Branch nasceu `master`** | O `git init` deste sistema usa `master`; o remoto é `main`. O `git pull` falhava com *"no upstream configured"* — falha silenciosa até a hora do deploy |
+
+Removido também um `.claude/settings.local.json` que foi junto na transferência inicial. Era configuração local, não pertencia ao servidor.
+
+**Conferido ao fim:** `git status` com 0 diferenças, `pull --ff-only` em dia, `main → origin/main`, `.env` **ausente** do diretório (o ambiente vem de `/etc/financeiro.env`), `node_modules`/`dist`/`generated` sobreviventes, tudo de `financeiro:financeiro` inclusive o `.git`.
+
+Depois rodei o ciclo inteiro — `pull` → `web:build` → `restart` — para provar que **funciona**, não só que está configurado. Build com o mesmo hash, serviço de volta como `app_financeiro_login` sem `BYPASSRLS` em `127.0.0.1:3000`, CRM em 200 com os 9 processos PM2.
 
 ---
 
@@ -243,9 +274,8 @@ Duas travas de decisão em cima disso: o **dia de vencimento** depende da `Q-SPE
 
 ## Operação
 
-- Trocar a senha de root do VPS e migrar para chave SSH
-- Aprovar a conversão de `/opt/financeiro/app` em checkout git — depois disso o deploy vira `git pull && npm ci && npm run web:build && systemctl restart financeiro`
-- Provisionar um login por pessoa **antes** de a digitação começar, senão a trilha nasce inútil
+- **Trocar a senha de root do VPS e migrar para chave SSH.** É a única pendência de infraestrutura que sobrou. Ela circulou em ~20 conexões nesta sessão, e a senha do login do Vinicius é uma variação dela — reúso entre SSH e aplicação amplia o estrago de um vazamento
+- Provisionar um login por pessoa **antes** de a digitação começar, senão a trilha nasce inútil. `scripts/provisionar-usuario.sql` está pronto
 
 ## Para o dev do CRM
 
@@ -256,16 +286,28 @@ Duas travas de decisão em cima disso: o **dia de vencimento** depende da `Q-SPE
 
 ## Como operar hoje
 
-```bash
-# na sua maquina
-npm test                    # 443 verificacoes, 21 suites
-git pull
+**Deploy** — `/opt/financeiro/app` é checkout git desde o fim desta sessão (§12):
 
-# no VPS
+```bash
+cd /opt/financeiro/app
+sudo -u financeiro git pull
+sudo -u financeiro env PATH=/opt/financeiro/node/bin:$PATH npm ci          # so se package-lock mudou
+sudo -u financeiro env PATH=/opt/financeiro/node/bin:$PATH npm run web:build   # so se web/ mudou
+systemctl restart financeiro
+```
+
+Mudança em `src/` sobe direto no `restart` — o TypeScript roda sem compilação (`--experimental-strip-types`).
+
+**O `git pull` do servidor não valida nada.** Se um erro de tipo entrar no `main`, ele chega em produção sem aviso: o build da SPA roda `tsc --noEmit`, mas o backend não passa por build nenhum. **`npm test` é antes de commitar, não depois do pull.**
+
+```bash
+# na sua maquina, ANTES do commit
+npm test                    # 443 verificacoes, 21 suites
+
+# no VPS, dia a dia
 systemctl status financeiro
 journalctl -u financeiro -f
-systemctl restart financeiro
 nginx -t && systemctl reload nginx   # SEMPRE o -t antes: o CRM esta nessa config
 ```
 
-**O `nginx -t` não é formalidade.** Um erro de sintaxe no reload derruba `app.blackhaus.io` junto.
+**O `nginx -t` não é formalidade.** Um erro de sintaxe no reload derruba `app.blackhaus.io` junto — o vhost do CRM e o nosso vivem na mesma configuração, e é por isso que o nosso se chama `zz-` (§3).
