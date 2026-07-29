@@ -5,8 +5,8 @@ Sistema financeiro multi-tenant da G3 Solar: faturamento de crédito de energia,
 | Campo | Valor |
 |---|---|
 | **Dono** | Vinicius Leal |
-| **Fase atual** | F0 fechada · F1 com os três critérios formais cumpridos · **F2 e F3 construídas em 28/07, depois de a `PAUTA-contador.md` voltar respondida.** 18 migrations, `fatura`, `boleto`, `liquidacao`, `split_execucao` e `split_item` no banco, dois motores puros, a `PortaDeCobranca` injetada e **431 verificações** em 21 suítes. O que segura a F2 agora é **um certificado A1**, não código: o critério do `PRD` §10 é *"boleto liquidado no sandbox baixa a fatura"*, e o ciclo inteiro está provado contra o adaptador falso. Ver `RESUMO-SESSAO-10.md`. Histórico da F1 preservado abaixo: **F1 em execução, e não fecha só com código nosso.** 15 migrations no Supabase `sa-east-1`, role de runtime, composition root, seis repositórios, 37 rotas, auth próprio medido ponta a ponta contra o Supabase real, conector do CRM construído e testado, e os 8 invariantes de catálogo verdes **contra produção**. A `Q-VIEWS-01` fechou no mesmo dia e o **invariante 9 está cumprido**. O ciclo rodou **valendo, duas vezes**, contra o CRM real e os três critérios formais fecharam; a `Q-ESCOPO-01` (conector entrega 1 de 4 entidades) é a vermelha que resta. Ver a tabela de critérios abaixo |
-| **Atualizado** | 28/07/2026 · fim da sessão 11 |
+| **Fase atual** | F0 fechada · F1 com os três critérios formais cumpridos · **F2 e F3 construídas em 28/07, depois de a `PAUTA-contador.md` voltar respondida.** 18 migrations, `fatura`, `boleto`, `liquidacao`, `split_execucao` e `split_item` no banco, dois motores puros, a `PortaDeCobranca` injetada e **448 verificações** em 22 suítes. O que segura a F2 agora é **um certificado A1**, não código: o critério do `PRD` §10 é *"boleto liquidado no sandbox baixa a fatura"*, e o ciclo inteiro está provado contra o adaptador falso. Ver `RESUMO-SESSAO-10.md`. Histórico da F1 preservado abaixo: **F1 em execução, e não fecha só com código nosso.** 15 migrations no Supabase `sa-east-1`, role de runtime, composition root, seis repositórios, 37 rotas, auth próprio medido ponta a ponta contra o Supabase real, conector do CRM construído e testado, e os 8 invariantes de catálogo verdes **contra produção**. A `Q-VIEWS-01` fechou no mesmo dia e o **invariante 9 está cumprido**. O ciclo rodou **valendo, duas vezes**, contra o CRM real e os três critérios formais fecharam; a `Q-ESCOPO-01` (conector entrega 1 de 4 entidades) é a vermelha que resta. Ver a tabela de critérios abaixo |
+| **Atualizado** | 29/07/2026 · fim da sessão 12 |
 | **No ar** | **`https://financeiro.blackhaus.io`** — systemd, Node 22 isolado, TLS até 26/10. Mesmo VPS do CRM, **sem alterar uma linha da configuração dele**. Ver `RESUMO-SESSAO-11.md` |
 
 ---
@@ -15,8 +15,10 @@ Sistema financeiro multi-tenant da G3 Solar: faturamento de crédito de energia,
 
 Nesta ordem. Cada documento pressupõe o anterior.
 
-1. **`RESUMO-SESSAO-11.md`** — **comece por aqui.** Estado atual e a fila com dono nomeado. A sessão do deploy: a paleta da G3, o sistema em produção, dois logins e duas questões novas
-2. **`RESUMO-SESSAO-10.md`** — a sessão anterior, em que a `PAUTA-contador.md` voltou e a carteira foi construída
+1. **`RESUMO-SESSAO-12.md`** — **comece por aqui.** Estado atual e a fila com dono nomeado. A sessão da verificação: produção conferida ponta a ponta, o defeito silencioso da tela de Contratos medido nos dois sentidos, e a vermelha nova que vem **antes** dos 39 contratos
+2. **`RESUMO-SESSAO-11.md`** — a sessão do deploy: a paleta da G3, o sistema em produção, dois logins e duas questões novas
+2. **`MAPA-UX-2026-07-29.md`** — a revisão de UX da SPA, na manhã do mesmo 29/07: rotas por caminho, busca e ordenação, caixa de sentença
+2. **`RESUMO-SESSAO-10.md`** — a sessão em que a `PAUTA-contador.md` voltou e a carteira foi construída
 2. **`SPEC-003-carteira.md`** — a spec da F2 e da F3. A §3 rastreia qual resposta do contador produziu qual coluna
 3. **`RESUMO-SESSAO-9.md`** — a sessão anterior. O roteiro que fechou a F1 está na **§11 do `RESUMO-SESSAO-8.md`**, e ele já foi executado por inteiro
 2. **`CLAUDE.md`** — as onze regras inegociáveis. Antes de qualquer linha de código
@@ -69,6 +71,10 @@ RESUMO-SESSAO-11.md          passagem da sessao 11 — COMECE POR AQUI. A paleta
                              da G3, o deploy em producao ao lado do CRM sem
                              tocar nele, os dois logins e as duas questoes que
                              o caminho da Sicoob fez aparecer
+RESUMO-SESSAO-12.md          passagem da sessao 12 — COMECE POR AQUI. Producao
+                             conferida, o defeito silencioso da tela de
+                             Contratos medido antes e depois, e as duas
+                             questoes que aparecem ANTES dos 39 contratos
 MAPA-UX-2026-07-29.md        a revisao de UX da SPA: caixa de sentenca, rotas
                              por caminho, busca/filtro/ordenacao, tema claro
                              como padrao. O que ficou de fora esta la, com nivel
@@ -143,6 +149,13 @@ web/src/tema.ts              CORES E TIPOGRAFIA, num lugar so. A paleta e a DA G
                              literal, e todo par tem o contraste AA medido
 web/src/dinheiro.ts          a regra 1 no browser: reais viram centavos por TEXTO,
                              sem multiplicar por 100 e sem float
+web/src/dados.ts             `useDados`/`useAcao` e o `emLotes`. NENHUMA tela
+                             engole erro: so o 404 de `contrato-vigente` vira
+                             "sem contrato". O teto de 6 e do pool transacional,
+                             e precisa ser NOSSO - producao e h2, e la o browser
+                             nao limita nada
+web/tests/lotes.ts           a primeira suite do web/. Prende o teto nos dois
+                             sentidos: respeitado E atingido
 src/http/erros.ts            erro de dominio -> HTTP. 500 nao vaza mensagem interna
 src/auth/jwt.ts              JWT do Supabase por node:crypto. O alg sai da CHAVE, nao do header
 src/auth/autenticador.ts     Bearer -> auth_user_id. Auth PROPRIO (MT-06 resolvida)
@@ -190,7 +203,7 @@ tests/dominio-carteira.ts    os dois motores SEM banco. A invariante do centavo
                              em 2.000 combinacoes
 tests/repos-carteira.ts      o ciclo do dinheiro ponta a ponta, pela role sem
                              BYPASSRLS e pelo adaptador falso
-tests/                       431 verificacoes em 21 suites. `npm test` roda todas
+tests/                       448 verificacoes em 22 suites. `npm test` roda todas
 tsconfig.json                `npm run typecheck` = tsc --noEmit. Roda no CI
 ```
 
@@ -234,7 +247,7 @@ npx prisma migrate deploy    # transacional POR MIGRATION. E o que salva de meia
 Validar num banco limpo:
 
 ```bash
-npm test          # typecheck + as 21 suites, 431 verificacoes
+npm test          # typecheck + as 22 suites, 448 verificacoes
 npm run typecheck # sozinho, tsc --noEmit
 ```
 
@@ -286,6 +299,8 @@ A lista completa, com dono nomeado, está em `RESUMO-SESSAO-7` §Pendências ger
 
 | Item | Estado |
 |---|---|
+| **`Q-ORIGINADOR-01`** | 🔴 **Vem antes dos 39 contratos.** Produção tem **zero** originadores e o contrato **não tem caminho de edição** — `originador_id` e o tier congelado (R20-b) só se escrevem no `rascunhar`. Digitar os 39 hoje grava nulo nos 39, e `src/repos/split.ts:164` só monta comissão quando os dois existem: o split roda, fecha e **não paga**, sem erro e sem log. Aberta em 29/07 |
+| **`Q-PRONTIDAO-COMIS-01`** | 🟡 E a prontidão não avisaria: a camada `regra_de_comissao` filtra `IS NOT NULL` nos dois lados, então 39 contratos sem originador lêem `nao_medido` — o **mesmo `?`** que hoje significa universo vazio. Depende da `Q-ORIGINADOR-01`; não corrigida de propósito |
 | **Bootstrap — o primeiro `plataforma_admin`** | 🟡 **Script pronto e provado; falta o `COMMIT`.** `scripts/bootstrap-plataforma-admin.sql`, com `-v modo=ensaio\|valendo` — sem default, porque script de provisionamento que escreve por esquecimento é o modo de falha errado. Conta criada no Supabase Auth (`efcc8e11-…`) e ensaio rodado contra ela: `usuario` + tier criados, `app.resolver_login` devolveu `tier = plataforma_admin`, 2 linhas de trilha, `ROLLBACK` deixou tudo em zero. `app_financeiro` continua sem `INSERT` nessa tabela, de propósito |
 | **Role LOGIN de runtime + `DATABASE_URL`** | ✅ **Fechado em 27/07** — `app_financeiro_login`, `NOSUPERUSER NOBYPASSRLS`. Isolamento provado conectado por ela: usuário de A apontando o contexto para o tenant B lê **0 linhas** e tem a escrita recusada. O composition root recusa o arranque se a role tiver `BYPASSRLS` |
 | **Reunião com o contador** | ✅ **Fechada em 28/07.** As dez voltaram respondidas; três lacunas (a 1 com duas marcas, a 3b questionada, a 4b em branco) fechadas por decisão do dono no mesmo dia; a 6a virou `Q-PAUTA-6A-01`. Fecharam a `Q-021` e a `Q-011`, e a `RATEIO-USO-01` caiu de 🔴 para 🟡. De-para na tabela final da `PAUTA-contador.md`, efeito de cada uma em `QUESTOES.md` §9 |
