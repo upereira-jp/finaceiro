@@ -17,12 +17,13 @@
     "faturar": "node --experimental-strip-types --env-file=.env scripts/faturar.ts",
     "auth:verificar": "node --experimental-strip-types --env-file=.env scripts/verificar-auth-real.ts",
     "test:documento": "node --experimental-strip-types tests/documento.ts",
+    "test:web": "node --experimental-strip-types web/tests/lotes.ts",
     "test:dominio": "node --experimental-strip-types tests/dominio-carteira.ts",
     "test:isolamento": "bash tests/run.sh",
     "test:middleware": "bash tests/middleware.sh",
     "test:sessao": "bash tests/sessao.sh",
     "test:repos": "bash tests/repos.sh",
-    "test": "npm run typecheck && npm run test:documento && npm run test:dominio && npm run test:isolamento && npm run test:middleware && npm run test:sessao && npm run test:repos",
+    "test": "npm run typecheck && npm run test:documento && npm run test:web && npm run test:dominio && npm run test:isolamento && npm run test:middleware && npm run test:sessao && npm run test:repos",
     "usinas": "node --experimental-strip-types --env-file=.env scripts/cadastrar-usinas.ts"
   },
   "dependencies": {

@@ -11,8 +11,8 @@
 // UC, e vigente inclui suspenso).
 
 import { useState } from 'react';
-import { api, type Contrato, type UnidadeConsumidora, type Originador, type Cliente } from '../api.ts';
-import { useAcao, useDados } from '../dados.ts';
+import { api, ErroDaApi, type Contrato, type UnidadeConsumidora, type Originador, type Cliente } from '../api.ts';
+import { emLotes, useAcao, useDados } from '../dados.ts';
 import {
   Pagina, Aviso, Tabela, Campo, ThOrd, useOrdenacao, ordenar, rotulo,
 } from '../ui.tsx';
@@ -35,16 +35,33 @@ export function TelaContratos() {
 
   // Um contrato vigente por UC (R14). A lista mostra so as que estao livres:
   // oferecer a UC ocupada faria o erro sair como 409 depois de preencher tudo.
+  //
+  // SO O 404 VIRA `null`. Um `catch` que engole tudo transformaria falha de rede,
+  // 401 de token vencido e 500 em "esta UC nao tem contrato" - a armadilha que o
+  // cabecalho do `dados.ts` descreve, com contrato como exemplo literal. O preco
+  // seria pago aqui: a tabela mostraria "Nenhum contrato" com contratos no banco,
+  // e a UC ja contratada voltaria para a lista de livres. Qualquer outro erro
+  // sobe, e o `useDados` o poe na tela - o <Aviso> de `vigentes.erro` ja existia
+  // esperando por ele, e nunca recebia nada.
   const vigentes = useDados<Record<string, Contrato | null>>(async () => {
     const todas = await api.get<UnidadeConsumidora[]>('/unidades-consumidoras?limite=500');
-    const pares = await Promise.all(todas.map(async (u) => {
-      try { return [u.id, await api.get<Contrato>(`/unidades-consumidoras/${u.id}/contrato-vigente`)] as const; }
-      catch { return [u.id, null] as const; }
-    }));
+    const pares = await emLotes(todas, async (u) => {
+      try {
+        return [u.id, await api.get<Contrato>(`/unidades-consumidoras/${u.id}/contrato-vigente`)] as const;
+      } catch (e: unknown) {
+        if (e instanceof ErroDaApi && e.status === 404) return [u.id, null] as const;
+        throw e;
+      }
+    });
     return Object.fromEntries(pares);
   });
 
-  const livres = (ucs.dado ?? []).filter((u) => u.status === 'ativa' && !vigentes.dado?.[u.id]);
+  // Enquanto `vigentes` nao respondeu - ou falhou -, NAO ha lista de livres.
+  // `!vigentes.dado?.[u.id]` daria `true` para todas nesses dois estados, e a
+  // tela ofereceria justamente as UCs ja contratadas.
+  const livres = vigentes.dado
+    ? (ucs.dado ?? []).filter((u) => u.status === 'ativa' && !vigentes.dado![u.id])
+    : [];
 
   const numeroUc = (id: string) => ucs.dado?.find((x) => x.id === id)?.numero_uc ?? id;
   const linhas = ordenar(
@@ -118,7 +135,14 @@ export function TelaContratos() {
                 <ThOrd chave="situacao" ordem={ordem} ao={alternar}>Situação</ThOrd>
                 <ThOrd chave="cheias" ordem={ordem} ao={alternar} num>Cheias pagas</ThOrd>
               </>}
-              vazio="Nenhum contrato — e é isso que impede a primeira fatura.">
+              vazio={
+                // Os tres estados sao DIFERENTES e a frase tem que distingui-los.
+                // "Nenhum contrato" durante a carga, ou depois de uma falha, e a
+                // mesma mentira que o `catch` engolido contava.
+                vigentes.carregando ? 'Lendo os contratos…'
+                : vigentes.erro ? 'Não foi possível ler os contratos — o aviso acima diz por quê. Esta lista não está vazia: ela é desconhecida.'
+                : 'Nenhum contrato — e é isso que impede a primeira fatura.'
+              }>
         {linhas.map(({ ucid, k }) => (
           <tr key={ucid}>
             <td><strong>{numeroUc(ucid)}</strong></td>

@@ -45,6 +45,43 @@ export function useDados<T>(buscar: () => Promise<T>, deps: unknown[] = []): Car
   return { dado, carregando, erro, recarregar: useCallback(() => setVersao((v) => v + 1), []) };
 }
 
+/**
+ * Teto de chamadas simultaneas de uma tela que varre uma lista.
+ *
+ * NAO e numero escolhido por gosto: cada requisicao de dado de negocio prende
+ * uma conexao do pool TRANSACIONAL pelo bloco inteiro da transacao, e esse pool
+ * tem `max` 8 (`src/db/pools.ts`, `POOL_TRANSACIONAL`). Disparar as 39 UCs de
+ * uma vez poe 39 transacoes contra 8 slots, com `maxWait` de 5.000 ms - e o que
+ * estoura ali sai como P2028, nao como fila. Seis deixa folga para o resto da
+ * tela e para a outra pessoa que estiver digitando ao mesmo tempo.
+ *
+ * O TETO PRECISA SER NOSSO, e isso foi MEDIDO em 29/07. Sobre HTTP/1.1 o proprio
+ * browser ja limita a 6 conexoes por origem - e foi por isso que o mock local
+ * mostrou pico 6 com e sem este arquivo, escondendo o problema. Producao
+ * responde em `h2` (conferido por ALPN em `financeiro.blackhaus.io`), onde os
+ * 39 pedidos viajam multiplexados numa conexao so e o limite do browser nao
+ * existe. O ambiente que reproduziria a falha e justamente o de producao.
+ *
+ * Se `POOL_TRANSACIONAL` mudar no servidor, este numero muda junto.
+ */
+const SIMULTANEAS = 6;
+
+/** Aplica `f` a cada item com no maximo `SIMULTANEAS` em voo. Preserva a ordem. */
+export async function emLotes<T, R>(itens: readonly T[], f: (item: T) => Promise<R>): Promise<R[]> {
+  const saida: R[] = new Array(itens.length);
+  let proximo = 0;
+  const trabalhador = async () => {
+    while (proximo < itens.length) {
+      const i = proximo++;
+      saida[i] = await f(itens[i]);
+    }
+  };
+  // Um `reject` derruba o `Promise.all` inteiro, que e o que se quer: a tela
+  // precisa do mapa COMPLETO ou de um erro - nunca de um mapa com buracos.
+  await Promise.all(Array.from({ length: Math.min(SIMULTANEAS, itens.length) }, trabalhador));
+  return saida;
+}
+
 export type Acao = {
   executar: (f: () => Promise<unknown>) => Promise<boolean>;
   ocupado: boolean;
