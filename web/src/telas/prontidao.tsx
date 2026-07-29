@@ -13,7 +13,7 @@
 import { useState } from 'react';
 import { api, type Prontidao } from '../api.ts';
 import { useDados } from '../dados.ts';
-import { Pagina, Aviso, Tabela, linha } from '../ui.tsx';
+import { Pagina, Aviso, Tabela, Marca, rotulo, linha } from '../ui.tsx';
 import { competenciaISO } from '../dinheiro.ts';
 
 const mesAtual = () => new Date().toISOString().slice(0, 7);
@@ -27,46 +27,62 @@ export function TelaProntidao() {
     <Pagina titulo="Prontidão para faturar"
             sub="O que falta para esta competência poder ser cobrada. Nove camadas, cada uma com dono. Esta tela conta — não decide nada.">
       <div style={{ ...linha, marginBottom: 16 }}>
-        <label style={{ margin: 0 }}>competência</label>
+        <label style={{ margin: 0 }}>Competência</label>
         <input type="month" value={mes} onChange={(e) => setMes(e.target.value)} style={{ width: 'auto' }} />
       </div>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
-      {carregando && <p className="fraco">carregando…</p>}
+      {carregando && <p className="fraco">Carregando…</p>}
 
       {dado && (
         <>
-          <div style={{ ...linha, gap: 16, marginBottom: 16 }}>
-            <span className={`marca ${dado.pode_faturar ? 'ok' : 'pendente'}`}>
-              {dado.pode_faturar ? 'pode faturar' : 'não pode faturar'}
-            </span>
-            <span className={`marca ${dado.pode_repartir ? 'ok' : 'pendente'}`}>
-              {dado.pode_repartir ? 'pode repartir' : 'não pode repartir'}
-            </span>
-            <span className="fraco">{dado.ucs_ativas} unidades consumidoras ativas</span>
+          <div className="kpis">
+            <div className="kpi">
+              <div className="nome">Pode faturar</div>
+              <div className="valor" style={{ color: dado.pode_faturar ? 'var(--ok)' : 'var(--erro)' }}>
+                {dado.pode_faturar ? 'Sim' : 'Não'}
+              </div>
+            </div>
+            <div className="kpi">
+              <div className="nome">Pode repartir</div>
+              <div className="valor" style={{ color: dado.pode_repartir ? 'var(--ok)' : 'var(--erro)' }}>
+                {dado.pode_repartir ? 'Sim' : 'Não'}
+              </div>
+            </div>
+            <div className="kpi">
+              <div className="nome">Unidades ativas</div>
+              <div className="valor">{dado.ucs_ativas}</div>
+            </div>
+            <div className="kpi">
+              <div className="nome">Camadas pendentes</div>
+              <div className="valor">
+                {dado.camadas.filter((c) => c.situacao === 'pendente').length}
+                <span className="fraco" style={{ fontSize: 14 }}> de {dado.camadas.length}</span>
+              </div>
+            </div>
           </div>
 
-          <Tabela cabecalho={<><th>camada</th><th>estado</th><th className="num">falta</th><th>efeito</th><th>dono</th></>}>
+          <Tabela cabecalho={<><th>Camada</th><th>Estado</th><th className="num">Falta</th><th>Efeito</th><th>Dono</th></>}>
             {dado.camadas.map((c) => (
               <tr key={c.camada}>
                 <td>
-                  <strong>{c.camada.replace(/_/g, ' ')}</strong>
+                  <strong>{rotulo(c.camada)}</strong>
                   <div className="fraco" style={{ fontSize: 13, marginTop: 4, maxWidth: 620 }}>{c.explicacao}</div>
                 </td>
-                <td><span className={`marca ${c.situacao}`}>{c.situacao.replace('_', ' ')}</span></td>
+                <td><Marca tom={c.situacao}>{rotulo(c.situacao)}</Marca></td>
                 <td className="num">
                   {c.situacao === 'nao_medido' ? '—' : `${c.faltam} de ${c.total}`}
                 </td>
-                <td className="fraco">{c.efeito === 'bloqueia_fatura' ? 'fatura' : 'split'}</td>
+                <td className="fraco">{c.efeito === 'bloqueia_fatura' ? 'Fatura' : 'Split'}</td>
                 <td className="fraco">{c.dono}{c.questao && <div style={{ fontSize: 12 }}>{c.questao}</div>}</td>
               </tr>
             ))}
           </Tabela>
 
-          <h2>como ler</h2>
+          <h2>Como ler</h2>
           <ul className="fraco" style={{ fontSize: 14, lineHeight: 1.7, paddingLeft: 18 }}>
-            <li><strong>fatura</strong> impede a cobrança existir. <strong>split</strong> deixa faturar e trava a repartição quando o dinheiro entrar.</li>
-            <li><strong>não medido</strong> não é <strong>ok</strong>: o universo daquela camada depende de contrato, e não há contrato. Zero sobre nada não é “pronto”.</li>
+            <li><strong>Fatura</strong> impede a cobrança existir. <strong>Split</strong> deixa faturar e trava a repartição quando o dinheiro entrar.</li>
+            <li><strong>Não medido</strong> não é <strong>OK</strong>: o universo daquela camada depende de contrato, e não há contrato. Zero sobre nada não é “pronto”.</li>
             <li>A ordem é a do trabalho: fechar a de cima é o que torna a de baixo mensurável.</li>
           </ul>
         </>

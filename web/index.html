@@ -3,7 +3,22 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#F39200" />
     <title>Financeiro G3</title>
+    <script>
+      // Anti-flash: aplica o tema guardado ANTES do primeiro paint. Duplica de
+      // proposito a chave e a regra de `tema.ts` (padrao claro) - importar o
+      // modulo aqui atrasaria o paint, que e o que este script existe para nao
+      // fazer. Se `lerModo`/`aplicarModo` mudarem, este bloco muda junto.
+      (function () {
+        try {
+          var m = localStorage.getItem('financeiro.tema');
+          var escuro = m === 'escuro' || (m === 'sistema' &&
+            matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.dataset.tema = escuro ? 'escuro' : 'claro';
+        } catch (e) { /* sem localStorage, vale o claro do :root */ }
+      })();
+    </script>
   </head>
   <body>
     <div id="raiz"></div>

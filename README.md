@@ -69,6 +69,9 @@ RESUMO-SESSAO-11.md          passagem da sessao 11 — COMECE POR AQUI. A paleta
                              da G3, o deploy em producao ao lado do CRM sem
                              tocar nele, os dois logins e as duas questoes que
                              o caminho da Sicoob fez aparecer
+MAPA-UX-2026-07-29.md        a revisao de UX da SPA: caixa de sentenca, rotas
+                             por caminho, busca/filtro/ordenacao, tema claro
+                             como padrao. O que ficou de fora esta la, com nivel
 PAUTA-contador.md            as 10 perguntas fechadas, RESPONDIDAS em 28/07. O
                              corpo fica intacto; a tabela do fim e o de-para
 VIEWS-PROPOSTAS-r2.sql       DDL proposta ao dev do CRM. EXECUTADA - as 8 views
@@ -133,10 +136,11 @@ scripts/servir.ts            O ENTRYPOINT. `npm start` (producao) / `npm run ser
 web/                         A SPA: React + Vite, tsconfig proprio. `npm run web:dev`
                              (5173, com proxy para a 3000) e `npm run web:build`.
                              Oito telas, na ORDEM das camadas da prontidao
-web/src/tema.ts              CORES E TIPOGRAFIA, num lugar so. A paleta de hoje e
-                             PROVISORIA e foi escolhida por quem escreveu o codigo,
-                             nao pela G3 - trocar e trocar este arquivo. Nenhuma
-                             tela tem cor literal
+web/src/tema.ts              CORES E TIPOGRAFIA, num lugar so. A paleta e a DA G3
+                             desde 28/07; o que esta marcado [derivado] (estados
+                             semanticos, tema escuro, hover) segue sendo escolha
+                             de quem escreveu o codigo. Nenhuma tela tem cor
+                             literal, e todo par tem o contraste AA medido
 web/src/dinheiro.ts          a regra 1 no browser: reais viram centavos por TEXTO,
                              sem multiplicar por 100 e sem float
 src/http/erros.ts            erro de dominio -> HTTP. 500 nao vaza mensagem interna

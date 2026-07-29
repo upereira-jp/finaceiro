@@ -13,7 +13,10 @@
 import { useState } from 'react';
 import { api, type Contrato, type UnidadeConsumidora, type Originador, type Cliente } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
-import { Pagina, Aviso, Tabela, Campo } from '../ui.tsx';
+import {
+  Pagina, Aviso, Tabela, Campo, ThOrd, useOrdenacao, ordenar, rotulo,
+} from '../ui.tsx';
+import { Ligacao } from '../rota.tsx';
 import { paraCentavos, emReais } from '../dinheiro.ts';
 
 export function TelaContratos() {
@@ -26,6 +29,7 @@ export function TelaContratos() {
   const [origId, setOrigId] = useState('');
   const [fechamento, setFechamento] = useState(new Date().toISOString().slice(0, 10));
   const [valor, setValor] = useState('');
+  const { ordem, alternar } = useOrdenacao('uc');
 
   const uc = ucs.dado?.find((u) => u.id === ucId);
 
@@ -41,6 +45,20 @@ export function TelaContratos() {
   });
 
   const livres = (ucs.dado ?? []).filter((u) => u.status === 'ativa' && !vigentes.dado?.[u.id]);
+
+  const numeroUc = (id: string) => ucs.dado?.find((x) => x.id === id)?.numero_uc ?? id;
+  const linhas = ordenar(
+    Object.entries(vigentes.dado ?? {})
+      .filter((par): par is [string, Contrato] => Boolean(par[1]))
+      .map(([ucid, k]) => ({ ucid, k })),
+    ordem,
+    {
+      uc: (l) => numeroUc(l.ucid),
+      fechamento: (l) => l.k.data_fechamento,
+      situacao: (l) => l.k.status,
+      cheias: (l) => l.k.faturas_cheias_pagas,
+    },
+  );
 
   async function criar() {
     if (!uc) return;
@@ -58,7 +76,7 @@ export function TelaContratos() {
       });
       await api.post(`/contratos/${criado.id}/ativar`);
     });
-    if (ok) { setUcId(''); setValor(''); acao.anunciar('contrato criado e ativado'); vigentes.recarregar(); }
+    if (ok) { setUcId(''); setValor(''); acao.anunciar('Contrato criado e ativado.'); vigentes.recarregar(); }
   }
 
   return (
@@ -66,15 +84,15 @@ export function TelaContratos() {
             sub="Vincula cliente, unidade consumidora, usina e originador. É entidade local: o conector não a espelha, e sem ela nenhuma fatura nasce.">
       <div className="cartao" style={{ marginBottom: 20 }}>
         <div className="campos">
-          <Campo rotulo="unidade consumidora" valor={ucId} ao={setUcId}
+          <Campo rotulo="Unidade consumidora" valor={ucId} ao={setUcId}
                  opcoes={livres.map((u) => ({
                    valor: u.id,
                    texto: `${u.numero_uc}${u.usina_id ? '' : ' (sem usina!)'}`,
                  }))} />
-          <Campo rotulo="originador (comissão)" valor={origId} ao={setOrigId}
+          <Campo rotulo="Originador (comissão)" valor={origId} ao={setOrigId}
                  opcoes={(origs.dado ?? []).map((o) => ({ valor: o.id, texto: `${o.nome} · ${o.tipo}` }))} />
-          <Campo rotulo="data de fechamento" valor={fechamento} ao={setFechamento} tipo="date" />
-          <Campo rotulo="valor de referência (R$)" valor={valor} ao={setValor} dica="ex. 789,00" />
+          <Campo rotulo="Data de fechamento" valor={fechamento} ao={setFechamento} tipo="date" />
+          <Campo rotulo="Valor de referência (R$)" valor={valor} ao={setValor} dica="Ex. 789,00" />
         </div>
         <p className="sub" style={{ marginTop: 12, marginBottom: 8 }}>
           O tipo do originador <strong>congela</strong> no fechamento (R20-b): promover um parceiro depois
@@ -83,28 +101,32 @@ export function TelaContratos() {
           {valor && <> Valor: <strong>{(() => { try { return emReais(paraCentavos(valor)); } catch { return 'inválido'; } })()}</strong>.</>}
         </p>
         <button className="primario" onClick={criar}
-                disabled={acao.ocupado || !uc || !uc.usina_id}>criar e ativar</button>
+                disabled={acao.ocupado || !uc || !uc.usina_id}>Criar e ativar</button>
         {uc && !uc.usina_id && (
-          <Aviso tipo="erro">Esta UC não tem usina vinculada. Defina o rateio em <a href="#unidades">Unidades</a> antes.</Aviso>
+          <Aviso tipo="erro">
+            Esta UC não tem usina vinculada. Defina o rateio em <Ligacao para="/unidades">Unidades</Ligacao> antes.
+          </Aviso>
         )}
         {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
         {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
       </div>
 
       {vigentes.erro && <Aviso tipo="erro">{vigentes.erro}</Aviso>}
-      <Tabela cabecalho={<><th>UC</th><th>fechamento</th><th>situação</th><th className="num">cheias pagas</th></>}
-              vazio="nenhum contrato — e é isso que impede a primeira fatura">
-        {Object.entries(vigentes.dado ?? {}).filter(([, k]) => k).map(([ucid, k]) => {
-          const u = ucs.dado?.find((x) => x.id === ucid);
-          return (
-            <tr key={ucid}>
-              <td><strong>{u?.numero_uc ?? ucid}</strong></td>
-              <td className="fraco">{k!.data_fechamento?.slice(0, 10)}</td>
-              <td><span className={`marca ${k!.status === 'ativo' ? 'ok' : 'pendente'}`}>{k!.status}</span></td>
-              <td className="num">{k!.faturas_cheias_pagas}</td>
-            </tr>
-          );
-        })}
+      <Tabela cabecalho={<>
+                <ThOrd chave="uc" ordem={ordem} ao={alternar}>UC</ThOrd>
+                <ThOrd chave="fechamento" ordem={ordem} ao={alternar}>Fechamento</ThOrd>
+                <ThOrd chave="situacao" ordem={ordem} ao={alternar}>Situação</ThOrd>
+                <ThOrd chave="cheias" ordem={ordem} ao={alternar} num>Cheias pagas</ThOrd>
+              </>}
+              vazio="Nenhum contrato — e é isso que impede a primeira fatura.">
+        {linhas.map(({ ucid, k }) => (
+          <tr key={ucid}>
+            <td><strong>{numeroUc(ucid)}</strong></td>
+            <td className="fraco">{k.data_fechamento?.slice(0, 10)}</td>
+            <td><span className={`marca ${k.status === 'ativo' ? 'ok' : 'pendente'}`}>{rotulo(k.status)}</span></td>
+            <td className="num">{k.faturas_cheias_pagas}</td>
+          </tr>
+        ))}
       </Tabela>
     </Pagina>
   );

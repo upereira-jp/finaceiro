@@ -8,7 +8,10 @@
 import { useState } from 'react';
 import { api, type DonoUsina, type Usina } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
-import { Pagina, Aviso, Tabela, Campo } from '../ui.tsx';
+import {
+  Pagina, Aviso, Tabela, Campo, Busca, Ferramentas, ThOrd,
+  useOrdenacao, ordenar, contem,
+} from '../ui.tsx';
 
 export function TelaDonos() {
   const donos = useDados<DonoUsina[]>(() => api.get('/donos-usina'));
@@ -17,6 +20,24 @@ export function TelaDonos() {
   const [f, setF] = useState({ nome: '', natureza: 'pf', documento_bruto: '', chave_pix: '', email: '' });
   const p = (k: keyof typeof f) => (v: string) => setF({ ...f, [k]: v });
 
+  const [busca, setBusca] = useState('');
+  const [situacao, setSituacao] = useState('');
+  const { ordem, alternar } = useOrdenacao('nome');
+
+  const todos = donos.dado ?? [];
+  const visiveis = ordenar(
+    todos.filter((d) =>
+      (contem(d.nome, busca) || contem(d.documento, busca) || contem(d.chave_pix, busca)) &&
+      (!situacao || (situacao === 'ativo') === d.ativo)),
+    ordem,
+    {
+      nome: (d) => d.nome,
+      documento: (d) => d.documento,
+      pix: (d) => d.chave_pix ?? d.banco,
+      situacao: (d) => (d.ativo ? 0 : 1),
+    },
+  );
+
   async function criar() {
     const ok = await acao.executar(() => api.post('/donos-usina', {
       nome: f.nome.trim(), natureza: f.natureza, documento_bruto: f.documento_bruto.trim(),
@@ -24,14 +45,14 @@ export function TelaDonos() {
     }));
     if (ok) {
       setF({ nome: '', natureza: 'pf', documento_bruto: '', chave_pix: '', email: '' });
-      acao.anunciar('dono cadastrado — agora vincule-o à usina na tela Usinas');
+      acao.anunciar('Dono cadastrado — agora vincule-o à usina na tela Usinas.');
       donos.recarregar(); semDono.recarregar();
     }
   }
 
   return (
     <Pagina titulo="Donos de usina"
-            sub="O maior fluxo de dinheiro do sistema. Exige chave PIX ou conta completa — conferido no cadastro, porque no pagamento já é tarde.">
+            sub="O maior fluxo de dinheiro do sistema. Exige chave Pix ou conta completa — conferido no cadastro, porque no pagamento já é tarde.">
       {(semDono.dado?.length ?? 0) > 0 && (
         <Aviso tipo="erro">
           {semDono.dado!.length} usina(s) sem dono: {semDono.dado!.map((u) => u.codigo_geradora).join(', ')}.
@@ -41,15 +62,15 @@ export function TelaDonos() {
 
       <div className="cartao" style={{ marginBottom: 20 }}>
         <div className="campos">
-          <Campo rotulo="nome" valor={f.nome} ao={p('nome')} />
-          <Campo rotulo="natureza" valor={f.natureza} ao={p('natureza')}
-                 opcoes={[{ valor: 'pf', texto: 'pessoa física' }, { valor: 'pj', texto: 'pessoa jurídica' }]} />
-          <Campo rotulo="documento" valor={f.documento_bruto} ao={p('documento_bruto')} dica="CPF ou CNPJ" />
-          <Campo rotulo="chave PIX" valor={f.chave_pix} ao={p('chave_pix')} />
-          <Campo rotulo="e-mail" valor={f.email} ao={p('email')} />
+          <Campo rotulo="Nome" valor={f.nome} ao={p('nome')} />
+          <Campo rotulo="Natureza" valor={f.natureza} ao={p('natureza')}
+                 opcoes={[{ valor: 'pf', texto: 'Pessoa física' }, { valor: 'pj', texto: 'Pessoa jurídica' }]} />
+          <Campo rotulo="Documento" valor={f.documento_bruto} ao={p('documento_bruto')} dica="CPF ou CNPJ" />
+          <Campo rotulo="Chave Pix" valor={f.chave_pix} ao={p('chave_pix')} />
+          <Campo rotulo="E-mail" valor={f.email} ao={p('email')} />
           <div style={{ alignSelf: 'end' }}>
             <button className="primario" onClick={criar}
-                    disabled={acao.ocupado || !f.nome.trim() || !f.documento_bruto.trim()}>cadastrar</button>
+                    disabled={acao.ocupado || !f.nome.trim() || !f.documento_bruto.trim()}>Cadastrar</button>
           </div>
         </div>
         {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
@@ -57,14 +78,34 @@ export function TelaDonos() {
       </div>
 
       {donos.erro && <Aviso tipo="erro">{donos.erro}</Aviso>}
-      <Tabela cabecalho={<><th>nome</th><th>documento</th><th>PIX</th><th>situação</th></>}
-              vazio="nenhum dono cadastrado — AUD-08">
-        {(donos.dado ?? []).map((d) => (
+
+      <Ferramentas contagem={todos.length ? `${visiveis.length} de ${todos.length}` : undefined}>
+        <Busca valor={busca} ao={setBusca} dica="Buscar por nome, documento ou Pix…" />
+        <select value={situacao} aria-label="Filtrar por situação" onChange={(e) => setSituacao(e.target.value)}>
+          <option value="">Todas as situações</option>
+          <option value="ativo">Ativos</option>
+          <option value="inativo">Inativos</option>
+        </select>
+        {(busca || situacao) && (
+          <button type="button" onClick={() => { setBusca(''); setSituacao(''); }}>Limpar filtros</button>
+        )}
+      </Ferramentas>
+
+      <Tabela cabecalho={<>
+                <ThOrd chave="nome" ordem={ordem} ao={alternar}>Nome</ThOrd>
+                <ThOrd chave="documento" ordem={ordem} ao={alternar}>Documento</ThOrd>
+                <ThOrd chave="pix" ordem={ordem} ao={alternar}>Pix</ThOrd>
+                <ThOrd chave="situacao" ordem={ordem} ao={alternar}>Situação</ThOrd>
+              </>}
+              vazio={todos.length
+                ? 'Nenhum dono corresponde à busca ou aos filtros.'
+                : 'Nenhum dono cadastrado — AUD-08.'}>
+        {visiveis.map((d) => (
           <tr key={d.id}>
-            <td>{d.nome} <span className="fraco">· {d.natureza}</span></td>
+            <td>{d.nome} <span className="fraco">· {d.natureza.toUpperCase()}</span></td>
             <td className="fraco">{d.documento}</td>
             <td className="fraco">{d.chave_pix ?? d.banco ?? '—'}</td>
-            <td><span className={`marca ${d.ativo ? 'ok' : 'pendente'}`}>{d.ativo ? 'ativo' : 'inativo'}</span></td>
+            <td><span className={`marca ${d.ativo ? 'ok' : 'pendente'}`}>{d.ativo ? 'Ativo' : 'Inativo'}</span></td>
           </tr>
         ))}
       </Tabela>

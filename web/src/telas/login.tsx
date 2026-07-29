@@ -8,7 +8,7 @@
 
 import { useState } from 'react';
 import { useSessao } from '../sessao.tsx';
-import { Aviso } from '../ui.tsx';
+import { Aviso, Logotipo } from '../ui.tsx';
 
 export function Login() {
   const { cliente } = useSessao();
@@ -29,27 +29,32 @@ export function Login() {
   }
 
   return (
-    <div className="conteudo" style={{ maxWidth: 380, paddingTop: 80 }}>
-      <h1>Financeiro G3</h1>
-      <p className="sub">Entre com a conta do financeiro.</p>
-      <form onSubmit={entrar} className="cartao">
-        <div style={{ display: 'grid', gap: 12 }}>
-          <div>
-            <label>e-mail</label>
-            <input type="email" value={email} autoComplete="username"
-                   onChange={(e) => setEmail(e.target.value)} required />
-          </div>
-          <div>
-            <label>senha</label>
-            <input type="password" value={senha} autoComplete="current-password"
-                   onChange={(e) => setSenha(e.target.value)} required />
-          </div>
-          {erro && <Aviso tipo="erro">{erro}</Aviso>}
-          <button className="primario" disabled={ocupado || !cliente}>
-            {ocupado ? 'entrando…' : 'entrar'}
-          </button>
+    <div className="central">
+      <div style={{ width: '100%', maxWidth: 380 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+          <Logotipo tamanho={28} />
+          <h1 style={{ margin: 0 }}>Financeiro G3</h1>
         </div>
-      </form>
+        <p className="sub">Entre com a conta do financeiro.</p>
+        <form onSubmit={entrar} className="cartao">
+          <div style={{ display: 'grid', gap: 12 }}>
+            <div>
+              <label>E-mail</label>
+              <input type="email" value={email} autoComplete="username"
+                     onChange={(e) => setEmail(e.target.value)} required />
+            </div>
+            <div>
+              <label>Senha</label>
+              <input type="password" value={senha} autoComplete="current-password"
+                     onChange={(e) => setSenha(e.target.value)} required />
+            </div>
+            {erro && <Aviso tipo="erro">{erro}</Aviso>}
+            <button className="primario" disabled={ocupado || !cliente}>
+              {ocupado ? 'Entrando…' : 'Entrar'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

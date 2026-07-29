@@ -70,7 +70,7 @@ export function ProvedorDeSessao({ children }: { children: ReactNode }) {
         setSessaoAuth(data.session);
         c.auth.onAuthStateChange((_e, s) => setSessaoAuth(s));
       } catch (e: any) {
-        if (vivo) setErro(e?.message ?? 'nao foi possivel carregar a configuracao');
+        if (vivo) setErro(e?.message ?? 'Não foi possível carregar a configuração.');
       } finally {
         if (vivo) setCarregando(false);
       }
@@ -100,7 +100,7 @@ export function ProvedorDeSessao({ children }: { children: ReactNode }) {
           return unico;
         });
       } catch (e: any) {
-        if (vivo) setErro(e?.message ?? 'falha ao resolver a sessao');
+        if (vivo) setErro(e?.message ?? 'Falha ao resolver a sessão.');
       }
     })();
     return () => { vivo = false; };

@@ -25,7 +25,7 @@ export function TelaTarifas() {
     const ok = await acao.executar(() => api.post('/tarifas', {
       distribuidora: dist, tarifa_reais_por_kwh: decimalTexto(valor, 6), vigencia_inicio: inicio,
     }));
-    if (ok) { acao.anunciar('vigência aberta'); lista.recarregar(); }
+    if (ok) { acao.anunciar('Vigência aberta.'); lista.recarregar(); }
   }
 
   return (
@@ -33,11 +33,11 @@ export function TelaTarifas() {
             sub="R$/kWh por distribuidora, versionado por vigência. É preço por unidade, não dinheiro — nunca vira centavos.">
       <div className="cartao" style={{ marginBottom: 20 }}>
         <div className="campos">
-          <Campo rotulo="distribuidora" valor={dist} ao={setDist} />
-          <Campo rotulo="R$/kWh" valor={valor} ao={setValor} dica="até 6 casas — ex. 1,130000" />
-          <Campo rotulo="vigência a partir de" valor={inicio} ao={setInicio} tipo="date" />
+          <Campo rotulo="Distribuidora" valor={dist} ao={setDist} />
+          <Campo rotulo="R$/kWh" valor={valor} ao={setValor} dica="Até 6 casas — ex. 1,130000" />
+          <Campo rotulo="Vigência a partir de" valor={inicio} ao={setInicio} tipo="date" />
           <div style={{ alignSelf: 'end' }}>
-            <button className="primario" onClick={abrir} disabled={acao.ocupado || !dist.trim()}>abrir vigência</button>
+            <button className="primario" onClick={abrir} disabled={acao.ocupado || !dist.trim()}>Abrir vigência</button>
           </div>
         </div>
         {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
@@ -45,13 +45,13 @@ export function TelaTarifas() {
       </div>
 
       {lista.erro && <Aviso tipo="erro">{lista.erro}</Aviso>}
-      <Tabela cabecalho={<><th>R$/kWh</th><th>início</th><th>fim</th></>}
-              vazio="sem tarifa cadastrada — a composição da fatura levanta (R26)">
+      <Tabela cabecalho={<><th>R$/kWh</th><th>Início</th><th>Fim</th></>}
+              vazio="Sem tarifa cadastrada — a composição da fatura levanta (R26).">
         {(lista.dado ?? []).map((t) => (
           <tr key={t.id}>
             <td className="num">{t.tarifa_reais_por_kwh}</td>
             <td className="fraco">{String(t.vigencia_inicio).slice(0, 10)}</td>
-            <td className="fraco">{t.vigencia_fim ? String(t.vigencia_fim).slice(0, 10) : 'em aberto'}</td>
+            <td className="fraco">{t.vigencia_fim ? String(t.vigencia_fim).slice(0, 10) : 'Em aberto'}</td>
           </tr>
         ))}
       </Tabela>
