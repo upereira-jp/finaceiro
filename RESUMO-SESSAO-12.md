@@ -5,7 +5,7 @@
 | **Foco** | Verificar o que entrou no ar em 28/07 e o que a revisão de UX de hoje mudou — e percorrer a tela que a fila manda usar amanhã |
 | **Método** | Medição, nos dois sentidos. O defeito achado foi **reproduzido no código anterior** antes de ser corrigido, e as duas fotos são da mesma condição de falha |
 | **Resultado** | Produção conferida ponta a ponta · 1 defeito silencioso corrigido na tela de Contratos · 5 verificações novas (443 → 448) · **2 questões novas, uma vermelha** |
-| **Commits** | nenhum — o trabalho está na árvore, ver §7 |
+| **Commits** | `47e6eb0`, `9d40f15` — empurrados para `main` e **no ar** |
 
 > # ESTADO ATUAL — 29/07/2026, tarde
 >
@@ -15,7 +15,7 @@
 > | **Produção vs. `main`** | o bundle servido é `index-4nVmkQDw.js`, **byte a byte o que `main` constrói**. A revisão de UX de hoje já está no ar |
 > | **Catálogo contra produção** | **8 de 8 verdes** — CAT-1 a CAT-8, executados hoje |
 > | **Suíte** | **448 verificações**, 22 suítes, `EXIT=0` |
-> | **Correção desta sessão** | **não está em produção.** Exige `git pull` + `web:build` + `restart` no VPS |
+> | **Correção desta sessão** | **no ar.** `index-DzZYJ0Ak.js`, mesmo hash do build local — reprodutível, não inferido |
 > | **O que segura a primeira fatura** | os 39 contratos — e agora com uma pergunta na frente deles |
 >
 > **A fila, atualizada:**
@@ -146,31 +146,37 @@ Nada se moveu desde 28/07: a digitação não começou. A fila do `RESUMO-SESSAO
 | **`Q-PRONTIDAO-COMIS-01` não corrigida** | Qual dos dois comportamentos é o certo depende da `Q-ORIGINADOR-01`. Escolher agora seria o default "porque parecia razoável" |
 | **`Q-AGENDA-01` não construída** | A fila de emissão e a consulta ativa só falam com a Sicoob, e o adaptador real depende do `ADR-0005` e do A1. Seria máquina que só roda contra o adaptador falso |
 | **Nada mexido no CRM** | Regra 4 |
-| **Nada commitado nem publicado** | Não foi pedido — ver §7 |
+| **Nenhuma migration, rota ou regra de negócio tocada** | O escopo foi `web/` e documento. O banco não mudou |
 
 ---
 
-## 7. Como levar isto ao ar
+## 7. O deploy, e o que foi medido em volta dele
 
-O trabalho está na árvore, sem commit. São cinco arquivos:
-
-```
-web/src/telas/contratos.tsx   a correção
-web/src/dados.ts              emLotes + o teto medido
-web/tests/lotes.ts            5 verificações (novo)
-web/tsconfig.json             tests/ entra no typecheck
-package.json                  test:web entra no npm test
-QUESTOES.md                   as duas questões novas
-RESUMO-SESSAO-12.md           este arquivo (novo)
-```
-
-`npm test` está verde (448, `EXIT=0`) e `npm run web:build` limpo. Depois de commitar e empurrar:
+Dois commits, `47e6eb0` (a correção) e `9d40f15` (o registro e as questões), empurrados para `main` e aplicados pelo ciclo documentado no `RESUMO-SESSAO-11` §12:
 
 ```bash
 cd /opt/financeiro/app
-sudo -u financeiro git pull
+sudo -u financeiro git pull --ff-only
 sudo -u financeiro env PATH=/opt/financeiro/node/bin:$PATH npm run web:build
 systemctl restart financeiro
 ```
 
-O `npm ci` não é necessário — nenhuma dependência mudou. E vale a nota do `RESUMO-SESSAO-11`: **o `git pull` do servidor não valida nada**, então `npm test` é antes de commitar.
+`npm ci` não foi preciso — nenhuma dependência mudou; só `scripts` do `package.json`.
+
+**O build do servidor deu o mesmo hash do build local — `index-DzZYJ0Ak.js`.** Não é conferência por data de commit: é a mesma saída, byte a byte, dos dois lados.
+
+Medido depois do restart, e o que interessa é o que **não** mudou:
+
+```
+financeiro     active, ouvindo em 127.0.0.1:3000        (nao 0.0.0.0 - RESUMO-SESSAO-11 §2)
+role           app_financeiro_login, sem BYPASSRLS, sem SUPERUSER
+bundle servido index-DzZYJ0Ak.js                        (o corrigido)
+rotas          /clientes /contratos /carteira /desconhecido  200
+API            /api/clientes sem Bearer                 401
+CRM            9 processos PM2 online, app.blackhaus.io 200
+servidor :80   404                                       (o `zz-` continua carregando depois do CRM)
+```
+
+As três últimas linhas são a regra 4 conferida na prática: o financeiro subiu, desceu e subiu de novo sem que o CRM notasse.
+
+**A nota do `RESUMO-SESSAO-11` continua valendo:** o `git pull` do servidor não valida nada — o backend roda TypeScript sem build. `npm test` é **antes** de commitar.
