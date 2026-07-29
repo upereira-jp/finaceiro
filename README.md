@@ -185,6 +185,17 @@ scripts/provisionar-usuario.sql
                              dois scripts cobrem so o primeiro, e nao ha rota de
                              gestao de usuario. Guarda o e-mail CONFIRMADO -
                              sem isso a linha nasce certa e a pessoa nao loga
+scripts/cadastrar-originadores.ts
+                             CADASTRO dos originadores, pelo caminho da
+                             aplicacao. A lista vem de ARQUIVO, nao do corpo do
+                             script: `documento` e NOT NULL e e CPF/CNPJ de
+                             pessoa real, e `tipo` decide quanto ela recebe.
+                             Medido em 29/07: `financeiro.parceiros` tem 9 linhas
+                             e NAO expoe documento nenhum - o CRM nao e fonte
+                             disto. Confere o lote INTEIRO antes de escrever, e
+                             digito que nao fecha aborta tudo: `classificar()`
+                             gravaria com documento_validado=false e nao ha R9
+                             para originador. `npm run originadores`
 scripts/ciclo-crm.ts         COMPOSICAO do ciclo: liga pool do CRM, leitor e
                              motor. Exige --ensaio ou --valendo. `npm run ciclo`
 scripts/faturar.ts           COMPOSICAO do lote de faturamento. Exige --ensaio ou
