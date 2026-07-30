@@ -23,7 +23,14 @@ import { TelaDonos } from './telas/donos.tsx';
 import { TelaUsinas } from './telas/usinas.tsx';
 import { TelaTarifas } from './telas/tarifas.tsx';
 import { TelaCarteira } from './telas/carteira.tsx';
+import { TelaFaturas } from './telas/faturas.tsx';
+import { TelaCobranca } from './telas/cobranca.tsx';
+import { TelaRelatorios } from './telas/relatorios.tsx';
+import { TelaDocumento } from './telas/documento.tsx';
 
+// As quatro primeiras sao cadastro, na ordem em que uma destrava a proxima; as
+// quatro ultimas sao o dinheiro, na ordem dos ATOS: compor (Carteira), emitir e
+// cobrar (Faturas), configurar o banco (Cobranca), conferir (Relatorios).
 const TELAS = [
   { rota: '/prontidao', titulo: 'Prontidão',  render: () => <TelaProntidao /> },
   { rota: '/clientes',  titulo: 'Clientes',   render: () => <TelaClientes /> },
@@ -33,6 +40,10 @@ const TELAS = [
   { rota: '/donos',     titulo: 'Donos',      render: () => <TelaDonos /> },
   { rota: '/tarifas',   titulo: 'Tarifas',    render: () => <TelaTarifas /> },
   { rota: '/carteira',  titulo: 'Carteira',   render: () => <TelaCarteira /> },
+  { rota: '/faturas',   titulo: 'Faturas',    render: () => <TelaFaturas /> },
+  { rota: '/cobranca',  titulo: 'Cobrança',   render: () => <TelaCobranca /> },
+  { rota: '/documento', titulo: 'Documento', render: () => <TelaDocumento /> },
+  { rota: '/relatorios', titulo: 'Relatórios', render: () => <TelaRelatorios /> },
 ] as const;
 
 export function App() {

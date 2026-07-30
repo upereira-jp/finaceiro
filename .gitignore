@@ -12,3 +12,4 @@ build/
 !auditoria/*.patch
 generated/
 package-lock.json
+originadores.json

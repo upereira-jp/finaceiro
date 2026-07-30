@@ -229,34 +229,37 @@ model tarifa {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model tenant {
-  id                    String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  razao_social          String
-  cnpj                  String                  @unique(map: "tenant_cnpj_unico")
-  status                tenant_status           @default(ativo)
-  data_ativacao         DateTime?               @db.Date
-  criado_em             DateTime                @default(now()) @db.Timestamptz(6)
-  atualizado_em         DateTime                @default(now()) @db.Timestamptz(6)
-  acesso_plataforma_log acesso_plataforma_log[]
-  boleto                boleto[]
-  cliente               cliente[]
-  cliente_estado_crm    cliente_estado_crm[]
-  conector_cobranca     conector_cobranca?
-  conector_crm          conector_crm?
-  conector_execucao     conector_execucao[]
-  contrato              contrato[]
-  dono_usina            dono_usina[]
-  fatura                fatura[]
-  liquidacao            liquidacao[]
-  originador            originador[]
-  regra_comissao        regra_comissao[]
-  regra_repasse         regra_repasse[]
-  split_execucao        split_execucao[]
-  split_item            split_item[]
-  tarifa                tarifa[]
-  unidade_consumidora   unidade_consumidora[]
-  usina                 usina[]
-  usina_geracao         usina_geracao[]
-  usuario_tenant        usuario_tenant[]
+  id                     String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  razao_social           String
+  cnpj                   String                  @unique(map: "tenant_cnpj_unico")
+  status                 tenant_status           @default(ativo)
+  data_ativacao          DateTime?               @db.Date
+  criado_em              DateTime                @default(now()) @db.Timestamptz(6)
+  atualizado_em          DateTime                @default(now()) @db.Timestamptz(6)
+  acesso_plataforma_log  acesso_plataforma_log[]
+  boleto                 boleto[]
+  campo_do_documento     campo_do_documento[]
+  cliente                cliente[]
+  cliente_estado_crm     cliente_estado_crm[]
+  conector_cobranca      conector_cobranca?
+  conector_crm           conector_crm?
+  conector_execucao      conector_execucao[]
+  contrato               contrato[]
+  dono_usina             dono_usina[]
+  fatura                 fatura[]
+  identidade_de_cobranca identidade_de_cobranca?
+  liquidacao             liquidacao[]
+  logo_de_cobranca       logo_de_cobranca?
+  originador             originador[]
+  regra_comissao         regra_comissao[]
+  regra_repasse          regra_repasse[]
+  split_execucao         split_execucao[]
+  split_item             split_item[]
+  tarifa                 tarifa[]
+  unidade_consumidora    unidade_consumidora[]
+  usina                  usina[]
+  usina_geracao          usina_geracao[]
+  usuario_tenant         usuario_tenant[]
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -586,6 +589,60 @@ model conector_cobranca {
   @@unique([tenant_id, id], map: "conector_cobranca_id_tenant")
 }
 
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model campo_do_documento {
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id     String          @db.Uuid
+  campo         campo_de_fatura
+  rotulo        String?
+  ordem         Int             @default(0) @db.SmallInt
+  visivel       Boolean         @default(true)
+  atualizado_em DateTime        @default(now()) @db.Timestamptz(6)
+  tenant        tenant          @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([tenant_id, id], map: "campo_do_documento_id_tenant")
+  @@unique([tenant_id, campo], map: "campo_do_documento_unico")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model identidade_de_cobranca {
+  id                   String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id            String            @unique @db.Uuid
+  pix_chave            String?
+  pix_tipo_chave       tipo_chave_pix?
+  pix_recebedor_nome   String?
+  pix_recebedor_cidade String?
+  logo_mime            String?
+  logo_bytes           Int?
+  logo_sha256          String?
+  atualizado_em        DateTime          @default(now()) @db.Timestamptz(6)
+  criado_em            DateTime          @default(now()) @db.Timestamptz(6)
+  tenant               tenant            @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  logo_de_cobranca     logo_de_cobranca?
+
+  @@unique([tenant_id, id], map: "identidade_de_cobranca_id_tenant")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model logo_de_cobranca {
+  id                     String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id              String                 @unique @db.Uuid
+  identidade_id          String                 @db.Uuid
+  conteudo               Bytes
+  criado_em              DateTime               @default(now()) @db.Timestamptz(6)
+  tenant                 tenant                 @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  identidade_de_cobranca identidade_de_cobranca @relation(fields: [tenant_id, identidade_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "logo_identidade_fk")
+
+  @@unique([tenant_id, id], map: "logo_de_cobranca_id_tenant")
+  @@unique([tenant_id, identidade_id], map: "logo_identidade_unico")
+}
+
 enum conector_status {
   ok
   erro
@@ -725,4 +782,23 @@ enum tipo_split_item {
 
 enum provedor_cobranca {
   sicoob
+}
+
+enum campo_de_fatura {
+  competencia
+  vencimento
+  numero_uc
+  distribuidora
+  cliente_nome
+  cliente_documento
+  usina_codigo_geradora
+  geracao_kwh_competencia
+  percentual_rateio_aplicado
+  consumo_kwh
+  tarifa_reais_por_kwh
+  valor_consumo_centavos
+  valor_tarifas_concessionaria_centavos
+  valor_juros_multa_centavos
+  valor_total_centavos
+  flag_fatura_cheia
 }

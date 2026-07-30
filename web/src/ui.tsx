@@ -114,6 +114,9 @@ export const ESTILO = `
   .aviso { padding: 10px 12px; border-radius: var(--raio); font-size: 14px; margin: 12px 0; }
   .aviso.erro { background: var(--erro-fundo); color: var(--erro); border: 1px solid currentColor; }
   .aviso.ok { background: var(--fundo2); color: var(--ok); border: 1px solid currentColor; }
+  /* O par --alerta/--alerta-fundo ja existia no tema com o contraste medido nos
+     dois temas ("sobre o proprio fundo de aviso", tema.ts); faltava a classe. */
+  .aviso.alerta { background: var(--alerta-fundo); color: var(--alerta); border: 1px solid currentColor; }
 
   /* Estado e PILULA CONTORNADA COM O TEXTO DENTRO, nunca preenchida: e a
      separacao de forma que o tema exige entre estado e acento (a nota de
@@ -143,6 +146,28 @@ export const ESTILO = `
   .kpi .nome { font-size: 12px; color: var(--fraco); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }
   .kpi .valor { font-size: 22px; font-weight: 650; font-variant-numeric: ${TIPOGRAFIA.numero}; }
 
+  /* ---------------------------------------------------------- impressao
+     A decisao 3 da Q-DOCFATURA-01 foi "HTML agora, gerador de PDF depois": o PDF
+     sai pelo dialogo do proprio sistema, e o que o define e este bloco. Sem ele,
+     window.print() imprimiria a barra de navegacao e os botoes junto. */
+  .documento {
+    background: #fff; color: #111; padding: 32px; border: 1px solid var(--borda);
+    border-radius: 8px; max-width: 800px;
+  }
+  .documento table td { padding: 6px 4px; border-bottom: 1px solid #eee; }
+  @media print {
+    /* Tudo fora do documento sai da pagina impressa - inclusive o que esta
+       marcado com a classe naoimprime, que sao os controles da propria previa. */
+    body * { visibility: hidden; }
+    #documento, #documento * { visibility: visible; }
+    #documento .naoimprime, .naoimprime { display: none !important; }
+    #documento {
+      position: absolute; left: 0; top: 0; width: 100%;
+      border: none; border-radius: 0; padding: 0; max-width: none;
+    }
+    @page { margin: 16mm; }
+  }
+
   /* O centro da tela de login, com o brilho quente da marca no alto. */
   .central {
     min-height: 100dvh; display: grid; place-items: center; padding: 20px;
@@ -150,7 +175,7 @@ export const ESTILO = `
   }
 `;
 
-export const Aviso = ({ tipo, children }: { tipo: 'erro' | 'ok'; children: ReactNode }) =>
+export const Aviso = ({ tipo, children }: { tipo: 'erro' | 'ok' | 'alerta'; children: ReactNode }) =>
   <div className={`aviso ${tipo}`}>{children}</div>;
 
 export function Campo(p: {

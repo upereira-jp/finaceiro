@@ -25,6 +25,7 @@ import * as fatura from '../repos/fatura.ts';
 import * as boleto from '../repos/boleto.ts';
 import * as liquidacao from '../repos/liquidacao.ts';
 import * as split from '../repos/split.ts';
+import * as documento from '../repos/documento.ts';
 import { prontidao } from '../repos/prontidao.ts';
 
 export type Requisicao = {
@@ -39,7 +40,20 @@ export type Requisicao = {
   tenantProposto: string | undefined;
 };
 
-export type Resultado = { status: number; corpo?: unknown };
+export type Resultado = {
+  status: number;
+  corpo?: unknown;
+  /**
+   * `content-type` explicito. Quando presente, o corpo vai CRU - sem
+   * `JSON.stringify`.
+   *
+   * Existe por uma rota so: a logo do documento de cobranca, que e `bytea` e
+   * precisa sair como imagem. A alternativa era base64 dentro de JSON, e ela
+   * infla 33% em toda leitura - o mesmo tipo de custo que fez a logo morar em
+   * tabela separada (`to_jsonb` de bytea custa 2,00x, medido).
+   */
+  tipo?: string;
+};
 
 type Handler = (req: Requisicao, app: App) => Promise<Resultado>;
 
@@ -608,5 +622,91 @@ export const ROTAS: Rota[] = [
     metodo: 'GET', padrao: '/comissoes',
     handler: (req, app) => emRelatorio(app, req, async () => ok(await split.comissoesPorOriginador(
       req.query.get('competencia') ? data(req.query.get('competencia'), 'competencia') : undefined))),
+  },
+  // ------------------------------------------- documento de cobranca (Q-DOCFATURA-01)
+  /*
+   * A IDENTIDADE, A LOGO E O LAYOUT. Tres coisas que o cliente ve, e nenhuma
+   * delas e segredo: chave Pix identifica DESTINO e sai impressa no documento.
+   * O que e segredo continua em `conector_cobranca.credencial_ref` (regra 5), e
+   * nenhuma rota daqui o toca.
+   */
+  {
+    metodo: 'GET', padrao: '/cobranca/identidade',
+    handler: (req, app) => emTenant(app, req, async () => ok(await documento.identidade())),
+  },
+  {
+    metodo: 'POST', padrao: '/cobranca/identidade',
+    handler: (req, app) => emTenant(app, req, async () => criado(await documento.salvarIdentidade(req.corpo ?? {}))),
+  },
+  {
+    /*
+     * A LOGO SOBE EM BASE64 DENTRO DE JSON, e o teto de dois lados tem de fechar:
+     * o banco recusa acima de 512 KB (`logo_de_cobranca`), e base64 disso da
+     * ~699 KB, abaixo do `maxCorpoBytes` de 1.000.000 do servidor. Subir o teto
+     * do banco sem subir o do servidor trocaria um erro nomeado por um 413.
+     *
+     * O mime NAO vem daqui: o gatilho do banco o deriva da ASSINATURA do arquivo
+     * e recusa o que nao for PNG ou JPEG. Um SVG rotulado como `image/png` nao
+     * passa, e isso importa porque a logo e embutida no HTML do documento.
+     */
+    metodo: 'PUT', padrao: '/cobranca/logo',
+    handler: (req, app) => emTenant(app, req, async () => {
+      const b64 = req.corpo?.conteudo_base64;
+      if (typeof b64 !== 'string' || !b64.trim()) {
+        throw new TypeError('conteudo_base64 e obrigatorio (a imagem em base64, sem prefixo data:)');
+      }
+      const bytes = Buffer.from(b64.replace(/^data:[^;]+;base64,/, ''), 'base64');
+      if (bytes.length === 0) throw new TypeError('conteudo_base64 nao decodificou para bytes');
+      return ok(await documento.salvarLogo(bytes));
+    }),
+  },
+  {
+    metodo: 'GET', padrao: '/cobranca/logo',
+    handler: (req, app) => emTenant(app, req, async () => {
+      const [l, id] = await Promise.all([documento.logo(), documento.identidade()]);
+      if (!l || !id?.logo_mime) {
+        return { status: 404, corpo: { erro: 'NaoEncontrado', mensagem: 'Este tenant nao tem logo.' } };
+      }
+      // Corpo CRU com o mime que o GATILHO derivou do arquivo - nao um mime que
+      // a aplicacao guardou e pode ter divergido do conteudo.
+      return { status: 200, corpo: l.conteudo as Uint8Array, tipo: id.logo_mime };
+    }),
+  },
+  {
+    metodo: 'DELETE', padrao: '/cobranca/logo',
+    handler: (req, app) => emTenant(app, req, async () => { await documento.removerLogo(); return semConteudo(); }),
+  },
+  {
+    metodo: 'GET', padrao: '/cobranca/campos',
+    handler: (req, app) => emTenant(app, req, async () => ok(await documento.campos())),
+  },
+  {
+    // A LISTA INTEIRA, sempre. Nao ha PATCH de um campo: um diff perdido deixaria
+    // o documento com dois campos na mesma posicao. Lista vazia volta ao PADRAO.
+    metodo: 'PUT', padrao: '/cobranca/campos',
+    handler: (req, app) => emTenant(app, req, async () => {
+      const campos = req.corpo?.campos;
+      if (!Array.isArray(campos)) throw new TypeError('campos deve ser uma LISTA (vazia volta ao padrao)');
+      return ok({ definidos: await documento.definirCampos(campos) });
+    }),
+  },
+  {
+    /*
+     * O DOCUMENTO DA FATURA - e esta e a rota que o CRM vai consumir.
+     *
+     * A decisao 4 da `Q-DOCFATURA-01` foi "entrega manual agora, com a primeira
+     * opcao ja preparada", e a primeira opcao e o `PRD` §7.8: endpoint exposto
+     * pelo financeiro, consumido pelo CRM. Por isso a composicao esta no
+     * repositorio e nao na tela - o CRM nao roda React, e a tela e um dos dois
+     * consumidores, nao o dono do formato.
+     *
+     * Caminho de RELATORIO: leitura pesada (fatura + UC + cliente + usina +
+     * layout + boleto) nao disputa slot com a emissao. E so LEITURA - `exigir('ler')`
+     * no repositorio -, entao expo-la a um consumidor externo nao abre superficie
+     * de escrita. O que falta para o CRM chamar de fato e a autenticacao dele,
+     * que e a mesma pergunta em aberto da `Q-WEBHOOK-01`.
+     */
+    metodo: 'GET', padrao: '/faturas/:id/documento',
+    handler: (req, app) => emRelatorio(app, req, async () => ok(await documento.paraFatura(req.params.id))),
   },
 ];

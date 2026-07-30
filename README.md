@@ -5,8 +5,8 @@ Sistema financeiro multi-tenant da G3 Solar: faturamento de crédito de energia,
 | Campo | Valor |
 |---|---|
 | **Dono** | Vinicius Leal |
-| **Fase atual** | F0 fechada · F1 com os três critérios formais cumpridos · **F2 e F3 construídas em 28/07, depois de a `PAUTA-contador.md` voltar respondida.** 18 migrations, `fatura`, `boleto`, `liquidacao`, `split_execucao` e `split_item` no banco, dois motores puros, a `PortaDeCobranca` injetada e **448 verificações** em 22 suítes. O que segura a F2 agora é **um certificado A1**, não código: o critério do `PRD` §10 é *"boleto liquidado no sandbox baixa a fatura"*, e o ciclo inteiro está provado contra o adaptador falso. Ver `RESUMO-SESSAO-10.md`. Histórico da F1 preservado abaixo: **F1 em execução, e não fecha só com código nosso.** 15 migrations no Supabase `sa-east-1`, role de runtime, composition root, seis repositórios, 37 rotas, auth próprio medido ponta a ponta contra o Supabase real, conector do CRM construído e testado, e os 8 invariantes de catálogo verdes **contra produção**. A `Q-VIEWS-01` fechou no mesmo dia e o **invariante 9 está cumprido**. O ciclo rodou **valendo, duas vezes**, contra o CRM real e os três critérios formais fecharam; a `Q-ESCOPO-01` (conector entrega 1 de 4 entidades) é a vermelha que resta. Ver a tabela de critérios abaixo |
-| **Atualizado** | 29/07/2026 · fim da sessão 12 |
+| **Fase atual** | F0 fechada · F1 com os três critérios formais cumpridos · **F2 e F3 construídas em 28/07, depois de a `PAUTA-contador.md` voltar respondida.** 20 migrations, `fatura`, `boleto`, `liquidacao`, `split_execucao` e `split_item` no banco, dois motores puros, a `PortaDeCobranca` injetada e **571 verificações** em 27 suítes. O que segura a F2 agora é **um certificado A1**, não código: o critério do `PRD` §10 é *"boleto liquidado no sandbox baixa a fatura"*, e o ciclo inteiro está provado contra o adaptador falso. Ver `RESUMO-SESSAO-10.md`. Histórico da F1 preservado abaixo: **F1 em execução, e não fecha só com código nosso.** 15 migrations no Supabase `sa-east-1`, role de runtime, composition root, seis repositórios, 37 rotas, auth próprio medido ponta a ponta contra o Supabase real, conector do CRM construído e testado, e os 8 invariantes de catálogo verdes **contra produção**. A `Q-VIEWS-01` fechou no mesmo dia e o **invariante 9 está cumprido**. O ciclo rodou **valendo, duas vezes**, contra o CRM real e os três critérios formais fecharam; a `Q-ESCOPO-01` (conector entrega 1 de 4 entidades) é a vermelha que resta. Ver a tabela de critérios abaixo |
+| **Atualizado** | 30/07/2026 · fim da sessão 14 — o eixo do originador, o caminho de cobrança inteiro na tela e o documento de cobrança. Ver `RESUMO-SESSAO-14.md` |
 | **No ar** | **`https://financeiro.blackhaus.io`** — systemd, Node 22 isolado, TLS até 26/10. Mesmo VPS do CRM, **sem alterar uma linha da configuração dele**. Ver `RESUMO-SESSAO-11.md` |
 
 ---
@@ -15,7 +15,9 @@ Sistema financeiro multi-tenant da G3 Solar: faturamento de crédito de energia,
 
 Nesta ordem. Cada documento pressupõe o anterior.
 
-1. **`RESUMO-SESSAO-12.md`** — **comece por aqui.** Estado atual e a fila com dono nomeado. A sessão da verificação: produção conferida ponta a ponta, o defeito silencioso da tela de Contratos medido nos dois sentidos, e a vermelha nova que vem **antes** dos 39 contratos
+1. **`RESUMO-SESSAO-14.md`** — **comece por aqui.** A sessão do caminho de cobrança: o eixo do originador decidido e medido, as três telas que faltavam, as duas migrations e as cinco decisões do documento. Traz também os quatro erros meus que o processo pegou, com o que cada um ensinou
+2. **`RESUMO-SESSAO-13.md`** — Estado atual e a fila com dono nomeado. A sessão em que a `Q-ORIGINADOR-01` foi decidida — e em que conferir a premissa contra o CRM antes de gravar mudou o que precisava ser perguntado
+2. **`RESUMO-SESSAO-12.md`** — a sessão da verificação: produção conferida ponta a ponta, o defeito silencioso da tela de Contratos medido nos dois sentidos, e a vermelha que abriu **antes** dos 39 contratos
 2. **`RESUMO-SESSAO-11.md`** — a sessão do deploy: a paleta da G3, o sistema em produção, dois logins e duas questões novas
 2. **`MAPA-UX-2026-07-29.md`** — a revisão de UX da SPA, na manhã do mesmo 29/07: rotas por caminho, busca e ordenação, caixa de sentença
 2. **`RESUMO-SESSAO-10.md`** — a sessão em que a `PAUTA-contador.md` voltou e a carteira foi construída
@@ -71,10 +73,30 @@ RESUMO-SESSAO-11.md          passagem da sessao 11 — COMECE POR AQUI. A paleta
                              da G3, o deploy em producao ao lado do CRM sem
                              tocar nele, os dois logins e as duas questoes que
                              o caminho da Sicoob fez aparecer
-RESUMO-SESSAO-12.md          passagem da sessao 12 — COMECE POR AQUI. Producao
-                             conferida, o defeito silencioso da tela de
-                             Contratos medido antes e depois, e as duas
-                             questoes que aparecem ANTES dos 39 contratos
+RESUMO-SESSAO-12.md          passagem da sessao 12 — Producao conferida, o
+                             defeito silencioso da tela de Contratos medido
+                             antes e depois, e as duas questoes que aparecem
+                             ANTES dos 39 contratos
+RESUMO-SESSAO-14.md          passagem da sessao 14 — COMECE POR AQUI. O eixo do
+                             originador (vendedor_origem) medido contra o CRM, as
+                             tres telas que faltavam (Cobranca, Faturas,
+                             Relatorios) mais a aba Documento, as migrations 19 e
+                             20 e as cinco decisoes do documento de cobranca. A 7
+                             lista quatro erros meus que os testes e o catalogo
+                             pegaram - inclusive uma citacao que eu inventei
+RESUMO-SESSAO-13.md          passagem da sessao 13 — A
+                             Q-ORIGINADOR-01 decidida, a premissa conferida
+                             contra o CRM antes de gravar, o campo obrigatorio
+                             na tela e a decima camada da prontidao
+ATRIBUICAO-originador-2026-07-29.md
+                             O MAPA DAS 41 linhas do rateio -> originador, depois
+                             de o dono decidir que o originador e o vendedor_origem
+                             ate segunda ordem. Tres nomes. A coluna `fonte` e o
+                             que importa: 28 atribuicoes o financeiro LE nas views,
+                             12 existem no CRM e sao INVISIVEIS a elas (card em
+                             etapa normal; a view expoe so `won`) e 1 e
+                             desconhecida (lead arquivado). Este documento e o
+                             unico portador das 12 - Q-ORIGVEND-01
 MAPA-UX-2026-07-29.md        a revisao de UX da SPA: caixa de sentenca, rotas
                              por caminho, busca/filtro/ordenacao, tema claro
                              como padrao. O que ficou de fora esta la, com nivel
@@ -115,7 +137,7 @@ src/repos/unidade_consumidora.ts  cadastro da UC. NAO edita rateio - ver rateio.
 src/repos/usina.ts           usina e geracao mensal. Decimal entra como STRING
 src/repos/originador.ts      documento OBRIGATORIO aqui; R20 congela no contrato
 src/repos/prontidao.ts       o que FALTA para uma competencia poder ser faturada.
-                             Nove camadas de uma vez, com dono nomeado. Conta e
+                             DEZ camadas de uma vez, com dono nomeado. Conta e
                              NAO decide. `nao_medido` nao e `ok`
 src/repos/rateio.ts          R11, o teto de 100% por usina. Unico caminho de escrita
 src/repos/dono_usina.ts      para quem vai o repasse. Exige PIX ou conta completa
@@ -133,7 +155,9 @@ src/dominio/faturamento.ts   quem entra no lote e quem e recusa contada
 src/dominio/split.ts         PRD 5.3 a 5.5, funcao PURA. O liquido G3 e subtracao
 src/sicoob/porta.ts          a interface. Nenhum tipo aceita segredo - so credencial_ref
 src/sicoob/falso.ts          adaptador determinista, com memoria. Sem rede
-src/http/rotas.ts            as 37 rotas. A matriz de papeis NAO e aplicada aqui
+src/http/rotas.ts            as 78 rotas (contadas em 29/07; eram 37 quando a
+                             matriz fechou, em 27/07). A matriz de papeis NAO e
+                             aplicada aqui
 src/http/servidor.ts         node:http puro. O Autenticador vem de FORA, por injecao.
                              A API mora sob /api; todo o resto e a SPA. Travessia
                              barrada por RESOLUCAO de caminho, nao por filtro de ".."
@@ -141,7 +165,10 @@ scripts/servir.ts            O ENTRYPOINT. `npm start` (producao) / `npm run ser
                              (local). Sobe a API e serve web/dist se existir
 web/                         A SPA: React + Vite, tsconfig proprio. `npm run web:dev`
                              (5173, com proxy para a 3000) e `npm run web:build`.
-                             Oito telas, na ORDEM das camadas da prontidao
+                             ONZE telas: as quatro de cadastro na ORDEM das
+                             camadas da prontidao, e depois a ordem dos ATOS do
+                             dinheiro - Carteira (compor), Faturas (emitir,
+                             boleto, baixa), Cobranca (o conector) e Relatorios
 web/src/tema.ts              CORES E TIPOGRAFIA, num lugar so. A paleta e a DA G3
                              desde 28/07; o que esta marcado [derivado] (estados
                              semanticos, tema escuro, hover) segue sendo escolha
@@ -156,17 +183,90 @@ web/src/dados.ts             `useDados`/`useAcao` e o `emLotes`. NENHUMA tela
                              nao limita nada
 web/tests/lotes.ts           a primeira suite do web/. Prende o teto nos dois
                              sentidos: respeitado E atingido
+web/src/contrato-regras.ts   as condicoes de criacao de contrato, PURAS e fora
+                             do .tsx - o runner do web/ nao le JSX, entao regra
+                             dentro do componente e inalcancavel por teste
+                             (regra 8). E aqui que mora a Q-ORIGINADOR-01: sem
+                             originador o botao TRAVA
+web/src/cobranca-regras.ts   as regras da cobranca, PURAS e fora do .tsx. Duas
+                             coisas: a REGRA 5 no formulario - o campo pede uma
+                             referencia, e colar PEM, JWT, client_secret ou
+                             base64 longo TRAVA o botao com o sinal nomeado -, e
+                             o espelho das transicoes do servidor (so rascunho
+                             emite, so emitida ganha boleto, baixa so em emitida
+                             ou vencida), cada uma citando a linha que manda
+web/tests/cobranca.ts        as 19 verificacoes dessas regras, nos dois sentidos.
+                             Inclui o total da baixa ao CENTAVO, soma de inteiros
+web/src/csv.ts               a exportacao, pura: separador `;` (Excel pt-BR), BOM
+                             UTF-8, escape das aspas e do `;`, e dinheiro por
+                             STRING a partir dos centavos - a regra 1 vale na
+                             SAIDA tambem, que e onde ninguem procura
+web/tests/csv.ts             as 16 verificacoes do CSV. `paraCsv` e testavel
+                             porque o download mora em `baixar.ts`, separado
+web/src/baixar.ts            o clique que baixa o arquivo. Toca `document` e
+                             `URL`, que o runner do web/ nao tem - e por isso
+                             esta FORA do csv.ts
+web/src/telas/faturas.tsx    o caminho que faltava: emitir (lote e unitaria),
+                             pedir o boleto, ver linha digitavel e Pix, e a BAIXA
+                             MANUAL - que e o unico gatilho de split que funciona
+                             sem certificado A1. Exporta CSV da competencia
+web/src/telas/cobranca.tsx   o conector da Sicoob e o estado do A1. O 412 do
+                             servidor e RESPOSTA ("nao ha conector"), nao falha
+                             de leitura, e a tela distingue os dois. Diz o que
+                             falta para um boleto ser pagavel, com o ID da questao
+web/src/telas/relatorios.tsx repasse por dono, comissao por originador e uso da
+                             usina - as tres views do banco, que ja respondiam e
+                             nao tinham tela. Cada uma com CSV
+web/src/telas/documento.tsx  a aba da logo, dos campos e da PREVIA imprimivel. A
+                             previa E o documento: ela pinta o retorno de
+                             `GET /faturas/:id/documento`, a mesma rota que o CRM
+                             vai consumir. `window.print()` gera o PDF, e o CSS de
+                             impressao esta no ui.tsx
+web/tests/contrato.ts        as 9 verificacoes dessas regras. A do originador nos
+                             DOIS sentidos - trava sem, destrava com
 src/http/erros.ts            erro de dominio -> HTTP. 500 nao vaza mensagem interna
 src/auth/jwt.ts              JWT do Supabase por node:crypto. O alg sai da CHAVE, nao do header
 src/auth/autenticador.ts     Bearer -> auth_user_id. Auth PROPRIO (MT-06 resolvida)
 src/dominio/documento.ts     CPF e CNPJ, inclusive alfanumerico (31/07/2026)
+src/dominio/brcode.ts        O BR CODE do Pix estatico - EMV TLV + CRC16/CCITT-FALSE.
+                             PURO e com 33 verificacoes, porque os dois modos de
+                             falha nao se parecem: CRC errado o app RECUSA (ninguem
+                             perde dinheiro); chave ou valor errados com CRC certo
+                             o app ACEITA, e num Pix estatico nao ha txid por
+                             fatura para conciliar depois. Valor entra em CENTAVOS
+src/dominio/layout-do-documento.ts
+                             As linhas do documento, na ordem e formatadas. O
+                             PADRAO vive aqui, nao no banco: `campo_do_documento`
+                             vazio significa "usa o padrao", e semear um padrao na
+                             migration decidiria o layout de todo tenant futuro.
+                             AUSENTE NAO E ZERO, e vale para dinheiro tambem -
+                             `valor_total_centavos` e GENERATED e aceita nulo
+src/repos/documento.ts       identidade, logo, campos e `paraFatura` - a composicao
+                             do documento. Esta no SERVIDOR de proposito: a
+                             decisao 4 pediu a rota do CRM preparada, e o CRM nao
+                             roda React. A tela e um dos dois consumidores, nao a
+                             dona do formato
 src/crm/conexao.ts           pool do CRM. RECUSA o arranque se a credencial tiver
                              escrita, BYPASSRLS ou alcance fora de financeiro.*
 src/crm/leitura.ts           PONTO UNICO de leitura. SQL constante, lista fechada
                              das 8 views. Nao ha funcao que aceite nome de tabela
 src/crm/sincronizacao.ts     o ciclo: dedup, idempotencia, recusas contadas e a
                              reconciliacao em tres classes. Porta INJETADA
-prisma/migrations/           DEZOITO, em ordem. 16 traz a carteira, 17 o split e a
+prisma/migrations/           VINTE, em ordem. A 19 traz o documento de
+                             cobranca: identidade (Pix recebedor + metadado da
+                             logo), o binario em tabela propria e o layout por
+                             tenant com a lista de campos FECHADA POR ENUM. A
+                             logo audita por PROPAGACAO - bytea em to_jsonb custa
+                             2,00x (medido), entao o gatilho carimba o sha256 na
+                             tabela auditada em vez de jogar o arquivo na trilha.
+                             O mime sai da ASSINATURA do arquivo, nao do rotulo:
+                             SVG e recusado porque a logo e embutida no HTML.
+                             A 20 acrescenta UNIQUE (tenant_id, identidade_id),
+                             redundante para o banco e NECESSARIA para o gerador:
+                             sem ela o db pull produz uma relacao to-one que o
+                             prisma generate recusa com P1012. E a regra 11 numa
+                             direcao nova - ver Q-PRISMA11B-01.
+                             16 traz a carteira, 17 o split e a
                              parcela da comissao, 18 o conector de cobranca. As
                              quinze primeiras: 13 fecha Q-AUDIT-01 e Q-DISTRIB-01;
                              14 traz conector_execucao; 15 corrige o gatilho de
@@ -214,7 +314,11 @@ tests/dominio-carteira.ts    os dois motores SEM banco. A invariante do centavo
                              em 2.000 combinacoes
 tests/repos-carteira.ts      o ciclo do dinheiro ponta a ponta, pela role sem
                              BYPASSRLS e pelo adaptador falso
-tests/                       448 verificacoes em 22 suites. `npm test` roda todas
+tests/                       571 verificacoes em 27 suites. `npm test` roda todas.
+                             A CONTAGEM E `npm test | grep -c '^ok '`, e o metodo
+                             esta escrito aqui porque os numeros anteriores (461,
+                             496) vinham de uma soma que nao se reproduzia: so 15
+                             das 27 suites anunciam total proprio
 tsconfig.json                `npm run typecheck` = tsc --noEmit. Roda no CI
 ```
 
@@ -241,7 +345,7 @@ Decidido e medido, não opinado. Detalhe em `adr/ADR-0003` r2.
 
 ## Como aplicar as migrations
 
-As migrations são **SQL puro**, não geradas por `prisma migrate dev`. São **dezoito**, e a ordem importa. As três primeiras montam a fundação, conforme a `SPEC-001` §3.2:
+As migrations são **SQL puro**, não geradas por `prisma migrate dev`. São **vinte**, todas aplicadas em produção (as duas últimas em 30/07). A ordem importa. As três primeiras montam a fundação, conforme a `SPEC-001` §3.2:
 
 ```
 prisma/migrations/20260725120000_fundacao_schema/   tabelas, enums, as 10 FKs compostas
@@ -258,7 +362,7 @@ npx prisma migrate deploy    # transacional POR MIGRATION. E o que salva de meia
 Validar num banco limpo:
 
 ```bash
-npm test          # typecheck + as 22 suites, 448 verificacoes
+npm test          # typecheck + as 27 suites, 571 verificacoes (linhas `ok`)
 npm run typecheck # sozinho, tsc --noEmit
 ```
 
@@ -310,8 +414,8 @@ A lista completa, com dono nomeado, está em `RESUMO-SESSAO-7` §Pendências ger
 
 | Item | Estado |
 |---|---|
-| **`Q-ORIGINADOR-01`** | 🔴 **Vem antes dos 39 contratos.** Produção tem **zero** originadores e o contrato **não tem caminho de edição** — `originador_id` e o tier congelado (R20-b) só se escrevem no `rascunhar`. Digitar os 39 hoje grava nulo nos 39, e `src/repos/split.ts:164` só monta comissão quando os dois existem: o split roda, fecha e **não paga**, sem erro e sem log. Aberta em 29/07 |
-| **`Q-PRONTIDAO-COMIS-01`** | 🟡 E a prontidão não avisaria: a camada `regra_de_comissao` filtra `IS NOT NULL` nos dois lados, então 39 contratos sem originador lêem `nao_medido` — o **mesmo `?`** que hoje significa universo vazio. Depende da `Q-ORIGINADOR-01`; não corrigida de propósito |
+| **`Q-ORIGINADOR-01`** | ✅ **Fechada em 29/07 na opção (a)** — as UCs da carteira **levam** originador, e a comissão está inteira pela frente: ninguém recebeu nada ainda, então `faturas_cheias_pagas` nascer em 0 é o valor **certo** e não a armadilha que parecia. A premissa que acompanhava a resposta (*"nenhuma venda foi efetivada"*) foi conferida contra o CRM antes de gravar, **não fechou** — `Clientes ativos - Assinatura`/ATIVOS tem 29 cards — e foi retirada pelo dono. A decisão não muda; a **base** dela sim: sustenta-se em **testemunho**, não em medição. Nada nos dois sistemas registra comissão paga por fora — ver `QUESTOES` §9. O campo é **obrigatório na tela**; `originador_id` segue nullable no banco de propósito. ~~**Falta o insumo, não a decisão: a lista de originadores**~~ — **29/07, noite: o eixo foi decidido e o insumo encolheu.** *"O originador vai ser o `vendedor_origem` até segunda ordem"*: a lista fechou em **três nomes** (Renata 49 ganhos, Out Sales 29, Jezielly Vieira 1) e a atribuição por UC ficou medida para 40 das 41 — **12 delas por um caminho que o financeiro não consegue ler**. Ver **`Q-ORIGVEND-01`** e `ATRIBUICAO-originador-2026-07-29.md`. Falta o que nenhuma consulta entrega: **três CPF/CNPJ**, a natureza, a confirmação do tipo e uma UC arquivada |
+| **`Q-PRONTIDAO-COMIS-01`** | ✅ **Fechada em 29/07** — era a contagem que faltava, e a `Q-ORIGINADOR-01` disse qual das duas direções valia. Décima camada da prontidão, `originador_do_contrato`: *"nenhum contrato"* segue `nao_medido` e *"contrato sem originador"* é `pendente`. Os dois `?` que eram o mesmo agora se distinguem. `K18f`–`K18i`, com a contagem conferida **contra a tabela** e não contra número fixo |
 | **Bootstrap — o primeiro `plataforma_admin`** | 🟡 **Script pronto e provado; falta o `COMMIT`.** `scripts/bootstrap-plataforma-admin.sql`, com `-v modo=ensaio\|valendo` — sem default, porque script de provisionamento que escreve por esquecimento é o modo de falha errado. Conta criada no Supabase Auth (`efcc8e11-…`) e ensaio rodado contra ela: `usuario` + tier criados, `app.resolver_login` devolveu `tier = plataforma_admin`, 2 linhas de trilha, `ROLLBACK` deixou tudo em zero. `app_financeiro` continua sem `INSERT` nessa tabela, de propósito |
 | **Role LOGIN de runtime + `DATABASE_URL`** | ✅ **Fechado em 27/07** — `app_financeiro_login`, `NOSUPERUSER NOBYPASSRLS`. Isolamento provado conectado por ela: usuário de A apontando o contexto para o tenant B lê **0 linhas** e tem a escrita recusada. O composition root recusa o arranque se a role tiver `BYPASSRLS` |
 | **Reunião com o contador** | ✅ **Fechada em 28/07.** As dez voltaram respondidas; três lacunas (a 1 com duas marcas, a 3b questionada, a 4b em branco) fechadas por decisão do dono no mesmo dia; a 6a virou `Q-PAUTA-6A-01`. Fecharam a `Q-021` e a `Q-011`, e a `RATEIO-USO-01` caiu de 🔴 para 🟡. De-para na tabela final da `PAUTA-contador.md`, efeito de cada uma em `QUESTOES.md` §9 |

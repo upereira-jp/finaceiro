@@ -1,0 +1,182 @@
+// BR CODE - o "Pix copia e cola" e o conteudo do QR estatico.
+//
+// De onde ele vem: a decisao 5 da `Q-DOCFATURA-01`, em 30/07. Enquanto nao houver
+// certificado A1, o documento sai sem faixa de boleto e com um QR Pix ESTATICO,
+// gerado por nos. Fora isto, quem produz o Pix e a Sicoob, junto com o boleto.
+//
+// ------------------------------------------------------------------------
+// POR QUE ESTE MODULO E PURO, E POR QUE ISSO NAO E PREFERENCIA.
+//
+// Uma string de BR Code errada tem dois modos de falha, e eles sao muito
+// diferentes entre si:
+//
+//   - CRC errado ou TLV malformado: o aplicativo do banco RECUSA. Barulhento, o
+//     cliente reclama no mesmo dia, ninguem perde dinheiro.
+//   - chave ou valor errados, com CRC certo: o aplicativo ACEITA. O cliente paga.
+//     O dinheiro vai para outro lugar, ou vai o valor errado, e o sistema nao tem
+//     como saber - o Pix estatico nao tem `txid` por fatura, entao a conciliacao
+//     e manual (`Q-DOCFATURA-01`, decisao 5).
+//
+// O segundo e silencioso e e sobre dinheiro de terceiro. Por isso o BR Code nao
+// e montado dentro de um componente nem dentro de um repositorio: e funcao pura,
+// com suite propria, e o valor entra em CENTAVOS INTEIROS - a conversao para os
+// "0.00" que o padrao exige e feita por TEXTO, sem divisao e sem float (regra 1).
+//
+// ------------------------------------------------------------------------
+// O QUE O PADRAO PEDE (EMV MPM, Manual de Padroes do BACEN):
+//
+// O payload e uma sequencia de campos `IITTvalor`, onde II e o id de dois digitos
+// e TT o tamanho de dois digitos. Campos aninhados repetem a forma dentro do
+// valor. O ultimo campo e sempre `6304` seguido do CRC16 em hex maiusculo, e o
+// CRC e calculado SOBRE a string inteira ja incluindo os literais `6304`.
+//
+// CRC16/CCITT-FALSE: polinomio 0x1021, inicial 0xFFFF, sem reflexao, sem XOR
+// final. Ele NAO e o CRC16 mais comum das bibliotecas - trocar de variante da um
+// codigo que so falha no celular do cliente.
+
+/** Dinheiro, sempre inteiro, sempre centavos - igual ao resto do sistema. */
+export type Centavos = number;
+
+export class BrCodeInvalido extends Error {
+  constructor(m: string) { super(`BR Code: ${m}`); this.name = 'BrCodeInvalido'; }
+}
+
+/**
+ * `1234` -> `"12.34"`. Por TEXTO, e o padrao exige ponto como separador.
+ *
+ * Nao ha `c / 100` aqui pelo mesmo motivo do `web/src/dinheiro.ts`: em ponto
+ * flutuante `815 / 100 * 100` nao volta 815, e o valor daqui vai numa cobranca.
+ */
+export function valorParaBrCode(centavos: Centavos): string {
+  if (!Number.isSafeInteger(centavos)) throw new BrCodeInvalido(`valor ${centavos} nao e inteiro seguro`);
+  if (centavos < 0) throw new BrCodeInvalido('valor negativo');
+  const s = String(centavos).padStart(3, '0');
+  return `${s.slice(0, -2)}.${s.slice(-2)}`;
+}
+
+/** CRC16/CCITT-FALSE, como o Manual de Padroes do BACEN exige. */
+export function crc16(texto: string): string {
+  let crc = 0xffff;
+  // `charCodeAt` basta porque tudo que chega aqui ja passou por `apenasAscii`:
+  // acentuacao viraria dois bytes em UTF-8 e o CRC sairia de um byte que o
+  // celular nao ve.
+  for (let i = 0; i < texto.length; i++) {
+    crc ^= texto.charCodeAt(i) << 8;
+    for (let b = 0; b < 8; b++) {
+      crc = (crc & 0x8000) !== 0 ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff;
+    }
+  }
+  return crc.toString(16).toUpperCase().padStart(4, '0');
+}
+
+/**
+ * Um campo `IITTvalor`.
+ *
+ * O tamanho e de DOIS digitos e nao ha campo de 100+ caracteres no que montamos:
+ * quem estourar isso levanta, em vez de gerar um payload que o leitor corta no
+ * meio e interpreta como outro campo.
+ */
+export function campo(id: string, valor: string): string {
+  if (!/^\d{2}$/.test(id)) throw new BrCodeInvalido(`id "${id}" nao tem dois digitos`);
+  if (valor.length > 99) throw new BrCodeInvalido(`campo ${id} tem ${valor.length} caracteres, o maximo e 99`);
+  return `${id}${String(valor.length).padStart(2, '0')}${valor}`;
+}
+
+/**
+ * Acentuacao fora, maiusculas dentro, e o corte no tamanho do padrao.
+ *
+ * Nome do recebedor aceita 25 e cidade 15 (campos 59 e 60). O banco ja recusa
+ * acima disso (`identidade_de_cobranca`), mas cortar aqui tambem importa: um
+ * payload de 26 caracteres no campo 59 e recusado pelo aplicativo, e o sintoma
+ * aparece no celular de quem ia pagar.
+ */
+export function apenasAscii(texto: string, maximo: number): string {
+  return texto
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')  // "João" -> "Joao"
+    .replace(/[^\x20-\x7e]/g, '')
+    .trim().toUpperCase().slice(0, maximo);
+}
+
+export type PixEstatico = {
+  /** A chave Pix do recebedor - CPF/CNPJ so digitos, e-mail, telefone ou aleatoria. */
+  chave: string;
+  /** Nome do recebedor. Cortado em 25 caracteres ASCII. */
+  recebedorNome: string;
+  /** Cidade do recebedor. Cortada em 15. */
+  recebedorCidade: string;
+  /**
+   * Valor em centavos, ou `null` para QR sem valor (o pagador digita).
+   *
+   * COM valor e o que o documento usa: o cliente nao deve ter de digitar o total
+   * de uma fatura de energia. Sem valor existe porque um QR de mostruario e caso
+   * legitimo, e omitir o campo 54 e diferente de manda-lo em zero.
+   */
+  valorCentavos: Centavos | null;
+  /**
+   * Identificador da transacao, campo 62-05. Ate 25 caracteres alfanumericos.
+   *
+   * `***` e o valor que o padrao define como "sem identificador", e e o default
+   * DELIBERADO aqui: Pix estatico nao carrega `txid` por fatura, e por isso a
+   * conciliacao e manual. Passar um `txid` proprio nao o torna conciliavel
+   * automaticamente - o extrato nao o devolve num Pix estatico.
+   */
+  txid?: string;
+};
+
+/**
+ * Monta o BR Code estatico. E a unica funcao que o resto do sistema chama.
+ *
+ * A ORDEM DOS CAMPOS NAO E LIVRE: o padrao pede id crescente, e alguns
+ * aplicativos recusam fora de ordem. Ela esta fixa aqui e o teste a prende.
+ */
+export function pixEstatico(p: PixEstatico): string {
+  const chave = p.chave.trim();
+  if (!chave) throw new BrCodeInvalido('chave vazia');
+  if (chave.length > 77) throw new BrCodeInvalido(`chave com ${chave.length} caracteres, o maximo e 77`);
+
+  const nome = apenasAscii(p.recebedorNome, 25);
+  const cidade = apenasAscii(p.recebedorCidade, 15);
+  if (!nome) throw new BrCodeInvalido('nome do recebedor vazio depois de normalizar');
+  if (!cidade) throw new BrCodeInvalido('cidade do recebedor vazia depois de normalizar');
+
+  const txid = apenasAscii(p.txid ?? '***', 25).replace(/[^A-Z0-9*]/g, '') || '***';
+
+  const merchant =
+    campo('00', 'br.gov.bcb.pix') +   // GUI, obrigatorio e sempre este
+    campo('01', chave);
+
+  const partes = [
+    campo('00', '01'),               // versao do payload
+    // 010211 = estatico (reutilizavel). 010212 seria de uso unico, e um QR de uso
+    // unico num documento que a pessoa guarda e pior que nao ter QR.
+    campo('01', '11'),
+    campo('26', merchant),
+    campo('52', '0000'),             // categoria do comerciante: nao informada
+    campo('53', '986'),              // BRL
+    ...(p.valorCentavos != null ? [campo('54', valorParaBrCode(p.valorCentavos))] : []),
+    campo('58', 'BR'),
+    campo('59', nome),
+    campo('60', cidade),
+    campo('62', campo('05', txid)),
+  ];
+
+  // O CRC entra sobre a string JA COM os literais `6304`. Calcular antes de
+  // acrescenta-los da um codigo que o aplicativo recusa - e e o erro classico
+  // desta implementacao.
+  const semCrc = `${partes.join('')}6304`;
+  return `${semCrc}${crc16(semCrc)}`;
+}
+
+/**
+ * Confere um BR Code recebido de fora: o CRC dos ultimos 4 caracteres bate?
+ *
+ * Existe para o teste poder verificar a propria saida sem repetir a conta, e para
+ * o dia em que um BR Code vier da Sicoob e alguem quiser conferir antes de
+ * imprimir. Nao valida semantica - so integridade.
+ */
+export function crcConfere(brcode: string): boolean {
+  if (brcode.length < 8) return false;
+  const corpo = brcode.slice(0, -4);
+  if (!corpo.endsWith('6304')) return false;
+  return crc16(corpo) === brcode.slice(-4).toUpperCase();
+}

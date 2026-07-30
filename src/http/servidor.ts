@@ -195,6 +195,18 @@ async function lerCorpo(req: IncomingMessage, max: number): Promise<any> {
 function responder(res: ServerResponse, r: Resultado): void {
   if (r.status === 413) res.setHeader('connection', 'close');
   if (r.status === 204 || r.corpo === undefined) { res.writeHead(r.status); res.end(); return; }
+
+  /*
+   * CORPO CRU quando a rota declara o tipo. Uma rota so usa isto hoje - a logo
+   * do documento -, e o `no-store` e deliberado: a logo e dado de UM tenant, e
+   * um cache intermediario que a guardasse por URL a entregaria para o tenant
+   * seguinte, que e vazamento entre empresas por caminho que a RLS nao ve.
+   */
+  if (r.tipo) {
+    res.writeHead(r.status, { 'content-type': r.tipo, 'cache-control': 'no-store, private' });
+    res.end(r.corpo as Uint8Array | string);
+    return;
+  }
   // BigInt aparece em count do Postgres e quebra JSON.stringify sem replacer.
   // Decimal do Prisma tem toJSON proprio e sai como string - o que e o certo:
   // numero de ponto flutuante em JSON e exatamente o que a regra 1 proibe.

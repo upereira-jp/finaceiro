@@ -314,6 +314,66 @@ BEGIN
   IF txt IS NULL THEN RAISE NOTICE 'ok   G2   inv.17 toda tabela de negocio ou de papel tem gatilho de auditoria';
   ELSE RAISE WARNING 'FALHA G2 inv.17 sem gatilho: %', txt; falhas := falhas + 1; END IF;
 
+  /*
+   * 17-b: o gatilho chamado `auditar_*` EXECUTA `app.auditar()`.
+   *
+   * Acrescentado em 30/07, e o motivo e um caso concreto: `logo_de_cobranca`
+   * guarda um bytea, e `to_jsonb` de bytea ocupa 2,00x (medido) - auditar a linha
+   * inteira poria 1,2 MB na trilha por troca de uma logo de 300 KB. Ela audita
+   * por PROPAGACAO: o gatilho carimba o sha256 na tabela de identidade, que e
+   * auditada, e a trilha registra antes/depois do hash.
+   *
+   * O invariante 17 sozinho aceitaria isso - e aceitaria tambem um gatilho
+   * chamado `auditar_qualquer_coisa` que nao auditasse NADA. Este fecha o furo: a
+   * excecao tem de estar nomeada aqui, com o mecanismo. A lista branca e de UMA
+   * linha de proposito; a segunda entrada deve doer.
+   */
+  SELECT string_agg(format('%s.%s -> %s', c.relname, t.tgname, p.proname), ', ') INTO txt
+  FROM pg_trigger t
+  JOIN pg_class c ON c.oid = t.tgrelid
+  JOIN pg_namespace ns ON ns.oid = c.relnamespace AND ns.nspname = 'public'
+  JOIN pg_proc p ON p.oid = t.tgfoid
+  WHERE t.tgname LIKE 'auditar_%' AND NOT t.tgisinternal
+    AND p.proname <> 'auditar'
+    AND c.relname NOT IN ('logo_de_cobranca');
+  IF txt IS NULL THEN RAISE NOTICE 'ok   G2b  inv.17-b gatilho auditar_* executa app.auditar(), fora da lista branca nomeada';
+  ELSE RAISE WARNING 'FALHA G2b inv.17-b gatilho que nao audita: %', txt; falhas := falhas + 1; END IF;
+
+  -- 17-c: e a propagacao da logo funciona - o hash chega na tabela auditada, e
+  -- ele e o do CONTEUDO. Sem isto o 17-b seria uma lista branca sem prova.
+  BEGIN
+    PERFORM set_config('app.tenant_id', A::text, true);
+    INSERT INTO identidade_de_cobranca (tenant_id) VALUES (A) RETURNING id INTO utA;
+    INSERT INTO logo_de_cobranca (tenant_id, identidade_id, conteudo)
+      VALUES (A, utA, decode('89504e470d0a1a0a', 'hex'));
+    SELECT logo_sha256 || ' ' || logo_mime INTO txt FROM identidade_de_cobranca WHERE tenant_id = A;
+    IF txt = encode(sha256(decode('89504e470d0a1a0a', 'hex')), 'hex') || ' image/png' THEN
+      RAISE NOTICE 'ok   G2c  a logo audita por propagacao: sha256 do CONTEUDO e mime pela ASSINATURA';
+    ELSE
+      RAISE WARNING 'FALHA G2c propagacao da logo: veio %', coalesce(txt, '(nulo)');
+      falhas := falhas + 1;
+    END IF;
+    DELETE FROM logo_de_cobranca WHERE tenant_id = A;
+    SELECT coalesce(logo_sha256, '(limpo)') INTO txt FROM identidade_de_cobranca WHERE tenant_id = A;
+    IF txt = '(limpo)' THEN
+      RAISE NOTICE 'ok   G2d  e apagar a logo LIMPA o metadado - o hash de uma imagem que nao existe mais mentiria';
+    ELSE RAISE WARNING 'FALHA G2d metadado sobreviveu ao DELETE: %', txt; falhas := falhas + 1; END IF;
+  END;
+
+  -- 17-e O SENTIDO QUE IMPORTA: SVG rotulado como imagem NAO entra. O mime e
+  -- reconhecido pela assinatura justamente porque a logo e embutida no HTML do
+  -- documento, e SVG executa script. Sem este par, o G2c passaria com a
+  -- verificacao de tipo removida.
+  BEGIN
+    INSERT INTO logo_de_cobranca (tenant_id, identidade_id, conteudo)
+      VALUES (A, utA, convert_to('<svg onload="alert(1)"></svg>', 'UTF8'));
+    RAISE WARNING 'FALHA G2e um SVG entrou como logo';
+    falhas := falhas + 1;
+  EXCEPTION WHEN raise_exception THEN
+    RAISE NOTICE 'ok   G2e  SVG (e qualquer coisa que nao seja PNG/JPEG) e RECUSADO pela assinatura, nao pelo rotulo';
+  END;
+  DELETE FROM identidade_de_cobranca WHERE tenant_id = A;
+
   -- 18: append-only por PRIVILEGIO, nao por convencao. E a checagem que pega o
   -- ALTER DEFAULT PRIVILEGES da migration 2 reconcedendo DML numa tabela nova.
   IF has_table_privilege('app_financeiro','auditoria','UPDATE')
@@ -370,5 +430,5 @@ BEGIN
 
   -- ==============================================================
   IF falhas > 0 THEN RAISE EXCEPTION '% falha(s) em auditoria e repasse', falhas;
-  ELSE RAISE NOTICE '--- auditoria e repasse: 31 verificacoes, 0 falhas'; END IF;
+  ELSE RAISE NOTICE '--- auditoria e repasse: 35 verificacoes, 0 falhas'; END IF;
 END $bloco$;
