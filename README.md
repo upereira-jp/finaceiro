@@ -57,6 +57,27 @@ Em **2026-07 só 14 das 39** UCs teriam geração. **A competência mais complet
 
 ---
 
+## As duas vertentes, e quanto de cada uma existe
+
+Revisão de 30/07, medida contra produção — **`REVISAO-VERTENTES-2026-07-30.md`**. O dono descreveu o sistema em duas vertentes, e as duas já têm nome no `PRD`:
+
+| Vertente | Nome no `PRD-v2.2` | Fase | Situação |
+|---|---|:--:|---|
+| **do cliente** — fatura, pagamento, quem pagou e quem não pagou | §4.3 Carteira | F2 · F3 | **construída**, parada por insumo humano |
+| **da empresa** — contas a pagar e a receber, pagamento de fornecedor e de funcionário, comissão, compras, cartão | §4.4 Corporativo | F4 · F5 | **0 de 13 entidades · 0 de 85 rotas · 0 de 12 telas** |
+
+**Não há escopo novo nisso** — está no PRD desde a v2.2. O que a revisão acrescentou são três coisas:
+
+**1. O ponto de encontro das duas está pela metade, e é a `Q-PAGAMENTO-01` 🔴.** O `PRD` §5.5 manda **quatro** escritas na mesma transação do split; `src/repos/split.ts` grava **duas** — `split_execucao` e `split_item`. E `split_item` **não tem coluna de pagamento**. No dia em que a primeira fatura for paga, o sistema saberá ao centavo **quanto** o dono da usina e o originador têm a receber, e **não terá onde registrar que foram pagos** — os relatórios são extrato de *apuração*, não de *quitação*, e nada impede pagar duas vezes. **A janela para decidir sem migration fecha na primeira liquidação**, enquanto `split_item` tem 0 linhas.
+
+**2. "Responsáveis dos leads" não é o eixo decidido, e tem prazo — `Q-EIXO-FUNCIONARIO-01` 🔴.** O eixo em vigor é o `vendedor_origem` (29/07); os dois **divergem em 43 dos 80 ganhos**, e nos 15 cards do funil `Rateio` o `responsavel` é a mesma pessoa em 15 de 15. Confirmar custa uma frase; não confirmar custa uma reescrita, porque a **R20-b congela o tipo no rascunho e não há edição**.
+
+**3. A inadimplência existe como visão e não como registro — `Q-INADIMPLENCIA-01` 🟡.** *"Quem não pagou"* o sistema responde; *"o que já se fez a respeito"* não tem onde ser gravado, e o `PRD` §4.3 proíbe usar a etapa `INADIMPLENTES` do CRM como fonte.
+
+**E um sinal que vale mais que a contagem:** o placar por fase do `QUESTOES.md` **não tinha linha para F4 nem para F5**. Não estavam atrasadas — nunca entraram no registro. Corrigido.
+
+---
+
 ## Os seis defeitos de 30/07, e de onde cada um veio
 
 Nenhum foi achado por auditoria. Três apareceram ao **construir em volta do código**; **três apareceram com o dono usando o sistema pela primeira vez** — e essa mudança de origem é o achado da sessão. Nenhum aparecia em revisão, e nenhum tinha teste.
@@ -86,7 +107,9 @@ Ou seja: **nenhuma descoberta, só um cabeçalho que não acompanhou o registro 
 
 Nesta ordem. Cada documento pressupõe o anterior.
 
+0. **`RETOMADA-2026-07-30.md`** — **se você está retomando o trabalho, leia este primeiro: dois minutos, e diz onde tudo parou.** Traz o que está por commitar, as duas perguntas que travam trabalho caro e o que **não** fazer em seguida
 0. **`ROTEIRO-REVISAO.md`** — **se o que você quer é usar o sistema e conferir, comece aqui e não no resto.** Passo a passo do que abrir, o que esperar ver e **o que significa se vier diferente** — incluindo o teste que nenhum comando faz: **ler o QR com a câmera do celular**
+1. **`REVISAO-VERTENTES-2026-07-30.md`** — **se a pergunta é "o sistema cobre o financeiro da empresa também?", comece aqui.** A revisão das duas vertentes contra produção: o que existe da carteira do cliente, o zero do módulo corporativo, e o `PRD` §5.5 implementado pela metade entre as duas
 1. **`RESUMO-SESSAO-16.md`** — **comece por aqui.** A sessão em que o sistema foi **usado por uma pessoa pela primeira vez**, e quatro dos seis defeitos vieram daí. Traz a agenda de cobrança, o importador de tarifas, os dois renomes do dono — e a §5, que mede o caminho para a primeira fatura contra produção
 2. **`RESUMO-SESSAO-15.md`** As três pendências do documento de cobrança fechadas, e o achado que apareceu ao **remedir** o CRM antes de construir: 76 merges de lead em 30/07 tornaram `lead.codigo` instável, tiraram um nome da lista de originadores e moveram duas atribuições de comissão. A §2 conta os dois defeitos que a verificação do QR pegou — um deles dentro do próprio instrumento de medida
 2. **`RESUMO-SESSAO-14.md`** — A sessão do caminho de cobrança: o eixo do originador decidido e medido, as três telas que faltavam, as duas migrations e as cinco decisões do documento. Traz também os quatro erros meus que o processo pegou, com o que cada um ensinou
@@ -132,6 +155,14 @@ SPEC-003-carteira.md         spec da F2 e F3 — faturamento, cobranca e split.
                              Escrita DEPOIS das respostas do contador, e a 3
                              diz qual resposta virou qual coluna
 _TEMPLATE-SPEC.md            anatomia fixa das specs
+REVISAO-VERTENTES-2026-07-30.md
+                             As DUAS VERTENTES medidas contra producao: a do
+                             cliente (PRD 4.3, construida) e a da empresa
+                             (PRD 4.4, ZERO de 13 entidades). A 3 e o achado:
+                             o PRD 5.5 manda quatro escritas na transacao do
+                             split e o codigo faz duas - ninguem tem onde
+                             registrar que um repasse foi PAGO, e a janela
+                             para decidir isso fecha na primeira liquidacao
 RESUMO-SESSAO-2.md           passagem da sessao 2
 RESUMO-SESSAO-3.md           passagem da sessao 3
 RESUMO-SESSAO-4.md           passagem da sessao 4
