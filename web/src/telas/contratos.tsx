@@ -39,7 +39,7 @@ import { useState } from 'react';
 import { api, ErroDaApi, type Contrato, type UnidadeConsumidora, type Originador, type Cliente } from '../api.ts';
 import { emLotes, useAcao, useDados } from '../dados.ts';
 import {
-  Pagina, Aviso, Tabela, Campo, ThOrd, useOrdenacao, ordenar, rotulo,
+  Pagina, Aviso, Tabela, Campo, ThOrd, Marca, Icone, useOrdenacao, ordenar, rotulo,
 } from '../ui.tsx';
 import { Ligacao } from '../rota.tsx';
 import { paraCentavos, emReais } from '../dinheiro.ts';
@@ -154,8 +154,9 @@ export function TelaContratos() {
           <strong> fatura cheia</strong>.
           {valor && <> Valor: <strong>{(() => { try { return emReais(paraCentavos(valor)); } catch { return 'inválido'; } })()}</strong>.</>}
         </p>
-        <button className="primario" onClick={criar}
-                disabled={!podeCriarContrato(estado)}>Criar e ativar</button>
+        <button className="primario" onClick={criar} disabled={!podeCriarContrato(estado)}>
+          <Icone nome="contratos" tamanho={15} peso="bold" /> Criar e ativar
+        </button>
         {trava === 'uc_sem_usina' && (
           <Aviso tipo="erro">
             Esta UC não tem usina vinculada. Defina o rateio em <Ligacao para="/unidades">Unidades</Ligacao> antes.
@@ -203,7 +204,7 @@ export function TelaContratos() {
           <tr key={ucid}>
             <td><strong>{numeroUc(ucid)}</strong></td>
             <td className="fraco">{k.data_fechamento?.slice(0, 10)}</td>
-            <td><span className={`marca ${k.status === 'ativo' ? 'ok' : 'pendente'}`}>{rotulo(k.status)}</span></td>
+            <td><Marca tom={k.status === 'ativo' ? 'ok' : 'pendente'}>{rotulo(k.status)}</Marca></td>
             <td className="num">{k.faturas_cheias_pagas}</td>
           </tr>
         ))}

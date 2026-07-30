@@ -2,9 +2,16 @@ import { useState } from 'react';
 import { api, type Cliente } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
-  Pagina, Aviso, Tabela, Campo, Busca, Ferramentas, ThOrd,
+  Pagina, Aviso, Tabela, Campo, Busca, Ferramentas, Filtro, ThOrd, Marca, Icone,
   useOrdenacao, ordenar, contem,
 } from '../ui.tsx';
+
+/** As duas situações de cliente, para o filtro e para a pílula. */
+const SITUACOES = [
+  { valor: '', texto: 'Todas as situações' },
+  { valor: 'ativo', texto: 'Ativos' },
+  { valor: 'inativo', texto: 'Inativos' },
+];
 
 export function TelaClientes() {
   const lista = useDados<Cliente[]>(() => api.get('/clientes?limite=500'));
@@ -41,7 +48,9 @@ export function TelaClientes() {
           <Campo rotulo="Nome" valor={nome} ao={setNome} />
           <Campo rotulo="Documento (CPF ou CNPJ)" valor={doc} ao={setDoc} dica="Opcional" />
           <div style={{ alignSelf: 'end' }}>
-            <button className="primario" onClick={criar} disabled={acao.ocupado || !nome.trim()}>Cadastrar</button>
+            <button className="primario" onClick={criar} disabled={acao.ocupado || !nome.trim()}>
+              <Icone nome="acrescentar" tamanho={15} peso="bold" /> Cadastrar
+            </button>
           </div>
         </div>
         {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
@@ -52,13 +61,11 @@ export function TelaClientes() {
 
       <Ferramentas contagem={todos.length ? `${visiveis.length} de ${todos.length}` : undefined}>
         <Busca valor={busca} ao={setBusca} dica="Buscar por nome ou documento…" />
-        <select value={situacao} aria-label="Filtrar por situação" onChange={(e) => setSituacao(e.target.value)}>
-          <option value="">Todas as situações</option>
-          <option value="ativo">Ativos</option>
-          <option value="inativo">Inativos</option>
-        </select>
+        <Filtro valor={situacao} ao={setSituacao} rotulo="Filtrar por situação" opcoes={SITUACOES} />
         {(busca || situacao) && (
-          <button type="button" onClick={() => { setBusca(''); setSituacao(''); }}>Limpar filtros</button>
+          <button type="button" onClick={() => { setBusca(''); setSituacao(''); }}>
+            <Icone nome="limpar" tamanho={15} /> Limpar filtros
+          </button>
         )}
       </Ferramentas>
 
@@ -74,7 +81,7 @@ export function TelaClientes() {
           <tr key={c.id}>
             <td>{c.nome}</td>
             <td className="fraco">{c.documento ?? '—'}</td>
-            <td><span className={`marca ${c.ativo ? 'ok' : 'pendente'}`}>{c.ativo ? 'Ativo' : 'Inativo'}</span></td>
+            <td><Marca tom={c.ativo ? 'ok' : 'pendente'}>{c.ativo ? 'Ativo' : 'Inativo'}</Marca></td>
           </tr>
         ))}
       </Tabela>

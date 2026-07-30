@@ -5,6 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#F39200" />
     <title>Financeiro G3</title>
+    <!--
+      PRELOAD DA FONTE. Sem ele o browser só descobre a Inter depois de baixar,
+      parsear e EXECUTAR o bundle — porque o @font-face vive num <style> que o
+      React injeta. São duas viagens em série; o preload as põe em paralelo.
+
+      `crossorigin` é obrigatório mesmo sendo mesma origem: requisição de fonte é
+      sempre CORS, e sem o atributo o browser baixa o arquivo DUAS vezes — uma
+      pelo preload e outra pelo @font-face, que não reaproveita a primeira.
+    -->
+    <link rel="preload" href="/fontes/inter-var-latin-v5.3.0.woff2" as="font"
+          type="font/woff2" crossorigin />
     <script>
       // Anti-flash: aplica o tema guardado ANTES do primeiro paint. Duplica de
       // proposito a chave e a regra de `tema.ts` (padrao claro) - importar o

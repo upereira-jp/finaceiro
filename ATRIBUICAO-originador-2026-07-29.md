@@ -1,5 +1,24 @@
 # ATRIBUIÇÃO DE ORIGINADOR — a carteira de 41 linhas
 
+> ## ⚠️ SUPERADO EM 30/07/2026 — NÃO USE ESTE MAPA PARA CADASTRAR
+>
+> **Use `ATRIBUICAO-originador-2026-07-30.md`.** Este arquivo fica como registro datado, com o corpo intacto — reescrevê-lo falsificaria o registro, que é a mesma decisão do `PATCH-citacoes-2026-07-24.md`.
+>
+> O CRM mudou entre a medição deste documento (29/07 22:53Z) e 30/07 03:30Z: **76 merges de lead**, registrados em `financeiro.lead_merges` com origem `merge_leads`. Três consequências, todas medidas:
+>
+> | O que | Neste documento | Em 30/07 |
+> |---|---|---|
+> | **Lista de originadores** | três nomes | **dois** — `Jezielly Vieira` ficou com **zero** cards no CRM |
+> | UC `000406456101252` (RHENAN) — 4.60%, 496,8 kWh | Jezielly Vieira | **Out Sales** |
+> | UC `000407359701237` (ATAIDE) — 18.40%, **1.987,2 kWh** | **Renata** | **Out Sales** |
+> | Peso da Renata | 25 UCs · 80,8% | 24 UCs · **74,2%** |
+> | Peso do Out Sales | 14 UCs · 15,9% | 16 UCs · **24,2%** |
+> | `lead` (a coluna `lead` das tabelas da §4) | os códigos de 29/07 | **39 dos 41 códigos não existem mais** — o merge renumera |
+>
+> **O que este documento acertou e ficou provado:** as **12** atribuições que a §4 marca como fonte `card` — invisíveis às views em 29/07 — ficaram legíveis pela view em 30/07, e **as 12 batem**. As duas que mudaram eram de fonte `view`, não `card`. Não foi o método daqui que errou; foi o dado que se moveu.
+>
+> Ver `Q-CRMCODIGO-01` no `QUESTOES.md`.
+
 | Campo | Valor |
 |---|---|
 | **Decisão** | *"O originador vai ser o `vendedor_origem` até segunda ordem"* — Vinicius, 29/07/2026 |

@@ -9,7 +9,9 @@
 import { useState } from 'react';
 import { api } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
-import { Pagina, Aviso, Tabela, rotulo, linha } from '../ui.tsx';
+import {
+  Pagina, Aviso, Tabela, rotulo, linha, Kpi, Marca, Icone, CampoData,
+} from '../ui.tsx';
 import { competenciaISO, emReais } from '../dinheiro.ts';
 
 type Resumo = {
@@ -48,24 +50,12 @@ export function TelaCarteira() {
             sub="O ensaio roda a triagem e não escreve nada. Compor grava as faturas em rascunho — emitir é um ato separado.">
       {atual && (
         <div className="kpis">
-          <div className="kpi">
-            <div className="nome">Faturado · {String(atual.competencia).slice(0, 7)}</div>
-            <div className="valor">{emReais(atual.faturado_centavos)}</div>
-          </div>
-          <div className="kpi">
-            <div className="nome">Recebido</div>
-            <div className="valor">{emReais(atual.recebido_centavos)}</div>
-          </div>
-          <div className="kpi">
-            <div className="nome">A receber</div>
-            <div className="valor">{emReais(atual.a_receber_centavos)}</div>
-          </div>
-          <div className="kpi">
-            <div className="nome">Vencidas em aberto</div>
-            <div className="valor" style={{ color: atual.vencidas_em_aberto ? 'var(--erro)' : undefined }}>
-              {atual.vencidas_em_aberto}
-            </div>
-          </div>
+          <Kpi nome={<>Faturado · {String(atual.competencia).slice(0, 7)}</>} icone="faturado"
+               valor={emReais(atual.faturado_centavos)} />
+          <Kpi nome="Recebido" icone="recebido" valor={emReais(atual.recebido_centavos)} />
+          <Kpi nome="A receber" icone="a_receber" valor={emReais(atual.a_receber_centavos)} />
+          <Kpi nome="Vencidas em aberto" icone="vencidas" valor={atual.vencidas_em_aberto}
+               tom={atual.vencidas_em_aberto ? 'erro' : undefined} />
         </div>
       )}
 
@@ -73,11 +63,15 @@ export function TelaCarteira() {
         <div style={{ ...linha, gap: 12 }}>
           <div>
             <label>Competência</label>
-            <input type="month" value={mes} onChange={(e) => setMes(e.target.value)} style={{ width: 'auto' }} />
+            <CampoData mes valor={mes} ao={setMes} rotuloAcessivel="Competência" style={{ width: 'auto' }} />
           </div>
           <div style={{ alignSelf: 'end', display: 'flex', gap: 8 }}>
-            <button onClick={rodar('ensaio')} disabled={acao.ocupado}>Ensaio</button>
-            <button className="primario" onClick={rodar('compor')} disabled={acao.ocupado}>Compor valendo</button>
+            <button onClick={rodar('ensaio')} disabled={acao.ocupado}>
+              <Icone nome="recarregar" tamanho={15} /> Ensaio
+            </button>
+            <button className="primario" onClick={rodar('compor')} disabled={acao.ocupado}>
+              <Icone nome="carteira" tamanho={15} peso="bold" /> Compor valendo
+            </button>
           </div>
         </div>
         {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
@@ -86,11 +80,11 @@ export function TelaCarteira() {
 
       {resumo && (
         <>
-          <div style={{ ...linha, gap: 16, marginBottom: 12 }}>
-            <span className="marca ok">{resumo.criadas} fatura(s)</span>
-            <span className={`marca ${resumo.recusadas ? 'pendente' : 'ok'}`}>{resumo.recusadas} recusada(s)</span>
+          <div style={{ ...linha, gap: 10, marginBottom: 12 }}>
+            <Marca tom="ok">{resumo.criadas} fatura(s)</Marca>
+            <Marca tom={resumo.recusadas ? 'pendente' : 'ok'}>{resumo.recusadas} recusada(s)</Marca>
             {Object.entries(resumo.alertas).map(([a, n]) => (
-              <span key={a} className="marca nao_medido">{n} × {rotulo(a)}</span>
+              <Marca key={a} tom="nao_medido">{n} × {rotulo(a)}</Marca>
             ))}
           </div>
           {/*
@@ -103,7 +97,7 @@ export function TelaCarteira() {
               {resumo.detalhe.slice(0, 60).map((d, i) => (
                 <tr key={i}>
                   <td><strong>{d.numero_uc}</strong></td>
-                  <td><span className="marca pendente">{rotulo(d.motivo)}</span></td>
+                  <td><Marca tom="pendente">{rotulo(d.motivo)}</Marca></td>
                   <td className="fraco" style={{ fontSize: 13 }}>{d.explicacao}</td>
                 </tr>
               ))}

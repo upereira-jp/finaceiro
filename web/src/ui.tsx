@@ -1,182 +1,118 @@
-// Componentes minimos e o estilo. Um arquivo, sem biblioteca de UI.
+// Os componentes. Um arquivo, sem biblioteca de UI.
 //
 // A ESCOLHA E COERENTE COM O RESTO: o servidor e `node:http` puro e as rotas sao
 // "uma tabela, nao um framework". Uma biblioteca de componentes aqui seria a
 // maior dependencia do projeto inteiro, para telas que sao formulario e tabela.
 //
-// O estilo mora num <style> injetado em vez de num .css importado porque assim
-// nao ha um segundo pipeline de build para manter.
-//
 // O QUE MUDOU EM 29/07/2026, a pedido do dono: o visual clareou e o laranja da
-// marca ganhou presenca (filete de gradiente, navegacao ativa, foco, cartoes),
-// os rotulos sairam do minusculo-tudo para a caixa de sentenca, e as tabelas
-// ganharam busca, filtro e ordenacao — os componentes novos estao no fim.
+// marca ganhou presenca, os rotulos sairam do minusculo-tudo para a caixa de
+// sentenca, e as tabelas ganharam busca, filtro e ordenacao.
+//
+// O QUE MUDOU EM 30/07/2026, a pedido do dono: o acabamento. Tres arquivos novos
+// dividem com este o que antes era so ele, e a divisao nao e arrumacao — e o que
+// torna as promessas VERIFICAVEIS, porque o runner do `web/` nao le JSX:
+//
+//   `estilo.ts`       o CSS inteiro. Puro, entao `web/tests/interface.ts` le o
+//                     proprio CSS e confere as cores literais e o movimento
+//   `iconografia.ts`  o vocabulario fechado de icones e o mapa dos estados
+//   `icones.tsx`      os desenhos do Phosphor. `Record` exaustivo: nome sem
+//                     desenho nao compila
+//   `navegacao.ts`    rota, titulo, icone e grupo das doze telas
+//
+// AQUI FICARAM OS COMPONENTES, e nada mais. Os novos sao os que o pedido de
+// acabamento exigiu: `BotaoDeIcone` (o "OK" que virou botao redondo),
+// `Interruptor` (o checkbox nativo), `CampoData` (o calendario clicavel),
+// `Menu` (a area do usuario), `Kpi`/`KpiSimNao` (o cartao flutuante) e
+// `Carregando` (a engrenagem com o sol da G3).
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode, CSSProperties } from 'react';
-import { VARIAVEIS_CSS, TIPOGRAFIA, lerModo, aplicarModo, type ModoTema } from './tema.ts';
+import { lerModo, aplicarModo, type ModoTema } from './tema.ts';
+import { Icone, Logotipo } from './icones.tsx';
+import { ICONE_DO_ESTADO, ICONE_DO_AVISO, type NomeDeIcone } from './iconografia.ts';
 
-// NENHUMA COR LITERAL DAQUI PARA BAIXO. Tudo sai de `tema.ts`, via custom
-// property — inclusive a sombra e o gradiente. E o que faz "trocar a paleta"
-// ser trocar um arquivo em vez de cacar hexadecimal em oito telas - e foi o que
-// se pagou em 28/07, quando a paleta da G3 chegou e a troca inteira coube num
-// arquivo.
-export const ESTILO = `
-  ${VARIAVEIS_CSS}
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--fundo); color: var(--texto);
-    font: ${TIPOGRAFIA.base}/${TIPOGRAFIA.linha} ${TIPOGRAFIA.familia};
-  }
-  ::selection { background: var(--acento-suave); }
-  /* --acento-forte, e nao --acento: link e TEXTO, e o laranja da marca como
-     texto da 2.35:1 no branco - reprova a restricao 1 do tema. */
-  a { color: var(--acento-forte); }
+export { Icone, Logotipo };
+export { ESTILO } from './estilo.ts';
 
-  /* O topo inteiro (filete de marca + barra) rola junto e gruda junto. */
-  .topo { position: sticky; top: 0; z-index: 10; }
-  .filete { height: 3px; background: var(--gradiente); }
-  .barra {
-    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-    padding: 10px 20px; border-bottom: 1px solid var(--borda); background: var(--fundo2);
-    box-shadow: 0 1px 2px var(--sombra);
-  }
-  .marca-app { display: flex; align-items: center; gap: 8px; font-weight: 650; font-size: 15px; }
-  .barra nav { display: flex; gap: 4px; flex-wrap: wrap; }
-  .barra nav a {
-    padding: 6px 12px; border-radius: 999px; text-decoration: none;
-    color: var(--fraco); font-size: 14px; font-weight: 500;
-  }
-  .barra nav a:hover { color: var(--texto); background: var(--fundo); }
-  /* Navegacao ativa e o acento como SUPERFICIE (--acento-suave): e presenca de
-     marca sem virar texto laranja puro, que reprovaria contraste. */
-  .barra nav a.ativo { background: var(--acento-suave); color: var(--acento-forte); }
+// ------------------------------------------------------------------- avisos
 
-  .conteudo { max-width: var(--largura); margin: 0 auto; padding: 24px 20px 80px; }
-  h1 { font-size: 24px; margin: 0 0 4px; letter-spacing: -0.01em; }
-  h2 { font-size: 17px; margin: 28px 0 10px; }
-  .sub { color: var(--fraco); margin: 0 0 20px; font-size: 14px; }
+/**
+ * O AVISO. Faixa lateral de 4px na cor do estado, icone na mesma cor, e o TEXTO
+ * em `--texto`.
+ *
+ * A COR SAIU DO TEXTO DE PROPOSITO, em 30/07. Antes o aviso inteiro era escrito
+ * na cor do estado, e a maioria dos avisos deste sistema tem dois paragrafos
+ * explicando o que fazer — sao os que dizem "esta lista nao esta vazia, ela e
+ * desconhecida". Paragrafo em vermelho e mais dificil de ler que o proprio erro,
+ * e ler e o ponto. A cor ficou onde chama atencao sem atravancar: a borda e o
+ * icone.
+ */
+export const Aviso = ({ tipo, children }: { tipo: 'erro' | 'ok' | 'alerta'; children: ReactNode }) => (
+  <div className={`aviso ${tipo}`} role={tipo === 'erro' ? 'alert' : undefined}>
+    <Icone nome={ICONE_DO_AVISO[tipo]} tamanho={18} peso="bold" />
+    <div className="corpo">{children}</div>
+  </div>
+);
 
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--borda); vertical-align: top; }
-  th { color: var(--fraco); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
-  tbody tr:last-child td { border-bottom: 0; }
-  tbody tr:hover { background: var(--fundo); }
-  td.num, th.num { text-align: right; font-variant-numeric: ${TIPOGRAFIA.numero}; }
+// -------------------------------------------------------------- formulario
 
-  /* Cabecalho ordenavel: o th vira botao sem deixar de parecer cabecalho. */
-  th .ordenar {
-    background: none; border: 0; padding: 0; font: inherit; color: inherit;
-    text-transform: inherit; letter-spacing: inherit; cursor: pointer;
-    display: inline-flex; align-items: center; gap: 4px;
+/** Abre o seletor de data do navegador. `showPicker()` e a unica forma de abrir
+ *  o calendario nativo a partir de um botao proprio — sem ela, esconder o
+ *  indicador nativo tiraria o calendario da pessoa em vez de embeleza-lo. */
+function abrirSeletorDeData(el: HTMLInputElement | null): void {
+  if (!el) return;
+  const comSeletor = el as HTMLInputElement & { showPicker?: () => void };
+  if (typeof comSeletor.showPicker === 'function') {
+    // Chrome 99+, Firefox 101+, Safari 16+. Levanta se o gesto nao for do
+    // usuario — cair no foco e melhor que estourar no console.
+    try { comSeletor.showPicker(); return; } catch { /* cai no foco */ }
   }
-  th .ordenar:hover { color: var(--texto); }
-  th .ordenar .seta { font-size: 9px; opacity: .45; }
-  th[aria-sort] .ordenar { color: var(--acento-forte); }
-  th[aria-sort] .ordenar .seta { opacity: 1; }
+  el.focus();
+}
 
-  .rolagem {
-    overflow-x: auto; border: 1px solid var(--borda); border-radius: var(--raio-cartao);
-    background: var(--fundo2); box-shadow: 0 1px 3px var(--sombra);
-  }
-  .cartao {
-    border: 1px solid var(--borda); border-radius: var(--raio-cartao); padding: 16px;
-    background: var(--fundo2); box-shadow: 0 1px 3px var(--sombra);
-  }
-  .campos { display: grid; gap: var(--gap); grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
-  label { display: block; font-size: 13px; font-weight: 500; color: var(--fraco); margin-bottom: 4px; }
-  input, select {
-    width: 100%; padding: 8px 10px; border: 1px solid var(--borda); border-radius: var(--raio);
-    background: var(--fundo); color: var(--texto); font: inherit; font-size: 14px;
-  }
-  input:focus, select:focus {
-    outline: none; border-color: var(--foco); box-shadow: 0 0 0 3px var(--acento-suave);
-  }
-  button {
-    padding: 8px 14px; border-radius: var(--raio); border: 1px solid var(--borda);
-    background: var(--fundo2); color: var(--texto); font: inherit; font-size: 14px;
-    font-weight: 500; cursor: pointer;
-    transition: border-color .12s ease, color .12s ease, background-color .12s ease;
-  }
-  button:hover:not(:disabled) { border-color: var(--acento); color: var(--acento-forte); }
-  button.primario { background: var(--acento); border-color: var(--acento); color: var(--acento-texto); font-weight: 600; }
-  /* O hover do botao primario ESCURECE (--acento-hover), nunca clareia: clarear
-     derruba o contraste do texto e "apaga" o botao - e a regra documentada no
-     proprio token, vinda da pesquisa de 29/07. */
-  button.primario:hover:not(:disabled) {
-    background: var(--acento-hover); border-color: var(--acento-hover); color: var(--acento-texto);
-  }
-  button:disabled { opacity: .5; cursor: default; }
-  a:focus-visible, button:focus-visible, th .ordenar:focus-visible {
-    outline: 2px solid var(--foco); outline-offset: 2px;
-  }
+/**
+ * O campo de data com o calendario do Phosphor dentro, clicavel.
+ *
+ * `mes` TROCA O TIPO PARA `month`, e nao e detalhe: metade das datas deste
+ * sistema e COMPETENCIA, nao dia. Um `type="date"` para competencia pediria um
+ * dia que ninguem usa e que o servidor descarta — e a tela ficaria com dois
+ * indicadores nativos diferentes de acordo com o campo.
+ */
+export function CampoData(p: {
+  valor: string; ao: (v: string) => void; rotuloAcessivel?: string;
+  mes?: boolean; className?: string; style?: CSSProperties;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  return (
+    <div className={`campo-data${p.className ? ` ${p.className}` : ''}`} style={p.style}>
+      <input ref={ref} type={p.mes ? 'month' : 'date'} value={p.valor} aria-label={p.rotuloAcessivel}
+             onChange={(e) => p.ao(e.target.value)} />
+      <button type="button" className="abrir-calendario" tabIndex={-1}
+              aria-label="Abrir calendário" onClick={() => abrirSeletorDeData(ref.current)}>
+        <Icone nome="calendario" tamanho={15} />
+      </button>
+    </div>
+  );
+}
 
-  .aviso { padding: 10px 12px; border-radius: var(--raio); font-size: 14px; margin: 12px 0; }
-  .aviso.erro { background: var(--erro-fundo); color: var(--erro); border: 1px solid currentColor; }
-  .aviso.ok { background: var(--fundo2); color: var(--ok); border: 1px solid currentColor; }
-  /* O par --alerta/--alerta-fundo ja existia no tema com o contraste medido nos
-     dois temas ("sobre o proprio fundo de aviso", tema.ts); faltava a classe. */
-  .aviso.alerta { background: var(--alerta-fundo); color: var(--alerta); border: 1px solid currentColor; }
-
-  /* Estado e PILULA CONTORNADA COM O TEXTO DENTRO, nunca preenchida: e a
-     separacao de forma que o tema exige entre estado e acento (a nota de
-     adjacencia do tema.ts) — o acento aparece preenchido, o estado nunca. */
-  .marca { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
-  .marca.ok { color: var(--ok); }
-  .marca.pendente { color: var(--erro); }
-  .marca.nao_medido { color: var(--alerta); }
-  .fraco { color: var(--fraco); }
-  .vazio { padding: 32px; text-align: center; color: var(--fraco); font-size: 14px; }
-
-  /* A barra de ferramentas das listas: busca, filtros e a contagem. */
-  .ferramentas { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 0 0 12px; }
-  .ferramentas select { width: auto; }
-  .ferramentas .contagem { margin-left: auto; font-size: 13px; color: var(--fraco); }
-  .busca { position: relative; }
-  .busca svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--fraco); }
-  .busca input { padding-left: 32px; width: 250px; }
-
-  /* Cartoes de resumo (Prontidao, Carteira). */
-  .kpis { display: grid; gap: var(--gap); grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); margin: 0 0 16px; }
-  .kpi {
-    border: 1px solid var(--borda); border-left: 3px solid var(--acento);
-    border-radius: var(--raio-cartao); background: var(--fundo2);
-    padding: 12px 16px; box-shadow: 0 1px 3px var(--sombra);
-  }
-  .kpi .nome { font-size: 12px; color: var(--fraco); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }
-  .kpi .valor { font-size: 22px; font-weight: 650; font-variant-numeric: ${TIPOGRAFIA.numero}; }
-
-  /* ---------------------------------------------------------- impressao
-     A decisao 3 da Q-DOCFATURA-01 foi "HTML agora, gerador de PDF depois": o PDF
-     sai pelo dialogo do proprio sistema, e o que o define e este bloco. Sem ele,
-     window.print() imprimiria a barra de navegacao e os botoes junto. */
-  .documento {
-    background: #fff; color: #111; padding: 32px; border: 1px solid var(--borda);
-    border-radius: 8px; max-width: 800px;
-  }
-  .documento table td { padding: 6px 4px; border-bottom: 1px solid #eee; }
-  @media print {
-    /* Tudo fora do documento sai da pagina impressa - inclusive o que esta
-       marcado com a classe naoimprime, que sao os controles da propria previa. */
-    body * { visibility: hidden; }
-    #documento, #documento * { visibility: visible; }
-    #documento .naoimprime, .naoimprime { display: none !important; }
-    #documento {
-      position: absolute; left: 0; top: 0; width: 100%;
-      border: none; border-radius: 0; padding: 0; max-width: none;
-    }
-    @page { margin: 16mm; }
-  }
-
-  /* O centro da tela de login, com o brilho quente da marca no alto. */
-  .central {
-    min-height: 100dvh; display: grid; place-items: center; padding: 20px;
-    background: radial-gradient(70% 50% at 50% 0%, var(--acento-suave), transparent 70%);
-  }
-`;
-
-export const Aviso = ({ tipo, children }: { tipo: 'erro' | 'ok' | 'alerta'; children: ReactNode }) =>
-  <div className={`aviso ${tipo}`}>{children}</div>;
+/** O select com a seta do Phosphor. A seta nativa muda de desenho a cada sistema
+ *  operacional, e era o que mais denunciava formulario nao estilizado. */
+export function Escolha(p: {
+  valor: string; ao: (v: string) => void; rotuloAcessivel?: string;
+  opcoes: Array<{ valor: string; texto: string }>; primeira?: string;
+  desabilitado?: boolean; className?: string;
+}) {
+  return (
+    <div className={`campo-caixa${p.className ? ` ${p.className}` : ''}`}>
+      <select value={p.valor} aria-label={p.rotuloAcessivel} disabled={p.desabilitado}
+              onChange={(e) => p.ao(e.target.value)}>
+        {p.primeira !== undefined && <option value="">{p.primeira}</option>}
+        {p.opcoes.map((o) => <option key={o.valor} value={o.valor}>{o.texto}</option>)}
+      </select>
+      <span className="adorno"><Icone nome="abrir_menu" tamanho={13} /></span>
+    </div>
+  );
+}
 
 export function Campo(p: {
   rotulo: string; valor: string; ao: (v: string) => void;
@@ -185,17 +121,68 @@ export function Campo(p: {
   return (
     <div>
       <label>{p.rotulo}</label>
-      {p.opcoes ? (
-        <select value={p.valor} onChange={(e) => p.ao(e.target.value)}>
-          <option value="">—</option>
-          {p.opcoes.map((o) => <option key={o.valor} value={o.valor}>{o.texto}</option>)}
-        </select>
-      ) : (
-        <input type={p.tipo ?? 'text'} value={p.valor} placeholder={p.dica} onChange={(e) => p.ao(e.target.value)} />
-      )}
+      {p.opcoes
+        ? <Escolha valor={p.valor} ao={p.ao} opcoes={p.opcoes} primeira="—" rotuloAcessivel={p.rotulo} />
+        : p.tipo === 'date'
+          ? <CampoData valor={p.valor} ao={p.ao} rotuloAcessivel={p.rotulo} />
+          : <input type={p.tipo ?? 'text'} value={p.valor} placeholder={p.dica}
+                   onChange={(e) => p.ao(e.target.value)} />}
     </div>
   );
 }
+
+/**
+ * O INTERRUPTOR, no lugar do checkbox nativo.
+ *
+ * `role="switch"` com `aria-checked` de verdade: o desenho mudou, a semantica
+ * nao. Um `<div>` com aparencia de switch e um controle que existe para quem ve
+ * e nao existe para quem usa leitor de tela — e nesta tela os dois interruptores
+ * decidem `sandbox` e `ativo` do conector de cobranca, que e onde um clique
+ * errado emite cobranca de verdade.
+ */
+export function Interruptor(p: {
+  ligado: boolean; ao: (v: boolean) => void; rotulo: ReactNode;
+  /** Obrigatorio na pratica quando `rotulo` e vazio — e o caso da coluna
+   *  "Mostrar" da aba Documento, onde o cabecalho da coluna e o unico rotulo
+   *  visivel e ele nao chega a leitor de tela linha por linha. */
+  rotuloAcessivel?: string;
+  desabilitado?: boolean;
+}) {
+  return (
+    <button type="button" role="switch" aria-checked={p.ligado} className="interruptor"
+            aria-label={p.rotuloAcessivel}
+            disabled={p.desabilitado} onClick={() => p.ao(!p.ligado)}>
+      <span className="trilho" aria-hidden="true"><span className="pino" /></span>
+      <span>{p.rotulo}</span>
+    </button>
+  );
+}
+
+// --------------------------------------------------------------------- botao
+
+/**
+ * O BOTAO SO DE ICONE — o que era um "OK" ao lado do input dentro da tabela.
+ *
+ * O `rotulo` E OBRIGATORIO no tipo, e nao por formalidade: um botao cujo unico
+ * conteudo e um `<svg aria-hidden>` nao tem nome nenhum para leitor de tela, e a
+ * tabela de Unidades tem 39 deles. Sem `aria-label` a pessoa ouviria "botao,
+ * botao, botao" trinta e nove vezes. O rotulo tambem vira `title`, que e a dica
+ * de quem usa mouse e nao adivinha o que o icone faz.
+ */
+export function BotaoDeIcone(p: {
+  icone: NomeDeIcone; rotulo: string; ao: () => void;
+  desabilitado?: boolean; primario?: boolean; grande?: boolean;
+}) {
+  return (
+    <button type="button" title={p.rotulo} aria-label={p.rotulo}
+            className={`so-icone${p.grande ? ' grande' : ''}${p.primario ? ' primario' : ''}`}
+            disabled={p.desabilitado} onClick={p.ao}>
+      <Icone nome={p.icone} tamanho={p.grande ? 18 : 16} peso="bold" />
+    </button>
+  );
+}
+
+// ------------------------------------------------------------------- pagina
 
 export const Pagina = ({ titulo, sub, children }: { titulo: string; sub?: string; children: ReactNode }) => (
   <>
@@ -230,24 +217,102 @@ export function rotulo(s: string): string {
   return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
-export const Marca = ({ tom, children }: { tom: 'ok' | 'pendente' | 'nao_medido'; children: ReactNode }) =>
-  <span className={`marca ${tom}`}>{children}</span>;
-
-// ------------------------------------------------------------------ marca G3
-
-/** O sol da G3, desenhado com o acento do tema — muda junto com ele. */
-export const Logotipo = ({ tamanho = 20 }: { tamanho?: number }) => (
-  <svg width={tamanho} height={tamanho} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <circle cx="12" cy="12" r="4.5" fill="var(--acento)" />
-    <g stroke="var(--acento)" strokeWidth="1.8" strokeLinecap="round">
-      {Array.from({ length: 8 }, (_, i) => {
-        const a = (i * Math.PI) / 4;
-        const [x, y] = [Math.cos(a), Math.sin(a)];
-        return <line key={i} x1={12 + 7 * x} y1={12 + 7 * y} x2={12 + 9.5 * x} y2={12 + 9.5 * y} />;
-      })}
-    </g>
-  </svg>
+/**
+ * A PILULA DE ESTADO. Preenchida suave, com icone E texto dentro.
+ *
+ * OS TRES SINAIS SAO DELIBERADOS e atendem a restricao 3 do tema (cor nao pode
+ * ser o unico sinal): a cor do fundo, o desenho do icone e a palavra. Tirar
+ * qualquer um deles deixa alguem sem a informacao — daltonico perde a cor, quem
+ * usa leitor de tela perde o icone, e quem le rapido pega o icone antes da
+ * palavra.
+ *
+ * ATE 29/07 ELA ERA CONTORNADA, e a troca esta registrada na nota de adjacencia
+ * do `tema.ts`: a separacao entre estado e acento passou a ser de PESO — o
+ * acento e preenchido solido, o estado e preenchido suave.
+ */
+export const Marca = ({ tom, icone, children }: {
+  tom: 'ok' | 'pendente' | 'nao_medido';
+  /** Sobrepõe o ícone do TOM pelo ícone do SIGNIFICADO. Existe porque a fatura
+   *  tem seis status mapeados em três tons: "Emitida" é tom `nao_medido` e
+   *  exibiria a interrogação de "não sei", que é o certo para uma camada não
+   *  medida e o errado para uma fatura emitida. Ver
+   *  `ICONE_DO_STATUS_DA_FATURA`. */
+  icone?: NomeDeIcone;
+  children: ReactNode;
+}) => (
+  <span className={`marca ${tom}`}>
+    <Icone nome={icone ?? ICONE_DO_ESTADO[tom]} tamanho={12} peso="bold" />
+    {children}
+  </span>
 );
+
+/**
+ * O INDICADOR DE CARGA: a engrenagem girando com o sol da G3 parado no centro.
+ *
+ * O TEXTO AO LADO NAO E ENFEITE. Sob `prefers-reduced-motion` a engrenagem para
+ * de girar — e ai o unico sinal de "estou trabalhando" e a frase. Um spinner sem
+ * legenda seria informacao que desaparece para quem pediu menos movimento.
+ */
+export const Carregando = ({ texto = 'Carregando…' }: { texto?: string }) => (
+  <div className="carregando" role="status">
+    <span className="marca-girando" aria-hidden="true">
+      <Icone nome="engrenagem" tamanho={26} peso="duotone" />
+      <Logotipo tamanho={12} />
+    </span>
+    {texto}
+  </div>
+);
+
+/** A faixa cinza que ocupa o lugar de um valor que ainda nao chegou. Existe para
+ *  a pagina nao PULAR quando ele chega. */
+export const Esqueleto = ({ largura = 90 }: { largura?: number }) => (
+  <span className="esqueleto" aria-hidden="true" style={{ display: 'inline-block', width: largura }}>&nbsp;</span>
+);
+
+// ------------------------------------------------------- cartao de metrica
+
+/**
+ * O CARTAO DE METRICA. Borda de 1px, sombra do segundo degrau e o icone como
+ * MARCA D'AGUA — grande, em `--acento`, a 11% de opacidade.
+ *
+ * A BORDA ESQUERDA DE 3px SAIU. Ela era o sinal de marca do cartao ate 29/07, e
+ * o pedido de 30/07 foi exatamente trocar "borda generica grossa" por "borda
+ * finissima mais sombra, para o cartao flutuar". A presenca da marca nao se
+ * perdeu — mudou de lugar, e ficou maior.
+ */
+export function Kpi(p: {
+  nome: ReactNode; valor: ReactNode; icone: NomeDeIcone; tom?: 'ok' | 'erro' | 'alerta';
+}) {
+  const cor = p.tom === 'ok' ? 'var(--ok)' : p.tom === 'erro' ? 'var(--erro)' : p.tom === 'alerta' ? 'var(--alerta)' : undefined;
+  return (
+    <div className="kpi">
+      <div className="nome">{p.nome}</div>
+      <div className="valor" style={cor ? { color: cor } : undefined}>{p.valor}</div>
+      <span className="marca-dagua"><Icone nome={p.icone} tamanho={44} peso="duotone" /></span>
+    </div>
+  );
+}
+
+/**
+ * O CARTAO DE SIM OU NAO — "pode faturar" e "pode repartir".
+ *
+ * A PALAVRA CONTINUA ESCRITA ao lado do icone grande, e isso e a restricao 3 de
+ * novo: `pode_faturar` e a resposta de maior consequencia da tela, e ela nao pode
+ * depender de reconhecer um desenho verde. O icone entra desenhando-se uma vez —
+ * e o unico movimento desta tela, para o olho ir nele primeiro.
+ */
+export function KpiSimNao(p: { nome: ReactNode; sim: boolean; icone: NomeDeIcone }) {
+  return (
+    <div className="kpi">
+      <div className="nome">{p.nome}</div>
+      <div className="valor sim-nao" style={{ color: p.sim ? 'var(--ok)' : 'var(--erro)' }}>
+        <Icone nome={p.sim ? 'sim' : 'nao'} tamanho={26} peso="fill" />
+        {p.sim ? 'Sim' : 'Não'}
+      </div>
+      <span className="marca-dagua"><Icone nome={p.icone} tamanho={44} peso="duotone" /></span>
+    </div>
+  );
+}
 
 // ----------------------------------------------------------------- ordenacao
 //
@@ -296,7 +361,8 @@ export function ThOrd(p: {
         aria-sort={ativa ? (p.ordem.desc ? 'descending' : 'ascending') : undefined}>
       <button type="button" className="ordenar" onClick={() => p.ao(p.chave)}>
         {p.children}
-        <span className="seta" aria-hidden="true">{ativa ? (p.ordem.desc ? '▼' : '▲') : '↕'}</span>
+        <Icone tamanho={11} peso="bold"
+               nome={ativa ? (p.ordem.desc ? 'ordem_decrescente' : 'ordem_crescente') : 'ordem_nenhuma'} />
       </button>
     </th>
   );
@@ -316,15 +382,22 @@ export const contem = (alvo: string | null | undefined, busca: string): boolean 
 export function Busca(p: { valor: string; ao: (v: string) => void; dica?: string }) {
   return (
     <div className="busca">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-           strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
-        <circle cx="10.5" cy="10.5" r="6.5" /><line x1="15.5" y1="15.5" x2="21" y2="21" />
-      </svg>
+      {/* O input vem ANTES do icone no DOM de proposito: e o que permite
+          `input:focus + .adorno-esquerda` acender a lupa junto com o foco. */}
       <input type="search" value={p.valor} placeholder={p.dica ?? 'Buscar…'}
              aria-label={p.dica ?? 'Buscar'} onChange={(e) => p.ao(e.target.value)} />
+      <span className="adorno-esquerda"><Icone nome="buscar" tamanho={15} peso="bold" /></span>
     </div>
   );
 }
+
+/** O filtro da barra de ferramentas: um `Escolha` com rotulo acessivel e sem
+ *  `<label>` visivel, porque a primeira opcao ja diz o que ele filtra
+ *  ("Todas as situações"). */
+export const Filtro = (p: {
+  valor: string; ao: (v: string) => void; rotulo: string;
+  opcoes: Array<{ valor: string; texto: string }>;
+}) => <Escolha valor={p.valor} ao={p.ao} rotuloAcessivel={p.rotulo} opcoes={p.opcoes} />;
 
 /** A barra acima da tabela: busca e filtros a esquerda, a contagem a direita.
  *  A contagem "N de M" e o que diz que um filtro esta ATIVO — lista curta sem
@@ -336,17 +409,72 @@ export const Ferramentas = ({ children, contagem }: { children: ReactNode; conta
   </div>
 );
 
+// ------------------------------------------------------------------- o menu
+
+/**
+ * O MENU SUSPENSO. Fecha por clique fora, por `Escape` e por escolher um item.
+ *
+ * OS TRES CAMINHOS DE FECHAR SAO O MINIMO, e o que faltar deles vira o menu que
+ * gruda na tela: sem clique fora a pessoa precisa achar o gatilho de novo, sem
+ * `Escape` quem usa teclado fica preso, e sem fechar ao escolher o menu tapa o
+ * efeito da propria escolha.
+ */
+export function Menu(p: { gatilho: ReactNode; rotulo: string; children: ReactNode }) {
+  const [aberto, setAberto] = useState(false);
+  const caixa = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!aberto) return;
+    const fora = (e: MouseEvent) => {
+      if (!caixa.current?.contains(e.target as Node)) setAberto(false);
+    };
+    const tecla = (e: KeyboardEvent) => { if (e.key === 'Escape') setAberto(false); };
+    addEventListener('mousedown', fora);
+    addEventListener('keydown', tecla);
+    return () => { removeEventListener('mousedown', fora); removeEventListener('keydown', tecla); };
+  }, [aberto]);
+
+  return (
+    <div className="menu" ref={caixa}>
+      <button type="button" aria-haspopup="menu" aria-expanded={aberto} aria-label={p.rotulo}
+              onClick={() => setAberto((v) => !v)}>
+        {p.gatilho}
+        <Icone nome="abrir_menu" tamanho={12} peso="bold" />
+      </button>
+      {aberto && (
+        <div className="menu-painel" role="menu" onClick={() => setAberto(false)}>
+          {p.children}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ------------------------------------------------------------------- o tema
 
-export function SeletorDeTema() {
+const NOME_DO_MODO: Record<ModoTema, { texto: string; icone: NomeDeIcone }> = {
+  claro: { texto: 'Tema claro', icone: 'tema_claro' },
+  escuro: { texto: 'Tema escuro', icone: 'tema_escuro' },
+  sistema: { texto: 'Tema do sistema', icone: 'tema_sistema' },
+};
+
+/** O seletor de tema virou item de menu em 30/07: era um `<select>` na barra, e
+ *  um select de tres opcoes ao lado do nome da pessoa e do botao de sair
+ *  competia por atencao com a navegacao. */
+export function ItensDeTema() {
   const [modo, setModo] = useState<ModoTema>(() => lerModo());
+  const escolher = (m: ModoTema) => { aplicarModo(m); setModo(m); };
   return (
-    <select value={modo} aria-label="Tema" title="Tema"
-            style={{ width: 'auto', padding: '4px 8px' }}
-            onChange={(e) => { const m = e.target.value as ModoTema; aplicarModo(m); setModo(m); }}>
-      <option value="claro">Tema claro</option>
-      <option value="escuro">Tema escuro</option>
-      <option value="sistema">Tema do sistema</option>
-    </select>
+    <>
+      <div className="titulo">Aparência</div>
+      {(Object.keys(NOME_DO_MODO) as ModoTema[]).map((m) => (
+        <button key={m} type="button" role="menuitemradio" aria-checked={modo === m}
+                onClick={() => escolher(m)}>
+          <Icone nome={NOME_DO_MODO[m].icone} tamanho={16} />
+          {NOME_DO_MODO[m].texto}
+          {modo === m && <Icone nome="ok" tamanho={13} peso="bold" className="ao-fim" />}
+        </button>
+      ))}
+    </>
   );
 }

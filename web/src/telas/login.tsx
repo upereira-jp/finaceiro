@@ -8,7 +8,7 @@
 
 import { useState } from 'react';
 import { useSessao } from '../sessao.tsx';
-import { Aviso, Logotipo } from '../ui.tsx';
+import { Aviso, Logotipo, Icone } from '../ui.tsx';
 
 export function Login() {
   const { cliente } = useSessao();
@@ -31,8 +31,8 @@ export function Login() {
   return (
     <div className="central">
       <div style={{ width: '100%', maxWidth: 380 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-          <Logotipo tamanho={28} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 4 }}>
+          <Logotipo tamanho={32} />
           <h1 style={{ margin: 0 }}>Financeiro G3</h1>
         </div>
         <p className="sub">Entre com a conta do financeiro.</p>
@@ -50,6 +50,7 @@ export function Login() {
             </div>
             {erro && <Aviso tipo="erro">{erro}</Aviso>}
             <button className="primario" disabled={ocupado || !cliente}>
+              <Icone nome={ocupado ? 'carregando' : 'usuario'} tamanho={16} peso="bold" />
               {ocupado ? 'Entrando…' : 'Entrar'}
             </button>
           </div>

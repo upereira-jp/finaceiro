@@ -29,7 +29,10 @@
 import { useState } from 'react';
 import { api, type Fatura, type Boleto, type UnidadeConsumidora } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
-import { Pagina, Aviso, Tabela, Marca, rotulo, linha, useOrdenacao, ordenar, ThOrd } from '../ui.tsx';
+import {
+  Pagina, Aviso, Tabela, Marca, rotulo, linha, useOrdenacao, ordenar, ThOrd,
+  Icone, CampoData, Carregando,
+} from '../ui.tsx';
 import { competenciaISO, emReais, paraCentavos } from '../dinheiro.ts';
 import { paraCsv, reaisParaPlanilha, nomeDoArquivo } from '../csv.ts';
 import { baixarCsv } from '../baixar.ts';
@@ -37,6 +40,7 @@ import {
   podeEmitirFatura, podeGerarBoleto, podeBaixarManual,
   totalEsperadoDaBaixa, tomDoStatusDaFatura,
 } from '../cobranca-regras.ts';
+import { ICONE_DO_STATUS_DA_FATURA } from '../iconografia.ts';
 
 export function TelaFaturas() {
   const [mes, setMes] = useState(() => new Date().toISOString().slice(0, 7));
@@ -107,13 +111,15 @@ export function TelaFaturas() {
         <div style={{ ...linha, gap: 12 }}>
           <div>
             <label>Competência</label>
-            <input type="month" value={mes} onChange={(e) => setMes(e.target.value)} style={{ width: 'auto' }} />
+            <CampoData mes valor={mes} ao={setMes} rotuloAcessivel="Competência" style={{ width: 'auto' }} />
           </div>
           <div style={{ alignSelf: 'end', display: 'flex', gap: 8 }}>
             <button onClick={() => void emitirLote()} disabled={acao.ocupado || !rascunhos}>
-              Emitir as {rascunhos} em rascunho
+              <Icone nome="emitir" tamanho={15} /> Emitir as {rascunhos} em rascunho
             </button>
-            <button onClick={exportar} disabled={!lista.length}>Exportar CSV</button>
+            <button onClick={exportar} disabled={!lista.length}>
+              <Icone nome="baixar" tamanho={15} /> Exportar CSV
+            </button>
           </div>
         </div>
         {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
@@ -147,7 +153,7 @@ export function TelaFaturas() {
                 <th>Ações</th>
               </>}
               vazio={faturas.carregando
-                ? 'Carregando…'
+                ? <Carregando texto="Lendo a competência…" />
                 : faturas.erro
                   ? 'Lista desconhecida — o aviso acima diz por quê.'
                   : `Nenhuma fatura em ${mes}. Compor o lote é na aba Carteira.`}>
@@ -173,22 +179,35 @@ function FaturaLinha(p: {
     <>
       <tr>
         <td><strong>{p.uc ?? f.unidade_consumidora_id.slice(0, 8)}</strong></td>
-        <td><Marca tom={tomDoStatusDaFatura(f.status)}>{rotulo(f.status)}</Marca></td>
+        <td>
+          <Marca tom={tomDoStatusDaFatura(f.status)} icone={ICONE_DO_STATUS_DA_FATURA[f.status]}>
+            {rotulo(f.status)}
+          </Marca>
+        </td>
         <td>{String(f.vencimento).slice(0, 10).split('-').reverse().join('/')}</td>
         <td className="num">{f.consumo_kwh ?? '—'}</td>
         <td className="num"><strong>{emReais(f.valor_total_centavos)}</strong></td>
         <td>
           <div style={{ ...linha, gap: 6 }}>
             {podeEmitirFatura(f.status) && (
-              <button onClick={() => void p.emitir()} disabled={acao.ocupado}>Emitir</button>
+              <button onClick={() => void p.emitir()} disabled={acao.ocupado}>
+                <Icone nome="emitir" tamanho={14} /> Emitir
+              </button>
             )}
-            <button onClick={p.abrir}>{p.aberta ? 'Fechar' : 'Boleto e baixa'}</button>
+            <button onClick={p.abrir} aria-expanded={p.aberta}>
+              <Icone nome="boleto" tamanho={14} />
+              {p.aberta ? 'Fechar' : 'Boleto e baixa'}
+            </button>
           </div>
         </td>
       </tr>
       {p.aberta && (
         <tr>
-          <td colSpan={6} style={{ background: 'var(--fundo-suave, transparent)' }}>
+          {/* O painel aberto recua para a terceira superficie da paleta: sem isso
+              ele se confunde com a linha seguinte da tabela. `--fundo-suave` era
+              um token que NAO EXISTIA - o fallback `transparent` estava em uso
+              desde 29/07 sem ninguem notar. O nome certo e `--fundo-recuo`. */}
+          <td colSpan={6} style={{ background: 'var(--fundo-recuo)' }}>
             <PainelDaFatura f={f} recarregar={p.recarregar} />
           </td>
         </tr>
@@ -243,7 +262,7 @@ function PainelDaFatura({ f, recarregar }: { f: Fatura; recarregar: () => void }
     <div style={{ padding: '12px 4px', display: 'grid', gap: 16 }}>
       {/* ------------------------------------------------------------- boleto */}
       <div>
-        <h3 style={{ margin: '0 0 8px' }}>Boleto</h3>
+        <h3><Icone nome="boleto" tamanho={16} /> Boleto</h3>
         {boleto.erro && <Aviso tipo="erro">Falha ao ler o boleto: {boleto.erro}</Aviso>}
         {!boleto.carregando && !boleto.erro && !boleto.dado && (
           <p className="sub" style={{ margin: '0 0 8px' }}>
@@ -282,6 +301,9 @@ function PainelDaFatura({ f, recarregar }: { f: Fatura; recarregar: () => void }
         {podeGerarBoleto(f.status, boleto.dado?.status ?? null) && (
           <button className="primario" style={{ marginTop: 8 }}
                   onClick={() => void gerarBoleto()} disabled={acao.ocupado}>
+            {acao.ocupado
+              ? <Icone nome="carregando" tamanho={15} />
+              : <Icone nome="boleto" tamanho={15} peso="bold" />}
             Gerar boleto
           </button>
         )}
@@ -290,7 +312,7 @@ function PainelDaFatura({ f, recarregar }: { f: Fatura; recarregar: () => void }
       {/* -------------------------------------------------------- baixa manual */}
       {podeBaixarManual(f.status) && (
         <div>
-          <h3 style={{ margin: '0 0 8px' }}>Baixa manual</h3>
+          <h3><Icone nome="recebido" tamanho={16} /> Baixa manual</h3>
           <p className="sub" style={{ margin: '0 0 8px' }}>
             Para o dinheiro que entrou sem passar pelo boleto — Pix direto, transferência,
             conciliação na mão. O servidor exige o valor <strong>ao centavo</strong>:
@@ -311,8 +333,9 @@ function PainelDaFatura({ f, recarregar }: { f: Fatura; recarregar: () => void }
                      placeholder="quem pagou, por qual meio" />
             </div>
             <div style={{ alignSelf: 'end' }}>
-              <button onClick={() => void baixar()} disabled={acao.ocupado || valorInvalido !== null}>
-                Baixar {emReais(totalEsperado)}
+              <button className="primario" onClick={() => void baixar()}
+                      disabled={acao.ocupado || valorInvalido !== null}>
+                <Icone nome="confirmar" tamanho={15} peso="bold" /> Baixar {emReais(totalEsperado)}
               </button>
             </div>
           </div>
@@ -338,7 +361,13 @@ function CampoCopiavel({ rotuloTexto, valor }: { rotuloTexto: string; valor: str
         void navigator.clipboard?.writeText(valor);
         setCopiado(true);
         setTimeout(() => setCopiado(false), 1500);
-      }}>{copiado ? 'Copiado' : 'Copiar'}</button>
+      }}>
+        {/* O icone TROCA ao copiar, e nao so o texto: e a confirmacao que se ve
+            sem ler, e ela importa aqui porque o que foi copiado e uma linha
+            digitavel — quem cola sem ter certeza paga o valor errado. */}
+        <Icone nome={copiado ? 'ok' : 'copiar'} tamanho={14} peso="bold" />
+        {copiado ? 'Copiado' : 'Copiar'}
+      </button>
     </div>
   );
 }

@@ -9,7 +9,7 @@ import { useState } from 'react';
 import { api, type DonoUsina, type Usina } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
-  Pagina, Aviso, Tabela, Campo, Busca, Ferramentas, ThOrd,
+  Pagina, Aviso, Tabela, Campo, Busca, Ferramentas, Filtro, ThOrd, Marca, Icone,
   useOrdenacao, ordenar, contem,
 } from '../ui.tsx';
 
@@ -70,7 +70,9 @@ export function TelaDonos() {
           <Campo rotulo="E-mail" valor={f.email} ao={p('email')} />
           <div style={{ alignSelf: 'end' }}>
             <button className="primario" onClick={criar}
-                    disabled={acao.ocupado || !f.nome.trim() || !f.documento_bruto.trim()}>Cadastrar</button>
+                    disabled={acao.ocupado || !f.nome.trim() || !f.documento_bruto.trim()}>
+              <Icone nome="acrescentar" tamanho={15} peso="bold" /> Cadastrar
+            </button>
           </div>
         </div>
         {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
@@ -81,13 +83,14 @@ export function TelaDonos() {
 
       <Ferramentas contagem={todos.length ? `${visiveis.length} de ${todos.length}` : undefined}>
         <Busca valor={busca} ao={setBusca} dica="Buscar por nome, documento ou Pix…" />
-        <select value={situacao} aria-label="Filtrar por situação" onChange={(e) => setSituacao(e.target.value)}>
-          <option value="">Todas as situações</option>
-          <option value="ativo">Ativos</option>
-          <option value="inativo">Inativos</option>
-        </select>
+        <Filtro valor={situacao} ao={setSituacao} rotulo="Filtrar por situação"
+                opcoes={[{ valor: '', texto: 'Todas as situações' },
+                         { valor: 'ativo', texto: 'Ativos' },
+                         { valor: 'inativo', texto: 'Inativos' }]} />
         {(busca || situacao) && (
-          <button type="button" onClick={() => { setBusca(''); setSituacao(''); }}>Limpar filtros</button>
+          <button type="button" onClick={() => { setBusca(''); setSituacao(''); }}>
+            <Icone nome="limpar" tamanho={15} /> Limpar filtros
+          </button>
         )}
       </Ferramentas>
 
@@ -105,7 +108,7 @@ export function TelaDonos() {
             <td>{d.nome} <span className="fraco">· {d.natureza.toUpperCase()}</span></td>
             <td className="fraco">{d.documento}</td>
             <td className="fraco">{d.chave_pix ?? d.banco ?? '—'}</td>
-            <td><span className={`marca ${d.ativo ? 'ok' : 'pendente'}`}>{d.ativo ? 'Ativo' : 'Inativo'}</span></td>
+            <td><Marca tom={d.ativo ? 'ok' : 'pendente'}>{d.ativo ? 'Ativo' : 'Inativo'}</Marca></td>
           </tr>
         ))}
       </Tabela>

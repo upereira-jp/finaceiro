@@ -19,7 +19,7 @@
 import { useState } from 'react';
 import { api, type Repasse, type Comissao, type UsoDaUsina } from '../api.ts';
 import { useDados } from '../dados.ts';
-import { Pagina, Aviso, Tabela, linha } from '../ui.tsx';
+import { Pagina, Aviso, Tabela, linha, Icone, CampoData, Carregando } from '../ui.tsx';
 import { competenciaISO, emReais } from '../dinheiro.ts';
 import { paraCsv, reaisParaPlanilha, nomeDoArquivo, type Coluna } from '../csv.ts';
 import { baixarCsv } from '../baixar.ts';
@@ -42,10 +42,12 @@ export function TelaRelatorios() {
         <div style={{ ...linha, gap: 12 }}>
           <div>
             <label>Competência (vazio = todas)</label>
-            <input type="month" value={mes} onChange={(e) => setMes(e.target.value)} style={{ width: 'auto' }} />
+            <CampoData mes valor={mes} ao={setMes} rotuloAcessivel="Competência" style={{ width: 'auto' }} />
           </div>
           {mes && (
-            <button style={{ alignSelf: 'end' }} onClick={() => setMes('')}>Todas as competências</button>
+            <button style={{ alignSelf: 'end' }} onClick={() => setMes('')}>
+              <Icone nome="limpar" tamanho={15} /> Todas as competências
+            </button>
           )}
         </div>
       </div>
@@ -150,7 +152,7 @@ function Bloco<T>(p: {
                   nomeDoArquivo(p.csv.assunto, p.csv.mes || undefined),
                   paraCsv(p.csv.colunas, lista),
                 )}>
-          Exportar CSV
+          <Icone nome="baixar" tamanho={15} /> Exportar CSV
         </button>
       </div>
       <p className="sub">{p.nota}</p>
@@ -161,7 +163,7 @@ function Bloco<T>(p: {
         </Aviso>
       )}
       <Tabela cabecalho={p.cabecalho}
-              vazio={p.carga.carregando ? 'Carregando…' : p.carga.erro ? 'Desconhecido.' : p.vazio}>
+              vazio={p.carga.carregando ? <Carregando /> : p.carga.erro ? 'Desconhecido.' : p.vazio}>
         {lista.map(p.corpo)}
       </Tabela>
     </section>

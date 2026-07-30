@@ -62,6 +62,14 @@ const chk = (id: string, cond: boolean, d: string) => {
 const lancou = async (f: () => Promise<unknown>): Promise<any> => {
   try { await f(); return null; } catch (e) { return e; }
 };
+/*
+ * O RESUMO DE UM ERRO EM UMA LINHA, e isto nao e cosmetico: a contagem oficial da
+ * suite e `npm test | grep -c '^ok '`, e mensagem do Prisma tem `\n` no meio. Uma
+ * verificacao que passa e imprime duas linhas conta como uma e polui a proxima -
+ * foi o que fez o total desta suite dar 46 sozinha e 45 dentro do `npm test`.
+ */
+const resumo = (e: unknown, n = 60) =>
+  String(e).replace(/\s+/g, ' ').trim().slice(0, n);
 const mes = (ano: number, m: number) => new Date(Date.UTC(ano, m - 1, 1));
 
 /*
@@ -257,7 +265,7 @@ const garantirTarifa = async (emT: <T>(f: () => Promise<T>) => Promise<T>) => {
    * nao ha rotulo a mandar, e e esse o desenho.
    */
   const eSvg = await lancou(() => emA(() => documento.salvarLogo(SVG)));
-  chk('W2d', eSvg !== null, `SVG e recusado pela ASSINATURA, nao pelo rotulo: ${String(eSvg).slice(0, 60)}`);
+  chk('W2d', eSvg !== null, `SVG e recusado pela ASSINATURA, nao pelo rotulo: ${resumo(eSvg)}`);
   const eGif = await lancou(() => emA(() => documento.salvarLogo(GIF)));
   chk('W2e', eGif !== null, 'GIF tambem e recusado - a lista de aceitos e fechada em PNG e JPEG');
 

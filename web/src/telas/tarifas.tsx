@@ -11,7 +11,7 @@
 import { useState } from 'react';
 import { api, type Tarifa } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
-import { Pagina, Aviso, Tabela, Campo } from '../ui.tsx';
+import { Pagina, Aviso, Tabela, Campo, Icone } from '../ui.tsx';
 import { decimalTexto } from '../dinheiro.ts';
 
 export function TelaTarifas() {
@@ -37,7 +37,9 @@ export function TelaTarifas() {
           <Campo rotulo="R$/kWh" valor={valor} ao={setValor} dica="Até 6 casas — ex. 1,130000" />
           <Campo rotulo="Vigência a partir de" valor={inicio} ao={setInicio} tipo="date" />
           <div style={{ alignSelf: 'end' }}>
-            <button className="primario" onClick={abrir} disabled={acao.ocupado || !dist.trim()}>Abrir vigência</button>
+            <button className="primario" onClick={abrir} disabled={acao.ocupado || !dist.trim()}>
+              <Icone nome="tarifas" tamanho={15} peso="bold" /> Abrir vigência
+            </button>
           </div>
         </div>
         {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}

@@ -9,7 +9,7 @@ import { useState } from 'react';
 import { api, type Usina, type DonoUsina, type RegraRepasse } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
-  Pagina, Aviso, Tabela, Campo, Busca, Ferramentas, ThOrd,
+  Pagina, Aviso, Tabela, Campo, Busca, Ferramentas, Filtro, ThOrd, Marca, Escolha, Icone,
   useOrdenacao, ordenar, contem, rotulo,
 } from '../ui.tsx';
 import { decimalTexto } from '../dinheiro.ts';
@@ -68,18 +68,18 @@ export function TelaUsinas() {
 
       <Ferramentas contagem={todas.length ? `${visiveis.length} de ${todas.length}` : undefined}>
         <Busca valor={busca} ao={setBusca} dica="Buscar por código, apelido ou distribuidora…" />
-        <select value={situacao} aria-label="Filtrar por situação" onChange={(e) => setSituacao(e.target.value)}>
-          <option value="">Todas as situações</option>
-          <option value="ativa">Ativas</option>
-          <option value="inativa">Inativas</option>
-        </select>
-        <select value={comDono} aria-label="Filtrar por dono" onChange={(e) => setComDono(e.target.value)}>
-          <option value="">Com e sem dono</option>
-          <option value="com">Com dono</option>
-          <option value="sem">Sem dono (bloqueia o repasse)</option>
-        </select>
+        <Filtro valor={situacao} ao={setSituacao} rotulo="Filtrar por situação"
+                opcoes={[{ valor: '', texto: 'Todas as situações' },
+                         { valor: 'ativa', texto: 'Ativas' },
+                         { valor: 'inativa', texto: 'Inativas' }]} />
+        <Filtro valor={comDono} ao={setComDono} rotulo="Filtrar por dono"
+                opcoes={[{ valor: '', texto: 'Com e sem dono' },
+                         { valor: 'com', texto: 'Com dono' },
+                         { valor: 'sem', texto: 'Sem dono (bloqueia o repasse)' }]} />
         {(busca || situacao || comDono) && (
-          <button type="button" onClick={() => { setBusca(''); setSituacao(''); setComDono(''); }}>Limpar filtros</button>
+          <button type="button" onClick={() => { setBusca(''); setSituacao(''); setComDono(''); }}>
+            <Icone nome="limpar" tamanho={15} /> Limpar filtros
+          </button>
         )}
       </Ferramentas>
 
@@ -94,14 +94,19 @@ export function TelaUsinas() {
           <tr key={u.id}>
             <td><strong>{u.codigo_geradora}</strong> {u.apelido && <span className="fraco">· {u.apelido}</span>}</td>
             <td className="fraco">{u.distribuidora}</td>
+            {/* O vinculo do dono grava NO CHANGE, sem botao de confirmar: e uma
+                escolha de lista, nao um valor digitado, e nao ha estado
+                intermediario para conferir. Por isso ele NAO usa a classe
+                `inline` — um select que parece texto esconderia que ele
+                escreve no banco ao mudar. */}
             <td style={{ minWidth: 230 }}>
-              <select value={u.dono_usina_id ?? ''} onChange={(e) => vincular(u.id, e.target.value)}
-                      disabled={acao.ocupado} aria-label={`Dono da usina ${u.codigo_geradora}`}>
-                <option value="">— Sem dono (bloqueia o repasse)</option>
-                {(donos.dado ?? []).map((d) => <option key={d.id} value={d.id}>{d.nome}</option>)}
-              </select>
+              <Escolha valor={u.dono_usina_id ?? ''} ao={(v) => void vincular(u.id, v)}
+                       desabilitado={acao.ocupado}
+                       rotuloAcessivel={`Dono da usina ${u.codigo_geradora}`}
+                       primeira="— Sem dono (bloqueia o repasse)"
+                       opcoes={(donos.dado ?? []).map((d) => ({ valor: d.id, texto: d.nome }))} />
             </td>
-            <td><span className={`marca ${u.status === 'ativa' ? 'ok' : 'pendente'}`}>{rotulo(u.status)}</span></td>
+            <td><Marca tom={u.status === 'ativa' ? 'ok' : 'pendente'}>{rotulo(u.status)}</Marca></td>
           </tr>
         ))}
       </Tabela>
@@ -114,7 +119,9 @@ export function TelaUsinas() {
           <Campo rotulo="Percentual" valor={pct} ao={setPct} dica="Ex. 70,00" />
           <Campo rotulo="Vigência a partir de" valor={inicio} ao={setInicio} tipo="date" />
           <div style={{ alignSelf: 'end' }}>
-            <button className="primario" onClick={abrirVigencia} disabled={acao.ocupado || !sel}>Abrir vigência</button>
+            <button className="primario" onClick={abrirVigencia} disabled={acao.ocupado || !sel}>
+              <Icone nome="tarifas" tamanho={15} peso="bold" /> Abrir vigência
+            </button>
           </div>
         </div>
         <p className="sub" style={{ marginTop: 12, marginBottom: 0 }}>

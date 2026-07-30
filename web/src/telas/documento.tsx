@@ -21,9 +21,12 @@ import { useEffect, useState } from 'react';
 import {
   api, buscarBinario,
   type IdentidadeDeCobranca, type CampoDoDocumento, type DocumentoDaFatura, type Fatura,
+  type QrDoDocumento,
 } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
-import { Pagina, Aviso, Campo, Tabela, Marca, linha } from '../ui.tsx';
+import {
+  Pagina, Aviso, Campo, Tabela, linha, Icone, Interruptor, BotaoDeIcone, CampoData, Escolha,
+} from '../ui.tsx';
 import { competenciaISO } from '../dinheiro.ts';
 import { mover, paraEnvio, type CampoConfigurado } from '../cobranca-regras.ts';
 
@@ -155,7 +158,7 @@ export function TelaDocumento() {
 
       {/* ------------------------------------------------------------- a logo */}
       <div className="cartao" style={{ marginBottom: 20 }}>
-        <h2 style={{ marginTop: 0 }}>Logo</h2>
+        <h2 style={{ marginTop: 0 }}><Icone nome="enviar" tamanho={17} /> Logo</h2>
         <p className="sub">
           <strong>PNG ou JPEG, até 512 KB.</strong> SVG é recusado de propósito: é documento com
           script dentro, e a logo é embutida no HTML do documento. O tipo é reconhecido pelos
@@ -169,7 +172,9 @@ export function TelaDocumento() {
                  onChange={(e) => { const f = e.target.files?.[0]; if (f) void enviarLogo(f); }} />
           {ident.dado?.logo_sha256 && (
             <>
-              <button onClick={() => void removerLogo()} disabled={acao.ocupado}>Remover</button>
+              <button onClick={() => void removerLogo()} disabled={acao.ocupado}>
+                <Icone nome="remover" tamanho={15} /> Remover
+              </button>
               <span className="fraco" style={{ fontSize: 12 }}>
                 {ident.dado.logo_mime} · {Math.round((ident.dado.logo_bytes ?? 0) / 1024)} KB ·
                 sha256 {ident.dado.logo_sha256.slice(0, 12)}…
@@ -181,7 +186,7 @@ export function TelaDocumento() {
 
       {/* ------------------------------------------------ o Pix do recebedor */}
       <div className="cartao" style={{ marginBottom: 20 }}>
-        <h2 style={{ marginTop: 0 }}>Recebimento por Pix</h2>
+        <h2 style={{ marginTop: 0 }}><Icone nome="pix" tamanho={17} /> Recebimento por Pix</h2>
         <p className="sub">
           Enquanto o certificado A1 não existir, a faixa de pagamento é um <strong>QR Pix
           estático</strong> gerado aqui. Chave Pix <strong>não é segredo</strong> — ela identifica o
@@ -196,7 +201,9 @@ export function TelaDocumento() {
           <Campo rotulo="Nome do recebedor (25)" valor={pix.nome} ao={(v) => setPix({ ...pix, nome: v })} />
           <Campo rotulo="Cidade (15)" valor={pix.cidade} ao={(v) => setPix({ ...pix, cidade: v })} />
           <div style={{ alignSelf: 'end' }}>
-            <button className="primario" onClick={() => void salvarPix()} disabled={acao.ocupado}>Salvar</button>
+            <button className="primario" onClick={() => void salvarPix()} disabled={acao.ocupado}>
+              <Icone nome={acao.ocupado ? 'carregando' : 'confirmar'} tamanho={15} peso="bold" /> Salvar
+            </button>
           </div>
         </div>
         <p className="sub" style={{ marginBottom: 0 }}>
@@ -209,11 +216,13 @@ export function TelaDocumento() {
       {/* -------------------------------------------------------- os campos */}
       <div className="cartao" style={{ marginBottom: 20 }}>
         <div style={{ ...linha }}>
-          <h2 style={{ margin: 0 }}>Campos do documento</h2>
+          <h2 style={{ margin: 0 }}><Icone nome="documento" tamanho={17} /> Campos do documento</h2>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-            <button onClick={() => void voltarAoPadrao()} disabled={acao.ocupado}>Voltar ao padrão</button>
+            <button onClick={() => void voltarAoPadrao()} disabled={acao.ocupado}>
+              <Icone nome="recarregar" tamanho={15} /> Voltar ao padrão
+            </button>
             <button className="primario" onClick={() => void salvarCampos()} disabled={acao.ocupado || !lista}>
-              Salvar layout
+              <Icone nome={acao.ocupado ? 'carregando' : 'confirmar'} tamanho={15} peso="bold" /> Salvar layout
             </button>
           </div>
         </div>
@@ -229,19 +238,29 @@ export function TelaDocumento() {
           {(lista ?? []).map((c, i) => (
             <tr key={c.campo}>
               <td>
+                {/* As setas eram os caracteres ↑ e ↓ dentro de um botao de texto:
+                    o desenho mudava com a fonte do sistema e nao tinham nome
+                    acessivel nenhum. Agora sao Phosphor com `aria-label`. */}
                 <div style={{ display: 'flex', gap: 4 }}>
-                  <button onClick={() => setLista(mover(lista!, i, -1))} disabled={i === 0}>↑</button>
-                  <button onClick={() => setLista(mover(lista!, i, 1))} disabled={i === lista!.length - 1}>↓</button>
+                  <BotaoDeIcone icone="subir" rotulo={`Subir ${c.rotulo}`}
+                                ao={() => setLista(mover(lista!, i, -1))} desabilitado={i === 0} />
+                  <BotaoDeIcone icone="descer" rotulo={`Descer ${c.rotulo}`}
+                                ao={() => setLista(mover(lista!, i, 1))}
+                                desabilitado={i === lista!.length - 1} />
                 </div>
               </td>
               <td><code style={{ fontSize: 12 }}>{c.campo}</code></td>
               <td>
-                <input value={c.rotulo} style={{ marginBottom: 0 }}
-                       onChange={(e) => setLista(lista!.map((x, j) => (j === i ? { ...x, rotulo: e.target.value } : x)))} />
+                {/* A classe `inline` vai num div e nao no `td`: `display: flex`
+                    num td o retira do algoritmo de tabela, e a linha quebra. */}
+                <div className="inline">
+                  <input value={c.rotulo} aria-label={`Rótulo impresso de ${c.campo}`}
+                         onChange={(e) => setLista(lista!.map((x, j) => (j === i ? { ...x, rotulo: e.target.value } : x)))} />
+                </div>
               </td>
               <td>
-                <input type="checkbox" checked={c.visivel} style={{ width: 'auto' }}
-                       onChange={(e) => setLista(lista!.map((x, j) => (j === i ? { ...x, visivel: e.target.checked } : x)))} />
+                <Interruptor ligado={c.visivel} rotulo="" rotuloAcessivel={`Mostrar ${c.rotulo}`}
+                             ao={(v) => setLista(lista!.map((x, j) => (j === i ? { ...x, visivel: v } : x)))} />
               </td>
             </tr>
           ))}
@@ -282,26 +301,26 @@ function Previa({ logoUrl }: { logoUrl: string | null }) {
   return (
     <>
       <div className="cartao naoimprime" style={{ marginBottom: 20 }}>
-        <h2 style={{ marginTop: 0 }}>Prévia</h2>
+        <h2 style={{ marginTop: 0 }}><Icone nome="imprimir" tamanho={17} /> Prévia</h2>
         <div style={{ ...linha, gap: 12 }}>
           <div>
             <label>Competência</label>
-            <input type="month" value={mes} onChange={(e) => { setMes(e.target.value); setFaturaId(''); }}
-                   style={{ width: 'auto' }} />
+            <CampoData mes valor={mes} rotuloAcessivel="Competência" style={{ width: 'auto' }}
+                       ao={(v) => { setMes(v); setFaturaId(''); }} />
           </div>
           <div style={{ flex: '1 1 260px' }}>
             <label>Fatura</label>
-            <select value={faturaId} onChange={(e) => setFaturaId(e.target.value)}>
-              <option value="">Escolha uma fatura…</option>
-              {(faturas.dado ?? []).map((f) => (
-                <option key={f.id} value={f.id}>
-                  {String(f.competencia).slice(0, 7)} · {f.status} · {f.id.slice(0, 8)}
-                </option>
-              ))}
-            </select>
+            <Escolha valor={faturaId} ao={setFaturaId} rotuloAcessivel="Fatura"
+                     primeira="Escolha uma fatura…"
+                     opcoes={(faturas.dado ?? []).map((f) => ({
+                       valor: f.id,
+                       texto: `${String(f.competencia).slice(0, 7)} · ${f.status} · ${f.id.slice(0, 8)}`,
+                     }))} />
           </div>
           <div style={{ alignSelf: 'end' }}>
-            <button onClick={() => window.print()} disabled={!doc.dado}>Imprimir / salvar PDF</button>
+            <button className="primario" onClick={() => window.print()} disabled={!doc.dado}>
+              <Icone nome="imprimir" tamanho={15} peso="bold" /> Imprimir / salvar PDF
+            </button>
           </div>
         </div>
         {faturas.erro && <Aviso tipo="erro">Falha ao ler as faturas: {faturas.erro}</Aviso>}
@@ -350,6 +369,43 @@ function Documento({ doc, logoUrl }: { doc: DocumentoDaFatura; logoUrl: string |
   );
 }
 
+/**
+ * O QUADRADO. O SVG vem PRONTO do servidor - ver `src/dominio/qrcode.ts` e a
+ * decisao 4 da `Q-DOCFATURA-01`: o CRM consome a mesma rota e nao roda React, e um
+ * QR desenhado aqui obrigaria o CRM a portar o codificador.
+ *
+ * `dangerouslySetInnerHTML` E DELIBERADO E E O PONTO ESTREITO, entao vale dizer por
+ * que e seguro aqui: o `d` do caminho e montado a partir de INDICES DA MATRIZ, e
+ * nenhum dado de fatura, cliente ou chave Pix atravessa a string. A verificacao
+ * `Q13c` de `tests/qrcode.ts` prende isso - o atributo nao aceita caractere fora de
+ * `[Mhvz0-9 -]`. Se alguem um dia interpolar texto no SVG, aquele teste cai antes.
+ */
+function Qr({ qr, motivo, rotulo }: { qr: QrDoDocumento | null; motivo?: string; rotulo: string }) {
+  if (!qr) {
+    // Sem desenho, o codigo copiavel continua ao lado. Dizer o motivo e melhor que
+    // um quadrado vazio - foi a mesma escolha de 29/07, agora no caso residual.
+    return motivo
+      ? <p className="sub naoimprime" style={{ marginTop: 8 }}>O desenho do QR não pôde ser gerado: {motivo}</p>
+      : null;
+  }
+  return (
+    <figure style={{ margin: '12px 0 0', display: 'flex', gap: 16, alignItems: 'center' }}>
+      <div
+        aria-label={rotulo}
+        style={{ width: 180, height: 180, flex: '0 0 auto' }}
+        dangerouslySetInnerHTML={{ __html: qr.svg }}
+      />
+      <figcaption className="sub" style={{ margin: 0 }}>
+        Aponte a câmera do aplicativo do banco.
+        <br />
+        <span className="fraco" style={{ fontSize: 11 }}>
+          QR versão {qr.versao}, correção {qr.nivel}, {qr.modulos}×{qr.modulos} módulos
+        </span>
+      </figcaption>
+    </figure>
+  );
+}
+
 function FaixaDePagamento({ pagamento }: { pagamento: DocumentoDaFatura['pagamento'] }) {
   if (pagamento.tipo === 'boleto') {
     return (
@@ -360,6 +416,7 @@ function FaixaDePagamento({ pagamento }: { pagamento: DocumentoDaFatura['pagamen
           <>
             <div className="fraco" style={{ fontSize: 12, marginTop: 12 }}>OU PIX (copia e cola)</div>
             <code style={{ fontSize: 11, wordBreak: 'break-all' }}>{pagamento.pix_copia_e_cola}</code>
+            <Qr qr={pagamento.qr} motivo={pagamento.qr_motivo} rotulo="QR Code do Pix do boleto" />
           </>
         )}
       </div>
@@ -369,18 +426,19 @@ function FaixaDePagamento({ pagamento }: { pagamento: DocumentoDaFatura['pagamen
   if (pagamento.tipo === 'pix') {
     return (
       <div style={{ marginTop: 24, borderTop: '2px dashed var(--borda)', paddingTop: 16 }}>
-        <div className="fraco" style={{ fontSize: 12 }}>PAGUE COM PIX — copie o código abaixo</div>
-        <code style={{ fontSize: 11, wordBreak: 'break-all' }}>{pagamento.brcode}</code>
+        <div className="fraco" style={{ fontSize: 12 }}>PAGUE COM PIX — aponte a câmera ou copie o código</div>
+        <Qr qr={pagamento.qr} motivo={pagamento.qr_motivo} rotulo="QR Code do Pix" />
+        <code style={{ fontSize: 11, wordBreak: 'break-all', display: 'block', marginTop: 12 }}>
+          {pagamento.brcode}
+        </code>
         {/*
-          O QR VISUAL AINDA NAO EXISTE, e dizer isso e melhor que desenhar um
-          quadrado falso: renderizar QR exige um codificador (Reed-Solomon e
-          mascaras) e ele nao foi escrito. O codigo acima e o BR Code COMPLETO e
-          valido - da para pagar copiando e colando hoje.
+          O QUE CONTINUA VERDADE DEPOIS DE O DESENHO EXISTIR: o Pix estatico nao
+          carrega `txid` por fatura, entao o dinheiro chega sem dizer de quem e. O
+          desenho nao muda isso, e a frase fica.
         */}
         <p className="sub naoimprime" style={{ marginTop: 8, marginBottom: 0 }}>
-          O <strong>desenho</strong> do QR ainda não é gerado — o código ao lado é o BR Code completo
-          e válido, e paga por copia-e-cola. Conciliação <strong>manual</strong>: um Pix estático não
-          carrega identificador por fatura.
+          Conciliação <strong>manual</strong>: um Pix estático não carrega identificador por fatura,
+          então a baixa é dada na aba Faturas. Isso não muda com o QR.
         </p>
       </div>
     );

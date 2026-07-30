@@ -13,7 +13,9 @@
 import { useState } from 'react';
 import { api, type Prontidao } from '../api.ts';
 import { useDados } from '../dados.ts';
-import { Pagina, Aviso, Tabela, Marca, rotulo, linha } from '../ui.tsx';
+import {
+  Pagina, Aviso, Tabela, Marca, rotulo, Kpi, KpiSimNao, Carregando, CampoData,
+} from '../ui.tsx';
 import { competenciaISO } from '../dinheiro.ts';
 
 const mesAtual = () => new Date().toISOString().slice(0, 7);
@@ -25,41 +27,32 @@ export function TelaProntidao() {
 
   return (
     <Pagina titulo="Prontidão para faturar"
-            sub="O que falta para esta competência poder ser cobrada. Nove camadas, cada uma com dono. Esta tela conta — não decide nada.">
-      <div style={{ ...linha, marginBottom: 16 }}>
+            sub="O que falta para esta competência poder ser cobrada. Dez camadas, cada uma com dono. Esta tela conta — não decide nada.">
+      <div className="ferramentas">
         <label style={{ margin: 0 }}>Competência</label>
-        <input type="month" value={mes} onChange={(e) => setMes(e.target.value)} style={{ width: 'auto' }} />
+        <CampoData mes valor={mes} ao={setMes} rotuloAcessivel="Competência" style={{ width: 'auto' }} />
       </div>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
-      {carregando && <p className="fraco">Carregando…</p>}
+      {carregando && <Carregando texto="Contando as dez camadas…" />}
 
       {dado && (
         <>
+          {/*
+            OS DOIS PRIMEIROS CARTOES SAO AS DUAS RESPOSTAS DE CONSEQUENCIA, e por
+            isso sao os unicos com icone grande de sim/nao: "pode faturar" decide
+            se a cobranca existe, "pode repartir" decide se o dinheiro que entrar
+            e distribuido. A palavra continua escrita ao lado do desenho.
+          */}
           <div className="kpis">
-            <div className="kpi">
-              <div className="nome">Pode faturar</div>
-              <div className="valor" style={{ color: dado.pode_faturar ? 'var(--ok)' : 'var(--erro)' }}>
-                {dado.pode_faturar ? 'Sim' : 'Não'}
-              </div>
-            </div>
-            <div className="kpi">
-              <div className="nome">Pode repartir</div>
-              <div className="valor" style={{ color: dado.pode_repartir ? 'var(--ok)' : 'var(--erro)' }}>
-                {dado.pode_repartir ? 'Sim' : 'Não'}
-              </div>
-            </div>
-            <div className="kpi">
-              <div className="nome">Unidades ativas</div>
-              <div className="valor">{dado.ucs_ativas}</div>
-            </div>
-            <div className="kpi">
-              <div className="nome">Camadas pendentes</div>
-              <div className="valor">
-                {dado.camadas.filter((c) => c.situacao === 'pendente').length}
-                <span className="fraco" style={{ fontSize: 14 }}> de {dado.camadas.length}</span>
-              </div>
-            </div>
+            <KpiSimNao nome="Pode faturar" sim={dado.pode_faturar} icone="pode_faturar" />
+            <KpiSimNao nome="Pode repartir" sim={dado.pode_repartir} icone="pode_repartir" />
+            <Kpi nome="Unidades ativas" icone="unidades" valor={dado.ucs_ativas} />
+            <Kpi nome="Camadas pendentes" icone="prontidao"
+                 valor={<>
+                   {dado.camadas.filter((c) => c.situacao === 'pendente').length}
+                   <span className="fraco" style={{ fontSize: 14, fontWeight: 500 }}> de {dado.camadas.length}</span>
+                 </>} />
           </div>
 
           <Tabela cabecalho={<><th>Camada</th><th>Estado</th><th className="num">Falta</th><th>Efeito</th><th>Dono</th></>}>

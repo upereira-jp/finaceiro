@@ -6,7 +6,7 @@ Sistema financeiro multi-tenant da G3 Solar: faturamento de crédito de energia,
 |---|---|
 | **Dono** | Vinicius Leal |
 | **Fase atual** | F0 fechada · F1 com os três critérios formais cumpridos · **F2 e F3 construídas em 28/07, depois de a `PAUTA-contador.md` voltar respondida.** 20 migrations, `fatura`, `boleto`, `liquidacao`, `split_execucao` e `split_item` no banco, dois motores puros, a `PortaDeCobranca` injetada e **571 verificações** em 27 suítes. O que segura a F2 agora é **um certificado A1**, não código: o critério do `PRD` §10 é *"boleto liquidado no sandbox baixa a fatura"*, e o ciclo inteiro está provado contra o adaptador falso. Ver `RESUMO-SESSAO-10.md`. Histórico da F1 preservado abaixo: **F1 em execução, e não fecha só com código nosso.** 15 migrations no Supabase `sa-east-1`, role de runtime, composition root, seis repositórios, 37 rotas, auth próprio medido ponta a ponta contra o Supabase real, conector do CRM construído e testado, e os 8 invariantes de catálogo verdes **contra produção**. A `Q-VIEWS-01` fechou no mesmo dia e o **invariante 9 está cumprido**. O ciclo rodou **valendo, duas vezes**, contra o CRM real e os três critérios formais fecharam; a `Q-ESCOPO-01` (conector entrega 1 de 4 entidades) é a vermelha que resta. Ver a tabela de critérios abaixo |
-| **Atualizado** | 30/07/2026 · fim da sessão 14 — o eixo do originador, o caminho de cobrança inteiro na tela e o documento de cobrança. Ver `RESUMO-SESSAO-14.md` |
+| **Atualizado** | 30/07/2026 · fim da sessão 14 — o eixo do originador, o caminho de cobrança inteiro na tela e o documento de cobrança. Ver `RESUMO-SESSAO-14.md`. **No mesmo dia, o acabamento visual da SPA:** tipografia própria, Phosphor exclusivo, tabela e input não-nativos, e as **191 verificações** que passaram a prender contraste, movimento e navegação — a regra 8 chegando à camada de apresentação. Ver `INTERFACE-2026-07-30.md` |
 | **No ar** | **`https://financeiro.blackhaus.io`** — systemd, Node 22 isolado, TLS até 26/10. Mesmo VPS do CRM, **sem alterar uma linha da configuração dele**. Ver `RESUMO-SESSAO-11.md` |
 
 ---
@@ -100,6 +100,15 @@ ATRIBUICAO-originador-2026-07-29.md
 MAPA-UX-2026-07-29.md        a revisao de UX da SPA: caixa de sentenca, rotas
                              por caminho, busca/filtro/ordenacao, tema claro
                              como padrao. O que ficou de fora esta la, com nivel
+INTERFACE-2026-07-30.md      O REGISTRO DO ACABAMENTO VISUAL: o que mudou, o que
+                             foi medido (contraste, bundle), o que a conferencia
+                             VISUAL pegou - tres defeitos que a leitura de codigo
+                             nao pegaria, um deles um icone de "nao sei" numa
+                             fatura emitida com sucesso - e a divergencia do
+                             Lottie, que virou Q-LOTTIE-01. As 12 telas foram
+                             RENDERIZADAS em Chromium nos dois temas: e a primeira
+                             vez que a interface deste projeto e conferida por
+                             imagem, e nao por leitura
 PAUTA-contador.md            as 10 perguntas fechadas, RESPONDIDAS em 28/07. O
                              corpo fica intacto; a tabela do fim e o de-para
 VIEWS-PROPOSTAS-r2.sql       DDL proposta ao dev do CRM. EXECUTADA - as 8 views
@@ -173,7 +182,47 @@ web/src/tema.ts              CORES E TIPOGRAFIA, num lugar so. A paleta e a DA G
                              desde 28/07; o que esta marcado [derivado] (estados
                              semanticos, tema escuro, hover) segue sendo escolha
                              de quem escreveu o codigo. Nenhuma tela tem cor
-                             literal, e todo par tem o contraste AA medido
+                             literal, e todo par tem o contraste AA medido - e
+                             desde 30/07 isso e TESTE e nao comentario. A fonte
+                             (Inter) e SERVIDA POR NOS: o argumento antigo contra
+                             webfont continua no arquivo, e o que o resolve e
+                             `font-display: swap` com a pilha de sistema atras
+web/tests/tema.ts            as 139 verificacoes da paleta. Confere a propria
+                             calculadora antes de julgar as cores (preto sobre
+                             branco e 21:1 por definicao), e a T4 pega a classe
+                             que o tsc NAO pega: token novo em `Paleta` que
+                             ninguem emitiu como custom property - o sintoma e um
+                             `var(--x)` que resolve para nada e descarta a regra
+                             CSS inteira, sem erro. JA PAGOU: `--fundo-suave`
+                             nunca existiu e estava em uso na tela de Faturas
+web/src/estilo.ts            O CSS INTEIRO, numa string e num modulo PURO - saiu
+                             do ui.tsx em 30/07 justamente para poder ser lido por
+                             teste. As tres cores literais do documento impresso
+                             sao excecao NOMEADA, e a lista e fechada: papel e
+                             preto sobre branco independente do tema da tela
+web/src/iconografia.ts       o vocabulario FECHADO de icones: os tres estados, os
+                             tres avisos, os seis status de fatura e a lista do que
+                             se MOVE. Nenhuma tela escolhe desenho - ela pede um
+                             nome semantico
+web/src/icones.tsx           os desenhos do Phosphor. `Record<NomeDeIcone, Icon>`
+                             exaustivo: nome sem desenho NAO COMPILA. Import
+                             profundo por icone, e o custo esta MEDIDO - 37,7 KB
+                             gzip para 54 icones, num pedaco proprio do bundle.
+                             O logotipo e a UNICA excecao: marca e identidade,
+                             nao iconografia
+web/src/navegacao.ts         rota, titulo, icone e grupo das 12 telas, como DADO.
+                             A ordem e decisao documentada (as camadas da
+                             prontidao, depois os atos do dinheiro) e agora tem
+                             teste - inclusive o "caminho desconhecido cai na
+                             Prontidao", que estava so em comentario
+web/tests/interface.ts       as 52 verificacoes da apresentacao: cor literal,
+                             movimento nos DOIS sentidos (nada anima por acidente),
+                             prefers-reduced-motion, unicidade da navegacao e a
+                             forma da tabela
+web/public/fontes/           a Inter variavel (48 KB, latino) e a licenca OFL. O
+                             nome carrega a VERSAO porque o servirEstatico manda
+                             `immutable` por um ano e o public/ do Vite nao recebe
+                             hash no nome
 web/src/dinheiro.ts          a regra 1 no browser: reais viram centavos por TEXTO,
                              sem multiplicar por 100 e sem float
 web/src/dados.ts             `useDados`/`useAcao` e o `emLotes`. NENHUMA tela
@@ -314,11 +363,11 @@ tests/dominio-carteira.ts    os dois motores SEM banco. A invariante do centavo
                              em 2.000 combinacoes
 tests/repos-carteira.ts      o ciclo do dinheiro ponta a ponta, pela role sem
                              BYPASSRLS e pelo adaptador falso
-tests/                       571 verificacoes em 27 suites. `npm test` roda todas.
+tests/                       854 verificacoes em 30 suites. `npm test` roda todas.
                              A CONTAGEM E `npm test | grep -c '^ok '`, e o metodo
                              esta escrito aqui porque os numeros anteriores (461,
                              496) vinham de uma soma que nao se reproduzia: so 15
-                             das 27 suites anunciam total proprio
+                             das 30 suites anunciam total proprio
 tsconfig.json                `npm run typecheck` = tsc --noEmit. Roda no CI
 ```
 
@@ -362,7 +411,7 @@ npx prisma migrate deploy    # transacional POR MIGRATION. E o que salva de meia
 Validar num banco limpo:
 
 ```bash
-npm test          # typecheck + as 27 suites, 571 verificacoes (linhas `ok`)
+npm test          # typecheck + as 30 suites, 854 verificacoes (linhas `ok`)
 npm run typecheck # sozinho, tsc --noEmit
 ```
 

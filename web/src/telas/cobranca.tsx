@@ -21,7 +21,7 @@
 import { useState } from 'react';
 import { api, ErroDaApi } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
-import { Pagina, Aviso, Campo, Marca, linha } from '../ui.tsx';
+import { Pagina, Aviso, Campo, Marca, linha, Interruptor, Icone } from '../ui.tsx';
 import { dataOuNull } from '../dinheiro.ts';
 import {
   motivoDaTravaDoConector, podeSalvarConector, sinalDeSegredo,
@@ -47,7 +47,9 @@ const semConectorEhResposta = async (): Promise<Certificado | null> => {
 const EXPLICACAO: Record<MotivoDeTravaDoConector, string> = {
   ocupado: 'Salvando…',
   sem_provedor: 'Escolha o provedor.',
-  sem_credencial_ref: 'A referência da credencial é obrigatória — é a coluna `credencial_ref`, que é NOT NULL.',
+  // Sem backtick: este texto NAO passa por JSX, entao a crase saía literal na
+  // tela — apareceu na conferência visual de 30/07.
+  sem_credencial_ref: 'A referência da credencial é obrigatória — é a coluna credencial_ref, que é NOT NULL.',
   credencial_ref_parece_segredo: '',   // a tela monta a frase com o sinal reconhecido
 };
 
@@ -183,16 +185,16 @@ export function TelaCobranca() {
         </div>
 
         <div style={{ ...linha, gap: 20, marginTop: 12 }}>
-          <label style={{ ...linha, gap: 6, marginBottom: 0 }}>
-            <input type="checkbox" checked={sandbox} onChange={(e) => setSandbox(e.target.checked)}
-                   style={{ width: 'auto' }} />
-            Sandbox
-          </label>
-          <label style={{ ...linha, gap: 6, marginBottom: 0 }}>
-            <input type="checkbox" checked={ativo} onChange={(e) => setAtivo(e.target.checked)}
-                   style={{ width: 'auto' }} />
-            Ativo
-          </label>
+          {/*
+            OS DOIS INTERRUPTORES SUBSTITUIRAM CHECKBOX NATIVO em 30/07, e aqui
+            isso nao e so acabamento: sao os dois campos que decidem se a emissao
+            aponta para o sandbox ou para a producao, e se o conector e usado. Um
+            checkbox nativo de 13px, do tamanho de um caractere, e um alvo pequeno
+            para uma consequencia grande. O `role="switch"` e o `aria-checked`
+            continuam sendo os de verdade — ver `Interruptor` no ui.tsx.
+          */}
+          <Interruptor ligado={sandbox} ao={setSandbox} rotulo="Sandbox" />
+          <Interruptor ligado={ativo} ao={setAtivo} rotulo="Ativo" />
           <span className="fraco" style={{ fontSize: 13 }}>
             {/*
               O default do servidor e `sandbox: true, ativo: false`, e a tela
@@ -207,6 +209,7 @@ export function TelaCobranca() {
 
         <div style={{ marginTop: 16 }}>
           <button className="primario" onClick={() => void salvar()} disabled={!podeSalvarConector(estado)}>
+            <Icone nome={acao.ocupado ? 'carregando' : 'cobranca'} tamanho={15} peso="bold" />
             Salvar conector
           </button>
           {motivo && motivo !== 'credencial_ref_parece_segredo' && (
@@ -219,7 +222,7 @@ export function TelaCobranca() {
       </div>
 
       {/* --------------------------------- o que falta para o boleto sair mesmo */}
-      <h2>O que falta para um boleto ser pagável</h2>
+      <h2><Icone nome="certificado" tamanho={17} /> O que falta para um boleto ser pagável</h2>
       <p className="sub">
         Nada disto é código nosso faltando — está medido e tem dono nomeado no <code>QUESTOES.md</code>.
       </p>

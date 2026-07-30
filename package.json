@@ -18,7 +18,7 @@
     "auth:verificar": "node --experimental-strip-types --env-file=.env scripts/verificar-auth-real.ts",
     "test:documento": "node --experimental-strip-types tests/documento.ts",
     "test:brcode": "node --experimental-strip-types tests/brcode.ts && node --experimental-strip-types tests/layout-do-documento.ts && node --experimental-strip-types tests/qrcode.ts",
-    "test:web": "node --experimental-strip-types web/tests/lotes.ts && node --experimental-strip-types web/tests/contrato.ts && node --experimental-strip-types web/tests/cobranca.ts && node --experimental-strip-types web/tests/csv.ts",
+    "test:web": "node --experimental-strip-types web/tests/lotes.ts && node --experimental-strip-types web/tests/contrato.ts && node --experimental-strip-types web/tests/cobranca.ts && node --experimental-strip-types web/tests/csv.ts && node --experimental-strip-types web/tests/tema.ts && node --experimental-strip-types web/tests/interface.ts",
     "test:dominio": "node --experimental-strip-types tests/dominio-carteira.ts",
     "test:isolamento": "bash tests/run.sh",
     "test:middleware": "bash tests/middleware.sh",

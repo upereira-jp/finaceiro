@@ -13,7 +13,7 @@ import { useState } from 'react';
 import { api, type UnidadeConsumidora, type Usina } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
-  Pagina, Aviso, Tabela, Busca, Ferramentas, ThOrd,
+  Pagina, Aviso, Tabela, Busca, Ferramentas, Filtro, ThOrd, Marca, BotaoDeIcone, CampoData, Icone,
   useOrdenacao, ordenar, contem, rotulo,
 } from '../ui.tsx';
 import { decimalTexto } from '../dinheiro.ts';
@@ -87,18 +87,18 @@ export function TelaUnidades() {
 
       <Ferramentas contagem={todas.length ? `${visiveis.length} de ${todas.length}` : undefined}>
         <Busca valor={busca} ao={setBusca} dica="Buscar por UC ou distribuidora…" />
-        <select value={situacao} aria-label="Filtrar por situação" onChange={(e) => setSituacao(e.target.value)}>
-          <option value="">Todas as situações</option>
-          <option value="ativa">Ativas</option>
-          <option value="inativa">Inativas</option>
-        </select>
-        <select value={pendencia} aria-label="Filtrar por pendência" onChange={(e) => setPendencia(e.target.value)}>
-          <option value="">Todas as pendências</option>
-          <option value="sem_vencimento">Sem vencimento</option>
-          <option value="sem_usina">Sem usina</option>
-        </select>
+        <Filtro valor={situacao} ao={setSituacao} rotulo="Filtrar por situação"
+                opcoes={[{ valor: '', texto: 'Todas as situações' },
+                         { valor: 'ativa', texto: 'Ativas' },
+                         { valor: 'inativa', texto: 'Inativas' }]} />
+        <Filtro valor={pendencia} ao={setPendencia} rotulo="Filtrar por pendência"
+                opcoes={[{ valor: '', texto: 'Todas as pendências' },
+                         { valor: 'sem_vencimento', texto: 'Sem vencimento' },
+                         { valor: 'sem_usina', texto: 'Sem usina' }]} />
         {(busca || situacao || pendencia) && (
-          <button type="button" onClick={() => { setBusca(''); setSituacao(''); setPendencia(''); }}>Limpar filtros</button>
+          <button type="button" onClick={() => { setBusca(''); setSituacao(''); setPendencia(''); }}>
+            <Icone nome="limpar" tamanho={15} /> Limpar filtros
+          </button>
         )}
       </Ferramentas>
 
@@ -118,24 +118,35 @@ export function TelaUnidades() {
             <td><strong>{u.numero_uc}</strong></td>
             <td className="fraco">{u.distribuidora}</td>
             <td className="fraco">{nomeUsina(u.usina_id) ?? <span style={{ color: 'var(--erro)' }}>Sem usina</span>}</td>
-            <td className="num" style={{ minWidth: 150 }}>
-              <div style={{ display: 'flex', gap: 6 }}>
+            {/*
+              OS DOIS CAMPOS DA LINHA PARECEM TEXTO ATE RECEBEREM ATENCAO
+              (classe `inline`), e o "OK" virou botao redondo de check. E o pedido
+              de 30/07, e ele conserta um problema real desta tabela: sao 39 linhas
+              com dois inputs e dois botoes cada, e a versao anterior desenhava 156
+              caixas com borda visivel de uma vez. A tela parecia um formulario
+              gigante em vez de uma lista com dois campos editaveis.
+            */}
+            <td className="num" style={{ minWidth: 140 }}>
+              <div className="inline" style={{ justifyContent: 'flex-end' }}>
                 <input value={rateio[u.id] ?? u.percentual_rateio ?? ''}
                        aria-label={`Rateio da ${u.numero_uc}`}
                        onChange={(e) => setRateio({ ...rateio, [u.id]: e.target.value })}
-                       placeholder="Ex. 12,5" style={{ width: 90 }} />
-                <button onClick={() => salvarRateio(u)} disabled={acao.ocupado || !u.usina_id}>OK</button>
+                       placeholder="Ex. 12,5" style={{ width: 82, textAlign: 'right' }} />
+                <BotaoDeIcone icone="confirmar" rotulo={`Gravar o rateio da ${u.numero_uc}`}
+                              ao={() => void salvarRateio(u)}
+                              desabilitado={acao.ocupado || !u.usina_id} />
               </div>
             </td>
-            <td style={{ minWidth: 190 }}>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <input type="date" value={edicao[u.id] ?? u.data_vencimento?.slice(0, 10) ?? ''}
-                       aria-label={`Vencimento da ${u.numero_uc}`}
-                       onChange={(e) => setEdicao({ ...edicao, [u.id]: e.target.value })} />
-                <button onClick={() => salvarVencimento(u)} disabled={acao.ocupado}>OK</button>
+            <td style={{ minWidth: 180 }}>
+              <div className="inline">
+                <CampoData valor={edicao[u.id] ?? u.data_vencimento?.slice(0, 10) ?? ''}
+                           rotuloAcessivel={`Vencimento da ${u.numero_uc}`}
+                           ao={(v) => setEdicao({ ...edicao, [u.id]: v })} />
+                <BotaoDeIcone icone="confirmar" rotulo={`Gravar o vencimento da ${u.numero_uc}`}
+                              ao={() => void salvarVencimento(u)} desabilitado={acao.ocupado} />
               </div>
             </td>
-            <td><span className={`marca ${u.status === 'ativa' ? 'ok' : 'pendente'}`}>{rotulo(u.status)}</span></td>
+            <td><Marca tom={u.status === 'ativa' ? 'ok' : 'pendente'}>{rotulo(u.status)}</Marca></td>
           </tr>
         ))}
       </Tabela>
