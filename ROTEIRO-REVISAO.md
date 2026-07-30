@@ -35,7 +35,7 @@
 >
 > ### (b) Produção não tem contrato nenhum — medido em 30/07
 >
-
+fa
 > ```
 > clientes .......... 84     contratos ............... 0
 > UCs (c/ rateio) ... 39     originadores ............ 0
