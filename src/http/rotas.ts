@@ -705,8 +705,20 @@ export const ROTAS: Rota[] = [
      * no repositorio -, entao expo-la a um consumidor externo nao abre superficie
      * de escrita. O que falta para o CRM chamar de fato e a autenticacao dele,
      * que e a mesma pergunta em aberto da `Q-WEBHOOK-01`.
+     *
+     * `?embutir_logo=1` FECHA A PENDENCIA (c) DA `Q-DOCFATURA-01`. A tela busca o
+     * binario por `GET /cobranca/logo`, com o Bearer dela; um consumidor externo
+     * que nao possa fazer a segunda chamada pede a logo em base64 aqui e monta o
+     * documento numa requisicao. E OPT-IN de proposito: base64 custa 33% a mais, e
+     * cobrar isso de quem nao precisa encareceria o caminho comum.
+     *
+     * O QR do Pix vem SEMPRE, como SVG pronto - ver `src/dominio/qrcode.ts`. O
+     * consumidor externo nao precisa de codificador nenhum, que e o que a
+     * decisao 4 pediu.
      */
     metodo: 'GET', padrao: '/faturas/:id/documento',
-    handler: (req, app) => emRelatorio(app, req, async () => ok(await documento.paraFatura(req.params.id))),
+    handler: (req, app) => emRelatorio(app, req, async () => ok(await documento.paraFatura(req.params.id, {
+      embutirLogo: ['1', 'true', 'sim'].includes((req.query.get('embutir_logo') ?? '').toLowerCase()),
+    }))),
   },
 ];

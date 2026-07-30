@@ -25,6 +25,7 @@ import {
   type DadosDaFatura, type LinhaDoDocumento,
 } from '../dominio/layout-do-documento.ts';
 import { pixEstatico } from '../dominio/brcode.ts';
+import { svgDoBrCode } from '../dominio/qrcode.ts';
 
 export class IdentidadeNaoCadastrada extends Error {
   readonly status = 412;
@@ -190,6 +191,20 @@ export async function campos(): Promise<ConfiguracaoDeCampo[]> {
 
 // ------------------------------------------------------- o documento da fatura
 
+/**
+ * O QR pronto para pintar. `svg` e uma string autocontida, montada no SERVIDOR.
+ *
+ * Vai no payload em vez de a tela desenhar por conta propria pela mesma razao da
+ * decisao 4: o CRM vai consumir esta rota e nao roda React. Um QR que so o
+ * navegador desenha obrigaria o CRM a portar `src/dominio/qrcode.ts`.
+ */
+export type QrDoDocumento = {
+  svg: string;
+  versao: number;
+  nivel: string;
+  modulos: number;
+};
+
 export type DocumentoDaFatura = {
   fatura_id: string;
   status: string;
@@ -199,19 +214,56 @@ export type DocumentoDaFatura = {
   valor_total_centavos: number | null;
   /** As linhas, ja na ordem e formatadas. */
   linhas: LinhaDoDocumento[];
-  /** Metadado da logo. O binario vem por `GET .../logo`, nao aqui. */
-  logo: { mime: string; bytes: number; sha256: string } | null;
+  /**
+   * Metadado da logo, e `data_uri` SO quando o chamador pediu `embutir_logo`.
+   *
+   * Por que nao vem sempre: base64 custa 33% a mais e a tela ja busca o binario
+   * por `GET /cobranca/logo`, com o mime que o gatilho derivou do arquivo. Quem
+   * precisa do embutido e o consumidor que nao pode fazer a segunda chamada
+   * autenticada - e esse e o CRM (`Q-DOCFATURA-01`, pendencia (c)).
+   */
+  logo: { mime: string; bytes: number; sha256: string; data_uri?: string } | null;
   /**
    * A faixa de pagamento, e ela tem TRES estados que nao se confundem:
    *   `boleto`  - registrado na Sicoob: linha digitavel e Pix do banco;
    *   `pix`     - sem A1, QR estatico nosso (decisao 5). Conciliacao MANUAL;
    *   `nenhuma` - nao ha boleto e o tenant nao cadastrou chave Pix.
+   *
+   * `qr` acompanha as duas primeiras quando ha BR Code. `null` com `qr_motivo`
+   * preenchido significa que o desenho falhou e o codigo segue pagavel por
+   * copia-e-cola - nunca um QR mudo no lugar de um erro.
    */
   pagamento:
-    | { tipo: 'boleto'; linha_digitavel: string | null; codigo_barras: string | null; pix_copia_e_cola: string | null }
-    | { tipo: 'pix'; brcode: string; conciliacao: 'manual' }
+    | {
+        tipo: 'boleto'; linha_digitavel: string | null; codigo_barras: string | null;
+        pix_copia_e_cola: string | null; qr: QrDoDocumento | null; qr_motivo?: string;
+      }
+    | { tipo: 'pix'; brcode: string; qr: QrDoDocumento | null; qr_motivo?: string; conciliacao: 'manual' }
     | { tipo: 'nenhuma'; motivo: string };
 };
+
+export type OpcoesDoDocumento = {
+  /** Embute a logo como `data:` no payload. Ver `logo.data_uri`. */
+  embutirLogo?: boolean;
+};
+
+/**
+ * O QR de um BR Code, sem deixar a falha derrubar o documento.
+ *
+ * A DECISAO AQUI E RECUSAR EM SILENCIO O DESENHO, NUNCA O DOCUMENTO. O nosso BR
+ * Code cabe com folga (medido: o pior possivel da versao 11, e o teto e 12), mas o
+ * `pix_copia_e_cola` do boleto vem da SICOOB - e string externa, de tamanho que
+ * nao controlamos. Se ela nao couber, a fatura ainda tem de sair: com linha
+ * digitavel, com o codigo copiavel e com o motivo escrito ao lado.
+ */
+function qrDe(brcode: string | null): { qr: QrDoDocumento | null; qr_motivo?: string } {
+  if (!brcode) return { qr: null };
+  try {
+    return { qr: svgDoBrCode(brcode, { nivel: 'M', lado: 220 }) };
+  } catch (e) {
+    return { qr: null, qr_motivo: e instanceof Error ? e.message : String(e) };
+  }
+}
 
 /**
  * Compoe o documento de uma fatura. E o que a tela imprime e o que o CRM vai
@@ -220,7 +272,7 @@ export type DocumentoDaFatura = {
  * Caminho de LEITURA: `exigir('ler')`. Compor documento nao escreve nada, e por
  * isso pode ser servido a um consumidor externo sem abrir superficie de escrita.
  */
-export async function paraFatura(faturaId: string): Promise<DocumentoDaFatura> {
+export async function paraFatura(faturaId: string, opcoes: OpcoesDoDocumento = {}): Promise<DocumentoDaFatura> {
   await exigir('ler');
   const tenant_id = tenantCorrente();
 
@@ -233,6 +285,13 @@ export async function paraFatura(faturaId: string): Promise<DocumentoDaFatura> {
     campos(),
     dbt().boleto.findFirst({ where: { fatura_id: faturaId } }),
   ]);
+  /*
+   * A LOGO SO E LIDA QUANDO PEDIDA, e a ordem importa: a leitura acima nao a
+   * arrasta, que e a razao de ela viver em outra tabela. Pedir o embutido paga o
+   * custo de propositio, e quem paga e o consumidor que nao pode fazer a segunda
+   * chamada.
+   */
+  const bin = opcoes.embutirLogo && ident?.logo_mime ? await logo() : null;
   const usina = f.usina_id
     ? await dbt().usina.findFirst({ where: { id: f.usina_id } })
     : null;
@@ -267,7 +326,14 @@ export async function paraFatura(faturaId: string): Promise<DocumentoDaFatura> {
     valor_total_centavos: f.valor_total_centavos,
     linhas: linhasDoDocumento(dados, cfg),
     logo: ident?.logo_mime && ident.logo_bytes != null && ident.logo_sha256
-      ? { mime: ident.logo_mime, bytes: ident.logo_bytes, sha256: ident.logo_sha256 }
+      ? {
+          mime: ident.logo_mime, bytes: ident.logo_bytes, sha256: ident.logo_sha256,
+          // O mime vem da IDENTIDADE, onde o gatilho o gravou a partir da assinatura
+          // do arquivo. Nao ha mime escolhido pela aplicacao neste caminho.
+          ...(bin?.conteudo
+            ? { data_uri: `data:${ident.logo_mime};base64,${Buffer.from(bin.conteudo as Uint8Array).toString('base64')}` }
+            : {}),
+        }
       : null,
     pagamento: faixaDePagamento(f, ident, bol),
   };
@@ -286,6 +352,9 @@ function faixaDePagamento(f: any, ident: any, bol: any): DocumentoDaFatura['paga
       linha_digitavel: bol.linha_digitavel ?? null,
       codigo_barras: bol.codigo_barras ?? null,
       pix_copia_e_cola: bol.pix_copia_e_cola ?? null,
+      // O Pix DO BANCO tambem ganha desenho. Ele e melhor que o nosso estatico -
+      // tem `txid` e concilia sozinho -, entao seria estranho desenhar so o pior.
+      ...qrDe(bol.pix_copia_e_cola ?? null),
     };
   }
 
@@ -305,16 +374,13 @@ function faixaDePagamento(f: any, ident: any, bol: any): DocumentoDaFatura['paga
   }
 
   if (ident?.pix_chave && ident.pix_recebedor_nome && ident.pix_recebedor_cidade) {
-    return {
-      tipo: 'pix',
-      brcode: pixEstatico({
-        chave: ident.pix_chave,
-        recebedorNome: ident.pix_recebedor_nome,
-        recebedorCidade: ident.pix_recebedor_cidade,
-        valorCentavos: f.valor_total_centavos,
-      }),
-      conciliacao: 'manual',
-    };
+    const brcode = pixEstatico({
+      chave: ident.pix_chave,
+      recebedorNome: ident.pix_recebedor_nome,
+      recebedorCidade: ident.pix_recebedor_cidade,
+      valorCentavos: f.valor_total_centavos,
+    });
+    return { tipo: 'pix', brcode, ...qrDe(brcode), conciliacao: 'manual' };
   }
 
   return {

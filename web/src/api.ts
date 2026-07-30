@@ -222,6 +222,20 @@ export type LinhaDoDocumento = {
   ausente: boolean;
 };
 
+/**
+ * O QR pronto para pintar, montado no SERVIDOR (`src/dominio/qrcode.ts`).
+ *
+ * A tela NAO codifica QR, e isso e a decisao 4 da `Q-DOCFATURA-01`: o CRM consome
+ * a mesma rota e nao roda React. Se o desenho nascesse aqui, o CRM precisaria
+ * portar o codificador inteiro - Reed-Solomon, mascaras e tudo.
+ */
+export type QrDoDocumento = {
+  svg: string;
+  versao: number;
+  nivel: string;
+  modulos: number;
+};
+
 export type DocumentoDaFatura = {
   fatura_id: string;
   status: string;
@@ -229,10 +243,15 @@ export type DocumentoDaFatura = {
   vencimento: string;
   valor_total_centavos: number | null;
   linhas: LinhaDoDocumento[];
-  logo: { mime: string; bytes: number; sha256: string } | null;
+  /** `data_uri` so vem com `?embutir_logo=1`, que e o caminho do consumidor
+   *  externo - a tela busca o binario por `GET /cobranca/logo`. */
+  logo: { mime: string; bytes: number; sha256: string; data_uri?: string } | null;
   pagamento:
-    | { tipo: 'boleto'; linha_digitavel: string | null; codigo_barras: string | null; pix_copia_e_cola: string | null }
-    | { tipo: 'pix'; brcode: string; conciliacao: 'manual' }
+    | {
+        tipo: 'boleto'; linha_digitavel: string | null; codigo_barras: string | null;
+        pix_copia_e_cola: string | null; qr: QrDoDocumento | null; qr_motivo?: string;
+      }
+    | { tipo: 'pix'; brcode: string; qr: QrDoDocumento | null; qr_motivo?: string; conciliacao: 'manual' }
     | { tipo: 'nenhuma'; motivo: string };
 };
 

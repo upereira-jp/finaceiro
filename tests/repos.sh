@@ -154,6 +154,12 @@ echo
 echo "=== carteira ponta a ponta: compor, emitir, boleto, baixa e split"
 node --experimental-strip-types tests/repos-carteira.ts
 echo
+# O que so se verifica com banco: o mime pela ASSINATURA do arquivo, o sha256
+# derivado pelo GATILHO e a lista de campos fechada pelo ENUM. Sem banco, as tres
+# passariam verdes quebradas - eram a pendencia (b) da Q-DOCFATURA-01.
+echo "=== documento de cobranca: identidade, logo pelo gatilho, campos pelo enum e o QR"
+node --experimental-strip-types tests/repos-documento.ts
+echo
 echo "=== HTTP: rotas, matriz de papeis e traducao de erro"
 node --experimental-strip-types tests/http.ts
 echo
