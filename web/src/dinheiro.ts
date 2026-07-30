@@ -1,19 +1,42 @@
 // DINHEIRO NO FRONT. A regra 1 do CLAUDE.md nao para na borda do servidor:
 // "Int em centavos em TODA camada: banco, API, UI, teste, fixture".
 //
-// E aqui ela e mais facil de furar do que em qualquer outro lugar, porque o
-// caminho obvio - `Number(campo.value) * 100` - parece certo e nao e:
+// ============================================================================
+// CORRIGIDO EM 30/07/2026. A versao anterior deste comentario citava dois
+// exemplos que NAO REPRODUZEM, e ficam registrados porque o erro e o mesmo que a
+// sessao 14 pegou numa citacao inventada do CRC:
 //
-//     Number('1234,56'.replace(',', '.')) * 100   ->  123455.99999999999
-//     Math.round(...)                             ->  123456   (acertou)
-//     Number('8,15') * 100                        ->  814.9999999999999
-//     Math.round(...)                             ->  815      (acertou)
+//     "Number('1234,56'.replace(',','.')) * 100 -> 123455.99999999999"
+//         mede-se 123456, EXATO.
+//     "Number('8,15') * 100 -> 814.9999999999999"
+//         `Number('8,15')` e NaN - falta o `.replace`. Com ele, da 815 exato.
 //
-// De novo o "acertou por sorte" que a medicao de 28/07 encontrou no servidor: o
-// arredondamento salva quase sempre, e "quase sempre" nao e criterio para o
-// valor que vai numa cobranca. Aqui a conversao e feita por TEXTO - separa
-// inteiro de decimal na virgula e concatena -, entao nao ha multiplicacao por
-// 100 e nao ha float em ponto nenhum do caminho.
+// O FENOMENO E REAL, e maior do que os exemplos falsos sugeriam. Medido em
+// 30/07, varrendo centavo a centavo:
+//
+//     o produto `Number(s) * 100` difere do inteiro em 131.256 de 1.000.000
+//     de valores (13%). Os primeiros: 0,07 -> 7.000000000000001,
+//     0,14 -> 14.000000000000002, 0,29 -> 28.999999999999996,
+//     19,99 -> 1998.9999999999998, 1,10 -> 110.00000000000001.
+//
+// E O ARREDONDAMENTO SALVA TODOS ELES. Medido na mesma varredura:
+//
+//     Math.round(Number(s) * 100) errou em 0 de 20.000.000 de valores,
+//     de R$ 0,01 a R$ 200.000,00.
+//
+// Entao a afirmacao honesta nao e "o caminho ingenuo erra" - e a mesma de
+// `src/dominio/centavos.ts` sobre o percentual: **o caminho ingenuo esta certo
+// hoje, e esta certo por sorte**. Ele depende de o erro do float ficar sempre
+// abaixo de meio centavo, o que e verdade nesta faixa e nao e uma garantia que
+// alguem escreveu.
+//
+// A conversao aqui e por TEXTO - separa inteiro de decimal e concatena -, entao
+// nao ha multiplicacao por 100 e nao ha float em ponto nenhum do caminho. O
+// valor esta certo por CONSTRUCAO, e nao dentro de uma faixa medida.
+//
+// A IRMA NO SERVIDOR e `src/dominio/centavos.ts:reaisParaCentavos`, com regras
+// identicas de proposito. `tests/planilha-tarifas.ts` V4 compara as duas SAIDAS
+// entre si, e nao cada uma com uma tabela: o risco real e elas divergirem.
 
 /** Dinheiro. Sempre inteiro, sempre em centavos. */
 export type Centavos = number;

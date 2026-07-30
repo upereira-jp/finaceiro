@@ -237,6 +237,7 @@ model tenant {
   criado_em              DateTime                @default(now()) @db.Timestamptz(6)
   atualizado_em          DateTime                @default(now()) @db.Timestamptz(6)
   acesso_plataforma_log  acesso_plataforma_log[]
+  agenda_execucao        agenda_execucao[]
   boleto                 boleto[]
   campo_do_documento     campo_do_documento[]
   cliente                cliente[]
@@ -441,12 +442,15 @@ model boleto {
   payload_envio             Json?
   payload_retorno           Json?
   criado_em                 DateTime      @default(now()) @db.Timestamptz(6)
+  ultima_tentativa_em       DateTime?     @db.Timestamptz(6)
+  proxima_tentativa_em      DateTime?     @db.Timestamptz(6)
   fatura                    fatura        @relation(fields: [tenant_id, fatura_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "boleto_fatura_fk")
   tenant                    tenant        @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@unique([tenant_id, fatura_id], map: "boleto_fatura_unico")
   @@unique([tenant_id, id], map: "boleto_id_tenant")
   @@index([tenant_id, status], map: "boleto_pendente_idx")
+  @@index([tenant_id, proxima_tentativa_em], map: "boleto_fila_idx", where: raw("(status = ANY (ARRAY['pendente'::status_boleto, 'erro'::status_boleto]))"))
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -584,6 +588,7 @@ model conector_cobranca {
   ultima_emissao_em     DateTime?         @db.Timestamptz(6)
   ultimo_erro           String?
   criado_em             DateTime          @default(now()) @db.Timestamptz(6)
+  agenda_execucao       agenda_execucao[]
   tenant                tenant            @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@unique([tenant_id, id], map: "conector_cobranca_id_tenant")
@@ -641,6 +646,32 @@ model logo_de_cobranca {
 
   @@unique([tenant_id, id], map: "logo_de_cobranca_id_tenant")
   @@unique([tenant_id, identidade_id], map: "logo_identidade_unico")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This table contains exclusion constraints and requires additional setup for migrations. Visit https://pris.ly/d/exclusion-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model agenda_execucao {
+  id                String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id         String            @db.Uuid
+  conector_id       String            @db.Uuid
+  tarefa            agenda_tarefa
+  ciclo_id          String            @db.Uuid
+  iniciado_em       DateTime          @default(now()) @db.Timestamptz(6)
+  terminado_em      DateTime?         @db.Timestamptz(6)
+  examinados        Int               @default(0)
+  registrados       Int               @default(0)
+  falhos            Int               @default(0)
+  liquidados        Int               @default(0)
+  divergentes       Int               @default(0)
+  status            execucao_status   @default(em_andamento)
+  detalhe           Json?
+  conector_cobranca conector_cobranca @relation(fields: [tenant_id, conector_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "agenda_conector_fk")
+  tenant            tenant            @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "agenda_tenant_fk")
+
+  @@unique([tenant_id, id], map: "agenda_execucao_id_tenant")
+  @@index([tenant_id, tarefa, iniciado_em(sort: Desc)], map: "agenda_execucao_tenant_idx")
 }
 
 enum conector_status {
@@ -801,4 +832,10 @@ enum campo_de_fatura {
   valor_juros_multa_centavos
   valor_total_centavos
   flag_fatura_cheia
+}
+
+/// This enum is commented in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+enum agenda_tarefa {
+  fila_de_emissao
+  consulta_ativa
 }

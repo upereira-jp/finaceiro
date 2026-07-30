@@ -640,6 +640,20 @@ export const ROTAS: Rota[] = [
   },
   {
     /*
+     * O QR DE CONFERENCIA, e ele existe por uma medicao de 30/07: producao tinha
+     * 0 contratos, 0 faturas e 39 UCs sem `data_vencimento`, entao o unico teste
+     * que nenhuma verificacao automatica substitui - ler o QR com uma camera -
+     * estava atras de bloqueios que dependem de insumo humano que nao chegou.
+     *
+     * GET e nao POST: nao escreve nada. E leitura, com `exigir('ler')` no
+     * repositorio como qualquer outra.
+     */
+    metodo: 'GET', padrao: '/cobranca/qr-de-conferencia',
+    handler: (req, app) => emTenant(app, req, async () =>
+      ok(await documento.qrDeConferencia(Number(req.query.get('valor_centavos'))))),
+  },
+  {
+    /*
      * A LOGO SOBE EM BASE64 DENTRO DE JSON, e o teto de dois lados tem de fechar:
      * o banco recusa acima de 512 KB (`logo_de_cobranca`), e base64 disso da
      * ~699 KB, abaixo do `maxCorpoBytes` de 1.000.000 do servidor. Subir o teto

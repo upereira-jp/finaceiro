@@ -229,6 +229,18 @@ export type LinhaDoDocumento = {
  * a mesma rota e nao roda React. Se o desenho nascesse aqui, o CRM precisaria
  * portar o codificador inteiro - Reed-Solomon, mascaras e tudo.
  */
+/** O retorno de `GET /cobranca/qr-de-conferencia`. Existe para o teste de campo
+ *  do QR nao depender de haver fatura — ver o cabecalho de `qrDeConferencia`. */
+export type QrDeConferencia = {
+  brcode: string;
+  qr: QrDoDocumento | null;
+  qr_motivo?: string;
+  recebedor: string;
+  cidade: string;
+  valor_centavos: number;
+  aviso: string;
+};
+
 export type QrDoDocumento = {
   svg: string;
   versao: number;

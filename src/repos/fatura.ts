@@ -326,6 +326,93 @@ export async function lancarTarifasDaConcessionaria(id: string, centavos: Centav
   }
 }
 
+export type ResultadoDoLancamento = {
+  competencia: string;
+  aplicadas: Array<{ numero_uc: string; fatura_id: string; centavos: Centavos }>;
+  /** UC que veio na planilha e NAO tem fatura em rascunho nesta competencia.
+   *  Pode ser UC que nao entrou no lote, fatura ja emitida, ou numero errado. */
+  sem_fatura: Array<{ numero_uc: string; centavos: Centavos; porque: string }>;
+  /** Fatura em rascunho que a planilha NAO cobriu. AUSENTE NAO E ZERO: ela fica
+   *  com o valor que ja tinha, e a lista existe para alguem decidir. */
+  sem_valor: Array<{ numero_uc: string; fatura_id: string; centavos_atuais: Centavos }>;
+};
+
+/**
+ * Lancamento EM LOTE das tarifas da concessionaria, por numero de UC.
+ *
+ * `Q-TARIFA-CONC-01`. A rota unitaria (`PUT /faturas/:id/tarifas-concessionaria`)
+ * pede o id da FATURA, e ninguem tem id de fatura na mao - a planilha da
+ * distribuidora traz numero de UC. Sem esta funcao, "por planilha" (PRD §5.1)
+ * significava alguem abrindo uma fatura por vez na tela.
+ *
+ * SO EM RASCUNHO, pela mesma razao da funcao unitaria: depois de emitida o total
+ * mudou e o boleto ja foi registrado com o valor antigo. A diferenca e que aqui a
+ * fatura fora de rascunho vira LINHA DE RELATORIO em vez de excecao - um lote de
+ * 40 nao pode parar na oitava e deixar sete gravadas.
+ *
+ * A CONFERENCIA DO INTEIRO E POR ITEM, antes de qualquer escrita: `exigirCentavos`
+ * em todos, e so depois o primeiro UPDATE. Um float que atravessasse a planilha
+ * derrubaria o lote no meio, com parte gravada.
+ */
+export async function lancarTarifasPorUC(
+  comp: Date | string,
+  porUC: ReadonlyMap<string, Centavos>,
+): Promise<ResultadoDoLancamento> {
+  await exigir('escrever_carteira');
+  const iso = competenciaISO(normalizar(comp));
+
+  for (const [uc, c] of porUC) {
+    exigirCentavos(c, `valor_tarifas_concessionaria_centavos[UC ${uc}]`);
+    if (c < 0) throw Object.assign(new RangeError(`UC ${uc}: tarifa da concessionaria nao e negativa`), { status: 422 });
+  }
+
+  /*
+   * As faturas da competencia COM o numero da UC. O join e necessario porque a
+   * fatura guarda `unidade_consumidora_id` e a planilha traz `numero_uc` - e o
+   * numero e o que a distribuidora conhece.
+   */
+  const faturas: Array<{ fatura_id: string; numero_uc: string; status: string; atuais: number }> =
+    await db().$queryRaw`
+      SELECT f.id AS fatura_id, uc.numero_uc, f.status::text,
+             f.valor_tarifas_concessionaria_centavos AS atuais
+        FROM fatura f
+        JOIN unidade_consumidora uc
+          ON uc.tenant_id = f.tenant_id AND uc.id = f.unidade_consumidora_id
+       WHERE f.competencia = ${iso}::date`;
+
+  const porNumero = new Map(faturas.map((f) => [f.numero_uc, f]));
+  const r: ResultadoDoLancamento = { competencia: iso, aplicadas: [], sem_fatura: [], sem_valor: [] };
+
+  for (const [numero_uc, centavos] of porUC) {
+    const f = porNumero.get(numero_uc);
+    if (!f) {
+      r.sem_fatura.push({ numero_uc, centavos, porque: `nao ha fatura na competencia ${iso} para esta UC` });
+      continue;
+    }
+    if (f.status !== 'rascunho') {
+      r.sem_fatura.push({
+        numero_uc, centavos,
+        porque: `a fatura esta em "${f.status}" e as tarifas so entram em rascunho - emitida, o boleto ja carrega o total`,
+      });
+      continue;
+    }
+    await dbt().fatura.updateMany({
+      where: { id: f.fatura_id, status: 'rascunho' },
+      data: { valor_tarifas_concessionaria_centavos: centavos },
+    });
+    r.aplicadas.push({ numero_uc, fatura_id: f.fatura_id, centavos });
+  }
+
+  // O outro lado da conta, e ele so existe porque ausente nao e zero.
+  for (const f of faturas) {
+    if (f.status !== 'rascunho') continue;
+    if (porUC.has(f.numero_uc)) continue;
+    r.sem_valor.push({ numero_uc: f.numero_uc, fatura_id: f.fatura_id, centavos_atuais: f.atuais });
+  }
+
+  return r;
+}
+
 // ---------------------------------------------------------------- leitura
 
 export async function porId(id: string) {

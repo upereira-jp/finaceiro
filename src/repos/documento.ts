@@ -94,6 +94,77 @@ export async function identidade() {
   return dbt().identidade_de_cobranca.findFirst({ where: { tenant_id: tenantCorrente() } });
 }
 
+/**
+ * O QR DE CONFERENCIA: o mesmo desenho, a partir da identidade e de um valor
+ * digitado, SEM fatura.
+ *
+ * POR QUE ISTO EXISTE, e a medicao que o produziu. Em 30/07 producao tinha
+ * **0 contratos, 0 originadores, 0 faturas e 0 identidades de cobranca**, e as
+ * 39 UCs sem `data_vencimento`. O unico teste que nenhuma das 964 verificacoes
+ * substitui - **ler o QR com uma camera** - estava atras de quatro bloqueios
+ * empilhados, sendo que tres deles dependem de insumo humano que nao chegou:
+ * CPF/CNPJ dos originadores (`Q-ORIGVEND-01`), os 39 contratos e a
+ * `data_vencimento` (`Q-SPEC001-02`).
+ *
+ * Ou seja: a coisa mais barata de conferir e a que menos podia ser conferida.
+ *
+ * O QUE ISTO NAO E, e a distincao importa: nao e um "modo de teste" e nao gera
+ * fatura, boleto nem linha nenhuma. E a MESMA funcao pura (`pixEstatico` +
+ * `svgDoBrCode`) que a fatura usa, alimentada pela identidade REAL do tenant.
+ * Um QR desenhado por um caminho paralelo nao provaria nada sobre o de verdade.
+ *
+ * E POR SER A CHAVE REAL, o valor e obrigatorio e o chamador tem de avisar. Um
+ * Pix sem valor deixaria quem le digitar a quantia - o mesmo argumento que
+ * `faixaDePagamento` faz para recusar total nulo.
+ */
+export async function qrDeConferencia(valorCentavos: number) {
+  await exigir('ler');
+  const ident = await identidade();
+  if (!ident) {
+    throw Object.assign(
+      new Error(
+        'Nao ha identidade de cobranca cadastrada neste tenant. O QR sai da chave Pix, do nome e '
+        + 'da cidade do recebedor - sem eles nao ha o que desenhar. Cadastre na aba Documento.'
+      ), { status: 412 },
+    );
+  }
+  if (!ident.pix_chave || !ident.pix_recebedor_nome || !ident.pix_recebedor_cidade) {
+    throw Object.assign(
+      new Error(
+        'A identidade de cobranca esta incompleta: o Pix exige chave, nome e cidade do recebedor. '
+        + 'O banco ja recusa a gravacao pela metade, entao isto so acontece com linha antiga.'
+      ), { status: 412 },
+    );
+  }
+  if (!Number.isSafeInteger(valorCentavos) || valorCentavos <= 0) {
+    throw Object.assign(
+      new TypeError(
+        'O valor em centavos e obrigatorio e maior que zero. Um QR Pix sem valor deixaria quem le '
+        + 'digitar a quantia, e e o mesmo motivo pelo qual a fatura sem total nao ganha faixa.'
+      ), { status: 422 },
+    );
+  }
+
+  const brcode = pixEstatico({
+    chave: ident.pix_chave,
+    recebedorNome: ident.pix_recebedor_nome,
+    recebedorCidade: ident.pix_recebedor_cidade,
+    valorCentavos,
+  });
+  return {
+    brcode,
+    ...qrDe(brcode),
+    recebedor: ident.pix_recebedor_nome,
+    cidade: ident.pix_recebedor_cidade,
+    valor_centavos: valorCentavos,
+    /* A advertencia viaja COM o payload e nao so na tela: o CRM consome esta
+     * mesma API, e um consumidor que pintasse o QR sem o aviso poria a chave
+     * real do tenant na frente de alguem sem dizer que ela e real. */
+    aviso: 'Este QR aponta para a chave Pix REAL deste tenant. Serve para conferir se a camera le '
+         + 'o codigo e se recebedor e valor aparecem certos - NAO confirme o pagamento.',
+  };
+}
+
 // ------------------------------------------------------------------------ logo
 
 /**

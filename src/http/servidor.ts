@@ -270,7 +270,30 @@ export function criarServidor(o: OpcoesDoServidor): http.Server {
 
       responder(res, await achou.rota.handler(requisicao, o.app));
     } catch (e: any) {
-      if (ehInesperado(e)) log(`[financeiro] ${metodo} ${caminho} falhou:`, e);
+      if (ehInesperado(e)) {
+        log(`[financeiro] ${metodo} ${caminho} falhou:`, e);
+      } else if (e?.name === 'TokenInvalido') {
+        /*
+         * O 401 VAI PARA O LOG COM O MOTIVO, e ate 30/07/2026 NAO IA.
+         *
+         * `src/auth/jwt.ts` monta a excecao assim: a mensagem que sai para o
+         * cliente e sempre "Credencial invalida.", e o motivo real - expirado,
+         * assinatura, `iss` errado, `sub` que nao e uuid - fica num campo
+         * `motivo`, com o comentario "para o log". So que nada logava: 401 tem
+         * `status`, entao `ehInesperado` devolve false e a linha acima nunca
+         * disparava. O motivo era montado e jogado fora.
+         *
+         * Medido pelo custo: em 30/07 o dono relatou "erro de credencial
+         * invalida" em producao e NAO HAVIA COMO SABER POR QUE - nem no
+         * navegador, que so ve a mensagem generica, nem no `journalctl`, que nao
+         * via nada. Diagnostico virou adivinhacao.
+         *
+         * Continua sem vazar para o cliente: `traduzir(e)` devolve a mensagem
+         * generica, e o motivo so existe deste lado. O token NAO entra no log -
+         * o que se registra e a razao da recusa, nunca a credencial recusada.
+         */
+        log(`[financeiro] 401 em ${metodo} ${caminho}: ${e.motivo ?? '(sem motivo)'}`, undefined);
+      }
       responder(res, traduzir(e));
     }
   });

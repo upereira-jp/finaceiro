@@ -10,8 +10,7 @@ import { useState } from 'react';
 import { api } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
-  Pagina, Aviso, Tabela, rotulo, linha, Kpi, Marca, Icone, CampoData,
-} from '../ui.tsx';
+  Pagina, Aviso, Tabela, rotulo, linha, Kpi, Marca, Icone, CampoData, AjudaDoMes } from '../ui.tsx';
 import { competenciaISO, emReais } from '../dinheiro.ts';
 
 type Resumo = {
@@ -62,8 +61,8 @@ export function TelaCarteira() {
       <div className="cartao" style={{ marginBottom: 20 }}>
         <div style={{ ...linha, gap: 12 }}>
           <div>
-            <label>Competência</label>
-            <CampoData mes valor={mes} ao={setMes} rotuloAcessivel="Competência" style={{ width: 'auto' }} />
+            <label>Mês de referência</label>
+            <CampoData mes valor={mes} ao={setMes} rotuloAcessivel="Mês de referência" style={{ width: 'auto' }} /><AjudaDoMes />
           </div>
           <div style={{ alignSelf: 'end', display: 'flex', gap: 8 }}>
             <button onClick={rodar('ensaio')} disabled={acao.ocupado}>
@@ -106,10 +105,10 @@ export function TelaCarteira() {
         </>
       )}
 
-      <h2>Posição por competência</h2>
+      <h2>Posição por mês de referência</h2>
       {posicao.erro && <Aviso tipo="erro">{posicao.erro}</Aviso>}
       <Tabela cabecalho={<>
-                <th>Competência</th><th className="num">Faturas</th><th className="num">Emitidas</th>
+                <th>Mês de referência</th><th className="num">Faturas</th><th className="num">Emitidas</th>
                 <th className="num">Liquidadas</th><th className="num">Vencidas</th>
                 <th className="num">Faturado</th><th className="num">Recebido</th><th className="num">A receber</th>
               </>}

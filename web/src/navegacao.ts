@@ -35,7 +35,17 @@ export type Tela = {
 };
 
 export const TELAS: readonly Tela[] = [
-  { rota: '/prontidao',  titulo: 'Prontidão',  icone: 'prontidao',  grupo: 'cadastro' },
+  /*
+   * "Pendências", e não "Prontidão" — decisão do dono em 30/07/2026, depois de
+   * abrir o sistema pela primeira vez: *"mude o nome, é pouco claro"*.
+   *
+   * O RÓTULO e a ROTA mudaram; o domínio NÃO. `src/repos/prontidao.ts`,
+   * `prontidao()` e as dez camadas seguem com o nome antigo, porque aí
+   * "prontidão" nomeia um CÁLCULO ("o quanto esta competência está pronta") e
+   * não um item de lista. `/prontidao` continua funcionando por acidente feliz do
+   * `telaDoCaminho`: caminho desconhecido cai na primeira tela, que é esta.
+   */
+  { rota: '/pendencias', titulo: 'Pendências', icone: 'prontidao',  grupo: 'cadastro' },
   { rota: '/clientes',   titulo: 'Clientes',   icone: 'clientes',   grupo: 'cadastro' },
   { rota: '/unidades',   titulo: 'Unidades',   icone: 'unidades',   grupo: 'cadastro' },
   { rota: '/contratos',  titulo: 'Contratos',  icone: 'contratos',  grupo: 'cadastro' },
@@ -50,7 +60,8 @@ export const TELAS: readonly Tela[] = [
 ] as const;
 
 /** A tela de um caminho. Caminho desconhecido — inclusive `/` — cai na primeira,
- *  que é a Prontidão: a tela que diz o que falta é o lugar certo para se perder. */
+ *  que é Pendências: a tela que diz o que falta é o lugar certo para se perder.
+ *  E é o que faz o `/prontidao` antigo continuar levando ao lugar certo. */
 export const telaDoCaminho = (caminho: string): Tela =>
   TELAS.find((t) => t.rota === caminho) ?? TELAS[0];
 

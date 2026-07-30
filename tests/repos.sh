@@ -110,11 +110,16 @@ SQL
 npm install --silent > /dev/null 2>&1
 # O generate precisa do schema-engine. Em ambiente sem acesso a binaries.prisma.sh
 # o stub resolve: generate nao consulta banco, so precisa do binario existir.
-if [ ! -d src/generated/prisma ]; then
-  printf '#!/bin/sh\necho "{}"\n' > /tmp/stub-schema-engine && chmod +x /tmp/stub-schema-engine
-  PRISMA_SCHEMA_ENGINE_BINARY=/tmp/stub-schema-engine PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1 \
-    npx prisma generate > /dev/null
-fi
+#
+# RODA SEMPRE, e a versao anterior tinha `if [ ! -d src/generated/prisma ]`. A
+# condicao gerava quando o diretorio NAO existia e portanto NUNCA atualizava um
+# obsoleto - que e exatamente o estado perigoso, e o mesmo que derrubou a aba
+# Documento em producao em 30/07: client de 28/07 contra banco com as migrations
+# 19 e 20. Meio segundo por execucao e barato; a suite A9 de tests/app.ts confere
+# a correspondencia, e ela so pode confiar num client fresco.
+printf '#!/bin/sh\necho "{}"\n' > /tmp/stub-schema-engine && chmod +x /tmp/stub-schema-engine
+PRISMA_SCHEMA_ENGINE_BINARY=/tmp/stub-schema-engine PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1 \
+  npx prisma generate > /dev/null
 
 export TEST_DATABASE_URL="postgresql://app_financeiro_login:spike@127.0.0.1:5432/fin_repos"
 # Usada SO pela suite do composition root, para provar que ela recusa a role
@@ -159,6 +164,17 @@ echo
 # passariam verdes quebradas - eram a pendencia (b) da Q-DOCFATURA-01.
 echo "=== documento de cobranca: identidade, logo pelo gatilho, campos pelo enum e o QR"
 node --experimental-strip-types tests/repos-documento.ts
+echo
+# Os dois processos periodicos do PRD 6. O que so se ve com banco: o carimbo
+# chegando a coluna, o predicado da fila em SQL, o EXCLUDE recusando a segunda
+# rodada e a idempotencia vindo do `liquidacao_fatura_unica` e nao da chave.
+echo "=== agenda de cobranca: fila de emissao com retry e consulta ativa"
+node --experimental-strip-types tests/repos-agenda.ts
+echo
+# Q-TARIFA-CONC-01. O casamento e por `numero_uc` (a distribuidora nao conhece id
+# nosso), o total e coluna GERADA, e "ausente nao e zero" precisa ser observavel.
+echo "=== tarifas da concessionaria: lancamento em lote por numero de UC"
+node --experimental-strip-types tests/repos-tarifas.ts
 echo
 echo "=== HTTP: rotas, matriz de papeis e traducao de erro"
 node --experimental-strip-types tests/http.ts

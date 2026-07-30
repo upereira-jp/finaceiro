@@ -14,8 +14,7 @@ import { useState } from 'react';
 import { api, type Prontidao } from '../api.ts';
 import { useDados } from '../dados.ts';
 import {
-  Pagina, Aviso, Tabela, Marca, rotulo, Kpi, KpiSimNao, Carregando, CampoData,
-} from '../ui.tsx';
+  Pagina, Aviso, Tabela, Marca, rotulo, Kpi, KpiSimNao, Carregando, CampoData, AjudaDoMes } from '../ui.tsx';
 import { competenciaISO } from '../dinheiro.ts';
 
 const mesAtual = () => new Date().toISOString().slice(0, 7);
@@ -27,10 +26,10 @@ export function TelaProntidao() {
 
   return (
     <Pagina titulo="Prontidão para faturar"
-            sub="O que falta para esta competência poder ser cobrada. Dez camadas, cada uma com dono. Esta tela conta — não decide nada.">
+            sub="O que falta para este mês poder ser cobrado. Dez camadas, cada uma com dono. Esta tela conta — não decide nada.">
       <div className="ferramentas">
-        <label style={{ margin: 0 }}>Competência</label>
-        <CampoData mes valor={mes} ao={setMes} rotuloAcessivel="Competência" style={{ width: 'auto' }} />
+        <label style={{ margin: 0 }}>Mês de referência</label>
+        <CampoData mes valor={mes} ao={setMes} rotuloAcessivel="Mês de referência" style={{ width: 'auto' }} /><AjudaDoMes />
       </div>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}

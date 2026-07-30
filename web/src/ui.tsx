@@ -97,6 +97,25 @@ export function CampoData(p: {
 
 /** O select com a seta do Phosphor. A seta nativa muda de desenho a cada sistema
  *  operacional, e era o que mais denunciava formulario nao estilizado. */
+/**
+ * A LINHA DE AJUDA DO MES DE REFERENCIA.
+ *
+ * Decisao do dono em 30/07/2026: *"competência também está pouco claro"*. A
+ * escolha foi trocar **so o rotulo na tela** — banco, codigo, rotas e a
+ * `PAUTA-contador` mantem `competencia`, que e o termo CONTABIL e e o que o
+ * contador usa ("a competencia governa a receita", PAUTA 1).
+ *
+ * Existe como componente e nao como texto solto em cinco telas porque o
+ * argumento contra o rename total foi justamente **nao ter dois vocabularios
+ * divergindo**. Se a frase estivesse copiada, ela divergiria entre as telas na
+ * primeira vez que alguem a ajustasse.
+ */
+export const AjudaDoMes = () => (
+  <div className="fraco" style={{ fontSize: 12, marginTop: 2 }}>
+    o mês do consumo, não o mês em que a fatura é paga
+  </div>
+);
+
 export function Escolha(p: {
   valor: string; ao: (v: string) => void; rotuloAcessivel?: string;
   opcoes: Array<{ valor: string; texto: string }>; primeira?: string;

@@ -62,13 +62,25 @@ export async function criar(e: NovoCliente) {
 /**
  * CLAUDE.md 11 na pratica.
  *
- * `cliente_documento_unico` e PARCIAL (WHERE documento IS NOT NULL). O Prisma 7.9
- * exclui indice parcial das chaves de findUnique - verificado no DMMF, as chaves
- * de cliente sao so [tenant_id+id] - entao nem existe findUnique por documento.
- * E se existisse nao deveria ser usado: com documento nulo a chave nao e unica.
+ * `cliente_documento_unico` e PARCIAL (WHERE documento IS NOT NULL), e a escolha
+ * do `findFirst` com predicado explicito e por isso.
  *
- * findFirst com o predicado explicito, e null nunca chega ao banco. O tenant sai
- * da RLS, nao de um WHERE.
+ * CORRIGIDO EM 30/07/2026. A versao anterior deste comentario afirmava que "o
+ * Prisma 7.9 exclui indice parcial das chaves de findUnique - verificado no
+ * DMMF, as chaves de cliente sao so [tenant_id+id] - entao nem existe findUnique
+ * por documento". **E falso desde 27/07**, e a `Q-CLAUDE11-01` o mediu: com
+ * `previewFeatures = ["partialIndexes"]` ligado no generator, o `db pull` emite
+ * `where: raw(...)` no `@@unique` e a chave APARECE em `findUnique` -
+ * `clienteWhereUniqueInput` expoe `tenant_id_documento`.
+ *
+ * Ou seja: a protecao automatica que este comentario invocava NAO existe. O que
+ * protege e a escolha abaixo, e ela nao depende de o gerador cooperar. O
+ * `tests/regra11.ts` transformou isso em invariante: nenhum arquivo de `src/`
+ * navega por chave parcial, e a lista de chaves parciais sai do proprio
+ * `schema.prisma`.
+ *
+ * `findFirst` com o predicado explicito, e null nunca chega ao banco. O tenant
+ * sai da RLS, nao de um WHERE.
  */
 export async function porDocumento(bruto: string | null | undefined) {
   await exigir('ler');

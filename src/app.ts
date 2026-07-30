@@ -32,6 +32,24 @@ export class RoleDeRuntimeInsegura extends Error {
   }
 }
 
+export class ClienteGeradoDesatualizado extends Error {
+  readonly tabelas: readonly string[];
+  constructor(tabelas: readonly string[]) {
+    super(
+      `O client do Prisma em src/generated/ NAO corresponde ao banco: ${tabelas.length} tabela(s) ` +
+      `existem em public e nao tem modelo no client — ${tabelas.join(', ')}. ` +
+      'Toda leitura delas seria `undefined.findFirst()`, que e um TypeError na cara do usuario e ' +
+      'nao um erro de banco.\n\n' +
+      'A CAUSA E QUASE SEMPRE A MESMA: `src/generated/` esta no .gitignore, entao `git pull` nao o ' +
+      'traz, e uma migration nova nao chega ao client sozinha. O conserto e uma linha, no servidor:\n\n' +
+      '    npx prisma generate && systemctl restart financeiro\n\n' +
+      'Em deploy, `prisma generate` vem DEPOIS de `prisma migrate deploy` e ANTES do restart.'
+    );
+    this.name = 'ClienteGeradoDesatualizado';
+    this.tabelas = tabelas;
+  }
+}
+
 export class SemDatabaseUrl extends Error {
   constructor() {
     super('DATABASE_URL ausente. Formato no .env.example - session pooler na 5432, ' +
@@ -85,11 +103,61 @@ export function criarApp(connectionString: string, cobranca: PortaDeCobranca = C
     return { usuario: l.usuario };
   }
 
+  /**
+   * A SEGUNDA CONFERENCIA DE ARRANQUE: o client gerado corresponde ao banco?
+   *
+   * MEDIDO EM 30/07/2026, EM PRODUCAO, e o sintoma chegou pela tela: "Cannot read
+   * properties of undefined (reading 'findFirst')" na aba Documento. A causa e
+   * uma cadeia que nenhuma peca sozinha denuncia:
+   *
+   *   1. `src/generated/` esta no `.gitignore` - o `git pull` do VPS nao o traz;
+   *   2. NADA no caminho de deploy rodava `prisma generate` (so o CI e as suites
+   *      rodavam, e `tests/repos.sh` so gerava quando o diretorio NAO existia,
+   *      entao nunca atualizava um obsoleto);
+   *   3. as migrations 19 e 20 entraram em producao em 30/07 e trouxeram
+   *      `identidade_de_cobranca`, `logo_de_cobranca` e `campo_do_documento`;
+   *   4. o client do servidor continuou o de 28/07, sem esses tres modelos.
+   *
+   * `dbt().identidade_de_cobranca` era `undefined`, e `undefined.findFirst()` e o
+   * erro que chegou ao usuario.
+   *
+   * O QUE ISSO ENSINA SOBRE A PROVA DO DEPLOY, e e a parte que dói: a publicacao
+   * das 11:50 foi conferida dos dois lados e deu tudo verde - `index.html` certo,
+   * bytes dos assets iguais, rotas novas em **401 TokenInvalido**. Mas
+   * **401 prova que a rota existe e recusa credencial** - ela nem chega ao banco.
+   * As tres rotas do documento estavam quebradas atras daquele 401.
+   *
+   * Por que virou guarda de arranque e nao linha no README: a `Q-PRISMA11B-01` ja
+   * havia registrado que "`tsc --noEmit` passa em cima do client ANTERIOR - typecheck
+   * verde nao prova que o client corresponde ao schema". Um passo a mais no
+   * procedimento depende de alguem lembrar, e a regra 11 deste projeto ja disse o
+   * que acha disso: "invariante que depende de alguem lembrar nao e invariante".
+   *
+   * A conferencia e barata e exata: toda tabela de `public` tem de existir como
+   * modelo no client. Sobra do lado do client nao e problema (tabela removida por
+   * migration antiga); falta e.
+   */
+  async function conferirClienteGerado(): Promise<{ modelos: number }> {
+    const r: Array<{ tabela: string }> = await transacional.$queryRaw`
+      SELECT c.relname AS tabela
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
+       WHERE c.relkind = 'r'
+         AND c.relname <> '_prisma_migrations'
+       ORDER BY 1`;
+
+    const cliente = transacional as unknown as Record<string, unknown>;
+    const faltando = r.map((x) => x.tabela).filter((t) => cliente[t] === undefined);
+    if (faltando.length > 0) throw new ClienteGeradoDesatualizado(faltando);
+    return { modelos: r.length };
+  }
+
   return {
     pools,
     tetos: { transacional: TETO_TRANSACIONAL, relatorio: TETO_RELATORIO },
     protegido,
     conferirRoleDeRuntime,
+    conferirClienteGerado,
     cobranca,
 
     /** R1-c: a unica chamada feita fora de contexto de tenant. */
@@ -135,11 +203,21 @@ export function app(): App {
   return instancia;
 }
 
-/** Arranque explicito: confere a role ANTES de servir a primeira requisicao. */
+/**
+ * Arranque explicito: as DUAS conferencias, antes de servir a primeira requisicao.
+ *
+ * A ordem importa. A role vem primeiro porque, com `BYPASSRLS`, a segunda
+ * conferencia leria o catalogo por um caminho que nao e o de producao. E as duas
+ * derrubam o arranque em vez de avisar: um servidor que sobe com a role errada
+ * vaza entre tenants em silencio, e um que sobe com o client velho quebra na cara
+ * do usuario numa tela que ninguem abriu ainda.
+ */
 export async function iniciar(): Promise<App> {
   const a = app();
   const { usuario } = await a.conferirRoleDeRuntime();
   console.log(`[financeiro] conectado como "${usuario}" - sem BYPASSRLS, sem SUPERUSER`);
+  const { modelos } = await a.conferirClienteGerado();
+  console.log(`[financeiro] client gerado cobre as ${modelos} tabelas de public`);
   return a;
 }
 

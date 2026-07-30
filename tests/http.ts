@@ -28,6 +28,8 @@ const chk = (id: string, cond: boolean, d: string) => {
 
 const app = criarApp(CONN);
 const erros: unknown[] = [];
+/** As mensagens que foram para o log. E o que a H16 inspeciona. */
+const mensagens: string[] = [];
 
 /**
  * Autenticador de TESTE: le o auth_user_id de um header.
@@ -44,7 +46,7 @@ const servidor = criarServidor({
     if (!v) throw Object.assign(new Error('Sem credencial.'), { status: 401, name: 'NaoAutenticado' });
     return v;
   },
-  log: (_m, e) => { erros.push(e); },
+  log: (m, e) => { mensagens.push(m); if (e !== undefined) erros.push(e); },
 });
 
 await new Promise<void>((r) => servidor.listen(0, r));
@@ -338,6 +340,48 @@ let clienteCriado = '';
   await new Promise<void>((r) => comSpa.close(() => r()));
   await rm(raiz, { recursive: true, force: true });
   await rm(segredo, { force: true });
+}
+
+// ---------------------------------------------- H27 o 401 vai para o LOG com o motivo
+/*
+ * ATE 30/07/2026 NAO IA, e o custo foi medido em producao: o dono relatou "erro
+ * de credencial invalida" e NAO havia como saber por que. O navegador so ve a
+ * mensagem generica - de proposito, para nao dizer a quem tenta se errou a
+ * assinatura ou se o token expirou - e o `journalctl` nao via nada, porque 401
+ * tem `status` e `ehInesperado` devolve false.
+ *
+ * O `motivo` era montado em `src/auth/jwt.ts` com o comentario "para o log" e
+ * jogado fora. Diagnostico virou adivinhacao.
+ *
+ * O AUTENTICADOR DESTA SUITE nao e o de producao, entao aqui se planta um
+ * `TokenInvalido` de verdade, com o mesmo `name` e o mesmo campo.
+ */
+{
+  const antes = mensagens.length;
+  const comAuthQueRecusa = criarServidor({
+    app,
+    autenticador: async () => {
+      const e: any = new Error('Credencial invalida.');
+      e.name = 'TokenInvalido'; e.status = 401; e.motivo = 'exp vencido em 2026-07-30T12:00:00Z';
+      throw e;
+    },
+    log: (m) => { mensagens.push(m); },
+  });
+  await new Promise<void>((r) => comAuthQueRecusa.listen(0, r));
+  const porta = (comAuthQueRecusa.address() as any).port;
+  const r = await fetch(`http://127.0.0.1:${porta}/api/clientes`);
+  const corpo: any = await r.json();
+
+  const logadas = mensagens.slice(antes);
+  chk('H27a', r.status === 401 && logadas.some((m) => /exp vencido/.test(m)),
+      'o 401 VAI para o log com o motivo real — sem isso, "credencial invalida" em producao nao '
+      + 'tem diagnostico nem no navegador nem no journalctl');
+
+  chk('H27b', corpo.mensagem === 'Credencial invalida.' && !/exp vencido/.test(JSON.stringify(corpo)),
+      'e o motivo NAO vaza na resposta — dizer "expirado" versus "assinatura invalida" a quem '
+      + 'tenta entrega mais do que ele precisa para tentar de novo');
+
+  await new Promise<void>((r) => comAuthQueRecusa.close(() => r()));
 }
 
 console.log(`\n${falhas === 0 ? 'TODAS PASSARAM' : `${falhas} FALHA(S)`}`);

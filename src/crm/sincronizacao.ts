@@ -32,6 +32,7 @@
 
 import { dbt } from '../db/tipado.ts';
 import { tenantCorrente, exigir, dentroDeUnidadeDeTrabalho } from '../db/contexto.ts';
+import { ehSqlstate, SQLSTATE } from '../db/sqlstate.ts';
 import type {
   VendaGanha, LeadArquivado, LeadMerge, UsinaDoCrm, GeracaoMensal,
   RateioCliente, RateioCredito, ResultadoDeLeitura,
@@ -447,9 +448,25 @@ export async function executarCiclo(
         data: { id: execucaoId, tenant_id: tenantId, conector_id: conector.id, ciclo_id: r.cicloId },
       });
     } catch (e: any) {
-      // 23P01 do EXCLUDE da migration 14. O banco recusou o segundo ciclo, e a
-      // traducao para erro de negocio e o que impede isso de virar 500.
-      if (e?.code === 'P2010' || String(e?.meta?.code ?? e?.code) === '23P01') throw new CicloJaEmAndamento();
+      /*
+       * 23P01 do EXCLUDE da migration 14. O banco recusou o segundo ciclo, e a
+       * traducao para erro de negocio e o que impede isso de virar 500.
+       *
+       * CORRIGIDO EM 30/07/2026, e a versao anterior desta linha NUNCA disparava:
+       *
+       *   e?.code === 'P2010' || String(e?.meta?.code ?? e?.code) === '23P01'
+       *
+       * Medido no Prisma 7.9 sobre driver adapter, `e.code` e 'P2039' e
+       * `e.meta.code` e undefined - o SQLSTATE mora em
+       * `e.meta.driverAdapterError.cause.code`. Nenhuma das duas metades
+       * alcancava, entao `CicloJaEmAndamento` nao era lancada e o erro cru do
+       * Prisma subia: "o segundo ciclo nao inicia" (SPEC-002 §7) chegaria como
+       * 500 em vez de 409. Nao havia teste - a classe era referenciada num unico
+       * lugar do sistema, este `throw`.
+       *
+       * Achado ao construir a agenda de cobranca, cujo EXCLUDE tem a mesma forma.
+       */
+      if (ehSqlstate(e, SQLSTATE.violacaoDeExclusao)) throw new CicloJaEmAndamento();
       throw e;
     }
     return { tenantId, conectorId: conector.id };

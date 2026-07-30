@@ -150,6 +150,50 @@ BEGIN
   IF n = 0 THEN RAISE NOTICE 'ok  CAT-8 nenhuma tabela com RLS habilitada e zero policies';
   ELSE RAISE WARNING 'FALHA CAT-8 RLS habilitada sem policy - nega tudo em silencio: %', nomes; falhas := falhas + 1; END IF;
 
-  IF falhas = 0 THEN RAISE NOTICE 'catalogo: 8 invariantes, nenhuma falha';
+  -- ------------------------------------------------------------------ CAT-9
+  /*
+   * CLAUDE.md 11, no furo que a Q-CLAUDE11-01 abriu e que o CAT-1 NAO cobre.
+   *
+   * O CAT-1 acusa indice unico parcial que cobre EXATAMENTE as colunas de uma
+   * FK, porque ali o `db pull` infere relacao to-one. Esse e um caso. O outro e
+   * o que a regra 11 nasceu para impedir e que voltou a existir:
+   *
+   *   com `previewFeatures = ["partialIndexes"]` ligado no generator, todo
+   *   `@@unique` parcial VOLTOU a ser chave de `findUnique`. Medido em 27/07 nos
+   *   tipos gerados. A regra 11 afirma que "o Prisma ja exclui parcial das
+   *   chaves de findUnique - verificado no DMMF", e isso deixou de ser verdade.
+   *
+   * O QUE SEPARA O PARCIAL PERIGOSO DO INOFENSIVO e o PREDICADO, e nao o fato de
+   * ser parcial:
+   *
+   *   WHERE documento IS NOT NULL   para qualquer valor nao-nulo da chave existe
+   *                                 no maximo UMA linha. `findUnique` por ela
+   *                                 devolve uma linha ou nenhuma - correto.
+   *
+   *   WHERE status = 'ativo'        VARIAS linhas compartilham a chave (as
+   *                                 inativas), e o Prisma devolve uma ARBITRARIA.
+   *                                 E o `contrato_ativo_unico_por_uc` que
+   *                                 originou a regra 11: R$ 111,00 de um
+   *                                 suspenso onde o vigente valia R$ 789,00.
+   *
+   * Entao o invariante nao e "nao ha unique parcial" - os tres que existem sao
+   * legitimos. E "todo unique parcial tem predicado IS NOT NULL".
+   *
+   * A OUTRA METADE E CODIGO, e mora em `tests/regra11.ts`: nenhum arquivo de
+   * `src/` navega por chave parcial. O catalogo nao ve o codigo, e o codigo nao
+   * ve o catalogo - por isso sao duas.
+   */
+  SELECT count(*), string_agg(i.indexrelid::regclass::text || ' WHERE ' ||
+                              pg_get_expr(i.indpred, i.indrelid), ', ')
+    INTO n, nomes
+  FROM pg_index i
+  JOIN pg_class t ON t.oid = i.indrelid
+  JOIN pg_namespace ns ON ns.oid = t.relnamespace AND ns.nspname = 'public'
+  WHERE i.indisunique AND i.indpred IS NOT NULL
+    AND pg_get_expr(i.indpred, i.indrelid) !~ '^\(?[a-z_]+ IS NOT NULL\)?$';
+  IF n = 0 THEN RAISE NOTICE 'ok  CAT-9 todo indice unico parcial tem predicado IS NOT NULL - nenhum devolve linha arbitraria por findUnique';
+  ELSE RAISE WARNING 'FALHA CAT-9 unique parcial com predicado que NAO e IS NOT NULL (varias linhas compartilham a chave, e com partialIndexes ligado ela e chave de findUnique): %', nomes; falhas := falhas + 1; END IF;
+
+  IF falhas = 0 THEN RAISE NOTICE 'catalogo: 9 invariantes, nenhuma falha';
   ELSE RAISE WARNING 'catalogo: % FALHA(S)', falhas; END IF;
 END $bloco$;

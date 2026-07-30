@@ -140,6 +140,69 @@ export function somar(valores: readonly Centavos[], campo = 'parcela'): Centavos
   return total;
 }
 
+export class ReaisInvalidos extends TypeError {
+  constructor(bruto: string, porque: string) {
+    super(`"${bruto}" nao e um valor em reais: ${porque}. Use 1234,56 ou 1234.56.`);
+    this.name = 'ReaisInvalidos';
+  }
+}
+
+/**
+ * "1.234,56" -> 123456. Sem passar por float em momento nenhum.
+ *
+ * IRMA DE `web/src/dinheiro.ts:paraCentavos`, E DE PROPOSITO IDENTICA NAS REGRAS.
+ * As duas metades do repositorio tem tsconfig proprio e nao se importam (o alvo
+ * la e o browser, aqui e Node), entao a funcao existe duas vezes - como `emReais`
+ * ja existia. O que NAO pode divergir e a semantica: se "1.234" valesse mil
+ * duzentos e trinta e quatro na tela e um real e vinte e tres centavos na
+ * planilha, o mesmo numero significaria duas coisas no mesmo sistema, e a
+ * diferenca so apareceria na fatura de alguem.
+ *
+ * A CONVERSAO E POR TEXTO, e o argumento para isso foi MEDIDO em 30/07 - nao
+ * herdado. Varrendo centavo a centavo:
+ *
+ *   `Number(s) * 100` difere do inteiro em 131.256 de 1.000.000 de valores
+ *   (0,07 -> 7.000000000000001; 19,99 -> 1998.9999999999998), e
+ *   `Math.round(Number(s) * 100)` errou em 0 de 20.000.000, de R$ 0,01 a
+ *   R$ 200.000,00.
+ *
+ * Ou seja: o caminho ingenuo com arredondamento esta CERTO na faixa inteira, e
+ * esta certo por sorte - depende de o erro do float ficar sempre abaixo de meio
+ * centavo, que e verdade aqui e nao e garantia que alguem escreveu. E o mesmo
+ * achado que este arquivo ja registra sobre `aplicarPercentual`.
+ *
+ * Por texto o valor esta certo por CONSTRUCAO, e nao dentro de uma faixa medida.
+ */
+export function reaisParaCentavos(bruto: string): Centavos {
+  const limpo = String(bruto).trim().replace(/\s/g, '');
+  if (!limpo) throw new ReaisInvalidos(bruto, 'esta vazio');
+
+  const negativo = limpo.startsWith('-');
+  const semSinal = negativo ? limpo.slice(1) : limpo;
+
+  // O ULTIMO ponto ou virgula e o separador decimal; os demais sao de milhar.
+  const ultimo = Math.max(semSinal.lastIndexOf(','), semSinal.lastIndexOf('.'));
+  const inteiraBruta = ultimo === -1 ? semSinal : semSinal.slice(0, ultimo);
+  const decimalBruta = ultimo === -1 ? '' : semSinal.slice(ultimo + 1);
+
+  const inteira = inteiraBruta.replace(/[.,]/g, '');
+  // Tres digitos depois do separador, e nenhum separador antes: era de milhar.
+  // "1.234" e mil duzentos e trinta e quatro, nao um real e 234 centavos.
+  const ehMilhar = decimalBruta.length === 3 && ultimo !== -1 && !/[.,]/.test(inteiraBruta);
+  const decimal = ehMilhar ? '' : decimalBruta;
+  const inteiraFinal = ehMilhar ? inteira + decimalBruta : inteira;
+
+  if (!/^\d*$/.test(inteiraFinal) || !/^\d*$/.test(decimal)) {
+    throw new ReaisInvalidos(bruto, 'ha caractere que nao e digito nem separador');
+  }
+  if (inteiraFinal === '' && decimal === '') throw new ReaisInvalidos(bruto, 'nao ha digito nenhum');
+  if (decimal.length > 2) throw new ReaisInvalidos(bruto, `${decimal.length} casas decimais - dinheiro tem 2`);
+
+  const centavos = Number(`${inteiraFinal || '0'}${decimal.padEnd(2, '0')}`);
+  if (!Number.isSafeInteger(centavos)) throw new ReaisInvalidos(bruto, 'passa do inteiro seguro');
+  return negativo ? -centavos : centavos;
+}
+
 /** R$ 1.234,56 a partir de 123456. So para mensagem de erro e log - nunca para
  *  calculo, e nunca de volta para centavos por caminho nenhum. */
 export function emReais(c: Centavos): string {

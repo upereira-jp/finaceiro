@@ -323,6 +323,10 @@ Toda referência entre entidades de negócio é `(tenant_id, id)`. São **dez** 
 
 **Fora da regra, e por quê:** `tenant_id → tenant(id)` aponta para a tabela raiz, que não tem `tenant_id`. `usuario_tenant.usuario_id → usuario` aponta para entidade de plataforma, também sem `tenant_id`. Nenhuma das duas atravessa nada.
 
+> **Esta lista é da F1, e o banco cresceu depois dela.** Medido em 30/07/2026 contra as 21 migrations: o schema tem **26** FKs compostas `(tenant_id, X)` — as dez daqui mais as que a carteira, o split, o conector de cobrança, o documento e a agenda trouxeram. A lista nominal **não** foi reaberta, de propósito: ela é o registro da conversão da F1, e recontá-la a cada migration a transformaria num número que envelhece — que é exatamente o defeito que o `CAT-7` foi escrito para não ter. **A verificação que não envelhece é o `CAT-7`**, que não conta nada: ele afirma a regra (*se o destino tem `tenant_id`, a referência é composta*) e vale para as 26 e para as que vierem.
+>
+> *Corrigido em 30/07/2026 (`Q-SPEC001-08`): as linhas de §9 diziam "as nove FKs" contra as **dez** desta tabela. As menções a "nove" que sobraram no rodapé de revisão e na nota do `ADR-0003` acima são registro datado e ficam intactas — é a decisão do `PATCH-citacoes-2026-07-24.md`.*
+
 ---
 
 #### `regra_repasse`
@@ -533,7 +537,7 @@ Matriz de papéis: `admin` total; `financeiro` total em corporativo e leitura em
 - [ ] Segunda passada do upsert com o mesmo payload não altera linha alguma
 - [ ] Escrita no CRM por qualquer caminho desta spec falha por permissão
 - [ ] Tenant sem conector executa o ciclo completo de cadastro
-- [ ] As **nove** FKs da §3.4 são compostas, e cada uma rejeita a referência cross-tenant com `23503`
+- [ ] As **dez** FKs da §3.4 são compostas, e cada uma rejeita a referência cross-tenant com `23503`
 - [ ] Requisição sem contexto, logo após uma requisição com contexto na mesma conexão de pool, lê **zero**
 - [ ] `regra_comissao` e `tarifa` recusam vigência sobreposta **pelo banco**, não pela aplicação
 - [ ] Nenhum `round()` em cálculo intermediário de valor derivado de tarifa
@@ -562,7 +566,7 @@ Matriz de papéis: `admin` total; `financeiro` total em corporativo e leitura em
 | `test_estado_crm_nao_editavel` | Inv. 7 |
 | `test_crm_readonly` | Inv. 9 · R19 |
 | `test_vazamento_contexto_no_pool` | Pool de tamanho 1: requisição com contexto seguida de requisição sem contexto tem que ler **zero**. É o teste que pega alguém apagando o `LOCAL` |
-| `test_fk_composta_rejeita_cross_tenant` | §3.4 · Inv. 2 — as nove FKs, uma a uma. Espera `23503` |
+| `test_fk_composta_rejeita_cross_tenant` | §3.4 · Inv. 2 — as dez FKs, uma a uma. Espera `23503` |
 | `test_transacao_nao_aninha` | Inv. 10 — tem que **falhar em desenvolvimento**, não devolver vazio |
 | `test_contexto_por_unidade_de_trabalho` | Inv. 11 — três pontos de medição na mesma unidade devem dar **um** `txid` |
 | `test_atomicidade_entre_operacoes` | Escrita seguida de falha do handler tem que ser **revertida**. É o teste que pegou o desenho errado |

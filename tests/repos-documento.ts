@@ -486,6 +486,54 @@ const garantirTarifa = async (emT: <T>(f: () => Promise<T>) => Promise<T>) => {
     'valor_total_centavos e GENERATED ALWAYS e a COLUNA aceita nulo — medido, contra o que eu tinha escrito');
 }
 
+// ===================================================== W7 o QR de conferencia
+/*
+ * O CAMINHO QUE NAO DEPENDE DE FATURA, e ele existe por uma medicao: em 30/07
+ * producao tinha 0 contratos, 0 faturas e 39 UCs sem `data_vencimento`, entao o
+ * unico teste que nenhuma verificacao automatica substitui - ler o QR com uma
+ * camera - estava atras de tres bloqueios de insumo humano.
+ *
+ * O QUE ESTAS VERIFICACOES PRENDEM, e nao e o desenho: `tests/qrcode.ts` ja prova
+ * a matriz com 45 verificacoes. Aqui o que importa e que este caminho use as
+ * MESMAS funcoes que a fatura usa. Um QR de conferencia desenhado por caminho
+ * paralelo daria confianca sobre uma coisa que nao e a que vai para o cliente.
+ */
+{
+  const q = await emA(() => documento.qrDeConferencia(123_45));
+  chk('W7a', q.qr !== null && q.qr!.modulos > 20 && crcConfere(q.brcode),
+      `o QR sai desenhado e o BR Code tem CRC valido (versao ${q.qr?.versao}, ${q.qr?.modulos} modulos) - `
+      + 'sem fatura nenhuma no caminho');
+
+  chk('W7b', q.brcode.includes('5406123.45') && q.valor_centavos === 123_45,
+      'o campo 54 e o valor DIGITADO formatado por texto - 12345 centavos viram "5406123.45", a '
+      + 'mesma conversao que a fatura usa');
+
+  /*
+   * A IDENTIDADE E A MESMA, e esta e a verificacao que impede o caminho paralelo:
+   * recebedor e cidade vem da linha do banco, nao de constante do codigo.
+   */
+  const ident = await emA(() => documento.identidade());
+  chk('W7c', q.recebedor === ident!.pix_recebedor_nome && q.cidade === ident!.pix_recebedor_cidade,
+      'recebedor e cidade saem da identidade REAL do tenant, e nao de valor fixo - e o que faz este '
+      + 'QR provar alguma coisa sobre o QR de verdade');
+
+  chk('W7d', /NAO confirme o pagamento/.test(q.aviso),
+      'o aviso de que a chave e REAL viaja no PAYLOAD e nao so na tela - o CRM consome esta mesma '
+      + 'API, e um consumidor que pintasse o QR sem o aviso poria a chave do tenant na frente de '
+      + 'alguem sem dizer que ela e real');
+
+  const semValor = await lancou(() => emA(() => documento.qrDeConferencia(0)));
+  const fracionado = await lancou(() => emA(() => documento.qrDeConferencia(12.5 as any)));
+  chk('W7e', semValor?.status === 422 && fracionado?.status === 422,
+      'valor zero e valor fracionario sao RECUSADOS com 422 - um Pix sem valor deixaria quem le '
+      + 'digitar a quantia, e e o mesmo motivo pelo qual a fatura sem total nao ganha faixa');
+
+  const daLeitura = await emALeitura(() => documento.qrDeConferencia(100));
+  chk('W7f', daLeitura.qr !== null,
+      'o papel `leitura` conferre o QR - a rota e GET e nao escreve nada, entao exigir escrita aqui '
+      + 'seria pedir permissao que a operacao nao precisa ter');
+}
+
 console.log(falhas === 0
   ? `\nTODAS as verificacoes do documento passaram.`
   : `\n${falhas} FALHA(S) no documento.`);

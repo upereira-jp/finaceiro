@@ -12,8 +12,9 @@
 // boleto pudesse liquidar, existiriam dois caminhos para repartir dinheiro.
 
 import { dbt } from '../db/tipado.ts';
-import { tenantCorrente, exigir } from '../db/contexto.ts';
+import { db, tenantCorrente, exigir } from '../db/contexto.ts';
 import { emReais } from '../dominio/centavos.ts';
+import { proximaTentativaEm } from '../dominio/agenda.ts';
 import { CobrancaNaoConfigurada, type PortaDeCobranca, type SituacaoDoBoleto } from '../sicoob/porta.ts';
 
 export class CobrancaNaoHabilitada extends Error {
@@ -138,6 +139,20 @@ export async function registrar(faturaId: string, cobranca: PortaDeCobranca): Pr
     },
   });
 
+  /*
+   * O CARIMBO DA TENTATIVA, e ele e o mesmo nos dois desfechos. A migration 21
+   * acrescentou `ultima_tentativa_em` porque a fila do PRD 6 precisa saber
+   * QUANDO foi a ultima tentativa: sem ele o intervalo exponencial so poderia
+   * ser contado a partir de `criado_em`, e um boleto que falhou ontem seria
+   * retentado no mesmo instante que um que falhou agora.
+   *
+   * Carimbado aqui, e nao no motor da agenda, porque este e o unico lugar do
+   * sistema que TENTA. A rota `POST /faturas/:id/boleto` chamada a mao e uma
+   * tentativa igual, e uma tentativa manual que nao mexe na fila faria a agenda
+   * retentar dois minutos depois do que uma pessoa acabou de tentar.
+   */
+  const agora = new Date();
+
   try {
     const r = await cobranca.registrar({
       credencialRef: c.credencial_ref,
@@ -167,8 +182,14 @@ export async function registrar(faturaId: string, cobranca: PortaDeCobranca): Pr
         sicoob_numero_contrato: r.sicoobNumeroContrato ?? c.numero_contrato,
         sicoob_nosso_numero: r.sicoobNossoNumero,
         status: 'registrado',
-        registrado_em: new Date(),
+        registrado_em: agora,
         ultimo_erro: null,
+        // Passou: sai da fila. `proxima_tentativa_em` nulo com
+        // `ultima_tentativa_em` preenchido satisfaz o
+        // `boleto_agendamento_coerente` da migration 21 - o inverso e que o
+        // banco recusa.
+        ultima_tentativa_em: agora,
+        proxima_tentativa_em: null,
         // A constraint `boleto_payload_sem_segredo` confere estes dois. Um
         // adaptador que devolvesse o token junto faria o INSERT falhar - que e
         // o comportamento certo, e e testado plantando o segredo.
@@ -198,12 +219,21 @@ export async function registrar(faturaId: string, cobranca: PortaDeCobranca): Pr
      */
     if (err instanceof CobrancaNaoConfigurada) throw err;
 
+    /*
+     * O intervalo sai da contagem DEPOIS desta falha - `linha.tentativas` e o
+     * valor lido antes do incremento, entao o `+ 1` e a tentativa que acabou de
+     * falhar. Ler o valor de volta do banco para calcular custaria um round-trip
+     * e daria o mesmo numero.
+     */
+    const tentativaAtual = linha.tentativas + 1;
     const comErro = await dbt().boleto.update({
       where: { id: linha.id },
       data: {
         status: 'erro',
         tentativas: { increment: 1 },
         ultimo_erro: String(err?.message ?? err).slice(0, 500),
+        ultima_tentativa_em: agora,
+        proxima_tentativa_em: proximaTentativaEm(tentativaAtual, agora),
       },
     });
     return { registrado: false, boleto: comErro, erro: String(err?.message ?? err) };
@@ -230,6 +260,93 @@ export async function situacaoDosEmAberto(cobranca: PortaDeCobranca, limite = 20
   const situacoes: SituacaoDoBoleto[] = [];
   for (const b of abertos) situacoes.push(await cobranca.consultar(c.credencial_ref, b.nosso_numero!));
   return situacoes;
+}
+
+/**
+ * A FILA DE EMISSAO do PRD 6: o que esta vencido para nova tentativa.
+ *
+ * Duas classes entram, e a segunda e a que nao era obvia:
+ *
+ *   `erro`     tentou e falhou. E o caso do nome.
+ *   `pendente` a LINHA nasceu e a chamada nunca terminou - processo morto,
+ *              timeout do lado de ca. A linha nasce antes da chamada de
+ *              proposito (ver o cabecalho de `registrar`), entao `pendente`
+ *              velho e um boleto que ninguem sabe se subiu. Deixa-lo fora da
+ *              fila e o mesmo buraco em outra roupa.
+ *
+ * `proxima_tentativa_em` NULO conta como vencido, e o `NULLS FIRST` da ordem faz
+ * essas linhas saírem primeiro: sao as mais antigas sem agendamento - as que a
+ * migration 21 encontrou ja em erro, e as `pendente` que nunca foram carimbadas.
+ *
+ * Nao ha teto de tentativas na consulta, e a ausencia e deliberada: ver o
+ * cabecalho de `src/dominio/agenda.ts`. O que cresce e o intervalo, nunca o
+ * silencio.
+ */
+export async function filaDeEmissao(agora: Date, limite: number) {
+  await exigir('ler');
+  const r: Array<{ boleto_id: string; fatura_id: string; status: string; tentativas: number;
+                   ultimo_erro: string | null; proxima_tentativa_em: Date | null }> =
+    await db().$queryRaw`
+      SELECT b.id AS boleto_id, b.fatura_id, b.status::text, b.tentativas,
+             b.ultimo_erro, b.proxima_tentativa_em
+        FROM boleto b
+        JOIN fatura f ON f.tenant_id = b.tenant_id AND f.id = b.fatura_id
+       WHERE b.status IN ('pendente','erro')
+         AND (b.proxima_tentativa_em IS NULL OR b.proxima_tentativa_em <= ${agora})
+         -- So fatura emitida ganha boleto - FaturaSemBoleto. Sem este filtro a
+         -- fila retentaria eternamente o boleto de uma fatura CANCELADA, e cada
+         -- rodada gastaria uma chamada para receber o mesmo 409.
+         AND f.status IN ('emitida','vencida')
+       ORDER BY b.proxima_tentativa_em ASC NULLS FIRST, b.vencimento ASC
+       LIMIT ${Math.max(1, Math.min(limite, 500))}`;
+  return r;
+}
+
+/** Quantos ficaram para tras nesta rodada. Existe para a rodada poder DIZER que
+ *  truncou - "cobri tudo" e "cobri os 200 primeiros" nao podem ser a mesma
+ *  saida. */
+export async function tamanhoDaFila(agora: Date): Promise<number> {
+  await exigir('ler');
+  const r: Array<{ n: bigint }> = await db().$queryRaw`
+    SELECT count(*) AS n
+      FROM boleto b
+      JOIN fatura f ON f.tenant_id = b.tenant_id AND f.id = b.fatura_id
+     WHERE b.status IN ('pendente','erro')
+       AND (b.proxima_tentativa_em IS NULL OR b.proxima_tentativa_em <= ${agora})
+       AND f.status IN ('emitida','vencida')`;
+  return Number(r[0]?.n ?? 0);
+}
+
+/** Os `registrado` com nosso numero, que e o universo da consulta ativa. Devolve
+ *  a linha inteira porque o motor precisa do `fatura_id` para baixar. */
+export async function emAberto(limite: number) {
+  await exigir('ler');
+  return dbt().boleto.findMany({
+    where: { status: 'registrado', nosso_numero: { not: null } },
+    orderBy: [{ vencimento: 'asc' }],
+    take: Math.max(1, Math.min(limite, 500)),
+  });
+}
+
+/** A divergencia achada pela consulta ativa fica NA LINHA do boleto, e nao so no
+ *  registro da execucao. Quem abre a fatura precisa ver o que o banco disse sem
+ *  saber que existe uma tabela de agenda. */
+export async function registrarDivergencia(boletoId: string, motivo: string) {
+  await exigir('escrever_carteira');
+  return dbt().boleto.update({
+    where: { id: boletoId },
+    data: { ultimo_erro: motivo.slice(0, 500) },
+  });
+}
+
+/** O banco cancelou o titulo. Nao ha dinheiro, entao nao ha split - so o nosso
+ *  estado a alinhar com o dele. */
+export async function marcarBaixadoNoBanco(boletoId: string, motivo: string) {
+  await exigir('escrever_carteira');
+  return dbt().boleto.update({
+    where: { id: boletoId },
+    data: { status: 'baixado', baixado_em: new Date(), ultimo_erro: motivo.slice(0, 500) },
+  });
 }
 
 export async function baixarNoBanco(faturaId: string, motivo: string, cobranca: PortaDeCobranca) {

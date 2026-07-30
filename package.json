@@ -19,14 +19,16 @@
     "test:documento": "node --experimental-strip-types tests/documento.ts",
     "test:brcode": "node --experimental-strip-types tests/brcode.ts && node --experimental-strip-types tests/layout-do-documento.ts && node --experimental-strip-types tests/qrcode.ts",
     "test:web": "node --experimental-strip-types web/tests/lotes.ts && node --experimental-strip-types web/tests/contrato.ts && node --experimental-strip-types web/tests/cobranca.ts && node --experimental-strip-types web/tests/csv.ts && node --experimental-strip-types web/tests/tema.ts && node --experimental-strip-types web/tests/interface.ts",
-    "test:dominio": "node --experimental-strip-types tests/dominio-carteira.ts",
+    "test:dominio": "node --experimental-strip-types tests/dominio-carteira.ts && node --experimental-strip-types tests/agenda.ts && node --experimental-strip-types tests/sqlstate.ts && node --experimental-strip-types tests/planilha-tarifas.ts && node --experimental-strip-types tests/regra11.ts && node --experimental-strip-types tests/prisma-config.ts",
     "test:isolamento": "bash tests/run.sh",
     "test:middleware": "bash tests/middleware.sh",
     "test:sessao": "bash tests/sessao.sh",
     "test:repos": "bash tests/repos.sh",
     "test": "npm run typecheck && npm run test:documento && npm run test:brcode && npm run test:web && npm run test:dominio && npm run test:isolamento && npm run test:middleware && npm run test:sessao && npm run test:repos",
     "usinas": "node --experimental-strip-types --env-file=.env scripts/cadastrar-usinas.ts",
-    "originadores": "node --experimental-strip-types --env-file=.env scripts/cadastrar-originadores.ts"
+    "originadores": "node --experimental-strip-types --env-file=.env scripts/cadastrar-originadores.ts",
+    "agenda": "node --experimental-strip-types --env-file=.env scripts/agenda.ts",
+    "tarifas": "node --experimental-strip-types --env-file=.env scripts/importar-tarifas.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.9.0",

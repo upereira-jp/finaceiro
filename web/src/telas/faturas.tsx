@@ -31,8 +31,7 @@ import { api, type Fatura, type Boleto, type UnidadeConsumidora } from '../api.t
 import { useAcao, useDados } from '../dados.ts';
 import {
   Pagina, Aviso, Tabela, Marca, rotulo, linha, useOrdenacao, ordenar, ThOrd,
-  Icone, CampoData, Carregando,
-} from '../ui.tsx';
+  Icone, CampoData, Carregando, AjudaDoMes } from '../ui.tsx';
 import { competenciaISO, emReais, paraCentavos } from '../dinheiro.ts';
 import { paraCsv, reaisParaPlanilha, nomeDoArquivo } from '../csv.ts';
 import { baixarCsv } from '../baixar.ts';
@@ -86,7 +85,7 @@ export function TelaFaturas() {
   const exportar = () => {
     const csv = paraCsv<Fatura>([
       { titulo: 'UC', de: (f) => numeroDaUc.get(f.unidade_consumidora_id) ?? f.unidade_consumidora_id },
-      { titulo: 'Competência', de: (f) => String(f.competencia).slice(0, 7) },
+      { titulo: 'Mes de referencia', de: (f) => String(f.competencia).slice(0, 7) },
       { titulo: 'Status', de: (f) => f.status },
       { titulo: 'Vencimento', de: (f) => String(f.vencimento).slice(0, 10) },
       { titulo: 'Geração kWh', de: (f) => f.geracao_kwh_competencia ?? '' },
@@ -106,12 +105,12 @@ export function TelaFaturas() {
 
   return (
     <Pagina titulo="Faturas"
-            sub="A competência inteira, linha por linha. Emitir fecha o valor; o boleto vem depois; a baixa é o único gatilho do split.">
+            sub="O mês de referência inteiro, linha por linha. Emitir fecha o valor; o boleto vem depois; a baixa é o único gatilho do split.">
       <div className="cartao" style={{ marginBottom: 20 }}>
         <div style={{ ...linha, gap: 12 }}>
           <div>
-            <label>Competência</label>
-            <CampoData mes valor={mes} ao={setMes} rotuloAcessivel="Competência" style={{ width: 'auto' }} />
+            <label>Mês de referência</label>
+            <CampoData mes valor={mes} ao={setMes} rotuloAcessivel="Mês de referência" style={{ width: 'auto' }} /><AjudaDoMes />
           </div>
           <div style={{ alignSelf: 'end', display: 'flex', gap: 8 }}>
             <button onClick={() => void emitirLote()} disabled={acao.ocupado || !rascunhos}>
@@ -153,7 +152,7 @@ export function TelaFaturas() {
                 <th>Ações</th>
               </>}
               vazio={faturas.carregando
-                ? <Carregando texto="Lendo a competência…" />
+                ? <Carregando texto="Lendo o mês…" />
                 : faturas.erro
                   ? 'Lista desconhecida — o aviso acima diz por quê.'
                   : `Nenhuma fatura em ${mes}. Compor o lote é na aba Carteira.`}>

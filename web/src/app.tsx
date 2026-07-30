@@ -49,7 +49,7 @@ import { TelaDocumento } from './telas/documento.tsx';
  * nome de ícone tenha desenho.
  */
 const RENDER: Record<string, () => ReactElement> = {
-  '/prontidao': () => <TelaProntidao />,
+  '/pendencias': () => <TelaProntidao />,
   '/clientes': () => <TelaClientes />,
   '/unidades': () => <TelaUnidades />,
   '/contratos': () => <TelaContratos />,
@@ -89,7 +89,7 @@ export function App() {
   if (!s.sessaoAuth) return <><style>{ESTILO}</style><Login /></>;
 
   // Caminho desconhecido (inclusive `/`) cai na primeira tela, que é a
-  // Prontidão — a tela que diz o que falta é o lugar certo para se perder.
+  // Pendências — a tela que diz o que falta é o lugar certo para se perder.
   const tela = telaDoCaminho(caminho);
   const vinculo = s.sessao?.tenants.find((t) => t.tenantId === s.tenantId);
   const varios = Boolean(s.sessao && s.sessao.tenants.length > 1);

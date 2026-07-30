@@ -27,7 +27,16 @@ import {
 import { TELAS, telaDoCaminho, inicioDoGrupoDinheiro } from '../src/navegacao.ts';
 
 let falhas = 0;
+/*
+ * O TOTAL E CONTADO, e nao escrito. A versao anterior fechava com o literal
+ * "52 verificacoes" e ele ja estava errado quando esta linha foi escrita — a
+ * suite cresceu e o numero nao. E a terceira vez que este projeto encontra uma
+ * contagem que nao se reproduz, e o `README` ja diz o metodo: a contagem oficial
+ * e `npm test | grep -c '^ok '`. Aqui o proprio `chk` conta.
+ */
+let feitas = 0;
 const chk = (id: string, cond: boolean, d: string) => {
+  feitas++;
   if (!cond) falhas++;
   console.log(`${cond ? 'ok   ' : 'FALHA'} ${id.padEnd(6)} ${d}`);
 };
@@ -117,10 +126,15 @@ chk('I4e', TELAS.every((t) => t.rota.startsWith('/') && !t.rota.includes(' ')),
 
 // A ORDEM E DECISAO DOCUMENTADA, nao gosto: cadastro primeiro, na ordem em que
 // uma camada destrava a proxima; dinheiro depois, na ordem dos ATOS. Este teste
-// prende a FORMA da decisao — os dois grupos sao contiguos, e a Prontidao, que e
-// a tela que diz o que falta, e a primeira.
-chk('I4f', TELAS[0]!.rota === '/prontidao',
-    'a primeira tela e a Prontidao — e onde cai quem se perde, e a que diz o que falta');
+// prende a FORMA da decisao — os dois grupos sao contiguos, e a tela que diz o
+// que falta e a primeira.
+//
+// A ROTA MUDOU EM 30/07 (`/prontidao` -> `/pendencias`, decisao do dono: o nome
+// era pouco claro). O teste afirma a POSICAO e o GRUPO, e nao o nome — se
+// afirmasse o nome, ele quebraria a cada troca de rotulo sem que nada de fato
+// tivesse mudado, e teste que quebra por cosmetica treina o time a ignora-lo.
+chk('I4f', TELAS[0]!.grupo === 'cadastro' && TELAS[0]!.rota === '/pendencias',
+    'a primeira tela e a que diz o que falta — e onde cai quem se perde');
 chk('I4g', TELAS.slice(0, inicioDoGrupoDinheiro).every((t) => t.grupo === 'cadastro')
         && TELAS.slice(inicioDoGrupoDinheiro).every((t) => t.grupo === 'dinheiro'),
     'os dois grupos sao contiguos — a divisoria da barra e um lugar so, nao dois');
@@ -129,10 +143,21 @@ chk('I4h', inicioDoGrupoDinheiro > 0 && inicioDoGrupoDinheiro < TELAS.length,
 
 // Caminho desconhecido cai na primeira tela. E o comportamento que o `app.tsx`
 // documenta desde 29/07 e que nunca teve teste.
-chk('I4i', telaDoCaminho('/nao-existe').rota === '/prontidao'
-        && telaDoCaminho('/').rota === '/prontidao'
+const primeira = TELAS[0]!.rota;
+chk('I4i', telaDoCaminho('/nao-existe').rota === primeira
+        && telaDoCaminho('/').rota === primeira
         && telaDoCaminho('/faturas').rota === '/faturas',
-    'caminho desconhecido e / caem na Prontidao; caminho conhecido resolve para ele mesmo');
+    'caminho desconhecido e / caem na primeira tela; caminho conhecido resolve para ele mesmo');
+
+/*
+ * E O `/prontidao` ANTIGO CONTINUA LEVANDO AO LUGAR CERTO, por consequencia da
+ * regra acima e nao por um redirecionamento escrito a mao. Vale como verificacao
+ * porque e o unico link que pode existir em favorito de alguem: a rota viveu de
+ * 29/07 a 30/07.
+ */
+chk('I4j', telaDoCaminho('/prontidao').rota === TELAS[0]!.rota,
+    'a rota antiga /prontidao cai na tela de Pendencias — caminho desconhecido resolve para a '
+    + 'primeira, e a primeira e ela');
 
 // ----------------------------------------- I5 cor nunca e o unico sinal (rest. 3)
 
@@ -188,4 +213,4 @@ chk('I6g', /--sombra-1|--sombra-2|--sombra-3/.test(REGRAS)
 
 console.log();
 if (falhas > 0) { console.log(`--- interface: ${falhas} FALHA(S)`); process.exit(1); }
-console.log('--- interface (estilo, movimento e navegacao): 52 verificacoes, 0 falhas');
+console.log(`--- interface (estilo, movimento e navegacao): ${feitas} verificacoes, 0 falhas`);

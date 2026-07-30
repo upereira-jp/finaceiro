@@ -21,19 +21,18 @@ import { useEffect, useState } from 'react';
 import {
   api, buscarBinario,
   type IdentidadeDeCobranca, type CampoDoDocumento, type DocumentoDaFatura, type Fatura,
-  type QrDoDocumento,
+  type QrDoDocumento, type QrDeConferencia,
 } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
-  Pagina, Aviso, Campo, Tabela, linha, Icone, Interruptor, BotaoDeIcone, CampoData, Escolha,
-} from '../ui.tsx';
-import { competenciaISO } from '../dinheiro.ts';
+  Pagina, Aviso, Campo, Tabela, linha, Icone, Interruptor, BotaoDeIcone, CampoData, Escolha, AjudaDoMes } from '../ui.tsx';
+import { competenciaISO, paraCentavos, emReais } from '../dinheiro.ts';
 import { mover, paraEnvio, type CampoConfigurado } from '../cobranca-regras.ts';
 
 /** Os 16 do enum `campo_de_fatura` (migration 19). A tela nao inventa nome de
  *  campo: o banco recusaria, e o erro sairia do lado errado. */
 const CAMPOS: Array<{ campo: string; rotulo: string }> = [
-  { campo: 'competencia', rotulo: 'Competência' },
+  { campo: 'competencia', rotulo: 'Mês de referência' },
   { campo: 'numero_uc', rotulo: 'Unidade consumidora' },
   { campo: 'cliente_nome', rotulo: 'Cliente' },
   { campo: 'cliente_documento', rotulo: 'CPF/CNPJ' },
@@ -277,6 +276,11 @@ export function TelaDocumento() {
         )}
       </div>
 
+      {/* ANTES da Previa de proposito: a Previa exige fatura, e enquanto nao houver
+          uma este painel e o unico caminho para o teste de campo do QR. Poe-lo
+          embaixo esconderia a saida atras de um "Nenhuma fatura em ...". */}
+      <ConferirQr temIdentidade={!!ident.dado} />
+
       <Previa logoUrl={logoUrl} />
     </Pagina>
   );
@@ -287,6 +291,87 @@ export function TelaDocumento() {
 // A PREVIA E O DOCUMENTO, e nao uma aproximacao dele: ela pinta o retorno de
 // `GET /faturas/:id/documento`, que e a mesma rota que o CRM vai consumir. Se as
 // duas coisas divergissem, a previa deixaria de ser conferencia.
+
+/**
+ * CONFERIR O QR SEM FATURA.
+ *
+ * MEDIDO EM PRODUCAO em 30/07/2026, e e o motivo de este painel existir: havia
+ * **0 contratos, 0 faturas e 39 UCs sem `data_vencimento`**. A Previa abaixo
+ * precisa de uma fatura, entao o unico teste que nenhuma das 964 verificacoes
+ * substitui — **ler o QR com uma camera** — estava atras de tres bloqueios que
+ * dependem de insumo humano que ainda nao chegou: os CPF/CNPJ dos originadores,
+ * os 39 contratos e a `data_vencimento` (`Q-SPEC001-02`).
+ *
+ * A coisa mais barata de conferir era a que menos podia ser conferida.
+ *
+ * NAO E UM "MODO DE TESTE": chama a MESMA funcao pura que a fatura chama
+ * (`pixEstatico` + `svgDoBrCode`), com a identidade REAL do tenant. Um QR
+ * desenhado por um caminho paralelo nao provaria nada sobre o de verdade. Nao
+ * grava nada — a rota e GET e o repositorio pede `exigir('ler')`.
+ */
+function ConferirQr({ temIdentidade }: { temIdentidade: boolean }) {
+  const [valor, setValor] = useState('123,45');
+  const [pedido, setPedido] = useState<number | null>(null);
+  const [erroDeLeitura, setErroDeLeitura] = useState<string | null>(null);
+
+  const qr = useDados<QrDeConferencia | null>(
+    async () => (pedido == null ? null : api.get<QrDeConferencia>(`/cobranca/qr-de-conferencia?valor_centavos=${pedido}`)),
+    [pedido],
+  );
+
+  const conferir = () => {
+    try {
+      setErroDeLeitura(null);
+      setPedido(paraCentavos(valor));
+    } catch (e) {
+      // A regra 1 na porta de entrada: reais viram centavos por TEXTO, e o valor
+      // ilegivel para AQUI em vez de virar NaN na query.
+      setErroDeLeitura(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  return (
+    <section className="cartao naoimprime" style={{ marginTop: 16 }}>
+      <h2 style={{ marginTop: 0 }}><Icone nome="documento" tamanho={17} /> Conferir o QR com a câmera</h2>
+      <p className="sub">
+        Desenha um QR a partir da sua chave Pix e de um valor que você digita, <strong>sem precisar
+        de fatura</strong>. É o teste de campo: as verificações automáticas provam que a matriz é um
+        QR válido pelo padrão, e <strong>não</strong> provam que o aplicativo do banco aceita.
+      </p>
+
+      {!temIdentidade
+        ? <Aviso tipo="alerta">
+            Cadastre a identidade de cobrança acima primeiro — chave Pix, nome e cidade do recebedor.
+            É de lá que o QR sai.
+          </Aviso>
+        : <>
+            <div style={{ ...linha, alignItems: 'flex-end' }}>
+              <Campo rotulo="Valor (R$)" valor={valor} ao={setValor} />
+              <button className="primario" onClick={conferir} disabled={qr.carregando}>
+                Desenhar o QR
+              </button>
+            </div>
+            {erroDeLeitura && <Aviso tipo="erro">{erroDeLeitura}</Aviso>}
+            {qr.erro && <Aviso tipo="erro">{qr.erro}</Aviso>}
+            {qr.dado && (
+              <>
+                <Aviso tipo="alerta">{qr.dado.aviso}</Aviso>
+                <Tabela cabecalho={<><th>Confira na tela do banco</th><th>Deve aparecer</th></>}>
+                  <tr><td>Recebedor</td><td><strong>{qr.dado.recebedor}</strong></td></tr>
+                  <tr><td>Cidade</td><td>{qr.dado.cidade}</td></tr>
+                  <tr><td>Valor</td><td><strong>{emReais(qr.dado.valor_centavos)}</strong></td></tr>
+                </Tabela>
+                <Qr qr={qr.dado.qr} motivo={qr.dado.qr_motivo} rotulo="QR Code de conferência" />
+                <p className="sub" style={{ marginTop: 8 }}>
+                  Copia e cola, para testar o outro caminho:
+                </p>
+                <code style={{ fontSize: 11, wordBreak: 'break-all' }}>{qr.dado.brcode}</code>
+              </>
+            )}
+          </>}
+    </section>
+  );
+}
 
 function Previa({ logoUrl }: { logoUrl: string | null }) {
   const [mes, setMes] = useState(() => new Date().toISOString().slice(0, 7));
@@ -304,9 +389,9 @@ function Previa({ logoUrl }: { logoUrl: string | null }) {
         <h2 style={{ marginTop: 0 }}><Icone nome="imprimir" tamanho={17} /> Prévia</h2>
         <div style={{ ...linha, gap: 12 }}>
           <div>
-            <label>Competência</label>
-            <CampoData mes valor={mes} rotuloAcessivel="Competência" style={{ width: 'auto' }}
-                       ao={(v) => { setMes(v); setFaturaId(''); }} />
+            <label>Mês de referência</label>
+            <CampoData mes valor={mes} rotuloAcessivel="Mês de referência" style={{ width: 'auto' }}
+                       ao={(v) => { setMes(v); setFaturaId(''); }} /><AjudaDoMes />
           </div>
           <div style={{ flex: '1 1 260px' }}>
             <label>Fatura</label>
@@ -343,7 +428,7 @@ function Documento({ doc, logoUrl }: { doc: DocumentoDaFatura; logoUrl: string |
         {logoUrl && <img src={logoUrl} alt="" style={{ maxHeight: 56, maxWidth: 200 }} />}
         <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
           <div style={{ fontSize: 20, fontWeight: 700 }}>FATURA</div>
-          <div className="fraco">competência {doc.competencia.slice(0, 7).split('-').reverse().join('/')}</div>
+          <div className="fraco">mês de referência {doc.competencia.slice(0, 7).split('-').reverse().join('/')}</div>
         </div>
       </header>
 

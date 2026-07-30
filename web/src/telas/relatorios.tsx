@@ -19,7 +19,7 @@
 import { useState } from 'react';
 import { api, type Repasse, type Comissao, type UsoDaUsina } from '../api.ts';
 import { useDados } from '../dados.ts';
-import { Pagina, Aviso, Tabela, linha, Icone, CampoData, Carregando } from '../ui.tsx';
+import { Pagina, Aviso, Tabela, linha, Icone, CampoData, Carregando, AjudaDoMes } from '../ui.tsx';
 import { competenciaISO, emReais } from '../dinheiro.ts';
 import { paraCsv, reaisParaPlanilha, nomeDoArquivo, type Coluna } from '../csv.ts';
 import { baixarCsv } from '../baixar.ts';
@@ -41,8 +41,8 @@ export function TelaRelatorios() {
       <div className="cartao" style={{ marginBottom: 20 }}>
         <div style={{ ...linha, gap: 12 }}>
           <div>
-            <label>Competência (vazio = todas)</label>
-            <CampoData mes valor={mes} ao={setMes} rotuloAcessivel="Competência" style={{ width: 'auto' }} />
+            <label>Mês de referência (vazio = todos)</label>
+            <CampoData mes valor={mes} ao={setMes} rotuloAcessivel="Mês de referência" style={{ width: 'auto' }} /><AjudaDoMes />
           </div>
           {mes && (
             <button style={{ alignSelf: 'end' }} onClick={() => setMes('')}>
@@ -58,11 +58,11 @@ export function TelaRelatorios() {
              vazio="Nenhum repasse ainda — o split só roda quando uma fatura é liquidada (PRD 5.2)."
              csv={{ assunto: 'repasses', mes, colunas: [
                { titulo: 'Dono', de: (r: Repasse) => r.dono },
-               { titulo: 'Competência', de: (r: Repasse) => String(r.competencia).slice(0, 7) },
+               { titulo: 'Mes de referencia', de: (r: Repasse) => String(r.competencia).slice(0, 7) },
                { titulo: 'Itens', de: (r: Repasse) => r.itens },
                { titulo: 'Valor R$', de: (r: Repasse) => reaisParaPlanilha(r.valor_centavos) },
              ] }}
-             cabecalho={<><th>Dono</th><th>Competência</th><th className="num">Itens</th><th className="num">Valor</th></>}
+             cabecalho={<><th>Dono</th><th>Mês de ref.</th><th className="num">Itens</th><th className="num">Valor</th></>}
              corpo={(r: Repasse, i: number) => (
                <tr key={`${r.dono}-${r.competencia}-${i}`}>
                  <td><strong>{r.dono}</strong></td>
@@ -78,12 +78,12 @@ export function TelaRelatorios() {
              vazio="Nenhuma comissão ainda. Se houver liquidação e isto continuar vazio, o caminho a olhar é o contrato sem originador — a prontidão acusa (camada `originador_do_contrato`)."
              csv={{ assunto: 'comissoes', mes, colunas: [
                { titulo: 'Originador', de: (c: Comissao) => c.originador },
-               { titulo: 'Competência', de: (c: Comissao) => String(c.competencia).slice(0, 7) },
+               { titulo: 'Mes de referencia', de: (c: Comissao) => String(c.competencia).slice(0, 7) },
                { titulo: 'Parcela', de: (c: Comissao) => c.parcela_comissao },
                { titulo: 'Itens', de: (c: Comissao) => c.itens },
                { titulo: 'Valor R$', de: (c: Comissao) => reaisParaPlanilha(c.valor_centavos) },
              ] }}
-             cabecalho={<><th>Originador</th><th>Competência</th><th className="num">Parcela</th><th className="num">Itens</th><th className="num">Valor</th></>}
+             cabecalho={<><th>Originador</th><th>Mês de ref.</th><th className="num">Parcela</th><th className="num">Itens</th><th className="num">Valor</th></>}
              corpo={(c: Comissao, i: number) => (
                <tr key={`${c.originador}-${c.competencia}-${c.parcela_comissao}-${i}`}>
                  <td><strong>{c.originador}</strong></td>
@@ -100,12 +100,12 @@ export function TelaRelatorios() {
              vazio="Nenhuma competência com geração e faturamento para cruzar."
              csv={{ assunto: 'uso-das-usinas', mes, colunas: [
                { titulo: 'Geradora', de: (u: UsoDaUsina) => u.codigo_geradora },
-               { titulo: 'Competência', de: (u: UsoDaUsina) => String(u.competencia).slice(0, 7) },
+               { titulo: 'Mes de referencia', de: (u: UsoDaUsina) => String(u.competencia).slice(0, 7) },
                { titulo: 'Geração kWh', de: (u: UsoDaUsina) => u.geracao_kwh ?? '' },
                { titulo: 'Faturado kWh', de: (u: UsoDaUsina) => u.consumo_faturado_kwh ?? '' },
                { titulo: 'Saldo kWh', de: (u: UsoDaUsina) => u.saldo_kwh ?? '' },
              ] }}
-             cabecalho={<><th>Geradora</th><th>Competência</th><th className="num">Geração kWh</th><th className="num">Faturado kWh</th><th className="num">Saldo kWh</th></>}
+             cabecalho={<><th>Geradora</th><th>Mês de ref.</th><th className="num">Geração kWh</th><th className="num">Faturado kWh</th><th className="num">Saldo kWh</th></>}
              corpo={(u: UsoDaUsina, i: number) => {
                // kWh chega como STRING (numeric do Postgres). O `Number` aqui e
                // so para decidir a COR - nao volta para conta nenhuma, e por isso
