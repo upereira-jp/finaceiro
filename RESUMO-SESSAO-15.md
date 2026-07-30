@@ -186,6 +186,8 @@ Ou seja: **o caminho inteiro do QR está commitado — backend, rota, tipo e tel
 
 **Não foi executado, e o motivo não é escolha:** o VPS **não é alcançável deste ambiente**. Medido — TCP 443 e TCP 22 para `financeiro.blackhaus.io` (`2.24.203.201`) não abrem, com timeout; e não é bloqueio geral de saída, porque o Supabase do CRM e o do financeiro responderam durante toda a sessão, e o GitHub também.
 
+> **CORREÇÃO de 30/07/2026 11:36 — a inalcançabilidade era do momento, não do ambiente.** Remedido: **TCP 443 e TCP 22 abrem**, `GET /` devolve **200**, `GET /api/publico/config` devolve **200**, e o host e o IP estão no `known_hosts` deste Codespace. O que **continua verdade** é o parágrafo seguinte inteiro — o `index.html` servido ainda aponta `assets/index-DzZYJ0Ak.js` e não traz o `preload` da fonte, então **nada das sessões 14 e 15 está publicado**. O que caiu foi só o motivo: o deploy é executável daqui, e o que falta é credencial de acesso ao servidor, não rota de rede.
+
 **O que foi provado, em árvore isolada no commit desta sessão** (worktree em `HEAD` limpo, sem os arquivos da sessão de UX):
 
 ```
@@ -220,7 +222,7 @@ systemctl status financeiro && journalctl -u financeiro -n 30
 
 **Duas coisas para saber antes de rodar isso:**
 
-1. **`main` ainda não tem nada.** O trabalho das sessões 14 e 15 está no branch `sessao-14-cobranca-e-documento`. O `git pull` do VPS puxa `main` — então o deploy exige **merge para `main` primeiro**, e isso publica as duas sessões de uma vez.
+1. ~~**`main` ainda não tem nada.** O trabalho das sessões 14 e 15 está no branch `sessao-14-cobranca-e-documento`. O `git pull` do VPS puxa `main` — então o deploy exige **merge para `main` primeiro**, e isso publica as duas sessões de uma vez.~~ **Corrigido em 30/07 11:36: essa ressalva também caiu, e ela já estava vencida quando eu a escrevi.** A sessão de UX commitou `b1710f5` às 04:19 **em cima** do meu commit e **empurrou `main`** — `main` = `origin/main` = `b1710f5` contém as duas sessões inteiras, e a árvore de trabalho está limpa. **O `git pull` do VPS basta; não há merge a fazer.** O único commit fora de `main` é `62e2f25`, que é este documento.
 2. ~~**Não rode `web:build` no VPS enquanto a sessão de UX não tiver publicado.**~~ **Corrigido: essa ressalva caiu.** Ela era verdadeira quando eu a escrevi — `web/src/estilo.ts` tinha 18 erros de parse às 03:50 e o `tsc --noEmit` do build falhava. A sessão de UX commitou às 04:19 e **`npm run web:build` passa na árvore final**, com 206 módulos e o bundle em 3 pedaços. **O `web:build` é obrigatório neste deploy**, e não opcional: a SPA mudou inteira, e o `index.html` passou a carregar a fonte servida por nós.
 
 **O que não foi verificado, e nenhuma verificação desta sessão substitui:** **nenhuma tela foi aberta** — não há browser neste ambiente —, e **o QR não foi lido por câmera de celular**. As 45 verificações provam que a matriz é um QR válido pelo padrão e que o texto volta inteiro; não provam que o aplicativo do banco o aceita. Isso é teste de campo, e é o primeiro que vale fazer quando o documento chegar a alguém.
