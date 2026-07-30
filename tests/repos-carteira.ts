@@ -17,7 +17,7 @@
 
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../src/generated/prisma/client.ts';
-import { withTenantEm } from '../src/db/contexto.ts';
+import { withTenantEm, db } from '../src/db/contexto.ts';
 import { criarPools } from '../src/db/pools.ts';
 import * as donoUsina from '../src/repos/dono_usina.ts';
 import * as usinaRepo from '../src/repos/usina.ts';
@@ -427,11 +427,65 @@ let liquidacaoJulho: string;
       'dono de usina bloqueia o SPLIT e contrato bloqueia a FATURA - a distincao e a mesma de recusa e alerta (R33)');
   chk('K18e', pA.camadas.filter((c) => c.situacao === 'pendente').every((c) => c.dono.length > 0),
       'toda camada pendente carrega dono nomeado - questao sem dono e automaticamente vermelha (QUESTOES 1)');
+
+  /*
+   * K18f a K18i - a camada `originador_do_contrato`, que a Q-PRONTIDAO-COMIS-01
+   * pediu e a Q-ORIGINADOR-01 autorizou a escrever (decidida em 29/07: a
+   * carteira LEVA originador, e nenhuma comissao foi paga ainda).
+   *
+   * A FIXTURE JA ERA O SUJEITO CERTO e ninguem tinha reparado: dos tres
+   * contratos ativos do tenant A, so o de `ucOk` tem originador - os de
+   * `ucSemGeracao` e `ucSemVencimento` nascem com `originador_id: null`. Antes
+   * desta camada, esses dois atravessavam a prontidao inteira sem aparecer em
+   * lugar nenhum, que e exatamente o defeito que se esta prendendo.
+   */
+  /*
+   * O NUMERO NAO E FIXO AQUI, e a primeira versao deste teste errou por isso:
+   * ela dizia "2 de 3" lendo a fixture, e a fixture nao e o estado - os testes
+   * acima criam contrato (a renovacao, o caso da usina sem dono). Numero fixo
+   * teria quebrado no dia em que alguem acrescentasse um caso acima, e o
+   * culpado pareceria ser a camada.
+   *
+   * Entao a camada e conferida contra o BANCO, na mesma condicao: se ela contar
+   * diferente do que a tabela tem, e a camada que esta errada.
+   *
+   * `db()` E NAO `prisma`, e a primeira tentativa errou nisto: o contexto de
+   * tenant e emitido DENTRO do `$transaction`, no client de transacao. Uma
+   * consulta pelo client de fora corre sem `app.current_tenant_id` e a RLS
+   * devolve zero linhas - e o teste diria "0 de 0" achando que mediu. E o mesmo
+   * modo de falha da regra 3: resultado vazio, nao erro de permissao.
+   */
+  const [real]: any[] = await emA(() => db().$queryRaw`
+    SELECT count(*) FILTER (WHERE k.originador_id IS NULL) AS sem,
+           count(*)                                        AS total
+      FROM contrato k
+      JOIN unidade_consumidora uc
+        ON uc.tenant_id = k.tenant_id AND uc.id = k.unidade_consumidora_id
+     WHERE k.status = 'ativo' AND uc.status = 'ativa'`);
+  const orig = porNome('originador_do_contrato');
+  chk('K18f', orig.faltam === Number(real.sem) && orig.total === Number(real.total)
+           && orig.faltam > 0 && orig.situacao === 'pendente',
+      `contrato ativo sem originador e ACUSADO, e a contagem bate com a tabela: ${orig.faltam} de ${orig.total} (tabela: ${real.sem} de ${real.total}) - antes desta camada eles eram invisiveis`);
+  chk('K18g', orig.efeito === 'bloqueia_split' && pA.pode_repartir === false,
+      'e a marca e bloqueia_split: nao impede a fatura EXISTIR e derruba `pode_repartir` - o sistema nao se declara pronto para repartir o que vai fechar sem pagar comissao');
+
+  /*
+   * O SEGUNDO SENTIDO, e e ele que da valor ao primeiro. A Q-PRONTIDAO-COMIS-01
+   * dizia que `regra_de_comissao` devolve `nao_medido` tanto para "nao ha
+   * contratos" quanto para "ha contratos e nenhum tem originador", e que as duas
+   * apareciam como o MESMO `?` na tela. Agora as duas continuam `nao_medido`
+   * naquela camada - e a de cima as separa.
+   */
+  const origB = pB.camadas.find((c) => c.camada === 'originador_do_contrato')!;
+  chk('K18h', origB.situacao === 'nao_medido' && origB.total === 0,
+      'universo vazio (tenant sem contrato) continua NAO_MEDIDO nesta camada tambem - a licao do K18a vale para a nova');
+  chk('K18i', orig.situacao !== origB.situacao,
+      'e os dois casos que a Q-PRONTIDAO-COMIS-01 confundia agora sao DISTINGUIVEIS: "nenhum contrato" e nao_medido, "contrato sem originador" e pendente');
 }
 
 console.log();
 if (falhas > 0) { console.log(`--- carteira: ${falhas} FALHA(S)`); await pools.transacional.end(); await pools.relatorio.end(); process.exit(1); }
-console.log('--- carteira ponta a ponta: 36 verificacoes, 0 falhas');
+console.log('--- carteira ponta a ponta: 40 verificacoes, 0 falhas');
 await prisma.$disconnect();
 await pools.transacional.end();
 await pools.relatorio.end();

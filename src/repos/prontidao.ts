@@ -53,8 +53,14 @@ export type Camada = {
    *  se e de 3 ou de 300. */
   total: number;
   /** `bloqueia_fatura` impede a cobranca existir; `bloqueia_split` deixa faturar
-   *  e trava a reparticao quando o dinheiro entrar. A distincao e a mesma da R33
-   *  - recusa e alerta nao sao a mesma coisa. */
+   *  e estraga a reparticao quando o dinheiro entrar. A distincao e a mesma da
+   *  R33 - recusa e alerta nao sao a mesma coisa.
+   *
+   *  ESTRAGAR NAO E SEMPRE TRAVAR, e a `originador_do_contrato` e o caso: ali o
+   *  split roda ate o fim, fecha em zero de comissao e nao levanta. Vale a mesma
+   *  marca porque o efeito sobre `pode_repartir` e o mesmo - o sistema nao pode
+   *  se declarar pronto para repartir -, e porque a alternativa era uma marca
+   *  nova cujo unico conteudo seria "e pior que as outras". */
   efeito: 'bloqueia_fatura' | 'bloqueia_split';
   explicacao: string;
   /** A questao aberta que a destrava, quando ha uma. Recusa e ponteiro, nao beco. */
@@ -73,7 +79,7 @@ export type Prontidao = {
 };
 
 /**
- * As nove camadas, numa consulta so.
+ * As dez camadas, numa consulta so.
  *
  * O filtro por tenant sai da RLS, nao de um WHERE escrito aqui. Os
  * `tenant_id = tenant_id` nos JOINs existem para o planejador, nao para o
@@ -92,7 +98,8 @@ export async function prontidao(comp: Date | string): Promise<Prontidao> {
       SELECT uc.* FROM unidade_consumidora uc WHERE uc.status = 'ativa'
     ),
     uc_contratada AS (
-      SELECT uc.*, k.id AS contrato_id, k.originador_tipo_no_fechamento, k.data_fechamento
+      SELECT uc.*, k.id AS contrato_id, k.originador_id,
+             k.originador_tipo_no_fechamento, k.data_fechamento
         FROM uc_ativa uc
         JOIN contrato k ON k.tenant_id = uc.tenant_id AND k.uc_vigente = uc.id AND k.status = 'ativo'
     )
@@ -131,7 +138,15 @@ export async function prontidao(comp: Date | string): Promise<Prontidao> {
           AND NOT EXISTS (SELECT 1 FROM regra_repasse rr
                            WHERE rr.tenant_id = u.tenant_id AND rr.usina_id = u.id
                              AND daterange(rr.vigencia_inicio, rr.vigencia_fim, '[)') @> ${iso}::date)) AS sem_repasse,
-      -- 8. regra de comissao para o tier CONGELADO de cada contrato (R20-b),
+      -- 8. originador do contrato: Q-ORIGINADOR-01, decidida em 29/07/2026.
+      --    As UCs da carteira LEVAM originador e a comissao esta toda pela
+      --    frente - ninguem recebeu nada ainda. Entao contrato ativo com
+      --    originador_id nulo nao e "venda sem comissao", e defeito de cadastro.
+      --    Conta ANTES da camada seguinte porque sem originador nao ha tier
+      --    congelado, e sem tier a regra_de_comissao nao tem o que medir.
+      (SELECT count(*) FROM uc_contratada uc WHERE uc.originador_id IS NULL)   AS sem_originador,
+      (SELECT count(*) FROM uc_contratada uc)                                 AS contratos_ativos,
+      -- 9. regra de comissao para o tier CONGELADO de cada contrato (R20-b),
       --    nas DUAS parcelas do PRD 5.4 - uma vigencia com so uma parcela faz o
       --    split levantar na fatura cheia que usar a outra
       (SELECT count(DISTINCT uc.originador_tipo_no_fechamento) FROM uc_contratada uc
@@ -142,7 +157,7 @@ export async function prontidao(comp: Date | string): Promise<Prontidao> {
                   AND daterange(rc.vigencia_inicio, rc.vigencia_fim, '[)') @> uc.data_fechamento) < 2) AS sem_comissao,
       (SELECT count(DISTINCT uc.originador_tipo_no_fechamento) FROM uc_contratada uc
         WHERE uc.originador_tipo_no_fechamento IS NOT NULL)                  AS tiers_em_uso,
-      -- 9. conector de cobranca ativo (o boleto, PAUTA 5)
+      -- 10. conector de cobranca ativo (o boleto, PAUTA 5)
       (SELECT count(*) FROM conector_cobranca cc WHERE cc.ativo)             AS cobranca_ativa`;
 
   const l = r[0];
@@ -198,10 +213,23 @@ export async function prontidao(comp: Date | string): Promise<Prontidao> {
       explicacao: 'usina ativa sem percentual de repasse vigente na competencia. E a outra metade da ' +
         'R12: com dono e sem regra, o split levanta no meio em vez de na conferencia' },
 
+    { camada: 'originador_do_contrato', faltam: n(l.sem_originador), total: n(l.contratos_ativos), derivada: true,
+      efeito: 'bloqueia_split', dono: 'operacao', questao: null,
+      explicacao: 'contrato ativo sem originador. A Q-ORIGINADOR-01 foi decidida em 29/07: as UCs da ' +
+        'carteira LEVAM originador e nenhuma comissao foi paga ainda, entao o nulo aqui e cadastro que ' +
+        'faltou, nao venda sem comissao. O modo de falha e o pior que existe neste sistema: split.ts so ' +
+        'monta o item de comissao quando ha originador_id E tier congelado, entao a reparticao roda, ' +
+        'fecha e NAO PAGA - sem erro, sem log e sem recusa. E nao ha caminho de edicao: originador_id e ' +
+        'o tier so se escrevem no rascunhar (R20-b), e consertar depois e encerrar + renovar, que zera o ' +
+        'contador de faturas cheias e registra na trilha uma renovacao que nao houve',
+    },
+
     { camada: 'regra_de_comissao', faltam: n(l.sem_comissao), total: n(l.tiers_em_uso), derivada: true,
       efeito: 'bloqueia_split', dono: 'Vinicius', questao: 'Q-COMIS-TERC-01',
       explicacao: 'tier congelado em contrato ativo sem AS DUAS parcelas vigentes na data de fechamento ' +
-        '(PRD §5.4). Uma vigencia com so uma parcela passa na 1a fatura cheia e levanta na 2a' },
+        '(PRD §5.4). Uma vigencia com so uma parcela passa na 1a fatura cheia e levanta na 2a. ' +
+        'O universo aqui sao os tiers EM USO: se esta camada diz `nao_medido` e a anterior acusa ' +
+        'contrato sem originador, o vazio e consequencia dela e se resolve la - era a Q-PRONTIDAO-COMIS-01' },
 
     { camada: 'cobranca_sicoob', faltam: n(l.cobranca_ativa) > 0 ? 0 : 1, total: 1,
       efeito: 'bloqueia_fatura', dono: 'Vinicius', questao: 'Q-SICOOB-01',

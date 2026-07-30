@@ -9,6 +9,31 @@
 // RASCUNHO E ATIVACAO SAO DOIS ATOS, e a tela nao os funde: ativar exige
 // documento validado do cliente e ocupa a UC pela R14 (um contrato vigente por
 // UC, e vigente inclui suspenso).
+//
+// O ORIGINADOR E OBRIGATORIO AQUI, e so aqui - Q-ORIGINADOR-01, decidida em
+// 29/07/2026. A carteira LEVA originador e **nenhuma comissao foi paga a
+// ninguem ainda**, entao o contador `faturas_cheias_pagas` nascer em 0 e o
+// valor CERTO e a comissao esta inteira pela frente.
+//
+// A segunda frase e TESTEMUNHO do dono e nao medicao - nada nos dois sistemas
+// registra comissao paga por fora. Os 29 clientes ATIVOS do CRM sao reais e nao
+// a contradizem: cliente ativo diz que ele recebe credito, nao que alguem foi
+// comissionado. O raciocinio inteiro esta em `contrato-regras.ts`, que e onde a
+// regra mora.
+//
+// A exigencia mora na TELA e nao no banco, de proposito. `originador_id` segue
+// nullable: um contrato sem comissao e um estado legitimo do dominio, e torna-lo
+// NOT NULL decidiria por todos os tenants e por todo contrato futuro uma questao
+// que foi respondida sobre 39 contratos desta carteira. O que o sistema ganha
+// no lugar da constraint e a camada `originador_do_contrato` da prontidao, que
+// ACUSA contrato ativo sem originador - deteccao no lugar de prevencao, como o
+// CAT-8 e para o rls_auto_enable.
+//
+// O PRECO DE ERRAR AQUI NAO E SIMETRICO, e por isso o botao trava em vez de
+// avisar: `src/repos/split.ts` so monta o item de comissao quando ha
+// originador_id E tier congelado. Sem eles a reparticao roda, fecha e nao paga -
+// sem erro, sem log, sem recusa. E nao ha desfazer: o campo so se escreve no
+// `rascunhar`, porque a R20-b congela o tier no fechamento.
 
 import { useState } from 'react';
 import { api, ErroDaApi, type Contrato, type UnidadeConsumidora, type Originador, type Cliente } from '../api.ts';
@@ -18,6 +43,7 @@ import {
 } from '../ui.tsx';
 import { Ligacao } from '../rota.tsx';
 import { paraCentavos, emReais } from '../dinheiro.ts';
+import { podeCriarContrato, motivoDaTrava } from '../contrato-regras.ts';
 
 export function TelaContratos() {
   const ucs = useDados<UnidadeConsumidora[]>(() => api.get('/unidades-consumidoras?limite=500'));
@@ -32,6 +58,14 @@ export function TelaContratos() {
   const { ordem, alternar } = useOrdenacao('uc');
 
   const uc = ucs.dado?.find((u) => u.id === ucId);
+
+  // As condicoes moram em `contrato-regras.ts`, puras, porque o runner do web/
+  // nao le JSX e regra sem teste e comentario (regra 8).
+  const estado = {
+    ucEscolhida: Boolean(uc), ucTemUsina: Boolean(uc?.usina_id),
+    temOriginador: Boolean(origId), ocupado: acao.ocupado,
+  };
+  const trava = motivoDaTrava(estado);
 
   // Um contrato vigente por UC (R14). A lista mostra so as que estao livres:
   // oferecer a UC ocupada faria o erro sair como 409 depois de preencher tudo.
@@ -77,8 +111,11 @@ export function TelaContratos() {
     },
   );
 
+  // O botao ja trava sem originador; esta guarda existe porque `criar` e uma
+  // funcao exportada pelo componente e nao pelo `disabled`, e uma tecla de
+  // atalho ou um teste que a chamasse direto passaria por cima da UI.
   async function criar() {
-    if (!uc) return;
+    if (!uc || !origId) return;
     const ok = await acao.executar(async () => {
       // valor_referencia_centavos e Int em centavos - a regra 1 vale na UI
       // tambem, e a conversao aqui e por TEXTO, sem multiplicar por 100.
@@ -86,7 +123,7 @@ export function TelaContratos() {
         cliente_id: uc.cliente_id,
         unidade_consumidora_id: uc.id,
         usina_id: uc.usina_id,
-        originador_id: origId || null,
+        originador_id: origId,
         data_fechamento: fechamento,
         valor_referencia_centavos: paraCentavos(valor || '0'),
         valor_referencia_origem: 'local',
@@ -106,7 +143,7 @@ export function TelaContratos() {
                    valor: u.id,
                    texto: `${u.numero_uc}${u.usina_id ? '' : ' (sem usina!)'}`,
                  }))} />
-          <Campo rotulo="Originador (comissão)" valor={origId} ao={setOrigId}
+          <Campo rotulo="Originador (comissão) — obrigatório" valor={origId} ao={setOrigId}
                  opcoes={(origs.dado ?? []).map((o) => ({ valor: o.id, texto: `${o.nome} · ${o.tipo}` }))} />
           <Campo rotulo="Data de fechamento" valor={fechamento} ao={setFechamento} tipo="date" />
           <Campo rotulo="Valor de referência (R$)" valor={valor} ao={setValor} dica="Ex. 789,00" />
@@ -118,10 +155,29 @@ export function TelaContratos() {
           {valor && <> Valor: <strong>{(() => { try { return emReais(paraCentavos(valor)); } catch { return 'inválido'; } })()}</strong>.</>}
         </p>
         <button className="primario" onClick={criar}
-                disabled={acao.ocupado || !uc || !uc.usina_id}>Criar e ativar</button>
-        {uc && !uc.usina_id && (
+                disabled={!podeCriarContrato(estado)}>Criar e ativar</button>
+        {trava === 'uc_sem_usina' && (
           <Aviso tipo="erro">
             Esta UC não tem usina vinculada. Defina o rateio em <Ligacao para="/unidades">Unidades</Ligacao> antes.
+          </Aviso>
+        )}
+        {/* A lista vazia e o estado de PRODUCAO hoje: zero originadores. Sem esta
+            frase o select fica em "—" sem explicacao e o botao trava sem dizer
+            por que - que e o defeito da tela de Contratos de novo, em outra
+            casa. O erro de leitura tem aviso proprio e vem antes: lista vazia
+            por falha nao e lista vazia por ausencia. */}
+        {origs.erro && <Aviso tipo="erro">Falha ao ler os originadores: {origs.erro}</Aviso>}
+        {!origs.erro && !origs.carregando && (origs.dado ?? []).length === 0 && (
+          <Aviso tipo="erro">
+            Nenhum originador cadastrado — e o contrato não pode ser criado sem um.
+            O tipo congela aqui (R20-b) e não há edição depois. Cadastre pelo caminho da
+            aplicação (<code>npm run originadores</code>) antes de digitar os contratos.
+          </Aviso>
+        )}
+        {trava === 'sem_originador' && (origs.dado ?? []).length > 0 && (
+          <Aviso tipo="alerta">
+            Escolha o originador. Ele não é editável depois: <code>split.ts</code> só monta a
+            comissão quando ele existe, e sem ele a repartição fecha sem pagar — sem erro e sem log.
           </Aviso>
         )}
         {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
