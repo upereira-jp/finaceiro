@@ -15,7 +15,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { createClient, type SupabaseClient, type Session } from '@supabase/supabase-js';
-import { api, ligarContexto, type Sessao } from './api.ts';
+import { api, ligarContexto, ligarPerdaDeSessao, rearmarPerdaDeSessao, type Sessao } from './api.ts';
 
 type Estado = {
   cliente: SupabaseClient | null;
@@ -26,6 +26,10 @@ type Estado = {
   sair: () => Promise<void>;
   carregando: boolean;
   erro: string | null;
+  /** Preenchido quando a sessao caiu sozinha (401), e nao quando a pessoa saiu.
+   *  A tela de login o mostra: sem ele, quem foi deslogado no meio do trabalho
+   *  ve o formulario aparecer sem explicacao. */
+  motivoDeSaida: string | null;
 };
 
 const Ctx = createContext<Estado | null>(null);
@@ -45,6 +49,7 @@ export function ProvedorDeSessao({ children }: { children: ReactNode }) {
   const [tenantId, setTenantId] = useState<string | null>(() => localStorage.getItem(CHAVE_TENANT));
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  const [motivoDeSaida, setMotivoDeSaida] = useState<string | null>(null);
 
   // O contexto que a camada de API le. Ligado por FUNCAO, e nao por valor, para
   // ela sempre ver o token corrente - inclusive o que o supabase-js renovou
@@ -55,6 +60,34 @@ export function ProvedorDeSessao({ children }: { children: ReactNode }) {
       tenantId: () => tenantId,
     });
   }, [sessaoAuth, tenantId]);
+
+  /*
+   * A SESSAO QUE CAI NO MEIO DO TRABALHO, e ate 30/07/2026 ela nao caia - ela
+   * FICAVA, quebrada, e cada painel da tela pintava "Credencial invalida.".
+   *
+   * O ESTADO ERA UMA ARMADILHA SEM SAIDA PELA TELA: a sessao vencida vive no
+   * `localStorage` do supabase-js, entao recarregar a le de volta e o erro
+   * volta igual. Foi o que o dono descreveu - deu Ctrl+Shift+R e o erro
+   * permaneceu. So sair e entrar resolvia, e nada na tela dizia isso.
+   *
+   * `signOut()` limpa o `localStorage`, o `onAuthStateChange` zera `sessaoAuth`,
+   * e o app volta para o login com o motivo escrito. A pessoa perde o que estava
+   * digitando - nao ha o que fazer quanto a isso, o token venceu -, mas sai do
+   * lugar em que estava presa em um clique em vez de nenhum.
+   */
+  useEffect(() => {
+    ligarPerdaDeSessao((motivo) => {
+      setMotivoDeSaida(motivo);
+      localStorage.removeItem(CHAVE_TENANT);
+      setTenantId(null);
+      // `void` de proposito: nao ha o que esperar, e o `onAuthStateChange` ja
+      // cuida de propagar o novo estado.
+      void cliente?.auth.signOut();
+    });
+  }, [cliente]);
+
+  // Sessao nova estabelecida: rearma o aviso, que dispara uma vez so por sessao.
+  useEffect(() => { if (sessaoAuth) { rearmarPerdaDeSessao(); setMotivoDeSaida(null); } }, [sessaoAuth]);
 
   // 1. config -> cliente Supabase -> sessao existente
   useEffect(() => {
@@ -107,14 +140,15 @@ export function ProvedorDeSessao({ children }: { children: ReactNode }) {
   }, [sessaoAuth]);
 
   const valor = useMemo<Estado>(() => ({
-    cliente, sessaoAuth, sessao, tenantId, carregando, erro,
+    cliente, sessaoAuth, sessao, tenantId, carregando, erro, motivoDeSaida,
     escolherTenant: (id) => { localStorage.setItem(CHAVE_TENANT, id); setTenantId(id); },
     sair: async () => {
       localStorage.removeItem(CHAVE_TENANT);
       setTenantId(null);
+      setMotivoDeSaida(null);   // saida deliberada nao mostra aviso de expiracao
       await cliente?.auth.signOut();
     },
-  }), [cliente, sessaoAuth, sessao, tenantId, carregando, erro]);
+  }), [cliente, sessaoAuth, sessao, tenantId, carregando, erro, motivoDeSaida]);
 
   return <Ctx.Provider value={valor}>{children}</Ctx.Provider>;
 }

@@ -11,7 +11,7 @@ import { useSessao } from '../sessao.tsx';
 import { Aviso, Logotipo, Icone } from '../ui.tsx';
 
 export function Login() {
-  const { cliente } = useSessao();
+  const { cliente, motivoDeSaida } = useSessao();
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [erro, setErro] = useState<string | null>(null);
@@ -36,6 +36,17 @@ export function Login() {
           <h1 style={{ margin: 0 }}>Financeiro G3</h1>
         </div>
         <p className="sub">Entre com a conta do financeiro.</p>
+        {/*
+          * QUEM CHEGOU AQUI SEM QUERER precisa saber por que. `motivoDeSaida` so
+          * vem preenchido quando a sessao caiu sozinha (401) - sair pelo menu o
+          * deixa nulo, e ai o formulario aparece limpo, como deve.
+          *
+          * Ate 30/07/2026 nao havia nem uma coisa nem outra: a sessao vencida
+          * NAO derrubava para ca, ficava pintando "Credencial invalida." em cada
+          * painel da tela, e recarregar nao ajudava porque a sessao vencida vive
+          * no localStorage.
+          */}
+        {motivoDeSaida && <Aviso tipo="alerta">{motivoDeSaida}</Aviso>}
         <form onSubmit={entrar} className="cartao">
           <div style={{ display: 'grid', gap: 12 }}>
             <div>

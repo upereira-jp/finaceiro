@@ -26,6 +26,22 @@ export class ErroDaApi extends Error {
   }
   /** 401 e 403 pedem acao diferente de 422: reautenticar contra corrigir o dado. */
   get ehDeSessao(): boolean { return this.status === 401; }
+
+  /**
+   * O QUE A PESSOA LE, e nao e a mensagem do servidor.
+   *
+   * O servidor responde "Credencial invalida." e isso e correto do lado dele: a
+   * mensagem e generica de proposito, porque dizer "expirado" versus "assinatura
+   * invalida" a quem tenta entrega mais do que ele precisa. O motivo real vai
+   * para o log de la (30/07).
+   *
+   * Do lado de ca, "Credencial invalida." e uma frase que nao diz o que fazer -
+   * e a pessoa esta olhando para a propria tela, ja logada. O que ela precisa
+   * ouvir e que a sessao venceu e que basta entrar de novo.
+   */
+  get mensagemDeSessao(): string {
+    return 'Sua sessão expirou. Entre de novo para continuar.';
+  }
 }
 
 type Contexto = { token: () => string | null; tenantId: () => string | null };
@@ -34,6 +50,35 @@ let contexto: Contexto = { token: () => null, tenantId: () => null };
 
 /** Ligado uma vez, no arranque, pelo provedor de sessao. */
 export function ligarContexto(c: Contexto): void { contexto = c; }
+
+/*
+ * O QUE ACONTECE QUANDO A SESSAO ACABA — e ate 30/07/2026 a resposta era "nada",
+ * o que e o defeito que este bloco conserta.
+ *
+ * `ErroDaApi.ehDeSessao` existia desde que esta camada foi escrita, com o
+ * comentario "401 e 403 pedem acao diferente de 422: reautenticar contra
+ * corrigir o dado". Medido em 30/07: **ninguem o chamava**. O 401 descia como
+ * erro comum ate `useDados`, e cada painel da tela pintava "Credencial
+ * invalida." numa caixa vermelha. Uma tela com seis blocos mostrava a mesma
+ * frase seis vezes, e nenhuma delas dizia o que fazer.
+ *
+ * O relato do dono foi literal: *"esta destruindo a UX"*. E o diagnostico e pior
+ * que a estetica — a pessoa NAO tem como sair daquele estado pela tela. Recarregar
+ * nao adianta: a sessao vencida vive no `localStorage`, e um F5 a le de volta.
+ * So sair e entrar resolve, e nada na tela dizia isso.
+ *
+ * UMA VEZ SO, E NAO POR CHAMADA. Uma tela dispara varias requisicoes em
+ * paralelo, e todas falham juntas quando o token vence. Sem a trava, seriam N
+ * `signOut()` concorrentes e N re-renders.
+ */
+type AoPerderSessao = (motivo: string) => void;
+let aoPerderSessao: AoPerderSessao = () => {};
+let jaAvisou = false;
+
+export function ligarPerdaDeSessao(f: AoPerderSessao): void { aoPerderSessao = f; }
+
+/** Chamado pelo provedor quando uma sessao NOVA e estabelecida: rearma o aviso. */
+export function rearmarPerdaDeSessao(): void { jaAvisou = false; }
 
 async function chamar<T>(metodo: string, caminho: string, corpo?: unknown): Promise<T> {
   const cabecalhos: Record<string, string> = {};
@@ -56,15 +101,31 @@ async function chamar<T>(metodo: string, caminho: string, corpo?: unknown): Prom
   try { dado = texto ? JSON.parse(texto) : undefined; } catch { dado = undefined; }
 
   if (!r.ok) {
-    throw new ErroDaApi(
+    const e = new ErroDaApi(
       r.status,
       dado?.erro ?? 'ErroDesconhecido',
       // Sem mensagem no corpo, o status sozinho e melhor do que uma frase
       // inventada: "erro ao salvar" esconderia qual das 78 rotas falhou.
       dado?.mensagem ?? `${metodo} ${caminho} devolveu ${r.status}`,
     );
+    avisarSePerdeuSessao(e);
+    throw e;
   }
   return dado as T;
+}
+
+/**
+ * O UNICO lugar que decide "a sessao acabou". Chamado pelos dois pontos de erro
+ * desta camada - o JSON e o binario -, porque a logo do documento passa pelo
+ * segundo e um 401 la significa a mesma coisa.
+ *
+ * `throw` continua acontecendo: a tela que quiser tratar o erro pode. O que muda
+ * e que alguem, em algum lugar, agora SABE que a sessao caiu.
+ */
+function avisarSePerdeuSessao(e: ErroDaApi): void {
+  if (!e.ehDeSessao || jaAvisou) return;
+  jaAvisou = true;
+  aoPerderSessao(e.mensagemDeSessao);
 }
 
 /**
@@ -86,8 +147,10 @@ export async function buscarBinario(caminho: string): Promise<Blob> {
     const texto = await r.text();
     let dado: any;
     try { dado = texto ? JSON.parse(texto) : undefined; } catch { dado = undefined; }
-    throw new ErroDaApi(r.status, dado?.erro ?? 'ErroDesconhecido',
+    const e = new ErroDaApi(r.status, dado?.erro ?? 'ErroDesconhecido',
       dado?.mensagem ?? `GET ${caminho} devolveu ${r.status}`);
+    avisarSePerdeuSessao(e);
+    throw e;
   }
   return r.blob();
 }
