@@ -7,7 +7,7 @@ Sistema financeiro multi-tenant da G3 Solar: faturamento de crédito de energia,
 | **Dono** | Vinicius Leal |
 | **Fase atual** | F0 fechada · F1 com os três critérios formais cumpridos · **F2 e F3 construídas em 28/07, depois de a `PAUTA-contador.md` voltar respondida.** 20 migrations, `fatura`, `boleto`, `liquidacao`, `split_execucao` e `split_item` no banco, dois motores puros, a `PortaDeCobranca` injetada e **571 verificações** em 27 suítes. O que segura a F2 agora é **um certificado A1**, não código: o critério do `PRD` §10 é *"boleto liquidado no sandbox baixa a fatura"*, e o ciclo inteiro está provado contra o adaptador falso. Ver `RESUMO-SESSAO-10.md`. Histórico da F1 preservado abaixo: **F1 em execução, e não fecha só com código nosso.** 15 migrations no Supabase `sa-east-1`, role de runtime, composition root, seis repositórios, 37 rotas, auth próprio medido ponta a ponta contra o Supabase real, conector do CRM construído e testado, e os 8 invariantes de catálogo verdes **contra produção**. A `Q-VIEWS-01` fechou no mesmo dia e o **invariante 9 está cumprido**. O ciclo rodou **valendo, duas vezes**, contra o CRM real e os três critérios formais fecharam; a `Q-ESCOPO-01` (conector entrega 1 de 4 entidades) é a vermelha que resta. Ver a tabela de critérios abaixo |
 | **Atualizado** | 30/07/2026 · fim da sessão 14 — o eixo do originador, o caminho de cobrança inteiro na tela e o documento de cobrança. Ver `RESUMO-SESSAO-14.md`. **No mesmo dia, o acabamento visual da SPA:** tipografia própria, Phosphor exclusivo, tabela e input não-nativos, e as **191 verificações** que passaram a prender contraste, movimento e navegação — a regra 8 chegando à camada de apresentação. Ver `INTERFACE-2026-07-30.md` |
-| **No ar** | **`https://financeiro.blackhaus.io`** — systemd, Node 22 isolado, TLS até 26/10. Mesmo VPS do CRM, **sem alterar uma linha da configuração dele**. Ver `RESUMO-SESSAO-11.md` |
+| **No ar** | **`https://financeiro.blackhaus.io`** — systemd, Node 22 isolado, TLS até 26/10. Mesmo VPS do CRM, **sem alterar uma linha da configuração dele**. **O bundle em produção é o de 29/07 (`index-DzZYJ0Ak.js`)** — as sessões 14 e 15 não foram publicadas, e o `main` ainda não as tem. Comandos e as duas ressalvas do deploy em `RESUMO-SESSAO-15.md` §7 |
 
 ---
 
@@ -15,7 +15,8 @@ Sistema financeiro multi-tenant da G3 Solar: faturamento de crédito de energia,
 
 Nesta ordem. Cada documento pressupõe o anterior.
 
-1. **`RESUMO-SESSAO-14.md`** — **comece por aqui.** A sessão do caminho de cobrança: o eixo do originador decidido e medido, as três telas que faltavam, as duas migrations e as cinco decisões do documento. Traz também os quatro erros meus que o processo pegou, com o que cada um ensinou
+1. **`RESUMO-SESSAO-15.md`** — **comece por aqui.** As três pendências do documento de cobrança fechadas, e o achado que apareceu ao **remedir** o CRM antes de construir: 76 merges de lead em 30/07 tornaram `lead.codigo` instável, tiraram um nome da lista de originadores e moveram duas atribuições de comissão. A §2 conta os dois defeitos que a verificação do QR pegou — um deles dentro do próprio instrumento de medida
+2. **`RESUMO-SESSAO-14.md`** — A sessão do caminho de cobrança: o eixo do originador decidido e medido, as três telas que faltavam, as duas migrations e as cinco decisões do documento. Traz também os quatro erros meus que o processo pegou, com o que cada um ensinou
 2. **`RESUMO-SESSAO-13.md`** — Estado atual e a fila com dono nomeado. A sessão em que a `Q-ORIGINADOR-01` foi decidida — e em que conferir a premissa contra o CRM antes de gravar mudou o que precisava ser perguntado
 2. **`RESUMO-SESSAO-12.md`** — a sessão da verificação: produção conferida ponta a ponta, o defeito silencioso da tela de Contratos medido nos dois sentidos, e a vermelha que abriu **antes** dos 39 contratos
 2. **`RESUMO-SESSAO-11.md`** — a sessão do deploy: a paleta da G3, o sistema em produção, dois logins e duas questões novas
@@ -77,6 +78,15 @@ RESUMO-SESSAO-12.md          passagem da sessao 12 — Producao conferida, o
                              defeito silencioso da tela de Contratos medido
                              antes e depois, e as duas questoes que aparecem
                              ANTES dos 39 contratos
+RESUMO-SESSAO-15.md          passagem da sessao 15 - COMECE POR AQUI. As tres
+                             pendencias da Q-DOCFATURA-01 fechadas (desenho do QR,
+                             teste do repo, logo no payload) e a vermelha nova
+                             Q-CRMCODIGO-01, achada ao REMEDIR o CRM antes de
+                             construir. A 6 reune seis erros meus, dois deles
+                             dentro do proprio instrumento de medida; a 7 diz o
+                             que do deploy foi provado e o que nao foi executado,
+                             e por que; a 8 explica por que a contagem de
+                             verificacoes NAO e comparavel a da sessao 14
 RESUMO-SESSAO-14.md          passagem da sessao 14 — COMECE POR AQUI. O eixo do
                              originador (vendedor_origem) medido contra o CRM, as
                              tres telas que faltavam (Cobranca, Faturas,
@@ -88,6 +98,15 @@ RESUMO-SESSAO-13.md          passagem da sessao 13 — A
                              Q-ORIGINADOR-01 decidida, a premissa conferida
                              contra o CRM antes de gravar, o campo obrigatorio
                              na tela e a decima camada da prontidao
+ATRIBUICAO-originador-2026-07-30.md
+                             O MAPA VIGENTE, remedido em 30/07 e ordenado por UC -
+                             a chave ESTAVEL. Substitui o de 29/07: 76 merges de
+                             lead renumeraram 39 dos 41 codigos, tiraram a Jezielly
+                             Vieira da lista (zero cards hoje) e moveram duas
+                             atribuicoes para o Out Sales, uma delas de 1.987,2
+                             kWh/mes. A lista de originadores e de DOIS nomes.
+                             40 das 41 origens agora sao LEGIVEIS pelas views, e as
+                             12 que eram invisiveis bateram uma a uma - Q-CRMCODIGO-01
 ATRIBUICAO-originador-2026-07-29.md
                              O MAPA DAS 41 linhas do rateio -> originador, depois
                              de o dono decidir que o originador e o vendedor_origem
@@ -283,6 +302,17 @@ src/dominio/brcode.ts        O BR CODE do Pix estatico - EMV TLV + CRC16/CCITT-F
                              perde dinheiro); chave ou valor errados com CRC certo
                              o app ACEITA, e num Pix estatico nao ha txid por
                              fatura para conciliar depois. Valor entra em CENTAVOS
+src/dominio/qrcode.ts        O DESENHO do QR - modo byte, Reed-Solomon sobre
+                             GF(256), oito mascaras com as quatro regras de
+                             penalidade, versoes 1 a 12 nos quatro niveis. O SVG
+                             sai do SERVIDOR e vai no payload do documento: o CRM
+                             consome a mesma rota e nao roda React. O `d` do
+                             caminho e montado SO de indices da matriz, entao
+                             nenhum dado de fatura atravessa a string - e o que
+                             torna seguro o consumidor pinta-lo direto. Teto na
+                             versao 12 e LEVANTA com o limite nomeado: o pior BR
+                             Code possivel tem 243 bytes e cabe na 11, e truncar
+                             daria um QR legivel apontando para um Pix incompleto
 src/dominio/layout-do-documento.ts
                              As linhas do documento, na ordem e formatadas. O
                              PADRAO vive aqui, nao no banco: `campo_do_documento`
@@ -354,6 +384,26 @@ scripts/verificar-auth-real.ts
                              auth ponta a ponta contra o Supabase real. Sem token
                              no stdin faz so o preflight do JWKS, que nao pede
                              credencial. `npm run auth:verificar`
+tests/qrcode.ts              as 45 verificacoes do QR, e o assunto principal do
+                             arquivo e COMO elas se verificam: nenhuma compara a
+                             saida com constante minha. Sindrome nula (usa a tabela
+                             do corpo, NAO a divisao que gerou a paridade),
+                             divisibilidade do BCH por rotina de bits escrita de
+                             outro jeito, distancia de Hamming do codigo, total de
+                             codewords DERIVADO da geometria contra as ancoras
+                             publicadas, a paridade publicada do exemplo do ISO
+                             18004 com os codewords de dado derivados a mao, e
+                             ida-e-volta por decodificador separado que redescobre
+                             os modulos de funcao por PREDICADO. Pegou dois
+                             defeitos - ver RESUMO-SESSAO-15 2
+tests/repos-documento.ts     as 45 verificacoes do repo de documento, com BANCO e
+                             pela role sem BYPASSRLS. Cobre o que NAO mora no
+                             codigo: o mime pela ASSINATURA do arquivo (SVG e GIF
+                             recusados pelos bytes), o sha256 derivado pelo GATILHO
+                             e conferido contra node:crypto, a lista de campos
+                             fechada pelo ENUM, e o isolamento das seis leituras de
+                             paraFatura. Afirma a RELACAO, nao constante: fixar um
+                             total seria fixar dependencia de ordem de execucao
 tests/catalogo.sql           CAT-1 a CAT-8: as regras 1, 2, 3 e 11 por catalogo.
                              Leitura pura - RODE TAMBEM contra producao:
                              psql "$DIRECT_URL" -f tests/catalogo.sql
@@ -463,11 +513,13 @@ A lista completa, com dono nomeado, está em `RESUMO-SESSAO-7` §Pendências ger
 
 | Item | Estado |
 |---|---|
+| **`Q-CRMCODIGO-01`** | 🔴 **Nova em 30/07, e achada ao REMEDIR o CRM antes de a operação digitar os contratos.** `financeiro.lead_merges` registra **76 merges em 30/07**: `lead.codigo` **não é estável** — 39 dos 41 códigos do rateio mudaram, com a mesma UC e o mesmo cliente —, `financeiro.vendas_ganhas` caiu de **80 para 51** linhas (o `DISTINCT ON (l.id)` conta lead distinto e os merges colapsaram duplicatas), a **lista de originadores caiu de três nomes para dois** (`Jezielly Vieira` tem **zero** cards hoje) e **duas atribuições trocaram de dono**, uma delas de **1.987,2 kWh/mês**. É vermelha porque digitar contrato pelo mapa de 29/07 pagaria comissão à pessoa errada **sem erro e sem log**, e a R20-b congela o tier no `rascunhar` — não há caminho de conserto. **O que está bem, e foi conferido:** a sincronização casa por `contrato_id` e `crm_lead_id`, os dois UUID, então o espelho não quebra. **O lado bom:** as **12** atribuições que eram invisíveis às views ficaram legíveis (40 de 41), e **as 12 bateram** com o que o conector de análise havia dito — duas medições por caminhos diferentes concordando. Mapa vigente em `ATRIBUICAO-originador-2026-07-30.md`, ordenado por **UC** |
 | **`Q-ORIGINADOR-01`** | ✅ **Fechada em 29/07 na opção (a)** — as UCs da carteira **levam** originador, e a comissão está inteira pela frente: ninguém recebeu nada ainda, então `faturas_cheias_pagas` nascer em 0 é o valor **certo** e não a armadilha que parecia. A premissa que acompanhava a resposta (*"nenhuma venda foi efetivada"*) foi conferida contra o CRM antes de gravar, **não fechou** — `Clientes ativos - Assinatura`/ATIVOS tem 29 cards — e foi retirada pelo dono. A decisão não muda; a **base** dela sim: sustenta-se em **testemunho**, não em medição. Nada nos dois sistemas registra comissão paga por fora — ver `QUESTOES` §9. O campo é **obrigatório na tela**; `originador_id` segue nullable no banco de propósito. ~~**Falta o insumo, não a decisão: a lista de originadores**~~ — **29/07, noite: o eixo foi decidido e o insumo encolheu.** *"O originador vai ser o `vendedor_origem` até segunda ordem"*: a lista fechou em **três nomes** (Renata 49 ganhos, Out Sales 29, Jezielly Vieira 1) e a atribuição por UC ficou medida para 40 das 41 — **12 delas por um caminho que o financeiro não consegue ler**. Ver **`Q-ORIGVEND-01`** e `ATRIBUICAO-originador-2026-07-29.md`. Falta o que nenhuma consulta entrega: **três CPF/CNPJ**, a natureza, a confirmação do tipo e uma UC arquivada |
 | **`Q-PRONTIDAO-COMIS-01`** | ✅ **Fechada em 29/07** — era a contagem que faltava, e a `Q-ORIGINADOR-01` disse qual das duas direções valia. Décima camada da prontidão, `originador_do_contrato`: *"nenhum contrato"* segue `nao_medido` e *"contrato sem originador"* é `pendente`. Os dois `?` que eram o mesmo agora se distinguem. `K18f`–`K18i`, com a contagem conferida **contra a tabela** e não contra número fixo |
 | **Bootstrap — o primeiro `plataforma_admin`** | 🟡 **Script pronto e provado; falta o `COMMIT`.** `scripts/bootstrap-plataforma-admin.sql`, com `-v modo=ensaio\|valendo` — sem default, porque script de provisionamento que escreve por esquecimento é o modo de falha errado. Conta criada no Supabase Auth (`efcc8e11-…`) e ensaio rodado contra ela: `usuario` + tier criados, `app.resolver_login` devolveu `tier = plataforma_admin`, 2 linhas de trilha, `ROLLBACK` deixou tudo em zero. `app_financeiro` continua sem `INSERT` nessa tabela, de propósito |
 | **Role LOGIN de runtime + `DATABASE_URL`** | ✅ **Fechado em 27/07** — `app_financeiro_login`, `NOSUPERUSER NOBYPASSRLS`. Isolamento provado conectado por ela: usuário de A apontando o contexto para o tenant B lê **0 linhas** e tem a escrita recusada. O composition root recusa o arranque se a role tiver `BYPASSRLS` |
 | **Reunião com o contador** | ✅ **Fechada em 28/07.** As dez voltaram respondidas; três lacunas (a 1 com duas marcas, a 3b questionada, a 4b em branco) fechadas por decisão do dono no mesmo dia; a 6a virou `Q-PAUTA-6A-01`. Fecharam a `Q-021` e a `Q-011`, e a `RATEIO-USO-01` caiu de 🔴 para 🟡. De-para na tabela final da `PAUTA-contador.md`, efeito de cada uma em `QUESTOES.md` §9 |
+| **Deploy das sessões 14 e 15** | 🟡 **Operacional, e não foi executado: o VPS não é alcançável do ambiente de desenvolvimento** — TCP 443 e 22 para `2.24.203.201` não abrem, e não é bloqueio geral (Supabase e GitHub respondem). O artefato foi **provado em árvore isolada**: `npm test` EXIT=0, `vite build` OK (`index-Cpc05c79.js`, 449,82 kB), o servidor sobe recusando role com `BYPASSRLS`, `/api/publico/config` 200, a SPA serve o bundle novo e a rota do documento devolve 401 sem Bearer. Faltam dois passos de quem tem acesso: **merge para `main`** (o VPS puxa `main`, e ele ainda não tem as duas sessões) e o ciclo do `RESUMO-SESSAO-11` §12. **A ressalva sobre o `web:build` caiu:** ela valia às 03:50, quando `web/src/estilo.ts` tinha 18 erros de parse; a sessão de UX commitou e `npm run web:build` **passa** na árvore final (206 módulos, bundle em 3 pedaços). O `web:build` é **obrigatório** neste deploy — a SPA mudou inteira |
 | **Certificado A1 e credencial Sicoob** | 🔴 **`Q-SICOOB-01`, e é o que segura a F2.** O critério do `PRD` §10 é *"boleto liquidado no sandbox baixa a fatura automaticamente"*, e o ciclo está provado **contra o adaptador falso**, não contra o sandbox. Do nosso lado está pronto: porta injetada, `conector_cobranca` com a referência por tenant (regra 5), e o adaptador padrão que **recusa com 503 nomeado** em vez de fingir |
 | **`Q-FATCHEIA-01`** | 🔴 O `PRD` §5.4 usa "fatura cheia" quatro vezes e **não define o termo** em lugar nenhum. Define em que mês começa a comissão de todo contrato novo. `fatura.flag_fatura_cheia` é `NOT NULL` **sem default**, de propósito |
 | **PgBouncer em modo *transaction*** | 🔴 Sem cobertura. Se entrar no caminho de conexão, o `ADR-0003` **reabre inteiro**. O `.env.example` manda o runtime para *session mode* por isso |
