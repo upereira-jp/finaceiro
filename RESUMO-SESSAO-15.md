@@ -5,13 +5,13 @@
 | **Foco** | As **três pendências** que a sessão 14 deixou nomeadas na `Q-DOCFATURA-01` — o desenho do QR, o teste de integração do `repos/documento.ts` e a logo no payload do CRM — e, antes delas, **conferir o estado dos vendedores e das negociações no CRM** |
 | **Método** | Medir antes de construir, e **medir de novo o que já tinha sido medido**. Foi a segunda medição que produziu o achado mais importante da sessão: o CRM mudou em quatro dias, e o mapa de atribuição de originador ficou errado em duas linhas |
 | **Resultado** | 3 pendências fechadas · 1 módulo puro novo (codificador de QR) · **90 verificações novas** em 2 suítes · **1 questão vermelha nova** · 1 mapa de atribuição refeito |
-| **Não feito** | **o deploy não foi executado** — o VPS não é alcançável deste ambiente (§7). O código está commitado e o bundle foi construído e provado; o `git pull` do servidor é passo de quem tem acesso |
+| **Não feito** | ~~**o deploy não foi executado** — o VPS não é alcançável deste ambiente (§7)~~ **Executado em 30/07 11:50, depois de a rede voltar a responder e de o `main` já ter as duas sessões.** O que segue sem prova é o que nenhum comando dá: **nenhuma tela aberta** e **o QR não lido por câmera** (§7) |
 
 > # ESTADO ATUAL — 30/07/2026, fim da sessão 15
 >
 > | | |
 > |---|---|
-> | **No ar** | `https://financeiro.blackhaus.io` — **continua o bundle de 29/07 (`index-DzZYJ0Ak.js`)**. Nada desta sessão nem da 14 está publicado |
+> | **No ar** | `https://financeiro.blackhaus.io` — ~~continua o bundle de 29/07 (`index-DzZYJ0Ak.js`). Nada desta sessão nem da 14 está publicado~~ **PUBLICADO em 30/07 11:50: o bundle no ar é `index-hNcReSCk.js`, e as sessões 14 e 15 estão as duas em produção.** Medido dos dois lados no §7 |
 > | **Bundle novo, provado** | duas medições, e a segunda é a que vale. Isolada no meu commit: `index-Cpc05c79.js`, 449,82 kB. **Na árvore final, já com o `web/` da sessão de UX: 3 pedaços — `index-hNcReSCk.js` 117,99 kB (34,81 gzip), `icones-DGYYwgme.js` 161,25 kB (37,72), `plataforma-vWw_Z3Y-.js` 352,75 kB (99,99).** O servidor **subiu e respondeu** com o primeiro (§7) |
 > | **Banco** | **20 migrations**, sem migration nova hoje. Nada escrito em produção |
 > | **Suíte** | `EXIT=0`. **854** linhas `ok` medidas por `npm test \| grep -c '^ok '` — e o número **não é comparável** ao 571 da sessão 14 (§8) |
@@ -27,7 +27,7 @@
 > | `Q-FATCHEIA-01` — o que é "fatura cheia" | 🔴 | Vinicius |
 > | `Q-WEBHOOK-01` — autenticação do webhook Sicoob **e do CRM** | 🔴 | Vinicius |
 > | `Q-SICOOB-01` — certificado A1 | 🔴 | Vinicius (externo) |
-> | **deploy** — `git pull` + `web:build` + `restart` no VPS | **operacional** | Vinicius (§7) |
+> | ~~**deploy** — `git pull` + `web:build` + `restart` no VPS~~ | ✅ | **executado 30/07 11:50** (§7) |
 > | `ADR-0005` — onde mora o segredo | proposta | Vinicius |
 > | `Q-ORIGVEND-01` — o eixo decidido; falta o insumo humano | 🟡 | Vinicius + operação |
 > | `Q-AGENDA-01` — nenhum processo periódico existe | 🟡 | Vinicius |
@@ -186,7 +186,24 @@ Ou seja: **o caminho inteiro do QR está commitado — backend, rota, tipo e tel
 
 **Não foi executado, e o motivo não é escolha:** o VPS **não é alcançável deste ambiente**. Medido — TCP 443 e TCP 22 para `financeiro.blackhaus.io` (`2.24.203.201`) não abrem, com timeout; e não é bloqueio geral de saída, porque o Supabase do CRM e o do financeiro responderam durante toda a sessão, e o GitHub também.
 
-> **CORREÇÃO de 30/07/2026 11:36 — a inalcançabilidade era do momento, não do ambiente.** Remedido: **TCP 443 e TCP 22 abrem**, `GET /` devolve **200**, `GET /api/publico/config` devolve **200**, e o host e o IP estão no `known_hosts` deste Codespace. O que **continua verdade** é o parágrafo seguinte inteiro — o `index.html` servido ainda aponta `assets/index-DzZYJ0Ak.js` e não traz o `preload` da fonte, então **nada das sessões 14 e 15 está publicado**. O que caiu foi só o motivo: o deploy é executável daqui, e o que falta é credencial de acesso ao servidor, não rota de rede.
+> ## EXECUTADO em 30/07/2026 11:50
+>
+> O parágrafo acima fica como registro do que era verdade quando foi escrito. **A inalcançabilidade era do momento, não do ambiente:** remedido às 11:36, TCP 443 e 22 **abrem** e o host está no `known_hosts`. O deploy foi rodado pelo Vinicius às 11:50, com os comandos desta seção, e **medido dos dois lados**.
+>
+> **No servidor:** `git pull` fez fast-forward de `bcff052` (29/07) para `8050a41` — 63 arquivos, `+10.216` linhas, as duas migrations e os quatro `web/src/telas/` novos de uma vez. `web:build` transformou **206 módulos** e imprimiu **os três hashes idênticos aos desta sessão**. `financeiro.service` voltou `active (running)`.
+>
+> **Medido de fora, depois:**
+>
+> | O quê | Resultado |
+> |---|---|
+> | `index.html` servido | aponta **`assets/index-hNcReSCk.js`**, com o `preload` da Inter e `modulepreload` dos dois outros pedaços |
+> | os três pedaços | **200**, com **os mesmos bytes** dos construídos aqui — 118.585 · 161.250 · 352.758 |
+> | `assets/index-DzZYJ0Ak.js` | **404** — o bundle de 29/07 saiu, não foi só somado |
+> | `/fontes/inter-var-latin-v5.3.0.woff2` | **200**, 48.256 bytes, pela **nossa** origem, `immutable` de um ano |
+> | rotas das sessões 14 e 15 | **401 `TokenInvalido`** em `/faturas/:id/documento`, `/cobranca/logo`, `/repasses`, `/comissoes` e `/carteira/uso-das-usinas` — existem e recusam credencial inválida |
+> | `GET /` e `/api/publico/config` | **200** |
+>
+> **O que continua sem prova, e nada disto substitui:** **nenhuma tela foi aberta** e **o QR não foi lido por câmera**. É o teste de campo do fim desta seção, e agora ele é possível.
 
 **O que foi provado, em árvore isolada no commit desta sessão** (worktree em `HEAD` limpo, sem os arquivos da sessão de UX):
 
