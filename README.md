@@ -199,7 +199,16 @@ RESUMO-SESSAO-18.md          passagem da sessao 18 - COMECE POR AQUI. As quatro
                              que o dono nao reconheceu: existem, e a medicao achou
                              84 linhas de cliente para 41 PESSOAS e um boleto que
                              sairia sem CPF do pagador
-PROMPT-dev-crm-rodada5-...   O PEDIDO EM ABERTO ao dev do CRM (03/08). UMA
+RESPOSTA-dev-crm-rodada5-... A RESPOSTA ao retorno do dev, a ENVIAR. Ele supos que
+                             as 39 vinham de planilha da operacao; medido: as 39
+                             tem crm_usina_cliente_id em 39 de 39 - sao o
+                             contrato_id DELE. A 3 e o achado que vale mais que a
+                             contagem: um contrato MUDOU DE UC no CRM e a nossa
+                             linha credita a pessoa errada agora. A 4 lista as
+                             tres coisas que as views NAO EXPOEM, e e por isso que
+                             a conta dele da 44 e a minha da 41
+PROMPT-dev-crm-rodada5-...   O pedido original ao dev do CRM (03/08), ja
+                             respondido. UMA
                              pergunta: o que mudou sobre "quem vendeu". As 41 UCs
                              do rateio agora casam com um ganho (eram 28 em 29/07),
                              os dois eixos divergem em 13 delas - 6.855,6 kWh/mes,
