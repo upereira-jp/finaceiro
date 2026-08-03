@@ -234,6 +234,30 @@ const PODE: Record<string, ReadonlySet<string>> = {
   escrever_cadastro:new Set(['admin']),
   escrever_carteira:new Set(['admin', 'cobranca']),
   administrar:      new Set(['admin']),
+
+  /*
+   * A COLUNA `Corporativo` DA TABELA ACIMA, e ela entrou em 03/08/2026 - antes
+   * disso nao havia entidade corporativa no sistema para ela governar. A
+   * migration 22 (`conta_pagar`, `pagamento`, `categoria`, `centro_custo`) e a
+   * primeira, e as duas linhas abaixo sao transcricao direta do PRD 3:
+   *
+   *   admin       total     -> le e escreve
+   *   financeiro  total     -> le e escreve
+   *   cobranca    -         -> NEM LE
+   *   leitura     leitura   -> so le
+   *
+   * POR QUE `ler_corporativo` E SEPARADO DE `ler`, e nao um detalhe: `ler` inclui
+   * `cobranca`, e a tabela do PRD da a `cobranca` um traco na coluna Corporativo.
+   * Usar `ler` nas contas a pagar daria ao papel de cobranca a lista de quanto a
+   * empresa deve a cada dono de usina e a cada originador - que e exatamente o
+   * tipo de dado que uma coluna inteira da matriz existe para separar.
+   *
+   * O criterio e o mesmo da Q-RBAC-01, resolvida em 27/07: divergencia entre
+   * codigo e PRD e defeito do codigo. Se a operacao mostrar que `cobranca`
+   * PRECISA ver contas a pagar, o conserto e a 3 do PRD, nunca esta linha.
+   */
+  ler_corporativo:     new Set(['admin', 'financeiro', 'leitura']),
+  escrever_corporativo:new Set(['admin', 'financeiro']),
 };
 
 /**

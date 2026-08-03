@@ -14,6 +14,7 @@
 import { dbt } from '../db/tipado.ts';
 import { db, tenantCorrente, exigir } from '../db/contexto.ts';
 import { calcularSplit, type EntradaDoSplit, type ResultadoDoSplit } from '../dominio/split.ts';
+import { provisionarDoSplit, type DespesaDoSplit } from './conta_pagar.ts';
 
 export class RepasseBloqueado extends Error {
   readonly status = 422;
@@ -127,7 +128,11 @@ async function regraDeComissao(tier: string, parcela: 1 | 2, dataFechamento: Dat
   return { id: l.id as string, percentual: l.percentual as string };
 }
 
-export type SplitExecutado = ResultadoDoSplit & { split_execucao_id: string };
+export type SplitExecutado = ResultadoDoSplit & {
+  split_execucao_id: string;
+  /** Quantas contas a pagar o split provisionou. PRD 5.5 itens 2 e 3. */
+  contas_a_pagar: number;
+};
 
 /**
  * Reparte uma liquidacao. Chamado pela baixa, na mesma transacao dela.
@@ -202,8 +207,19 @@ export async function executar(liquidacaoId: string): Promise<SplitExecutado> {
     },
   });
 
+  /*
+   * O ID SAI DAQUI, E NAO DO BANCO, e o motivo e a linha seguinte: as contas a
+   * pagar precisam apontar para o `split_item` que as gerou, e `createMany` nao
+   * devolve os ids. As alternativas eram um `create` por item (quatro viagens no
+   * lugar de uma, dentro da transacao da baixa) ou um `findMany` depois - e
+   * gerar o uuid aqui e o que `sincronizacao.ts` ja faz com os clientes do
+   * rateio, pelo mesmo motivo.
+   */
+  const itens = resultado.itens.map((it) => ({ id: crypto.randomUUID(), ...it }));
+
   await dbt().split_item.createMany({
-    data: resultado.itens.map((it) => ({
+    data: itens.map((it) => ({
+      id: it.id,
       tenant_id: tenant,
       split_execucao_id: execucao.id,
       tipo: it.tipo,
@@ -217,7 +233,42 @@ export async function executar(liquidacaoId: string): Promise<SplitExecutado> {
     })),
   });
 
-  return { ...resultado, split_execucao_id: execucao.id };
+  /*
+   * AS DUAS ESCRITAS QUE FALTAVAM - PRD 5.5, itens 2 e 3, "na mesma transacao do
+   * split". Ate 03/08/2026 esta funcao gravava DUAS das quatro, e a consequencia
+   * nao era uma escrita a menos: era que o sistema saberia ao centavo QUANTO o
+   * dono da usina e o originador tinham a receber e **nao teria onde registrar
+   * que foram pagos**. Os relatorios sao extrato de apuracao, nao de quitacao, e
+   * nada impedia pagar duas vezes o mesmo repasse. `Q-PAGAMENTO-01`.
+   *
+   * NA MESMA TRANSACAO, e nao "logo depois": esta funcao ja roda dentro da
+   * transacao da baixa (`repos/liquidacao.ts`), entao provisionar aqui herda o
+   * tudo-ou-nada que o PRD exige - "falha em qualquer parte reverte tudo".
+   * Provisionar num segundo passo abriria a janela em que a liquidacao existe, o
+   * split existe, e a despesa nao.
+   *
+   * `liquido_g3` NAO entra: e receita, e provisiona-la como despesa faria a
+   * empresa dever a si mesma. O item 4 do PRD 5.5 - "receita G3 refletida no
+   * fluxo e no DRE" - depende de `movimento_caixa`, que nao esta nesta fatia
+   * (ver o cabecalho da migration 22).
+   */
+  const despesas = itens
+    .filter((it) => it.tipo !== 'liquido_g3')
+    .map((it) => ({
+      split_item_id: it.id,
+      tipo: it.tipo as DespesaDoSplit['tipo'],
+      valor_centavos: it.valor_centavos,
+      dono_usina_id: it.dono_usina_id,
+      originador_id: it.originador_id,
+    }));
+
+  const provisionado = await provisionarDoSplit({
+    competencia: i.competencia,
+    itens: despesas,
+    rotulo: `${i.codigo_geradora} ${i.competencia.toISOString().slice(0, 7)}`,
+  });
+
+  return { ...resultado, split_execucao_id: execucao.id, contas_a_pagar: provisionado.criadas };
 }
 
 // ---------------------------------------------------------------- leitura

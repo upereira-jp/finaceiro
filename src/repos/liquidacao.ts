@@ -66,7 +66,12 @@ export type Baixa = {
 export type ResultadoDaBaixa = {
   liquidacao_id: string;
   ja_existia: boolean;
-  split: { split_execucao_id: string; itens: number } | null;
+  /* `contas_a_pagar` entrou em 03/08 com a Q-PAGAMENTO-01: o split passou a
+   * provisionar a despesa na mesma transacao (PRD 5.5 itens 2 e 3), e quem
+   * da a baixa precisa VER que isso aconteceu - um numero que volta zero e a
+   * unica forma de "provisionou nada" chegar a alguem. Nulo na releitura de
+   * uma baixa que ja existia, onde nao houve provisionamento agora. */
+  split: { split_execucao_id: string; itens: number; contas_a_pagar: number | null } | null;
   /** Preenchido quando a baixa entrou mas o split nao pode rodar. Nao e recusa:
    *  o dinheiro entrou e o titulo esta pago. E divergencia - gravada, e alguem
    *  precisa olhar. Mesma distincao do RESUMO-SESSAO-9 2. */
@@ -106,7 +111,7 @@ export async function baixar(e: Baixa): Promise<ResultadoDaBaixa> {
       return {
         liquidacao_id: anterior.id,
         ja_existia: true,
-        split: s ? { split_execucao_id: s.id, itens: s.split_item.length } : null,
+        split: s ? { split_execucao_id: s.id, itens: s.split_item.length, contas_a_pagar: null } : null,
         split_bloqueado: null,
       };
     }
@@ -154,7 +159,7 @@ export async function baixar(e: Baixa): Promise<ResultadoDaBaixa> {
     const s = await split.executar(l.id);
     return {
       liquidacao_id: l.id, ja_existia: false,
-      split: { split_execucao_id: s.split_execucao_id, itens: s.itens.length },
+      split: { split_execucao_id: s.split_execucao_id, itens: s.itens.length, contas_a_pagar: s.contas_a_pagar },
       split_bloqueado: null,
     };
   } catch (err: any) {

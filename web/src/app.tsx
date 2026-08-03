@@ -42,6 +42,7 @@ import { TelaFaturas } from './telas/faturas.tsx';
 import { TelaCobranca } from './telas/cobranca.tsx';
 import { TelaRelatorios } from './telas/relatorios.tsx';
 import { TelaDocumento } from './telas/documento.tsx';
+import { TelaContasAPagar } from './telas/contas-a-pagar.tsx';
 
 /**
  * Rota -> componente. `Record` sobre as rotas de `navegacao.ts`, então uma tela
@@ -60,6 +61,7 @@ const RENDER: Record<string, () => ReactElement> = {
   '/faturas': () => <TelaFaturas />,
   '/cobranca': () => <TelaCobranca />,
   '/documento': () => <TelaDocumento />,
+  '/contas-a-pagar': () => <TelaContasAPagar />,
   '/relatorios': () => <TelaRelatorios />,
 };
 

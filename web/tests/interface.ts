@@ -114,7 +114,12 @@ chk('I3d', /\*,\s*\*::before,\s*\*::after/.test(bloqueio),
 
 // ------------------------------------------------------- I4 a barra de navegacao
 
-chk('I4', TELAS.length === 12, `sao 12 telas (contadas: ${TELAS.length})`);
+/* TREZE desde 03/08/2026 - "Contas a pagar" entrou com a Q-PAGAMENTO-01, e e a
+ * primeira tela da vertente da EMPRESA (PRD 4.4). O numero e literal de
+ * proposito: uma tela a mais e decisao de produto, e uma contagem que se
+ * atualiza sozinha (`TELAS.length === TELAS.length`) nao acusaria uma tela
+ * acrescentada por engano num merge. */
+chk('I4', TELAS.length === 13, `sao 13 telas (contadas: ${TELAS.length})`);
 chk('I4b', new Set(TELAS.map((t) => t.rota)).size === TELAS.length,
     'nenhuma rota repetida — rota repetida faz a segunda tela ser inalcancavel');
 chk('I4c', new Set(TELAS.map((t) => t.titulo)).size === TELAS.length,

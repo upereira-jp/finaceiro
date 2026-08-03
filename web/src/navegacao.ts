@@ -56,6 +56,12 @@ export const TELAS: readonly Tela[] = [
   { rota: '/faturas',    titulo: 'Faturas',    icone: 'faturas',    grupo: 'dinheiro' },
   { rota: '/cobranca',   titulo: 'Cobrança',   icone: 'cobranca',   grupo: 'dinheiro' },
   { rota: '/documento',  titulo: 'Documento',  icone: 'documento',  grupo: 'dinheiro' },
+  /* A ULTIMA DO GRUPO DINHEIRO, e a posicao e a mesma decisao de ordem que o
+   * cabecalho descreve: a vertente do CLIENTE (compor, emitir, cobrar,
+   * documentar) vem antes da vertente da EMPRESA, porque e o dinheiro que
+   * entra que produz o que sai. Contas a pagar so tem linha depois de a
+   * primeira fatura ser liquidada - o split as provisiona. */
+  { rota: '/contas-a-pagar', titulo: 'Contas a pagar', icone: 'contas_a_pagar', grupo: 'dinheiro' },
   { rota: '/relatorios', titulo: 'Relatórios', icone: 'relatorios', grupo: 'dinheiro' },
 ] as const;
 

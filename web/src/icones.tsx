@@ -102,6 +102,16 @@ const DESENHO: Record<NomeDeIcone, Icon> = {
   cobranca: Bank,
   documento: FileText,
   relatorios: ChartLineUp,
+  /* A MAO QUE ENTREGA DINHEIRO, e a escolha e por CONTRASTE com `carteira`
+   * (Wallet, o dinheiro que ENTRA) e com `faturas` (Receipt, o titulo que se
+   * emite). Contas a pagar e a unica tela em que o dinheiro SAI.
+   *
+   * E O MESMO DESENHO DE `pode_repartir`, de proposito e nao por descuido: a
+   * metrica "pode repartir" e a promessa de que o dinheiro vai SAIR para o dono
+   * da usina, e esta tela e onde ele sai. Dois nomes semanticos podem partilhar
+   * um desenho; o que a iconografia proibe e o contrario - uma tela escolher
+   * desenho. */
+  contas_a_pagar: HandCoins,
 
   // os três estados da prontidão — glifo nu, porque a pílula já é a moldura
   ok: Check,

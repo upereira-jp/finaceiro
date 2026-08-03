@@ -5,9 +5,9 @@ Sistema financeiro multi-tenant da G3 Solar: faturamento de crédito de energia,
 | Campo | Valor |
 |---|---|
 | **Dono** | Vinicius Leal |
-| **Fase atual** | F0 fechada · F1 com os três critérios formais cumpridos e a **entrega nomeada do conector também** — a `Q-ESCOPO-01` está **fechada desde 28/07** e este cabeçalho não tinha acompanhado: são **4 de 4** entidades da `SPEC-002` §2 espelhadas, reconferido em 30/07. Ver "Sobre a `Q-ESCOPO-01`" abaixo · **F2 e F3 construídas em 28/07**, depois de a `PAUTA-contador.md` voltar respondida · **30/07, tarde: os dois processos periódicos do `PRD` §6 passaram a existir** — fila de emissão com retry exponencial e consulta ativa diária (`Q-AGENDA-01`). **21 migrations, todas aplicadas em produção** e **990 verificações em 40 suítes**. O que segura a F2 continua sendo **um certificado A1**, não código |
-| **Atualizado** | 30/07/2026, fim da sessão 16 · **`RESUMO-SESSAO-16.md`** · **990 verificações**, `EXIT=0` · migration 21 **aplicada em produção** · **6 defeitos consertados, 4 deles achados pelo dono usando o sistema** — e essa mudança de origem é o próprio assunto da sessão · Antes, na mesma tarde · **o que não dependia de decisão de ninguém foi construído**: a agenda de cobrança (`Q-AGENDA-01`), o importador de tarifas da concessionária (`Q-TARIFA-CONC-01`) e o invariante que devolve mecanismo à regra 11 (`Q-CLAUDE11-01`, opção b). **110 verificações novas em 6 suítes**, contadas na fonte por `grep -c "chk('"` e conferidas contra o delta do `npm test` (854 → 964, diferença zero). **Três defeitos do código existente apareceram no caminho** e estão consertados — ver "O que a construção de 30/07 encontrou" abaixo · De manhã: as duas sessões paralelas de 29–30/07 publicadas em produção às 11:50 (`RESUMO-SESSAO-14.md`, `RESUMO-SESSAO-15.md`, `INTERFACE-2026-07-30.md`) |
-| **No ar** | **`https://financeiro.blackhaus.io`** — systemd, Node 22 isolado, TLS até 26/10. Mesmo VPS do CRM, **sem alterar uma linha da configuração dele**. **As sessões 14 e 15 foram publicadas em 30/07 11:50**, e o bundle em produção é **`index-hNcReSCk.js`** (mais `icones-DGYYwgme.js` e `plataforma-vWw_Z3Y-.js`) — o de 29/07 responde **404**. **A migration 21 foi aplicada em produção** em 30/07 e o bundle `index-BPNacouw.js` está no ar. **Falta publicar `3fd7b22`** — o conserto da sessão expirada, bundle `index-CTi2cd4A.js`: `git pull` → `prisma generate` → `web:build` → `restart`, **sem** migration desta vez. Os **9** invariantes de catálogo, incluindo o `CAT-9` novo, rodaram **contra produção** em 30/07 e passaram |
+| **Fase atual** | F0 fechada · F1 com os tres criterios formais e a entrega nomeada cumpridos · **F2 e F3 construidas em 28/07** · **30/07:** os dois processos periodicos do `PRD` §6 · **03/08: a primeira entidade da F4 existe** — `conta_pagar` e `pagamento`, decididos pelo dono, fecham a `Q-PAGAMENTO-01`, e o `PRD` §5.5 passa a gravar as quatro escritas na transacao do split em vez de duas. **22 migrations, 21 aplicadas em producao** e **1106 verificacoes em 43 suites**. O que segura a F2 continua sendo **um certificado A1**, nao codigo |
+| **Atualizado** | 03/08/2026, fim da sessao 18 · **`RESUMO-SESSAO-18.md`** · **1106 verificacoes**, `EXIT=0`, delta de **63** contado na fonte e conferido contra o `npm test` — diferenca zero · **as quatro perguntas que travavam trabalho caro foram respondidas pelo dono**, e tres viraram construcao no mesmo dia · **1 defeito de producao**: o conector **apagava** `data_vencimento`, e apagaria os 39 no ciclo seguinte ao preenchimento — sem erro, sem log e sem recusa · migration 22 (`contas_a_pagar`) **so em banco de teste** · 13a tela |
+| **No ar** | **`https://financeiro.blackhaus.io`** — systemd, Node 22 isolado, TLS ate 26/10. Mesmo VPS do CRM, **sem alterar uma linha da configuracao dele**. **Producao segue com 21 migrations e o bundle `index-BPNacouw.js`** — nada desta sessao nem da 17 foi publicado. Pendentes: `3fd7b22` (conserto da sessao expirada) e a sessao 18 inteira, que **tem migration**. Os **9** invariantes de catalogo rodaram contra producao em 30/07 e passaram |
 
 ---
 
@@ -64,13 +64,13 @@ Revisão de 30/07, medida contra produção — **`REVISAO-VERTENTES-2026-07-30.
 | Vertente | Nome no `PRD-v2.2` | Fase | Situação |
 |---|---|:--:|---|
 | **do cliente** — fatura, pagamento, quem pagou e quem não pagou | §4.3 Carteira | F2 · F3 | **construída**, parada por insumo humano |
-| **da empresa** — contas a pagar e a receber, pagamento de fornecedor e de funcionário, comissão, compras, cartão | §4.4 Corporativo | F4 · F5 | **0 de 13 entidades · 0 de 85 rotas · 0 de 12 telas** |
+| **da empresa** — contas a pagar e a receber, pagamento de fornecedor e de funcionário, comissão, compras, cartão | §4.4 Corporativo | F4 · F5 | **4 de 13 entidades · 12 rotas · 1 tela** — desde 03/08. As quatro são as que **quitam**; as nove que faltam são fluxo de caixa, conciliação e cartão |
 
 **Não há escopo novo nisso** — está no PRD desde a v2.2. O que a revisão acrescentou são três coisas:
 
-**1. O ponto de encontro das duas está pela metade, e é a `Q-PAGAMENTO-01` 🔴.** O `PRD` §5.5 manda **quatro** escritas na mesma transação do split; `src/repos/split.ts` grava **duas** — `split_execucao` e `split_item`. E `split_item` **não tem coluna de pagamento**. No dia em que a primeira fatura for paga, o sistema saberá ao centavo **quanto** o dono da usina e o originador têm a receber, e **não terá onde registrar que foram pagos** — os relatórios são extrato de *apuração*, não de *quitação*, e nada impede pagar duas vezes. **A janela para decidir sem migration fecha na primeira liquidação**, enquanto `split_item` tem 0 linhas.
+**1. ~~O ponto de encontro das duas está pela metade~~ — `Q-PAGAMENTO-01` ✅ FECHADA em 03/08.** O dono decidiu por `conta_pagar` completa, e a migration 22 a construiu **enquanto `split_item` ainda tinha 0 linhas** — a janela não chegou a fechar. O `split.ts` grava as quatro escritas do `PRD` §5.5, e pagar duas vezes o mesmo repasse deixou de ser possível **pelo banco**, não por conferência. Ver `RESUMO-SESSAO-18.md` §3. O texto original: O `PRD` §5.5 manda **quatro** escritas na mesma transação do split; `src/repos/split.ts` grava **duas** — `split_execucao` e `split_item`. E `split_item` **não tem coluna de pagamento**. No dia em que a primeira fatura for paga, o sistema saberá ao centavo **quanto** o dono da usina e o originador têm a receber, e **não terá onde registrar que foram pagos** — os relatórios são extrato de *apuração*, não de *quitação*, e nada impede pagar duas vezes. **A janela para decidir sem migration fecha na primeira liquidação**, enquanto `split_item` tem 0 linhas.
 
-**2. "Responsáveis dos leads" não é o eixo decidido, e tem prazo — `Q-EIXO-FUNCIONARIO-01` 🔴.** O eixo em vigor é o `vendedor_origem` (29/07); os dois **divergem em 43 dos 80 ganhos**, e nos 15 cards do funil `Rateio` o `responsavel` é a mesma pessoa em 15 de 15. Confirmar custa uma frase; não confirmar custa uma reescrita, porque a **R20-b congela o tipo no rascunho e não há edição**.
+**2. "Responsáveis dos leads" não é o eixo decidido, e tem prazo — `Q-EIXO-FUNCIONARIO-01` 🔴, e em 03/08 ela mudou de endereço.** Perguntado ao dono, a resposta foi *"o CRM foi alterado nesse sentido, peça uma pequena auditoria para o DEV do CRM"* — então o eixo **não** se decide olhando o que as views dizem hoje. Pedido em `PROMPT-dev-crm-rodada5-2026-08-03.md`; remedido no dia, os dois eixos divergem em **13 das 41 UCs**, 23% da carteira em kWh. O texto original: O eixo em vigor é o `vendedor_origem` (29/07); os dois **divergem em 43 dos 80 ganhos**, e nos 15 cards do funil `Rateio` o `responsavel` é a mesma pessoa em 15 de 15. Confirmar custa uma frase; não confirmar custa uma reescrita, porque a **R20-b congela o tipo no rascunho e não há edição**.
 
 **3. A inadimplência existe como visão e não como registro — `Q-INADIMPLENCIA-01` 🟡.** *"Quem não pagou"* o sistema responde; *"o que já se fez a respeito"* não tem onde ser gravado, e o `PRD` §4.3 proíbe usar a etapa `INADIMPLENTES` do CRM como fonte.
 
@@ -107,10 +107,11 @@ Ou seja: **nenhuma descoberta, só um cabeçalho que não acompanhou o registro 
 
 Nesta ordem. Cada documento pressupõe o anterior.
 
-0. **`RETOMADA-2026-07-30.md`** — **se você está retomando o trabalho, leia este primeiro: dois minutos, e diz onde tudo parou.** Traz o que está por commitar, as duas perguntas que travam trabalho caro e o que **não** fazer em seguida
+0. **`RETOMADA-2026-08-03.md`** — **se você está retomando o trabalho, leia este primeiro: dois minutos, e diz onde tudo parou.** Substitui o de 30/07. Traz o que está por commitar, as duas perguntas que travam trabalho caro e o que **não** fazer em seguida
 0. **`ROTEIRO-REVISAO.md`** — **se o que você quer é usar o sistema e conferir, comece aqui e não no resto.** Passo a passo do que abrir, o que esperar ver e **o que significa se vier diferente** — incluindo o teste que nenhum comando faz: **ler o QR com a câmera do celular**
 1. **`REVISAO-VERTENTES-2026-07-30.md`** — **se a pergunta é "o sistema cobre o financeiro da empresa também?", comece aqui.** A revisão das duas vertentes contra produção: o que existe da carteira do cliente, o zero do módulo corporativo, e o `PRD` §5.5 implementado pela metade entre as duas
-1. **`RESUMO-SESSAO-16.md`** — **comece por aqui.** A sessão em que o sistema foi **usado por uma pessoa pela primeira vez**, e quatro dos seis defeitos vieram daí. Traz a agenda de cobrança, o importador de tarifas, os dois renomes do dono — e a §5, que mede o caminho para a primeira fatura contra produção
+1. **`RESUMO-SESSAO-18.md`** — **comece por aqui.** A sessao em que as quatro perguntas foram respondidas pelo dono. A §1 e o defeito que a pergunta encontrou sem procurar — o conector apagava o vencimento que ninguem tinha preenchido ainda; a §3 e a `conta_pagar`, com o que o banco passou a IMPEDIR; a §4 sao as 39 UCs medidas e as tres coisas que a medicao achou sem ser pedida
+1. **`RESUMO-SESSAO-16.md`** — A sessão em que o sistema foi **usado por uma pessoa pela primeira vez**, e quatro dos seis defeitos vieram daí. Traz a agenda de cobrança, o importador de tarifas, os dois renomes do dono — e a §5, que mede o caminho para a primeira fatura contra produção
 2. **`RESUMO-SESSAO-15.md`** As três pendências do documento de cobrança fechadas, e o achado que apareceu ao **remedir** o CRM antes de construir: 76 merges de lead em 30/07 tornaram `lead.codigo` instável, tiraram um nome da lista de originadores e moveram duas atribuições de comissão. A §2 conta os dois defeitos que a verificação do QR pegou — um deles dentro do próprio instrumento de medida
 2. **`RESUMO-SESSAO-14.md`** — A sessão do caminho de cobrança: o eixo do originador decidido e medido, as três telas que faltavam, as duas migrations e as cinco decisões do documento. Traz também os quatro erros meus que o processo pegou, com o que cada um ensinou
 2. **`RESUMO-SESSAO-13.md`** — Estado atual e a fila com dono nomeado. A sessão em que a `Q-ORIGINADOR-01` foi decidida — e em que conferir a premissa contra o CRM antes de gravar mudou o que precisava ser perguntado
@@ -182,7 +183,28 @@ RESUMO-SESSAO-12.md          passagem da sessao 12 — Producao conferida, o
                              defeito silencioso da tela de Contratos medido
                              antes e depois, e as duas questoes que aparecem
                              ANTES dos 39 contratos
-RESUMO-SESSAO-16.md          passagem da sessao 16 - COMECE POR AQUI. A agenda
+RETOMADA-2026-08-03.md       ONDE TUDO PAROU. O que falta publicar (e agora tem
+                             MIGRATION), as tres proximas acoes - nenhuma delas
+                             codigo - e o que NAO fazer em seguida
+RESUMO-SESSAO-18.md          passagem da sessao 18 - COMECE POR AQUI. As quatro
+                             perguntas respondidas pelo dono. A 1 e o defeito que
+                             a pergunta ACHOU SEM PROCURAR: o conector levava
+                             data_vencimento no espelho e o CRM a tem vazia em 41
+                             de 41 - preencher as 39 UCs e rodar o ciclo apagaria
+                             as 39, sem erro, sem log e sem recusa. A 3 e a
+                             conta_pagar (PRD 4.4) e as QUATRO coisas que o banco
+                             passou a impedir, entre elas provisionar o mesmo
+                             split_item duas vezes - por coluna GERADA, que e o
+                             conserto que a regra 11 prescreve. A 4 mede as 39 UCs
+                             que o dono nao reconheceu: existem, e a medicao achou
+                             84 linhas de cliente para 41 PESSOAS e um boleto que
+                             sairia sem CPF do pagador
+PROMPT-dev-crm-rodada5-...   O PEDIDO EM ABERTO ao dev do CRM (03/08). UMA
+                             pergunta: o que mudou sobre "quem vendeu". As 41 UCs
+                             do rateio agora casam com um ganho (eram 28 em 29/07),
+                             os dois eixos divergem em 13 delas - 6.855,6 kWh/mes,
+                             23% da carteira - e um nome NOVO aparece so num deles
+RESUMO-SESSAO-16.md          passagem da sessao 16 - A agenda
                              de cobranca, o importador de tarifas e a regra 11 com
                              mecanismo de novo. A 2 reune SEIS defeitos, quatro
                              deles achados pelo DONO usando o sistema - e a 2.1
@@ -298,7 +320,16 @@ src/repos/fatura.ts          compoe o lote pela GERACAO MEDIDA. A conta fica no
 src/repos/boleto.ts          fala com a PORTA, nunca com a Sicoob. A falha de
                              registro COMMITA e a rota traduz em 502
 src/repos/liquidacao.ts      o evento de caixa, e o unico gatilho do split
-src/repos/split.ts           junta insumo, chama o motor puro, persiste
+src/repos/conta_pagar.ts     A VERTENTE DA EMPRESA, na fatia que tinha prazo.
+                             Quase nenhuma regra mora aqui: valor_pago e status
+                             sao DERIVADOS por gatilho, o teto e um CHECK, a
+                             imutabilidade do valor que nasceu de split e outro
+                             gatilho, e a unicidade da origem e um indice. O
+                             arquivo compoe e le - porque o segundo caminho de
+                             escrita e o proprio split, que roda sozinho
+src/repos/split.ts           junta insumo, chama o motor puro, persiste - e desde
+                             03/08 PROVISIONA a despesa na mesma transacao (PRD
+                             5.5 itens 2 e 3). Eram duas escritas das quatro
 src/dominio/centavos.ts      aritmetica de dinheiro em BigInt. A divergencia do
                              float foi MEDIDA: aparece abaixo de 1%, nao nas taxas de hoje
 src/dominio/faturamento.ts   quem entra no lote e quem e recusa contada
@@ -378,6 +409,11 @@ web/src/contrato-regras.ts   as condicoes de criacao de contrato, PURAS e fora
                              dentro do componente e inalcancavel por teste
                              (regra 8). E aqui que mora a Q-ORIGINADOR-01: sem
                              originador o botao TRAVA
+web/src/contas-regras.ts     as regras da tela de contas a pagar, PURAS. Espelham
+                             as travas do servidor, e espelho tem modo de falha
+                             proprio: divergir sem que nenhum dos dois lados
+                             pareca errado. Cada trava cita a linha que manda, e
+                             o teste as exercita NOS DOIS SENTIDOS
 web/src/cobranca-regras.ts   as regras da cobranca, PURAS e fora do .tsx. Duas
                              coisas: a REGRA 5 no formulario - o campo pede uma
                              referencia, e colar PEM, JWT, client_secret ou
@@ -481,8 +517,17 @@ src/crm/leitura.ts           PONTO UNICO de leitura. SQL constante, lista fechad
                              das 8 views. Nao ha funcao que aceite nome de tabela
 src/crm/sincronizacao.ts     o ciclo: dedup, idempotencia, recusas contadas e a
                              reconciliacao em tres classes. Porta INJETADA
-prisma/migrations/           VINTE E UMA, em ordem - e a 21 NAO esta em
-                             producao. Ela traz a agenda de cobranca: os dois
+prisma/migrations/           VINTE E DUAS, em ordem - e a 22 NAO esta em
+                             producao. Ela traz `conta_pagar`, `pagamento`,
+                             `categoria` e `centro_custo`: o lado que QUITA, que
+                             nao existia. O vinculo unico ao split_item e indice
+                             CHEIO sobre COLUNA GERADA - o parcial obvio cobriria
+                             exatamente as colunas da FK e o CAT-1 o recusaria,
+                             que e a regra 11 numa direcao nova. O gatilho nasceu
+                             SECURITY DEFINER e o teste G4 acusou: invariante 19,
+                             todo SECURITY DEFINER do projeto e LEITURA sem policy,
+                             e este ESCREVE.
+                             A 21 traz a agenda de cobranca: Ela traz a agenda de cobranca: os dois
                              carimbos que faltavam em `boleto`
                              (ultima_tentativa_em e proxima_tentativa_em, sem os
                              quais "esperar 2^n" so poderia ser contado do
@@ -558,6 +603,13 @@ scripts/agenda.ts            O ENTRYPOINT da agenda. Roda UMA VEZ e sai, e isso 
                              ATENCAO ao --ensaio: a PORTA e chamada de verdade,
                              entao contra a Sicoob real ele registra boleto LA e
                              da rollback AQUI
+scripts/importar-vencimentos.ts
+                             IMPORTACAO do DIA de vencimento das UCs por planilha
+                             (Q-SPEC001-02, decidida em 03/08: varia por UC). O
+                             --modelo sai PREENCHIDO com as UCs reais, e --saida e
+                             OBRIGATORIO: `iniciar()` imprime duas linhas no
+                             stdout, e o CSV feito por redirecionamento nascia com
+                             elas no topo - o proprio importador o recusava depois
 scripts/importar-tarifas.ts  IMPORTACAO das tarifas da concessionaria por
                              planilha (PRD 5.1). O casamento e por numero_uc,
                              porque ninguem tem id de fatura na mao. O ensaio
@@ -627,7 +679,7 @@ tests/dominio-carteira.ts    os dois motores SEM banco. A invariante do centavo
                              em 2.000 combinacoes
 tests/repos-carteira.ts      o ciclo do dinheiro ponta a ponta, pela role sem
                              BYPASSRLS e pelo adaptador falso
-tests/                       990 verificacoes em 40 suites. `npm test` roda todas.
+tests/                       1106 verificacoes em 43 suites. `npm test` roda todas.
                              A CONTAGEM E `npm test | grep -c '^ok '`, e o metodo
                              esta escrito aqui porque os numeros anteriores (461,
                              496) vinham de uma soma que nao se reproduzia: so
@@ -664,7 +716,7 @@ Decidido e medido, não opinado. Detalhe em `adr/ADR-0003` r2.
 
 ## Como aplicar as migrations
 
-As migrations são **SQL puro**, não geradas por `prisma migrate dev`. São **vinte e uma**. **Vinte estão aplicadas em produção** — medido em `_prisma_migrations` em 30/07 — e a **21 (`agenda_de_cobranca`) não está**: ela é parte do deploy pendente. A ordem importa. As três primeiras montam a fundação, conforme a `SPEC-001` §3.2:
+As migrations são **SQL puro**, não geradas por `prisma migrate dev`. São **vinte e duas**. **Vinte e uma estão aplicadas em produção** — a 21 entrou em 30/07 — e a **22 (`contas_a_pagar`) não está**: ela é parte do deploy pendente desta sessão. A ordem importa. As três primeiras montam a fundação, conforme a `SPEC-001` §3.2:
 
 ```
 prisma/migrations/20260725120000_fundacao_schema/   tabelas, enums, as 10 FKs compostas
@@ -681,7 +733,7 @@ npx prisma migrate deploy    # transacional POR MIGRATION. E o que salva de meia
 Validar num banco limpo:
 
 ```bash
-npm test          # typecheck + as 40 suites, 990 verificacoes (linhas `ok`)
+npm test          # typecheck + as 43 suites, 1106 verificacoes (linhas `ok`)
 npm run typecheck # sozinho, tsc --noEmit
 ```
 
@@ -769,7 +821,7 @@ Medido em 27/07 contra o `PRD-v2.2` §10, não estimado. **Os três critérios d
 
 | Critério de saída | Evidência | |
 |---|---|---|
-| `migrate reset` limpo | `tests/run.sh` aplica as 15 migrations em banco vazio a cada `npm test`; `EXIT=0` | ✅ |
+| `migrate reset` limpo | `tests/run.sh` aplica as 22 migrations em banco vazio a cada `npm test`; `EXIT=0` | ✅ |
 | sync idempotente | ✅ **cumprido contra o CRM real em 27/07.** Duas execuções valendo: 48 lidos, 41 criados na 1ª, **0 criados e 0 atualizados na 2ª**, com um único instante de `criado_em` nas 41 linhas. Também provado em 1.000 linhas pelo `N30` | ✅ |
 | escrita no CRM falha por permissão | automatizado em 27/07: `N21`/`N21b` (a guarda de arranque recusa credencial com escrita, inclusive privilégio **herdado por role**) e `N25` (a sessão é read-only). A medição por catálogo que dizia "0 privilégio de escrita" veio de método fraco — ver `Q-PGNET-01` | ✅ |
 
@@ -794,6 +846,7 @@ A lista completa, com dono nomeado, está em `RESUMO-SESSAO-7` §Pendências ger
 
 | Item | Estado |
 |---|---|
+| **Deploy da sessao 18 (migration 22)** | 🔴 **Pendente, e tem migration.** `contas_a_pagar` traz `conta_pagar`, `pagamento`, `categoria` e `centro_custo`. Ordem: `git pull` → **`npx prisma migrate deploy`** → `prisma generate` → `web:build` → `restart`. **Sem o `generate` o servidor recusa subir** — a guarda de arranque da sessao 16 compara as tabelas de `public` com os modelos do client. Conferir depois: `psql "$DIRECT_URL" -f tests/catalogo.sql`, que tem de dizer 9/9. **Junto vai o `3fd7b22`**, que estava pendente desde 30/07 |
 | ~~**Deploy da agenda (migration 21)**~~ | ✅ **Aplicada em produção em 30/07**, pelo `DIRECT_URL`, como as 20 anteriores. Conferido depois: `agenda_execucao` com RLS+FORCE+policy+gatilho+EXCLUDE, os dois carimbos em `boleto`, o CHECK, o índice da fila, `DELETE` revogado, e o catálogo **9/9 contra produção**. Nenhum dado de negócio tocado. O histórico tinha 2 registros sem `finished_at` do `auditoria_repasse_e_furos` — conferidos antes: os dois estão **marcados como rolled back** desde 27/07, resquício do crash do `GRANT`, e a terceira linha é a aplicação bem-sucedida. ~~Produção tem **20** migrations e o repositório tem **21** — medido em `_prisma_migrations` em 30/07. Este deploy tem **um passo a mais** que o de manhã, e ele vem **antes** do restart: `npx prisma migrate deploy`. Sem ele o servidor sobe e a agenda falha na primeira chamada, porque `agenda_execucao` não existe. Ciclo completo em **"Como publicar a agenda"**, abaixo. **O que já foi provado:** `npm test` EXIT=0 com 964 verificações, os **9** invariantes de catálogo **contra produção**, e `db pull` reproduzindo o `schema.prisma` commitado byte a byte |
 | **`Q-AGENDA-02`** | 🟢 **Nova, e é confirmação e não decisão de projeto.** O `PRD` §6 diz "retry exponencial" e "consulta ativa diária" e **não dá os números**: base, teto, prazo de aviso do A1 e teto de itens por rodada. Os quatro estão num objeto só (`POLITICA`, em `src/dominio/agenda.ts`), com o raciocínio ao lado, e **nenhum teste depende deles** — as suítes usam política artificial de propósito. Trocar os quatro é editar quatro números. **O que não é escolha:** a fila **não desiste sozinha** — o teto é do *intervalo*, não da contagem, porque parar de cobrar um cliente é decisão de negócio com dono |
 | **`Q-CRMCODIGO-01`** | 🔴 **Nova em 30/07, e achada ao REMEDIR o CRM antes de a operação digitar os contratos.** `financeiro.lead_merges` registra **76 merges em 30/07**: `lead.codigo` **não é estável** — 39 dos 41 códigos do rateio mudaram, com a mesma UC e o mesmo cliente —, `financeiro.vendas_ganhas` caiu de **80 para 51** linhas (o `DISTINCT ON (l.id)` conta lead distinto e os merges colapsaram duplicatas), a **lista de originadores caiu de três nomes para dois** (`Jezielly Vieira` tem **zero** cards hoje) e **duas atribuições trocaram de dono**, uma delas de **1.987,2 kWh/mês**. É vermelha porque digitar contrato pelo mapa de 29/07 pagaria comissão à pessoa errada **sem erro e sem log**, e a R20-b congela o tier no `rascunhar` — não há caminho de conserto. **O que está bem, e foi conferido:** a sincronização casa por `contrato_id` e `crm_lead_id`, os dois UUID, então o espelho não quebra. **O lado bom:** as **12** atribuições que eram invisíveis às views ficaram legíveis (40 de 41), e **as 12 bateram** com o que o conector de análise havia dito — duas medições por caminhos diferentes concordando. Mapa vigente em `ATRIBUICAO-originador-2026-07-30.md`, ordenado por **UC** |

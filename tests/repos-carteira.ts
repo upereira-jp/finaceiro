@@ -30,6 +30,7 @@ import * as fatura from '../src/repos/fatura.ts';
 import * as boleto from '../src/repos/boleto.ts';
 import * as liquidacao from '../src/repos/liquidacao.ts';
 import * as split from '../src/repos/split.ts';
+import * as contaPagar from '../src/repos/conta_pagar.ts';
 import { prontidao } from '../src/repos/prontidao.ts';
 import { CobrancaFalsa } from '../src/sicoob/falso.ts';
 import { COBRANCA_NAO_CONFIGURADA, CobrancaNaoConfigurada } from '../src/sicoob/porta.ts';
@@ -234,6 +235,45 @@ let liquidacaoJulho: string;
   const k = await emA(() => contrato.vigenteDaUC(ucOk));
   chk('K7g', k?.faturas_cheias_pagas === 1,
       'o contador do contrato avancou para 1 - pelo gatilho do banco, nao pela aplicacao');
+
+  /*
+   * K7h-K7l: AS DUAS ESCRITAS QUE FALTAVAM. PRD 5.5 itens 2 e 3, Q-PAGAMENTO-01.
+   *
+   * Ate 03/08/2026 a mesma transacao gravava `split_execucao` e `split_item` e
+   * parava ali. O sistema sabia ao centavo quanto devia ao dono da usina e ao
+   * originador, e nao tinha ONDE registrar que pagou.
+   *
+   * O que estas verificacoes prendem nao e "as contas existem" - e que elas
+   * carregam EXATAMENTE os valores que K7c, K7d e K7e acabaram de conferir no
+   * split. Afirmar constantes proprias aqui deixaria as duas metades divergirem
+   * sem nenhuma delas parecer errada, que e o modo de falha da questao inteira.
+   */
+  chk('K7h', r.split!.contas_a_pagar === 3,
+      `o split provisionou 3 contas a pagar na MESMA transacao - uma por item de despesa, `
+      + `e nenhuma para liquido_g3, que e receita (veio ${r.split!.contas_a_pagar})`);
+
+  const contas = await emA(() => contaPagar.listar({}));
+  const porBenef = (t: string) => contas.find((c: any) => c.beneficiario_tipo === t)!;
+
+  chk('K7i', porBenef('dono_usina')?.valor_centavos === por('repasse_usina').valor_centavos
+        && porBenef('originador')?.valor_centavos === por('comissao').valor_centavos
+        && porBenef('concessionaria')?.valor_centavos === por('repasse_concessionaria').valor_centavos,
+      'cada conta carrega o valor do split_item que a gerou, ao centavo - apuracao e quitacao '
+      + 'nao podem divergir sem que uma das duas pareca certa');
+
+  chk('K7j', contas.every((c: any) => c.status === 'aberta' && c.valor_pago_centavos === 0),
+      'as tres nascem ABERTAS e com zero pago - provisionar nao e pagar');
+
+  // O vencimento do PRD 5.5: dia 10 do mes seguinte a COMPETENCIA, e nao a data
+  // do caixa. A baixa foi em 12/08 e a competencia e julho -> 10/08.
+  chk('K7k', contas.every((c: any) => c.vencimento.getUTCDate() === 10 && c.vencimento.getUTCMonth() === 7),
+      `o vencimento sai da COMPETENCIA (julho -> 10/08), nao da data da baixa (12/08) - contar do `
+      + `caixa faria o repasse de um dono vencer em datas diferentes por acidente de quando o `
+      + `cliente pagou (veio ${contas[0]?.vencimento?.toISOString().slice(0, 10)})`);
+
+  chk('K7l', (await emA(() => contaPagar.itensDeSplitSemConta())).length === 0,
+      'e a conferencia entre apuracao e quitacao nao acha buraco: nenhum split_item de despesa '
+      + 'ficou sem conta');
 }
 
 // ---------------------------------------------------- K8 webhook duplicado

@@ -25,6 +25,7 @@ import * as fatura from '../repos/fatura.ts';
 import * as boleto from '../repos/boleto.ts';
 import * as liquidacao from '../repos/liquidacao.ts';
 import * as split from '../repos/split.ts';
+import * as contaPagar from '../repos/conta_pagar.ts';
 import * as documento from '../repos/documento.ts';
 import { prontidao } from '../repos/prontidao.ts';
 
@@ -623,6 +624,82 @@ export const ROTAS: Rota[] = [
     handler: (req, app) => emRelatorio(app, req, async () => ok(await split.comissoesPorOriginador(
       req.query.get('competencia') ? data(req.query.get('competencia'), 'competencia') : undefined))),
   },
+  // ------------------------------------ contas a pagar (PRD 4.4 · Q-PAGAMENTO-01)
+  /*
+   * A VERTENTE DA EMPRESA, na fatia que tinha prazo. Estas rotas sao as unicas
+   * do sistema que passam por `ler_corporativo`/`escrever_corporativo` - a
+   * coluna `Corporativo` da matriz do PRD 3, que ate 03/08 nao tinha entidade
+   * para governar. Consequencia visivel: o papel `cobranca` recebe 403 aqui,
+   * enquanto ve tudo da carteira.
+   *
+   * NAO HA rota que CRIE conta de repasse ou de comissao. Elas nascem do split,
+   * na transacao da baixa, e so de la - um segundo caminho provisionaria a mesma
+   * despesa duas vezes ao mesmo beneficiario.
+   */
+  {
+    metodo: 'GET', padrao: '/contas-a-pagar',
+    handler: (req, app) => emTenant(app, req, async () => ok(await contaPagar.listar({
+      status: (req.query.get('status') ?? undefined) as any,
+      competencia: req.query.get('competencia')
+        ? data(req.query.get('competencia'), 'competencia') : undefined,
+      limite: limite(req.query),
+    }))),
+  },
+  {
+    metodo: 'GET', padrao: '/contas-a-pagar/resumo',
+    handler: (req, app) => emRelatorio(app, req, async () => ok(await contaPagar.resumo())),
+  },
+  {
+    /* A conferencia entre APURACAO e QUITACAO. Lista vazia e o estado correto -
+     * a rota existe para que "nenhuma conta foi provisionada" seja uma pergunta
+     * que alguem consiga fazer, e nao um silencio. */
+    metodo: 'GET', padrao: '/contas-a-pagar/sem-provisao',
+    handler: (req, app) => emRelatorio(app, req, async () => ok(await contaPagar.itensDeSplitSemConta())),
+  },
+  {
+    metodo: 'GET', padrao: '/contas-a-pagar/:id',
+    handler: (req, app) => emTenant(app, req, async () => {
+      const c = await contaPagar.porId(req.params.id);
+      return c ? ok(c) : { status: 404, corpo: { erro: 'NaoEncontrado', mensagem: 'Conta a pagar nao encontrada.' } };
+    }),
+  },
+  {
+    metodo: 'POST', padrao: '/contas-a-pagar',
+    handler: (req, app) => emTenant(app, req, async () => criado(await contaPagar.criarManual({
+      ...req.corpo,
+      competencia: data(req.corpo?.competencia, 'competencia'),
+      vencimento: data(req.corpo?.vencimento, 'vencimento'),
+    }))),
+  },
+  {
+    metodo: 'POST', padrao: '/contas-a-pagar/:id/cancelar',
+    handler: (req, app) => emTenant(app, req, async () => {
+      await contaPagar.cancelar(req.params.id);
+      return semConteudo();
+    }),
+  },
+  {
+    metodo: 'POST', padrao: '/contas-a-pagar/:id/pagamentos',
+    handler: (req, app) => emTenant(app, req, async () => criado(await contaPagar.registrarPagamento(
+      req.params.id, { ...req.corpo, data_pagamento: data(req.corpo?.data_pagamento, 'data_pagamento') }))),
+  },
+  {
+    metodo: 'GET', padrao: '/categorias',
+    handler: (req, app) => emTenant(app, req, async () => ok(await contaPagar.listarCategorias())),
+  },
+  {
+    metodo: 'POST', padrao: '/categorias',
+    handler: (req, app) => emTenant(app, req, async () => criado(await contaPagar.criarCategoria(req.corpo?.nome))),
+  },
+  {
+    metodo: 'GET', padrao: '/centros-de-custo',
+    handler: (req, app) => emTenant(app, req, async () => ok(await contaPagar.listarCentrosDeCusto())),
+  },
+  {
+    metodo: 'POST', padrao: '/centros-de-custo',
+    handler: (req, app) => emTenant(app, req, async () => criado(await contaPagar.criarCentroDeCusto(req.corpo?.nome))),
+  },
+
   // ------------------------------------------- documento de cobranca (Q-DOCFATURA-01)
   /*
    * A IDENTIDADE, A LOGO E O LAYOUT. Tres coisas que o cliente ve, e nenhuma

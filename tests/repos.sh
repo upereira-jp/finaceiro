@@ -176,6 +176,11 @@ echo
 echo "=== tarifas da concessionaria: lancamento em lote por numero de UC"
 node --experimental-strip-types tests/repos-tarifas.ts
 echo
+# Q-PAGAMENTO-01. O PRD 5.5 manda quatro escritas na transacao do split e o
+# codigo fazia duas. Aqui: a QUITACAO. O elo com a apuracao esta em K7h-K7l.
+echo "=== contas a pagar: quitacao do repasse e da comissao (PRD 4.4)"
+node --experimental-strip-types tests/repos-conta-pagar.ts
+echo
 # Q-SPEC001-02. O dia de vencimento varia por UC (dono, 03/08), entao entra por
 # planilha. O V6 amarra a coluna que este modulo grava a que a R25 da SPEC-002
 # protege do conector - antes de 03/08 o ciclo a apagava.

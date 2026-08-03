@@ -133,6 +133,7 @@ model dono_usina {
   telefone           String?
   email              String?
   ativo              Boolean              @default(true)
+  conta_pagar        conta_pagar[]
   tenant             tenant               @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   split_item         split_item[]
   usina              usina[]
@@ -162,6 +163,7 @@ model originador {
   telefone           String?
   email              String?
   ativo              Boolean              @default(true)
+  conta_pagar        conta_pagar[]
   contrato           contrato[]
   tenant             tenant               @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   split_item         split_item[]
@@ -240,11 +242,14 @@ model tenant {
   agenda_execucao        agenda_execucao[]
   boleto                 boleto[]
   campo_do_documento     campo_do_documento[]
+  categoria              categoria[]
+  centro_custo           centro_custo[]
   cliente                cliente[]
   cliente_estado_crm     cliente_estado_crm[]
   conector_cobranca      conector_cobranca?
   conector_crm           conector_crm?
   conector_execucao      conector_execucao[]
+  conta_pagar            conta_pagar[]
   contrato               contrato[]
   dono_usina             dono_usina[]
   fatura                 fatura[]
@@ -252,6 +257,7 @@ model tenant {
   liquidacao             liquidacao[]
   logo_de_cobranca       logo_de_cobranca?
   originador             originador[]
+  pagamento              pagamento[]
   regra_comissao         regra_comissao[]
   regra_repasse          regra_repasse[]
   split_execucao         split_execucao[]
@@ -557,6 +563,7 @@ model split_item {
   valor_centavos        Int
   regra_repasse_id      String?         @db.Uuid
   regra_comissao_id     String?         @db.Uuid
+  conta_pagar           conta_pagar[]
   dono_usina            dono_usina?     @relation(fields: [tenant_id, dono_usina_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "split_item_dono_fk")
   split_execucao        split_execucao  @relation(fields: [tenant_id, split_execucao_id], references: [tenant_id, id], onDelete: Cascade, onUpdate: NoAction, map: "split_item_execucao_fk")
   originador            originador?     @relation(fields: [tenant_id, originador_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "split_item_originador_fk")
@@ -672,6 +679,94 @@ model agenda_execucao {
 
   @@unique([tenant_id, id], map: "agenda_execucao_id_tenant")
   @@index([tenant_id, tarefa, iniciado_em(sort: Desc)], map: "agenda_execucao_tenant_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model categoria {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id   String        @db.Uuid
+  nome        String
+  ativo       Boolean       @default(true)
+  criado_em   DateTime      @default(now()) @db.Timestamptz(6)
+  tenant      tenant        @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "categoria_tenant_fk")
+  conta_pagar conta_pagar[]
+
+  @@unique([tenant_id, id], map: "categoria_id_tenant")
+  @@unique([tenant_id, nome], map: "categoria_nome_unico")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model centro_custo {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id   String        @db.Uuid
+  nome        String
+  ativo       Boolean       @default(true)
+  criado_em   DateTime      @default(now()) @db.Timestamptz(6)
+  tenant      tenant        @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "centro_custo_tenant_fk")
+  conta_pagar conta_pagar[]
+
+  @@unique([tenant_id, id], map: "centro_custo_id_tenant")
+  @@unique([tenant_id, nome], map: "centro_custo_nome_unico")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model conta_pagar {
+  id                      String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id               String             @db.Uuid
+  descricao               String
+  categoria_id            String?            @db.Uuid
+  centro_custo_id         String?            @db.Uuid
+  beneficiario_tipo       tipo_beneficiario
+  dono_usina_id           String?            @db.Uuid
+  originador_id           String?            @db.Uuid
+  beneficiario_nome       String?
+  valor_centavos          Int
+  valor_pago_centavos     Int                @default(0)
+  competencia             DateTime           @db.Date
+  vencimento              DateTime           @db.Date
+  status                  status_conta_pagar @default(aberta)
+  origem_split_item_id    String?            @db.Uuid
+  origem_split_item_chave String?            @default(dbgenerated("COALESCE(origem_split_item_id, id)")) @db.Uuid
+  criado_em               DateTime           @default(now()) @db.Timestamptz(6)
+  cancelada_em            DateTime?          @db.Timestamptz(6)
+  categoria               categoria?         @relation(fields: [tenant_id, categoria_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "conta_pagar_categoria_fk")
+  centro_custo            centro_custo?      @relation(fields: [tenant_id, centro_custo_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "conta_pagar_centro_custo_fk")
+  dono_usina              dono_usina?        @relation(fields: [tenant_id, dono_usina_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "conta_pagar_dono_fk")
+  originador              originador?        @relation(fields: [tenant_id, originador_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "conta_pagar_originador_fk")
+  split_item              split_item?        @relation(fields: [tenant_id, origem_split_item_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "conta_pagar_split_fk")
+  tenant                  tenant             @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "conta_pagar_tenant_fk")
+  pagamento               pagamento[]
+
+  @@unique([tenant_id, id], map: "conta_pagar_id_tenant")
+  @@unique([tenant_id, origem_split_item_chave], map: "conta_pagar_origem_unica")
+  @@index([tenant_id, vencimento], map: "conta_pagar_aberta_idx", where: raw("(status = ANY (ARRAY['aberta'::status_conta_pagar, 'parcial'::status_conta_pagar]))"))
+  @@index([tenant_id, competencia], map: "conta_pagar_competencia_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model pagamento {
+  id                 String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id          String             @db.Uuid
+  conta_pagar_id     String             @db.Uuid
+  data_pagamento     DateTime           @db.Date
+  valor_centavos     Int
+  forma              forma_de_pagamento
+  referencia_externa String?
+  observacao         String?
+  criado_em          DateTime           @default(now()) @db.Timestamptz(6)
+  conta_pagar        conta_pagar        @relation(fields: [tenant_id, conta_pagar_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "pagamento_conta_fk")
+  tenant             tenant             @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "pagamento_tenant_fk")
+
+  @@unique([tenant_id, id], map: "pagamento_id_tenant")
+  @@unique([tenant_id, referencia_externa], map: "pagamento_referencia_unica", where: raw("(referencia_externa IS NOT NULL)"))
+  @@index([tenant_id, conta_pagar_id], map: "pagamento_conta_idx")
+  @@index([tenant_id, data_pagamento], map: "pagamento_data_idx")
 }
 
 enum conector_status {
@@ -838,4 +933,30 @@ enum campo_de_fatura {
 enum agenda_tarefa {
   fila_de_emissao
   consulta_ativa
+}
+
+/// This enum is commented in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+enum forma_de_pagamento {
+  pix
+  ted
+  doc
+  boleto
+  dinheiro
+  compensacao
+}
+
+/// This enum is commented in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+enum status_conta_pagar {
+  aberta
+  parcial
+  paga
+  cancelada
+}
+
+/// This enum is commented in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+enum tipo_beneficiario {
+  dono_usina
+  originador
+  concessionaria
+  outro
 }
