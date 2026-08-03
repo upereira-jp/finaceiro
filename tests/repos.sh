@@ -176,6 +176,12 @@ echo
 echo "=== tarifas da concessionaria: lancamento em lote por numero de UC"
 node --experimental-strip-types tests/repos-tarifas.ts
 echo
+# Q-SPEC001-02. O dia de vencimento varia por UC (dono, 03/08), entao entra por
+# planilha. O V6 amarra a coluna que este modulo grava a que a R25 da SPEC-002
+# protege do conector - antes de 03/08 o ciclo a apagava.
+echo "=== vencimento por planilha: lancamento em lote do dia, por numero de UC"
+node --experimental-strip-types tests/repos-vencimentos.ts
+echo
 echo "=== HTTP: rotas, matriz de papeis e traducao de erro"
 node --experimental-strip-types tests/http.ts
 echo

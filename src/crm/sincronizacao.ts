@@ -1063,18 +1063,67 @@ async function espelharUnidades(
           continue;
         }
         const clienteId = clientePorLead.get(a.leadId)!;
+
+        /*
+         * `data_vencimento` NAO ENTRA NO ESPELHO. R25 da SPEC-002, 03/08/2026.
+         *
+         * Ela estava aqui dentro e ia para o `updateMany` la embaixo. O CRM tem a
+         * coluna e a tem VAZIA - 41 de 41 linhas de `financeiro.rateio_clientes`
+         * com NULL, medido no dia -, e quem preenche o vencimento e o financeiro,
+         * por UC (decisao do dono em 03/08, `Q-SPEC001-02`).
+         *
+         * O efeito era este: a UC preenchida divergia do NULL do CRM, o `mudou`
+         * abaixo acusava a diferenca, e o update gravava NULL de volta. Preencher
+         * as 39 UCs e rodar `npm run ciclo` apagaria as 39 - sem erro, sem log e
+         * sem recusa. O sintoma chegaria um passo depois e apontando para o lugar
+         * errado: a composicao do lote recusaria tudo por `sem_vencimento`, e o
+         * motivo pareceria "a operacao nao preencheu".
+         *
+         * Campo local, o usuario vence (R5). E a divergencia vira SINAL em vez de
+         * silencio, pela mesma razao da R21-b: nao sobrescrever e o correto, mas
+         * calar deixaria as duas fontes divergindo sem que ninguem soubesse.
+         */
         const espelho = {
           cliente_id: clienteId,
           usina_id: usina.id,
           percentual_rateio: a.percentual,
-          data_vencimento: a.vencimento,
           crm_usina_cliente_id: a.contratoId,
         };
         const atual = porNumero.get(a.numeroUc);
+        const dia = (d: Date | null | undefined) => (d ? String(d).slice(0, 10) : null);
+
         if (!atual) {
+          /*
+           * Nasce sem vencimento - a coluna e nossa e comeca vazia. Se o CRM
+           * mandar um valor, ele NAO e gravado, e por isso e anunciado: um dado
+           * descartado em silencio na criacao seria invisivel para sempre, e a
+           * R21-b so confere no UPDATE justamente por nao ter como conferir aqui.
+           * Aqui tem.
+           */
+          if (a.vencimento) {
+            r.divergencias.push({
+              entidade: 'unidade_consumidora', chave: a.numeroUc,
+              sinal: `o CRM traz data_vencimento ${dia(a.vencimento)} para a UC que esta nascendo, e ela `
+                   + 'NAO foi gravada: `data_vencimento` e campo LOCAL do financeiro (SPEC-002 R25 e R5). '
+                   + 'Quem define o dia de vencimento e a operacao, por UC (Q-SPEC001-02).',
+            });
+          }
           aCriar.push({ tenant_id: tenantId, numero_uc: a.numeroUc,
                         distribuidora: usina.distribuidora, ...espelho });
           continue;
+        }
+
+        // O sinal da R25. So quando o CRM tem valor E ele difere do nosso: CRM
+        // vazio contra UC preenchida e o caso NORMAL de hoje (41 de 41), e
+        // anuncia-lo faria o ciclo cuspir 39 sinais em toda rodada - ruido que
+        // treina qualquer um a ignorar o detalhe inteiro.
+        if (a.vencimento && dia(a.vencimento) !== dia(atual.data_vencimento)) {
+          r.divergencias.push({
+            entidade: 'unidade_consumidora', chave: a.numeroUc,
+            sinal: `data_vencimento da UC e ${dia(atual.data_vencimento) ?? '(vazia)'} e o CRM manda `
+                 + `${dia(a.vencimento)}. Nada foi sobrescrito: campo LOCAL do financeiro (SPEC-002 R25 e R5). `
+                 + 'Quem define o dia de vencimento e a operacao, por UC (Q-SPEC001-02).',
+          });
         }
 
         /*
@@ -1111,10 +1160,15 @@ async function espelharUnidades(
           atual.cliente_id !== espelho.cliente_id ||
           atual.usina_id !== espelho.usina_id ||
           !mesmoDecimal(atual.percentual_rateio, espelho.percentual_rateio) ||
-          String(atual.data_vencimento ?? '') !== String(espelho.data_vencimento ?? '') ||
           atual.crm_usina_cliente_id !== espelho.crm_usina_cliente_id;
         if (!mudou) continue;   // R3
-        // `distribuidora` NAO entra no update: campo local, o usuario vence (R5).
+        /*
+         * NEM `distribuidora` NEM `data_vencimento` entram no update: os dois sao
+         * campo local, e o usuario vence (R5). E os dois saem tambem do `mudou`
+         * acima - deixar `data_vencimento` na comparacao faria toda UC preenchida
+         * contar como "atualizada" em todo ciclo, o que quebra a R3 (segunda
+         * passada nao escreve) sem mudar uma linha.
+         */
         await db.unidade_consumidora.updateMany({
           where: { tenant_id: tenantId, id: atual.id }, data: espelho,
         });

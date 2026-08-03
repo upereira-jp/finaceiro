@@ -147,6 +147,87 @@ export async function editar(id: string, e: EdicaoUC) {
   if (r.count === 0) throw Object.assign(new Error('Unidade consumidora nao encontrada.'), { status: 404 });
 }
 
+// ------------------------------------------------- lancamento de vencimento
+
+export type ResultadoDosVencimentos = {
+  aplicadas: Array<{ numero_uc: string; unidade_consumidora_id: string; dia: number; antes: number | null }>;
+  /** UC da planilha que nao existe no cadastro. Nao e erro do arquivo - e a
+   *  planilha e o banco discordando sobre quais UCs existem, e quem decide o
+   *  que fazer com isso e uma pessoa. */
+  sem_uc: Array<{ numero_uc: string; dia: number }>;
+  /** UC ATIVA do cadastro que a planilha nao cobriu, com o que ela tem hoje.
+   *  Existe porque ausente nao e zero: o lancamento nao apaga o que nao veio. */
+  nao_cobertas: Array<{ numero_uc: string; dia_atual: number | null }>;
+  /** Cobertas pela planilha com o MESMO dia que ja tinham. Contadas a parte para
+   *  a segunda passada nao parecer trabalho: reimportar o mesmo arquivo tem de
+   *  sair com `aplicadas` em zero. */
+  inalteradas: Array<{ numero_uc: string; dia: number }>;
+};
+
+/**
+ * Lanca o dia de vencimento de varias UCs de uma vez, casando por `numero_uc`.
+ *
+ * POR QUE `numero_uc` E NAO O id. E o unico identificador que a operacao tem na
+ * mao - o mesmo argumento do `lancarTarifasPorUC`. `uc_numero_unico` e indice
+ * unico CHEIO sobre `(tenant_id, numero_uc)`, entao navegar por ele nao esbarra
+ * na regra 11.
+ *
+ * O QUE ESTA FUNCAO NAO FAZ, e os tres sao deliberados:
+ *   - nao apaga vencimento de UC que a planilha nao trouxe (ausente nao e zero);
+ *   - nao toca UC cancelada, porque cancelada saiu do rateio e nao vai faturar;
+ *   - nao decide o dia de nada - `dia` chega ja validado pelo leitor puro.
+ */
+export async function lancarVencimentosPorUC(
+  porUC: ReadonlyMap<string, number>,
+): Promise<ResultadoDosVencimentos> {
+  await exigir('escrever_cadastro');
+
+  for (const [uc, dia] of porUC) {
+    if (!Number.isInteger(dia) || dia < 1 || dia > 31) {
+      throw Object.assign(new RangeError(`UC ${uc}: dia de vencimento invalido (${dia})`), { status: 422 });
+    }
+  }
+
+  const atuais = await dbt().unidade_consumidora.findMany({
+    where: { status: { not: 'cancelada' } },
+    select: { id: true, numero_uc: true, data_vencimento: true },
+  });
+  const porNumero = new Map(atuais.map((u) => [u.numero_uc, u]));
+
+  const r: ResultadoDosVencimentos = { aplicadas: [], sem_uc: [], nao_cobertas: [], inalteradas: [] };
+
+  for (const [numero_uc, dia] of porUC) {
+    const u = porNumero.get(numero_uc);
+    if (!u) { r.sem_uc.push({ numero_uc, dia }); continue; }
+
+    const antes = u.data_vencimento ? u.data_vencimento.getUTCDate() : null;
+    if (antes === dia) { r.inalteradas.push({ numero_uc, dia }); continue; }
+
+    /*
+     * A data e um PORTADOR do dia, nao um vencimento. `faturamento.ts` le dela
+     * so `getUTCDate()` e monta a data real a partir da competencia - o mes e o
+     * ano gravados aqui nao sao lidos por ninguem. Janeiro de 2000 tem 31 dias
+     * (necessario para o dia 31 ser representavel) e e obviamente arbitrario,
+     * que e o ponto: uma data plausivel seria lida como significativa.
+     */
+    await dbt().unidade_consumidora.updateMany({
+      where: { id: u.id },
+      data: { data_vencimento: new Date(Date.UTC(2000, 0, dia)) },
+    });
+    r.aplicadas.push({ numero_uc, unidade_consumidora_id: u.id, dia, antes });
+  }
+
+  for (const u of atuais) {
+    if (porUC.has(u.numero_uc)) continue;
+    r.nao_cobertas.push({
+      numero_uc: u.numero_uc,
+      dia_atual: u.data_vencimento ? u.data_vencimento.getUTCDate() : null,
+    });
+  }
+
+  return r;
+}
+
 /** Suspensa continua no rateio: o teto da R11 conta suspensa, so ignora cancelada. */
 export async function suspender(id: string) {
   await exigir('escrever_cadastro');

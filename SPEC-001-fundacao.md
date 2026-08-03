@@ -200,7 +200,9 @@ Escrito **apenas** pelo conector. Nenhuma tela edita. As oito combinações são
 
 #### `unidade_consumidora`
 
-`cliente_id FK NOT NULL` · `numero_uc` · `distribuidora` · `endereco_*` (**local**, não existe no CRM) · `titularidade enum propria|terceiro|em_troca` (mapeia `usina_clientes.troca_titularidade`) · `usina_id FK NULL` · `percentual_rateio numeric(7,4) NULL` (**espelho do CRM**) · `data_vencimento date NULL` (**100% vazia no CRM**, P8 §5) · `status enum ativa|suspensa|cancelada` (**do financeiro** — não existe no CRM) · `crm_usina_cliente_id`.
+`cliente_id FK NOT NULL` · `numero_uc` · `distribuidora` · `endereco_*` (**local**, não existe no CRM) · `titularidade enum propria|terceiro|em_troca` (mapeia `usina_clientes.troca_titularidade`) · `usina_id FK NULL` · `percentual_rateio numeric(7,4) NULL` (**espelho do CRM**) · `data_vencimento date NULL` (**local** — ver abaixo) · `status enum ativa|suspensa|cancelada` (**do financeiro** — não existe no CRM) · `crm_usina_cliente_id`.
+
+> **`data_vencimento` é campo LOCAL, e a classificação mudou em 03/08/2026.** Este parágrafo dizia apenas *"100% vazia no CRM, P8 §5"* — registrava o fato e não tirava a consequência, e o conector a tratava como espelho. Medido em 03/08: `financeiro.rateio_clientes` traz **41 linhas e `data_vencimento` NULL em 41**, e o `updateMany` do conector gravava esse `NULL` por cima do valor local. Preencher o vencimento das 39 UCs e rodar `npm run ciclo` **apagaria os 39** — sem erro, sem log e sem recusa. Quem define o dia de vencimento é a operação, por UC (`Q-SPEC001-02`, decidida pelo dono em 03/08). Regra e mecanismo em `SPEC-002` **R25**; testes `N55`/`N56`, e o `N55` falha contra o código anterior.
 
 ```sql
 UNIQUE (tenant_id, numero_uc)

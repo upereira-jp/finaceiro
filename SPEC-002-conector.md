@@ -3,8 +3,8 @@
 | Campo | Valor |
 |---|---|
 | **Status** | Rascunho — **aguarda aceite do autor.** Reconciliada com o medido em 27/07 (v1.3); o aceite em si é decisão do dono, não de quem implementou |
-| **Versão** | 1.4 |
-| **Data** | 26/07/2026 · rev. 1.4 em 28/07/2026 |
+| **Versão** | 1.5 |
+| **Data** | 26/07/2026 · rev. 1.5 em 03/08/2026 |
 | **Autor** | Vinicius Leal |
 | **Fase** | **F1.** Resolvido em 27/07 pela `Q-FASE-01`: o `PRD-v2.2` §10 vence, porque a hierarquia do `CLAUDE.md` põe o PRD acima das SPECs. O cabeçalho anterior dizia *"F2 (parcial em F1)"* e era ele que divergia |
 | **Depende de** | `SPEC-001` v2.3 (schema, isolamento, middleware) · `ADR-0001` · `ADR-0003` r2 |
@@ -109,7 +109,8 @@ conector_execucao   id · tenant_id · ciclo_id · iniciado_em · terminado_em
 | `numero_uc` | **CRM** | chave do espelho, de `rateio_clientes.uc` |
 | `cliente_id` | **CRM** | via `rateio_creditos.lead_id`. **O cliente é criado se não existir** — é a decisão de espelho fiel |
 | `usina_id` | **CRM** | via `codigo_geradora` |
-| `percentual_rateio`, `data_vencimento` | **CRM** | `data_vencimento` veio **0 de 36**; o dev confirmou: campo disponível, a operação nunca digitou |
+| `percentual_rateio` | **CRM** | |
+| `data_vencimento` | **local** | **Reclassificado em 03/08 — ver R25.** Veio **0 de 36** em 27/07 e **0 de 41** em 03/08; o dev confirmou que o campo existe e a operação nunca digitou. Quem define o dia de vencimento é a operação do financeiro, por UC (`Q-SPEC001-02`, decidida em 03/08). Enquanto foi tratada como espelho, o conector **apagava** o valor preenchido aqui |
 | `crm_usina_cliente_id` | **CRM** | rastreabilidade, **não** chave (índice parcial) |
 | `distribuidora` | **derivada da usina** | ver `R21` |
 | endereço, `titularidade`, `status` | **local** | o CRM não expõe |
@@ -123,6 +124,20 @@ conector_execucao   id · tenant_id · ciclo_id · iniciado_em · terminado_em
 > **R23 (nova).** **Contrato de rateio que muda de UC é recusa contada.** `uc_crm_unico` é parcial e a regra 11 proíbe navegar por ele — mas ele **existe no banco e viola com `23505`**, e um `23505` no meio de um `createMany` derruba o lote inteiro. Conferido por `findMany` com predicado explícito, que é o que a regra 11 manda usar, e a violação vira recusa nomeada.
 
 > **R24 (nova).** **`cliente_estado_crm.tem_rateio_ativo` é escrito pelo espelho de UC.** Era a coluna que nascia `NULL` desde a migration e que nenhum caminho preenchia. Teste `N47`.
+
+> **R25 (nova, 03/08/2026).** **`unidade_consumidora.data_vencimento` é campo LOCAL. O conector não a escreve — nem no INSERT, nem no UPDATE — e divergência vira sinal.**
+>
+> **O defeito que esta regra fecha, e ele estava em produção.** `data_vencimento` viajava dentro do objeto `espelho` e ia para o `updateMany`. O CRM tem a coluna e a tem **vazia**: medido em 03/08, `financeiro.rateio_clientes` traz **41 linhas e `data_vencimento` NULL em 41** — e a `SPEC-001` §3.3 já registrava *"100% vazia no CRM"* desde o `P8` §5, sem tirar a consequência. Preencher o vencimento das 39 UCs e rodar `npm run ciclo` **apagaria os 39**: o `mudou` acusaria a diferença entre o valor local e o `NULL` do CRM, e o update gravaria `NULL` de volta.
+>
+> **A falha não teria erro, log nem recusa** — e o sintoma chegaria um passo adiante, apontando para o lugar errado: a composição do lote recusaria tudo por `sem_vencimento`, e o motivo pareceria *"a operação não preencheu"*.
+>
+> Quem define o dia de vencimento é a operação, por UC — decisão do dono em 03/08 (`Q-SPEC001-02`). Logo é campo do financeiro, e campo local **o usuário vence** (R5). O mecanismo é o mesmo da R21-b, e pela mesma razão: não sobrescrever é o correto, mas calar deixaria as duas fontes divergindo sem que ninguém soubesse.
+>
+> **Duas diferenças em relação à R21-b, e as duas são deliberadas.** (1) O sinal roda **também na criação** — a R21-b confere só no UPDATE por não ter segunda fonte no nascimento, e aqui tem: um valor do CRM descartado em silêncio numa UC nova seria invisível para sempre. (2) O sinal só dispara quando o CRM tem valor **e** ele difere do nosso — CRM vazio contra UC preenchida é o caso **normal** de hoje (41 de 41), e anunciá-lo cuspiria 39 sinais por rodada, que é o ruído que treina qualquer um a ignorar o `detalhe` inteiro.
+>
+> `data_vencimento` sai também da comparação `mudou`: deixá-la ali faria toda UC preenchida contar como *"atualizada"* em todo ciclo, quebrando a **R3** (segunda passada não escreve) sem mudar uma linha.
+>
+> Testes `N55` (o valor sobrevive ao ciclo com CRM vazio — **falha contra o código anterior**, e é o registro executável do defeito) e `N56` (CRM com valor diferente vira sinal, não sobrescrita e não recusa).
 
 ## 4. Regras de negócio
 
@@ -252,11 +267,13 @@ os dois caminhos de delete fisico, que sao raros - em vez de tudo que sai da vie
 | Duplicidade | Lead ganho em N funis | Dedup por `lead_id` **antes** do upsert (R4) |
 | Parcial | CPF do CRM inválido | Grava com `documento_validado = false` e `documento_origem = 'crm_semente'` |
 | Parcial | `potencia_kwp` nula (100% hoje) | Cadastro aceito; cálculo dependente falha explicitamente, **nunca assume zero** |
-| Parcial | `data_vencimento` vazia (100% hoje) | Aceito; a régua de cobrança é da F2 |
+| Parcial | `data_vencimento` vazia no CRM (100% hoje) | Aceito, e agora é o **estado esperado**: campo local, o CRM não é fonte (R25) |
 | Ambiguidade | `comissionamento_n_opcoes > 1` | Recusa contada; sem valor gravado (R8) |
 | Ambiguidade | Ganho com valor nulo | Recusa contada (R9) |
 | Concorrência | Conector e usuário no mesmo cliente | Campo espelho: conector vence. Campo local: usuário vence (R5) |
 | Concorrência | Usuário edita a `distribuidora` da UC para valor diferente do da usina | **Sinal, não recusa e não sobrescrita** (R21-b). A linha é gravada, o campo local é preservado, e a divergência vai para `conector_execucao.detalhe`. O `status` do ciclo **não** muda |
+| Concorrência | Operação preenche `data_vencimento` e o CRM manda `NULL` | **Nada acontece — e é o caso normal**, 41 de 41 hoje. O valor local sobrevive e **não** há sinal (R25). Antes de 03/08 isto apagava o campo |
+| Concorrência | Operação preenche `data_vencimento` e o CRM manda valor **diferente** | **Sinal, não recusa e não sobrescrita** (R25). Mesma forma da R21-b |
 | Concorrência | Dois ciclos do mesmo conector se sobrepõem | Segundo não inicia. `conector_crm` guarda ciclo em andamento |
 | Origem ausente | Cliente espelhado some do CRM | §4.3 — depende de AUD-07 |
 | Falha | Ciclo morre no meio | `status = 'parcial'`; o que foi processado está commitado por lote (R13); próximo ciclo é idempotente e recompõe |
@@ -332,6 +349,7 @@ os dois caminhos de delete fisico, que sao raros - em vez de tudo que sai da vie
 
 | Versão | Data | O que mudou |
 |---|---|---|
+| **1.5** | **03/08/2026** | **`data_vencimento` era espelho e virou campo local — e a correção é de defeito, não de estilo.** Nova **R25**: o conector não escreve `data_vencimento` em nenhum caminho, e divergência vira sinal. O código anterior a levava no `updateMany`, e o CRM a tem **vazia em 41 de 41 linhas** (medido no dia): preencher o vencimento das 39 UCs e rodar o ciclo **apagaria os 39**, sem erro, sem log e sem recusa. Duas linhas novas na §7 e os testes `N55`/`N56` — o `N55` **falha contra o código anterior**, e é o registro executável do defeito. Achado ao construir o importador de vencimento, não por auditoria: a pergunta era *"onde o valor vai ser gravado"* e a resposta foi *"e quem o apaga depois"* |
 | **1.4** | **28/07/2026** | **A suposição da R21 deixou de esperar confirmação e virou sinal.** Nova **R21-b**: divergência entre a `distribuidora` da UC (campo local, R5) e a da usina vinculada aparece em `conector_execucao.detalhe` — sem recusar e sem sobrescrever. Novo **invariante 13**, nova linha na §7, novo teste obrigatório (`N51`–`N54`). O `N54` nasceu de um buraco encontrado ao escrevê-lo: o `fechar()` do caminho de **erro** levava `recusas` e não levava `divergencias`, então o sinal se perderia justamente no ciclo interrompido. **Medido contra produção em 28/07: zero divergências nas 35 UCs** — o sinal nasce silencioso, que é o estado correto |
 | **1.3** | **27/07/2026** | **Reconciliação com o medido — a spec estava atrás do código, e em SDD isso é a inversão que não se tolera.** A **R9** ganha a redação da `Q-VALOR-01`: `consumo_kwh` conta como valor, e a recusa exige ausência dos três. A **R14** perde a afirmação *"os funis de venda têm zero ganhos sem valor"*, **medida falsa** — eram 40 de 41. A **R13** ganha o **tamanho declarado (50)** e a conta de viagens que o fixa, que até aqui só existiam em comentário de código. A **§8** sai de 9 critérios em aberto para **9 marcados com o teste nomeado**, incluindo o "por log de query" que nunca fora atendido. A **§9** ganha o teste de cada linha — e expõe duas verdades desconfortáveis: `test_vitima_de_merge_funde_espelho` **não existia para código que existia**, e `test_atribuicao_por_partner_id` não é teste faltando, é a `Q-ESCOPO-01`. Duas questões novas: **`Q-ESCOPO-01`** (🔴, o conector entrega 1 de 4 entidades) e **`Q-CICLO-ORFAO-01`** (🟡) |
 | **1.2** | **26/07/2026** | **Rodada 2 do dev absorvida, e ela resolveu duas vermelhas.** MERGE-01 fecha: o CRM criou `public.lead_merges` com backfill e o codigo gravando, e o par de 10/07 foi recuperado do log — nenhum cliente ativo pendurado. ATIVO-01 fecha por fato: o funil `Clientes ativos - Assinatura` esta **vazio**, e a etapa-fonte tambem, porque os 29 concluidos param em `Rateio Concluido` com `stage_type='normal'`, que nao dispara a automacao. Fonte de estado ativo troca para `financeiro.rateio_clientes`. COMISSAO-02 dissolve: o CRM **nao calcula** comissao, carimba tier — mas isso expos o furo da R20, corrigido na `SPEC-001` v2.5. Novas R16, R17, R18, invariantes 11 e 12, quatro testes |

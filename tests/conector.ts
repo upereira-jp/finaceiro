@@ -728,6 +728,73 @@ const L3 = 'aaaa3333-0000-4000-8000-00000000cc03';
                 WHERE tenant_id=$1::uuid AND numero_uc=$2`, A, UC_A);
   }
 
+  // ---- N55/N56: `data_vencimento` e CAMPO LOCAL (SPEC-002 R25).
+  //
+  // O DEFEITO QUE ESTES DOIS REGISTRAM, medido em 03/08/2026: `data_vencimento`
+  // viajava dentro do objeto `espelho` e ia para o `updateMany`. O CRM tem a
+  // coluna e a tem VAZIA - 41 de 41 linhas de `financeiro.rateio_clientes` com
+  // NULL, medido no dia -, entao a UC preenchida pelo financeiro divergia do
+  // NULL do CRM, o `mudou` acusava, e o update gravava NULL de volta.
+  //
+  // Preencher os 39 vencimentos e rodar `npm run ciclo` apagaria os 39. Sem
+  // erro, sem log e sem recusa: a proxima composicao de lote recusaria tudo por
+  // `sem_vencimento` e o motivo pareceria "ninguem preencheu".
+  //
+  // O N55 e o registro EXECUTAVEL do defeito - ele falha contra o codigo antigo.
+  {
+    // O financeiro preenche. E o que a operacao vai fazer com as 39.
+    await sql(`UPDATE unidade_consumidora SET data_vencimento='2026-08-10'
+                WHERE tenant_id=$1::uuid AND numero_uc=$2`, A, UC_A);
+
+    const r = await executarCiclo(porta([venda({ lead_id: L1 })], [], [], true,
+      [usinaCrm({ usina_id: 'dddd1111-0000-4000-8000-00000000aa01', codigo_geradora: 'GER-CRM-01' })], [],
+      // `data_vencimento: null` e o default da fixture, e e a forma REAL do CRM.
+      [rateioCliCrm({ contrato_id: CT1, uc: UC_A, cliente: 'Fulano do Rateio' })],
+      [rateioCreCrm({ contrato_id: CT1, lead_id: LR1 })]), loteEmA());
+
+    /* O driver devolve `date` como Date de MEIA-NOITE LOCAL. `String(d)` da
+     * "Mon Aug 10 2026 ..." e `toISOString()` pode recuar um dia em fuso a oeste
+     * de Greenwich - as duas comparariam errado, e a primeira ja comparou: esta
+     * verificacao ficou vermelha por causa dela mesma antes de o conserto entrar.
+     * Os getters locais casam com o que o driver montou. */
+    const dia10 = (d: any): string | null => {
+      if (!d) return null;
+      const x = new Date(d);
+      return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+    };
+
+    const [dep] = await sql(`SELECT data_vencimento FROM unidade_consumidora
+                              WHERE tenant_id=$1::uuid AND numero_uc=$2`, A, UC_A);
+    chk('N55', dia10(dep?.data_vencimento) === '2026-08-10' && r.divergencias.length === 0,
+        `SPEC-002 R25 o vencimento preenchido pelo financeiro SOBREVIVE ao ciclo com CRM vazio `
+        + `(ficou=${dia10(dep?.data_vencimento) ?? 'NULL'}, div=${r.divergencias.length})`);
+
+    // Agora o CRM manda um valor, e DIFERENTE. Campo local: o usuario vence (R5),
+    // e a divergencia vira SINAL - mesma forma da R21-b, e pelo mesmo motivo:
+    // sobrescrever seria a R5 ao contrario, e calar deixaria as duas fontes
+    // divergindo sem que ninguem soubesse.
+    const comDiv = await executarCiclo(porta([venda({ lead_id: L1 })], [], [], true,
+      [usinaCrm({ usina_id: 'dddd1111-0000-4000-8000-00000000aa01', codigo_geradora: 'GER-CRM-01' })], [],
+      [rateioCliCrm({ contrato_id: CT1, uc: UC_A, cliente: 'Fulano do Rateio',
+                      data_vencimento: new Date('2026-08-25') })],
+      [rateioCreCrm({ contrato_id: CT1, lead_id: LR1 })]), loteEmA());
+
+    const [dep2] = await sql(`SELECT data_vencimento FROM unidade_consumidora
+                               WHERE tenant_id=$1::uuid AND numero_uc=$2`, A, UC_A);
+    const [linha] = await sql(`SELECT detalhe FROM conector_execucao WHERE tenant_id=$1::uuid AND ciclo_id=$2::uuid`,
+                              A, comDiv.cicloId);
+    const d = comDiv.divergencias.find((x: any) => /vencimento/i.test(x.sinal ?? ''));
+    chk('N56', dia10(dep2?.data_vencimento) === '2026-08-10'
+         && d?.entidade === 'unidade_consumidora' && d?.chave === UC_A
+         && comDiv.porEntidade.unidade_consumidora.recusados === 0 && comDiv.status !== 'erro'
+         && /divergencias/.test(JSON.stringify(linha?.detalhe ?? {})),
+        `SPEC-002 R25 CRM com vencimento diferente vira SINAL e NAO sobrescreve `
+        + `(ficou=${dia10(dep2?.data_vencimento) ?? 'NULL'}, rec=${comDiv.porEntidade.unidade_consumidora.recusados})`);
+
+    await sql(`UPDATE unidade_consumidora SET data_vencimento=NULL
+                WHERE tenant_id=$1::uuid AND numero_uc=$2`, A, UC_A);
+  }
+
   // ---- N50: cascata - UC de usina nao espelhada nao tem de quem herdar.
   {
     const r = await executarCiclo(porta([venda({ lead_id: L1 })], [], [], true, [], [],
