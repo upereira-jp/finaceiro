@@ -17,7 +17,7 @@
 // sem `size` - duas geometrias diferentes, e por isso a previa nao respondia "e
 // assim que vai sair?". Agora ela responde.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   api, type Bloco, type Folha, type LayoutDoDocumento, type Papel, type TipoDeBloco,
 } from '../api.ts';
@@ -25,8 +25,9 @@ import { useAcao, useDados } from '../dados.ts';
 import { Aviso, Escolha, Icone, Interruptor, BotaoDeIcone, linha } from '../ui.tsx';
 import {
   areaDaFolha, medidasComOrientacao, arrastar, redimensionar, escalaDaPrevia,
-  blocoNovo, naGrade, type Aresta, type Retangulo,
+  blocoNovo, naGrade, PX_POR_MM as PX_MM, type Aresta, type Retangulo,
 } from '../layout-regras.ts';
+import { useLargura } from '../medir-largura.ts';
 
 /*
  * OS SEIS TIPOS. SEM ICONE, e isso e deliberado: `iconografia.ts` e um
@@ -75,27 +76,18 @@ export function EditorDeLayout() {
   const [selecionado, setSelecionado] = useState<string | null>(null);
   const [avisos, setAvisos] = useState<string[]>([]);
 
-  const palco = useRef<HTMLDivElement>(null);
-  const [larguraPx, setLarguraPx] = useState(0);
+  const [palco, larguraPx] = useLargura<HTMLDivElement>();
 
   useEffect(() => {
     if (dados.dado && !folha) { setFolha(dados.dado.folha); setBlocos(dados.dado.blocos); }
   }, [dados.dado, folha]);
 
   /*
-   * A LARGURA DISPONIVEL VEM DO DOM, e por isso e estado e nao calculo.
-   *
-   * `escalaDaPrevia` trata o zero (antes do primeiro layout do navegador) como
-   * escala 1 em vez de 0 ou NaN - a `W7d` prende isso. Sem aquele tratamento, o
-   * primeiro quadro renderizaria a folha com `scale(0)` e o editor abriria
-   * vazio, o que parece defeito de dado e nao de tempo.
+   * A LARGURA VEM DE `ResizeObserver`, e nao de um efeito que le `clientWidth`.
+   * O porque esta em `web/src/medir-largura.ts`: a versao com efeito NUNCA
+   * media, e o sintoma nao era erro - era a folha saindo em tamanho natural
+   * dentro de uma coluna menor, cortada por `overflow: hidden`.
    */
-  useEffect(() => {
-    const medir = () => setLarguraPx(palco.current?.clientWidth ?? 0);
-    medir();
-    window.addEventListener('resize', medir);
-    return () => window.removeEventListener('resize', medir);
-  }, [dados.dado]);
 
   if (dados.erro) return <Aviso tipo="erro">Falha ao ler o layout: {dados.erro}</Aviso>;
   if (!dados.dado || !folha) return <p className="fraco">Carregando o layout…</p>;
@@ -103,7 +95,7 @@ export function EditorDeLayout() {
   const medidas = medidasComOrientacao(dados.dado.papeis[folha.papel], folha.orientacao);
   const area = areaDaFolha(dados.dado.papeis[folha.papel], folha);
   const escala = escalaDaPrevia(larguraPx, medidas.largura_mm);
-  const PX_POR_MM = (96 / 25.4) * escala;
+  const PX_POR_MM = PX_MM * escala;
 
   const bloco = blocos.find((b) => b.id === selecionado) ?? null;
   const trocar = (id: string, mudanca: Partial<Bloco>) =>
@@ -229,7 +221,7 @@ export function EditorDeLayout() {
         {/* O PALCO. `height` reservado pela folha escalada: sem isso a caixa
             colapsa, porque `transform` nao ocupa espaco no fluxo. */}
         <div ref={palco} style={{ flex: '1 1 420px', minWidth: 280,
-                                  height: medidas.altura_mm * PX_POR_MM + 2, overflow: 'hidden' }}>
+                                  height: medidas.altura_mm * PX_MM * escala + 2, overflow: 'hidden' }}>
           <div className="folha-palco" style={{ ['--escala' as any]: escala }}>
             <div className="folha" style={{
               ['--folha-w' as any]: `${medidas.largura_mm}mm`,
@@ -252,9 +244,20 @@ export function EditorDeLayout() {
                        textAlign: b.alinhamento === 'esquerda' ? 'left' : b.alinhamento === 'centro' ? 'center' : 'right',
                        display: 'flex', alignItems: 'center', padding: '1mm',
                      }}>
-                  <span style={{ pointerEvents: 'none', width: '100%', opacity: .75 }}>
-                    {b.tipo === 'texto' ? b.texto : b.tipo === 'campo' ? b.campo : rotuloDoTipo(b.tipo)}
-                  </span>
+                  {/* O FILETE SE DESENHA, e nao se rotula: ele nasce com 1mm de
+                      altura e o texto "Filete separador" vazava por cima do
+                      bloco de baixo. Achado FOTOGRAFANDO a tela - num bloco de
+                      1mm nao ha onde caber rotulo, e a unica representacao
+                      honesta dele e ele mesmo. */}
+                  {b.tipo === 'linha'
+                    ? <div style={{ pointerEvents: 'none', width: '100%',
+                                    borderTop: '1px solid currentColor', opacity: .5 }} />
+                    : (
+                      <span style={{ pointerEvents: 'none', width: '100%', opacity: .75,
+                                     overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                        {b.tipo === 'texto' ? b.texto : b.tipo === 'campo' ? b.campo : rotuloDoTipo(b.tipo)}
+                      </span>
+                    )}
                   {b.id === selecionado && ALCAS.map((a) => (
                     <span key={a.aresta} role="presentation"
                           onPointerDown={(e) => iniciarGesto(e, b.id, a.aresta)}

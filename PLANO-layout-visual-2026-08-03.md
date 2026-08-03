@@ -143,13 +143,17 @@ Os oito passos da §4, na ordem. **`npm test` `EXIT=0`, 1156 → 1230 verificaç
 | editor | `web/src/telas/layout-editor.tsx` · regras puras em `web/src/layout-regras.ts` |
 | impressão | `.folha` em mm no `estilo.ts` · `@page size` injetado por `regraDaPagina` |
 
-**Três coisas que apareceram ao construir, e nenhuma estava no plano:**
+**Cinco coisas que apareceram ao construir, e nenhuma estava no plano. As duas últimas só apareceram ao FOTOGRAFAR a tela** — leitura de código não pegaria nenhuma das duas, e é a mesma lição que o `INTERFACE-2026-07-30.md` já tinha registrado:
 
 **1. `.map(naGrade)` produzia `NaN`.** `Array.map` passa `(valor, índice, array)`, então o índice virava o `passo` da grade: o primeiro elemento dividia por zero. Um `NaN` dali viajaria até a coluna `numeric` como coordenada e o bloco sumiria do papel sem erro em lugar nenhum. Achado ao escrever a `W1b`, que **continua chamando `.map(naGrade)` de propósito** — é o registro executável do defeito.
 
 **2. As alças de redimensionar misturavam duas convenções.** `'e'` significava *esquerda* nas simples e podia ser lido como *este* nas diagonais (`'ne'`, `'se'`). É a classe exata de confusão que faz a alça mover o lado errado, e isso é invisível em revisão de código. Renomeadas para `'esquerda' | 'topo-direita' | …`.
 
-**3. Duas verificações fixavam número onde a regra é relação.** A `W8h` afirmava "2 blocos" e ficou vermelha porque a verificação anterior legitimamente gravou outro número; a `I1c` de `web/tests/interface.ts` comparava a **sequência** de cores literais e não o conjunto, então o bloco de impressão crescer a derrubava sem que nenhuma cor nova tivesse entrado. As duas passaram a afirmar a relação — e a `I1c` mantém inteira a propriedade que importa: a quarta cor de papel dói.
+**3. A prévia nunca se media, e só a FOTOGRAFIA pegou.** O `useEffect` que lia `clientWidth` tinha `[dados]` na lista de dependências, e nessa renderização o componente ainda fazia `return` cedo — a `ref` era `null`, a largura ficava em zero, e quando o palco enfim montava o efeito não corria de novo. **O sintoma não era erro:** `escalaDaPrevia(0, …)` devolve 1 de propósito, então a folha saía em tamanho natural (794 px de A4) dentro de uma coluna de 490 e era **cortada** por `overflow: hidden`, com o resto da tela perfeito. Trocado por `ResizeObserver` (`web/src/medir-largura.ts`), que dispara quando o elemento **ganha** tamanho em vez de quando alguém adivinha que ele já tem. Medido depois: 770 × 1089 px, razão 1,4143 — o √2 do A4.
+
+**4. O filete se rotulava.** Um bloco de 1 mm de altura com o texto *"Filete separador"* dentro: a legenda vazava por cima do bloco de baixo. Num bloco de 1 mm não há onde caber rótulo, e a única representação honesta dele é ele mesmo. Também achado fotografando.
+
+**5. Duas verificações fixavam número onde a regra é relação.** A `W8h` afirmava "2 blocos" e ficou vermelha porque a verificação anterior legitimamente gravou outro número; a `I1c` de `web/tests/interface.ts` comparava a **sequência** de cores literais e não o conjunto, então o bloco de impressão crescer a derrubava sem que nenhuma cor nova tivesse entrado. As duas passaram a afirmar a relação — e a `I1c` mantém inteira a propriedade que importa: a quarta cor de papel dói.
 
 ---
 

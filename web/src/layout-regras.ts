@@ -170,11 +170,13 @@ export function redimensionar(
  * do que a impressa, que e o erro oposto e igualmente enganoso.
  */
 export function escalaDaPrevia(larguraDisponivelPx: number, larguraDaFolhaMm: number): number {
-  const PX_POR_MM = 96 / 25.4;      // 96 dpi CSS, a definicao do `mm` no browser
   const natural = larguraDaFolhaMm * PX_POR_MM;
   if (larguraDisponivelPx <= 0 || natural <= 0) return 1;
   return Math.min(1, larguraDisponivelPx / natural);
 }
+
+/** 96 dpi CSS - e a definicao do `mm` no browser, nao uma escolha nossa. */
+export const PX_POR_MM = 96 / 25.4;
 
 /**
  * A REGRA `@page`, e ela e o conserto do ponto 3 do plano.

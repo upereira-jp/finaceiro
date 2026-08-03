@@ -28,7 +28,8 @@ import {
   Pagina, Aviso, Campo, Tabela, linha, Icone, Interruptor, BotaoDeIcone, CampoData, Escolha, AjudaDoMes } from '../ui.tsx';
 import { competenciaISO, paraCentavos, emReais } from '../dinheiro.ts';
 import { mover, paraEnvio, type CampoConfigurado } from '../cobranca-regras.ts';
-import { escalaDaPrevia, regraDaPagina } from '../layout-regras.ts';
+import { escalaDaPrevia, regraDaPagina, PX_POR_MM } from '../layout-regras.ts';
+import { useLargura } from '../medir-largura.ts';
 import { EditorDeLayout, estiloDoBloco } from './layout-editor.tsx';
 
 /** Os 16 do enum `campo_de_fatura` (migration 19). A tela nao inventa nome de
@@ -444,16 +445,8 @@ function Previa({ logoUrl }: { logoUrl: string | null }) {
  */
 function Documento({ doc, logoUrl }: { doc: DocumentoDaFatura; logoUrl: string | null }) {
   const { medidas, area, blocos, problemas } = doc.layout;
-  const palco = useRef<HTMLDivElement>(null);
-  const [larguraPx, setLarguraPx] = useState(0);
-
-  useEffect(() => {
-    const medir = () => setLarguraPx(palco.current?.clientWidth ?? 0);
-    medir();
-    window.addEventListener('resize', medir);
-    return () => window.removeEventListener('resize', medir);
-  }, []);
-
+  // `ResizeObserver`, nao efeito com `clientWidth` - ver `medir-largura.ts`.
+  const [palco, larguraPx] = useLargura<HTMLDivElement>();
   const escala = escalaDaPrevia(larguraPx, medidas.largura_mm);
   const papelCss = PAPEL_CSS[doc.layout.folha.papel] ?? 'A4';
 
@@ -476,7 +469,7 @@ function Documento({ doc, logoUrl }: { doc: DocumentoDaFatura; logoUrl: string |
         </div>
       )}
 
-      <div ref={palco} style={{ height: medidas.altura_mm * (96 / 25.4) * escala + 2, overflow: 'hidden' }}>
+      <div ref={palco} style={{ height: medidas.altura_mm * PX_POR_MM * escala + 2, overflow: 'hidden' }}>
         <div className="folha-palco" style={{ ['--escala' as any]: escala }}>
           <div id="documento" className="folha" style={{
             ['--folha-w' as any]: `${medidas.largura_mm}mm`,
