@@ -228,6 +228,42 @@ As 45 verificações do `tests/qrcode.ts` provam que a matriz é um QR válido p
 
 **Espere ver:** a prévia acompanhar. Lista vazia significa **"usa o padrão"**, e o padrão vive no código, não no banco.
 
+### 6.1 ⭐ *Onde cada coisa fica na folha* — novo em 03/08, e é o painel que vale conferir
+
+O painel de campos acima decide **quais** valores saem. Este decide **onde**. São coisas diferentes e as duas convivem: o bloco *Tabela de campos* é o que pinta a lista de cima.
+
+**Faça:** troque o **papel** para **A5** e a orientação para **Paisagem**. ✍️
+
+**Espere ver:** a folha na tela **mudar de tamanho e de proporção na hora**, e os elementos posicionados para A4 passarem a **não caber** — visivelmente, cortados na borda da folha.
+
+**Se vier diferente:**
+- **a folha não muda de tamanho** → defeito;
+- **os blocos "se ajeitam" sozinhos no papel menor** → **também é defeito**, e do tipo pior. Trocar de papel é uma mudança que precisa ser *vista*; reescalar em silêncio esconderia que o layout mudou.
+
+**Faça:** volte para **A4 · Retrato**, clique num elemento e **arraste**. Depois puxe uma das oito alças. ✍️
+
+**Espere ver:**
+- o elemento acompanhar o cursor **na mesma velocidade** — se ele "foge" ou anda mais rápido que o ponteiro, é defeito de escala;
+- ao redimensionar, **a alça oposta ficar parada**. Puxar a borda esquerda para a direita encolhe o bloco e a **borda direita não sai do lugar**;
+- o elemento **parar na margem** tracejada e não sair da área útil;
+- os números do painel da direita (X, Y, largura, altura, em mm) acompanharem o arrasto — e dá para **digitar** neles, que é o único jeito de alinhar dois blocos com precisão.
+
+**Faça:** arraste um elemento de propósito para **sobrepor** outro e clique em **Salvar a folha**. ✍️
+
+**Espere ver:** ele **salva**, e aparece um aviso dizendo que dois blocos ocupam a mesma área. **Isso está certo:** sobrepor pode ser intencional (uma tarja atrás de um valor), e recusar decidiria por você o que vai no seu papel. Bloco **fora** da folha é outra história — esse é **recusado**, com o motivo em milímetros, porque não há leitura em que ele esteja certo.
+
+**Faça:** clique em **Voltar ao padrão**.
+
+**Espere ver:** o documento de sempre — logo à esquerda, FATURA à direita, tabela no meio, pagamento embaixo. **Layout vazio não é documento vazio:** significa "usa o padrão", e o padrão vive no código.
+
+**Faça:** com uma fatura escolhida na Prévia, clique em **Imprimir / salvar PDF**. ✍️
+
+**Espere ver:** no diálogo de impressão, o papel já vindo **A4** (ou o que você escolheu) — **não** o padrão do seu computador. Este é o ponto: antes de 03/08 o sistema não declarava o tamanho do papel, e **a mesma fatura saía com geometria diferente em duas máquinas**, sem nada registrar qual foi usada.
+
+**Se vier diferente:**
+- **o diálogo abre com Carta/Letter num sistema em inglês** → é o defeito antigo voltando;
+- **a folha na tela e a folha impressa têm proporções diferentes** → defeito. Elas são a *mesma* geometria; a da tela só está reduzida para caber.
+
 ---
 
 ## 7. Cobrança — o que falta para um boleto ser pagável

@@ -110,7 +110,9 @@ Nesta ordem. Cada documento pressupõe o anterior.
 0. **`RETOMADA-2026-08-03.md`** — **se você está retomando o trabalho, leia este primeiro: dois minutos, e diz onde tudo parou.** Substitui o de 30/07. Traz o que está por commitar, as duas perguntas que travam trabalho caro e o que **não** fazer em seguida
 0. **`ROTEIRO-REVISAO.md`** — **se o que você quer é usar o sistema e conferir, comece aqui e não no resto.** Passo a passo do que abrir, o que esperar ver e **o que significa se vier diferente** — incluindo o teste que nenhum comando faz: **ler o QR com a câmera do celular**
 1. **`REVISAO-VERTENTES-2026-07-30.md`** — **se a pergunta é "o sistema cobre o financeiro da empresa também?", comece aqui.** A revisão das duas vertentes contra produção: o que existe da carteira do cliente, o zero do módulo corporativo, e o `PRD` §5.5 implementado pela metade entre as duas
-1. **`RESUMO-SESSAO-19.md`** — **comece por aqui.** A sessao em que o eixo do originador foi **respondido pelo dev do CRM** — e nao era nenhuma das duas colunas que mediamos. A §1 e o custo do eixo velho (12 UCs, 19,6% da carteira); a §2 sao as **tres afirmacoes do dev que ja nao eram verdade**, e por que conferir a resposta valeu mais que obedece-la; a §3 e a `Q-PARCERIA-01`, que a correcao do proprio dev abriu. Mapa vigente: **`ATRIBUICAO-originador-2026-08-03.md`**
+1. **`RESUMO-SESSAO-20.md`** — **comece por aqui.** Duas entregas: o conector passou a ler as **dez** views e a conferir o eixo do originador sozinho (a §1.1 e o assunto — a causa raiz nao era ler oito, era **nao contar**), e o **layout da fatura virou posicao** (a §2.1 sao os tres defeitos silenciosos que o pedido do dono desenterrou). A §3 lista **seis erros meus**, e **dois deles so apareceram ao FOTOGRAFAR a tela**
+1. **`PLANO-layout-visual-2026-08-03.md`** — se a pergunta e *"como o documento da fatura e montado?"*, comece aqui. A §2 sao os **oito pontos de melhoria** do processo anterior, tres deles defeito e nao limitacao; o bloco EXECUTADO traz o que apareceu ao construir
+1. **`RESUMO-SESSAO-19.md`** — A sessao em que o eixo do originador foi **respondido pelo dev do CRM** — e nao era nenhuma das duas colunas que mediamos. A §1 e o custo do eixo velho (12 UCs, 19,6% da carteira); a §2 sao as **tres afirmacoes do dev que ja nao eram verdade**, e por que conferir a resposta valeu mais que obedece-la; a §3 e a `Q-PARCERIA-01`, que a correcao do proprio dev abriu. Mapa vigente: **`ATRIBUICAO-originador-2026-08-03.md`**
 1. **`RESUMO-SESSAO-18.md`** — A sessao em que as quatro perguntas foram respondidas pelo dono. A §1 e o defeito que a pergunta encontrou sem procurar — o conector apagava o vencimento que ninguem tinha preenchido ainda; a §3 e a `conta_pagar`, com o que o banco passou a IMPEDIR; a §4 sao as 39 UCs medidas e as tres coisas que a medicao achou sem ser pedida
 1. **`RESUMO-SESSAO-16.md`** — A sessão em que o sistema foi **usado por uma pessoa pela primeira vez**, e quatro dos seis defeitos vieram daí. Traz a agenda de cobrança, o importador de tarifas, os dois renomes do dono — e a §5, que mede o caminho para a primeira fatura contra produção
 2. **`RESUMO-SESSAO-15.md`** As três pendências do documento de cobrança fechadas, e o achado que apareceu ao **remedir** o CRM antes de construir: 76 merges de lead em 30/07 tornaram `lead.codigo` instável, tiraram um nome da lista de originadores e moveram duas atribuições de comissão. A §2 conta os dois defeitos que a verificação do QR pegou — um deles dentro do próprio instrumento de medida
@@ -187,6 +189,25 @@ RESUMO-SESSAO-12.md          passagem da sessao 12 — Producao conferida, o
 RETOMADA-2026-08-03.md       ONDE TUDO PAROU. O que falta publicar (e agora tem
                              MIGRATION), as tres proximas acoes - nenhuma delas
                              codigo - e o que NAO fazer em seguida
+RESUMO-SESSAO-20.md          passagem da sessao 20 - COMECE POR AQUI. Duas
+                             entregas. A 1 e o conector lendo as DEZ views e
+                             conferindo o eixo do originador sozinho - e a 1.1 e
+                             o assunto: a causa raiz nao era ler oito, era NAO
+                             CONTAR. As views existiam desde 01/08 e o script
+                             imprimia "views legiveis: 10" numa linha que ninguem
+                             confrontava com o 8. A 2 e o layout da fatura virando
+                             POSICAO, e a 2.1 sao os TRES defeitos silenciosos que
+                             o pedido do dono desenterrou - entre eles o `@page`
+                             sem `size`, que fazia a mesma fatura sair diferente
+                             em duas maquinas. A 3 lista SEIS erros meus, e DOIS
+                             so apareceram ao FOTOGRAFAR a tela
+PLANO-layout-visual-2026-08-03.md
+                             O PLANO e a EXECUCAO do layout por posicao. A 2 sao
+                             os OITO pontos de melhoria do processo anterior,
+                             tres deles DEFEITO e nao limitacao; a 3 e o desenho
+                             (milimetro, papel por enum, seis tipos de bloco) e o
+                             bloco EXECUTADO traz as CINCO coisas que apareceram
+                             ao construir e nao estavam no plano
 RESUMO-SESSAO-18.md          passagem da sessao 18 - COMECE POR AQUI. As quatro
                              perguntas respondidas pelo dono. A 1 e o defeito que
                              a pergunta ACHOU SEM PROCURAR: o conector levava
@@ -598,12 +619,6 @@ web/src/telas/layout-editor.tsx
                              O EDITOR: papel, orientacao, margens, os seis tipos
                              de bloco e o arrasto. A folha na tela tem o TAMANHO
                              REAL do papel, so escalada - o que se ve e o que sai
-PLANO-layout-visual-2026-08-03.md
-                             O PLANO e a EXECUCAO do layout por posicao. A 2 sao
-                             os OITO pontos de melhoria do processo anterior,
-                             tres deles defeito e nao limitacao; o bloco
-                             EXECUTADO traz as tres coisas que apareceram ao
-                             construir e nao estavam no plano
 prisma/schema.prisma         vem do `db pull`. NAO editar a mao - ver regra 11
 prisma.config.ts             lido SO pelo CLI. NAO exige DIRECT_URL para
                              `generate` - medido: generate roda com a URL
@@ -916,7 +931,7 @@ A lista completa, com dono nomeado, está em `RESUMO-SESSAO-7` §Pendências ger
 | `Q-AUDIT-01` — trilha da concessão de tier sem `registro_id` | ✅ **Fechada em 27/07** — migration 13. `usuario_id` entra no `coalesce` de `app.auditar()` **por último**, então as outras 15 tabelas não mudam. G6 e G7 verificados nos dois sentidos |
 | `Q-DISTRIB-01` — RLS sem policy em `distribuidora` | ✅ **Fechada em 27/07** — migration 13. O `rls_auto_enable` do Supabase havia habilitado RLS na tabela, sem policy: a role de runtime lia **0** linhas. Agora lê 1. `CAT-8` acusa a classe inteira |
 | `MT-09` — `rls_auto_enable` do Supabase | 🟡 **Reclassificado em 27/07: já aconteceu.** A cobertura pelo `CAT-3` que esta linha alegava **não existia** — ele filtra por `tenant_id`. Coberto agora pelo `CAT-8`, que é detecção e não prevenção. Resta decidir se o event trigger é tratado no provisionamento |
-| `Q-SPEC001-08` — `SPEC-001` diz nove e dez | 🟡 Linhas 536 e 565 contra a §3.4. São **dez** |
+| ~~`Q-SPEC001-08` — `SPEC-001` diz nove e dez~~ | ✅ **Fechada em 30/07**, e esta linha ficou vencida por quatro dias — `QUESTOES.md` a marca RESOLVIDA e a `SPEC-001` §3.4 traz a nota desde então. É o mesmo modo de falha que o `PATCH-citacoes` tratou e que a `Q-ESCOPO-01` repetiu: **o corpo datado está certo, o índice está errado, e quem lê só o índice decide errado.** Terceira vez |
 | Bug do `GRANT` no Supabase | 🟡 Reportar. Derruba todas as sessões da instância |
 | Dev do CRM — `LIMIT 1` sem `ORDER BY` | 🔴 `VIEWS-PROPOSTAS-r2.sql` §100. É alíquota, não relatório |
 | Dev do CRM — segredos em `text` puro | 🔴 `P8` §4. O repositório foi público até 25/07 e **nomeia as colunas** — rotação, não só migração de coluna |

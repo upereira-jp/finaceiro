@@ -133,9 +133,38 @@ A Parte 6 de vocês mostra que o CPF existe no CRM. **Se ele entrar numa view, o
 
 Vocês perguntaram se queríamos ser avisados quando um ganho for reaberto. **Sim.** E a resposta é mais simples do que vocês ofereceram: `vendas_creditadas` **já tem** `vigente`, `revogado_em` e `revogado_motivo`, e nós já os lemos. Não precisamos de nada novo.
 
-O que falta é do nosso lado: fazer o conector ler essa view a cada ciclo e **acusar** quando um contrato já digitado tiver perdido o crédito. É o mesmo desenho que já usamos para divergência de distribuidora — não recusa, não sobrescreve, registra. Vamos construir.
+~~O que falta é do nosso lado: fazer o conector ler essa view a cada ciclo e **acusar**. Vamos construir.~~ — **construído no mesmo dia, e já está no repositório.** O conector passou a ler as duas views a cada ciclo (a lista fechada foi de 8 para 10) e a conferir o crédito vigente contra o originador que estiver digitado. É o mesmo desenho da divergência de distribuidora: **não recusa, não sobrescreve, registra** em `conector_execucao.detalhe`.
 
-**Uma pergunta só, para dimensionar:** o `revogado_em` de hoje veio de um recrédito, que é conserto. **Reabrir ganho é rotina de operação, ou foi excepcional?** Se for rotina, o sinal precisa virar tela; se for excepcional, basta o registro.
+Cinco coisas viram sinal, e **as cinco estão mudas hoje** — medimos cada uma antes de escrever, porque um alerta que dispara toda rodada treina qualquer um a ignorar o registro inteiro:
+
+| dispara quando | hoje |
+|---|--:|
+| UC espelhada sem crédito **vigente** (com a redação mudando se houve revogação sem substituto) | 39 de 39 têm · **0** |
+| dois créditos vigentes na mesma UC — o eixo fica ambíguo e não escolhemos | nenhuma repetida · **0** |
+| o originador digitado não é nenhuma das duas pontas do crédito | 0 contratos · **0** |
+| o digitado casa uma ponta e o crédito nomeia a outra — a Parte 3 desta carta | 3 UCs, sem contrato · **0** |
+| contrato **ativo** sobre rateio que vocês não dão por ativado | ver §4.3 · **0** |
+
+**O que continua sendo pergunta para vocês:** o `revogado_em` de hoje veio de um recrédito, que é conserto. **Reabrir ganho é rotina de operação, ou foi excepcional?** Se for rotina, o sinal precisa virar tela; se for excepcional, o registro basta.
+
+**E uma nota que é sobre nós, não sobre vocês.** As duas views existiam desde 01/08 e nós só descobrimos em 03/08, por acaso. O motivo é que **nada do nosso lado comparava o que o schema `financeiro` expõe contra a lista que o conector conhece** — o script imprimia *"views legíveis: 10"* numa linha que ninguém confrontava com o 8. Corrigido: agora ele grita quando aparece view nova e quando some view conhecida. Se vocês publicarem outra, nós vemos no ciclo seguinte.
+
+### 4.3 🟡 A `situacao` chegou, nós lemos — e ela diz uma coisa que muda o faturamento
+
+A §4 da carta anterior pediu **coluna de situação do contrato de rateio**, porque sem ela toda linha de `rateio_clientes` era lida como válida. Vocês entregaram em `rateio_situacao`, e agora que lemos:
+
+| sobre as **39 UCs que espelhamos** | |
+|---|--:|
+| `ativado` | **28** |
+| `nao_ativado` | **11** — destas, **7** em `em_troca_titularidade` |
+
+*(Sobre as 41 linhas da view: 29 `ativado`/`won` e 12 `nao_ativado`/`normal`.)*
+
+Hoje isto não custa nada — `contrato` tem 0 linhas, então nada foi faturado. Mas quando os contratos forem digitados, a pergunta fica de pé:
+
+> **Uma UC com rateio `nao_ativado` pode ser faturada?** E `em_troca_titularidade` — o crédito continua indo para o mesmo titular durante a troca, ou para no meio?
+
+Do nosso lado a decisão está registrada e **não foi improvisada** (`Q-SITUACAO-01`): o conector **continua espelhando as 39** e apenas **conta** por situação no registro de cada ciclo. Recusar as 11 ou marcá-las na UC são as outras duas opções, e as duas mudam o que a operação vê — é decisão de negócio, e ela custa menos agora, com contrato em zero, do que depois de 41 digitados.
 
 ---
 
@@ -149,6 +178,8 @@ O que falta é do nosso lado: fazer o conector ler essa view a cada ciclo e **ac
 
 ## Em uma linha
 
-**O eixo foi adotado, o mapa foi refeito hoje (12 UCs mudaram de dono, 19,6% da carteira em kWh), e o que trava agora não é mais leitura: são três CPF/CNPJ e a pergunta da Parte 3.**
+**O eixo foi adotado, o mapa foi refeito hoje (12 UCs mudaram de dono, 19,6% da carteira em kWh), o conector já lê as dez views e confere sozinho — e o que trava agora não é mais leitura: são três CPF/CNPJ e a pergunta da Parte 3.**
+
+**As três perguntas desta carta, juntas:** (1) com parceiro indicador, a comissão é do vendedor, do parceiro ou repartida? — Parte 3; (2) `documento` do cliente numa view? — §4.1; (3) UC com rateio `nao_ativado` ou em troca de titularidade pode ser faturada? — §4.3.
 
 **O conector continua sem escrever no CRM, e nada aqui muda isso.**
