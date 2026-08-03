@@ -6,7 +6,7 @@ Sistema financeiro multi-tenant da G3 Solar: faturamento de crédito de energia,
 |---|---|
 | **Dono** | Vinicius Leal |
 | **Fase atual** | F0 fechada · F1 com os tres criterios formais e a entrega nomeada cumpridos · **F2 e F3 construidas em 28/07** · **30/07:** os dois processos periodicos do `PRD` §6 · **03/08: a primeira entidade da F4 existe** — `conta_pagar` e `pagamento`, decididos pelo dono, fecham a `Q-PAGAMENTO-01`, e o `PRD` §5.5 passa a gravar as quatro escritas na transacao do split em vez de duas. **22 migrations, 21 aplicadas em producao** e **1123 verificacoes em 44 suites**. O que segura a F2 continua sendo **um certificado A1**, nao codigo |
-| **Atualizado** | 03/08/2026, sessao 20 · **`Q-VIEWSCRED-01` FECHADA: o conector le as DEZ views e confere o eixo do originador** — `SPEC-002` R26 e invariante 14, **1156 verificacoes** (`EXIT=0`, delta **33** contado na fonte e conferido contra o `npm test`, diferenca zero). Medido antes de construir: **39 das 39 UCs espelhadas tem credito vigente**, e o conector **nao escreve originador** — divergencia vira sinal, com as cinco condicoes mudas contra o estado de hoje. A causa raiz foi consertada junto: nada comparava as views do CRM contra a nossa lista fechada, e agora `viewsNovasNoCrm`/`viewsAusentes` gritam as duas direcoes. Nova 🟡 `Q-SITUACAO-01`: **11 das 39 UCs estao `nao_ativado` no CRM**, 7 em troca de titularidade · sessao 19: **`RESUMO-SESSAO-19.md`** · **1123 verificacoes**, delta de **17** · **o dev do CRM respondeu, e o eixo do originador nao era nenhuma das duas colunas que mediamos**: e o **credito congelado no momento do ganho**. Consequencia medida: o mapa de 30/07 esta errado em **12 das 41 UCs**, e **19,6% da carteira em kWh** troca de dono · **tres afirmacoes do dev estavam vencidas**, inclusive a de que nao alcancavamos o dado — as duas views existem e sao legiveis · nova 🔴 `Q-PARCERIA-01`: o credito traz **vendedor E parceiro** e o `contrato` guarda um so · migration 22 (`contas_a_pagar`) **so em banco de teste** · nada escrito em producao |
+| **Atualizado** | 03/08/2026, sessao 20 · **duas entregas.** (1) **O LAYOUT DA FATURA VIROU POSICAO**, a pedido do dono: escolher o papel (A4, A5, Carta, Oficio), a orientacao, as margens, e **arrastar cada elemento para onde se quer** — migration **23**, `src/dominio/layout-visual.ts` puro e o editor na aba Documento. Tres defeitos silenciosos consertados junto: o `@page` **nao declarava `size`** (o papel era o do sistema de quem imprime), a previa tinha geometria diferente da do papel, e o negrito do total **nao viajava no payload** — o CRM receberia a fatura sem ele. Plano e execucao em `PLANO-layout-visual-2026-08-03.md`. (2) **`Q-VIEWSCRED-01` FECHADA: o conector le as DEZ views e confere o eixo do originador** — `SPEC-002` R26 e invariante 14, **1230 verificacoes** (`EXIT=0`, delta **33** no conector e **74** no layout contado na fonte e conferido contra o `npm test`, diferenca zero). Medido antes de construir: **39 das 39 UCs espelhadas tem credito vigente**, e o conector **nao escreve originador** — divergencia vira sinal, com as cinco condicoes mudas contra o estado de hoje. A causa raiz foi consertada junto: nada comparava as views do CRM contra a nossa lista fechada, e agora `viewsNovasNoCrm`/`viewsAusentes` gritam as duas direcoes. Nova 🟡 `Q-SITUACAO-01`: **11 das 39 UCs estao `nao_ativado` no CRM**, 7 em troca de titularidade · sessao 19: **`RESUMO-SESSAO-19.md`** · **1123 verificacoes**, delta de **17** · **o dev do CRM respondeu, e o eixo do originador nao era nenhuma das duas colunas que mediamos**: e o **credito congelado no momento do ganho**. Consequencia medida: o mapa de 30/07 esta errado em **12 das 41 UCs**, e **19,6% da carteira em kWh** troca de dono · **tres afirmacoes do dev estavam vencidas**, inclusive a de que nao alcancavamos o dado — as duas views existem e sao legiveis · nova 🔴 `Q-PARCERIA-01`: o credito traz **vendedor E parceiro** e o `contrato` guarda um so · migration 22 (`contas_a_pagar`) **so em banco de teste** · nada escrito em producao |
 | **No ar** | **`https://financeiro.blackhaus.io`** — systemd, Node 22 isolado, TLS ate 26/10. Mesmo VPS do CRM, **sem alterar uma linha da configuracao dele**. **Producao segue com 21 migrations e o bundle `index-BPNacouw.js`** — nada desta sessao nem da 17 foi publicado. Pendentes: `3fd7b22` (conserto da sessao expirada) e a sessao 18 inteira, que **tem migration**. Os **9** invariantes de catalogo rodaram contra producao em 30/07 e passaram |
 
 ---
@@ -527,8 +527,13 @@ src/crm/leitura.ts           PONTO UNICO de leitura. SQL constante, lista fechad
                              das 8 views. Nao ha funcao que aceite nome de tabela
 src/crm/sincronizacao.ts     o ciclo: dedup, idempotencia, recusas contadas e a
                              reconciliacao em tres classes. Porta INJETADA
-prisma/migrations/           VINTE E DUAS, em ordem - e a 22 NAO esta em
-                             producao. Ela traz `conta_pagar`, `pagamento`,
+prisma/migrations/           VINTE E TRES, em ordem - e a 22 e a 23 NAO estao
+                             em producao. A 23 traz `layout_do_documento` e
+                             `bloco_do_documento`: a folha e os elementos
+                             POSICIONADOS. Ela nao migra dado nenhum e nao semeia
+                             nada - layout vazio significa "usa o padrao", que
+                             vive em codigo e reproduz o documento de sempre.
+                             A 22 traz `conta_pagar`, `pagamento`,
                              `categoria` e `centro_custo`: o lado que QUITA, que
                              nao existia. O vinculo unico ao split_item e indice
                              CHEIO sobre COLUNA GERADA - o parcial obvio cobriria
@@ -568,6 +573,37 @@ prisma/migrations/           VINTE E DUAS, em ordem - e a 22 NAO esta em
                              quinze primeiras: 13 fecha Q-AUDIT-01 e Q-DISTRIB-01;
                              14 traz conector_execucao; 15 corrige o gatilho de
                              auditoria que a 14 esqueceu (o teste G2 acusou)
+src/dominio/layout-visual.ts O LAYOUT DA FATURA POR POSICAO (migration 23).
+                             Puro: recebe a folha, os blocos e os dados e
+                             devolve o documento com cada elemento JA
+                             POSICIONADO e JA formatado. NAO desenha - devolve
+                             DADO, porque o CRM consome a mesma rota e nao roda
+                             React. Milimetro, nao pixel: pixel depende de DPI e
+                             porcentagem mudaria a proporcao entre A4 e A5, que
+                             e o que escolher a folha deveria impedir. As cinco
+                             conferencias distinguem ERRO de SINAL: bloco fora
+                             do papel e recusa (nao ha leitura em que o usuario
+                             esteja certo), sobreposicao e aviso (pode ser
+                             intencional)
+web/src/layout-regras.ts     AS REGRAS DO EDITOR, puras e fora do .tsx: arrastar,
+                             redimensionar, prender na grade e escalar. As
+                             MEDIDAS DOS PAPEIS nao estao aqui - vem do servidor,
+                             porque duas verdades sobre o tamanho da folha
+                             sairiam como previa desenhando uma coisa e
+                             impressora saindo com outra. A alca oposta e PONTO
+                             FIXO, e e isso que a W5 afirma: "a alca muda a
+                             largura" e satisfeito por uma implementacao que move
+                             o bloco inteiro
+web/src/telas/layout-editor.tsx
+                             O EDITOR: papel, orientacao, margens, os seis tipos
+                             de bloco e o arrasto. A folha na tela tem o TAMANHO
+                             REAL do papel, so escalada - o que se ve e o que sai
+PLANO-layout-visual-2026-08-03.md
+                             O PLANO e a EXECUCAO do layout por posicao. A 2 sao
+                             os OITO pontos de melhoria do processo anterior,
+                             tres deles defeito e nao limitacao; o bloco
+                             EXECUTADO traz as tres coisas que apareceram ao
+                             construir e nao estavam no plano
 prisma/schema.prisma         vem do `db pull`. NAO editar a mao - ver regra 11
 prisma.config.ts             lido SO pelo CLI. NAO exige DIRECT_URL para
                              `generate` - medido: generate roda com a URL
@@ -689,7 +725,7 @@ tests/dominio-carteira.ts    os dois motores SEM banco. A invariante do centavo
                              em 2.000 combinacoes
 tests/repos-carteira.ts      o ciclo do dinheiro ponta a ponta, pela role sem
                              BYPASSRLS e pelo adaptador falso
-tests/                       1123 verificacoes em 44 suites. `npm test` roda todas.
+tests/                       1230 verificacoes em 47 suites. `npm test` roda todas.
                              A CONTAGEM E `npm test | grep -c '^ok '`, e o metodo
                              esta escrito aqui porque os numeros anteriores (461,
                              496) vinham de uma soma que nao se reproduzia: so
@@ -726,7 +762,7 @@ Decidido e medido, não opinado. Detalhe em `adr/ADR-0003` r2.
 
 ## Como aplicar as migrations
 
-As migrations são **SQL puro**, não geradas por `prisma migrate dev`. São **vinte e duas**. **Vinte e uma estão aplicadas em produção** — a 21 entrou em 30/07 — e a **22 (`contas_a_pagar`) não está**: ela é parte do deploy pendente desta sessão. A ordem importa. As três primeiras montam a fundação, conforme a `SPEC-001` §3.2:
+As migrations são **SQL puro**, não geradas por `prisma migrate dev`. São **vinte e três**. **Vinte e uma estão aplicadas em produção** — a 21 entrou em 30/07 — e a **22 (`contas_a_pagar`) e a 23 (`layout_visual_do_documento`) não estão**: as duas são parte do deploy pendente. A ordem importa. As três primeiras montam a fundação, conforme a `SPEC-001` §3.2:
 
 ```
 prisma/migrations/20260725120000_fundacao_schema/   tabelas, enums, as 10 FKs compostas
@@ -743,7 +779,7 @@ npx prisma migrate deploy    # transacional POR MIGRATION. E o que salva de meia
 Validar num banco limpo:
 
 ```bash
-npm test          # typecheck + as 44 suites, 1123 verificacoes (linhas `ok`)
+npm test          # typecheck + as 47 suites, 1230 verificacoes (linhas `ok`)
 npm run typecheck # sozinho, tsc --noEmit
 ```
 
@@ -831,7 +867,7 @@ Medido em 27/07 contra o `PRD-v2.2` §10, não estimado. **Os três critérios d
 
 | Critério de saída | Evidência | |
 |---|---|---|
-| `migrate reset` limpo | `tests/run.sh` aplica as 22 migrations em banco vazio a cada `npm test`; `EXIT=0` | ✅ |
+| `migrate reset` limpo | `tests/run.sh` aplica as 23 migrations em banco vazio a cada `npm test`; `EXIT=0` | ✅ |
 | sync idempotente | ✅ **cumprido contra o CRM real em 27/07.** Duas execuções valendo: 48 lidos, 41 criados na 1ª, **0 criados e 0 atualizados na 2ª**, com um único instante de `criado_em` nas 41 linhas. Também provado em 1.000 linhas pelo `N30` | ✅ |
 | escrita no CRM falha por permissão | automatizado em 27/07: `N21`/`N21b` (a guarda de arranque recusa credencial com escrita, inclusive privilégio **herdado por role**) e `N25` (a sessão é read-only). A medição por catálogo que dizia "0 privilégio de escrita" veio de método fraco — ver `Q-PGNET-01` | ✅ |
 

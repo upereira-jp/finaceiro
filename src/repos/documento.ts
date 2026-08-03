@@ -24,6 +24,10 @@ import {
   linhasDoDocumento, type ConfiguracaoDeCampo, type CampoDeFatura,
   type DadosDaFatura, type LinhaDoDocumento,
 } from '../dominio/layout-do-documento.ts';
+import {
+  FOLHA_PADRAO, conferirLayout, documentoPosicionado,
+  type Folha, type Bloco, type Papel, type Orientacao, type DocumentoPosicionado,
+} from '../dominio/layout-visual.ts';
 import { pixEstatico } from '../dominio/brcode.ts';
 import { svgDoBrCode } from '../dominio/qrcode.ts';
 
@@ -260,6 +264,135 @@ export async function campos(): Promise<ConfiguracaoDeCampo[]> {
   }));
 }
 
+// ----------------------------------------------- a folha e os blocos (mig. 23)
+//
+// O QUE ISTO ACRESCENTA A `campo_do_documento`, e por que nao a substitui.
+//
+// `campo_do_documento` resolve QUAIS campos e em que ORDEM - uma lista linear,
+// sem coordenada e sem largura. Os blocos daqui sao a MOLDURA: onde essa tabela
+// fica na folha, e onde ficam a logo, o pagamento, os textos livres e o total.
+// As duas configuracoes sao independentes, e por isso nenhuma migracao de dado
+// foi necessaria - quem so configurou campos continua com o documento que tinha.
+
+export class BlocoForaDaPagina extends Error {
+  readonly status = 422;
+  constructor(detalhe: string) {
+    super(`O bloco nao cabe na folha: ${detalhe}`);
+    this.name = 'BlocoForaDaPagina';
+  }
+}
+
+/** `numeric` chega como Decimal/string do driver. A regra 1 proibe float ate em
+ *  calculo intermediario - mas medida de papel nao e dinheiro, e o consumo final
+ *  e geometria de tela. A conversao acontece AQUI, num lugar so, na fronteira. */
+const nmm = (v: unknown): number => Number(v ?? 0);
+
+export async function layout(): Promise<Folha> {
+  await exigir('ler');
+  const l = await dbt().layout_do_documento.findFirst({ where: { tenant_id: tenantCorrente() } });
+  // Sem linha e o caso NORMAL, nao ausencia de dado: a migration 23 nao semeia
+  // nada, e o padrao vive em codigo pela mesma razao que o `PADRAO` de campos.
+  if (!l) return FOLHA_PADRAO;
+  return {
+    papel: l.papel as Papel,
+    orientacao: l.orientacao as Orientacao,
+    margem_topo_mm: nmm(l.margem_topo_mm),
+    margem_direita_mm: nmm(l.margem_direita_mm),
+    margem_baixo_mm: nmm(l.margem_baixo_mm),
+    margem_esquerda_mm: nmm(l.margem_esquerda_mm),
+  };
+}
+
+export async function blocos(): Promise<Bloco[]> {
+  await exigir('ler');
+  const r = await dbt().bloco_do_documento.findMany({
+    where: { tenant_id: tenantCorrente() },
+    orderBy: [{ z: 'asc' }, { id: 'asc' }],
+  });
+  return r.map((b: any) => ({
+    id: b.id, tipo: b.tipo, campo: b.campo, texto: b.texto,
+    x_mm: nmm(b.x_mm), y_mm: nmm(b.y_mm),
+    largura_mm: nmm(b.largura_mm), altura_mm: nmm(b.altura_mm),
+    alinhamento: b.alinhamento, tamanho_pt: b.tamanho_pt, peso: b.peso,
+    borda: b.borda, fundo: b.fundo, z: b.z,
+  }));
+}
+
+export type NovoBloco = Omit<Bloco, 'id'> & { id?: string };
+
+/**
+ * Grava a folha e os blocos JUNTOS, e a atomicidade e o ponto.
+ *
+ * Um `PUT` do layout inteiro em vez de rotas por bloco: com chamadas separadas,
+ * trocar de A4 para A5 e reposicionar os blocos seriam dois estados no banco, e
+ * o do meio - blocos de A4 numa folha A5 - e justamente o que a conferencia
+ * recusa. Quem tenta salvar em duas etapas ou e recusado no meio, ou grava um
+ * estado invalido. Aqui e uma escrita so, dentro da transacao da requisicao.
+ *
+ * `blocos` vazio APAGA os blocos e volta ao layout padrao em codigo - mesma
+ * semantica que `definirCampos([])` ja tinha para os campos.
+ */
+export async function salvarLayout(folha: Folha, novos: ReadonlyArray<NovoBloco>) {
+  await exigir('administrar');
+  const tenant_id = tenantCorrente();
+
+  /*
+   * A CONFERENCIA RODA ANTES DE QUALQUER ESCRITA, e a divisao entre o que recusa
+   * e o que so avisa e a mesma da R21-b do conector:
+   *
+   *   fora_da_pagina  RECUSA - nao ha leitura em que o usuario esteja certo:
+   *                   um bloco fora do papel simplesmente nao imprime;
+   *   sobreposicao    AVISA - sobrepor pode ser intencional (tarja atras de um
+   *                   valor, moldura em volta da tabela), e recusar decidiria
+   *                   pelo dono o que ele quer no papel dele;
+   *   sem_conteudo    AVISA - bloco vazio ocupa area e nao pinta nada, o que so
+   *                   se descobre imprimindo, mas e um layout em construcao.
+   */
+  const comId = novos.map((b, i) => ({ ...b, id: b.id ?? `novo-${i}` }));
+  const problemas = conferirLayout(folha, comId);
+  const fora = problemas.filter((p) => p.tipo === 'fora_da_pagina');
+  if (fora.length > 0) throw new BlocoForaDaPagina(fora.map((p) => p.detalhe).join(' | '));
+
+  await dbt().layout_do_documento.upsert({
+    where: { tenant_id },
+    create: { tenant_id, ...paraColunas(folha) },
+    update: { ...paraColunas(folha), atualizado_em: new Date() },
+  });
+
+  /*
+   * APAGA E RECRIA, e nao um diff por bloco. O layout e um documento inteiro -
+   * mover tres blocos e apagar um e UMA edicao, nao quatro. Um diff exigiria
+   * casar id a id e teria o modo de falha de deixar orfao o bloco que a tela
+   * esqueceu de mandar. `deleteMany` + `createMany` sao duas viagens, na mesma
+   * transacao, e a trilha da regra 9 grava as duas pontas.
+   */
+  await dbt().bloco_do_documento.deleteMany({ where: { tenant_id } });
+  if (comId.length > 0) {
+    await dbt().bloco_do_documento.createMany({
+      data: comId.map((b) => ({
+        tenant_id, tipo: b.tipo,
+        // O CHECK `bloco_conteudo_por_tipo` recusa a combinacao errada no banco;
+        // normalizar aqui e o que faz o erro sair como recusa nomeada em vez de
+        // 23514 no meio de um `createMany`.
+        campo: b.tipo === 'campo' ? b.campo : null,
+        texto: b.tipo === 'texto' ? (texto(b.texto) ?? '') : null,
+        x_mm: b.x_mm, y_mm: b.y_mm, largura_mm: b.largura_mm, altura_mm: b.altura_mm,
+        alinhamento: b.alinhamento, tamanho_pt: b.tamanho_pt, peso: b.peso,
+        borda: b.borda, fundo: b.fundo, z: b.z,
+      })),
+    });
+  }
+  // Os avisos VOLTAM para quem salvou. Sinal que nao interrompe nada e o que
+  // mais facilmente vira silencio - a mesma frase de `scripts/ciclo-crm.ts`.
+  return { blocos: comId.length, avisos: problemas.filter((p) => p.tipo !== 'fora_da_pagina') };
+}
+
+const paraColunas = (f: Folha) => ({
+  papel: f.papel, orientacao: f.orientacao,
+  margem_topo_mm: f.margem_topo_mm, margem_direita_mm: f.margem_direita_mm,
+  margem_baixo_mm: f.margem_baixo_mm, margem_esquerda_mm: f.margem_esquerda_mm,
+});
+
 // ------------------------------------------------------- o documento da fatura
 
 /**
@@ -283,8 +416,25 @@ export type DocumentoDaFatura = {
   vencimento: string;
   /** NULO e possivel: a coluna e GENERATED ALWAYS e aceita nulo (medido). */
   valor_total_centavos: number | null;
-  /** As linhas, ja na ordem e formatadas. */
+  /**
+   * As linhas, ja na ordem e formatadas.
+   *
+   * CONTINUA AQUI depois da migration 23, e nao e duplicacao esquecida: e o
+   * documento em forma de LISTA, que e o que um consumidor sem geometria precisa
+   * - um e-mail em texto, um CSV, um relatorio. `layout` abaixo e o mesmo
+   * conteudo em forma de PAPEL. Quem pinta escolhe qual das duas usa, e nenhuma
+   * delas obriga o consumidor a portar o motor do outro lado.
+   */
   linhas: LinhaDoDocumento[];
+  /**
+   * O documento POSICIONADO - folha, area imprimivel e blocos com coordenada em
+   * milimetros, cada um com o conteudo ja formatado (migration 23).
+   *
+   * `problemas` viaja DENTRO dele de proposito: um bloco que nao cabe ou dois
+   * que se cobrem sao coisas que quem imprime precisa saber, e mandar isso so
+   * para log seria o silencio que este projeto ja pagou tres vezes.
+   */
+  layout: DocumentoPosicionado;
   /**
    * Metadado da logo, e `data_uri` SO quando o chamador pediu `embutir_logo`.
    *
@@ -350,11 +500,13 @@ export async function paraFatura(faturaId: string, opcoes: OpcoesDoDocumento = {
   const f = await dbt().fatura.findFirst({ where: { id: faturaId } });
   if (!f) throw new FaturaSemDocumento(faturaId);
 
-  const [uc, ident, cfg, bol] = await Promise.all([
+  const [uc, ident, cfg, bol, folha, blocosDoTenant] = await Promise.all([
     dbt().unidade_consumidora.findFirst({ where: { id: f.unidade_consumidora_id }, include: { cliente: true } }),
     dbt().identidade_de_cobranca.findFirst({ where: { tenant_id } }),
     campos(),
     dbt().boleto.findFirst({ where: { fatura_id: faturaId } }),
+    layout(),
+    blocos(),
   ]);
   /*
    * A LOGO SO E LIDA QUANDO PEDIDA, e a ordem importa: a leitura acima nao a
@@ -396,6 +548,9 @@ export async function paraFatura(faturaId: string, opcoes: OpcoesDoDocumento = {
     vencimento: dados.vencimento,
     valor_total_centavos: f.valor_total_centavos,
     linhas: linhasDoDocumento(dados, cfg),
+    // As duas formas do MESMO documento saem da mesma composicao de dados: a
+    // lista e o papel nao podem divergir porque nao ha duas fontes.
+    layout: documentoPosicionado(dados, folha, blocosDoTenant, cfg),
     logo: ident?.logo_mime && ident.logo_bytes != null && ident.logo_sha256
       ? {
           mime: ident.logo_mime, bytes: ident.logo_bytes, sha256: ident.logo_sha256,

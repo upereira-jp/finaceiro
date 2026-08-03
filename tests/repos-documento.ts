@@ -534,6 +534,122 @@ const garantirTarifa = async (emT: <T>(f: () => Promise<T>) => Promise<T>) => {
       + 'seria pedir permissao que a operacao nao precisa ter');
 }
 
+// ============================== W8 a FOLHA e os BLOCOS (migration 23)
+//
+// A decisao inteira e PURA e tem 31 verificacoes sem banco em
+// `tests/layout-visual.ts`. O que estas provam e o que aquelas nao alcancam:
+// que o layout ATRAVESSA o banco intacto, que os CHECKs mordem, e que a
+// composicao da fatura o carrega.
+{
+  const padrao = await emA(() => documento.layout());
+  const semBlocos = await emA(() => documento.blocos());
+  chk('W8a', padrao.papel === 'a4' && padrao.orientacao === 'retrato'
+       && padrao.margem_topo_mm === 16 && semBlocos.length === 0,
+      `sem linha no banco a folha e a PADRAO do codigo, e nao ausencia de dado `
+      + `(${padrao.papel} ${padrao.orientacao}, ${semBlocos.length} blocos)`);
+
+  const folha = { papel: 'a5' as const, orientacao: 'paisagem' as const,
+                  margem_topo_mm: 10, margem_direita_mm: 10,
+                  margem_baixo_mm: 10, margem_esquerda_mm: 10 };
+  // A5 paisagem com 10mm: area util de 190 x 128.
+  const bloco = (o: any) => ({
+    tipo: 'texto', campo: null, texto: 'oi', x_mm: 10, y_mm: 10,
+    largura_mm: 40, altura_mm: 20, alinhamento: 'esquerda', tamanho_pt: 10,
+    peso: 'normal', borda: false, fundo: false, z: 0, ...o,
+  });
+
+  const r = await emA(() => documento.salvarLayout(folha, [
+    bloco({ id: 'a', texto: 'Rua das Flores, 100' }),
+    bloco({ id: 'b', tipo: 'campo', campo: 'valor_total_centavos', texto: null,
+            x_mm: 120, y_mm: 100, largura_mm: 70, altura_mm: 20,
+            alinhamento: 'direita', tamanho_pt: 18, peso: 'forte', borda: true, z: 3 }),
+  ]));
+  chk('W8b', r.blocos === 2 && r.avisos.length === 0,
+      `dois blocos gravados sem aviso (${r.blocos}, avisos=${r.avisos.length})`);
+
+  const lidaFolha = await emA(() => documento.layout());
+  const lidos = await emA(() => documento.blocos());
+  const b = lidos.find((x) => x.tipo === 'campo');
+  chk('W8c', lidaFolha.papel === 'a5' && lidaFolha.orientacao === 'paisagem'
+       && lidaFolha.margem_topo_mm === 10,
+      `a folha volta do banco como foi gravada (${lidaFolha.papel} ${lidaFolha.orientacao})`);
+
+  /*
+   * A GEOMETRIA VOLTA COMO NUMERO, e nao como Decimal ou string.
+   *
+   * `numeric` chega do driver como objeto, e um `Decimal` viajando ate o JSON
+   * da rota vira `{"s":1,"e":2,"d":[120]}` no navegador - que nao e coordenada
+   * nenhuma, e o bloco sumiria do papel sem erro em lugar algum. A conversao
+   * acontece num lugar so, na fronteira do repositorio, e e isto que prende.
+   */
+  chk('W8d', typeof b?.x_mm === 'number' && b.x_mm === 120 && b.largura_mm === 70,
+      `a coordenada volta como NUMBER, nao como Decimal (${typeof b?.x_mm}: ${b?.x_mm})`);
+  chk('W8e', b?.peso === 'forte' && b.tamanho_pt === 18 && b.alinhamento === 'direita' && b.borda === true,
+      'peso, tamanho, alinhamento e borda atravessam o banco - e o que o CRM passa a receber junto');
+
+  // O CHECK do banco: campo com texto, ou tipo sem nenhum dos dois.
+  const misturado = await lancou(() => emA(() => documento.salvarLayout(folha, [
+    bloco({ id: 'x', tipo: 'logo', texto: 'nao devia', campo: null }),
+  ])));
+  chk('W8f', misturado === null,
+      'bloco de logo com texto e NORMALIZADO antes de gravar - o CHECK do banco e a segunda tranca, nao a primeira');
+
+  // FORA DA PAGINA e RECUSA, e a mensagem nomeia o papel.
+  //
+  // A CONTAGEM E LIDA ANTES, e nao fixada: a primeira versao afirmava "2" e
+  // ficou vermelha porque a verificacao anterior (W8f) legitimamente gravou
+  // outro numero. Fixar o total mediria ordem de execucao em vez de medir a
+  // regra - e a regra e uma RELACAO: a recusa nao muda o que ja estava la.
+  const antesDaRecusa = (await emA(() => documento.blocos())).length;
+  const fora = await lancou(() => emA(() => documento.salvarLayout(folha, [
+    bloco({ id: 'y', x_mm: 10, y_mm: 10, largura_mm: 500, altura_mm: 20 }),
+  ])));
+  chk('W8g', fora?.status === 422 && /a5/.test(String(fora?.message)),
+      `bloco fora do papel e RECUSADO com 422 e o motivo nomeia o papel: ${String(fora?.name)}`);
+
+  const depoisDaRecusa = (await emA(() => documento.blocos())).length;
+  chk('W8h', antesDaRecusa > 0 && depoisDaRecusa === antesDaRecusa,
+      `a recusa nao apagou os blocos que ja estavam la - a conferencia roda ANTES de qualquer `
+      + `escrita (${antesDaRecusa} -> ${depoisDaRecusa})`);
+
+  // SOBREPOSICAO e AVISO, nao recusa - e ela volta para quem salvou.
+  const sobre = await emA(() => documento.salvarLayout(folha, [
+    bloco({ id: 'p', x_mm: 20, y_mm: 20, largura_mm: 40, altura_mm: 20 }),
+    bloco({ id: 'q', x_mm: 30, y_mm: 25, largura_mm: 40, altura_mm: 20 }),
+  ]));
+  chk('W8i', sobre.blocos === 2 && sobre.avisos.length === 1
+       && sobre.avisos[0]!.tipo === 'sobreposicao',
+      `sobreposicao GRAVA e AVISA - sobrepor pode ser intencional (${sobre.avisos.length} aviso)`);
+
+  // O documento da fatura CARREGA o layout posicionado.
+  const doc = await emA(() => documento.paraFatura(faturaA));
+  chk('W8j', doc.layout.folha.papel === 'a5' && doc.layout.medidas.largura_mm === 210
+       && doc.layout.blocos.length === 2,
+      `paraFatura devolve o documento POSICIONADO, com a folha do tenant `
+      + `(${doc.layout.medidas.largura_mm}x${doc.layout.medidas.altura_mm}mm, ${doc.layout.blocos.length} blocos)`);
+  chk('W8k', doc.linhas.length > 0,
+      'as linhas em forma de LISTA continuam saindo - e o documento para quem nao tem geometria');
+
+  // Lista vazia volta ao PADRAO, como em `definirCampos([])`.
+  await emA(() => documento.salvarLayout(folha, []));
+  chk('W8l', (await emA(() => documento.blocos())).length === 0,
+      'lista vazia APAGA os blocos e volta ao layout padrao do codigo');
+
+  const doPadrao = await emA(() => documento.paraFatura(faturaA));
+  chk('W8m', doPadrao.layout.blocos.length === 5
+       && doPadrao.layout.blocos.some((x) => x.tipo === 'tabela_de_campos'),
+      `sem blocos gravados a composicao cai no layout PADRAO, que reproduz o documento de sempre `
+      + `(${doPadrao.layout.blocos.length} blocos)`);
+
+  const naoEscreve = await lancou(() => emALeitura(() => documento.salvarLayout(folha, [])));
+  chk('W8n', naoEscreve !== null, 'papel `leitura` nao salva layout');
+
+  // Devolve a folha ao padrao para nao contaminar quem rodar depois.
+  await emA(() => documento.salvarLayout(
+    { papel: 'a4', orientacao: 'retrato', margem_topo_mm: 16, margem_direita_mm: 16,
+      margem_baixo_mm: 16, margem_esquerda_mm: 16 }, []));
+}
+
 console.log(falhas === 0
   ? `\nTODAS as verificacoes do documento passaram.`
   : `\n${falhas} FALHA(S) no documento.`);

@@ -536,6 +536,43 @@ export const ESTILO = `
   }
   .documento table td { padding: 7px 4px; border-bottom: 1px solid #eee; }
   .documento thead th { background: none; }
+
+  /* ------------------------------------------------ a FOLHA (migration 23)
+     A GEOMETRIA DA TELA E A DO PAPEL, E ISSO E O CONSERTO.
+
+     Antes, a previa era "max-width: 800px; padding: 32px" e o papel era
+     "width: 100%" com "@page { margin: 16mm }" - DUAS geometrias diferentes,
+     entao a previa nao respondia "e assim que vai sair?". Ela conferia
+     conteudo, nao forma.
+
+     Agora a folha tem a largura e a altura EXATAS do papel escolhido, em mm, e
+     a tela so a ESCALA ("transform", com a escala vinda de "escalaDaPrevia").
+     Escalar nao muda proporcao nenhuma: o que se ve e o que sai.
+
+     "--folha-w", "--folha-h" e "--escala" sao escritas pelo componente, porque
+     dependem do papel que o tenant gravou. A regra "@page" correspondente e
+     injetada em "<style>" por "regraDaPagina" - "size" nao aceita variavel. */
+  .folha {
+    position: relative;
+    width: var(--folha-w); height: var(--folha-h);
+    background: #fff; color: #111;
+    box-shadow: var(--sombra-2); border: 1px solid var(--borda);
+    overflow: hidden;
+  }
+  .folha-palco { transform: scale(var(--escala, 1)); transform-origin: top left; }
+  /* A area util, desenhada como guia. Some na impressao - e guia, nao conteudo. */
+  .folha .margem-guia {
+    position: absolute; border: 1px dashed var(--borda); pointer-events: none;
+  }
+  .bloco { position: absolute; overflow: hidden; box-sizing: border-box; }
+  .bloco table { width: 100%; border-collapse: collapse; }
+  .bloco table td { padding: 4px 2px; border-bottom: 1px solid #eee; }
+  .bloco-borda { border: 1px solid #111; }
+  /* O cinza do fundo e o MESMO "#eee" da borda da tabela, e nao um quarto tom:
+     a lista de excecoes deste bloco e fechada de proposito, e "quase igual"
+     seria a quarta cor de papel entrando por reuso preguicoso. */
+  .bloco-fundo { background: #eee; }
+
   @media print {
     /* Tudo fora do documento sai da pagina impressa - inclusive o que esta
        marcado com a classe naoimprime, que sao os controles da propria previa. */
@@ -546,7 +583,17 @@ export const ESTILO = `
       position: absolute; left: 0; top: 0; width: 100%;
       border: none; border-radius: 0; padding: 0; max-width: none; box-shadow: none;
     }
-    @page { margin: 16mm; }
+    /* A folha imprime em tamanho REAL: a escala e da tela, nunca do papel. */
+    #documento.folha {
+      width: var(--folha-w); height: var(--folha-h);
+      border: none; box-shadow: none;
+    }
+    .folha-palco { transform: none !important; }
+    .folha .margem-guia { display: none !important; }
+    /* SEM "@page" AQUI. O papel e do tenant e a regra e injetada em runtime por
+       "regraDaPagina" - "size" nao aceita "var()". Deixar um "@page" fixo neste
+       arquivo faria ele competir com o injetado, e quem venceria dependeria da
+       ordem de insercao das folhas de estilo. */
   }
   /* FIM-DOCUMENTO-IMPRESSO */
 

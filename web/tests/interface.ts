@@ -73,8 +73,17 @@ chk('I1b', literais(foraDoDocumento).length === 0,
 // estas. Uma quarta cor de papel — ou trocar #fff por #fefefe — para esta linha e
 // obriga quem mexeu a dizer por que. E o mesmo desenho do invariante 17-b da
 // migration 19: "a segunda entrada nessa lista deve doer".
+//
+// AJUSTADO EM 03/08 com a migration 23, e o ajuste vale ser explicado porque ele
+// AFROUXA a comparacao: antes era a SEQUENCIA de ocorrencias, e o bloco cresceu
+// (a folha em mm, os blocos posicionados, borda e fundo). A sequencia prendia
+// duas coisas ao mesmo tempo — quais cores e quantas vezes cada uma aparece — e
+// so a primeira era a intencao declarada. Escrever `#eee` numa regra nova nao e
+// excecao nova; escrever `#f2f2f2` e. Agora a comparacao e o CONJUNTO, na ordem
+// da primeira aparicao, e a propriedade que importa continua inteira: a quarta
+// cor de papel para esta linha, e trocar `#fff` por `#fefefe` tambem.
 const ESPERADAS = ['#fff', '#111', '#eee'];
-const achadas = literais(dentroDoDocumento);
+const achadas = [...new Set(literais(dentroDoDocumento))];
 chk('I1c', JSON.stringify(achadas) === JSON.stringify(ESPERADAS),
     `no documento impresso, exatamente ${ESPERADAS.join(' ')} — papel e preto sobre branco, `
     + `independente do tema da tela (achadas: ${achadas.join(' ') || 'nenhuma'})`);

@@ -17,17 +17,19 @@
 // formatacoes do mesmo valor e como duas telas passam a discordar. O que chega em
 // `linha.valor` vai para a tela como esta.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   api, buscarBinario,
   type IdentidadeDeCobranca, type CampoDoDocumento, type DocumentoDaFatura, type Fatura,
-  type QrDoDocumento, type QrDeConferencia,
+  type QrDoDocumento, type QrDeConferencia, type BlocoComposto,
 } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
   Pagina, Aviso, Campo, Tabela, linha, Icone, Interruptor, BotaoDeIcone, CampoData, Escolha, AjudaDoMes } from '../ui.tsx';
 import { competenciaISO, paraCentavos, emReais } from '../dinheiro.ts';
 import { mover, paraEnvio, type CampoConfigurado } from '../cobranca-regras.ts';
+import { escalaDaPrevia, regraDaPagina } from '../layout-regras.ts';
+import { EditorDeLayout, estiloDoBloco } from './layout-editor.tsx';
 
 /** Os 16 do enum `campo_de_fatura` (migration 19). A tela nao inventa nome de
  *  campo: o banco recusaria, e o erro sairia do lado errado. */
@@ -276,6 +278,12 @@ export function TelaDocumento() {
         )}
       </div>
 
+      {/* -------------------------------------------- a folha e as posicoes
+          DEPOIS dos campos de proposito: o bloco `tabela_de_campos` pinta a
+          lista de cima, entao a ordem na tela e a ordem da dependencia -
+          escolher o que aparece, e so entao onde. */}
+      <EditorDeLayout />
+
       {/* ANTES da Previa de proposito: a Previa exige fatura, e enquanto nao houver
           uma este painel e o unico caminho para o teste de campo do QR. Poe-lo
           embaixo esconderia a saida atras de um "Nenhuma fatura em ...". */}
@@ -420,38 +428,126 @@ function Previa({ logoUrl }: { logoUrl: string | null }) {
   );
 }
 
-/** O documento em si. `id="documento"` e o alvo do CSS de impressao do `ui.tsx`. */
+/**
+ * O documento em si. `id="documento"` e o alvo do CSS de impressao do `estilo.ts`.
+ *
+ * REESCRITO EM 03/08 COM A MIGRATION 23, e a mudanca e de natureza e nao de
+ * aparencia: antes esta funcao ESCOLHIA o desenho - logo a esquerda, "FATURA" a
+ * direita, tabela no meio, pagamento embaixo, tudo em JSX fixo. Agora ela pinta
+ * `doc.layout`, que vem posicionado do servidor.
+ *
+ * O QUE ISSO CONSERTA, alem de atender ao pedido: o `valor_total_centavos` saia
+ * em negrito 18px por causa de duas linhas DESTE arquivo, e essa decisao nao
+ * viajava no payload. O CRM consome a mesma rota e nao roda React - ele
+ * receberia a mesma fatura sem o negrito, e nenhum dos dois lados pareceria
+ * errado. Agora peso, tamanho e alinhamento sao dado do bloco.
+ */
 function Documento({ doc, logoUrl }: { doc: DocumentoDaFatura; logoUrl: string | null }) {
-  return (
-    <div id="documento" className="documento">
-      <header style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
-        {logoUrl && <img src={logoUrl} alt="" style={{ maxHeight: 56, maxWidth: 200 }} />}
-        <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
-          <div style={{ fontSize: 20, fontWeight: 700 }}>FATURA</div>
-          <div className="fraco">mês de referência {doc.competencia.slice(0, 7).split('-').reverse().join('/')}</div>
-        </div>
-      </header>
+  const { medidas, area, blocos, problemas } = doc.layout;
+  const palco = useRef<HTMLDivElement>(null);
+  const [larguraPx, setLarguraPx] = useState(0);
 
-      <table style={{ width: '100%' }}>
+  useEffect(() => {
+    const medir = () => setLarguraPx(palco.current?.clientWidth ?? 0);
+    medir();
+    window.addEventListener('resize', medir);
+    return () => window.removeEventListener('resize', medir);
+  }, []);
+
+  const escala = escalaDaPrevia(larguraPx, medidas.largura_mm);
+  const papelCss = PAPEL_CSS[doc.layout.folha.papel] ?? 'A4';
+
+  return (
+    <>
+      {/* A REGRA `@page`, INJETADA. `size` nao aceita `var()`, entao ela nao pode
+          morar no `estilo.ts` com o resto - e sem ela o navegador usaria o papel
+          padrao do SISTEMA de quem imprime, que foi o defeito que a migration 23
+          nomeou: a mesma fatura saindo com geometria diferente em duas maquinas. */}
+      <style>{regraDaPagina(papelCss, doc.layout.folha.orientacao)}</style>
+
+      {problemas.length > 0 && (
+        // `naoimprime` num <div> em volta, e nao no Aviso: o componente nao
+        // aceita `className`, e alargar a assinatura dele para um caso so
+        // deixaria a proxima pessoa achar que Aviso e generico.
+        <div className="naoimprime">
+          <Aviso tipo="alerta">
+            O layout tem {problemas.length} ponto(s) a olhar: {problemas.map((p) => p.detalhe).join(' · ')}
+          </Aviso>
+        </div>
+      )}
+
+      <div ref={palco} style={{ height: medidas.altura_mm * (96 / 25.4) * escala + 2, overflow: 'hidden' }}>
+        <div className="folha-palco" style={{ ['--escala' as any]: escala }}>
+          <div id="documento" className="folha" style={{
+            ['--folha-w' as any]: `${medidas.largura_mm}mm`,
+            ['--folha-h' as any]: `${medidas.altura_mm}mm`,
+          }}>
+            <div className="margem-guia naoimprime" style={{
+              left: `${area.x_mm}mm`, top: `${area.y_mm}mm`,
+              width: `${area.largura_mm}mm`, height: `${area.altura_mm}mm`,
+            }} />
+            {blocos.map((b) => (
+              <div key={b.id}
+                   className={`bloco${b.borda ? ' bloco-borda' : ''}${b.fundo ? ' bloco-fundo' : ''}`}
+                   style={{ ...estiloDoBloco(b), padding: '1mm' }}>
+                <ConteudoDoBloco b={b} doc={doc} logoUrl={logoUrl} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/** O `size` do `@page` por papel. Espelha `PAPEIS[].css` do servidor - e a razao
+ *  de nao duplicar as MEDIDAS esta em `web/src/layout-regras.ts`; aqui o que se
+ *  duplica e o nome CSS, que e uma palavra do proprio CSS e nao um dado nosso. */
+const PAPEL_CSS: Record<string, string> = {
+  a4: 'A4', a5: 'A5', carta: 'Letter', oficio: '216mm 330mm',
+};
+
+/** O que cada tipo de bloco pinta. A geometria ja veio de fora. */
+function ConteudoDoBloco(
+  { b, doc, logoUrl }: { b: BlocoComposto; doc: DocumentoDaFatura; logoUrl: string | null },
+) {
+  if (b.tipo === 'linha') {
+    return <div style={{ width: '100%', borderTop: '1px solid currentColor', opacity: .35 }} />;
+  }
+  if (b.tipo === 'logo') {
+    return logoUrl
+      ? <img src={logoUrl} alt="" style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />
+      : null;
+  }
+  if (b.tipo === 'texto') return <span style={{ whiteSpace: 'pre-wrap' }}>{b.texto}</span>;
+
+  if (b.tipo === 'campo') {
+    // O valor vem PRONTO do servidor. "—" e ausencia de dado, nunca zero.
+    return (
+      <span style={{ width: '100%' }}>
+        {b.rotulo ? <span className="fraco" style={{ marginRight: 6 }}>{b.rotulo}</span> : null}
+        {b.ausente ? <span className="fraco">{b.valor}</span> : b.valor}
+      </span>
+    );
+  }
+  if (b.tipo === 'tabela_de_campos') {
+    return (
+      <table>
         <tbody>
-          {doc.linhas.map((l) => (
+          {(b.linhas ?? []).map((l) => (
             <tr key={l.campo}>
               <td style={{ width: '55%' }}>{l.rotulo}</td>
-              <td className="num" style={{
-                fontWeight: l.campo === 'valor_total_centavos' ? 700 : 400,
-                fontSize: l.campo === 'valor_total_centavos' ? 18 : undefined,
-              }}>
-                {/* O valor vem PRONTO do servidor. "—" e ausencia de dado, nunca zero. */}
+              <td className="num">
                 {l.ausente ? <span className="fraco">{l.valor}</span> : l.valor}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
-
-      <FaixaDePagamento pagamento={doc.pagamento} />
-    </div>
-  );
+    );
+  }
+  if (b.tipo === 'pagamento') return <FaixaDePagamento pagamento={doc.pagamento} />;
+  return null;
 }
 
 /**
