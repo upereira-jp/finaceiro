@@ -1,3 +1,11 @@
+> # ⛔ SUPERADO EM 03/08/2026 — NÃO DIGITE CONTRATO POR ESTE MAPA
+>
+> **O eixo mudou, e não por preferência: o dev do CRM respondeu que nem `vendedor_origem` nem `responsavel_atual` respondem "quem vendeu".** A resposta canônica é o **crédito congelado no momento do ganho** (`financeiro.vendas_creditadas`), e por ele **este mapa está errado em 12 das 41 UCs — 5.858,8 kWh/mês, 19,6% da carteira**. O Out Sales sai de 24,2% para 4,6%.
+>
+> **Mapa vigente: `ATRIBUICAO-originador-2026-08-03.md`.**
+>
+> O corpo abaixo fica **intacto**, como registro datado — é a mesma decisão do `PATCH-citacoes-2026-07-24.md`. O que ele mediu em 30/07 estava certo *para o eixo daquele dia*; o que mudou foi qual eixo vale. As 12 estão listadas na §3 do mapa novo.
+
 # ATRIBUIÇÃO DE ORIGINADOR — a carteira de 41 linhas, remedida em 30/07
 
 | Campo | Valor |
