@@ -33,10 +33,22 @@ export class SemCrmDatabaseUrl extends Error {
   }
 }
 
-/** As oito views expostas pelo dev do CRM. Lista FECHADA - ver leitura.ts. */
+/**
+ * As DEZ views expostas pelo dev do CRM. Lista FECHADA - ver leitura.ts.
+ *
+ * Eram oito ate 03/08/2026. As duas ultimas - `vendas_creditadas` e
+ * `rateio_situacao` - foram criadas por eles em 01/08 e nos so descobrimos ao
+ * MEDIR uma resposta que dizia que elas nao existiam (`Q-VIEWSCRED-01`).
+ *
+ * A lista e fechada e a conferencia de arranque compara o que a role enxerga
+ * contra ela: view NOVA do lado deles nao entra sozinha, e view que SUMIR
+ * aparece. As duas direcoes importam - a segunda e o contrato de integracao
+ * quebrando, a primeira e um mes de trabalho feito por planilha sem necessidade.
+ */
 export const VIEWS_DO_CRM = [
   'vendas_ganhas', 'usinas', 'rateio_clientes', 'rateio_creditos',
   'geracao_mensal', 'parceiros', 'leads_arquivados', 'lead_merges',
+  'vendas_creditadas', 'rateio_situacao',
 ] as const;
 
 export type ViewDoCrm = (typeof VIEWS_DO_CRM)[number];
@@ -58,13 +70,37 @@ export type DiagnosticoDaRole = {
    * pg_net concede arwdDxtm a PUBLIC em net.http_request_queue.
    */
   privilegiosDeInfraestrutura: string[];
-  /** Views de `financeiro` que a role enxerga. Tem que ser as oito. */
+  /** Views de `financeiro` que a role enxerga. Tem que ser as dez. */
   viewsLegiveis: string[];
   /**
    * Views que expoem coluna de tenant - e o que liga a validacao por linha da
-   * invariante 9. Medido em 27/07 depois do ajuste do dev: as OITO.
+   * invariante 9. Medido em 27/07 depois do ajuste do dev: as OITO de entao; em
+   * 03/08, as DEZ.
    */
   viewsComColunaDeTenant: string[];
+  /**
+   * VIEWS QUE O CRM EXPOE E QUE NAO ESTAO NA NOSSA LISTA FECHADA.
+   *
+   * Esta linha existe por um custo pago. O dev do CRM criou `vendas_creditadas` e
+   * `rateio_situacao` em 01/08/2026, e nada deste lado notou: a lista fechada
+   * continuou com oito, o conector continuou lendo oito, e a descoberta veio em
+   * 03/08 por acaso - conferindo, por outro motivo, uma afirmacao de que as views
+   * nao existiam. Entre uma coisa e outra, o eixo do originador estava legivel
+   * por consulta e o projeto seguia planejando digitacao por documento.
+   *
+   * NAO derruba o arranque, e a escolha e deliberada: view nova do lado deles nao
+   * e insegurança, e recusar o ciclo por causa dela pararia o espelho por um
+   * evento que e boa noticia. Mas ela tambem nao pode chegar em silencio - a
+   * mesma forma de `privilegiosDeInfraestrutura`: declarada no diagnostico, e
+   * quem chama registra.
+   */
+  viewsNovasNoCrm: string[];
+  /**
+   * O SENTIDO CONTRARIO, e ele e mais grave: view da lista fechada que a role
+   * nao enxerga mais. E o contrato de integracao quebrando, e o sintoma sem esta
+   * linha seria um erro de SQL no meio do ciclo, longe da causa.
+   */
+  viewsAusentes: string[];
 };
 
 /**
@@ -95,7 +131,8 @@ export function criarPoolCrm(connectionString: string, teto = 2): Pool {
  *   1. a role e SUPERUSER ou tem BYPASSRLS?
  *   2. ela pode ESCREVER em algum objeto de schema de negocio?
  *   3. ela alcanca algum objeto de negocio fora das views `financeiro.*`?
- *   4. ela enxerga as oito views, e quais expoem coluna de tenant?
+ *   4. ela enxerga as dez views, quais expoem coluna de tenant, e o que apareceu
+ *      ou sumiu em relacao a lista fechada?
  */
 export async function conferirRoleDeLeitura(pool: Pool): Promise<DiagnosticoDaRole> {
   const c = await pool.connect();
@@ -177,11 +214,15 @@ export async function conferirRoleDeLeitura(pool: Pool): Promise<DiagnosticoDaRo
           AND has_table_privilege(c.oid, 'SELECT')
         ORDER BY c.relname`);
 
+    const legiveis = views.rows.map((r) => r.view);
+    const conhecidas = new Set<string>(VIEWS_DO_CRM);
     return {
       usuario: p.usuario,
       privilegiosDeInfraestrutura,
-      viewsLegiveis: views.rows.map((r) => r.view),
+      viewsLegiveis: legiveis,
       viewsComColunaDeTenant: views.rows.filter((r) => r.tem_tenant).map((r) => r.view),
+      viewsNovasNoCrm: legiveis.filter((v) => !conhecidas.has(v)),
+      viewsAusentes: [...conhecidas].filter((v) => !legiveis.includes(v)),
     };
   } finally {
     c.release();

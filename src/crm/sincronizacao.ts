@@ -28,21 +28,27 @@
 // as invariantes 1 e 2 verificaveis. O motor nao conhece `pg`, nao monta SQL e
 // nao sabe o nome de nenhuma tabela do CRM. Tudo que ele alcanca do outro lado
 // passa por `PortaDeLeitura`, cuja unica implementacao real e leitura.ts, que so
-// enxerga as oito views.
+// enxerga as dez views.
 
 import { dbt } from '../db/tipado.ts';
 import { tenantCorrente, exigir, dentroDeUnidadeDeTrabalho } from '../db/contexto.ts';
 import { ehSqlstate, SQLSTATE } from '../db/sqlstate.ts';
+import { conferirCreditoDeOriginador, type ResumoDeSituacao } from '../dominio/credito-originador.ts';
 import type {
   VendaGanha, LeadArquivado, LeadMerge, UsinaDoCrm, GeracaoMensal,
-  RateioCliente, RateioCredito, ResultadoDeLeitura,
+  RateioCliente, RateioCredito, VendaCreditada, RateioSituacao, ResultadoDeLeitura,
 } from './leitura.ts';
 
 /**
  * O que o ciclo precisa do CRM. Deliberadamente menor que `LeitorCrm`.
  *
- * SETE das oito views. A que falta e `parceiros`, que alimentaria `originador` -
+ * NOVE das dez views. A que falta e `parceiros`, que alimentaria `originador` -
  * F3, fora do escopo desta spec.
+ *
+ * `vendas_creditadas` e `rateio_situacao` entraram em 03/08 (R26). Elas nao
+ * produzem nenhuma escrita: o ciclo as le para CONFERIR o que foi digitado
+ * contra o eixo do originador, e o resultado e sinal em `conector_execucao`.
+ * A razao de nao escreverem esta em `src/dominio/credito-originador.ts`.
  *
  * `rateio_clientes` e `rateio_creditos` entraram em 28/07, com a decisao do dono
  * sobre a `F-01`: **espelho fiel**. Dos 36 `lead_id` do rateio, ZERO aparecem em
@@ -65,6 +71,8 @@ export type PortaDeLeitura = {
   geracaoMensal():   Promise<ResultadoDeLeitura<GeracaoMensal>>;
   rateioClientes():  Promise<ResultadoDeLeitura<RateioCliente>>;
   rateioCreditos():  Promise<ResultadoDeLeitura<RateioCredito>>;
+  vendasCreditadas(): Promise<ResultadoDeLeitura<VendaCreditada>>;
+  rateioSituacao():   Promise<ResultadoDeLeitura<RateioSituacao>>;
 };
 
 /**
@@ -201,6 +209,14 @@ export type ResultadoDoCiclo = {
   porEntidade: Record<Entidade, ContagemDeEntidade>;
   /** Sinais que nao impedem a escrita. Ver `Divergencia`. */
   divergencias: Divergencia[];
+  /**
+   * R26. `false` quando `vendas_creditadas` veio vazia e a conferencia do eixo
+   * do originador NAO RODOU - ambiguo entre "a view quebrou" e "nao ha credito",
+   * pela mesma razao da §7. Declarar que nao rodou e o oposto de acusar 39 UCs.
+   */
+  creditoConferido: boolean;
+  /** R26. Contagem da situacao do rateio, sobre as UCs ESPELHADAS. */
+  situacaoDoRateio: ResumoDeSituacao;
   /** R13 - quantas transacoes o ciclo abriu. Uma delas gigante e o defeito. */
   transacoes: number;
   /** Maior numero de leads que uma unica transacao carregou. Nunca > tamanho do lote. */
@@ -407,6 +423,8 @@ export async function executarCiclo(
     recusas: [], filaDeRevisao: [], divergencias: [], garantiaDeTenantDegradada: false,
     porEntidade: { cliente: zerado(), usina: zerado(), usina_geracao: zerado(),
                    unidade_consumidora: zerado() },
+    creditoConferido: false,
+    situacaoDoRateio: { ativado: 0, nao_ativado: 0, em_troca_titularidade: 0, sem_linha_na_view: 0 },
     transacoes: 0, maiorLote: 0, execucaoGravada: false,
   };
 
@@ -551,6 +569,11 @@ export async function executarCiclo(
         divergencias: r.divergencias,
         commitado_por_lote: houveTrabalho,
         garantia_de_tenant_degradada: r.garantiaDeTenantDegradada,
+        // Mesma razao das `divergencias` acima, e a licao e do N54: este
+        // `fechar()` e OUTRO trecho de codigo, e o que nao for repetido aqui se
+        // perde justamente no ciclo que deu errado.
+        credito_conferido: r.creditoConferido,
+        situacao_do_rateio: r.situacaoDoRateio,
       });
     } catch (aoFechar: any) {
       e.aoFechar = aoFechar;
@@ -636,6 +659,14 @@ async function processar(
   // rateio para que a reconciliacao nao os classifique como ausentes.
   await espelharUnidades(porta, r, tenantId, tamanho, lote, gravarContadores, vistosNoCrm);
 
+  // ------------------------------------------- o eixo do originador (R26)
+  //
+  // DEPOIS do espelho de UC, porque confere contra as UCs que acabaram de ser
+  // gravadas - conferir antes deixaria a UC nascida neste ciclo de fora, e o
+  // sinal chegaria so na rodada seguinte. E ANTES da reconciliacao, que so mexe
+  // em `cliente`: a ordem entre as duas nao importa, e esta e a que le menos.
+  await conferirCredito(porta, r, tenantId, lote);
+
   // ------------------------------------------------- reconciliacao (§4.3)
   // Outra leitura fora de transacao, pelo mesmo motivo.
   const [merges, arquivados] = await Promise.all([porta.leadMerges(), porta.leadsArquivados()]);
@@ -682,6 +713,17 @@ async function processar(
     lotes: { tamanho, transacoes: r.transacoes, maior_lote: r.maiorLote },
     por_entidade: r.porEntidade,
     garantia_de_tenant_degradada: r.garantiaDeTenantDegradada,
+    // R26. O resumo e CONTAGEM e nao sinal, de proposito: 11 das 39 UCs estao
+    // `nao_ativado` no CRM hoje (7 em troca de titularidade), e emitir 11
+    // divergencias por rodada treinaria a ignorar o `detalhe` inteiro. Como
+    // numero, a mesma informacao cabe numa linha e nao compete com o resto.
+    credito_conferido: r.creditoConferido,
+    situacao_do_rateio: r.situacaoDoRateio,
+    ...(r.creditoConferido ? {} : {
+      nota_credito: 'financeiro.vendas_creditadas devolveu zero linhas: a conferencia do eixo do '
+                  + 'originador (SPEC-002 R26) NAO RODOU. Ambiguo entre "a view quebrou" e "nao ha '
+                  + 'credito", e acusar cada UC a partir disso seria pior que calar.',
+    }),
     ...(r.garantiaDeTenantDegradada ? {
       nota: 'Nenhuma view do CRM expoe coluna de tenant: a validacao por linha da ' +
             'SPEC-002 R1-b nao rodou. O isolamento depende do literal no corpo da ' +
@@ -1185,6 +1227,73 @@ async function espelharUnidades(
       await marcarRateioAtivo([...new Set(bloco.map((a) => clientePorLead.get(a.leadId)!))], tenantId);
       await gravarContadores();
     });
+  }
+}
+
+/**
+ * R26 - O EIXO DO ORIGINADOR, CONFERIDO E NUNCA ESCRITO. `Q-VIEWSCRED-01`.
+ *
+ * Esta funcao nao tem um unico caminho de escrita, e isso e a regra e nao uma
+ * propriedade do momento: `originador_id` e campo local (R5), e a R20-b da
+ * SPEC-001 congela `originador_tipo_no_fechamento` no `rascunhar` sem edicao.
+ * Um conector que gravasse ali estaria decidindo sozinho quanto alguem recebe.
+ * A decisao inteira mora em `src/dominio/credito-originador.ts`, pura e testada
+ * sem banco - aqui so ha leitura, montagem e registro.
+ *
+ * UMA transacao, so de leitura. As UCs e os contratos cabem numa consulta: sao
+ * 39 e 0 hoje, e mesmo em ordem de grandeza maior isto e um `findMany` com
+ * `include`, nao uma viagem por linha - a licao da Q-LOTE-01 vale aqui tambem.
+ */
+async function conferirCredito(
+  porta: PortaDeLeitura, r: ResultadoDoCiclo, tenantId: string, lote: AbrirLote,
+): Promise<void> {
+  // Leitura do CRM FORA de transacao nossa, como todas as outras.
+  const [creditos, situacoes] = await Promise.all([porta.vendasCreditadas(), porta.rateioSituacao()]);
+  if (creditos.garantiaDegradada || situacoes.garantiaDegradada) r.garantiaDeTenantDegradada = true;
+
+  const ucs = await lote(async () =>
+    dbt().unidade_consumidora.findMany({
+      where: { tenant_id: tenantId },
+      select: {
+        numero_uc: true,
+        contrato: {
+          // So contrato VIVO conta. Um encerrado nao paga comissao nenhuma, e
+          // acusa-lo faria o sinal falar de dinheiro que nao se move mais.
+          where: { status: { in: ['rascunho', 'ativo', 'suspenso'] } },
+          select: {
+            status: true,
+            originador: { select: { nome: true, crm_partner_id: true } },
+          },
+        },
+      },
+    }));
+
+  const conferencia = conferirCreditoDeOriginador({
+    ucs: ucs.map((u) => {
+      // `contrato` e LISTA na relacao - a chave unica do vigente e parcial e a
+      // regra 11 proibe navegar por ela. Se houver mais de um vivo, o primeiro
+      // por `status` nao serve como criterio: o `contrato_vigente_unico_por_uc`
+      // ja garante no maximo um `ativo`/`suspenso` por UC, e rascunho nao
+      // concorre com ele - entao pegar o de maior precedencia e determinista.
+      const ordem = { ativo: 0, suspenso: 1, rascunho: 2 } as Record<string, number>;
+      const c = [...u.contrato].sort((a, b) => (ordem[a.status] ?? 9) - (ordem[b.status] ?? 9))[0];
+      return {
+        numeroUc: u.numero_uc,
+        contrato: c ? {
+          status: c.status,
+          originadorNome: c.originador?.nome ?? null,
+          originadorCrmPartnerId: c.originador?.crm_partner_id ?? null,
+        } : null,
+      };
+    }),
+    creditos: creditos.linhas,
+    situacoes: situacoes.linhas,
+  });
+
+  r.creditoConferido = conferencia.conferido;
+  r.situacaoDoRateio = conferencia.resumoDeSituacao;
+  for (const s of conferencia.sinais) {
+    r.divergencias.push({ entidade: 'unidade_consumidora', chave: s.chave, sinal: s.sinal });
   }
 }
 

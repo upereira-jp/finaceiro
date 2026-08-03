@@ -89,6 +89,28 @@ async function main(): Promise<void> {
     console.log(`            privilegio de infraestrutura (Q-PGNET-01): ${diag.privilegiosDeInfraestrutura.join(', ')}`);
   }
 
+  /*
+   * VIEW NOVA E VIEW SUMIDA, e as duas sao gritadas porque o custo do silencio
+   * ja foi pago. O dev do CRM criou `vendas_creditadas` e `rateio_situacao` em
+   * 01/08/2026 e este script continuou imprimindo "views legiveis: 10" numa
+   * linha que ninguem compara com nada - a lista fechada tinha oito, o conector
+   * lia oito, e por dois dias o eixo do originador esteve a uma consulta de
+   * distancia enquanto o projeto planejava digitacao por documento
+   * (`Q-VIEWSCRED-01`). Contagem que ninguem confere nao e medicao.
+   */
+  if (diag.viewsNovasNoCrm.length > 0) {
+    console.log(`\n  ATENCAO: o CRM expoe ${diag.viewsNovasNoCrm.length} view(s) que a lista FECHADA de`);
+    console.log(`  src/crm/conexao.ts nao conhece: ${diag.viewsNovasNoCrm.join(', ')}`);
+    console.log('  O conector NAO as le. Isto nao e falha - e trabalho novo disponivel, e');
+    console.log('  descobrir tarde ja custou uma semana de planilha uma vez.\n');
+  }
+  if (diag.viewsAusentes.length > 0) {
+    console.log(`\n  ATENCAO: ${diag.viewsAusentes.length} view(s) da lista fechada NAO estao legiveis:`);
+    console.log(`  ${diag.viewsAusentes.join(', ')}`);
+    console.log('  O contrato de integracao mudou do lado deles. O ciclo vai falhar ao');
+    console.log('  consultar essas, e o erro chegaria longe da causa sem este aviso.\n');
+  }
+
   if (diag.viewsComColunaDeTenant.length < diag.viewsLegiveis.length) {
     console.log('\n  ATENCAO: nem toda view expoe crm_tenant_id. A validacao por linha da');
     console.log('  SPEC-002 R1-b nao vai rodar nessas, e o ciclo vai registrar');
@@ -167,6 +189,17 @@ async function main(): Promise<void> {
     console.log(`  fila de revisao humana (§4.3): ${resultado.filaDeRevisao.join(', ')}`);
   }
   console.log(`  garantia de tenant degradada: ${resultado.garantiaDeTenantDegradada}`);
+  /*
+   * R26. As duas linhas dizem coisas diferentes e as duas importam: a primeira e
+   * se a conferencia do eixo do originador RODOU (view vazia = nao rodou, e
+   * calar isso faria "zero divergencias" significar duas coisas opostas); a
+   * segunda e a contagem que ate 03/08 nao existia em view nenhuma, e por isso
+   * toda linha do rateio era lida como valida.
+   */
+  console.log(`  credito conferido (R26): ${resultado.creditoConferido}`);
+  const s = resultado.situacaoDoRateio;
+  console.log(`  situacao do rateio nas UCs espelhadas: ${s.ativado} ativado, ${s.nao_ativado} nao ativado `
+            + `(${s.em_troca_titularidade} em troca de titularidade), ${s.sem_linha_na_view} sem linha na view`);
   // R13 visivel: se `maiorLote` empatar com `lidos`, o ciclo voltou a ser
   // transacao unica e o P2028 volta com o crescimento.
   console.log(`  lotes .......... ${resultado.transacoes} transacoes, maior lote ` +

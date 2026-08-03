@@ -33,7 +33,7 @@ import {
   type PortaDeLeitura, type AbrirLote,
 } from '../src/crm/sincronizacao.ts';
 import type { VendaGanha, LeadArquivado, LeadMerge, UsinaDoCrm, GeracaoMensal,
-              RateioCliente, RateioCredito } from '../src/crm/leitura.ts';
+              RateioCliente, RateioCredito, VendaCreditada, RateioSituacao } from '../src/crm/leitura.ts';
 
 const CONN = process.env.TEST_DATABASE_URL!;
 const A = process.env.TEST_TENANT_A!;
@@ -90,10 +90,19 @@ const venda = (o: Partial<VendaGanha> & { lead_id: string }): VendaGanha => ({
   ...o,
 });
 
+/*
+ * As duas ultimas - `creditos` e `situacoes` - entraram em 03/08 com a R26, e o
+ * DEFAULT VAZIO e deliberado: com `vendas_creditadas` vazia a conferencia do eixo
+ * do originador declara que NAO RODOU e nao acusa ninguem. E o que mantem as
+ * dezenas de verificacoes anteriores medindo o que sempre mediram - se a view
+ * vazia acusasse UC por UC, cada teste antigo passaria a carregar divergencias
+ * que nao tem nada a ver com o que ele afirma. Ver `N57`.
+ */
 const porta = (
   vendas: VendaGanha[], arquivados: LeadArquivado[] = [], merges: LeadMerge[] = [],
   degradada = true, usinas: UsinaDoCrm[] = [], geracao: GeracaoMensal[] = [],
   rateioCli: RateioCliente[] = [], rateioCre: RateioCredito[] = [],
+  creditos: VendaCreditada[] = [], situacoes: RateioSituacao[] = [],
 ): PortaDeLeitura => ({
   crmTenantId: CRM_TENANT,
   vendasGanhas:    async () => ({ linhas: vendas, garantiaDegradada: degradada }),
@@ -103,6 +112,32 @@ const porta = (
   geracaoMensal:   async () => ({ linhas: geracao, garantiaDegradada: degradada }),
   rateioClientes:  async () => ({ linhas: rateioCli, garantiaDegradada: degradada }),
   rateioCreditos:  async () => ({ linhas: rateioCre, garantiaDegradada: degradada }),
+  vendasCreditadas: async () => ({ linhas: creditos, garantiaDegradada: degradada }),
+  rateioSituacao:   async () => ({ linhas: situacoes, garantiaDegradada: degradada }),
+});
+
+/* Fixtures das duas views novas, com a FORMA REAL medida em 03/08/2026 pela
+ * `financeiro_ro`: `vendedor` como nome curto, `parceiro_id`/`parceiro_nome`
+ * nulos em 45 de 48, e `uc` como a ponte com o nosso espelho - 39 das nossas 39
+ * casaram. */
+const creditoCrm = (o: Partial<VendaCreditada> & { uc: string }): VendaCreditada => ({
+  crm_tenant_id: CRM_TENANT, credito_id: 'cccc1111-0000-4000-8000-0000000000c1',
+  crm_lead_id: 'aaaa8001-0000-4000-8000-00000000cc01', lead_codigo: 'G3-0001',
+  cliente: 'Cliente do rateio', telefone: null,
+  funil: 'Vendas - Assinatura', etapa: 'GANHO', vendedor: 'Renata',
+  vendedor_user_id: 'eeee1111-0000-4000-8000-0000000000f1', responsavel_origem: 'Renata',
+  parceiro_id: null, parceiro_nome: null, parceria_tipo: null, parceria_categoria: null,
+  comissao_pct: null, comissao_label: null, vendedor_nome_ficha: null, divergencia_ficha: false,
+  valor: null, ganho_em: new Date('2026-06-01T12:00:00Z'), origem_carimbo: 'backfill',
+  vigente: true, revogado_em: null, revogado_motivo: null,
+  created_at: new Date('2026-08-01T03:53:00Z'), ...o,
+});
+const situacaoCrm = (o: Partial<RateioSituacao> & { uc: string }): RateioSituacao => ({
+  crm_tenant_id: CRM_TENANT, contrato_id: 'bbbb8001-0000-4000-8000-00000000cc81',
+  crm_lead_id: 'aaaa8001-0000-4000-8000-00000000cc01', lead_codigo: 'G3-0001',
+  cliente: 'Cliente do rateio', etapa_rateio: 'Rateio Concluido', stage_type: 'won',
+  situacao: 'ativado', em_troca_titularidade: false,
+  na_etapa_desde: new Date('2026-07-14T12:00:00Z'), ...o,
 });
 
 /* Fixtures do rateio, com a forma real: `data_vencimento`, `troca_titularidade` e
@@ -804,6 +839,154 @@ const L3 = 'aaaa3333-0000-4000-8000-00000000cc03';
     const n = await sql(`SELECT count(*)::int n FROM unidade_consumidora WHERE tenant_id=$1::uuid AND numero_uc='000000000000899'`, A);
     chk('N50', n[0].n === 0 && r.porEntidade.unidade_consumidora.recusados === 1,
         `cascata: UC de usina nao espelhada e recusa contada, nao UC sem distribuidora (rec=${r.porEntidade.unidade_consumidora.recusados})`);
+  }
+
+  // ---- N57-N62: O EIXO DO ORIGINADOR CONFERIDO CONTRA O CREDITO (R26).
+  //
+  // A decisao esta em `src/dominio/credito-originador.ts` e tem 28 verificacoes
+  // PURAS em `tests/credito-originador.ts`. O que estes seis provam e o que
+  // aquelas nao alcancam, e e outra coisa:
+  //
+  //   N57  a view vazia declara que a conferencia NAO RODOU, e isso CHEGA AO BANCO
+  //   N58  o caminho limpo, contra UC de verdade lida do nosso schema
+  //   N59  o sinal chega ao `conector_execucao.detalhe` e NAO vira recusa
+  //   N60  o resumo de situacao chega ao `detalhe` como CONTAGEM
+  //   N61  invariante 14 - a conferencia nao escreve NADA, medido campo a campo
+  //   N62  o contrato digitado sobrevive ao ciclo com o originador divergente
+  //
+  // O par mudo/falante e sempre montado com UM campo de diferenca, para que a
+  // verificacao esteja medindo a condicao e nao o cenario.
+  {
+    const USINA_ID = 'dddd1111-0000-4000-8000-00000000aa01';
+    const cenario = (creditos: VendaCreditada[] = [], situacoes: RateioSituacao[] = []) =>
+      porta([venda({ lead_id: L1 })], [], [], true,
+        [usinaCrm({ usina_id: USINA_ID, codigo_geradora: 'GER-CRM-01' })], [],
+        [rateioCliCrm({ contrato_id: CT1, uc: UC_A, cliente: 'Fulano do Rateio' })],
+        [rateioCreCrm({ contrato_id: CT1, lead_id: LR1 })], creditos, situacoes);
+    const detalheDe = async (cicloId: string) => {
+      const [l] = await sql(`SELECT detalhe FROM conector_execucao WHERE tenant_id=$1::uuid AND ciclo_id=$2::uuid`,
+                            A, cicloId);
+      return (l?.detalhe ?? {}) as any;
+    };
+
+    // ---- N57: view vazia = conferencia nao rodou. E o estado de todos os
+    // testes acima, e por isso nenhum deles carrega divergencia de credito.
+    {
+      const r = await executarCiclo(cenario(), loteEmA());
+      const det = await detalheDe(r.cicloId);
+      chk('N57', r.creditoConferido === false && r.divergencias.length === 0
+           && det.credito_conferido === false && typeof det.nota_credito === 'string',
+          `R26 vendas_creditadas vazia: NAO acusa nenhuma UC e o detalhe DIZ que nao rodou `
+          + `(conferido=${r.creditoConferido}, div=${r.divergencias.length})`);
+    }
+
+    /*
+     * A CONTAGEM E POR UC, NUNCA O TOTAL DO CICLO - e a primeira versao destas
+     * duas verificacoes usava o total e ficou vermelha por isso.
+     *
+     * O tenant do teste acumula as UCs dos blocos anteriores (N45-N50), e so a
+     * UC_A recebe credito nas fixtures daqui: o total legitimamente traz ~37
+     * sinais de "sem credito vigente" que nao tem nada a ver com o que estas
+     * verificacoes afirmam. Prender o total seria prender ORDEM DE EXECUCAO,
+     * que e o mesmo criterio que `tests/repos-documento.ts` ja registrou:
+     * afirmar a RELACAO, nao a constante.
+     */
+    const naUc = (r: { divergencias: { chave: string; sinal: string }[] }, uc = UC_A) =>
+      r.divergencias.filter((d) => d.chave === uc);
+
+    // ---- N58: o caminho limpo. Sem ele o N59 poderia estar acusando qualquer coisa.
+    {
+      const r = await executarCiclo(cenario([creditoCrm({ uc: UC_A })], [situacaoCrm({ uc: UC_A })]), loteEmA());
+      chk('N58', r.creditoConferido === true && naUc(r).length === 0,
+          `R26 UC espelhada com credito vigente unico: conferido e ZERO sinais NELA (${naUc(r).length})`);
+    }
+
+    // ---- N59: um campo de diferenca - o credito da UC vem REVOGADO e sem
+    // substituto. O sinal aparece, e nao vira recusa nem derruba o status.
+    {
+      const r = await executarCiclo(cenario(
+        [creditoCrm({ uc: UC_A, vigente: false, revogado_motivo: 'venda cancelada pelo cliente' }),
+         creditoCrm({ uc: '000000000000899' })],   // outra UC: a view nao esta vazia
+        [situacaoCrm({ uc: UC_A })]), loteEmA());
+      const det = await detalheDe(r.cicloId);
+      const d = r.divergencias.find((x) => x.chave === UC_A && /REVOGADO/.test(x.sinal));
+      chk('N59', d !== undefined && r.porEntidade.unidade_consumidora.recusados === 0
+           && r.status !== 'erro' && /venda cancelada pelo cliente/.test(JSON.stringify(det.divergencias ?? [])),
+          `R26 credito revogado sem substituto vira SINAL com o motivo do CRM, sem recusa `
+          + `(rec=${r.porEntidade.unidade_consumidora.recusados}, status=${r.status})`);
+    }
+
+    // ---- N60: o resumo e CONTAGEM, e conta as ESPELHADAS.
+    //
+    // A view leva tres UCs e so uma esta espelhada neste tenant. Contar a view
+    // daria 3 e responderia a pergunta errada: o numero existe para dizer
+    // quantas das MINHAS estao nao ativadas (11 de 39 em producao, 03/08).
+    {
+      const r = await executarCiclo(cenario(
+        [creditoCrm({ uc: UC_A })],
+        [situacaoCrm({ uc: UC_A, situacao: 'nao_ativado', em_troca_titularidade: true }),
+         situacaoCrm({ uc: '000000000000898', situacao: 'nao_ativado' }),
+         situacaoCrm({ uc: '000000000000899' })]), loteEmA());
+      const det = await detalheDe(r.cicloId);
+      const s = det.situacao_do_rateio ?? {};
+      chk('N60', s.nao_ativado === 1 && s.em_troca_titularidade === 1 && s.ativado === 0
+           && naUc(r).length === 0,
+          `R26 situacao do rateio chega ao detalhe como contagem das ESPELHADAS, e sem contrato `
+          + `nao vira sinal (nao_ativado=${s.nao_ativado}, ativado=${s.ativado}, div_na_uc=${naUc(r).length})`);
+    }
+
+    // ---- N61/N62: INVARIANTE 14 - a conferencia nao escreve nada.
+    //
+    // Este e o par que importa mais, porque o modo de falha e silencioso: um
+    // conector que "corrigisse" o originador a partir do credito pagaria outra
+    // pessoa sem erro e sem log, e a R20-b congela o tipo no rascunhar sem
+    // caminho de edicao. Aqui o contrato e PLANTADO com o originador ERRADO de
+    // proposito, e a afirmacao e que ele continua errado depois do ciclo.
+    {
+      const ORIG = 'aaaa7001-0000-4000-8000-00000000dd01';
+      const CTR  = 'bbbb7001-0000-4000-8000-00000000dd02';
+      const [ucLinha] = await sql(`SELECT id, cliente_id, percentual_rateio::text, crm_usina_cliente_id
+                                     FROM unidade_consumidora WHERE tenant_id=$1::uuid AND numero_uc=$2`, A, UC_A);
+
+      await sql(`INSERT INTO originador (id, tenant_id, nome, natureza, tipo, documento, documento_tipo)
+                 VALUES ($1::uuid,$2::uuid,'Out Sales','pj','terceirizado','19131243000197','cnpj')
+                 ON CONFLICT DO NOTHING`, ORIG, A);
+      await sql(`INSERT INTO contrato (id, tenant_id, cliente_id, unidade_consumidora_id, usina_id,
+                                       originador_id, originador_tipo_no_fechamento, data_fechamento,
+                                       valor_referencia_centavos, valor_referencia_origem, status)
+                 VALUES ($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,$6::uuid,'terceirizado','2026-06-01',
+                         12345,'local','ativo')
+                 ON CONFLICT DO NOTHING`,
+               CTR, A, ucLinha.cliente_id, ucLinha.id, process.env.TEST_USINA!, ORIG);
+
+      // O credito diz Renata; o contrato congelou Out Sales. C3 dispara.
+      const r = await executarCiclo(cenario(
+        [creditoCrm({ uc: UC_A, vendedor: 'Renata' })],
+        [situacaoCrm({ uc: UC_A, situacao: 'nao_ativado' })]), loteEmA());
+
+      const d = r.divergencias.find((x) => x.chave === UC_A && /Out Sales/.test(x.sinal) && /Renata/.test(x.sinal));
+      // C5 tambem dispara aqui, e de proposito: o contrato esta ATIVO sobre um
+      // rateio que o CRM nao da por ativado. Sao dois fatos, dois sinais.
+      const c5 = r.divergencias.find((x) => x.chave === UC_A && /Q-SITUACAO-01/.test(x.sinal));
+      chk('N61', d !== undefined && c5 !== undefined && r.porEntidade.unidade_consumidora.recusados === 0,
+          `R26 contrato com originador divergente do credito vira SINAL, e o rateio nao ativado `
+          + `sob contrato ATIVO vira outro (sinais na UC=${r.divergencias.filter((x) => x.chave === UC_A).length})`);
+
+      const [ct] = await sql(`SELECT originador_id, originador_tipo_no_fechamento, status FROM contrato WHERE id=$1::uuid`, CTR);
+      const [uc2] = await sql(`SELECT cliente_id, percentual_rateio::text, crm_usina_cliente_id
+                                 FROM unidade_consumidora WHERE id=$1::uuid`, ucLinha.id);
+      chk('N62', ct?.originador_id === ORIG && ct?.originador_tipo_no_fechamento === 'terceirizado'
+           && ct?.status === 'ativo' && uc2?.cliente_id === ucLinha.cliente_id
+           && uc2?.percentual_rateio === ucLinha.percentual_rateio
+           && uc2?.crm_usina_cliente_id === ucLinha.crm_usina_cliente_id,
+          `invariante 14 a conferencia NAO ESCREVE: originador, tipo congelado, status e a UC `
+          + `inteiros depois do ciclo (originador=${ct?.originador_id === ORIG ? 'intacto' : ct?.originador_id})`);
+
+      // Devolve o estado: o contrato plantado atrapalharia os testes seguintes,
+      // que contam UCs e clientes sem esperar contrato nenhum.
+      await sql(`DELETE FROM contrato WHERE id=$1::uuid`, CTR);
+      await sql(`DELETE FROM originador WHERE id=$1::uuid`, ORIG);
+    }
   }
 }
 

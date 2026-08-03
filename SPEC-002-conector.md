@@ -3,8 +3,8 @@
 | Campo | Valor |
 |---|---|
 | **Status** | Rascunho — **aguarda aceite do autor.** Reconciliada com o medido em 27/07 (v1.3); o aceite em si é decisão do dono, não de quem implementou |
-| **Versão** | 1.5 |
-| **Data** | 26/07/2026 · rev. 1.5 em 03/08/2026 |
+| **Versão** | 1.6 |
+| **Data** | 26/07/2026 · rev. 1.6 em 03/08/2026 |
 | **Autor** | Vinicius Leal |
 | **Fase** | **F1.** Resolvido em 27/07 pela `Q-FASE-01`: o `PRD-v2.2` §10 vence, porque a hierarquia do `CLAUDE.md` põe o PRD acima das SPECs. O cabeçalho anterior dizia *"F2 (parcial em F1)"* e era ele que divergia |
 | **Depende de** | `SPEC-001` v2.3 (schema, isolamento, middleware) · `ADR-0001` · `ADR-0003` r2 |
@@ -139,6 +139,32 @@ conector_execucao   id · tenant_id · ciclo_id · iniciado_em · terminado_em
 >
 > Testes `N55` (o valor sobrevive ao ciclo com CRM vazio — **falha contra o código anterior**, e é o registro executável do defeito) e `N56` (CRM com valor diferente vira sinal, não sobrescrita e não recusa).
 
+> **R26 (nova, 03/08/2026).** **O eixo do originador é o crédito congelado do CRM, o conector o LÊ e NUNCA o escreve, e divergência contra o que foi digitado vira sinal.**
+>
+> As views `financeiro.vendas_creditadas` e `financeiro.rateio_situacao` entram na lista fechada — que passa de **oito para dez**. Elas não produzem escrita nenhuma: o ciclo as lê para **conferir**, e o resultado vai para `conector_execucao.detalhe`.
+>
+> **Por que o conector não escreve `contrato.originador_id`, e isso é regra e não estado do momento.** (1) `originador_id` é campo local, e a R5 diz que o usuário vence — `originador` exige CPF/CNPJ, natureza e `tipo`, que **nenhuma das dez views entrega**. (2) A **R20-b** da `SPEC-001` congela `originador_tipo_no_fechamento` no `rascunhar` e `contrato` não tem edição: um conector que gravasse ali estaria decidindo sozinho, sem trilha de gente, quanto alguém recebe.
+>
+> **As cinco conferências, e cada uma foi medida contra o CRM real antes de ser escrita.** O critério é o mesmo da R25: sinal que dispara em toda rodada treina a ignorar o `detalhe` inteiro. Contra o estado de 03/08 as cinco disparam **zero** vezes.
+>
+> | | Dispara quando | Medido em 03/08 |
+> |---|---|--:|
+> | **C1** | UC espelhada sem crédito **vigente** — com a redação mudando se houve revogação sem substituto | 39 de 39 têm crédito · **0** |
+> | **C2** | dois créditos vigentes na mesma UC: o eixo é ambíguo e a R8 proíbe o palpite | nenhuma UC repetida · **0** |
+> | **C3** | o originador digitado não é nenhuma das duas pontas do crédito | 0 contratos · **0** |
+> | **C4** | o digitado casa uma ponta **e o crédito nomeia a outra** — a `Q-PARCERIA-01` materializada | 3 UCs, sem contrato · **0** |
+> | **C5** | contrato **ativo** sobre rateio que o CRM não dá por ativado ou está em troca de titularidade | 11 de 39 não ativadas, 0 contratos · **0** |
+>
+> **`vendas_creditadas` vazia NÃO acusa ninguém.** Zero linhas é ambíguo entre *"a view quebrou"* e *"não há crédito"* — a mesma decisão que a §7 já tomou para `vendas_ganhas`. A conferência declara que **não rodou** (`credito_conferido: false` mais uma nota), do mesmo jeito que `garantia_de_tenant_degradada` declara. Acusar 39 UCs a partir de uma view possivelmente quebrada seria o oposto de informar.
+>
+> **A situação do rateio entra como CONTAGEM, não como sinal por UC.** `situacao_do_rateio` no `detalhe` conta as UCs **espelhadas** — não as linhas da view, que são 41 contra as nossas 39. Onze delas estão `nao_ativado` hoje: onze sinais por rodada seriam ruído, e a mesma informação cabe numa linha como número. **Se o conector deve ou não recusar linha de rateio não ativada é decisão com dono, e está em `Q-SITUACAO-01`** — não vira improviso do implementador (regra 10).
+>
+> **A comparação de nomes é declarada, e o que ela não resolve também.** Onde há chave forte — `originador.crm_partner_id` contra `vendas_creditadas.parceiro_id`, o mesmo UUID — ela vence. O vendedor não tem chave nossa (`originador` não guarda `crm_user_id`, e criá-la é migration com dono), então ali a comparação é por nome normalizado: NFD sem diacríticos, espaços colapsados, caixa baixa. **Dois originadores homônimos passariam como o mesmo** — nome não é chave, e isso fica declarado em vez de escondido.
+>
+> **`divergencia_ficha` é lida e não vira sinal**, de propósito: é divergência interna do CRM entre o crédito e a ficha do lead, `true` em **7 de 48** hoje, e não temos como consertá-la.
+>
+> A decisão inteira é **pura** e mora em `src/dominio/credito-originador.ts` — 27 verificações sem banco em `tests/credito-originador.ts`, cada regra com o seu caso mudo ao lado do caso falante. Testes `N57`–`N62` com banco.
+
 ## 4. Regras de negócio
 
 > **R1.** O conector le **exclusivamente** as views `financeiro.*`. Nenhuma tabela base do CRM e consultada, nem para conferencia.
@@ -246,6 +272,7 @@ os dois caminhos de delete fisico, que sao raros - em vez de tudo que sai da vie
 11. Atribuicao de originador vem de `partner_id`, nunca de tag (R16).
 12. Vitima de merge **funde**, nao apenas desativa (R18).
 13. **Suposição não confirmada que o conector propaga vira sinal registrado, nunca silêncio** (R21-b). Divergência entre campo derivado e campo local aparece em `conector_execucao.detalhe` — e **não** é contada como recusa, porque a linha foi gravada.
+14. **O conector nunca escreve o originador de um contrato** (R26). O crédito congelado do CRM é lido e conferido; `contrato.originador_id` e `originador_tipo_no_fechamento` não são tocados por nenhum caminho desta spec, e divergência vira sinal. Escrever ali seria decidir sozinho quanto alguém recebe, sobre um campo que a R20-b congela sem caminho de edição.
 
 ## 6. Interfaces
 
@@ -315,6 +342,8 @@ os dois caminhos de delete fisico, que sao raros - em vez de tudo que sai da vie
 | `test_atribuicao_por_partner_id` | Inv. 11 · R16 — 🔴 **NÃO EXISTE, e não é teste faltando: é funcionalidade faltando.** O conector não cria `contrato`, então não há atribuição de originador para testar. Ver `Q-ESCOPO-01` na §10 |
 | `test_vitima_de_merge_funde_espelho` | Inv. 12 · R18 — **`N32`/`N33`/`N34`**. Escrito em 27/07: o código existia desde a construção e **nenhum teste provava que a fusão acontece** — o `N6` provava só a ordem da classificação |
 | `test_ordem_de_classificacao_de_ausencia` | R18 — `N6` |
+| `test_credito_de_originador_nao_e_escrito` | **Inv. 14 · R26 — `N61`/`N62`**. O contrato é plantado com o originador **errado de propósito** e a afirmação é que ele continua errado depois do ciclo: originador, tipo congelado, status e a UC inteiros. O modo de falha é silencioso — um conector que "corrigisse" pagaria outra pessoa sem erro e sem log |
+| `test_divergencia_de_credito_vira_sinal` | **R26 — `N57`–`N60`** com banco, mais as **27 puras** de `tests/credito-originador.ts`. O `N57` fixa que a view vazia **não acusa ninguém** e declara que não rodou; o `N58` é o caminho limpo, sem o qual o `N59` poderia estar acusando qualquer coisa; o `N60` prova que a situação do rateio entra como **contagem das espelhadas**, não como sinal por UC. Nas puras, cada uma das cinco condições tem o seu **caso mudo** ao lado do falante, com um campo de diferença |
 | `test_divergencia_de_distribuidora_vira_sinal` | Inv. 13 · R21-b — **`N51`–`N54`**. O `N51` fixa o caminho limpo (sem ele o `N52` poderia estar acusando qualquer coisa); o `N53` separa sinal de recusa e de sobrescrita; o `N54` cobre o `fechar()` do caminho de **erro**, que é outro trecho de código e levava `recusas` sem levar `divergencias`. Os dois sentidos verificados por plantio |
 
 ## 10. Questões abertas
@@ -349,6 +378,7 @@ os dois caminhos de delete fisico, que sao raros - em vez de tudo que sai da vie
 
 | Versão | Data | O que mudou |
 |---|---|---|
+| **1.6** | **03/08/2026** | **A lista fechada de views passa de oito para dez, e o eixo do originador deixa de sair de documento.** Nova **R26** e novo **invariante 14**: o conector lê `financeiro.vendas_creditadas` e `financeiro.rateio_situacao`, confere o crédito congelado contra o originador digitado, e **não escreve nem um campo**. Cinco condições de sinal, **todas medidas contra o CRM real antes de escritas e todas mudas hoje** — o critério de ruído da R25 aplicado por construção. `N57`–`N62` mais 27 verificações puras. **A parte que ensina não é a regra, é como as views foram descobertas:** elas existiam desde 01/08 e a resposta do dev dizia que não; nada deste lado comparava o que o CRM expõe contra a nossa lista fechada, então "views legíveis: 10" era impresso e ninguém conferia contra o 8. `conferirRoleDeLeitura` passa a devolver `viewsNovasNoCrm` e `viewsAusentes`, e o script grita as duas. Contagem que ninguém confere não é medição |
 | **1.5** | **03/08/2026** | **`data_vencimento` era espelho e virou campo local — e a correção é de defeito, não de estilo.** Nova **R25**: o conector não escreve `data_vencimento` em nenhum caminho, e divergência vira sinal. O código anterior a levava no `updateMany`, e o CRM a tem **vazia em 41 de 41 linhas** (medido no dia): preencher o vencimento das 39 UCs e rodar o ciclo **apagaria os 39**, sem erro, sem log e sem recusa. Duas linhas novas na §7 e os testes `N55`/`N56` — o `N55` **falha contra o código anterior**, e é o registro executável do defeito. Achado ao construir o importador de vencimento, não por auditoria: a pergunta era *"onde o valor vai ser gravado"* e a resposta foi *"e quem o apaga depois"* |
 | **1.4** | **28/07/2026** | **A suposição da R21 deixou de esperar confirmação e virou sinal.** Nova **R21-b**: divergência entre a `distribuidora` da UC (campo local, R5) e a da usina vinculada aparece em `conector_execucao.detalhe` — sem recusar e sem sobrescrever. Novo **invariante 13**, nova linha na §7, novo teste obrigatório (`N51`–`N54`). O `N54` nasceu de um buraco encontrado ao escrevê-lo: o `fechar()` do caminho de **erro** levava `recusas` e não levava `divergencias`, então o sinal se perderia justamente no ciclo interrompido. **Medido contra produção em 28/07: zero divergências nas 35 UCs** — o sinal nasce silencioso, que é o estado correto |
 | **1.3** | **27/07/2026** | **Reconciliação com o medido — a spec estava atrás do código, e em SDD isso é a inversão que não se tolera.** A **R9** ganha a redação da `Q-VALOR-01`: `consumo_kwh` conta como valor, e a recusa exige ausência dos três. A **R14** perde a afirmação *"os funis de venda têm zero ganhos sem valor"*, **medida falsa** — eram 40 de 41. A **R13** ganha o **tamanho declarado (50)** e a conta de viagens que o fixa, que até aqui só existiam em comentário de código. A **§8** sai de 9 critérios em aberto para **9 marcados com o teste nomeado**, incluindo o "por log de query" que nunca fora atendido. A **§9** ganha o teste de cada linha — e expõe duas verdades desconfortáveis: `test_vitima_de_merge_funde_espelho` **não existia para código que existia**, e `test_atribuicao_por_partner_id` não é teste faltando, é a `Q-ESCOPO-01`. Duas questões novas: **`Q-ESCOPO-01`** (🔴, o conector entrega 1 de 4 entidades) e **`Q-CICLO-ORFAO-01`** (🟡) |

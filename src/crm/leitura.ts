@@ -8,9 +8,24 @@
 // COMO A GARANTIA E CONSTRUIDA, e nao apenas afirmada:
 //   - o SQL de cada view e uma CONSTANTE deste arquivo. Nao ha funcao que aceite
 //     nome de tabela, nome de schema ou fragmento de SQL vindo de fora.
-//   - `consultar()` e privado. O que sai daqui sao oito leitores nomeados.
-//   - o teste percorre o modulo e falha se aparecer um nono SQL, ou se algum
-//     mencionar schema que nao seja `financeiro`.
+//   - `consultar()` e privado. O que sai daqui sao dez leitores nomeados.
+//   - o teste percorre o modulo e falha se aparecer um decimo-primeiro SQL, ou se
+//     algum mencionar schema que nao seja `financeiro`.
+//
+// ------------------------------------------------------------------------
+// AS DUAS ULTIMAS ENTRARAM EM 03/08/2026, E A LICAO E SOBRE MEDIR RESPOSTA.
+//
+// `vendas_creditadas` e `rateio_situacao` foram criadas pelo dev do CRM em 01/08
+// e a resposta dele a rodada 5 dizia que o credito *"nao esta em view nenhuma"* e
+// que *"mesmo com o nome, voces leriam 0 linhas"*. Medido pela `financeiro_ro` no
+// mesmo dia: 48 e 41 linhas, um unico `crm_tenant_id` em cada. A afirmacao estava
+// vencida, e obedece-la teria custado uma semana de digitacao por planilha -
+// `Q-VIEWSCRED-01`.
+//
+// Elas sao o eixo do originador (`Q-EIXO-FUNCIONARIO-01`: o credito CONGELADO no
+// momento do ganho, nao `vendedor_origem` nem `responsavel_atual`) e a situacao do
+// rateio, que ate 03/08 nao existia em view nenhuma - por isso toda linha de
+// `rateio_clientes` era lida como valida.
 //
 // ------------------------------------------------------------------------
 // A INVARIANTE 9 ESTA CUMPRIDA DESDE 27/07 - E QUASE NAO ESTEVE.
@@ -100,6 +115,28 @@ const SQL: Record<ViewDoCrm, string> = {
   lead_merges: `
     SELECT vitima_id, sobrevivente_id, mesclado_em, origem, crm_tenant_id
       FROM financeiro.lead_merges`,
+  /*
+   * O CREDITO CONGELADO. Imutavel por gatilho do lado deles: corrigir exige
+   * revogar e recreditar, e por isso `vigente`, `revogado_em` e `revogado_motivo`
+   * entram - sao o aviso de revogacao de graca (Q-VIEWSCRED-01).
+   *
+   * `divergencia_ficha` E LIDA E NAO VIRA SINAL, de proposito: e divergencia
+   * interna do CRM entre o credito e a ficha do lead, `true` em 7 de 48 hoje.
+   * Fica no tipo porque quem for consultar a view merece ver a coluna existir;
+   * o motivo de nao propaga-la esta em `src/dominio/credito-originador.ts`.
+   */
+  vendas_creditadas: `
+    SELECT credito_id, crm_lead_id, lead_codigo, cliente, telefone, uc,
+           funil, etapa, vendedor, vendedor_user_id, responsavel_origem,
+           parceiro_id, parceiro_nome, parceria_tipo, parceria_categoria,
+           comissao_pct, comissao_label, vendedor_nome_ficha, divergencia_ficha,
+           valor, ganho_em, origem_carimbo, vigente, revogado_em, revogado_motivo,
+           created_at, crm_tenant_id
+      FROM financeiro.vendas_creditadas`,
+  rateio_situacao: `
+    SELECT contrato_id, uc, crm_lead_id, lead_codigo, cliente, etapa_rateio,
+           stage_type, situacao, em_troca_titularidade, na_etapa_desde, crm_tenant_id
+      FROM financeiro.rateio_situacao`,
 };
 
 export type OpcoesDoLeitor = {
@@ -167,6 +204,8 @@ export function criarLeitorCrm(o: OpcoesDoLeitor) {
     parceiros:       () => consultar<ParceiroDoCrm>('parceiros'),
     leadsArquivados: () => consultar<LeadArquivado>('leads_arquivados'),
     leadMerges:      () => consultar<LeadMerge>('lead_merges'),
+    vendasCreditadas: () => consultar<VendaCreditada>('vendas_creditadas'),
+    rateioSituacao:   () => consultar<RateioSituacao>('rateio_situacao'),
   };
 }
 
@@ -242,4 +281,45 @@ export type LeadArquivado = {
 export type LeadMerge = {
   crm_tenant_id: string;
   vitima_id: string; sobrevivente_id: string; mesclado_em: Date; origem: string | null;
+};
+
+/**
+ * O credito congelado - o EIXO do originador desde 03/08 (`Q-EIXO-FUNCIONARIO-01`).
+ *
+ * `uc` e a ponte com o nosso espelho, e ela e boa: medido em 03/08, 44 UCs
+ * distintas nas 45 linhas vigentes, sem repetida, e **39 das nossas 39** casam.
+ * `comissao_pct` e `valor` chegam como STRING pela mesma razao de sempre - a
+ * regra 1 proibe float, e `numeric` do Postgres vira texto no driver.
+ */
+export type VendaCreditada = {
+  crm_tenant_id: string;
+  credito_id: string; crm_lead_id: string; lead_codigo: string | null;
+  cliente: string | null; telefone: string | null; uc: string | null;
+  funil: string | null; etapa: string | null;
+  vendedor: string | null; vendedor_user_id: string | null;
+  responsavel_origem: string | null;
+  parceiro_id: string | null; parceiro_nome: string | null;
+  parceria_tipo: string | null; parceria_categoria: string | null;
+  comissao_pct: string | null; comissao_label: string | null;
+  vendedor_nome_ficha: string | null; divergencia_ficha: boolean | null;
+  valor: string | null; ganho_em: Date | null; origem_carimbo: string | null;
+  vigente: boolean; revogado_em: Date | null; revogado_motivo: string | null;
+  created_at: Date;
+};
+
+/**
+ * A situacao do contrato de rateio. Ate 03/08 nao havia coluna nenhuma que a
+ * dissesse, e por isso toda linha de `rateio_clientes` era lida como valida -
+ * foi o pedido da §4 da `RESPOSTA-dev-crm-rodada5`, e ele veio atendido.
+ *
+ * Medido em 03/08 sobre as nossas 39 UCs espelhadas: **28 `ativado`, 11
+ * `nao_ativado`**, sendo **7 em troca de titularidade**. Ver `Q-SITUACAO-01`.
+ */
+export type RateioSituacao = {
+  crm_tenant_id: string;
+  contrato_id: string; uc: string | null; crm_lead_id: string | null;
+  lead_codigo: string | null; cliente: string | null;
+  etapa_rateio: string | null; stage_type: string | null;
+  situacao: string | null; em_troca_titularidade: boolean | null;
+  na_etapa_desde: Date | null;
 };
