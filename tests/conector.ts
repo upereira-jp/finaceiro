@@ -418,6 +418,58 @@ const L3 = 'aaaa3333-0000-4000-8000-00000000cc03';
       `R18 contrato e UC da vitima migram para o espelho do sobrevivente ` +
       `(contrato->${ct?.cliente_id === s.id ? 'sobrevivente' : ct?.cliente_id} , uc->${uc?.cliente_id === s.id ? 'sobrevivente' : uc?.cliente_id})`);
 
+  /*
+   * N33b - O ESTADO DA VITIMA TAMBEM CAI, e ate 04/08/2026 ele nao caia.
+   *
+   * `desativarLote` marcava `cliente.ativo = false` e deixava
+   * `cliente_estado_crm` afirmando `tem_rateio_ativo = true`. Medido contra
+   * producao depois do ciclo dos merges: **36 de 41 inativos mentiam**. E o
+   * modo de falha e silencioso duas vezes - nao da erro, e nada fora do
+   * conector le essa tabela hoje, entao ninguem tropecaria nela ate o F-01b
+   * decidir o gatilho de faturamento em cima dela.
+   *
+   * A vitima teve a UC MIGRADA para o sobrevivente algumas linhas acima desta
+   * verificacao: ela nao tem rateio nenhum, e a tabela dizia que tinha.
+   */
+  const [estV] = await sql(`SELECT tem_rateio_ativo, tem_venda_ganha FROM cliente_estado_crm
+                              WHERE cliente_id=$1::uuid`, v.id);
+  chk('N33b', estV?.tem_rateio_ativo === false && estV?.tem_venda_ganha === false,
+      `a vitima desativada deixa de afirmar atividade em cliente_estado_crm `
+      + `(rateio=${estV?.tem_rateio_ativo}, venda=${estV?.tem_venda_ganha})`);
+
+  // E o SOBREVIVENTE nao foi arrastado junto - a desativacao e da vitima.
+  const [estS] = await sql(`SELECT tem_rateio_ativo, tem_venda_ganha FROM cliente_estado_crm
+                              WHERE cliente_id=$1::uuid`, s.id);
+  chk('N33c', estS === undefined || estS.tem_venda_ganha === true,
+      `o sobrevivente continua marcado como ativo - o par mudo da N33b `
+      + `(venda=${estS?.tem_venda_ganha})`);
+
+  /*
+   * N33d - A AUTO-CURA DO PASSADO, e ela existe porque o conserto da N33b nao
+   * alcanca quem ja foi desativado.
+   *
+   * A reconciliacao da §4.3 so olha cliente `ativo: true`: quem ja saiu nunca
+   * mais entra em `aDesativar`. Entao as 41 linhas que foram desativadas ANTES
+   * de `desativarLote` aprender a baixar o estado mentiriam PARA SEMPRE, e
+   * nenhum ciclo futuro as tocaria. O plantio abaixo reproduz exatamente esse
+   * estado - inativo com o estado mentindo - e afirma que um ciclo o corrige.
+   */
+  await sql(`UPDATE cliente_estado_crm SET tem_rateio_ativo = true, tem_venda_ganha = true
+              WHERE cliente_id = $1::uuid`, v.id);
+  const rNorm = await executarCiclo(porta([venda({ lead_id: SOBREVIVENTE })]), loteEmA());
+  const [estCurado] = await sql(`SELECT tem_rateio_ativo, tem_venda_ganha FROM cliente_estado_crm
+                                   WHERE cliente_id=$1::uuid`, v.id);
+  chk('N33d', rNorm.estadoNormalizado >= 1 && estCurado?.tem_rateio_ativo === false,
+      `estado mentiroso de cliente JA inativo e corrigido pelo ciclo seguinte, sem ninguem `
+      + `desativa-lo de novo (normalizadas=${rNorm.estadoNormalizado})`);
+
+  // E o segundo ciclo nao acha mais nada: em regime permanente isto e ZERO, que
+  // e o que separa "auto-curativo" de "reescreve tudo toda vez" (R3).
+  const rLimpo = await executarCiclo(porta([venda({ lead_id: SOBREVIVENTE })]), loteEmA());
+  chk('N33e', rLimpo.estadoNormalizado === 0,
+      `o ciclo seguinte normaliza ZERO linhas - a limpeza nao vira escrita perpetua `
+      + `(${rLimpo.estadoNormalizado})`);
+
   const [linhaV] = await sql(`SELECT ativo FROM cliente WHERE id=$1::uuid`, v.id);
   chk('N33', r.desativados === 1 && linhaV !== undefined && linhaV.ativo === false,
       `R6 a vitima e DESATIVADA e a linha continua - fusao nao e delecao (linhas=${linhaV ? 1 : 0}, ativo=${linhaV?.ativo})`);

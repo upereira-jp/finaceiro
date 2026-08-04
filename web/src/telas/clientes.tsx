@@ -20,7 +20,22 @@ export function TelaClientes() {
   const [doc, setDoc] = useState('');
 
   const [busca, setBusca] = useState('');
-  const [situacao, setSituacao] = useState('');
+  /*
+   * O PADRAO E "ATIVOS", e nao "todas as situacoes".
+   *
+   * Cliente desativado nao e apagado - a invariante 4 da `SPEC-002` proibe
+   * deletar espelhado, e a linha fica como historico. O efeito na tela e que a
+   * lista cresce sem parar: medido em 04/08 contra producao, **41 das 86 linhas
+   * eram vitimas de merge**, e a tela abria em 86.
+   *
+   * Nao e numero falso, mas engana a primeira vista: quase metade da lista e
+   * gente que o CRM fundiu e que nao tem UC nenhuma. Abrir em "Ativos" mostra a
+   * carteira que existe, e o filtro continua ali para achar quem saiu.
+   *
+   * E o numero total NAO some: a contagem do cabecalho ja diz "45 de 86", que e
+   * o que impede o padrao novo de trocar um numero que engana por um que omite.
+   */
+  const [situacao, setSituacao] = useState('ativo');
   const { ordem, alternar } = useOrdenacao('nome');
 
   const todos = lista.dado ?? [];

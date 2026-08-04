@@ -217,6 +217,13 @@ export type ResultadoDoCiclo = {
   creditoConferido: boolean;
   /** R26. Contagem da situacao do rateio, sobre as UCs ESPELHADAS. */
   situacaoDoRateio: ResumoDeSituacao;
+  /**
+   * Quantas linhas de `cliente_estado_crm` de cliente INATIVO ainda afirmavam
+   * atividade e foram corrigidas. Em regime permanente e ZERO - valor diferente
+   * de zero, num ciclo que nao seja o primeiro depois de 04/08, e sinal de que
+   * alguem desativou cliente por fora do conector.
+   */
+  estadoNormalizado: number;
   /** R13 - quantas transacoes o ciclo abriu. Uma delas gigante e o defeito. */
   transacoes: number;
   /** Maior numero de leads que uma unica transacao carregou. Nunca > tamanho do lote. */
@@ -425,6 +432,7 @@ export async function executarCiclo(
                    unidade_consumidora: zerado() },
     creditoConferido: false,
     situacaoDoRateio: { ativado: 0, nao_ativado: 0, em_troca_titularidade: 0, sem_linha_na_view: 0 },
+    estadoNormalizado: 0,
     transacoes: 0, maiorLote: 0, execucaoGravada: false,
   };
 
@@ -704,6 +712,12 @@ async function processar(
     });
   }
 
+  /*
+   * A limpeza do estado dos inativos, uma vez por ciclo. Ver
+   * `normalizarEstadoDosInativos` - em regime permanente afeta zero linhas.
+   */
+  r.estadoNormalizado = await lote(() => normalizarEstadoDosInativos(tenantId));
+
   if (r.recusados > 0 || r.filaDeRevisao.length > 0) r.status = 'parcial';
 
   return fechar({
@@ -719,6 +733,7 @@ async function processar(
     // numero, a mesma informacao cabe numa linha e nao compete com o resto.
     credito_conferido: r.creditoConferido,
     situacao_do_rateio: r.situacaoDoRateio,
+    estado_normalizado: r.estadoNormalizado,
     ...(r.creditoConferido ? {} : {
       nota_credito: 'financeiro.vendas_creditadas devolveu zero linhas: a conferencia do eixo do '
                   + 'originador (SPEC-002 R26) NAO RODOU. Ambiguo entre "a view quebrou" e "nao ha '
@@ -1544,8 +1559,70 @@ async function desativarLote(
     }
   }
 
+  const ids = bloco.map((a) => a.clienteId);
   await db.cliente.updateMany({
-    where: { tenant_id: tenantId, id: { in: bloco.map((a) => a.clienteId) } },
+    where: { tenant_id: tenantId, id: { in: ids } },
     data: { ativo: false },
   });
+
+  /*
+   * O ESTADO TAMBEM CAI, e ate 04/08/2026 ele NAO caia.
+   *
+   * `desativarLote` marcava `cliente.ativo = false` e nao tocava em
+   * `cliente_estado_crm`. Resultado medido contra producao depois do ciclo que
+   * absorveu os 76 merges de 30/07: dos **41 clientes inativos, 36 continuavam
+   * com `tem_rateio_ativo = true`** e 31 com `tem_venda_ganha = true`.
+   *
+   * Era mentira no dado, e do tipo que nao da erro: a vitima de merge teve a UC
+   * MIGRADA para o sobrevivente (acima, nesta mesma funcao), entao ela nao tem
+   * rateio nenhum - e a tabela dizia que tinha.
+   *
+   * NAO CAUSOU DANO ATE AGORA porque nada fora do conector le
+   * `cliente_estado_crm` (varrido em 04/08). Mas o proximo a ler ia herdar o
+   * erro, e o C1 do `PRD` previa exatamente esta tabela como fonte de "cliente
+   * ativo" - e o F-01b ainda vai decidir o gatilho de faturamento em cima dela.
+   *
+   * `false` E O VALOR HONESTO AQUI, e nao `null`. Este projeto separa "ausente"
+   * de "zero" em todo lugar - mas isto nao e ausencia de medicao: o conector
+   * ACABOU de medir e concluiu que o cliente saiu do CRM. `false` e o que ele
+   * mediu; `null` diria "nao sei", e ele sabe.
+   *
+   * `em_carteira` FICA DE FORA, de proposito: o conceito foi reclassificado
+   * pela C1-b e o F-01b ainda nao decidiu o que o preenche. Escrever nele aqui
+   * seria improviso sobre coluna cujo dono da semantica ainda nao respondeu
+   * (regra 10).
+   */
+  await db.cliente_estado_crm.updateMany({
+    where: { tenant_id: tenantId, cliente_id: { in: ids } },
+    data: { tem_rateio_ativo: false, tem_venda_ganha: false, sincronizado_em: new Date() },
+  });
+}
+
+/**
+ * A LIMPEZA DO QUE JA ESTAVA ERRADO, e ela existe porque o conserto acima nao
+ * alcanca o passado.
+ *
+ * A reconciliacao da §4.3 so olha cliente `ativo: true` - quem ja foi desativado
+ * nunca mais entra em `aDesativar`. Entao os 41 que foram desativados ANTES de
+ * `desativarLote` aprender a baixar o estado ficariam mentindo para sempre, e
+ * nenhum ciclo futuro os corrigiria.
+ *
+ * Roda uma vez por ciclo, e e um `updateMany` com predicado estreito: so mexe em
+ * linha de cliente INATIVO que ainda afirma atividade. Em regime permanente
+ * afeta ZERO linhas - o conserto de cima ja as deixa certas -, entao o custo e
+ * uma viagem e o beneficio e a invariante virar auto-curativa.
+ *
+ * Invariante 5 respeitada: quem escreve `cliente_estado_crm` continua sendo so o
+ * conector. Um UPDATE manual no banco resolveria o mesmo e violaria a regra.
+ */
+async function normalizarEstadoDosInativos(tenantId: string): Promise<number> {
+  const r = await dbt().cliente_estado_crm.updateMany({
+    where: {
+      tenant_id: tenantId,
+      cliente: { ativo: false },
+      OR: [{ tem_rateio_ativo: true }, { tem_venda_ganha: true }],
+    },
+    data: { tem_rateio_ativo: false, tem_venda_ganha: false, sincronizado_em: new Date() },
+  });
+  return r.count;
 }

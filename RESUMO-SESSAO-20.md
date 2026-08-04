@@ -4,7 +4,7 @@
 |---|---|
 | **Foco** | Duas entregas. **O conector passou a ler as dez views do CRM e a conferir o eixo do originador**; e **o layout da fatura deixou de ser lista e passou a ser posição** — a pedido do dono |
 | **Método** | Medir antes de construir, e **fotografar depois**. As duas coisas pagaram: a medição decidiu cada regra de sinal, e a fotografia pegou dois defeitos que a leitura de código não pegaria |
-| **Resultado** | **2 questões fechadas** · **2 migrations** · 1123 → **1237 verificações** · `EXIT=0` · catálogo 9/9 |
+| **Resultado** | **2 questões fechadas** · **2 migrations** · 1123 → **1241 verificações** · `EXIT=0` · catálogo 9/9 |
 | **Escrito em produção** | **04/08, autorizado pelo dono:** o destrave e o ciclo `--valendo`. As migrations 22, 23 e 24 **não** foram aplicadas — ver §4.1 |
 | **Não feito** | O deploy e a `Q-PARCERIA-01` continuam esperando decisão. Os três CPF/CNPJ e o dia de vencimento das 39 UCs continuam sendo insumo humano |
 
@@ -13,7 +13,7 @@
 > | | |
 > |---|---|
 > | **Banco** | **24 migrations**; a 22, a 23 e a 24 **só em banco de teste**. Produção segue com 21 |
-> | **Suíte** | `EXIT=0`, **1237** linhas `ok` em 47 suítes. Delta **114**, contado na fonte e conferido contra o `npm test`: diferença zero |
+> | **Suíte** | `EXIT=0`, **1241** linhas `ok` em 47 suítes. Delta **118**, contado na fonte e conferido contra o `npm test`: diferença zero |
 > | **Produção** | **espelho alinhado com o CRM em 04/08** (destrave + ciclo). Schema inalterado |
 > | **O eixo do originador** | ✅ decidido na sessão 19, e **agora legível por código** |
 >
