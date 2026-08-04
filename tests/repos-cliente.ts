@@ -4,9 +4,10 @@
 import pg from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../src/generated/prisma/client.ts';
-import { withTenantEm, SemContextoDeTenant } from '../src/db/contexto.ts';
+import { withTenantEm, SemContextoDeTenant, db } from '../src/db/contexto.ts';
 import { criarPools } from '../src/db/pools.ts';
 import * as cliente from '../src/repos/cliente.ts';
+import * as ucRepo from '../src/repos/unidade_consumidora.ts';
 
 const CONN = process.env.TEST_DATABASE_URL ?? 'postgresql://app_financeiro_login:spike@127.0.0.1:5432/fin_repos';
 const A = process.env.TEST_TENANT_A!;
@@ -125,6 +126,78 @@ const lancou = async (f: () => Promise<unknown>): Promise<any> => {
   const e = await lancou(() => emB(() => cliente.desativar(c.id)));
   chk('C13', e?.status === 404,
       'editar cliente de outro tenant e 404, nunca 403: ausencia de vinculo e indistinguivel de inexistencia');
+}
+
+// ============ C14-C17: a rota /clientes devolve a CARTEIRA ATIVA, nao o cadastro
+//
+// Decisao do dono em 04/08/2026, e ela veio de uma frase: "apenas,
+// exclusivamente, unicamente, os clientes da etapa Ativos".
+//
+// A palavra "ativo" ja significou TRES coisas neste sistema no mesmo dia:
+// `cliente.ativo` (45 linhas), `unidade_consumidora.status` (41) e a etapa do
+// CRM (29). Esta rota devolvia a mais larga das tres, e o dono via 86.
+//
+// A ETAPA E `Desconto Ativo` do funil `Rateio` (`stage_type = 'won'`), medida
+// no CRM em 04/08 - e ela chega ate nos como `rateio_situacao = 'ativado'` no
+// espelho da UC. Por isso o filtro e pela UC e nao pelo cliente: a etapa e do
+// contrato de rateio, e `cliente` nao tem - nem deve ter - coluna de funil.
+{
+  const semUc = await emA(() => cliente.criar({ nome: 'ZZ sem UC nenhuma' }));
+
+  const comUcAtivada = await emA(() => cliente.criar({ nome: 'ZZ com UC ativada' }));
+  const comUcParada  = await emA(() => cliente.criar({ nome: 'ZZ com UC nao ativada' }));
+
+  const criarUc = async (clienteId: string, numero: string, situacao: string | null) => {
+    const u = await emA(() => ucRepo.criar({
+      cliente_id: clienteId, numero_uc: numero, distribuidora: 'Equatorial',
+    }));
+    if (situacao) {
+      await emA(() => db().$executeRaw`
+        UPDATE unidade_consumidora
+           SET rateio_situacao = ${situacao},
+               crm_usina_cliente_id = gen_random_uuid(),
+               rateio_situacao_lida_em = now()
+         WHERE id = ${u.id}::uuid`);
+    }
+    return u.id;
+  };
+  await criarUc(comUcAtivada.id, 'CLI-UC-ATIVA', 'ativado');
+  await criarUc(comUcParada.id,  'CLI-UC-PARADA', 'nao_ativado');
+
+  const carteira = await emA(() => cliente.listar({ limite: 500 }));
+  const nomes = new Set(carteira.map((c: any) => c.nome));
+
+  chk('C14', nomes.has('ZZ com UC ativada'),
+      'cliente com UC na etapa ativada ENTRA na carteira - e o par mudo dos dois abaixo');
+  chk('C15', !nomes.has('ZZ com UC nao ativada') && !nomes.has('ZZ sem UC nenhuma'),
+      'cliente com UC NAO ativada e cliente SEM UC ficam de fora: "apenas, exclusivamente, unicamente"');
+
+  /*
+   * O ESCOPO EXPLICITO, e ele NAO contradiz o pedido - ele o torna seguro.
+   *
+   * Sem `escopo=todos`, um cliente criado a mao por `POST /clientes` - que
+   * nunca vai ter UC do CRM - ficaria invisivel PARA SEMPRE, e nao ha outro
+   * caminho de busca no sistema: a tela lista, e o que nao esta na lista nao
+   * existe para quem opera. O padrao e o que o dono pediu; a saida existe e a
+   * tela a nomeia.
+   */
+  const tudo = await emA(() => cliente.listar({ escopo: 'todos', limite: 500 }));
+  const nomesTudo = new Set(tudo.map((c: any) => c.nome));
+  chk('C16', nomesTudo.has('ZZ sem UC nenhuma') && nomesTudo.has('ZZ com UC nao ativada')
+       && tudo.length > carteira.length,
+      `escopo=todos alcanca quem a carteira esconde - senao cliente criado a mao seria `
+      + `inalcancavel (${carteira.length} na carteira, ${tudo.length} no cadastro)`);
+
+  /*
+   * UM CLIENTE COM DUAS UCs NAO DUPLICA. `some` vira EXISTS, e nao JOIN - um
+   * JOIN traria a linha uma vez por UC, e a lista mostraria a mesma pessoa
+   * duas vezes sem nada parecer errado.
+   */
+  await criarUc(comUcAtivada.id, 'CLI-UC-ATIVA-2', 'ativado');
+  const dedup = await emA(() => cliente.listar({ limite: 500 }));
+  chk('C17', dedup.filter((c: any) => c.nome === 'ZZ com UC ativada').length === 1,
+      `cliente com DUAS UCs ativadas aparece UMA vez - `
+      + `${dedup.filter((c: any) => c.nome === 'ZZ com UC ativada').length} linha(s)`);
 }
 
 await prisma.$disconnect();

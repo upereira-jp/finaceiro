@@ -101,10 +101,49 @@ export async function porLeadDoCrm(crmLeadId: string | null | undefined) {
   return dbt().cliente.findFirst({ where: { crm_lead_id: crmLeadId } });
 }
 
-export async function listar(opcoes: { ativo?: boolean; limite?: number } = {}) {
+/**
+ * A LISTA DE CLIENTES, e por PADRAO ela e a carteira ATIVA - nao o cadastro
+ * inteiro. Decisao do dono em 04/08/2026.
+ *
+ * O QUE "ATIVO" PASSOU A SIGNIFICAR AQUI, e a palavra ja significou tres coisas
+ * neste sistema num unico dia:
+ *
+ *   `cliente.ativo`                 nosso: o conector nao o desativou por
+ *                                   ausencia no CRM. Eram 45 em 04/08
+ *   `unidade_consumidora.status`    nosso: ninguem suspendeu a UC. Eram 41
+ *   `rateio_situacao = 'ativado'`   DO CRM: a etapa `Desconto Ativo` do funil
+ *                                   `Rateio`, `stage_type = 'won'`. **29**
+ *
+ * O dono pediu a terceira, e so ela: "apenas, exclusivamente, unicamente, os
+ * clientes da etapa Ativos". Medido no dia: **29 linhas, 24 pessoas** - a
+ * diferenca e a `Q-CLIENTEDUP-01`, que e outro assunto e nao se resolve aqui.
+ *
+ * POR QUE PELA UC E NAO PELO CLIENTE. A etapa e do contrato de rateio, e o
+ * rateio pendura na UC - `cliente` nao tem, e nao deve ter, coluna de etapa de
+ * funil. Um cliente entra na lista porque tem PELO MENOS UMA UC ativada; quem
+ * tem duas UCs e so uma ativada continua sendo cliente ativo, o que e o certo.
+ *
+ * `escopo: 'todos'` EXISTE E NAO E CONTRADICAO COM O PEDIDO. Sem ele, um cliente
+ * criado a mao por `POST /clientes` - que nunca tera UC do CRM - ficaria
+ * invisivel PARA SEMPRE, e nao ha outro caminho de busca no sistema: a tela
+ * lista, e o que nao esta na lista nao existe para quem opera. O padrao e o que
+ * o dono pediu; a saida de emergencia e explicita e a tela a nomeia.
+ */
+export type EscopoDeClientes = 'carteira_ativa' | 'todos';
+
+export async function listar(
+  opcoes: { ativo?: boolean; limite?: number; escopo?: EscopoDeClientes } = {},
+) {
   await exigir('ler');
+  const escopo = opcoes.escopo ?? 'carteira_ativa';
   return dbt().cliente.findMany({
-    where: opcoes.ativo === undefined ? {} : { ativo: opcoes.ativo },
+    where: {
+      ...(opcoes.ativo === undefined ? {} : { ativo: opcoes.ativo }),
+      ...(escopo === 'todos' ? {} : {
+        // `some` vira EXISTS: um cliente com duas UCs nao duplica na lista.
+        unidade_consumidora: { some: { rateio_situacao: 'ativado' } },
+      }),
+    },
     orderBy: [{ nome: 'asc' }],
     take: Math.min(opcoes.limite ?? 100, 500),
   });

@@ -113,9 +113,21 @@ export const ROTAS: Rota[] = [
 
   // ----------------------------------------------------------------- clientes
   {
+    /*
+     * A CARTEIRA ATIVA, e nao o cadastro inteiro (decisao do dono, 04/08/2026).
+     *
+     * Por padrao devolve so quem tem UC na etapa `Desconto Ativo` do funil
+     * `Rateio` - 29 linhas em producao, contra 86 do cadastro. O motivo esta em
+     * `src/repos/cliente.ts`: "ativo" significava tres coisas diferentes, e esta
+     * rota devolvia a mais larga das tres.
+     *
+     * `?escopo=todos` e a saida explicita, e ela existe para que cliente criado
+     * a mao nao fique invisivel - sem lista nao ha outro caminho de busca.
+     */
     metodo: 'GET', padrao: '/clientes',
     handler: (req, app) => emTenant(app, req, async () => ok(await cliente.listar({
       ativo: req.query.has('ativo') ? req.query.get('ativo') === 'true' : undefined,
+      escopo: req.query.get('escopo') === 'todos' ? 'todos' : 'carteira_ativa',
       limite: limite(req.query),
     }))),
   },

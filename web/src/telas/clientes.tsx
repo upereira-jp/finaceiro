@@ -14,28 +14,34 @@ const SITUACOES = [
 ];
 
 export function TelaClientes() {
-  const lista = useDados<Cliente[]>(() => api.get('/clientes?limite=500'));
+  /*
+   * O ESCOPO E DA CARTEIRA ATIVA, e e ele que decide o que a rota devolve.
+   *
+   * `carteira_ativa` (padrao) = so quem tem UC na etapa `Desconto Ativo` do
+   * funil `Rateio` - 29 em producao. `todos` = o cadastro inteiro, 86, e existe
+   * para que cliente criado a mao nao fique inalcancavel.
+   */
+  const [escopo, setEscopo] = useState<'carteira_ativa' | 'todos'>('carteira_ativa');
+  const lista = useDados<Cliente[]>(
+    () => api.get(`/clientes?limite=500${escopo === 'todos' ? '&escopo=todos' : ''}`),
+    [escopo],
+  );
   const acao = useAcao();
   const [nome, setNome] = useState('');
   const [doc, setDoc] = useState('');
 
   const [busca, setBusca] = useState('');
   /*
-   * O PADRAO E "ATIVOS", e nao "todas as situacoes".
+   * O FILTRO DE SITUACAO ABRE VAZIO DE NOVO, e agora isso esta certo.
    *
-   * Cliente desativado nao e apagado - a invariante 4 da `SPEC-002` proibe
-   * deletar espelhado, e a linha fica como historico. O efeito na tela e que a
-   * lista cresce sem parar: medido em 04/08 contra producao, **41 das 86 linhas
-   * eram vitimas de merge**, e a tela abria em 86.
-   *
-   * Nao e numero falso, mas engana a primeira vista: quase metade da lista e
-   * gente que o CRM fundiu e que nao tem UC nenhuma. Abrir em "Ativos" mostra a
-   * carteira que existe, e o filtro continua ali para achar quem saiu.
-   *
-   * E o numero total NAO some: a contagem do cabecalho ja diz "45 de 86", que e
-   * o que impede o padrao novo de trocar um numero que engana por um que omite.
+   * Ele passou a "Ativos" mais cedo em 04/08 para tirar da tela as 41 vitimas
+   * de merge. Depois o recorte subiu para o SERVIDOR - a rota devolve so a
+   * carteira ativa -, e nenhuma vitima de merge chega mais ate aqui. Manter o
+   * filtro pre-aplicado esconderia, dentro das 29, uma que alguem tivesse
+   * desativado a mao: duas peneiras empilhadas para o mesmo proposito, e a
+   * segunda invisivel.
    */
-  const [situacao, setSituacao] = useState('ativo');
+  const [situacao, setSituacao] = useState('');
   const { ordem, alternar } = useOrdenacao('nome');
 
   const todos = lista.dado ?? [];
@@ -57,7 +63,8 @@ export function TelaClientes() {
   }
 
   return (
-    <Pagina titulo="Clientes" sub="Espelhados do CRM pelo conector, e cadastráveis aqui quando não vierem de lá.">
+    <Pagina titulo="Clientes"
+            sub="A carteira ativa: quem tem unidade consumidora na etapa Desconto Ativo do funil Rateio. O cadastro inteiro está em «Todo o cadastro», e inclui quem o CRM fundiu.">
       <div className="cartao" style={{ marginBottom: 20 }}>
         <div className="campos">
           <Campo rotulo="Nome" valor={nome} ao={setNome} />
@@ -74,9 +81,18 @@ export function TelaClientes() {
 
       {lista.erro && <Aviso tipo="erro">{lista.erro}</Aviso>}
 
-      <Ferramentas contagem={todos.length ? `${visiveis.length} de ${todos.length}` : undefined}>
+      <Ferramentas contagem={todos.length
+        ? `${visiveis.length} de ${todos.length}${escopo === 'carteira_ativa' ? ' na carteira ativa' : ' no cadastro'}`
+        : undefined}>
         <Busca valor={busca} ao={setBusca} dica="Buscar por nome ou documento…" />
         <Filtro valor={situacao} ao={setSituacao} rotulo="Filtrar por situação" opcoes={SITUACOES} />
+        {/* O ESCOPO E O RECORTE DO SERVIDOR, e nao mais um filtro de tela: trocar
+            aqui muda a CONSULTA. Fica ao lado dos outros para quem opera nao ter
+            de saber a diferenca - e o rotulo diz o que cada um traz. */}
+        <Filtro valor={escopo} ao={(v) => setEscopo(v as 'carteira_ativa' | 'todos')}
+                rotulo="Escopo da lista"
+                opcoes={[{ valor: 'carteira_ativa', texto: 'Carteira ativa' },
+                         { valor: 'todos', texto: 'Todo o cadastro' }]} />
         {(busca || situacao) && (
           <button type="button" onClick={() => { setBusca(''); setSituacao(''); }}>
             <Icone nome="limpar" tamanho={15} /> Limpar filtros
