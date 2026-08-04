@@ -1,4 +1,4 @@
-# RESUMO-SESSAO-20 — 03/08/2026
+# RESUMO-SESSAO-20 — 03–04/08/2026
 
 | Campo | Valor |
 |---|---|
@@ -8,7 +8,7 @@
 | **Escrito em produção** | **04/08, autorizado pelo dono:** o destrave e o ciclo `--valendo`. As migrations 22, 23 e 24 **não** foram aplicadas — ver §4.1 |
 | **Não feito** | O deploy e a `Q-PARCERIA-01` continuam esperando decisão. Os três CPF/CNPJ e o dia de vencimento das 39 UCs continuam sendo insumo humano |
 
-> # ESTADO ATUAL — 03/08/2026, fim da sessão 20
+> # ESTADO ATUAL — 04/08/2026, fim da sessão 20
 >
 > | | |
 > |---|---|
@@ -23,11 +23,10 @@
 > |---|:--:|---|
 > | **`Q-PARCERIA-01`** — vendedor **e** parceiro na mesma venda, e o contrato guarda um | 🔴 **trava a digitação** | Vinicius + dev do CRM |
 > | **CPF/CNPJ dos três originadores** | 🔴 | Vinicius + operação |
-> | **`--valendo` do destrave + ciclo** | 🔴 **pronto, ensaiado, não executado** | Vinicius |
-> | **Preencher o dia de vencimento das 39 UCs** | 🔴 | Vinicius + operação |
-> | **Deploy: migrations 22 e 23 + bundle** | 🔴 | Vinicius |
-> 
-> | `Q-CLIENTEDUP-01` · `Q-PAGADOR-01` · `Q-FATCHEIA-01` · `Q-WEBHOOK-01` · `Q-SICOOB-01` | 🔴 | Vinicius |
+> | **Preencher o dia de vencimento das 41 UCs** | 🔴 **o modelo já está gerado** — `vencimentos-modelo-20260804.csv` | Vinicius + operação |
+> | **Deploy: migrations 22, 23 e 24 + bundle** | 🔴 **e a 24 exige rodar o ciclo antes de compor lote** | Vinicius |
+> | `Q-CLIENTEDUP-01` (84 → 45, **não fechou**) · `Q-PAGADOR-01` · `Q-FATCHEIA-01` · `Q-WEBHOOK-01` · `Q-SICOOB-01` | 🔴 | Vinicius |
+> | ~~**`--valendo` do destrave + ciclo**~~ | ✅ **executado em 04/08** — §4.1 | — |
 > | ~~`Q-VIEWSCRED-01`~~ · ~~`Q-SPEC001-08`~~ · ~~`Q-SITUACAO-01`~~ | ✅ | fechadas |
 
 ---
@@ -50,7 +49,7 @@ O motivo é que **nada deste lado comparava o que o CRM expõe contra a nossa li
 
 `conferirRoleDeLeitura` passa a devolver `viewsNovasNoCrm` e `viewsAusentes`, e o script grita as duas — a segunda é mais grave (é o contrato de integração quebrando), a primeira é a que custou uma semana de planejamento por planilha.
 
-### 1.2 🟡 `Q-SITUACAO-01`, que apareceu ao ler a segunda view
+### 1.2 `Q-SITUACAO-01`, que apareceu ao ler a segunda view — e fechou no dia seguinte (§4.2)
 
 A §4 da `RESPOSTA-dev-crm-rodada5` pediu **coluna de situação** do contrato de rateio, porque sem ela toda linha de `rateio_clientes` era lida como válida. Eles entregaram. Lendo:
 
@@ -59,7 +58,7 @@ A §4 da `RESPOSTA-dev-crm-rodada5` pediu **coluna de situação** do contrato d
 | `ativado` | **28** |
 | `nao_ativado` | **11** — destas, **7** em troca de titularidade |
 
-Hoje não custa nada: `contrato` tem 0 linhas. **Recusar as 11, marcá-las na UC, ou só contar** são três caminhos diferentes, e os três mudam o que a operação vê. É decisão de negócio com dono (regra 10). O que foi construído é o terceiro — `situacao_do_rateio` como **contagem** no `detalhe`, porque 11 sinais por rodada seriam ruído —, mais um sinal que dispara quando um contrato **ativo** cobrir um rateio não ativado. **A decisão custa menos agora, com contrato em zero, do que depois de 41 digitados.**
+Hoje não custa nada: `contrato` tem 0 linhas. **Recusar as 11, marcá-las na UC, ou só contar** são três caminhos diferentes, e os três mudam o que a operação vê. É decisão de negócio com dono (regra 10), e foi registrada como tal em 03/08 — o que se construiu naquele dia foi a **contagem** no `detalhe`, mais um sinal para contrato ativo sobre rateio não ativado. **O dono decidiu em 04/08, e a §4.2 conta o resto.**
 
 ---
 
