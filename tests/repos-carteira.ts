@@ -25,6 +25,7 @@ import * as ucRepo from '../src/repos/unidade_consumidora.ts';
 import * as rateio from '../src/repos/rateio.ts';
 import * as contrato from '../src/repos/contrato.ts';
 import * as originadorRepo from '../src/repos/originador.ts';
+import * as clienteRepo from '../src/repos/cliente.ts';
 import * as regras from '../src/repos/regras.ts';
 import * as fatura from '../src/repos/fatura.ts';
 import * as boleto from '../src/repos/boleto.ts';
@@ -32,6 +33,7 @@ import * as liquidacao from '../src/repos/liquidacao.ts';
 import * as split from '../src/repos/split.ts';
 import * as contaPagar from '../src/repos/conta_pagar.ts';
 import { prontidao } from '../src/repos/prontidao.ts';
+import { triar } from '../src/dominio/faturamento.ts';
 import { CobrancaFalsa } from '../src/sicoob/falso.ts';
 import { COBRANCA_NAO_CONFIGURADA, CobrancaNaoConfigurada } from '../src/sicoob/porta.ts';
 
@@ -47,7 +49,13 @@ const emA = <T>(f: () => Promise<T>) => withTenantEm(prisma as any, { tenantId: 
 const emB = <T>(f: () => Promise<T>) => withTenantEm(prisma as any, { tenantId: B, usuarioId: U }, () => f());
 
 let falhas = 0;
+// O TOTAL E CONTADO, e nao escrito no rodape. Ate 04/08/2026 a ultima linha
+// dizia "40 verificacoes" enquanto a suite tinha 56 - um numero fixo medindo
+// outra coisa, que e a mesma classe que a K2d, a W8h e a N58 pegaram dentro das
+// proprias verificacoes.
+let total = 0;
 const chk = (id: string, cond: boolean, d: string) => {
+  total++;
   if (!cond) falhas++;
   console.log(`${cond ? 'ok   ' : 'FALHA'} ${id.padEnd(4)} ${d}`);
 };
@@ -576,11 +584,141 @@ let liquidacaoJulho: string;
       'universo vazio (tenant sem contrato) continua NAO_MEDIDO nesta camada tambem - a licao do K18a vale para a nova');
   chk('K18i', orig.situacao !== origB.situacao,
       'e os dois casos que a Q-PRONTIDAO-COMIS-01 confundia agora sao DISTINGUIVEIS: "nenhum contrato" e nao_medido, "contrato sem originador" e pendente');
+
+  /*
+   * K18j - O ESPELHO, CONFERIDO CONTRA O ORIGINAL.
+   *
+   * `prontidao.ts` cita esta verificacao desde 04/08/2026 e ela NAO EXISTIA -
+   * o comentario dizia "o K18j compara os dois lados um contra o outro" sobre
+   * um id que nenhum arquivo definia. Fica registrado: e a mesma classe da
+   * citacao inventada que a sessao 14 pegou, e a regra 8 e literal - invariante
+   * sem teste e comentario.
+   *
+   * O QUE ELA PRENDE. O universo da prontidao e o predicado da triagem sao a
+   * MESMA regra escrita duas vezes, em duas linguagens: um `WITH uc_ativa` em
+   * SQL e um `if` em TypeScript. Espelho tem modo de falha proprio - divergir
+   * sem que nenhum dos dois lados pareca errado -, e ja aconteceu: em 04/08 a
+   * condicao tinha duas metades e so uma foi mudada.
+   *
+   * Entao a afirmacao nao e sobre um numero meu. E: **o universo da prontidao e
+   * exatamente o conjunto de UCs ativas que a triagem NAO recusa por
+   * `rateio_nao_ativado`**. Se um lado mudar sozinho, esta linha fica vermelha.
+   */
+  /*
+   * NAO SE COMPARA CONTRA `ensaiarLote`, e a primeira versao desta verificacao
+   * fazia isso e ficou vermelha - com razao. A triagem devolve UM motivo por UC,
+   * o PRIMEIRO, entao UC sem contrato para em `sem_contrato_vigente` e nunca
+   * chega a ser contada como `rateio_nao_ativado`. Contar pela saida mediria a
+   * ORDEM das recusas, nao a regra.
+   *
+   * O que se compara sao as duas GRAFIAS da mesma regra. Cada UC ativa do banco
+   * e passada por `triar()` com todo o resto COMPLETO - contrato, rateio,
+   * geracao, vencimento -, de modo que a unica recusa possivel seja a situacao
+   * do rateio. O que sobra e o universo, e ele tem de bater com o da prontidao.
+   */
+  const ucsAtivas: any[] = await emA(() => db().$queryRawUnsafe(
+    `SELECT id::text, numero_uc, crm_usina_cliente_id::text, rateio_situacao
+       FROM unidade_consumidora WHERE status = 'ativa'`));
+
+  const recusadasPelaSituacao = ucsAtivas.filter((u) => {
+    const t = triar({
+      unidade_consumidora_id: u.id, numero_uc: u.numero_uc,
+      contrato_id: 'contrato-ficticio', data_fechamento: mes(2020, 1),
+      usina_id: 'usina-ficticia', percentual_rateio: '10.0000',
+      geracao_kwh: '10000.0000', data_vencimento: new Date(Date.UTC(2000, 0, 10)),
+      dono_usina_id: null, ja_tem_fatura: false,
+      rateio_situacao: u.rateio_situacao, crm_usina_cliente_id: u.crm_usina_cliente_id,
+    }, mes(2026, 7));
+    return t.faturar === false && t.motivo === 'rateio_nao_ativado';
+  }).length;
+
+  chk('K18j', pA.ucs_ativas === ucsAtivas.length - recusadasPelaSituacao,
+      `o universo da prontidao (${pA.ucs_ativas}) e exatamente o que a triagem NAO recusa pela situacao do `
+      + `rateio (${ucsAtivas.length} ativas - ${recusadasPelaSituacao}) - a mesma regra escrita em SQL e em `
+      + 'TypeScript, conferida uma contra a outra e nao contra um numero meu. Em 04/08 ela tinha duas '
+      + 'metades e so uma foi mudada');
+}
+
+// ---------------------------------------------------- K19 a camada do documento do cliente
+//
+// A CAMADA QUE FALTAVA, e ela nao foi achada por auditoria: apareceu percorrendo
+// o caminho para a primeira fatura em 04/08/2026. `documento_validado` era false
+// em 45 de 45 clientes ativos de producao, e a R9 recusa levar contrato para
+// `ativo` sem ele - entao os 29 contratos a digitar seriam 29 rascunhos.
+//
+// A prontidao contava dez camadas e NENHUMA media isso. O relatorio dizia "29
+// sem contrato ativo" e mandava digitar; o efeito chegaria uma camada adiante e
+// com o nome errado, porque rascunho nao ocupa a UC e a triagem recusa por
+// `sem_contrato_vigente` - a PRIMEIRA da ordem, atras da qual nada e medido.
+{
+  const antes = await emA(() => prontidao('2026-07-01'));
+  const doc = antes.camadas.find((c) => c.camada === 'documento_do_cliente')!;
+
+  /*
+   * AS AFIRMACOES SAO SOBRE O DELTA, e nao sobre o total. O banco de teste
+   * acumula clientes das suites anteriores - a `repos-cliente` deixa dois sem
+   * documento validado -, e prender um numero absoluto aqui mediria a ORDEM DE
+   * EXECUCAO das suites em vez da regra. E a mesma troca que a K2d, a W8h e a
+   * N58 ja fizeram, e e a quarta vez que ela aparece.
+   */
+  const base = doc.faltam;
+
+  chk('K19a', doc !== undefined && doc.efeito === 'bloqueia_fatura',
+      'a camada existe e bloqueia FATURA, nao split: sem contrato ativo nao ha o que cobrar, nem por Pix');
+  chk('K19b', doc.total > 0 && doc.total <= antes.ucs_ativas,
+      `o universo sao PESSOAS de UC faturavel (${doc.total}), e ele cabe dentro do de UCs (${antes.ucs_ativas}) - `
+      + 'nunca o contrario, porque uma pessoa pode ter varias UCs e nenhuma UC tem dois clientes');
+  chk('K19c', antes.camadas[0]!.camada === 'documento_do_cliente',
+      'e ela vem PRIMEIRA, antes de `contrato_ativo`: a ordem do relatorio e a ordem em que o trabalho destrava o proximo, '
+      + 'e digitar contrato antes disto produz rascunho, nao contrato');
+
+  /*
+   * O par mudo: um cliente novo SEM documento, com UC faturavel. Um campo de
+   * diferenca em relacao ao da fixture, e ele mora na outra tabela.
+   */
+  const semDoc = await emA(() => clienteRepo.criar({ nome: 'K19 sem documento' }));
+  await emA(() => ucRepo.criar({
+    cliente_id: semDoc.id, numero_uc: 'K19-UC-1', distribuidora: 'Equatorial' }));
+
+  const depois = await emA(() => prontidao('2026-07-01'));
+  const doc2 = depois.camadas.find((c) => c.camada === 'documento_do_cliente')!;
+
+  chk('K19d', doc2.faltam === base + 1 && doc2.situacao === 'pendente',
+      `o cliente sem documento e ACUSADO: a camada sobe exatamente UM (${base} -> ${doc2.faltam}) - antes dela ele atravessava a prontidao inteira sem aparecer`);
+  chk('K19e', depois.pode_faturar === false,
+      'e `pode_faturar` cai, que e o que impede o relatorio de autorizar o que a R9 vai recusar');
+
+  /*
+   * CONTADA EM PESSOAS, NAO EM UCs - e a diferenca entre os dois totais nao e
+   * ruido: e a Q-CLIENTEDUP-01 aparecendo de lado. Uma segunda UC para a MESMA
+   * pessoa nao acrescenta trabalho, porque ela tem UM CPF.
+   */
+  await emA(() => ucRepo.criar({
+    cliente_id: semDoc.id, numero_uc: 'K19-UC-2', distribuidora: 'Equatorial' }));
+  const terceira = await emA(() => prontidao('2026-07-01'));
+  const doc3 = terceira.camadas.find((c) => c.camada === 'documento_do_cliente')!;
+  const contrato3 = terceira.camadas.find((c) => c.camada === 'contrato_ativo')!;
+
+  chk('K19f', doc3.faltam === doc2.faltam && doc3.total === doc2.total,
+      `a segunda UC da MESMA pessoa nao move a camada (${doc3.faltam} de ${doc3.total}) - o trabalho e um CPF, nao dois`);
+  chk('K19g', contrato3.total > doc3.total,
+      `e por isso o total desta camada (${doc3.total} pessoas) e MENOR que o da de baixo (${contrato3.total} UCs) - `
+      + 'as duas contam universos diferentes de proposito, e a diferenca e quantas pessoas tem mais de uma UC');
+
+  /*
+   * E o fechamento: validar o documento fecha a camada, sem tocar em UC nenhuma.
+   */
+  await emA(() => clienteRepo.lancarDocumentosPorCliente(new Map([[semDoc.id, '55678901257']])));
+  const quarta = await emA(() => prontidao('2026-07-01'));
+  const doc4 = quarta.camadas.find((c) => c.camada === 'documento_do_cliente')!;
+  chk('K19h', doc4.faltam === base,
+      `e a camada VOLTA ao que era quando o documento e lancado (${doc3.faltam} -> ${doc4.faltam}, base ${base}) - `
+      + 'uma escrita em `cliente`, e nada em UC nem em contrato');
 }
 
 console.log();
 if (falhas > 0) { console.log(`--- carteira: ${falhas} FALHA(S)`); await pools.transacional.end(); await pools.relatorio.end(); process.exit(1); }
-console.log('--- carteira ponta a ponta: 40 verificacoes, 0 falhas');
+console.log(`--- carteira ponta a ponta: ${total} verificacoes, 0 falhas`);
 await prisma.$disconnect();
 await pools.transacional.end();
 await pools.relatorio.end();

@@ -84,7 +84,9 @@ export type Prontidao = {
 };
 
 /**
- * As dez camadas, numa consulta so.
+ * As onze camadas, numa consulta so. Eram dez ate 04/08/2026, quando a R9
+ * apareceu como camada: ela ja era lei desde a SPEC-001 e nao era CONTADA, entao
+ * o relatorio mandava digitar 29 contratos que nao teriam como ativar.
  *
  * O filtro por tenant sai da RLS, nao de um WHERE escrito aqui. Os
  * `tenant_id = tenant_id` nos JOINs existem para o planejador, nao para o
@@ -135,6 +137,24 @@ export async function prontidao(comp: Date | string): Promise<Prontidao> {
     )
     SELECT
       (SELECT count(*) FROM uc_ativa)                                        AS ucs_ativas,
+      /*
+       * 0. documento do cliente - R9, e a camada e contada em PESSOAS.
+       *
+       * As outras contam UC ou usina; esta conta cliente distinto porque o
+       * trabalho e por pessoa: quem tem duas UCs tem UM CPF. E a diferenca entre
+       * os dois totais nao e ruido - ela e a Q-CLIENTEDUP-01 aparecendo de lado.
+       *
+       * "documento_validado" e nao "documento IS NOT NULL": pela R8, semente do
+       * CRM com digito certo preenche a coluna e NAO destrava a R9. Contar por
+       * ausencia daria a camada como fechada com contrato nenhum ativando.
+       *
+       * (Sem crase nos comentarios daqui: isto vive dentro de um template
+       * literal, e uma crase fecharia a consulta no meio.)
+       */
+      (SELECT count(DISTINCT c.id) FROM uc_ativa uc
+         JOIN cliente c ON c.tenant_id = uc.tenant_id AND c.id = uc.cliente_id
+        WHERE NOT c.documento_validado)                                      AS sem_documento,
+      (SELECT count(DISTINCT uc.cliente_id) FROM uc_ativa uc)                AS clientes_faturaveis,
       -- 1. contrato: entidade LOCAL, nao espelhada do CRM (SPEC-002 §2)
       (SELECT count(*) FROM uc_ativa uc
         WHERE NOT EXISTS (SELECT 1 FROM contrato k
@@ -205,6 +225,29 @@ export async function prontidao(comp: Date | string): Promise<Prontidao> {
   };
 
   const bruto: Array<Omit<Camada, 'situacao'> & { derivada?: boolean }> = [
+    /*
+     * VEM ANTES DE `contrato_ativo`, e isso quebra a coincidencia com a ordem da
+     * triagem de proposito. O criterio declarado no cabecalho deste arquivo e
+     * "quem le de cima para baixo trabalha na ordem em que o trabalho destrava o
+     * proximo", e a triagem so coincidia com ele por acaso: `documento` nao e
+     * motivo de recusa de lote nenhum, e mesmo assim e a PRECONDICAO da camada
+     * de baixo. Digitar contrato antes disto produz rascunho, nao contrato.
+     *
+     * Medido em 04/08/2026 contra producao: `documento_validado` false em 45 de
+     * 45 clientes ativos, e nenhuma das 10 views do CRM expoe documento.
+     */
+    { camada: 'documento_do_cliente', faltam: n(l.sem_documento), total: n(l.clientes_faturaveis),
+      efeito: 'bloqueia_fatura', dono: 'Vinicius + operacao', questao: 'Q-PAGADOR-01',
+      explicacao: 'cliente de UC faturavel sem documento VALIDADO. A R9 (`podeAtivarContrato`) recusa ' +
+        'levar contrato para `ativo` sem ele, e nao ha outra porta: `renovar` passa por `ativar`, e as ' +
+        'rotas nao expoem terceira. O efeito chega uma camada adiante e com o nome errado - a UC vira ' +
+        'recusa `sem_contrato_vigente`, que e a PRIMEIRA da triagem, entao nada depois dela e medido. ' +
+        'Contado em PESSOAS: quem tem duas UCs tem um CPF so. `documento_validado` e nao `documento IS ' +
+        'NOT NULL` porque semente do CRM entra false pela R8, e semente nao ativa contrato. ' +
+        'O insumo nao esta em lugar nenhum do CRM: as 10 views nao expoem documento (medido em 04/08). ' +
+        'Entra por `npm run documentos`, que confere o lote inteiro antes de escrever porque ' +
+        '`cliente_documento_unico` colidiria no meio (Q-CLIENTEDUP-01)' },
+
     { camada: 'contrato_ativo', faltam: n(l.sem_contrato), total: n(l.ucs_ativas),
       efeito: 'bloqueia_fatura', dono: 'Vinicius + operacao', questao: 'Q-022',
       explicacao: 'UC ativa sem contrato ativo. `contrato` e entidade LOCAL e NAO e espelhada do CRM ' +

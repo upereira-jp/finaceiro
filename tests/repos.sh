@@ -187,6 +187,13 @@ echo
 echo "=== vencimento por planilha: lancamento em lote do dia, por numero de UC"
 node --experimental-strip-types tests/repos-vencimentos.ts
 echo
+# R9. Medido em 04/08: `documento_validado` false em 45 de 45 clientes ativos, e
+# `contrato.ativar()` recusa sem ele - entao os 29 contratos a digitar seriam 29
+# rascunhos. O D7 fecha o circuito nos dois sentidos; o D4 e a colisao da
+# Q-CLIENTEDUP-01, que so o banco enxerga.
+echo "=== documento por planilha: CPF/CNPJ do cliente, e a R9 que ele destrava"
+node --experimental-strip-types tests/repos-documento-cliente.ts
+echo
 echo "=== HTTP: rotas, matriz de papeis e traducao de erro"
 node --experimental-strip-types tests/http.ts
 echo

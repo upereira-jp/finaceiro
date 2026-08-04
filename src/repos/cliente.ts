@@ -183,6 +183,166 @@ export async function editar(id: string, e: EdicaoCliente) {
   if (r.count === 0) throw Object.assign(new Error('Cliente nao encontrado.'), { status: 404 });
 }
 
+// ------------------------------------------------- lancamento de documento
+
+export type ResultadoDosDocumentos = {
+  aplicados: Array<{
+    cliente_id: string; nome: string; documento: string;
+    /** O que havia antes, para a segunda passada ser obviamente vazia. */
+    antes: string | null;
+    /** R8 na pratica: o mesmo documento ja podia estar la, vindo do CRM, com
+     *  `documento_validado = false`. Trocar so a origem E mudanca - e a que
+     *  destrava a R9 -, e sem esta marca ela pareceria escrita a toa. */
+    so_validou: boolean;
+  }>;
+  /** Cliente da planilha que nao existe, ou existe e esta inativo. Nao e erro do
+   *  arquivo: e a planilha e o banco discordando sobre quem existe, e quem
+   *  decide o que fazer com isso e uma pessoa. */
+  sem_cliente: Array<{ cliente_id: string; documento: string; motivo: 'nao_existe' | 'inativo' }>;
+  /** Ja tinham ESTE documento e ja validado. Contados a parte para reimportar o
+   *  mesmo arquivo sair com `aplicados` em zero. */
+  inalterados: Array<{ cliente_id: string; nome: string; documento: string }>;
+  /**
+   * O documento ja pertence a OUTRO cliente. E a `Q-CLIENTEDUP-01` chegando pelo
+   * unico caminho em que ela e observavel: o banco.
+   *
+   * O leitor puro pega a repeticao DENTRO do arquivo; esta lista pega a
+   * repeticao contra o que ja esta gravado - inclusive contra cliente INATIVO,
+   * porque `cliente_documento_unico` nao olha a coluna `ativo`.
+   */
+  colisoes: Array<{
+    cliente_id: string; nome: string; documento: string;
+    dono_atual_id: string; dono_atual_nome: string; dono_atual_ativo: boolean;
+  }>;
+  /** Cliente ATIVO que a planilha nao cobriu, com o que ele tem hoje. Ausente
+   *  nao e zero: o lancamento nao apaga o documento de quem nao veio. */
+  nao_cobertos: Array<{
+    cliente_id: string; nome: string; documento_atual: string | null;
+    validado: boolean;
+    /** Tem ao menos uma UC faturavel - mesmo predicado da triagem. Sem isto o
+     *  relatorio contaria junto quem nao fatura hoje e mandaria procurar CPF que
+     *  nao destrava nada, que foi o defeito medido no modelo de vencimentos. */
+    fatura: boolean;
+  }>;
+};
+
+/**
+ * Lanca o CPF/CNPJ de varios clientes de uma vez, casando por `id`.
+ *
+ * POR QUE ISTO EXISTE - medido em 04/08/2026 contra producao. `cliente.documento`
+ * e NULL em 45 de 45 linhas ativas, e a R9 (`podeAtivarContrato`) recusa levar
+ * contrato para `ativo` sem documento VALIDADO. Sem contrato ativo a triagem
+ * recusa por `sem_contrato_vigente`, que e a primeira da ordem: **os 29 contratos
+ * a digitar viram 29 rascunhos e 29 recusas 422** enquanto esta coluna estiver
+ * vazia. Nenhuma das 10 views do CRM expoe documento - conferido no catalogo do
+ * schema `financeiro` no mesmo dia -, entao o dado entra por aqui ou nao entra.
+ *
+ * O QUE ESTA FUNCAO NAO FAZ, e os quatro sao deliberados:
+ *   - nao apaga documento de cliente que a planilha nao trouxe (ausente nao e zero);
+ *   - nao escreve nada se ALGUMA linha colidir - ver abaixo;
+ *   - nao toca cliente inativo, nem para conferir: ele aparece na recusa;
+ *   - nao valida digito, porque o leitor puro ja recusou o que nao fecha.
+ *
+ * A CONFERENCIA E DE LOTE, E ISSO E O PONTO DESTE ARQUIVO. `cliente_documento_
+ * unico` e UNIQUE parcial sobre (tenant_id, documento), e gravando linha a linha
+ * a violacao chega no MEIO do lote - com metade escrita, sem o arquivo no banco
+ * para saber qual metade. Entao: colide alguma, nao escreve nenhuma. E o mesmo
+ * criterio do `cadastrar-originadores.ts`, e a razao aqui foi medida antes de
+ * escrita (`Q-CLIENTEDUP-01`: 45 linhas ativas para 36 nomes distintos).
+ */
+export async function lancarDocumentosPorCliente(
+  porCliente: ReadonlyMap<string, string>,
+): Promise<ResultadoDosDocumentos> {
+  await exigir('escrever_cadastro');
+
+  /*
+   * TODOS os clientes, inclusive os inativos, e as duas razoes sao diferentes:
+   * o inativo entra no mapa de COLISAO porque o indice unico nao olha `ativo`
+   * (as 41 vitimas de merge de 30/07 continuam la), e fica FORA de
+   * `nao_cobertos` porque documento de cliente desativado nao e trabalho.
+   */
+  const todos = await dbt().cliente.findMany({
+    select: {
+      id: true, nome: true, ativo: true, documento: true, documento_validado: true,
+      unidade_consumidora: {
+        select: { status: true, crm_usina_cliente_id: true, rateio_situacao: true },
+      },
+    },
+  });
+  const porId = new Map(todos.map((c) => [c.id, c]));
+  const donoDoDocumento = new Map(
+    todos.filter((c) => c.documento !== null).map((c) => [c.documento!, c]));
+
+  const r: ResultadoDosDocumentos = {
+    aplicados: [], sem_cliente: [], inalterados: [], colisoes: [], nao_cobertos: [],
+  };
+
+  /*
+   * PRIMEIRA PASSADA: so decide. Nada e escrito aqui, e e por isso que a colisao
+   * pode abortar o lote inteiro sem deixar rastro pela metade.
+   */
+  const aEscrever: Array<{ cliente: typeof todos[number]; documento: string }> = [];
+  for (const [cliente_id, documento] of porCliente) {
+    const c = porId.get(cliente_id);
+    if (!c) { r.sem_cliente.push({ cliente_id, documento, motivo: 'nao_existe' }); continue; }
+    if (!c.ativo) { r.sem_cliente.push({ cliente_id, documento, motivo: 'inativo' }); continue; }
+
+    // R8: mesmo documento com `documento_validado = false` NAO e inalterado - e
+    // semente do CRM esperando confirmacao, e confirmar e exatamente o ato que
+    // esta planilha registra.
+    if (c.documento === documento && c.documento_validado) {
+      r.inalterados.push({ cliente_id, nome: c.nome, documento });
+      continue;
+    }
+
+    const dono = donoDoDocumento.get(documento);
+    if (dono && dono.id !== cliente_id) {
+      r.colisoes.push({
+        cliente_id, nome: c.nome, documento,
+        dono_atual_id: dono.id, dono_atual_nome: dono.nome, dono_atual_ativo: dono.ativo,
+      });
+      continue;
+    }
+
+    aEscrever.push({ cliente: c, documento });
+  }
+
+  for (const c of todos) {
+    if (!c.ativo || porCliente.has(c.id)) continue;
+    r.nao_cobertos.push({
+      cliente_id: c.id, nome: c.nome,
+      documento_atual: c.documento, validado: c.documento_validado,
+      // O predicado da triagem, aplicado a PESSOA: basta uma UC faturavel. Quem
+      // tem duas UCs e so uma ativada e cliente que fatura, e o documento dele e
+      // trabalho de verdade.
+      fatura: c.unidade_consumidora.some((u) =>
+        u.status === 'ativa' && (u.crm_usina_cliente_id === null || u.rateio_situacao === 'ativado')),
+    });
+  }
+
+  // COLIDIU ALGUMA, NAO ESCREVE NENHUMA. O relatorio sai inteiro - quem le
+  // precisa ver as colisoes E o que teria sido gravado, senao conserta uma linha
+  // por rodada.
+  if (r.colisoes.length > 0) return r;
+
+  /*
+   * SEGUNDA PASSADA: escreve, e por `editar()`. Nao ha UPDATE direto aqui de
+   * proposito - `editar` e o unico lugar que aplica a R8 (a origem decide se o
+   * documento vale), e um segundo caminho de escrita divergiria dele sem que
+   * nenhum dos dois parecesse errado.
+   */
+  for (const { cliente, documento } of aEscrever) {
+    await editar(cliente.id, { documento_bruto: documento, documento_origem: 'coleta_local' });
+    r.aplicados.push({
+      cliente_id: cliente.id, nome: cliente.nome, documento,
+      antes: cliente.documento,
+      so_validou: cliente.documento === documento,
+    });
+  }
+
+  return r;
+}
+
 /** Baixa logica. Nunca DELETE: contrato, UC e comissao apontam para ca. */
 export async function desativar(id: string) {
   await exigir('escrever_cadastro');
