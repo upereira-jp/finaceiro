@@ -123,11 +123,24 @@ Se for "os dois", precisamos saber a repartição, e o nosso schema muda (é mig
 
 ## PARTE 4 — Dois pedidos nossos, e o primeiro é pequeno
 
-### 4.1 🔴 Exponham `documento` do cliente numa view
+### 4.1 🔴 Exponham `documento` do cliente numa view — e ele resolve **dois** problemas, não um
 
-O nosso boleto sai com **pagador sem CPF e sem endereço**: `cliente.documento` é NULL nas 84 linhas que espelhamos, e os seis campos de endereço da UC estão vazios nas 39. A Sicoob recusa um pagador sem identificação, e a recusa chega até nós traduzida em 502, num ponto onde a mensagem útil já se perdeu.
+O nosso boleto sai com **pagador sem CPF e sem endereço**: `cliente.documento` é NULL em todas as linhas que espelhamos, e os seis campos de endereço da UC estão vazios. A Sicoob recusa um pagador sem identificação, e a recusa chega até nós traduzida em 502, num ponto onde a mensagem útil já se perdeu.
 
 A Parte 6 de vocês mostra que o CPF existe no CRM. **Se ele entrar numa view, o problema acaba.** Endereço também, se existir.
+
+**E há um segundo problema que a mesma coluna resolve, e que só ficou visível depois do ciclo de 04/08.** Nós temos hoje **45 linhas de cliente ativas para 36 pessoas**. A causa não é erro de vocês nem nosso: **o CRM cria um lead por contrato, e o nosso conector cria um cliente por lead** — decisão nossa de 28/07, espelho fiel. Uma pessoa com duas UCs vira duas linhas aqui. Medido:
+
+| pessoa | linhas | UCs |
+|---|--:|--:|
+| ATAIDE DE MELO OLIVEIRA, CARLA GONZAGA, GABRIELLA VIEIRA, Hermani Soares, RENATA FERREIRA, RENATA LUCY, THIAGO GONÇALVES | 2 cada | 2 cada |
+| Carlos Gabriel Santos Alves | 3 | 0 (as três que vocês vão alocar) |
+
+**O dano é um só e é concreto: nove dessas linhas não podem receber CPF.** A nossa tabela tem `UNIQUE (tenant_id, documento)` — a segunda linha da mesma pessoa colide no meio da digitação. O faturamento não é afetado; a fatura segue a UC e o contrato.
+
+**Não estamos pedindo que vocês fundam esses leads** — são contratos legitimamente distintos, e fundir seria errado do lado de vocês. O nosso modelo já é *um cliente, N unidades consumidoras*; o que falta é uma **chave de pessoa** para o conector consolidar sozinho, e `documento` é ela. Sem ela as alternativas todas são ruins: consolidar por nome (nome não é chave), ou largar o `UNIQUE`, que destrói a garantia de que documento identifica pessoa.
+
+**Então a §4.1 subiu de prioridade:** ela não destrava só o boleto — destrava também o cadastro de CPF que o boleto exige.
 
 ### 4.2 🟡 Sim, queremos o sinal de revogação — e ele já está pronto do lado de vocês
 
@@ -180,6 +193,6 @@ Do nosso lado a decisão está registrada e **não foi improvisada** (`Q-SITUACA
 
 **O eixo foi adotado, o mapa foi refeito hoje (12 UCs mudaram de dono, 19,6% da carteira em kWh), o conector já lê as dez views e confere sozinho — e o que trava agora não é mais leitura: são três CPF/CNPJ e a pergunta da Parte 3.**
 
-**As três perguntas desta carta, juntas:** (1) com parceiro indicador, a comissão é do vendedor, do parceiro ou repartida? — Parte 3; (2) `documento` do cliente numa view? — §4.1; (3) UC com rateio `nao_ativado` ou em troca de titularidade pode ser faturada? — §4.3.
+**As três perguntas desta carta, juntas:** (1) com parceiro indicador, a comissão é do vendedor, do parceiro ou repartida? — Parte 3; (2) **`documento` do cliente numa view** — e ela é a mais barata de vocês e a que destrava mais coisa nossa: boleto **e** deduplicação de cliente — §4.1; (3) UC com rateio `nao_ativado` ou em troca de titularidade pode ser faturada? — §4.3.
 
 **O conector continua sem escrever no CRM, e nada aqui muda isso.**
