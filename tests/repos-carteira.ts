@@ -535,6 +535,14 @@ let liquidacaoJulho: string;
    * Entao a camada e conferida contra o BANCO, na mesma condicao: se ela contar
    * diferente do que a tabela tem, e a camada que esta errada.
    *
+   * A CONDICAO GANHOU UMA METADE EM 04/08, e esta verificacao foi quem acusou.
+   * O universo da prontidao passou a ser o FATURAVEL - `status = 'ativa'` e,
+   * quando a UC e espelhada, rateio `ativado` no CRM (`Q-SITUACAO-01`). A
+   * consulta daqui continuava com a condicao velha e as duas divergiram: a
+   * camada disse 3 de 4 e a tabela 4 de 5, porque a `CART-UC-4` e espelhada e
+   * nao ativada. Nao foi o teste que quebrou - foi o teste fazendo exatamente o
+   * que existe para fazer, comparando dois caminhos independentes.
+   *
    * `db()` E NAO `prisma`, e a primeira tentativa errou nisto: o contexto de
    * tenant e emitido DENTRO do `$transaction`, no client de transacao. Uma
    * consulta pelo client de fora corre sem `app.current_tenant_id` e a RLS
@@ -547,7 +555,8 @@ let liquidacaoJulho: string;
       FROM contrato k
       JOIN unidade_consumidora uc
         ON uc.tenant_id = k.tenant_id AND uc.id = k.unidade_consumidora_id
-     WHERE k.status = 'ativo' AND uc.status = 'ativa'`);
+     WHERE k.status = 'ativo' AND uc.status = 'ativa'
+       AND (uc.crm_usina_cliente_id IS NULL OR uc.rateio_situacao = 'ativado')`);
   const orig = porNome('originador_do_contrato');
   chk('K18f', orig.faltam === Number(real.sem) && orig.total === Number(real.total)
            && orig.faltam > 0 && orig.situacao === 'pendente',

@@ -16,6 +16,11 @@ import {
   Pagina, Aviso, Tabela, Busca, Ferramentas, Filtro, ThOrd, Marca, BotaoDeIcone, CampoData, Icone,
   useOrdenacao, ordenar, contem, rotulo,
 } from '../ui.tsx';
+import {
+  situacaoDaUc, ehFaturavel, contarSituacoes,
+  ROTULO_DA_SITUACAO, TOM_DA_SITUACAO, ICONE_DA_SITUACAO,
+  type SituacaoDaUc,
+} from '../unidades-regras.ts';
 import { decimalTexto } from '../dinheiro.ts';
 
 export function TelaUnidades() {
@@ -37,7 +42,7 @@ export function TelaUnidades() {
   const visiveis = ordenar(
     todas.filter((u) =>
       (contem(u.numero_uc, busca) || contem(u.distribuidora, busca)) &&
-      (!situacao || u.status === situacao) &&
+      (!situacao || situacaoDaUc(u) === situacao) &&
       (pendencia !== 'sem_vencimento' || !u.data_vencimento) &&
       (pendencia !== 'sem_usina' || !u.usina_id)),
     ordem,
@@ -47,7 +52,7 @@ export function TelaUnidades() {
       usina: (u) => nomeUsina(u.usina_id),
       rateio: (u) => (u.percentual_rateio == null ? null : parseFloat(u.percentual_rateio)),
       vencimento: (u) => u.data_vencimento,
-      situacao: (u) => u.status,
+      situacao: (u) => situacaoDaUc(u),
     },
   );
 
@@ -70,7 +75,15 @@ export function TelaUnidades() {
     if (ok) { acao.anunciar(`Rateio da ${uc.numero_uc} atualizado.`); ucs.recarregar(); }
   }
 
-  const semVencimento = todas.filter((u) => !u.data_vencimento && u.status === 'ativa').length;
+  /*
+   * O ALERTA CONTA AS FATURAVEIS, e ate 04/08 contava as 41.
+   *
+   * `status === 'ativa'` e o nosso cadastro; faturavel exige tambem o rateio
+   * ativado no CRM. Medido no dia: 41 contra 29. O alerta mandava preencher 41
+   * vencimentos, e doze deles eram para UC que nao ia faturar de qualquer jeito.
+   */
+  const semVencimento = todas.filter((u) => !u.data_vencimento && ehFaturavel(u)).length;
+  const contagem = contarSituacoes(todas);
 
   return (
     <Pagina titulo="Unidades consumidoras"
@@ -85,12 +98,21 @@ export function TelaUnidades() {
       {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
       {ucs.erro && <Aviso tipo="erro">{ucs.erro}</Aviso>}
 
-      <Ferramentas contagem={todas.length ? `${visiveis.length} de ${todas.length}` : undefined}>
+      {/* A contagem diz as DUAS coisas. "41 de 41" escondia que so 29 faturam, e
+          mostrar so as 29 esconderia as outras doze - o par e o que nao mente
+          para nenhum dos dois lados. */}
+      <Ferramentas contagem={todas.length
+        ? `${visiveis.length} de ${todas.length} · ${contagem.faturaveis} faturáveis`
+        : undefined}>
         <Busca valor={busca} ao={setBusca} dica="Buscar por UC ou distribuidora…" />
+        {/* As opcoes saem do vocabulario FECHADO de `unidades-regras`, e nao de
+            uma lista escrita aqui: uma situacao nova sem opcao de filtro ficaria
+            invisivel, e `inativa` - que estava nesta lista - nem existe no enum
+            do banco (`ativa | suspensa | cancelada`), entao filtrava por nada. */}
         <Filtro valor={situacao} ao={setSituacao} rotulo="Filtrar por situação"
                 opcoes={[{ valor: '', texto: 'Todas as situações' },
-                         { valor: 'ativa', texto: 'Ativas' },
-                         { valor: 'inativa', texto: 'Inativas' }]} />
+                         ...(Object.keys(ROTULO_DA_SITUACAO) as SituacaoDaUc[])
+                           .map((k) => ({ valor: k, texto: ROTULO_DA_SITUACAO[k] }))]} />
         <Filtro valor={pendencia} ao={setPendencia} rotulo="Filtrar por pendência"
                 opcoes={[{ valor: '', texto: 'Todas as pendências' },
                          { valor: 'sem_vencimento', texto: 'Sem vencimento' },
@@ -146,7 +168,11 @@ export function TelaUnidades() {
                               ao={() => void salvarVencimento(u)} desabilitado={acao.ocupado} />
               </div>
             </td>
-            <td><Marca tom={u.status === 'ativa' ? 'ok' : 'pendente'}>{rotulo(u.status)}</Marca></td>
+            <td>
+              <Marca tom={TOM_DA_SITUACAO[situacaoDaUc(u)]} icone={ICONE_DA_SITUACAO[situacaoDaUc(u)]}>
+                {ROTULO_DA_SITUACAO[situacaoDaUc(u)]}
+              </Marca>
+            </td>
           </tr>
         ))}
       </Tabela>

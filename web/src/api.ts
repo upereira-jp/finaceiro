@@ -178,7 +178,15 @@ export type Cliente = { id: string; nome: string; documento: string | null; ativ
 export type UnidadeConsumidora = {
   id: string; cliente_id: string; numero_uc: string; distribuidora: string;
   usina_id: string | null; percentual_rateio: string | null;
-  data_vencimento: string | null; status: string;
+  data_vencimento: string | null;
+  /** NOSSO cadastro: `ativa | suspensa | cancelada`. Nao diz nada sobre o CRM. */
+  status: string;
+  /** Espelho do CRM (migration 24). Ver `web/src/unidades-regras.ts` - "ativo"
+   *  significava duas coisas, e a tela mostrava a errada. */
+  rateio_situacao?: string | null;
+  rateio_em_troca_titularidade?: boolean | null;
+  /** Preenchido quando a UC veio do rateio do CRM. UC local nao tem. */
+  crm_usina_cliente_id?: string | null;
 };
 
 export type Usina = {

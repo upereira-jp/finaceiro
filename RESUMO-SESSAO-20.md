@@ -4,7 +4,7 @@
 |---|---|
 | **Foco** | Duas entregas. **O conector passou a ler as dez views do CRM e a conferir o eixo do originador**; e **o layout da fatura deixou de ser lista e passou a ser posição** — a pedido do dono |
 | **Método** | Medir antes de construir, e **fotografar depois**. As duas coisas pagaram: a medição decidiu cada regra de sinal, e a fotografia pegou dois defeitos que a leitura de código não pegaria |
-| **Resultado** | **2 questões fechadas** · **2 migrations** · 1123 → **1241 verificações** · `EXIT=0` · catálogo 9/9 |
+| **Resultado** | **2 questões fechadas** · **2 migrations** · 1123 → **1258 verificações** · `EXIT=0` · catálogo 9/9 |
 | **Escrito em produção** | **04/08, autorizado pelo dono:** o destrave e o ciclo `--valendo`. As migrations 22, 23 e 24 **não** foram aplicadas — ver §4.1 |
 | **Não feito** | O deploy e a `Q-PARCERIA-01` continuam esperando decisão. Os três CPF/CNPJ e o dia de vencimento das 39 UCs continuam sendo insumo humano |
 
@@ -13,7 +13,7 @@
 > | | |
 > |---|---|
 > | **Banco** | **24 migrations**; a 22, a 23 e a 24 **só em banco de teste**. Produção segue com 21 |
-> | **Suíte** | `EXIT=0`, **1241** linhas `ok` em 47 suítes. Delta **118**, contado na fonte e conferido contra o `npm test`: diferença zero |
+> | **Suíte** | `EXIT=0`, **1258** linhas `ok` em 48 suítes. Delta **135**, contado na fonte e conferido contra o `npm test`: diferença zero |
 > | **Produção** | **espelho alinhado com o CRM em 04/08** (destrave + ciclo). Schema inalterado |
 > | **O eixo do originador** | ✅ decidido na sessão 19, e **agora legível por código** |
 >
@@ -144,6 +144,26 @@ Migration **24**: `rateio_situacao`, `rateio_em_troca_titularidade` e `rateio_si
 
 **Um erro meu repetido três vezes no mesmo dia:** fixar um total onde a regra é sobre uma linha. `W8h`, `N58` e `K2d` afirmavam contagens que medem a população do banco de teste, não a regra. As três passaram a nomear a linha.
 
+## 4.3 "Ativo" significava duas coisas, e a tela mostrava a errada
+
+Duas leituras do dono caíram no mesmo vocabulário, no mesmo dia. Primeiro *"ainda existem 86 clientes, e apenas 29 na etapa do funil"*. Depois *"por que existem 41 ativos?"*. **Os dois números estavam certos e queriam dizer outra coisa.**
+
+| | o que é | quem escreve | hoje |
+|---|---|---|--:|
+| `unidade_consumidora.status = 'ativa'` | conceito **nosso**, de cadastro: ninguém suspendeu nem cancelou. Toda UC **nasce** assim | gente, pela nossa tela | **41** |
+| `rateio_situacao = 'ativado'` | conceito **do CRM**: o rateio foi ativado no funil | o conector (migration 24) | **29** |
+
+A decisão do dono foi curta: **só aparece como Ativa o que fatura.**
+
+**Onde isso doía, e o segundo lugar é pior que o primeiro.** A tela de Unidades escrevia "Ativas" e o alerta dizia *"41 unidades ativas sem dia de vencimento"* — mandando preencher doze vencimentos que nunca faturariam. E a **Pendências** calculava **todas as camadas** sobre as 41: ela dizia "41 sem contrato", "41 sem vencimento", inflando cada camada em doze.
+
+Consertado nos dois:
+
+- **servidor** — o universo da prontidão passou a ser o faturável, com o **mesmo predicado da triagem**: `status = 'ativa'` **e**, quando a UC é espelhada, rateio `ativado`. UC criada à mão continua contando, porque o CRM não tem opinião sobre ela;
+- **tela** — `web/src/unidades-regras.ts`, puro, com **17 verificações**. Seis situações num vocabulário fechado, e **só `Ativa` é verde**. A contagem virou *"N de 41 · 29 faturáveis"* — mostrar só as 29 esconderia doze, e mostrar só as 41 é o que enganava.
+
+**Duas coisas que a construção encontrou de lado.** O filtro da tela oferecia `inativa`, que **não existe no enum do banco** (`ativa | suspensa | cancelada`) — filtrava por nada desde sempre. E a `K18f` acusou a mudança sozinha: ela compara a prontidão contra uma consulta independente, as duas divergiram (3 de 4 contra 4 de 5), e foi assim que eu soube que a condição tinha duas metades e eu só havia mudado uma.
+
 ## 5. O que muda para quem opera amanhã
 
 1. **A digitação continua travada nas mesmas duas coisas:** a `Q-PARCERIA-01` e os três CPF/CNPJ. Nada do que foi construído hoje destrava isso — o que mudou é que **digitar errado agora aparece sozinho no ciclo seguinte**, em vez de ficar em silêncio. A R20-b continua sem caminho de edição;
@@ -151,4 +171,5 @@ Migration **24**: `rateio_situacao`, `rateio_em_troca_titularidade` e `rateio_si
 3. **a aba Documento tem um painel novo** — *Onde cada coisa fica na folha*. Escolher papel, orientação, margens e arrastar os elementos. **A folha na tela tem o tamanho real do papel**;
 4. **o papel agora é declarado.** Quem imprimir vai ver o diálogo já em A4, e não no padrão da máquina;
 5. **a `RESPOSTA-dev-crm-rodada6` foi atualizada** e leva **três** perguntas: a comissão com parceiro indicador, o `documento` do cliente numa view, e se UC com rateio `nao_ativado` pode ser faturada;
-6. **o deploy acumulou:** agora são **duas** migrations pendentes (22 e 23) mais o bundle. O procedimento é o mesmo do `RETOMADA` §2 — sem o `prisma generate` o servidor **recusa subir**, de propósito.
+6. **o deploy acumulou, e virou pré-requisito de mais coisa:** são **três** migrations pendentes (22, 23 e 24) mais o bundle. Sem o `prisma generate` o servidor **recusa subir**, de propósito. E desde 04/08 o **`npm run ciclo` não roda contra produção** até a 24 entrar — o conector escreve três colunas que só existem depois dela. Ler produção, o catálogo e o `destravar-uc` seguem funcionando;
+7. **a limpeza do estado dos inativos chega no primeiro ciclo depois do deploy.** Ela é auto-curativa e roda a cada ciclo até não achar mais nada — não corre risco de se perder.

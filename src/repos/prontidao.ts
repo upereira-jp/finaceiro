@@ -70,6 +70,11 @@ export type Camada = {
 
 export type Prontidao = {
   competencia: string;
+  /**
+   * As UCs FATURAVEIS - `status = 'ativa'` e, quando espelhada, rateio ativado
+   * no CRM. O nome ficou por compatibilidade de payload; o significado mudou em
+   * 04/08. Ver o comentario do `WITH uc_ativa`.
+   */
   ucs_ativas: number;
   /** True so quando NENHUMA camada de `bloqueia_fatura` tem pendencia. Nao
    *  promete que a fatura vai sair certa - promete que ela pode sair. */
@@ -94,8 +99,33 @@ export async function prontidao(comp: Date | string): Promise<Prontidao> {
   const iso = competenciaISO(c);
 
   const r: any[] = await db().$queryRaw`
+    /*
+     * O UNIVERSO E O FATURAVEL, e nao "toda UC nao cancelada". Mudou em
+     * 04/08/2026, e a razao e que a palavra "ativa" significava duas coisas.
+     *
+     * "unidade_consumidora.status" e conceito NOSSO, de cadastro - ninguem
+     * suspendeu nem cancelou esta UC aqui -, e toda UC nasce "ativa".
+     * "rateio_situacao" e conceito DO CRM - o contrato de rateio foi ativado no
+     * funil. Medido no dia: 41 estavam "ativa" e 29 "ativado".
+     *
+     * A prontidao contava as 41, entao ela dizia "41 sem contrato" e "41 sem
+     * vencimento" para um trabalho que so importa em 29 - inflando cada camada
+     * em 12 e mandando a operacao preencher o que nunca ia faturar.
+     *
+     * O PREDICADO E O MESMO DA TRIAGEM, e isto e espelho: "triar()" em
+     * "src/dominio/faturamento.ts" recusa por "rateio_nao_ativado" quando a UC
+     * E ESPELHADA ("crm_usina_cliente_id" preenchido) e a situacao nao e
+     * "ativado". UC cadastrada a mao nao tem opiniao do CRM e continua contando,
+     * que e a guarda que impede uma UC local de ficar invisivel para sempre.
+     *
+     * Espelho tem modo de falha proprio - divergir sem que nenhum lado pareca
+     * errado -, e por isso o "K18j" compara os dois lados um contra o outro em
+     * vez de comparar cada um com um numero meu.
+     */
     WITH uc_ativa AS (
-      SELECT uc.* FROM unidade_consumidora uc WHERE uc.status = 'ativa'
+      SELECT uc.* FROM unidade_consumidora uc
+       WHERE uc.status = 'ativa'
+         AND (uc.crm_usina_cliente_id IS NULL OR uc.rateio_situacao = 'ativado')
     ),
     uc_contratada AS (
       SELECT uc.*, k.id AS contrato_id, k.originador_id,
