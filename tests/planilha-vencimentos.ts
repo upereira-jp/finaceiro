@@ -22,7 +22,8 @@
 
 import {
   lerPlanilhaDeVencimentos, lerDiaDoVencimento, dataQuePortaODia,
-  MODELO_DE_VENCIMENTOS, type DiaDoMes,
+  montarModeloDeVencimentos, MODELO_DE_VENCIMENTOS,
+  type DiaDoMes, type LinhaDoModelo,
 } from '../src/dominio/planilha-vencimentos.ts';
 import { vencimentoDaFatura } from '../src/dominio/faturamento.ts';
 
@@ -215,6 +216,82 @@ const lancou = (f: () => unknown): any => { try { f(); return null; } catch (e) 
   const p = lerPlanilhaDeVencimentos(MODELO_DE_VENCIMENTOS);
   chk('P10a', p.erros.length === 0 && p.linhas.length === 2 && p.cabecalho,
       `o MODELO_DE_VENCIMENTOS passa pelo proprio leitor (l=${p.linhas.length} e=${p.erros.length})`);
+}
+
+// ================================================== M. o MODELO PREENCHIDO
+//
+// O QUE ESTE BLOCO PERSEGUE. O modelo saia com todas as UCs nao canceladas e
+// nada distinguia uma da outra - medido em 04/08/2026, 12 das 41 nao faturam
+// (rateio nao ativado no CRM) e a triagem as recusa ANTES de olhar vencimento.
+// Pedir 41 dias para cobrar 29 e o mesmo defeito da tela de Unidades e da
+// prontidao no dia anterior (`RESUMO-SESSAO-20` §4.3).
+//
+// Nenhuma destas verificacoes precisa de banco: o que decide a ordem e a marca
+// e uma funcao pura, e ate 04/08 isso vivia dentro do script.
+{
+  const uc = (n: string, fatura: boolean, usina = '0001', extra: Partial<LinhaDoModelo> = {}): LinhaDoModelo => ({
+    numero_uc: n, dia_atual: '', cliente: 'FULANO', usina, rateio: '3.2000',
+    status: 'ativa', situacao_crm: fatura ? 'ativado' : 'nao_ativado', fatura, ...extra,
+  });
+
+  // ------------------------------------------------ M1 a marca e a ordem
+  {
+    const csv = montarModeloDeVencimentos([uc('C', false), uc('A', true), uc('B', true)]);
+    const corpo = csv.replace(/^﻿/, '').split('\n').filter((l) => l !== '');
+    const ucs = corpo.slice(1).map((l) => l.split(';')[0]);
+
+    chk('M1a', ucs.join(',') === 'A,B,C',
+        `faturavel vem primeiro, e dentro do bloco a ordem e estavel (veio ${ucs.join(',')})`);
+    chk('M1b', corpo[1]!.split(';')[2] === 'sim' && corpo[3]!.split(';')[2] === 'NAO',
+        'a coluna `fatura` marca cada linha - "sim" e "NAO", e o NAO e maiusculo porque e o que se procura');
+
+    /*
+     * AS QUE NAO FATURAM CONTINUAM NO ARQUIVO. Sete das doze estao em troca de
+     * titularidade e voltam quando o CRM as ativar - esconde-las faria o dia
+     * delas ser digitado uma segunda vez, la na frente.
+     */
+    chk('M1c', corpo.length === 4, `nenhuma linha e escondida: 3 UCs entram, 3 saem (veio ${corpo.length - 1})`);
+  }
+
+  // ------------------------------------------------ M2 o que o Excel precisa
+  {
+    const csv = montarModeloDeVencimentos([uc('000000014813865', true, '0001',
+      { cliente: 'SILVA; FILHO "JR"', dia_atual: '10', situacao_crm: '' })]);
+
+    chk('M2a', csv.startsWith('﻿'),
+        'o BOM UTF-8 abre o arquivo - sem ele o Excel pt-BR quebra o acento de "GABRIELLA"');
+    chk('M2b', /"SILVA; FILHO ""JR"""/.test(csv),
+        'o `;` e a aspa dentro do nome sao escapados, senao a linha ganha uma coluna e o CSV desalinha');
+    chk('M2c', csv.includes(';(nao espelhada);'),
+        'UC sem situacao no CRM sai como "(nao espelhada)" e nao como celula vazia - vazio se le como falta de dado');
+    chk('M2d', csv.split('\n')[1]!.split(';')[1] === '10',
+        'o dia que a UC JA tem vem preenchido: a segunda passada tem de ser obviamente vazia');
+  }
+
+  // ------------------------------------------------ M3 o circuito fechado
+  //
+  // A verificacao que liga as duas metades: o arquivo que o `--modelo` escreve
+  // tem de passar pelo leitor que o `--ensaio` usa. Um modelo que o proprio
+  // importador recusa e a pior instrucao possivel - e a coluna `fatura` entrou
+  // no MEIO das colunas, que e onde uma quebra dessas apareceria.
+  {
+    const csv = montarModeloDeVencimentos([uc('000000000000001', true), uc('000000000000002', false)]);
+    // Como sai do `--modelo`: sem dia nenhum preenchido.
+    const vazio = lerPlanilhaDeVencimentos(csv);
+    chk('M3a', vazio.cabecalho && vazio.linhas.length === 0 && vazio.erros.length === 2,
+        `o modelo em branco e recusado linha a linha, com o cabecalho reconhecido (e=${vazio.erros.length})`);
+
+    // E como volta do Excel: a coluna 2 preenchida, o resto intacto.
+    const preenchido = csv.split('\n').map((l, i) => {
+      if (i === 0 || l === '') return l;
+      const c = l.split(';'); c[1] = '15'; return c.join(';');
+    }).join('\n');
+    const p = lerPlanilhaDeVencimentos(preenchido);
+    chk('M3b', p.erros.length === 0 && p.linhas.length === 2 && p.linhas[0]!.dia === 15,
+        `preenchido, o modelo passa inteiro pelo leitor (l=${p.linhas.length} e=${p.erros.length})`);
+    chk('M3c', p.linhas[0]!.numero_uc === '000000000000001',
+        'a UC continua na PRIMEIRA coluna depois da coluna nova - o leitor le 1 e 2 e ignora o resto');
+  }
 }
 
 console.log(`\n${falhas === 0 ? 'TODAS PASSARAM' : `${falhas} FALHA(S)`}`);

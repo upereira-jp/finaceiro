@@ -211,6 +211,63 @@ const ucPorNumero = async (n: string): Promise<any> => {
       'e a UC e alcancavel pelo numero, que e a chave do casamento da planilha');
 }
 
+// ------------------------------------------- V7 "nao coberta" tem DOIS significados
+//
+// Medido em producao em 04/08/2026: das 41 UCs ativas, **12 nao faturam** - o
+// rateio delas nao esta ativado no CRM, e a triagem as recusa por
+// `rateio_nao_ativado` ANTES de chegar em `sem_vencimento`.
+//
+// Sem `fatura` no resultado, as duas coisas se contavam juntas e o script
+// terminava dizendo "12 UC(s) seguem SEM vencimento" para um trabalho que nao
+// existe. E o mesmo defeito que a tela de Unidades e a prontidao tiveram no dia
+// anterior (`RESUMO-SESSAO-20` §4.3), e ele reaparece em todo lugar que confunde
+// `status = 'ativa'` (conceito NOSSO) com `rateio_situacao = 'ativado'`
+// (conceito DO CRM).
+//
+// O par mudo e o ponto: as duas UCs abaixo diferem em UM campo espelhado.
+{
+  const u2 = await ucPorNumero('VNC-UC-2');
+  await emA(() => db().$queryRawUnsafe(
+    `UPDATE unidade_consumidora
+        SET crm_usina_cliente_id = gen_random_uuid(), rateio_situacao = 'nao_ativado'
+      WHERE id = $1::uuid`, u2.id));
+
+  // A planilha nao cobre nenhuma das duas: as duas caem em `nao_cobertas`, e e
+  // ai que a diferenca tem de aparecer.
+  const r = await emA(() => ucRepo.lancarVencimentosPorUC(mapaDe('VNC-UC-1;10\n')));
+  const espelhada = r.nao_cobertas.find((x) => x.numero_uc === 'VNC-UC-2');
+  chk('V7a', espelhada !== undefined && espelhada.fatura === false,
+      'UC espelhada do CRM com rateio `nao_ativado` sai marcada como NAO faturavel - o dia dela '
+      + 'nao e pendencia, porque ela para na recusa anterior');
+
+  await emA(() => db().$queryRawUnsafe(
+    `UPDATE unidade_consumidora SET rateio_situacao = 'ativado' WHERE id = $1::uuid`, u2.id));
+  const r2 = await emA(() => ucRepo.lancarVencimentosPorUC(mapaDe('VNC-UC-1;10\n')));
+  const ativada = r2.nao_cobertas.find((x) => x.numero_uc === 'VNC-UC-2');
+  chk('V7b', ativada !== undefined && ativada.fatura === true,
+      'a MESMA UC, com o rateio ativado no CRM, volta a ser pendencia de verdade - um campo de '
+      + 'diferenca, e e o campo que o conector espelha');
+
+  // A guarda que a `Q-SITUACAO-01` quase perdeu: UC criada a mao nunca vai ter
+  // situacao vinda do CRM, e marca-la como nao faturavel a esconderia para
+  // sempre - sem erro e sem log.
+  await emA(() => db().$queryRawUnsafe(
+    `UPDATE unidade_consumidora SET crm_usina_cliente_id = NULL, rateio_situacao = NULL
+      WHERE id = $1::uuid`, u2.id));
+  const r3 = await emA(() => ucRepo.lancarVencimentosPorUC(mapaDe('VNC-UC-1;10\n')));
+  const local = r3.nao_cobertas.find((x) => x.numero_uc === 'VNC-UC-2');
+  chk('V7c', local !== undefined && local.fatura === true,
+      'UC NAO espelhada (criada pela nossa tela) conta como faturavel mesmo sem situacao - o CRM '
+      + 'nao tem opiniao sobre ela, e o silencio dele nao pode virar recusa permanente');
+
+  await emA(() => ucRepo.suspender(u2.id));
+  const r4 = await emA(() => ucRepo.lancarVencimentosPorUC(mapaDe('VNC-UC-1;10\n')));
+  const susp = r4.nao_cobertas.find((x) => x.numero_uc === 'VNC-UC-2');
+  chk('V7d', susp !== undefined && susp.fatura === false,
+      'e SUSPENSA nao fatura - a marca e o predicado inteiro da triagem, nao so a metade do CRM');
+  await emA(() => ucRepo.reativar(u2.id));
+}
+
 console.log(`\n${falhas === 0 ? 'vencimento por planilha: todas as verificacoes passaram'
                               : `vencimento por planilha: ${falhas} FALHA(S)`}`);
 await prisma.$disconnect();

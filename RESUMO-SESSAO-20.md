@@ -27,7 +27,7 @@
 > | **Deploy: migrations 22, 23 e 24 + bundle** | 🔴 **e a 24 exige rodar o ciclo antes de compor lote** | Vinicius |
 > | `Q-CLIENTEDUP-01` (84 → 45, **não fechou**) · `Q-PAGADOR-01` · `Q-FATCHEIA-01` · `Q-WEBHOOK-01` · `Q-SICOOB-01` | 🔴 | Vinicius |
 > | ~~**`--valendo` do destrave + ciclo**~~ | ✅ **executado em 04/08** — §4.1 | — |
-> | ~~`Q-VIEWSCRED-01`~~ · ~~`Q-SPEC001-08`~~ · ~~`Q-SITUACAO-01`~~ | ✅ | fechadas |
+> | ~~`Q-VIEWSCRED-01`~e quan~ · ~~`Q-SPEC001-08`~~ · ~~`Q-SITUACAO-01`~~ | ✅ | fechadas |
 
 ---
 

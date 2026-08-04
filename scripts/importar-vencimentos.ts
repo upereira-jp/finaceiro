@@ -33,7 +33,10 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { iniciar, encerrarApp } from '../src/app.ts';
 import { lancarVencimentosPorUC, type ResultadoDosVencimentos } from '../src/repos/unidade_consumidora.ts';
-import { lerPlanilhaDeVencimentos, MODELO_DE_VENCIMENTOS } from '../src/dominio/planilha-vencimentos.ts';
+import {
+  lerPlanilhaDeVencimentos, montarModeloDeVencimentos, MODELO_DE_VENCIMENTOS,
+  type LinhaDoModelo,
+} from '../src/dominio/planilha-vencimentos.ts';
 import { db } from '../src/db/contexto.ts';
 
 class RollbackDoEnsaio extends Error {
@@ -43,10 +46,6 @@ class RollbackDoEnsaio extends Error {
 
 const arg = (n: string) => { const i = process.argv.indexOf(`--${n}`); return i >= 0 ? process.argv[i + 1] : undefined; };
 const tem = (n: string) => process.argv.includes(`--${n}`);
-
-/** O `;` do CSV do Excel pt-BR, e o mesmo escape do `web/src/csv.ts`. */
-const celula = (v: string): string =>
-  /[";\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 
 async function main(): Promise<void> {
   const modelo = tem('modelo');
@@ -85,35 +84,49 @@ async function main(): Promise<void> {
    * resto, entao o arquivo que sai e o das UCs DAQUELE tenant.
    */
   if (modelo) {
+    /*
+     * O PREDICADO DE `fatura` E O MESMO DA TRIAGEM E DA PRONTIDAO, copiado de
+     * `src/repos/prontidao.ts`: UC espelhada do CRM (`crm_usina_cliente_id`
+     * preenchido) so fatura com o rateio `ativado`; UC criada a mao continua
+     * contando, porque o CRM nao tem opiniao sobre ela.
+     *
+     * Espelho de regra tem modo de falha proprio - divergir sem que nenhum dos
+     * dois lados pareca errado -, e por isso a `M2f` compara esta coluna contra
+     * o que a triagem recusa, e nao contra um numero meu.
+     */
     const linhas: any[] = await a.withTenant(sessao, arg('tenant'), async () => db().$queryRaw`
       SELECT uc.numero_uc, c.nome AS cliente,
              coalesce(us.codigo_geradora, '') AS usina,
              uc.percentual_rateio::text AS rateio,
              uc.status::text AS status,
+             coalesce(uc.rateio_situacao::text, '') AS situacao_crm,
+             (uc.status = 'ativa'
+              AND (uc.crm_usina_cliente_id IS NULL OR uc.rateio_situacao = 'ativado')) AS fatura,
              CASE WHEN uc.data_vencimento IS NULL THEN ''
                   ELSE to_char(uc.data_vencimento, 'DD') END AS dia_atual
         FROM unidade_consumidora uc
         JOIN cliente c  ON c.tenant_id = uc.tenant_id AND c.id = uc.cliente_id
         LEFT JOIN usina us ON us.tenant_id = uc.tenant_id AND us.id = uc.usina_id
-       WHERE uc.status <> 'cancelada'
-       ORDER BY us.codigo_geradora NULLS LAST, uc.numero_uc`) as any[];
+       WHERE uc.status <> 'cancelada'`) as any[];
 
-    // BOM UTF-8 primeiro: sem ele o Excel pt-BR abre "GABRIELLA" com acento quebrado.
-    let csv = '﻿' + 'numero_uc;dia_vencimento;cliente;usina;rateio_%;status\n';
-    for (const l of linhas) {
-      csv += [
-        celula(l.numero_uc), celula(l.dia_atual), celula(l.cliente),
-        celula(l.usina), celula(l.rateio ?? ''), celula(l.status),
-      ].join(';') + '\n';
-    }
-    writeFileSync(saida!, csv, 'utf8');
+    const modeladas: LinhaDoModelo[] = linhas.map((l) => ({
+      numero_uc: l.numero_uc, dia_atual: l.dia_atual, cliente: l.cliente,
+      usina: l.usina, rateio: l.rateio ?? '', status: l.status,
+      situacao_crm: l.situacao_crm, fatura: l.fatura === true,
+    }));
+    writeFileSync(saida!, montarModeloDeVencimentos(modeladas), 'utf8');
+
+    const faturaveis = modeladas.filter((l) => l.fatura);
+    const semDia = faturaveis.filter((l) => !l.dia_atual).length;
 
     console.log(`\n== ${linhas.length} UC(s) nao canceladas, escritas em ${saida} ==`);
-    console.log('   Preencha a coluna dia_vencimento e importe com --ensaio.');
-    console.log('   As colunas cliente/usina/rateio/status sao so para voce saber qual linha e qual -');
-    console.log('   o importador le as duas primeiras e ignora o resto.');
-    const semDia = linhas.filter((l) => !l.dia_atual).length;
-    console.log(`   ${semDia} de ${linhas.length} estao SEM dia hoje.\n`);
+    console.log(`   ${faturaveis.length} FATURAM hoje e vem primeiro; ${modeladas.length - faturaveis.length} nao,`);
+    console.log('   e vao marcadas com NAO na coluna `fatura` - o rateio delas nao esta ativado no CRM,');
+    console.log('   entao a triagem as recusa por `rateio_nao_ativado` ANTES de olhar o vencimento.');
+    console.log(`   ${semDia} das ${faturaveis.length} que faturam estao SEM dia hoje - e o trabalho.`);
+    console.log('\n   Preencha a coluna dia_vencimento e importe com --ensaio.');
+    console.log('   As demais colunas sao so para voce saber qual linha e qual - o importador');
+    console.log('   le as duas primeiras e ignora o resto.\n');
     await encerrarApp();
     return;
   }
@@ -207,7 +220,8 @@ async function main(): Promise<void> {
      */
     console.log('\n  UC do cadastro que a planilha NAO cobriu (ficaram como estavam):');
     for (const s of r!.nao_cobertas) {
-      console.log(`    ${s.numero_uc.padEnd(20)} ${s.dia_atual === null ? 'SEM vencimento' : `continua no dia ${s.dia_atual}`}`);
+      console.log(`    ${s.numero_uc.padEnd(20)} ${s.fatura ? '     ' : '(nao fatura) '}` +
+                  `${s.dia_atual === null ? 'SEM vencimento' : `continua no dia ${s.dia_atual}`}`);
     }
   }
 
@@ -215,10 +229,22 @@ async function main(): Promise<void> {
     ? `\n== ROLLBACK (--ensaio). ${r!.aplicadas.length} teriam sido gravadas. Nada foi gravado. ==`
     : `\n== COMMIT. ${r!.aplicadas.length} UC(s) com dia de vencimento gravado. ==`);
 
-  if (!ensaio && r!.nao_cobertas.some((x) => x.dia_atual === null)) {
-    const n = r!.nao_cobertas.filter((x) => x.dia_atual === null).length;
-    console.log(`\n   ATENCAO: ${n} UC(s) seguem SEM vencimento. Na composicao do lote elas viram`);
-    console.log('   recusa contada `sem_vencimento` - depois das quatro recusas que vem antes dela.');
+  /*
+   * SO AS FATURAVEIS SAO PENDENCIA. A UC com rateio nao ativado no CRM para na
+   * recusa `rateio_nao_ativado`, que vem ANTES de `sem_vencimento` na ordem da
+   * triagem - o dia dela nao muda nada hoje. Contar as duas juntas foi o que
+   * fez o alerta da tela dizer "41 unidades ativas sem dia de vencimento"
+   * (`RESUMO-SESSAO-20` §4.3), mandando preencher doze que nao faturariam.
+   */
+  const faltando = r!.nao_cobertas.filter((x) => x.dia_atual === null);
+  const faltandoQueFatura = faltando.filter((x) => x.fatura);
+  if (!ensaio && faltandoQueFatura.length > 0) {
+    console.log(`\n   ATENCAO: ${faltandoQueFatura.length} UC(s) QUE FATURAM seguem SEM vencimento. Na composicao`);
+    console.log('   do lote elas viram recusa contada `sem_vencimento` - depois das quatro que vem antes.');
+  }
+  if (!ensaio && faltando.length > faltandoQueFatura.length) {
+    console.log(`\n   (${faltando.length - faltandoQueFatura.length} outra(s) sem vencimento NAO faturam hoje - o rateio delas nao esta`);
+    console.log('   ativado no CRM. Elas param na recusa anterior, e o dia nao e trabalho pendente.)');
   }
 
   await encerrarApp();

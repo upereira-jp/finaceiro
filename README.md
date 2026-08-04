@@ -13,47 +13,54 @@ Sistema financeiro multi-tenant da G3 Solar: faturamento de crédito de energia,
 
 ## O caminho para a primeira fatura
 
-Medido contra produção em 30/07. **O que segura o faturamento não é código** — é insumo humano, e a ordem importa mais do que parece.
+**Remedido contra produção em 04/08**, depois do deploy e do ciclo — e o universo mudou: são **29 UCs**, não 39. **O que segura o faturamento não é código** — é insumo humano, e a ordem importa mais do que parece.
 
-### O estado hoje
+### O estado hoje — 04/08, pela `prontidao` e por consulta direta
 
 | | | | |
 |---|--:|---|--:|
-| clientes | 84 | **contratos** | **0** |
-| UCs (todas com rateio) | 39 | **originadores** | **0** |
-| usinas | 4 | **UCs com `data_vencimento`** | **0** |
-| tarifa vigente | 1 | **donos de usina** | **0** |
-| regras de comissão | 10 | **identidade de cobrança** | **0** |
+| clientes (linhas · ativos) | 86 · 45 | **contratos** | **0** |
+| UCs ativas | 41 | **originadores** | **0** |
+| **UCs que FATURAM** (rateio `ativado`) | **29** | **UCs com `data_vencimento`** | **0 de 29** |
+| usinas | 4 | **donos de usina** | **0 de 4** |
+| tarifa vigente (Equatorial, 1,130000) | 1 | **regra de repasse** | **0 de 4** |
+| regras de comissão (5 tiers × 2 parcelas) | 10 | **identidade de cobrança** | **0** |
+
+**As duas camadas que já estão fechadas** e que ninguém precisa tocar: a **tarifa** cobre as 29 (todas são Equatorial, e a vigência é aberta dos dois lados — `-infinity`), e as **regras de comissão** cobrem os cinco tiers nas duas parcelas do `PRD` §5.4. Nenhuma das duas aparece na prontidão porque o universo delas depende de contrato — elas dizem `nao_medido`, que **não é `ok`**, e é por isso que foram conferidas por consulta direta.
 
 ### A ordem que destrava
 
 | # | O quê | Depende de |
 |:--:|---|---|
-| 1 | **Identidade de cobrança** (chave Pix, recebedor, cidade) | **só do dono** — destrava o teste do QR hoje |
-| 2 | **Dia de vencimento das 39 UCs** | ver abaixo: é o *dia*, não o modelo |
-| 3 | **CPF/CNPJ dos dois originadores** + natureza | operação |
-| 4 | **Reconferir o mapa de atribuição** (`Q-CRMCODIGO-01`) | o CRM se moveu duas vezes em quatro dias |
-| 5 | **Digitar os contratos** | 3 e 4 — **R20-b congela o tier e não há edição** |
-| 6 | **Lançar a geração** que falta na competência escolhida | operação |
+| 1 | **Identidade de cobrança** (chave Pix, recebedor, cidade) | **só do dono** — sem ela o documento sai **sem QR**, e é o único meio de pagamento que não espera o A1 |
+| 2 | **Dia de vencimento das 29 UCs** | **o modelo está pronto e marcado**: `vencimentos-modelo-20260804.csv`, 29 `sim` primeiro e 12 `NAO` no fim |
+| 3 | **CPF/CNPJ dos três originadores** + natureza | operação — nenhuma das 10 views do CRM entrega documento |
+| 4 | **Decidir a `Q-PARCERIA-01`** | dono + dev do CRM — **trava a digitação**, e a 2ª parcela é 25% contra zero |
+| 5 | **Digitar os 29 contratos** | 3 e 4 — **R20-b congela o tier e não há edição** |
+| 6 | **Lançar a geração** que falta na competência escolhida | operação — ver o quadro abaixo |
 | 7 | **Compor e emitir** | 1–6 |
 | 8 | **Dono de usina + `regra_repasse`** | **não bloqueia a fatura**, bloqueia o *repasse* |
 
+**O boleto não está nesta lista, e é de propósito.** A prontidão marca `cobranca_sicoob` como `bloqueia_fatura`, mas a **triagem não tem esse motivo de recusa**: sem o A1 o lote compõe, a fatura existe e o documento sai — com o **Pix estático**, que é o item 1. O que não sai é boleto (`Q-SICOOB-01`).
+
 ### Três coisas que a medição mudou
 
-**A `Q-SPEC001-02` é menor do que parece.** Ela pergunta *"quem preenche `data_vencimento`, por UC ou por contrato?"*, o que soa como decisão de modelagem. Lendo `src/dominio/faturamento.ts`, o sistema usa **apenas o dia do mês** (`data_vencimento.getUTCDate()`) e o campo existe **só na UC** — não há equivalente no contrato. Não há duas opções: falta saber **em que dia cada UC vence**. Se for o mesmo dia para todas, é um `UPDATE`.
+**A `Q-SPEC001-02` era menor do que parecia — e ✅ fechou em 03/08.** Ela perguntava *"quem preenche `data_vencimento`, por UC ou por contrato?"*, o que soa como decisão de modelagem. Lendo `src/dominio/faturamento.ts`, o sistema usa **apenas o dia do mês** (`data_vencimento.getUTCDate()`) e o campo existe **só na UC** — não havia duas opções, faltava o dado. **O dono respondeu que o dia varia por cliente/UC**: não é um `UPDATE`, é planilha, e o importador (`npm run vencimentos`) existe desde então. Desde 04/08 o modelo sai **marcado**: a coluna `fatura` diz quais 29 valem e as 12 que não faturam descem para o fim — pedir 41 dias para cobrar 29 era o mesmo defeito que a tela de Unidades teve no dia anterior.
 
-**A ordem das recusas decide a ordem do trabalho.** A triagem recusa na ordem em que está escrita e mostra só o primeiro motivo: `sem_contrato_vigente` → `ja_faturada` → **`rateio_nao_ativado`** → `sem_rateio` → `sem_geracao_lancada` → `sem_vencimento`. *(O terceiro entrou em 04/08 com a migration 24 — o CRM passou a dizer a situação do rateio, e **12 das 41 UCs não estão ativadas**. Ver `Q-SITUACAO-01`.)* Preencher o vencimento **hoje não muda nada** — as 39 param na primeira. E digitar os contratos **sem** a data faz todas caírem na quinta, e o trabalho volta para as 39 UCs.
+**A ordem das recusas decide a ordem do trabalho.** A triagem recusa na ordem em que está escrita e mostra só o primeiro motivo: `sem_contrato_vigente` → `ja_faturada` → **`rateio_nao_ativado`** → `sem_rateio` → `sem_geracao_lancada` → `sem_vencimento`. *(O terceiro entrou em 04/08 com a migration 24 — o CRM passou a dizer a situação do rateio, e **12 das 41 UCs não estão ativadas**. Ver `Q-SITUACAO-01`.)* Preencher o vencimento **hoje não muda nada** — as 29 param na primeira. E digitar os contratos **sem** a data faz todas caírem na sexta, e o trabalho volta para as 29 UCs.
 
-**A geração é um bloqueio que ninguém tinha nomeado:**
+**A geração é um bloqueio que ninguém tinha nomeado**, e remedido em 04/08 sobre o universo certo ele ficou **pior do que parecia**:
 
-| usina | UCs | rateio | competências com geração | última |
+| usina | UCs que faturam | rateio faturável | competências com geração | última |
 |---|--:|--:|--:|---|
-| `0001` | 20 | 94,28% | 1 | **2026-06** |
-| `0002` | 14 | 91,20% | 7 | **2026-07** |
-| `0003` | 1 | 100,00% | **0** | — |
-| `04` | 4 | 21,00% | **0** | — |
+| `0001` | **19** | 88,78% | 1 | **2026-06** |
+| `0002` | **9** | 43,20% | 7 (01 a 07) | **2026-07** |
+| `0003` | **1** | 100,00% | **0** | — |
+| `04` | **0** | — | **0** | — |
 
-Em **2026-07 só 14 das 39** UCs teriam geração. **A competência mais completa é 2026-06, com 34.** Faturar 2026-07 antes de lançar a geração da `0001` produz um lote de 14 e 25 recusas — que não é defeito: é o sistema recusando emitir receita sobre energia que ninguém registrou ter sido gerada (`PAUTA-contador` 9a).
+**A competência mais completa é 2026-06, com 28 das 29** — falta só a UC única da `0003`, que **nunca teve geração lançada**. Em **2026-07 seriam 9**, porque a `0001` só tem junho. Faturar 2026-07 antes de lançar a geração da `0001` produz um lote de 9 e 20 recusas — que não é defeito: é o sistema recusando emitir receita sobre energia que ninguém registrou ter sido gerada (`PAUTA-contador` 9a).
+
+Duas leituras que a remedição corrigiu: a usina `04` **não bloqueia mais nada** — as 5 UCs dela estão todas com rateio não ativado, então a geração que falta lá não impede fatura nenhuma; e a `0003` deixou de ser um caso de borda, porque **é a única UC que separa 28 de 29**.
 
 ---
 

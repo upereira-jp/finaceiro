@@ -156,8 +156,14 @@ export type ResultadoDosVencimentos = {
    *  que fazer com isso e uma pessoa. */
   sem_uc: Array<{ numero_uc: string; dia: number }>;
   /** UC ATIVA do cadastro que a planilha nao cobriu, com o que ela tem hoje.
-   *  Existe porque ausente nao e zero: o lancamento nao apaga o que nao veio. */
-  nao_cobertas: Array<{ numero_uc: string; dia_atual: number | null }>;
+   *  Existe porque ausente nao e zero: o lancamento nao apaga o que nao veio.
+   *
+   *  `fatura` e o mesmo predicado da triagem, e ele muda o que a ausencia
+   *  SIGNIFICA: UC faturavel sem dia vira recusa `sem_vencimento` no lote; UC
+   *  com rateio nao ativado no CRM ja para antes disso, e o dia dela nao e
+   *  trabalho pendente. Sem esta distincao o relatorio contava as duas juntas e
+   *  mandava preencher doze que nao faturariam. */
+  nao_cobertas: Array<{ numero_uc: string; dia_atual: number | null; fatura: boolean }>;
   /** Cobertas pela planilha com o MESMO dia que ja tinham. Contadas a parte para
    *  a segunda passada nao parecer trabalho: reimportar o mesmo arquivo tem de
    *  sair com `aplicadas` em zero. */
@@ -190,7 +196,10 @@ export async function lancarVencimentosPorUC(
 
   const atuais = await dbt().unidade_consumidora.findMany({
     where: { status: { not: 'cancelada' } },
-    select: { id: true, numero_uc: true, data_vencimento: true },
+    select: {
+      id: true, numero_uc: true, data_vencimento: true,
+      status: true, crm_usina_cliente_id: true, rateio_situacao: true,
+    },
   });
   const porNumero = new Map(atuais.map((u) => [u.numero_uc, u]));
 
@@ -222,6 +231,11 @@ export async function lancarVencimentosPorUC(
     r.nao_cobertas.push({
       numero_uc: u.numero_uc,
       dia_atual: u.data_vencimento ? u.data_vencimento.getUTCDate() : null,
+      // O predicado da triagem, e nao "status = ativa": suspensa nao fatura, e
+      // UC espelhada com rateio nao ativado no CRM tambem nao. UC criada a mao
+      // (`crm_usina_cliente_id` nulo) continua contando - o CRM nao sabe dela.
+      fatura: u.status === 'ativa'
+        && (u.crm_usina_cliente_id === null || u.rateio_situacao === 'ativado'),
     });
   }
 

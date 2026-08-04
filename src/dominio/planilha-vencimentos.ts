@@ -213,6 +213,71 @@ export function dataQuePortaODia(dia: DiaDoMes): Date {
 /** O modelo que o `--modelo` imprime quando nao ha banco a consultar. Com banco,
  *  `npm run vencimentos -- --modelo` sai preenchido com as UCs reais. */
 export const MODELO_DE_VENCIMENTOS =
-  'numero_uc;dia_vencimento;cliente;usina\n' +
-  '000406456101252;10;FULANO DE TAL;0001\n' +
-  '000407359701237;25;BELTRANA DA SILVA;0001\n';
+  'numero_uc;dia_vencimento;fatura;cliente;usina\n' +
+  '000406456101252;10;sim;FULANO DE TAL;0001\n' +
+  '000407359701237;25;sim;BELTRANA DA SILVA;0001\n';
+
+// ============================================================================
+// O MODELO PREENCHIDO — e a coluna `fatura` e a razao de este bloco existir
+//
+// O modelo saia com as 41 UCs nao canceladas e NADA distinguia uma da outra.
+// Medido em 04/08/2026 contra producao: **12 delas nao faturam** - o rateio nao
+// esta ativado no CRM (`rateio_situacao`, migration 24), e a triagem as recusa
+// por `rateio_nao_ativado` antes de olhar vencimento.
+//
+// Pedir 41 dias para cobrar 29 e o MESMO defeito que a tela de Unidades e a
+// prontidao tiveram no dia anterior (`RESUMO-SESSAO-20` §4.3): "ativa" e
+// conceito nosso, de cadastro, e "ativado" e conceito do CRM, de faturamento.
+// Quem le a planilha nao tem como saber disso - e o custo nao e so o trabalho a
+// mais: e a pessoa preencher 41, ver 29 faturarem e nao ter onde ler por que.
+//
+// AS 12 CONTINUAM NO ARQUIVO, e isso e deliberado. Sete estao em troca de
+// titularidade e voltam a faturar quando o CRM as ativar - esconde-las faria o
+// dia delas ser digitado uma segunda vez, la na frente, por alguem que nao vai
+// lembrar. Elas descem para o fim e vao marcadas.
+
+/** Uma UC no modelo. `dia_atual` vazio significa "sem vencimento hoje", nunca
+ *  "dia 1" - ausente nao e zero, aqui tambem. */
+export type LinhaDoModelo = {
+  numero_uc: string;
+  dia_atual: string;
+  cliente: string;
+  usina: string;
+  rateio: string;
+  /** `unidade_consumidora.status` - conceito NOSSO, de cadastro. */
+  status: string;
+  /** `rateio_situacao` - conceito DO CRM. Vazio quando a UC nao e espelhada. */
+  situacao_crm: string;
+  /** Faturavel HOJE: o mesmo predicado da triagem e da prontidao. */
+  fatura: boolean;
+};
+
+/** O `;` do CSV do Excel pt-BR, e o mesmo escape do `web/src/csv.ts`. */
+const celula = (v: string): string =>
+  /[";\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+
+/**
+ * O CSV do modelo, montado. PURO de proposito (regra 8): o que decide a ORDEM e
+ * a MARCA das linhas e o que a pessoa vai ler, e ate 04/08 isso vivia dentro do
+ * script - inalcancavel por teste, como toda regra que mora no `.tsx`.
+ *
+ * A ordem e faturavel primeiro. Nao e estetica: quem abre a planilha comeca de
+ * cima, e as 29 que importam ficam num bloco continuo que acaba antes das 12.
+ */
+export function montarModeloDeVencimentos(linhas: LinhaDoModelo[]): string {
+  const ordenadas = [...linhas].sort((a, b) =>
+    (a.fatura === b.fatura ? 0 : a.fatura ? -1 : 1) ||
+    a.usina.localeCompare(b.usina) ||
+    a.numero_uc.localeCompare(b.numero_uc));
+
+  // BOM UTF-8 primeiro: sem ele o Excel pt-BR abre "GABRIELLA" com acento quebrado.
+  let csv = '﻿' + 'numero_uc;dia_vencimento;fatura;cliente;usina;rateio_%;situacao_crm;status\n';
+  for (const l of ordenadas) {
+    csv += [
+      celula(l.numero_uc), celula(l.dia_atual), l.fatura ? 'sim' : 'NAO',
+      celula(l.cliente), celula(l.usina), celula(l.rateio),
+      celula(l.situacao_crm || '(nao espelhada)'), celula(l.status),
+    ].join(';') + '\n';
+  }
+  return csv;
+}
