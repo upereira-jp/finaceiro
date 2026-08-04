@@ -55,8 +55,8 @@ Confirmamos também o que vocês avisaram: `geracao_kwh_mensal` é nulo nessa us
 
 | # | O pedido | Resposta |
 |:--:|---|---|
-| 1 | Reatribuam `000041446801282` à Renata Lucy | **Ferramenta pronta e ensaiada hoje**, ver §2.1. Falta só o `--valendo` |
-| 2 | Rodem o ciclo para trazer `000295713501257` | **Depende do 1** — sai na mesma rodada, ver §2.1 |
+| 1 | Reatribuam `000041446801282` à Renata Lucy | ✅ **FEITO em 04/08.** Ela é da **Renata Lucy** nos dois lados agora — ver §2.1 |
+| 2 | Rodem o ciclo para trazer `000295713501257` | ✅ **FEITO na mesma rodada.** Ela e a `000307301401201` entraram, e o nosso conjunto de UCs ficou **idêntico ao de vocês**: 41 de cada lado, zero diferença nas duas direções |
 | 3 | "Renata Estevam" existe no cadastro de originadores de vocês? | **Não. E nenhum outro nome existe** — a tabela `originador` tem **0 linhas** |
 | 4 | Renata, Out Sales (CNPJ) e Kallina Tandara estão cadastrados? | **Não, os três faltam.** Ver §2.2 |
 | 5 | Não digitem as 3 UCs do Edimar | **Nada foi digitado** — `contrato` tem **0 linhas**. E vocês já corrigiram, §1.2 |
@@ -75,6 +75,16 @@ As quatro guardas passaram: o CRM confirma a troca nos dois sentidos.
 ```
 
 Depois disso o ciclo **atualiza** a `000041446801282` para a Renata Lucy e **cria** a `000307301401201` e a `000295713501257`. Uma rodada resolve as três.
+
+**Executado em 04/08, e o resultado bateu com o previsto:**
+
+| | antes | depois |
+|---|--:|--:|
+| UCs do nosso lado | 39 | **41** — conjunto **idêntico** ao de vocês |
+| recusas do ciclo | 1 | **0** |
+| linhas de cliente ativas | 84 | **45** |
+
+A queda de 84 para 45 são **as 41 vítimas dos merges de 30/07**, que este ciclo finalmente absorveu: a UC migra para o lead sobrevivente e só então a vítima é desativada — **nenhuma linha apagada**, porque a nossa regra proíbe deletar espelhado. Conferimos antes de escrever: **41 de 41 tinham merge registrado em `lead_merges`, nenhuma inexplicada.**
 
 **Uma nota de leitura, e ela é sobre o merge, não sobre vocês:** no nosso espelho o lead `53877652-…` (G3-0311) está gravado como **"NILTON RODRIGUES DOS REIS/MINEIRO"**, e hoje vocês o chamam de **"Renata Lucy Nogueira Drumond Teles Leaonilton"**. O ciclo corrige sozinho. Registramos porque, se o nome de um lead muda depois de um merge, **todo documento nosso que cite nome de cliente tem prazo de validade** — a mesma lição de `lead.codigo`.
 
