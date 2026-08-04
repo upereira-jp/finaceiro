@@ -25,6 +25,7 @@ Sistema financeiro multi-tenant da G3 Solar: faturamento de crédito de energia,
 | usinas | 4 | **donos de usina** | **0 de 4** |
 | tarifa vigente (Equatorial, 1,130000) | 1 | **regra de repasse** | **0 de 4** |
 | regras de comissão (5 tiers × 2 parcelas) | 10 | **identidade de cobrança** | **0** |
+| clientes das 29 UCs (linhas · pessoas) | 29 · **24** | **clientes com documento validado** | **0 de 29** |
 
 **As duas camadas que já estão fechadas** e que ninguém precisa tocar: a **tarifa** cobre as 29 (todas são Equatorial, e a vigência é aberta dos dois lados — `-infinity`), e as **regras de comissão** cobrem os cinco tiers nas duas parcelas do `PRD` §5.4. Nenhuma das duas aparece na prontidão porque o universo delas depende de contrato — elas dizem `nao_medido`, que **não é `ok`**, e é por isso que foram conferidas por consulta direta.
 
@@ -33,15 +34,24 @@ Sistema financeiro multi-tenant da G3 Solar: faturamento de crédito de energia,
 | # | O quê | Depende de |
 |:--:|---|---|
 | 1 | **Identidade de cobrança** (chave Pix, recebedor, cidade) | **só do dono** — sem ela o documento sai **sem QR**, e é o único meio de pagamento que não espera o A1 |
-| 2 | **Dia de vencimento das 29 UCs** | **o modelo está pronto e marcado**: `vencimentos-modelo-20260804.csv`, 29 `sim` primeiro e 12 `NAO` no fim |
-| 3 | **CPF/CNPJ dos três originadores** + natureza | operação — nenhuma das 10 views do CRM entrega documento |
-| 4 | **Decidir a `Q-PARCERIA-01`** | dono + dev do CRM — **trava a digitação**, e a 2ª parcela é 25% contra zero |
-| 5 | **Digitar os 29 contratos** | 3 e 4 — **R20-b congela o tier e não há edição** |
-| 6 | **Lançar a geração** que falta na competência escolhida | operação — ver o quadro abaixo |
-| 7 | **Compor e emitir** | 1–6 |
-| 8 | **Dono de usina + `regra_repasse`** | **não bloqueia a fatura**, bloqueia o *repasse* |
+| 2 | **CPF/CNPJ dos clientes** — **24 pessoas para 29 linhas** | operação — **entrou na lista em 04/08 e é o item novo**: sem ele o contrato **não ativa** (R9). O modelo está pronto: `documentos-modelo-20260804.csv`, e `npm run documentos` |
+| 3 | **Dia de vencimento das 29 UCs** | **o modelo está pronto e marcado**: `vencimentos-modelo-20260804.csv`, 29 `sim` primeiro e 12 `NAO` no fim |
+| 4 | **CPF/CNPJ dos três originadores** + natureza | operação — nenhuma das 10 views do CRM entrega documento |
+| 5 | **Decidir a `Q-PARCERIA-01`** | dono + dev do CRM — **trava a digitação**, e a 2ª parcela é 25% contra zero |
+| 6 | **Digitar os 29 contratos** | 2, 4 e 5 — **R20-b congela o tier e não há edição**, e sem o 2 a ativação devolve 422 |
+| 7 | **Lançar a geração** que falta na competência escolhida | operação — ver o quadro abaixo |
+| 8 | **Compor e emitir** | 1–7 |
+| 9 | **Dono de usina + `regra_repasse`** | **não bloqueia a fatura**, bloqueia o *repasse* |
 
 **O boleto não está nesta lista, e é de propósito.** A prontidão marca `cobranca_sicoob` como `bloqueia_fatura`, mas a **triagem não tem esse motivo de recusa**: sem o A1 o lote compõe, a fatura existe e o documento sai — com o **Pix estático**, que é o item 1. O que não sai é boleto (`Q-SICOOB-01`).
+
+### O item 2 é novo, e ele estava faltando na lista desde sempre
+
+Achado em 04/08 percorrendo este caminho, não auditando spec. `contrato.ativar()` chama `podeAtivarContrato()` — a **R9** —, e sem `documento_validado` o contrato fica em **rascunho**. Rascunho não ocupa a UC, então a triagem recusa por **`sem_contrato_vigente`**, que é a **primeira** da ordem. Medido: `documento_validado` é `false` em **45 de 45** clientes ativos, e **nenhuma das 10 views do CRM expõe documento**.
+
+**O efeito chegaria com o nome errado.** Digitar os 29 contratos hoje produz 29 rascunhos e 29 recusas `422`; e quem lesse depois *"29 sem contrato ativo"* procuraria o defeito no contrato, quando ele está no cliente. A prontidão não media isso — eram dez camadas e nenhuma delas. Agora são **onze**, e `documento_do_cliente` é a **primeira**.
+
+**E a `Q-CLIENTEDUP-01` deixou de ser incômodo de digitação: ela agora custa 5 das 29 UCs.** As 29 linhas de cliente são **24 pessoas** — cinco aparecem duas vezes, com nome e telefone idênticos e **uma UC faturável em cada**. `cliente_documento_unico` aceita o CPF em **uma** das duas linhas, então o lote sai com **24**, e as outras 5 esperam a decisão. O importador recusa o arquivo inteiro nomeando as duas linhas de cada colisão, em vez de gravar metade.
 
 ### Três coisas que a medição mudou
 
@@ -347,8 +357,12 @@ src/repos/unidade_consumidora.ts  cadastro da UC. NAO edita rateio - ver rateio.
 src/repos/usina.ts           usina e geracao mensal. Decimal entra como STRING
 src/repos/originador.ts      documento OBRIGATORIO aqui; R20 congela no contrato
 src/repos/prontidao.ts       o que FALTA para uma competencia poder ser faturada.
-                             DEZ camadas de uma vez, com dono nomeado. Conta e
-                             NAO decide. `nao_medido` nao e `ok`
+                             ONZE camadas de uma vez, com dono nomeado. Conta e
+                             NAO decide. `nao_medido` nao e `ok`. A decima
+                             primeira entrou em 04/08 e vem PRIMEIRA:
+                             `documento_do_cliente`, contada em PESSOAS - a R9 ja
+                             era lei e nao era CONTADA, entao o relatorio mandava
+                             digitar 29 contratos que nao teriam como ativar
 src/repos/rateio.ts          R11, o teto de 100% por usina. Unico caminho de escrita
 src/repos/dono_usina.ts      para quem vai o repasse. Exige PIX ou conta completa
 src/repos/regras.ts          tarifa, regra_comissao e regra_repasse. NAO ha editar:
@@ -675,6 +689,17 @@ scripts/agenda.ts            O ENTRYPOINT da agenda. Roda UMA VEZ e sai, e isso 
                              ATENCAO ao --ensaio: a PORTA e chamada de verdade,
                              entao contra a Sicoob real ele registra boleto LA e
                              da rollback AQUI
+scripts/importar-documentos.ts
+                             IMPORTACAO do CPF/CNPJ dos clientes por planilha. E
+                             o item que faltava no caminho da primeira fatura: a
+                             R9 recusa ativar contrato sem documento VALIDADO, e
+                             producao tinha 45 de 45 sem. Confere o lote INTEIRO
+                             antes de escrever, e colidiu uma nao grava nenhuma -
+                             `cliente_documento_unico` recusaria no MEIO da
+                             digitacao, que e a Q-CLIENTEDUP-01. A chave e o uuid
+                             porque as duas legiveis foram MEDIDAS e descartadas:
+                             `lead.codigo` muda sozinho e nome nao e unico.
+                             `npm run documentos`
 scripts/importar-vencimentos.ts
                              IMPORTACAO do DIA de vencimento das UCs por planilha
                              (Q-SPEC001-02, decidida em 03/08: varia por UC). O
