@@ -59,7 +59,7 @@ const cobranca = new CobrancaFalsa('SICOOB-T');
 
 // ================================================================ fixture
 let usinaComDono: string; let usinaSemDono: string;
-let ucOk: string; let ucSemGeracao: string; let ucSemVencimento: string;
+let ucOk: string; let ucSemGeracao: string; let ucSemVencimento: string; let ucNaoAtivada: string;
 let contratoOk: string; let orgId: string;
 
 {
@@ -89,7 +89,8 @@ let contratoOk: string; let orgId: string;
   }));
 
   // Tres UCs, e cada uma existe para exercitar um caminho da triagem.
-  const criarUC = async (numero: string, usina: string | null, pct: string | null, venc: Date | null) => {
+  const criarUC = async (numero: string, usina: string | null, pct: string | null, venc: Date | null,
+                         situacao: string | null = null) => {
     const uc = await emA(() => ucRepo.criar({
       cliente_id: CLI, numero_uc: numero, distribuidora: 'Equatorial', data_vencimento: venc,
     }));
@@ -98,13 +99,37 @@ let contratoOk: string; let orgId: string;
         unidade_consumidora_id: uc.id, usina_id: usina, percentual_rateio: pct,
       }));
     }
+    /*
+     * A SITUACAO SO E PLANTADA QUANDO O CENARIO PEDE, e o default e NAO plantar.
+     *
+     * `rateio_situacao` e `crm_usina_cliente_id` sao campos ESPELHO: so o
+     * conector os escreve. UC criada por `ucRepo.criar` - o caminho da tela -
+     * nao tem nenhum dos dois, e a triagem a FATURA, porque a regra da situacao
+     * so vale sobre o que veio do rateio do CRM (F4m). Entao as tres UCs
+     * originais continuam medindo o que sempre mediram, sem remendo.
+     *
+     * A quarta e a excecao, e por isso ela recebe os DOIS campos: e a unica que
+     * precisa parecer espelhada para a K2d alcanca-la.
+     */
+    if (situacao) {
+      await emA(() => db().$executeRaw`
+        UPDATE unidade_consumidora
+           SET rateio_situacao = ${situacao},
+               crm_usina_cliente_id = gen_random_uuid(),
+               rateio_situacao_lida_em = now()
+         WHERE id = ${uc.id}::uuid`);
+    }
     return uc.id;
   };
   ucOk           = await criarUC('CART-UC-1', usinaComDono, '50.0000', new Date(Date.UTC(2026, 0, 10)));
   ucSemGeracao   = await criarUC('CART-UC-2', usinaSemDono, '100.0000', new Date(Date.UTC(2026, 0, 10)));
   ucSemVencimento = await criarUC('CART-UC-3', usinaComDono, '25.0000', null);
+  // A quarta existe so para a K2d: completa em tudo, e o CRM nao a da por ativada.
+  ucNaoAtivada = await criarUC('CART-UC-4', usinaComDono, '5.0000',
+                               new Date(Date.UTC(2026, 0, 10)), 'nao_ativado');
 
-  for (const [uc, org2] of [[ucOk, orgId], [ucSemGeracao, null], [ucSemVencimento, null]] as const) {
+  for (const [uc, org2] of [[ucOk, orgId], [ucSemGeracao, null], [ucSemVencimento, null],
+                            [ucNaoAtivada, null]] as const) {
     const k = await emA(() => contrato.rascunhar({
       cliente_id: CLI, unidade_consumidora_id: uc, usina_id: uc === ucSemGeracao ? usinaSemDono : usinaComDono,
       originador_id: org2, data_fechamento: new Date(Date.UTC(2026, 4, 1)),
@@ -139,6 +164,27 @@ let contratoOk: string; let orgId: string;
       'a UC da usina sem geracao lancada e RECUSA - e o caso da usina 0003, e faturar ali seria receita sobre energia que ninguem registrou');
   chk('K2b', r.recusas.sem_vencimento === 1,
       'a UC sem data de vencimento e recusa, nao um dia escolhido pelo programador (Q-SPEC001-02)');
+  /*
+   * K2d - `rateio_nao_ativado` ponta a ponta (Q-SITUACAO-01, decidida em 04/08).
+   *
+   * A `CART-UC-4` esta COMPLETA: usina, rateio, vencimento e contrato ativo. A
+   * unica coisa que a separa da `ucOk` e a situacao no CRM - um campo de
+   * diferenca -, e e por isso que esta verificacao mede a regra e nao o cenario.
+   * Medido em producao no dia da decisao: 12 das 41 UCs estavam assim.
+   */
+  /*
+   * A AFIRMACAO E SOBRE A LINHA, NAO SOBRE O TOTAL - e a primeira versao desta
+   * verificacao dizia `=== 1` e ficou vermelha porque o tenant do teste carrega
+   * UCs de outros blocos, e uma delas tambem cai aqui. Fixar o total mediria a
+   * populacao do banco de teste em vez da regra. E a terceira vez que esta
+   * mesma troca aparece hoje (ver W8h e N58): quando a regra e sobre UMA linha,
+   * a verificacao tem de nomear a linha.
+   */
+  const uc4 = r.detalhe.find((d) => d.numero_uc === 'CART-UC-4');
+  chk('K2d', uc4?.motivo === 'rateio_nao_ativado' && (r.recusas.rateio_nao_ativado ?? 0) >= 1,
+      `UC completa em tudo - usina, rateio, vencimento e contrato ativo - mas nao ativada no CRM `
+      + `e RECUSA nomeada, e nao fatura silenciosa (motivo=${uc4?.motivo})`);
+
   chk('K2c', r.detalhe.every((d) => d.explicacao.length > 40),
       'cada recusa carrega a explicacao e o ponteiro da questao que a destrava');
 }
@@ -150,7 +196,7 @@ let contratoOk: string; let orgId: string;
   }));
   const fs = await emA(() => fatura.daCompetencia('2026-07-01'));
   const f = fs[0]!;
-  chk('K3a', r.criadas === 1 && fs.length === 1, `uma fatura criada de tres UCs candidatas (criadas=${r.criadas})`);
+  chk('K3a', r.criadas === 1 && fs.length === 1, `uma fatura criada de QUATRO UCs candidatas (criadas=${r.criadas})`);
   chk('K3b', f.status === 'rascunho' && f.emitida_em === null,
       'nasce em RASCUNHO: compor e conferir sao dois atos (PRD 9)');
   // 10.000 kWh x 50% = 5.000 kWh; x 1,130000 = R$ 5.650,00

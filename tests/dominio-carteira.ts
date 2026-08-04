@@ -15,7 +15,7 @@ import {
 } from '../src/dominio/centavos.ts';
 import { calcularSplit, SplitNaoFecha, type EntradaDoSplit } from '../src/dominio/split.ts';
 import {
-  competencia, vencimentoDaFatura, ehFaturaCheia, triar, CompetenciaInvalida,
+  competencia, vencimentoDaFatura, ehFaturaCheia, triar, CompetenciaInvalida, EXPLICACAO,
   type LinhaCandidata,
 } from '../src/dominio/faturamento.ts';
 
@@ -265,6 +265,7 @@ const base = (over: Partial<EntradaDoSplit> = {}): EntradaDoSplit => ({
     contrato_id: 'k-1', usina_id: 'u-1', percentual_rateio: '10.0000',
     data_vencimento: dia(2026, 1, 10), data_fechamento: dia(2026, 5, 1),
     geracao_kwh: '10000.0000', dono_usina_id: 'd-1', ja_tem_fatura: false,
+    rateio_situacao: 'ativado', crm_usina_cliente_id: 'crm-k-1',
   };
   const motivo = (over: Partial<LinhaCandidata>) => {
     const t = triar({ ...completa, ...over }, jul);
@@ -284,6 +285,59 @@ const base = (over: Partial<EntradaDoSplit> = {}): EntradaDoSplit => ({
   // verdade, nao o primeiro que a implementacao encontrar.
   chk('F4g', motivo({ contrato_id: null, geracao_kwh: null }) === 'sem_contrato_vigente',
       'com dois problemas, o motivo devolvido e o que impede de existir, nao o que impede de calcular');
+
+  /*
+   * F4h-F4l: `rateio_nao_ativado` (migration 24, Q-SITUACAO-01).
+   *
+   * O dono decidiu em 04/08 que o financeiro fatura as ATIVADAS. Medido no dia:
+   * 29 das 41 UCs estavam `ativado` e 12 nao, sete delas em troca de
+   * titularidade - entao isto NAO e caso de borda, e 12 de 41 do lote real.
+   */
+  chk('F4h', motivo({ rateio_situacao: 'nao_ativado' }) === 'rateio_nao_ativado',
+      'rateio nao ativado no CRM RECUSA - o financeiro fatura as ativadas (Q-SITUACAO-01)');
+
+  /*
+   * NULL NAO E "NAO ATIVADO", e cai na mesma recusa por decisao: o lado seguro
+   * para dinheiro e nao faturar o que nao se confirmou. O que separa as duas e
+   * a EXPLICACAO - uma pede rodar o ciclo, a outra pede falar com o CRM -, e e
+   * por isso que a F4j confere o TEXTO e nao so o motivo.
+   */
+  chk('F4i', motivo({ rateio_situacao: null }) === 'rateio_nao_ativado',
+      'situacao NUNCA LIDA numa UC ESPELHADA tambem recusa: ausencia de medicao nao e '
+      + 'medicao de ausencia (o par mudo e a F4m)');
+  chk('F4j', /conector ainda nao leu/.test(EXPLICACAO.rateio_nao_ativado)
+       && /Q-SITUACAO-01/.test(EXPLICACAO.rateio_nao_ativado),
+      'a explicacao SEPARA as duas causas que caem na mesma recusa, porque a acao e diferente');
+
+  // Valor desconhecido do CRM recusa, e e o lado seguro: a coluna e `text` de
+  // proposito (o vocabulario e deles), entao uma palavra nova nao quebra o
+  // ciclo - ela so nao fatura ate alguem olhar.
+  chk('F4k', motivo({ rateio_situacao: 'em_analise' }) === 'rateio_nao_ativado',
+      'situacao DESCONHECIDA recusa em vez de faturar - `text` espelha, a triagem decide');
+
+  // A ORDEM: vem depois de sem_contrato_vigente e ja_faturada, antes de sem_rateio.
+  chk('F4l', motivo({ rateio_situacao: 'nao_ativado', contrato_id: null }) === 'sem_contrato_vigente'
+       && motivo({ rateio_situacao: 'nao_ativado', ja_tem_fatura: true }) === 'ja_faturada'
+       && motivo({ rateio_situacao: 'nao_ativado', percentual_rateio: null }) === 'rateio_nao_ativado',
+      'a ordem: contrato e ja_faturada VENCEM a situacao; a situacao vence sem_rateio - '
+      + 'mandar a operacao lancar geracao numa UC que nao e para faturar seria trabalho jogado fora');
+
+  /*
+   * F4m - A GUARDA QUE IMPEDIU UM DEFEITO DE ENTRAR, e ela e o par mudo da F4h.
+   *
+   * `POST /unidades-consumidoras` cria UC A MAO, e essa UC nunca vai ter
+   * situacao no CRM - porque o CRM nao sabe dela. Sem esta condicao ela ficaria
+   * NAO FATURAVEL PARA SEMPRE, sem erro e sem log: regra de uma fonte externa
+   * aplicada a quem nao vem daquela fonte. A primeira versao desta migration
+   * tinha esse buraco, e ele apareceu porque QUATRO suites quebraram - todas
+   * criam UC pelo caminho da aplicacao, que e o mesmo caminho da tela.
+   *
+   * A diferenca entre esta linha e a F4h e UM campo: `crm_usina_cliente_id`.
+   */
+  chk('F4m', motivo({ rateio_situacao: null, crm_usina_cliente_id: null }) === null
+       && motivo({ rateio_situacao: 'nao_ativado', crm_usina_cliente_id: null }) === null,
+      'UC criada A MAO (sem crm_usina_cliente_id) FATURA - a regra da situacao so vale '
+      + 'sobre o que veio do rateio do CRM');
 }
 
 // ---------------------------------------------------- F5 alerta nao e recusa
@@ -293,6 +347,7 @@ const base = (over: Partial<EntradaDoSplit> = {}): EntradaDoSplit => ({
     unidade_consumidora_id: 'uc-1', numero_uc: 'UC-1', contrato_id: 'k-1', usina_id: 'u-1',
     percentual_rateio: '10.0000', data_vencimento: dia(2026, 1, 10), data_fechamento: dia(2026, 5, 1),
     geracao_kwh: '10000.0000', dono_usina_id: null, ja_tem_fatura: false,
+    rateio_situacao: 'ativado', crm_usina_cliente_id: 'crm-k-1',
   }, jul);
   chk('F5', t.faturar === true && t.alertas.includes('usina_sem_dono'),
       'usina sem dono FATURA e alerta: a cobranca ao cliente nao depende do cadastro do dono (R12 bloqueia o repasse, nao a fatura)');

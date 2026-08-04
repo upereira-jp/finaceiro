@@ -4,16 +4,17 @@
 |---|---|
 | **Foco** | Duas entregas. **O conector passou a ler as dez views do CRM e a conferir o eixo do originador**; e **o layout da fatura deixou de ser lista e passou a ser posição** — a pedido do dono |
 | **Método** | Medir antes de construir, e **fotografar depois**. As duas coisas pagaram: a medição decidiu cada regra de sinal, e a fotografia pegou dois defeitos que a leitura de código não pegaria |
-| **Resultado** | 1 questão fechada · 1 aberta · **1 migration** · 1123 → **1230 verificações** · `EXIT=0` · catálogo 9/9 |
-| **Não feito** | **Nada foi escrito em produção.** As migrations 22 e 23 seguem só em banco de teste; o destrave `--valendo`, o deploy e a `Q-PARCERIA-01` continuam esperando decisão |
+| **Resultado** | **2 questões fechadas** · **2 migrations** · 1123 → **1237 verificações** · `EXIT=0` · catálogo 9/9 |
+| **Escrito em produção** | **04/08, autorizado pelo dono:** o destrave e o ciclo `--valendo`. As migrations 22, 23 e 24 **não** foram aplicadas — ver §4.1 |
+| **Não feito** | O deploy e a `Q-PARCERIA-01` continuam esperando decisão. Os três CPF/CNPJ e o dia de vencimento das 39 UCs continuam sendo insumo humano |
 
 > # ESTADO ATUAL — 03/08/2026, fim da sessão 20
 >
 > | | |
 > |---|---|
-> | **Banco** | **23 migrations**; a 22 (`contas_a_pagar`) e a 23 (`layout_visual_do_documento`) **só em banco de teste**. Produção segue com 21 |
-> | **Suíte** | `EXIT=0`, **1230** linhas `ok` em 47 suítes. Delta **107**, contado na fonte e conferido contra o `npm test`: diferença zero |
-> | **Produção** | **inalterada.** Só `SELECT` |
+> | **Banco** | **24 migrations**; a 22, a 23 e a 24 **só em banco de teste**. Produção segue com 21 |
+> | **Suíte** | `EXIT=0`, **1237** linhas `ok` em 47 suítes. Delta **114**, contado na fonte e conferido contra o `npm test`: diferença zero |
+> | **Produção** | **espelho alinhado com o CRM em 04/08** (destrave + ciclo). Schema inalterado |
 > | **O eixo do originador** | ✅ decidido na sessão 19, e **agora legível por código** |
 >
 > **A fila, atualizada:**
@@ -25,9 +26,9 @@
 > | **`--valendo` do destrave + ciclo** | 🔴 **pronto, ensaiado, não executado** | Vinicius |
 > | **Preencher o dia de vencimento das 39 UCs** | 🔴 | Vinicius + operação |
 > | **Deploy: migrations 22 e 23 + bundle** | 🔴 | Vinicius |
-> | **`Q-SITUACAO-01`** — 11 das 39 UCs `nao_ativado` no CRM | 🟡 **nova** | Vinicius + operação |
+> 
 > | `Q-CLIENTEDUP-01` · `Q-PAGADOR-01` · `Q-FATCHEIA-01` · `Q-WEBHOOK-01` · `Q-SICOOB-01` | 🔴 | Vinicius |
-> | ~~`Q-VIEWSCRED-01`~~ · ~~`Q-SPEC001-08`~~ | ✅ | fechadas |
+> | ~~`Q-VIEWSCRED-01`~~ · ~~`Q-SPEC001-08`~~ · ~~`Q-SITUACAO-01`~~ | ✅ | fechadas |
 
 ---
 
@@ -110,6 +111,39 @@ O `README.md` listava a **`Q-SPEC001-08`** como 🟡 aberta. Ela **fechou em 30/
 É exatamente o modo de falha que o `PATCH-citacoes` tratou e que a `Q-ESCOPO-01` repetiu: **o corpo datado está certo, o índice está errado, e quem lê só o índice decide errado.** Terceira vez, e vale como classe a procurar, não como descuido isolado.
 
 ---
+
+## 4.1 04/08 — o que foi escrito em produção, com autorização
+
+Até aqui a sessão não tinha tocado produção. O dono autorizou duas coisas, nesta ordem.
+
+**O destrave e o ciclo, valendo.** O ensaio foi refeito antes — o CRM se moveu duas vezes em quatro dias, e o estado de ontem não é garantia. As quatro guardas passaram e o `--valendo` rodou.
+
+| | antes | depois |
+|---|--:|--:|
+| UCs espelhadas | 39 | **41** — conjunto **idêntico** ao do CRM, zero diferença nas duas direções |
+| destas, `ativado` no CRM | 28 | **29** |
+| linhas de `cliente` ativas | 84 | **45** |
+| recusas do ciclo | 1 (R23) | **0** |
+
+**As 41 vítimas de merge de 30/07 foram fundidas** (R18): a UC migra para o sobrevivente e só então a vítima vira `ativo = false` — nenhuma deleção. Medido antes de escrever: **41 de 41 tinham merge registrado, nenhuma inexplicada**. A `000041446801282` passou a ser da **Renata Lucy** nos dois lados, que era a atribuição errada que motivou tudo.
+
+**Duas previsões minhas estavam erradas** e ficam registradas: eu disse 40 UCs e 43 clientes; foram **41** e **45**. Esqueci que o ciclo traz *duas* UCs e cria dois clientes. A `Q-CLIENTEDUP-01` melhorou muito (84 → 45) e **não fechou**: 45 ativas para 36 nomes distintos.
+
+**E as migrations 22, 23 e 24 NÃO foram aplicadas**, por decisão do dono depois de eu medir o seguinte: a guarda de arranque recusa subir com tabela em `public` sem modelo no client, então aplicar o schema sem o deploy em seguida deixa produção **viva mas não reiniciável**. Ou o ciclo inteiro de uma vez, ou a migration espera.
+
+## 4.2 A `Q-SITUACAO-01` fechou no mesmo dia, e a pergunta veio do dono
+
+Ao rever o quadro, o dono apontou: *"para o sistema financeiro você deveria considerar apenas 29 UCs, não?"*. Ele estava certo, e era a resposta da questão que eu tinha aberto horas antes.
+
+Migration **24**: `rateio_situacao`, `rateio_em_troca_titularidade` e `rateio_situacao_lida_em` em `unidade_consumidora` — campo espelho que só o conector escreve. Na triagem, o motivo **`rateio_nao_ativado`**, terceiro na ordem. **12 das 41 UCs não faturam** enquanto o CRM não as ativar.
+
+**Duas coisas que a construção corrigiu no caminho:**
+
+**Eu apresentei "filtrar na triagem" e "marcar na UC" como alternativas, e não são.** A triagem é pura sobre os nossos dados e a situação vive no CRM: qualquer das duas precisava da coluna. O que mudava era o comportamento, não o armazenamento. A imprecisão foi minha e a decisão do dono valia igual nas duas leituras.
+
+**E a primeira versão da regra tinha um buraco que quase entrou.** Ela valia para toda UC, e `POST /unidades-consumidoras` cria UC à mão — essa UC nunca teria situação, porque o CRM não sabe dela, e ficaria **não faturável para sempre, sem erro e sem log**. O buraco apareceu porque **quatro suítes quebraram de uma vez**, todas criando UC pelo caminho da aplicação, que é o mesmo caminho da tela. A regra passou a valer só sobre UC espelhada; `F4m` é o par mudo da `F4h`, com um campo de diferença.
+
+**Um erro meu repetido três vezes no mesmo dia:** fixar um total onde a regra é sobre uma linha. `W8h`, `N58` e `K2d` afirmavam contagens que medem a população do banco de teste, não a regra. As três passaram a nomear a linha.
 
 ## 5. O que muda para quem opera amanhã
 

@@ -291,6 +291,9 @@ model unidade_consumidora {
   data_vencimento                                                DateTime?       @db.Date
   status                                                         status_uc       @default(ativa)
   crm_usina_cliente_id                                           String?         @db.Uuid
+  rateio_situacao                                                String?
+  rateio_em_troca_titularidade                                   Boolean?
+  rateio_situacao_lida_em                                        DateTime?       @db.Timestamptz(6)
   contrato                                                       contrato[]
   fatura                                                         fatura[]
   cliente                                                        cliente         @relation(fields: [tenant_id, cliente_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "uc_cliente_fk")
@@ -301,6 +304,7 @@ model unidade_consumidora {
   @@unique([tenant_id, crm_usina_cliente_id], map: "uc_crm_unico", where: raw("(crm_usina_cliente_id IS NOT NULL)"))
   @@unique([tenant_id, id], map: "uc_id_tenant")
   @@unique([tenant_id, numero_uc], map: "uc_numero_unico")
+  @@index([tenant_id, id], map: "uc_rateio_ativado", where: raw("(rateio_situacao = 'ativado'::text)"))
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.

@@ -657,7 +657,7 @@ async function processar(
   // Depois das usinas pelo mesmo motivo da geracao: a UC herda a distribuidora
   // da usina e referencia ela por FK composta. E `vistosNoCrm` recebe os leads do
   // rateio para que a reconciliacao nao os classifique como ausentes.
-  await espelharUnidades(porta, r, tenantId, tamanho, lote, gravarContadores, vistosNoCrm);
+  const situacoes = await espelharUnidades(porta, r, tenantId, tamanho, lote, gravarContadores, vistosNoCrm);
 
   // ------------------------------------------- o eixo do originador (R26)
   //
@@ -665,7 +665,7 @@ async function processar(
   // gravadas - conferir antes deixaria a UC nascida neste ciclo de fora, e o
   // sinal chegaria so na rodada seguinte. E ANTES da reconciliacao, que so mexe
   // em `cliente`: a ordem entre as duas nao importa, e esta e a que le menos.
-  await conferirCredito(porta, r, tenantId, lote);
+  await conferirCredito(porta, r, tenantId, lote, situacoes);
 
   // ------------------------------------------------- reconciliacao (§4.3)
   // Outra leitura fora de transacao, pelo mesmo motivo.
@@ -952,12 +952,29 @@ async function espelharUsinas(
 async function espelharUnidades(
   porta: PortaDeLeitura, r: ResultadoDoCiclo, tenantId: string, tamanho: number,
   lote: AbrirLote, gravarContadores: () => Promise<void>, vistosNoCrm: Set<string>,
-): Promise<void> {
-  const [clientes, creditos] = await Promise.all([porta.rateioClientes(), porta.rateioCreditos()]);
-  if (clientes.garantiaDegradada || creditos.garantiaDegradada) r.garantiaDeTenantDegradada = true;
+): Promise<RateioSituacao[]> {
+  const [clientes, creditos, situacoes] = await Promise.all([
+    porta.rateioClientes(), porta.rateioCreditos(), porta.rateioSituacao(),
+  ]);
+  if (clientes.garantiaDegradada || creditos.garantiaDegradada || situacoes.garantiaDegradada) {
+    r.garantiaDeTenantDegradada = true;
+  }
+  /*
+   * A SITUACAO E CAMPO ESPELHO (migration 24, `Q-SITUACAO-01`), e ela e escrita
+   * AQUI e nao em `conferirCredito` - aquela funcao nao tem um caminho de
+   * escrita e nao vai ter.
+   *
+   * Sem esta escrita a decisao do dono nao teria efeito: a triagem recusa por
+   * `rateio_nao_ativado` quando a coluna nao diz `ativado`, e coluna nunca
+   * preenchida recusaria TODAS - o que pareceria defeito de faturamento e seria
+   * conector que nao escreveu.
+   */
+  const situacaoPorUc = new Map(
+    situacoes.linhas.filter((s) => s.uc?.trim()).map((s) => [s.uc!.trim(), s]),
+  );
   r.lidos += clientes.linhas.length;
   r.porEntidade.unidade_consumidora.lidos = clientes.linhas.length;
-  if (clientes.linhas.length === 0) return;
+  if (clientes.linhas.length === 0) return situacoes.linhas;
 
   // `rateio_creditos` e quem tem o `lead_id`; `rateio_clientes` tem a UC. A ponte
   // e `contrato_id`, e ela casou 36/36 na medicao de 27/07.
@@ -1054,7 +1071,8 @@ async function espelharUnidades(
       const atuais = await db.unidade_consumidora.findMany({
         where: { tenant_id: tenantId, numero_uc: { in: numeros } },
         select: { id: true, numero_uc: true, cliente_id: true, usina_id: true, distribuidora: true,
-                  percentual_rateio: true, data_vencimento: true, crm_usina_cliente_id: true },
+                  percentual_rateio: true, data_vencimento: true, crm_usina_cliente_id: true,
+                  rateio_situacao: true, rateio_em_troca_titularidade: true },
       });
       const porNumero = new Map(atuais.map((u) => [u.numero_uc, u]));
 
@@ -1125,11 +1143,25 @@ async function espelharUnidades(
          * silencio, pela mesma razao da R21-b: nao sobrescrever e o correto, mas
          * calar deixaria as duas fontes divergindo sem que ninguem soubesse.
          */
+        /*
+         * A SITUACAO ENTRA NO ESPELHO, e `data_vencimento` continua fora - as
+         * duas colunas nasceram na mesma tabela e sao opostas: vencimento e
+         * campo LOCAL (R25, o usuario vence) e situacao e campo do CRM, que so
+         * o conector escreve. Ver a SPEC-001 3.3.
+         *
+         * `lida_em` carimba mesmo quando o CRM nao tem linha para a UC, e e o
+         * que distingue "lido e vazio" de "nunca lido" - a triagem recusa as
+         * duas, mas a explicacao manda a pessoa a lugares diferentes.
+         */
+        const sit = situacaoPorUc.get(a.numeroUc);
         const espelho = {
           cliente_id: clienteId,
           usina_id: usina.id,
           percentual_rateio: a.percentual,
           crm_usina_cliente_id: a.contratoId,
+          rateio_situacao: texto(sit?.situacao ?? null),
+          rateio_em_troca_titularidade: sit?.em_troca_titularidade ?? null,
+          rateio_situacao_lida_em: new Date(),
         };
         const atual = porNumero.get(a.numeroUc);
         const dia = (d: Date | null | undefined) => (d ? String(d).slice(0, 10) : null);
@@ -1198,11 +1230,22 @@ async function espelharUnidades(
                  + '(Q-UC-DISTRIB-01). Nada foi sobrescrito: distribuidora e campo local.',
           });
         }
+        /*
+         * `rateio_situacao_lida_em` FICA FORA DO `mudou`, e isso e a R3.
+         *
+         * Ele e `new Date()` a cada ciclo: incluido na comparacao, TODA UC
+         * contaria como "atualizada" em toda passada, e "segunda passada nao
+         * escreve" cairia sem uma linha ter mudado de verdade. E o mesmo
+         * defeito que `data_vencimento` causava antes da R25, por outro
+         * caminho - carimbo de leitura nao e mudanca de dado.
+         */
         const mudou =
           atual.cliente_id !== espelho.cliente_id ||
           atual.usina_id !== espelho.usina_id ||
           !mesmoDecimal(atual.percentual_rateio, espelho.percentual_rateio) ||
-          atual.crm_usina_cliente_id !== espelho.crm_usina_cliente_id;
+          atual.crm_usina_cliente_id !== espelho.crm_usina_cliente_id ||
+          atual.rateio_situacao !== espelho.rateio_situacao ||
+          atual.rateio_em_troca_titularidade !== espelho.rateio_em_troca_titularidade;
         if (!mudou) continue;   // R3
         /*
          * NEM `distribuidora` NEM `data_vencimento` entram no update: os dois sao
@@ -1228,6 +1271,7 @@ async function espelharUnidades(
       await gravarContadores();
     });
   }
+  return situacoes.linhas;
 }
 
 /**
@@ -1246,10 +1290,17 @@ async function espelharUnidades(
  */
 async function conferirCredito(
   porta: PortaDeLeitura, r: ResultadoDoCiclo, tenantId: string, lote: AbrirLote,
+  situacoes: readonly RateioSituacao[],
 ): Promise<void> {
   // Leitura do CRM FORA de transacao nossa, como todas as outras.
-  const [creditos, situacoes] = await Promise.all([porta.vendasCreditadas(), porta.rateioSituacao()]);
-  if (creditos.garantiaDegradada || situacoes.garantiaDegradada) r.garantiaDeTenantDegradada = true;
+  //
+  // `situacoes` vem de FORA, ja lido por `espelharUnidades`. Reler seria uma
+  // segunda viagem ao CRM pelos mesmos 41 registros - e, pior que o custo, as
+  // duas leituras poderiam DIVERGIR se o CRM se movesse entre elas, e ai o que
+  // foi gravado no espelho e o que o sinal acusa contariam historias
+  // diferentes sobre o mesmo ciclo.
+  const creditos = await porta.vendasCreditadas();
+  if (creditos.garantiaDegradada) r.garantiaDeTenantDegradada = true;
 
   const ucs = await lote(async () =>
     dbt().unidade_consumidora.findMany({
@@ -1287,7 +1338,7 @@ async function conferirCredito(
       };
     }),
     creditos: creditos.linhas,
-    situacoes: situacoes.linhas,
+    situacoes,
   });
 
   r.creditoConferido = conferencia.conferido;

@@ -26,7 +26,8 @@ export type MotivoDeRecusa =
   | 'sem_rateio'
   | 'sem_contrato_vigente'
   | 'sem_vencimento'
-  | 'ja_faturada';
+  | 'ja_faturada'
+  | 'rateio_nao_ativado';
 
 /**
  * ALERTA NAO E RECUSA, e a distincao ja e do projeto - o RESUMO-SESSAO-9 2 a
@@ -60,6 +61,18 @@ export const EXPLICACAO: Record<MotivoDeRecusa, string> = {
     'improviso que a regra 10 proibe',
   ja_faturada:
     'ja existe fatura nao cancelada desta UC nesta competencia',
+  /*
+   * A EXPLICACAO DISTINGUE DUAS CAUSAS que caem na mesma recusa, e a distincao e
+   * o que torna a recusa acionavel: uma pede rodar o ciclo, a outra pede falar
+   * com o CRM. E a mesma separacao entre `nao_medido` e `pendente` na prontidao -
+   * ausencia de medicao nao e medicao de ausencia.
+   */
+  rateio_nao_ativado:
+    'o CRM nao da o rateio desta UC por ativado. O financeiro fatura as ATIVADAS (decisao do ' +
+    'dono em 04/08, Q-SITUACAO-01): medido no dia, 29 das 41 estavam `ativado` e 12 nao, sete ' +
+    'delas em troca de titularidade. Se a coluna estiver VAZIA a causa e outra - o conector ' +
+    'ainda nao leu esta UC, e o conserto e rodar `npm run ciclo`, nao falar com o CRM. ' +
+    'Vale so para UC que veio do rateio do CRM: UC cadastrada a mao nao passa por aqui',
 };
 
 export const EXPLICACAO_DO_ALERTA: Record<Alerta, string> = {
@@ -161,6 +174,24 @@ export type LinhaCandidata = {
   geracao_kwh: string | null;
   dono_usina_id: string | null;
   ja_tem_fatura: boolean;
+  /**
+   * Espelho de `financeiro.rateio_situacao.situacao` do CRM (migration 24).
+   *
+   * `null` NAO e o mesmo que "nao ativado": significa que o conector ainda nao
+   * leu esta UC. Ver a triagem - o que decide se isso recusa e se a UC E
+   * espelhada, e nao o valor sozinho.
+   */
+  rateio_situacao: string | null;
+  /**
+   * `crm_usina_cliente_id`. E o que diz se esta UC VEM do rateio do CRM.
+   *
+   * Existe aqui por um defeito que quase entrou: sem ele, a regra da situacao
+   * valeria tambem para UC criada A MAO por `POST /unidades-consumidoras`, que
+   * nunca vai ter situacao nenhuma - e ela ficaria permanentemente nao
+   * faturavel, em silencio. Regra de fonte externa so vale sobre o que vem
+   * daquela fonte.
+   */
+  crm_usina_cliente_id: string | null;
 };
 
 /**
@@ -177,6 +208,28 @@ export function triar(l: LinhaCandidata, c: Date): Candidata {
 
   if (!l.contrato_id || !l.data_fechamento) return recusa('sem_contrato_vigente');
   if (l.ja_tem_fatura)                      return recusa('ja_faturada');
+  /*
+   * TERCEIRO NA ORDEM, e a posicao foi escolhida e nao herdada.
+   *
+   * A ordem das checagens e a ordem de utilidade do diagnostico, e esta
+   * pertence ao primeiro grupo - "o que impede de EXISTIR". Uma UC cujo rateio
+   * o CRM nao da por ativado nao deveria estar num lote, e dizer a operacao
+   * "falta geracao" ou "falta vencimento" a mandaria trabalhar numa UC que nao
+   * e para ser faturada.
+   *
+   * Mas vem DEPOIS de `sem_contrato_vigente` e `ja_faturada`: sem contrato nao
+   * ha nada a faturar de qualquer jeito, e se ja foi faturada a informacao util
+   * e essa - "nao ativado" numa UC ja faturada mandaria procurar problema onde
+   * nao ha acao possivel.
+   *
+   * E SO VALE PARA UC ESPELHADA (`crm_usina_cliente_id` preenchido), que e a
+   * guarda que impede um defeito de acontecer: `POST /unidades-consumidoras`
+   * cria UC a mao, e essa UC nunca tera situacao no CRM porque o CRM nao sabe
+   * dela. Sem esta condicao ela ficaria nao faturavel PARA SEMPRE, sem erro e
+   * sem log - a regra de uma fonte externa aplicada a quem nao vem dela.
+   * Em producao as 41 sao espelhadas, entao a regra alcanca todas.
+   */
+  if (l.crm_usina_cliente_id && l.rateio_situacao !== 'ativado') return recusa('rateio_nao_ativado');
   if (!l.usina_id || !l.percentual_rateio)  return recusa('sem_rateio');
   if (l.geracao_kwh == null)                return recusa('sem_geracao_lancada');
   if (!l.data_vencimento)                   return recusa('sem_vencimento');

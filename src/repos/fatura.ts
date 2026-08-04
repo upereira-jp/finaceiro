@@ -91,6 +91,8 @@ async function candidatas(comp: Date): Promise<LinhaCandidata[]> {
            c.data_fechamento,
            u.dono_usina_id,
            g.geracao_kwh::text         AS geracao_kwh,
+           uc.rateio_situacao,
+           uc.crm_usina_cliente_id,
            (f.id IS NOT NULL)          AS ja_tem_fatura
       FROM unidade_consumidora uc
       LEFT JOIN contrato c

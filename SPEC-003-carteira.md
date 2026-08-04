@@ -118,7 +118,17 @@ Onze, todas `(tenant_id, <alvo>)` contra `UNIQUE (tenant_id, id)`: `fatura` → 
 
 > **R31.** Composição e emissão são **atos separados**. A fatura nasce em `rascunho`, sem boleto, fora do a receber. *(PRD §9: import → conferência → emissão em lote)*
 
-> **R32.** Falta de insumo vira **recusa contada com motivo**, nunca valor escolhido. Os cinco motivos: `sem_contrato_vigente`, `ja_faturada`, `sem_rateio`, `sem_geracao_lancada`, `sem_vencimento`. A ordem da triagem é a ordem de utilidade do diagnóstico. *(regra 10; padrão da `SPEC-002` invariante 8)*
+> **R32.** Falta de insumo vira **recusa contada com motivo**, nunca valor escolhido. Os **seis** motivos, na ordem da triagem: `sem_contrato_vigente`, `ja_faturada`, **`rateio_nao_ativado`**, `sem_rateio`, `sem_geracao_lancada`, `sem_vencimento`. A ordem é a ordem de utilidade do diagnóstico. *(regra 10; padrão da `SPEC-002` invariante 8)*
+>
+> **`rateio_nao_ativado` entrou em 04/08/2026** com a migration 24 (`Q-SITUACAO-01`). Até 03/08 **não havia coluna que dissesse a situação** do contrato de rateio, e por isso toda linha de `financeiro.rateio_clientes` era lida como válida — o pedido está na §4 da `RESPOSTA-dev-crm-rodada5` e o CRM o atendeu. Lendo: **das 41 UCs espelhadas, 29 estão `ativado` e 12 não**, sete delas em troca de titularidade. O dono decidiu que **o financeiro fatura as ativadas**.
+>
+> **A posição na ordem foi escolhida, não herdada.** Vem depois de `sem_contrato_vigente` e `ja_faturada` — sem contrato não há nada a faturar de qualquer jeito, e numa UC já faturada a informação útil é essa — e **antes** de `sem_rateio`: dizer *"falta geração"* ou *"falta vencimento"* mandaria a operação trabalhar numa UC que não é para ser faturada, e a R20-b congela o tier no `rascunhar` sem caminho de volta.
+>
+> **`NULL` não é "não ativado", e cai na mesma recusa por decisão.** Coluna vazia significa que o conector ainda não leu aquela UC — ausência de medição não é medição de ausência, a mesma separação entre `nao_medido` e `pendente` na prontidão. As duas não faturam, porque o lado seguro para dinheiro é não cobrar o que não se confirmou; o que as separa é a **explicação**, porque a ação é diferente: uma pede rodar o ciclo, a outra pede falar com o CRM. Testes `F4h`–`F4l` (puros) e **`K2d`** (com banco, UC completa em tudo menos a situação).
+>
+> **A coluna é `text` e não enum**, ao contrário de `campo_de_fatura`: aquela lista é nossa, esta é vocabulário do CRM. Um estado novo do lado deles quebraria um enum no meio do ciclo; em `text` ele é espelhado e a triagem o trata como não faturável, que é o lado seguro (`F4k`).
+>
+> **A regra só alcança UC ESPELHADA (`crm_usina_cliente_id` preenchido), e essa condição impediu um defeito de entrar.** `POST /unidades-consumidoras` cria UC à mão, e essa UC **nunca** terá situação no CRM — porque o CRM não sabe dela. Sem a condição ela ficaria **não faturável para sempre, sem erro e sem log**: uma regra de fonte externa aplicada a quem não vem daquela fonte. O buraco existiu na primeira versão e apareceu porque **quatro suítes quebraram de uma vez** — todas criam UC pelo caminho da aplicação, que é o mesmo caminho da tela. `F4m` é o par mudo da `F4h`, com **um** campo de diferença. Em produção as 41 são espelhadas, então a regra alcança todas.
 
 > **R33.** **Alerta não é recusa.** Usina sem dono **fatura** e alerta: a cobrança ao cliente não depende daquele cadastro. Recusa significa "nada foi gravado"; alerta significa "foi gravado, e alguém precisa olhar". *(precedente: `RESUMO-SESSAO-9` §2)*
 
