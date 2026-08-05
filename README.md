@@ -171,7 +171,10 @@ Nesta ordem. Cada documento pressupõe o anterior.
 0. **`RETOMADA-2026-08-03.md`** — **se você está retomando o trabalho, leia este primeiro: dois minutos, e diz onde tudo parou.** Substitui o de 30/07. Traz o que está por commitar, as duas perguntas que travam trabalho caro e o que **não** fazer em seguida
 0. **`ROTEIRO-REVISAO.md`** — **se o que você quer é usar o sistema e conferir, comece aqui e não no resto.** Passo a passo do que abrir, o que esperar ver e **o que significa se vier diferente** — incluindo o teste que nenhum comando faz: **ler o QR com a câmera do celular**
 1. **`REVISAO-VERTENTES-2026-07-30.md`** — **se a pergunta é "o sistema cobre o financeiro da empresa também?", comece aqui.** A revisão das duas vertentes contra produção: o que existe da carteira do cliente, o zero do módulo corporativo, e o `PRD` §5.5 implementado pela metade entre as duas
-1. **`RESUMO-SESSAO-20.md`** — **comece por aqui.** Duas entregas: o conector passou a ler as **dez** views e a conferir o eixo do originador sozinho (a §1.1 e o assunto — a causa raiz nao era ler oito, era **nao contar**), e o **layout da fatura virou posicao** (a §2.1 sao os tres defeitos silenciosos que o pedido do dono desenterrou). A §3 lista **seis erros meus**, e **dois deles so apareceram ao FOTOGRAFAR a tela**
+0. **`PENDENCIAS-2026-08-05.md`** — **se você vai OPERAR, abra este primeiro.** A fila inteira medida contra produção em 05/08, ordenada por *o que destrava o quê* e não por severidade. Diz também o que **não** é pendência: nenhuma migration, e os importadores não precisam de deploy
+1. **`RESUMO-SESSAO-21.md`** — **comece por aqui.** Os dois últimos insumos em massa ganharam importador (contratos e endereço do pagador), o `ADR-0005` foi decidido e a `Q-WEBHOOK-01` ganhou desenho. A §2 são as duas medições que **encolheram o caminho crítico sem nenhuma decisão**; a §4 é a leitura que respondeu metade de um ADR; e a **§5 é o que eu decidi NÃO fazer, e por quê** — o `src/sicoob/http.ts` é escrevível e continua não escrito
+1. **`SICOOB-contrato-medido-2026-08-05.md`** — se a pergunta é *"como escrevo o adaptador da Sicoob?"*, comece aqui. Os três verbos da porta com caminho, corpo, resposta e erro. A §3.2 é a armadilha que mais custa (**`valor` é decimal, não centavos**) e a §4 é o que **não** está medido
+1. **`RESUMO-SESSAO-20.md`** — Duas entregas: o conector passou a ler as **dez** views e a conferir o eixo do originador sozinho (a §1.1 e o assunto — a causa raiz nao era ler oito, era **nao contar**), e o **layout da fatura virou posicao** (a §2.1 sao os tres defeitos silenciosos que o pedido do dono desenterrou). A §3 lista **seis erros meus**, e **dois deles so apareceram ao FOTOGRAFAR a tela**
 1. **`PLANO-layout-visual-2026-08-03.md`** — se a pergunta e *"como o documento da fatura e montado?"*, comece aqui. A §2 sao os **oito pontos de melhoria** do processo anterior, tres deles defeito e nao limitacao; o bloco EXECUTADO traz o que apareceu ao construir
 1. **`RESUMO-SESSAO-19.md`** — A sessao em que o eixo do originador foi **respondido pelo dev do CRM** — e nao era nenhuma das duas colunas que mediamos. A §1 e o custo do eixo velho (12 UCs, 19,6% da carteira); a §2 sao as **tres afirmacoes do dev que ja nao eram verdade**, e por que conferir a resposta valeu mais que obedece-la; a §3 e a `Q-PARCERIA-01`, que a correcao do proprio dev abriu. Mapa vigente: **`ATRIBUICAO-originador-2026-08-03.md`**
 1. **`RESUMO-SESSAO-18.md`** — A sessao em que as quatro perguntas foram respondidas pelo dono. A §1 e o defeito que a pergunta encontrou sem procurar — o conector apagava o vencimento que ninguem tinha preenchido ainda; a §3 e a `conta_pagar`, com o que o banco passou a IMPEDIR; a §4 sao as 39 UCs medidas e as tres coisas que a medicao achou sem ser pedida
@@ -250,6 +253,27 @@ RESUMO-SESSAO-12.md          passagem da sessao 12 — Producao conferida, o
 RETOMADA-2026-08-03.md       ONDE TUDO PAROU. O que falta publicar (e agora tem
                              MIGRATION), as tres proximas acoes - nenhuma delas
                              codigo - e o que NAO fazer em seguida
+PENDENCIAS-2026-08-05.md     A FILA INTEIRA, medida em 05/08 contra producao e
+                             contra o CRM. Ordenada por O QUE DESTRAVA O QUE, e
+                             nao por severidade. Diz tambem o que NAO e
+                             pendencia: zero migrations, e os importadores
+                             rodam do Codespace sem deploy
+RESUMO-SESSAO-21.md          passagem da sessao 21 - COMECE POR AQUI. Os dois
+                             ultimos insumos em massa ganharam importador. A 2
+                             sao duas medicoes que encolheram o caminho critico
+                             SEM DECISAO NENHUMA - a Q-PARCERIA-01 saiu da frente
+                             das 29 e os originadores viraram dois. A 4 e a
+                             leitura que respondeu METADE de um ADR, e a 5 e o
+                             que eu decidi NAO FAZER: o src/sicoob/http.ts e
+                             escrevivel e continua nao escrito, por Q-PECA-NAO-
+                             PLUGADA-01
+SICOOB-contrato-medido-2026-08-05.md
+                             O CONTRATO DA API, medido na documentacao publica.
+                             Os tres verbos da porta com caminho, corpo, resposta
+                             e erro padrao. A 3.2 e a armadilha que mais custa -
+                             `valor` e DECIMAL e todo o sistema e Int em centavos
+                             -, e a 4 lista o que NAO esta medido, entre eles os
+                             campos de identidade do cooperado
 RESUMO-SESSAO-20.md          passagem da sessao 20 - COMECE POR AQUI. Duas
                              entregas. A 1 e o conector lendo as DEZ views e
                              conferindo o eixo do originador sozinho - e a 1.1 e
