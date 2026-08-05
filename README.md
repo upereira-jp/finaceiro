@@ -36,14 +36,28 @@ Sistema financeiro multi-tenant da G3 Solar: faturamento de crédito de energia,
 | 1 | **Identidade de cobrança** (chave Pix, recebedor, cidade) | **só do dono** — sem ela o documento sai **sem QR**, e é o único meio de pagamento que não espera o A1 |
 | 2 | **CPF/CNPJ dos clientes** — **24 pessoas para 29 linhas** | operação — **entrou na lista em 04/08 e é o item novo**: sem ele o contrato **não ativa** (R9). O modelo está pronto: `documentos-modelo-20260804.csv`, e `npm run documentos` |
 | 3 | **Dia de vencimento das 29 UCs** | **o modelo está pronto e marcado**: `vencimentos-modelo-20260804.csv`, 29 `sim` primeiro e 12 `NAO` no fim |
-| 4 | **CPF/CNPJ dos três originadores** + natureza | operação — nenhuma das 10 views do CRM entrega documento |
-| 5 | **Decidir a `Q-PARCERIA-01`** | dono + dev do CRM — **trava a digitação**, e a 2ª parcela é 25% contra zero |
-| 6 | **Digitar os 29 contratos** | 2, 4 e 5 — **R20-b congela o tier e não há edição**, e sem o 2 a ativação devolve 422 |
+| 4 | **CPF/CNPJ dos originadores** + natureza | operação — nenhuma das 10 views do CRM entrega documento. **Remedido em 05/08: são DOIS para as 29**, não três — ver abaixo |
+| 5 | ~~**Decidir a `Q-PARCERIA-01`**~~ | ✅ **sai do caminho crítico das 29 em 05/08, por medição.** Continua 🔴 aberta, e volta a travar quando o CRM ativar as três UCs do Edimar |
+| 6 | **Digitar os 29 contratos** | 2 e 4 — **R20-b congela o tier e não há edição**, e sem o 2 a ativação devolve 422. **Desde 05/08 tem importador**: `npm run contratos`, e o modelo sai preenchido pelo crédito do CRM |
 | 7 | **Lançar a geração** que falta na competência escolhida | operação — ver o quadro abaixo |
 | 8 | **Compor e emitir** | 1–7 |
 | 9 | **Dono de usina + `regra_repasse`** | **não bloqueia a fatura**, bloqueia o *repasse* |
 
 **O boleto não está nesta lista, e é de propósito.** A prontidão marca `cobranca_sicoob` como `bloqueia_fatura`, mas a **triagem não tem esse motivo de recusa**: sem o A1 o lote compõe, a fatura existe e o documento sai — com o **Pix estático**, que é o item 1. O que não sai é boleto (`Q-SICOOB-01`).
+
+### 05/08: dois itens encolheram, e nenhum dos dois por decisão — por medição
+
+Remedido contra o CRM antes de construir o importador, e as duas coisas estavam no índice e não no corpo datado. É a quarta vez que essa classe aparece.
+
+**A `Q-PARCERIA-01` não trava mais a digitação das 29.** Ela nasceu de três vendas do Edimar com vendedor **e** parceiro no mesmo crédito, e a escolha muda a 2ª parcela de 25% para zero. Medido em 05/08: as três UCs — `000241968901278`, `000006990101222`, `000039416101210` — estão **as três `nao_ativado`**, na usina `04`, e **nenhuma está entre as 29 faturáveis**. Conferido pelo outro lado também, que é o que fecha: os 29 créditos vigentes das 29 UCs têm **`parceiro_id` nulo em 29 de 29**. A questão **continua vermelha e continua sem dono resolvido** — ela volta a travar no dia em que o CRM ativar aquelas três, e é por isso que o modelo do importador as marca com o ID da questão em vez de deixá-las passar.
+
+**E são dois originadores, não três.** Pelo crédito vigente das 29: **Renata 26, Out Sales 3**. A `Kallina Tandara`, que a `Q-ORIGVEND-01` acrescentou em 03/08, tem **1 UC** e ela está entre as 12 que não faturam. O terceiro CPF/CNPJ continua sendo trabalho — só não é trabalho **deste** lote.
+
+**O passo 6 deixou de ser digitação à mão.** `npm run contratos` era o único insumo em massa do projeto sem importador, e a razão não é velocidade: **`contrato` não tem edição**. A R20-b congela `originador_tipo_no_fechamento` no `rascunhar`, e nem originador, nem data de fechamento, nem valor mudam depois — o conserto é `encerrar` + `renovar`, que abre linha nova, zera `faturas_cheias_pagas` e deixa na trilha uma renovação que não houve. Vinte e nove atos irreversíveis precisam de um ponto em que sejam revisáveis de uma vez.
+
+O modelo sai preenchido pelo **crédito congelado** do CRM — `ganho_em` vira a data de fechamento sugerida e `consumo_reais` o valor de referência, **41 de 41** —, e a coluna `originador_crm` mostra quem vendeu ao lado de cada UC, que é a única forma de conferir a atribuição sem ler uuid. Rodado contra produção em 05/08: **41 linhas, 29 marcadas `sim`, 3 marcadas com a `Q-PARCERIA-01`**, e o arquivo é **recusado inteiro** enquanto não houver originador cadastrado — o que é o comportamento certo, não um defeito.
+
+**O que o importador impede, e não estava impedido em lugar nenhum:** o **rascunho órfão**. `rascunhar` aceita cliente sem documento e `ativar` recusa (R9) — a sequência ingênua gravaria uma linha que **não ocupa a UC, não fatura e não aparece em recusa nenhuma**, e a rodada seguinte gravaria outra. A conferência é por **linha** e não por lote, ao contrário do importador de documentos: as UCs que passam viram contrato, as que não passam ficam exatamente como estavam, e reimportar o mesmo arquivo depois grava só o que falta. Abortar tudo por uma linha faria os 24 esperarem a `Q-CLIENTEDUP-01`.
 
 ### O item 2 é novo, e ele estava faltando na lista desde sempre
 
@@ -539,6 +553,19 @@ src/cobranca/agenda.ts       O MOTOR das duas tarefas, com a forma copiada de
                              deixou a escolha do host em aberto), NAO liquida (a
                              baixa e de repos/liquidacao, o unico gatilho do
                              split) e NAO desiste
+src/dominio/planilha-contratos.ts
+                             A planilha de contratos, lida. PURO. O modo de falha
+                             que ele persegue nao e o das outras tres: e a CELULA
+                             PLAUSIVEL QUE MUDA QUEM RECEBE DINHEIRO e nao produz
+                             erro em lugar nenhum depois de gravada. Originador
+                             vazio e recusa (contrato sem originador nao paga
+                             NUNCA - o split roda, fecha e nao monta o item); a
+                             data confere o CALENDARIO e nao a forma ("31/02/2026"
+                             viraria 03/03 em silencio, um mes adiante, e mes e a
+                             unidade em que ehFaturaCheia decide); e o cabecalho
+                             precisa falhar nas TRES colunas conferiveis, o que
+                             fecha o buraco que as outras tres planilhas aceitam -
+                             a primeira linha de dado engolida como cabecalho
 src/dominio/planilha-tarifas.ts
                              A planilha da concessionaria, lida. PURO. O modo de
                              falha que ele persegue nao e o arquivo ilegivel - e
@@ -700,6 +727,24 @@ scripts/importar-documentos.ts
                              porque as duas legiveis foram MEDIDAS e descartadas:
                              `lead.codigo` muda sozinho e nome nao e unico.
                              `npm run documentos`
+scripts/importar-contratos.ts
+                             IMPORTACAO dos CONTRATOS por planilha - o passo 6 do
+                             caminho para a primeira fatura, e o unico insumo em
+                             massa do projeto que nao tinha importador. A razao
+                             nao e velocidade: `contrato` NAO TEM EDICAO. A R20-b
+                             congela o tier no `rascunhar`, e o conserto e
+                             encerrar + renovar, que zera faturas_cheias_pagas e
+                             registra na trilha uma renovacao que nao houve - 29
+                             atos irreversiveis precisam de um ponto em que sejam
+                             revisaveis DE UMA VEZ. O modelo sai preenchido pelo
+                             CREDITO CONGELADO do CRM (ganho_em -> data de
+                             fechamento, consumo_reais -> valor, 41 de 41), le
+                             pelo LEITOR FECHADO de src/crm/leitura.ts e grita a
+                             Q-PARCERIA-01 onde ela aparece. O que ele impede e o
+                             RASCUNHO ORFAO: rascunhar aceita sem documento e
+                             ativar recusa (R9), entao a sequencia ingenua deixa
+                             linha que nao ocupa a UC, nao fatura e nao aparece
+                             em recusa nenhuma. `npm run contratos`
 scripts/importar-vencimentos.ts
                              IMPORTACAO do DIA de vencimento das UCs por planilha
                              (Q-SPEC001-02, decidida em 03/08: varia por UC). O
@@ -776,11 +821,21 @@ tests/dominio-carteira.ts    os dois motores SEM banco. A invariante do centavo
                              em 2.000 combinacoes
 tests/repos-carteira.ts      o ciclo do dinheiro ponta a ponta, pela role sem
                              BYPASSRLS e pelo adaptador falso
-tests/                       1262 verificacoes em 48 suites. `npm test` roda todas.
+tests/                       1448 verificacoes (05/08), em 46 suites `.ts` mais as
+                             `.sql` do run.sh. `npm test` roda todas, EXIT=0.
                              A CONTAGEM E `npm test | grep -c '^ok '`, e o metodo
                              esta escrito aqui porque os numeros anteriores (461,
                              496) vinham de uma soma que nao se reproduzia: so
                              parte das suites anuncia total proprio.
+                             O "48 suites" desta linha ficou VENCIDO por dois
+                             commits e nao se reproduzia por metodo nenhum que eu
+                             achasse - a contagem agora diz COMO foi feita
+                             (entrypoints distintos invocados por `npm test`), que
+                             e a mesma correcao que o numero de verificacoes ja
+                             tinha recebido. As 105 de 05/08 foram contadas na
+                             FONTE (95 literais `chk('` mais 10 de dois lacos) e
+                             conferidas contra o delta do npm test: 1343 -> 1448,
+                             diferenca ZERO.
                              As 110 de 30/07 foram contadas na FONTE
                              (`grep -c "chk('"`) e conferidas contra o delta do
                              npm test: 854 -> 990, diferenca ZERO. E a terceira

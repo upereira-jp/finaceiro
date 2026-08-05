@@ -194,6 +194,15 @@ echo
 echo "=== documento por planilha: CPF/CNPJ do cliente, e a R9 que ele destrava"
 node --experimental-strip-types tests/repos-documento-cliente.ts
 echo
+# O passo 6 do caminho para a primeira fatura. `contrato` NAO tem edicao e a
+# R20-b congela o tier no rascunhar, entao 29 digitacoes irreversiveis precisam
+# de um ponto em que sejam revisaveis de uma vez. O L2 e o assunto: o RASCUNHO
+# ORFAO que a sequencia ingenua (rascunhar, deixar o ativar recusar) deixaria
+# para tras - linha que nao ocupa a UC, nao fatura e nao aparece em recusa
+# nenhuma. O L5 prova a R20-b no TEMPO, que e a unica prova possivel dela.
+echo "=== contrato por planilha: lote de contratos, R9 antes de escrever e R20-b"
+node --experimental-strip-types tests/repos-contrato-lote.ts
+echo
 echo "=== HTTP: rotas, matriz de papeis e traducao de erro"
 node --experimental-strip-types tests/http.ts
 echo
