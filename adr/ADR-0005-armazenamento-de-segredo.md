@@ -2,12 +2,30 @@
 
 | Campo | Valor |
 |---|---|
-| **Status** | **Proposta** — aguarda decisão de Vinicius Leal (`CLAUDE.md` regra 10) |
-| **Data** | 28/07/2026 |
+| **Status** | ✅ **ACEITA — Opção A**, decidida por Vinicius Leal em **05/08/2026** |
+| **Data** | 28/07/2026 · **decidida em 05/08/2026** |
 | **Decisor** | Vinicius Leal |
 | **Resolve** | O pré-requisito da `Q-SICOOB-01` · `CLAUDE.md` regra 5 · `PRD-v2.2` §6 |
 | **Base factual** | Catálogo do banco de produção medido em 28/07/2026 — PostgreSQL 17.6, extensões e grants na §2 |
 | **Afeta** | `src/sicoob/http.ts` (não escrito) · `conector_cobranca.credencial_ref` · toda credencial por tenant que vier depois |
+
+> ## A DECISÃO — 05/08/2026
+>
+> **Opção A: Supabase Vault + função resolvedora `SECURITY DEFINER` amarrada ao tenant.** A recomendação da §4 foi aceita como está, e o argumento que a sustenta é o da §4 e não o da §3: **a `credencial_ref` é indireção**, então escolher A hoje não fecha a porta para C amanhã — trocar o cofre depois troca o resolvedor, e não a porta, nem `conector_cobranca`, nem migration, nem repositório.
+>
+> **O que passa a valer, e é o contrato do que for escrito daqui em diante:**
+>
+> 1. o segredo vai para `vault.secrets` com `name = credencial_ref`;
+> 2. **a role de runtime continua sem acesso ao schema `vault`** — quem resolve é uma função `SECURITY DEFINER` em `app`;
+> 3. a função confere que a `credencial_ref` pedida é a do `conector_cobranca` **daquele** tenant, por `app.current_tenant_id()`;
+> 4. ela grava trilha **na mesma transação** (regra 9);
+> 5. o A1 entra em base64 e **nunca toca o disco do servidor** — o TLS do Node aceita `pfx` como `Buffer`, e é isso que corrige a suposição do `RESUMO-SESSAO-10`.
+>
+> **A opção D fica descartada por decisão, não por omissão** — arquivo em disco no VPS, no mesmo VPS do CRM que guarda cinco tokens em `text` puro.
+>
+> **O que esta decisão NÃO fez:** nada foi escrito. Não há migration, não há função, não há segredo no cofre — e o `src/sicoob/http.ts` continua não existindo. O que mudou é que agora ele **pode** ser escrito, porque se sabe de onde ele lê. A §6 continua inteira: as quatro questões que ficam abertas depois desta decisão seguem abertas, e a primeira delas — *quem escreve no cofre* — é pré-requisito de qualquer linha de código, porque a role de runtime não deve ter `INSERT` em `vault.secrets`.
+>
+> **Corpo original abaixo, intacto.**
 
 > **O que este ADR decide não é implementação, é escolha.** A regra 5 diz que segredo por tenant *"vive em armazenamento cifrado e é acessado por referência"*. A migration 18 criou a referência — `conector_cobranca.credencial_ref` — e **o armazenamento para onde ela aponta não existe.** Não há cofre e não há resolvedor. Enquanto não houver, `src/sicoob/http.ts` não tem como ser escrito: não se sabe de onde ele lê o certificado A1.
 >

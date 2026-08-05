@@ -57,7 +57,37 @@ Remedido contra o CRM antes de construir o importador, e as duas coisas estavam 
 
 O modelo sai preenchido pelo **crédito congelado** do CRM — `ganho_em` vira a data de fechamento sugerida e `consumo_reais` o valor de referência, **41 de 41** —, e a coluna `originador_crm` mostra quem vendeu ao lado de cada UC, que é a única forma de conferir a atribuição sem ler uuid. Rodado contra produção em 05/08: **41 linhas, 29 marcadas `sim`, 3 marcadas com a `Q-PARCERIA-01`**, e o arquivo é **recusado inteiro** enquanto não houver originador cadastrado — o que é o comportamento certo, não um defeito.
 
-**O que o importador impede, e não estava impedido em lugar nenhum:** o **rascunho órfão**. `rascunhar` aceita cliente sem documento e `ativar` recusa (R9) — a sequência ingênua gravaria uma linha que **não ocupa a UC, não fatura e não aparece em recusa nenhuma**, e a rodada seguinte gravaria outra. A conferência é por **linha** e não por lote, ao contrário do importador de documentos: as UCs que passam viram contrato, as que não passam ficam exatamente como estavam, e reimportar o mesmo arquivo depois grava só o que falta. Abortar tudo por uma linha faria os 24 esperarem a `Q-CLIENTEDUP-01`.
+### A cadeia do boleto é outra, e ela tem quatro bloqueios
+
+Medida em 05/08, e a distinção importa: **o boleto não está atrás da fatura por acaso — ele tem bloqueios próprios**, e nenhum deles é insumo da operação.
+
+| # | O quê | Estado |
+|:--:|---|---|
+| 1 | **`ADR-0005`** — onde mora o segredo do tenant | ✅ **decidido em 05/08: Opção A**, Supabase Vault + função resolvedora `SECURITY DEFINER`. Era o único bloqueio da F2 que não dependia de ninguém de fora |
+| 2 | **`src/sicoob/http.ts`** — o adaptador real da Cobrança v3 | 🔴 **não existe.** Estava travado pelo 1, e agora **pode** ser escrito |
+| 3 | **Certificado A1 + credencial** | 🔴 externo — `Q-SICOOB-01` |
+| 4 | **`Q-WEBHOOK-01`** — como a Sicoob entra no webhook | 🟡 **desenhada em 05/08: `ADR-0006`**, Proposta, aguarda decisão |
+
+**O `ADR-0006` achou uma quarta decisão que a questão não nomeava.** Ela listava três — o que autentica, como o tenant é resolvido, como a rota escapa do Bearer. A quarta apareceu percorrendo o caminho de **escrita** em vez de ler a rota: **um webhook não tem usuário**, e `contexto.ts:79` exige `usuarioId` em UUID, `liquidacao.baixar` exige o papel `escrever_carteira`, e a regra 9 exige *quem*. Reusar o `auth_user_id` de uma pessoa faria a trilha dizer que o Vinicius baixou uma fatura às 3h — e **trilha que mente é pior que trilha ausente**. A proposta é usuário de serviço por tenant, sem caminho de login.
+
+**E o que governa o ADR inteiro é o que não está medido:** o que a Sicoob suporta. HMAC só existe se eles assinarem; mTLS depende da topologia do VPS; cabeçalho depende de a configuração do webhook aceitar um. É a lição da `Q-VIEWSCRED-01` aplicada antes de custar: o ADR escolhe a **forma** que acomoda os três e nomeia a leitura da documentação como pré-requisito, em vez de escolher o mecanismo e descobrir depois.
+
+**Nada disso é emergência, e a razão está no `PRD` §6:** `GET /boletos/situacao` é a consulta ativa diária, e ela existe justamente para capturar liquidação cujo webhook falhou. Sem webhook o dinheiro não se perde — chega no dia seguinte, e a baixa manual funciona hoje.
+
+### O endereço do pagador: mais um insumo que não estava em lista nenhuma
+
+Achado em 05/08 percorrendo a cadeia do boleto. `src/repos/boleto.ts` monta o pagador com os seis campos de endereço da UC, e eles estão **vazios em 29 de 29** faturáveis — e **nenhuma das 10 views do CRM expõe endereço**, do mesmo jeito que nenhuma expõe documento. É coleta da operação ou não existe.
+
+**Não bloqueia fatura nem Pix** — a triagem não tem recusa por endereço e o BR Code do Pix estático não carrega endereço de pagador. Bloqueia o boleto, e só ele: por isso o modelo sai marcado e ninguém precisa preencher 41.
+
+Entra por **`npm run enderecos`**, e `enderecos-modelo-20260805.csv` já está gerado. Duas coisas próprias deste importador:
+
+- **conferido antes de construir: o conector não escreve `endereco_*`.** O objeto `espelho` de `espelharUnidades` tem `cliente_id`, `usina_id`, `percentual_rateio`, `crm_usina_cliente_id` e as três de `rateio_*`, e mais nada — então preencher os endereços e rodar `npm run ciclo` **não** os apaga. Era exatamente o defeito que a `SPEC-002` R25 corrigiu para `data_vencimento` em 03/08, e a razão de medir em vez de supor;
+- **endereço é o único insumo do projeto que pode estar pela metade** — cinco campos e um vazio —, e uma UC assim não é *pronta* nem *vazia*. O relatório distingue as duas, senão mandaria procurar endereço que já existe.
+
+**O que continua aberto da `Q-PAGADOR-01`:** o **documento** do pagador. O `?? ''` de `boleto.ts:164` segue sem guarda, e a suíte `Y5c` prende isso de propósito — é o registro executável de que o endereço foi resolvido e a outra metade não.
+
+**O que o importador de contratos impede, e não estava impedido em lugar nenhum:** o **rascunho órfão**. `rascunhar` aceita cliente sem documento e `ativar` recusa (R9) — a sequência ingênua gravaria uma linha que **não ocupa a UC, não fatura e não aparece em recusa nenhuma**, e a rodada seguinte gravaria outra. A conferência é por **linha** e não por lote, ao contrário do importador de documentos: as UCs que passam viram contrato, as que não passam ficam exatamente como estavam, e reimportar o mesmo arquivo depois grava só o que falta. Abortar tudo por uma linha faria os 24 esperarem a `Q-CLIENTEDUP-01`.
 
 ### O item 2 é novo, e ele estava faltando na lista desde sempre
 
@@ -346,9 +376,19 @@ adr/
   ADR-0001-...               estrategia de multi-tenancy: banco unico, RLS por linha (retroativa)
   ADR-0003-...               contexto de tenant: SET LOCAL por transacao (r2, aceita)
   ADR-0004-...               provisionamento: organizacao, dominio e host (aceita)
-  ADR-0005-...               onde mora o segredo do tenant (PROPOSTA, aguarda
-                             decisao). Pre-requisito do adaptador Sicoob real:
-                             a credencial_ref aponta para um cofre que nao existe
+  ADR-0005-...               onde mora o segredo do tenant. ACEITA em 05/08 -
+                             Opcao A, Supabase Vault + funcao resolvedora
+                             SECURITY DEFINER amarrada ao tenant, com trilha na
+                             mesma transacao. Destrava ESCREVER o
+                             src/sicoob/http.ts; nao destrava a F2, que ainda
+                             espera o A1 e o webhook
+  ADR-0006-...               como a Sicoob entra no webhook de liquidacao
+                             (PROPOSTA, aguarda decisao). A Q-WEBHOOK-01 nomeia
+                             tres decisoes acopladas e sao QUATRO: a quarta e que
+                             webhook NAO TEM USUARIO, e tanto a trilha da regra 9
+                             quanto o RBAC exigem um. A 2 e o que governa tudo -
+                             o que a Sicoob suporta NAO esta medido, e metade das
+                             opcoes nao e exercivel se ela nao assinar
 
 auditoria/
   P7-...                     topologia de funis do CRM
@@ -553,6 +593,18 @@ src/cobranca/agenda.ts       O MOTOR das duas tarefas, com a forma copiada de
                              deixou a escolha do host em aberto), NAO liquida (a
                              baixa e de repos/liquidacao, o unico gatilho do
                              split) e NAO desiste
+src/dominio/planilha-enderecos.ts
+                             A planilha de endereco do pagador, lida. PURO. O
+                             modo de falha que ela persegue e o PREENCHIDO QUE
+                             NAO VALE - endereco e o unico insumo do projeto em
+                             que a celula errada nao tem consequencia nenhuma
+                             DESTE lado: nada valida, nada calcula, e a recusa
+                             vem da Sicoob traduzida em 502, longe da causa.
+                             Entao o conferivel e conferido: UF contra a lista
+                             FECHADA de 27 ("GOI" passa em qualquer verificacao
+                             de tamanho), CEP contra oito digitos, e "00000000"
+                             RECUSADO - e ausencia disfarcada de preenchimento, e
+                             a celula vazia ao menos aparece no relatorio
 src/dominio/planilha-contratos.ts
                              A planilha de contratos, lida. PURO. O modo de falha
                              que ele persegue nao e o das outras tres: e a CELULA
@@ -727,6 +779,19 @@ scripts/importar-documentos.ts
                              porque as duas legiveis foram MEDIDAS e descartadas:
                              `lead.codigo` muda sozinho e nome nao e unico.
                              `npm run documentos`
+scripts/importar-enderecos.ts
+                             IMPORTACAO do ENDERECO DO PAGADOR por planilha - a
+                             cadeia do BOLETO, que e OUTRA que a da fatura, e foi
+                             por isso que ninguem tinha listado este insumo.
+                             Medido em 05/08: os seis campos de endereco da UC
+                             estao vazios em 29 de 29 faturaveis e NENHUMA das 10
+                             views do CRM os expoe - mesma forma do documento do
+                             cliente. NAO bloqueia fatura nem Pix (a triagem nao
+                             tem recusa por endereco) e NAO destrava boleto
+                             sozinho. Conferido ANTES de construir: o conector
+                             nao escreve `endereco_*`, entao rodar o ciclo depois
+                             NAO apaga - que era o defeito que a R25 corrigiu
+                             para data_vencimento. `npm run enderecos`
 scripts/importar-contratos.ts
                              IMPORTACAO dos CONTRATOS por planilha - o passo 6 do
                              caminho para a primeira fatura, e o unico insumo em
@@ -821,7 +886,7 @@ tests/dominio-carteira.ts    os dois motores SEM banco. A invariante do centavo
                              em 2.000 combinacoes
 tests/repos-carteira.ts      o ciclo do dinheiro ponta a ponta, pela role sem
                              BYPASSRLS e pelo adaptador falso
-tests/                       1448 verificacoes (05/08), em 46 suites `.ts` mais as
+tests/                       1531 verificacoes (05/08), em 48 suites `.ts` mais as
                              `.sql` do run.sh. `npm test` roda todas, EXIT=0.
                              A CONTAGEM E `npm test | grep -c '^ok '`, e o metodo
                              esta escrito aqui porque os numeros anteriores (461,
@@ -835,7 +900,8 @@ tests/                       1448 verificacoes (05/08), em 46 suites `.ts` mais 
                              tinha recebido. As 105 de 05/08 foram contadas na
                              FONTE (95 literais `chk('` mais 10 de dois lacos) e
                              conferidas contra o delta do npm test: 1343 -> 1448,
-                             diferenca ZERO.
+                             diferenca ZERO. As 83 do endereco, no mesmo dia:
+                             1448 -> 1531, tambem ZERO.
                              As 110 de 30/07 foram contadas na FONTE
                              (`grep -c "chk('"`) e conferidas contra o delta do
                              npm test: 854 -> 990, diferenca ZERO. E a terceira

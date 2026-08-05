@@ -203,6 +203,15 @@ echo
 echo "=== contrato por planilha: lote de contratos, R9 antes de escrever e R20-b"
 node --experimental-strip-types tests/repos-contrato-lote.ts
 echo
+# A cadeia do BOLETO, que e outra que a da fatura. Medido em 05/08: os seis
+# campos de endereco da UC estao vazios em 29 de 29 faturaveis e nenhuma das 10
+# views do CRM os expoe. O Y2 e o assunto: endereco e o unico insumo do projeto
+# que pode estar PELA METADE, e "parcial" nao e nem pronto nem vazio. O Y5 fecha
+# o circuito com o pagador de boleto.ts - e prende que o DOCUMENTO segue sem
+# guarda, que e a metade da Q-PAGADOR-01 que continua aberta.
+echo "=== endereco por planilha: o pagador do boleto, e o parcial que nao e vazio"
+node --experimental-strip-types tests/repos-enderecos.ts
+echo
 echo "=== HTTP: rotas, matriz de papeis e traducao de erro"
 node --experimental-strip-types tests/http.ts
 echo

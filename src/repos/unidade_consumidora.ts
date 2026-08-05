@@ -242,6 +242,166 @@ export async function lancarVencimentosPorUC(
   return r;
 }
 
+// ------------------------------------------------- lancamento de endereco
+
+export type ResultadoDosEnderecos = {
+  aplicados: Array<{
+    numero_uc: string;
+    unidade_consumidora_id: string;
+    /** O que a linha tinha antes, resumido - para a segunda passada ser
+     *  obviamente uma correcao e nao uma redigitacao. */
+    antes: string | null;
+    depois: string;
+    fatura: boolean;
+  }>;
+  /** UC da planilha que nao existe no cadastro. Nao e erro do arquivo - e a
+   *  planilha e o banco discordando sobre quais UCs existem. */
+  sem_uc: Array<{ numero_uc: string }>;
+  /** Cobertas pela planilha com o MESMO endereco que ja tinham. Contadas a
+   *  parte para a segunda passada nao parecer trabalho. */
+  inalterados: Array<{ numero_uc: string }>;
+  /**
+   * UC ativa que a planilha nao cobriu, com o que ela tem hoje.
+   *
+   * `completo` e o que distingue esta lista das outras quatro planilhas:
+   * endereco e o unico insumo do projeto que pode estar PELA METADE - cinco
+   * campos e um vazio -, e uma UC assim nao e "pronta" nem "vazia". Contar as
+   * duas juntas mandaria alguem procurar endereco que ja existe.
+   */
+  nao_cobertos: Array<{ numero_uc: string; completo: boolean; fatura: boolean }>;
+};
+
+/** Os seis que o boleto precisa. `complemento` fica de fora: e o unico
+ *  genuinamente opcional, e exigi-lo poria "-" em 29 boletos impressos. */
+const OBRIGATORIOS = [
+  'endereco_logradouro', 'endereco_numero', 'endereco_bairro',
+  'endereco_municipio', 'endereco_uf', 'endereco_cep',
+] as const;
+
+const enderecoCompleto = (u: Record<string, unknown>): boolean =>
+  OBRIGATORIOS.every((c) => {
+    const v = u[c];
+    return typeof v === 'string' && v.trim() !== '';
+  });
+
+/** Uma linha so, para o relatorio comparar antes e depois sem despejar seis
+ *  campos por UC. Nao e formato de boleto - e leitura humana. */
+const resumo = (u: {
+  endereco_logradouro?: string | null; endereco_numero?: string | null;
+  endereco_bairro?: string | null; endereco_municipio?: string | null;
+  endereco_uf?: string | null; endereco_cep?: string | null;
+}): string | null => {
+  const partes = [
+    [u.endereco_logradouro, u.endereco_numero].filter(Boolean).join(', '),
+    u.endereco_bairro, [u.endereco_municipio, u.endereco_uf].filter(Boolean).join('/'), u.endereco_cep,
+  ].filter((p) => p && String(p).trim() !== '');
+  return partes.length === 0 ? null : partes.join(' · ');
+};
+
+/**
+ * Lanca o endereco do pagador de varias UCs de uma vez, casando por `numero_uc`.
+ *
+ * POR QUE ISTO EXISTE - medido em 05/08/2026 contra producao, percorrendo a
+ * cadeia do BOLETO e nao a da fatura. `src/repos/boleto.ts` monta o pagador com
+ * os seis campos de endereco da UC, e eles estao **vazios em 29 de 29** UCs
+ * faturaveis. Nenhuma das 10 views do CRM expoe endereco - conferido no catalogo
+ * do schema `financeiro` no mesmo dia -, entao o dado entra por aqui ou nao
+ * entra. E a mesma forma do documento do cliente (`Q-PAGADOR-01`), na cadeia do
+ * boleto em vez da da fatura.
+ *
+ * ISTO NAO BLOQUEIA FATURA NEM PIX, e a distincao esta aqui para nao inflar
+ * fila: a triagem nao tem recusa por endereco e o BR Code do Pix estatico nao
+ * carrega endereco de pagador. Bloqueia o boleto, e so ele.
+ *
+ * O QUE ESTA FUNCAO NAO FAZ, e os quatro sao deliberados:
+ *   - nao apaga endereco de UC que a planilha nao trouxe (ausente nao e zero);
+ *   - nao toca UC cancelada, porque cancelada saiu do rateio e nao vai faturar;
+ *   - nao completa campo nenhum - `complemento` ausente vira NULL explicito, e
+ *     os outros seis chegam ja validados pelo leitor puro;
+ *   - nao aborta o lote por linha ruim, porque nao ha indice unico a violar
+ *     aqui: cada UC e independente das outras, e escrever 28 de 29 e util.
+ *
+ * A ESCRITA E POR `editar()`, e nao por UPDATE direto: e o mesmo caminho da
+ * rota e da tela, e `editar` e quem normaliza a UF para maiuscula. Um UPDATE
+ * aqui seria um segundo caminho de escrita de endereco, com uma normalizacao
+ * propria que divergiria da primeira sem que nenhum dos dois parecesse errado.
+ */
+export async function lancarEnderecosPorUC(
+  porUC: ReadonlyMap<string, {
+    logradouro: string; numero: string; complemento: string | null;
+    bairro: string; municipio: string; uf: string; cep: string;
+  }>,
+): Promise<ResultadoDosEnderecos> {
+  await exigir('escrever_cadastro');
+
+  const atuais = await dbt().unidade_consumidora.findMany({
+    where: { status: { not: 'cancelada' } },
+    select: {
+      id: true, numero_uc: true, status: true,
+      crm_usina_cliente_id: true, rateio_situacao: true,
+      endereco_logradouro: true, endereco_numero: true, endereco_complemento: true,
+      endereco_bairro: true, endereco_municipio: true, endereco_uf: true, endereco_cep: true,
+    },
+  });
+  const porNumero = new Map(atuais.map((u) => [u.numero_uc, u]));
+
+  // O predicado da triagem, e nao "status = ativa". UC criada a mao
+  // (`crm_usina_cliente_id` nulo) continua contando - o CRM nao sabe dela.
+  const faturavel = (u: typeof atuais[number]) =>
+    u.status === 'ativa' && (u.crm_usina_cliente_id === null || u.rateio_situacao === 'ativado');
+
+  const r: ResultadoDosEnderecos = { aplicados: [], sem_uc: [], inalterados: [], nao_cobertos: [] };
+
+  for (const [numero_uc, e] of porUC) {
+    const u = porNumero.get(numero_uc);
+    if (!u) { r.sem_uc.push({ numero_uc }); continue; }
+
+    const novo = {
+      endereco_logradouro: e.logradouro,
+      endereco_numero: e.numero,
+      endereco_complemento: e.complemento,
+      endereco_bairro: e.bairro,
+      endereco_municipio: e.municipio,
+      endereco_uf: e.uf.toUpperCase(),
+      endereco_cep: e.cep,
+    };
+
+    /*
+     * IGUAL E IGUAL NOS SETE, inclusive no complemento nulo. Comparar so os seis
+     * obrigatorios faria a correcao de um complemento sair como "inalterado" -
+     * e o complemento e o campo que mais se corrige depois da primeira coleta.
+     */
+    const igual =
+      u.endereco_logradouro === novo.endereco_logradouro &&
+      u.endereco_numero === novo.endereco_numero &&
+      (u.endereco_complemento ?? null) === novo.endereco_complemento &&
+      u.endereco_bairro === novo.endereco_bairro &&
+      u.endereco_municipio === novo.endereco_municipio &&
+      u.endereco_uf === novo.endereco_uf &&
+      u.endereco_cep === novo.endereco_cep;
+
+    if (igual) { r.inalterados.push({ numero_uc }); continue; }
+
+    const antes = resumo(u);
+    await editar(u.id, novo);
+    r.aplicados.push({
+      numero_uc, unidade_consumidora_id: u.id,
+      antes, depois: resumo(novo)!, fatura: faturavel(u),
+    });
+  }
+
+  for (const u of atuais) {
+    if (porUC.has(u.numero_uc)) continue;
+    r.nao_cobertos.push({
+      numero_uc: u.numero_uc,
+      completo: enderecoCompleto(u as unknown as Record<string, unknown>),
+      fatura: faturavel(u),
+    });
+  }
+
+  return r;
+}
+
 /** Suspensa continua no rateio: o teto da R11 conta suspensa, so ignora cancelada. */
 export async function suspender(id: string) {
   await exigir('escrever_cadastro');
