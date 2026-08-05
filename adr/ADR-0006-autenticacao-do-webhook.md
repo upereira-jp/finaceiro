@@ -32,13 +32,51 @@ O que já está resolvido e não se reabre: **a idempotência.** `liquidacao.bai
 
 ---
 
-## 2. O que NÃO está medido, e é o que governa a decisão
+## 2. O que a Sicoob suporta — e é isso que governa a decisão
 
-**Não sabemos o que a Sicoob suporta.** Não há certificado, não há credencial de sandbox e nenhuma linha da documentação da Cobrança v3 foi lida contra este problema — `Q-SICOOB-01`.
+**As opções da §3 não são todas exercíveis.** HMAC sobre o corpo exige que o emissor assine; mTLS exige que ele apresente certificado de cliente *e* que o TLS chegue até o Node; cabeçalho fixo exige que a configuração do webhook deixe adicionar um. Se a Sicoob só oferecer um dos três, **a decisão está tomada pela outra ponta**.
 
-Isso não é detalhe de cronograma: **as opções da §3 não são todas exercíveis**. HMAC sobre o corpo exige que o emissor assine; mTLS exige que ele apresente certificado de cliente *e* que o TLS chegue até o Node; cabeçalho fixo exige que a configuração do webhook deixe adicionar um. Se a Sicoob só oferecer um dos três, a decisão está tomada pela outra ponta.
+**Esta é a lição da `Q-VIEWSCRED-01`, e ela custou uma semana:** as duas views que respondiam quem vendeu existiam havia dois dias e ninguém comparava o que o outro lado expõe contra a nossa suposição. Então este ADR **não escolhe o mecanismo antes de saber o que existe** — ele escolhe a *forma* que acomoda os três.
 
-**Esta é a lição da `Q-VIEWSCRED-01`, e ela custou uma semana:** as duas views que respondiam quem vendeu existiam havia dois dias e ninguém comparava o que o outro lado expõe contra a nossa suposição. Então este ADR **não escolhe o mecanismo de autenticação antes de ler a documentação deles** — ele escolhe a *forma* que acomoda os três, e nomeia a leitura como pré-requisito.
+> **Esta seção foi reescrita em 05/08, no mesmo dia.** A primeira versão dizia *"não sabemos o que a Sicoob suporta — nenhuma linha da documentação foi lida contra este problema"*, e foi verdade por algumas horas. A §2.1 é a leitura, e deixar o parágrafo antigo intacto acima dela seria a mesma classe que o `PATCH-citacoes` tratou e a `Q-ESCOPO-01` repetiu: **o corpo datado certo, o índice errado, e quem lê só o topo decide errado.**
+>
+> **O que a leitura mudou:** metade da pergunta foi respondida — o lado de saída está documentado. **A outra metade não é "não medida", é "não pública"**, e a diferença é de destinatário, não de esforço.
+
+### 2.1 O que foi medido em 05/08, e o que a medição NÃO encontrou
+
+A §2 foi escrita dizendo *"ninguém leu a documentação"*. **Lida no mesmo dia**, na documentação pública da Cobrança Bancária v3. O resultado divide em três.
+
+**O que ficou sabido — o lado de SAÍDA, que é o `src/sicoob/http.ts`:**
+
+| | |
+|---|---|
+| Produção | `https://api.sicoob.com.br/cobranca-bancaria/v3` |
+| Sandbox | `https://sandbox.sicoob.com.br/sicoob/sandbox/cobranca-bancaria/v3` |
+| Autenticação | OAuth2 em **Keycloak** — `https://auth.sicoob.com.br/auth/realms/cooperado/protocol/openid-connect/token` |
+| Cabeçalhos, em toda chamada | `Authorization: Bearer <token>` **e** `client_id: <client_id>` |
+| Certificado | **ICP Brasil**, emitido para o **CNPJ do cooperado** quando PJ |
+
+Isso confirma a premissa do `ADR-0005` sem mudá-la: a `credencial_ref` precisa resolver para **A1 + `client_id`**, e o `client_secret` pode nem existir — em Keycloak com mTLS o certificado *é* a credencial. Qual das duas formas a Sicoob usa é detalhe a confirmar contra o sandbox, não decisão nossa.
+
+**O que a medição NÃO encontrou, e é o que esta ADR precisa:** **nada sobre como a Sicoob autentica a chamada ao NOSSO endpoint.** O material público descreve o cadastro da URL no portal e o escopo de webhook da aplicação, e não descreve cabeçalho, assinatura, certificado de cliente nem faixa de IP na direção de entrada.
+
+**Isso não é "não tem" — é "não é público".** A diferença importa: a §3 continua sem poder ser fechada, e o pré-requisito deixou de ser *"ler a documentação"* e passou a ser **perguntar ao suporte da Sicoob ou abrir a aplicação no portal e ver o que a configuração de webhook oferece**. É uma pergunta com destinatário, não uma leitura pendente.
+
+**A recomendação da §3 não muda por causa disto** — ela já estava desenhada para acomodar as três formas, e é exatamente para este resultado que ela foi desenhada assim.
+
+### 2.2 Um achado de lado, que não é desta ADR mas nasceu da mesma leitura
+
+O objeto `pagador` da inclusão de boleto é:
+
+```
+numeroCpfCnpj · nome · endereco · bairro · cidade · cep · uf · email
+```
+
+Três consequências, todas registradas em `src/dominio/planilha-enderecos.ts`:
+
+1. **`endereco` é UMA string** — "Rua 87 Quadra 1 Lote 1 casa 1". Nós temos `logradouro`, `numero` e `complemento` separados, e quem concatena é o adaptador. Exigir logradouro **e** número no importador continua certo, e por um motivo melhor do que o que estava escrito: os dois alimentam a mesma string;
+2. **`cep` sem máscara e `uf` de duas letras** batem exatamente com o que o importador já normaliza;
+3. **`email` existe no payload e não existe no nosso tipo `Pagador`** (`src/sicoob/porta.ts`). Medido: **3 de 29** clientes faturáveis têm e-mail, e **29 de 29** têm telefone. Não é bloqueio — é lacuna nomeada para quando o adaptador for escrito.
 
 ---
 
@@ -130,7 +168,9 @@ O que B torna possível e A não:
 
 | Questão | Por quê |
 |---|---|
-| O que a Sicoob suporta de fato | §2. É pré-requisito da Decisão 1, e não depende de nós |
+| **O que a Sicoob suporta na ENTRADA** | §2.1. Medido em 05/08: **não é público**. Deixou de ser "ler a documentação" e passou a ser **perguntar ao suporte** ou abrir a aplicação no portal e ver o que a configuração de webhook oferece — pergunta com destinatário, não leitura pendente |
+| `client_secret` existe? | §2.1. Em Keycloak com mTLS o certificado pode ser a credencial inteira. Confirma-se contra o sandbox, e muda o que a resolvedora do `ADR-0005` devolve |
+| `email` no pagador | §2.2. Está no payload deles e não no nosso tipo `Pagador`. 3 de 29 clientes têm |
 | Rotação do segredo do webhook | Mesma classe da rotação do A1, que o `ADR-0005` §6 já deixou aberta |
 | O corpo cru, se for HMAC | `lerCorpo` entrega parseado. Preservar os bytes muda o servidor, não só a rota |
 | Quem provisiona o usuário de serviço | Como o `bootstrap-plataforma-admin.sql`: provisionamento, não migration — e sem caminho de login |

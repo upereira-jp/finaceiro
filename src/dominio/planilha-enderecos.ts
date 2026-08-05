@@ -20,12 +20,39 @@
 // Code do Pix estatico nao carrega endereco de pagador. Isto bloqueia o BOLETO,
 // e so ele - por isso o modelo sai marcado e ninguem precisa preencher 41.
 //
-// E O QUE A SICOOB EXIGE DE VERDADE NAO ESTA MEDIDO. `src/sicoob/http.ts` nao
-// existe (Q-SICOOB-01), entao quais dos seis campos a Cobranca v3 recusa por
-// ausencia e pergunta em aberto. Este modulo exige os SEIS - a escolha
-// conservadora - e ela esta dita aqui em vez de escondida: quando o adaptador
-// for escrito e a resposta chegar, afrouxar e apagar uma condicao neste arquivo.
-// Apertar depois seria pedir a coleta duas vezes.
+// O QUE A SICOOB PEDE, MEDIDO EM 05/08/2026 na documentacao publica da Cobranca
+// Bancaria v3. A versao anterior deste comentario dizia que isto NAO estava
+// medido e que exigir os seis era "a escolha conservadora". Estava medido errado
+// por omissao - a documentacao e publica e ninguem tinha olhado. O objeto
+// `pagador` da inclusao de boleto e:
+//
+//   numeroCpfCnpj   so digitos
+//   nome
+//   endereco        UMA STRING - "Rua 87 Quadra 1 Lote 1 casa 1"
+//   bairro
+//   cidade
+//   cep             OITO DIGITOS, SEM MASCARA - "72320000"
+//   uf              DUAS LETRAS - "DF"
+//   email
+//
+// TRES CONSEQUENCIAS, e a primeira e a que muda este arquivo:
+//
+// 1. `endereco` e UM campo la e sao TRES aqui (`logradouro`, `numero`,
+//    `complemento`). Nao ha campo de numero separado na Cobranca v3 - o numero
+//    vai dentro da string. Entao exigir logradouro E numero continua certo, e
+//    pela razao oposta a que estava escrita: nao e conservadorismo, e que os
+//    dois ALIMENTAM a mesma string, e um endereco sem numero chega ao boleto
+//    como um endereco incompleto de verdade. Quem concatena e o adaptador.
+// 2. `cep` sem mascara e `uf` de duas letras batem EXATAMENTE com o que este
+//    modulo ja normaliza. A coincidencia nao e sorte: as duas sao a forma
+//    canonica do dado, e foi por isso que a mascara sai aqui.
+// 3. `municipio` aqui e `cidade` la. E renome de adaptador, nao de coluna - o
+//    GLOSSARIO manda o dominio em portugues e `municipio` e o termo do projeto.
+//
+// O QUE CONTINUA SEM MEDICAO: quais dos oito a API RECUSA por ausencia. A
+// documentacao publica traz o exemplo completo e nao marca obrigatoriedade campo
+// a campo, e sem credencial de sandbox (`Q-SICOOB-01`) nao da para provocar a
+// recusa. Exigir os seis segue sendo a posicao, agora por um motivo medido.
 //
 // POR QUE PURO E SEPARADO DO SCRIPT. Regra 8, como nas outras quatro planilhas.
 //
