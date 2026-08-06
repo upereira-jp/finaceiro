@@ -167,6 +167,72 @@ export function totalEsperadoDaBaixa(
   return f.valor_consumo_centavos + f.valor_tarifas_concessionaria_centavos + jurosCentavos + multaCentavos;
 }
 
+// ------------------------------------- a tarifa da concessionaria que nao chegou
+//
+// `Q-TARIFA-CONC-01`, a metade que voltou a abrir em 06/08. O que falta ali nao e
+// um dado: e uma ORDEM que nenhum documento diz, e a ausencia dela NAO aparece
+// como recusa.
+//
+// `fatura.valor_total_centavos` e coluna GERADA - `valor_consumo +
+// valor_tarifas_concessionaria + valor_juros_multa` (`schema.prisma:485`) -, o
+// segundo tem default 0, e `comporLote` usa zero quando ninguem informa
+// (`src/repos/fatura.ts:191`). Entao o lote compoe e emite **sem erro nenhum**,
+// cobrando so o credito. Nao ha excecao, nao ha log e nao ha linha vermelha: ha
+// uma fatura de valor menor, que o cliente paga, e que fecha o mes errado.
+//
+// E `lancarTarifasPorUC` so aceita RASCUNHO, o que fixa a sequencia em TRES
+// passos e nao dois:  compor  ->  `npm run tarifas`  ->  emitir.
+//
+// O QUE ESTA CONTAGEM NAO FAZ, e a regra 10 e o motivo: ela nao decide que zero
+// esta errado. Uma competencia pode legitimamente nao levar tarifa da
+// distribuidora - e essa e a pergunta (a) da questao, que tem dono e nao e a
+// tela. Ela tambem nao trava o botao. O que ela faz e transformar um silencio em
+// numero, que e o que a `prontidao` faz com as onze camadas: conta e NAO decide.
+//
+// A janela existe: rascunho volta atras de graca. Depois de emitida, corrigir
+// obriga a CANCELAR - e cancelamento exige motivo e fica na trilha.
+
+export type FaturaConferivel = {
+  status: StatusFatura;
+  unidade_consumidora_id: string;
+  valor_tarifas_concessionaria_centavos: number | null;
+};
+
+export type ConferenciaDeTarifas = {
+  /** O universo: os rascunhos da competencia, que sao o que "Emitir" alcanca. */
+  rascunhos: number;
+  comTarifa: number;
+  semTarifa: number;
+  /** As UCs sem tarifa, nomeadas. Contar sozinho manda procurar; nomear diz onde. */
+  ucsSemTarifa: string[];
+};
+
+/**
+ * Quantos rascunhos sairiam cobrando SO o credito.
+ *
+ * A INVARIANTE E A SOMA - `comTarifa + semTarifa === rascunhos`, sempre -, pelo
+ * mesmo motivo do `lote-de-documentos.ts`: uma contagem que perde item em
+ * silencio e pior que contagem nenhuma, porque parece completa.
+ *
+ * `null` conta como AUSENTE e nao como zero. A coluna e `NOT NULL` com default 0
+ * no banco, entao `null` so chega aqui por leitura parcial - e tratar leitura
+ * parcial como "tarifa zero conferida" e exatamente a mentira que esta funcao
+ * existe para nao contar.
+ */
+export function conferirTarifas(
+  lista: readonly FaturaConferivel[],
+  numeroDaUc: (id: string) => string | null | undefined,
+): ConferenciaDeTarifas {
+  const rascunhos = lista.filter((f) => podeEmitirFatura(f.status));
+  const sem = rascunhos.filter((f) => !f.valor_tarifas_concessionaria_centavos);
+  return {
+    rascunhos: rascunhos.length,
+    comTarifa: rascunhos.length - sem.length,
+    semTarifa: sem.length,
+    ucsSemTarifa: sem.map((f) => numeroDaUc(f.unidade_consumidora_id) ?? f.unidade_consumidora_id),
+  };
+}
+
 /** Tom da marca de status, para a tela nao decidir cor por `if` espalhado. */
 export function tomDoStatusDaFatura(s: StatusFatura): 'ok' | 'pendente' | 'nao_medido' {
   if (s === 'paga') return 'ok';

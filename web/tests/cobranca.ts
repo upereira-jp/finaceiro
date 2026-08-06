@@ -23,8 +23,8 @@ import {
   sinalDeSegredo, motivoDaTravaDoConector, podeSalvarConector,
   estadoDoCertificado, DIAS_DE_AVISO_DO_CERTIFICADO,
   podeEmitirFatura, podeGerarBoleto, podeBaixarManual,
-  totalEsperadoDaBaixa, tomDoStatusDaFatura,
-  type EstadoDoConector, type StatusFatura,
+  totalEsperadoDaBaixa, tomDoStatusDaFatura, conferirTarifas,
+  type EstadoDoConector, type StatusFatura, type FaturaConferivel,
 } from '../src/cobranca-regras.ts';
 
 let falhas = 0;
@@ -174,6 +174,57 @@ const chk = (id: string, cond: boolean, d: string) => {
       'campo escondido VAI no envio com visivel=false - omiti-lo o faria voltar pelo padrao na proxima leitura');
 }
 
+// ------------------- B10 a tarifa da concessionaria ausente vira NUMERO
+//
+// `Q-TARIFA-CONC-01`. O modo de falha perseguido nao e a fatura errada - e o
+// SILENCIO: `valor_total_centavos` e coluna gerada, a parcela ausente vale zero,
+// e o lote emite sem erro cobrando so o credito. Estas verificacoes prendem que a
+// contagem existe, que ela nao perde item e que ela nao decide nada.
+{
+  const uc = (n: string) => `UC-${n}`;
+  const numero = (id: string) => uc(id);
+  const f = (status: StatusFatura, id: string, tarifa: number | null): FaturaConferivel =>
+    ({ status, unidade_consumidora_id: id, valor_tarifas_concessionaria_centavos: tarifa });
+
+  const lote: FaturaConferivel[] = [
+    f('rascunho', '1', 0),
+    f('rascunho', '2', 15_000),
+    f('rascunho', '3', 0),
+    f('emitida',  '4', 0),      // ja emitida: fora do universo, nao ha mais o que lancar
+    f('cancelada', '5', 0),
+  ];
+  const c = conferirTarifas(lote, numero);
+
+  chk('B10', c.rascunhos === 3 && c.semTarifa === 2 && c.comTarifa === 1,
+      'so RASCUNHO entra na conta: 3 rascunhos, 2 sem tarifa - emitida e cancelada ficam fora');
+  chk('B10b', c.comTarifa + c.semTarifa === c.rascunhos,
+      'a INVARIANTE e a soma: com + sem = rascunhos, sempre - contagem que perde item parece completa');
+  chk('B10c', c.ucsSemTarifa.join(',') === 'UC-1,UC-3',
+      'as UCs sem tarifa saem NOMEADAS, e nao so contadas - contar manda procurar, nomear diz onde');
+
+  // `null` e leitura PARCIAL, e nao "tarifa zero conferida". A coluna e NOT NULL
+  // com default 0 no banco: null so chega aqui por leitura incompleta, e conta-lo
+  // como conferido seria a mentira que esta funcao existe para nao contar.
+  const comNulo = conferirTarifas([f('rascunho', '9', null)], numero);
+  chk('B10d', comNulo.semTarifa === 1 && comNulo.comTarifa === 0,
+      'null conta como AUSENTE, nao como zero conferido');
+
+  // O sentido oposto: sem esta, um `semTarifa` preso em zero passaria despercebido.
+  const todasComTarifa = conferirTarifas([f('rascunho', '7', 1), f('rascunho', '8', 99)], numero);
+  chk('B10e', todasComTarifa.semTarifa === 0 && todasComTarifa.ucsSemTarifa.length === 0,
+      'com tarifa em todas, a contagem e zero e a tela nao mostra aviso nenhum');
+
+  // A contagem NAO trava nada: quem decide se zero esta certo e a Q-TARIFA-CONC-01
+  // (a), que tem dono. `podeEmitirFatura` continua olhando so o status.
+  chk('B10f', podeEmitirFatura('rascunho') === true && c.semTarifa > 0,
+      'contar NAO e decidir: com 2 sem tarifa, emitir rascunho continua permitido (regra 10)');
+
+  // Lista vazia nao e um estado especial, e o `0 de 0` nao pode virar aviso.
+  const vazio = conferirTarifas([], numero);
+  chk('B10g', vazio.rascunhos === 0 && vazio.semTarifa === 0,
+      'competencia sem rascunho nao gera aviso - 0 de 0 nao e pendencia');
+}
+
 console.log();
 if (falhas > 0) { console.log(`--- cobranca: ${falhas} FALHA(S)`); process.exit(1); }
-console.log('--- cobranca (regras da tela): 26 verificacoes, 0 falhas');
+console.log('--- cobranca (regras da tela): 33 verificacoes, 0 falhas');

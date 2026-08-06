@@ -37,7 +37,7 @@ import { paraCsv, reaisParaPlanilha, nomeDoArquivo } from '../csv.ts';
 import { baixarCsv } from '../baixar.ts';
 import {
   podeEmitirFatura, podeGerarBoleto, podeBaixarManual,
-  totalEsperadoDaBaixa, tomDoStatusDaFatura,
+  totalEsperadoDaBaixa, tomDoStatusDaFatura, conferirTarifas,
 } from '../cobranca-regras.ts';
 import { ICONE_DO_STATUS_DA_FATURA } from '../iconografia.ts';
 
@@ -74,10 +74,18 @@ export function TelaFaturas() {
   const emitirLote = async () => {
     const rascunhos = lista.filter((f) => podeEmitirFatura(f.status)).length;
     if (!rascunhos) return;
+    // A tarifa que falta entra na PERGUNTA, e nao so no aviso da tela: o aviso
+    // fica acima da tabela e some quando alguem rola. Este texto e o ultimo lugar
+    // antes do ato que obriga a cancelar para desfazer.
+    const t = conferirTarifas(lista, (id) => numeroDaUc.get(id));
     if (!confirm(
       `Emitir ${rascunhos} fatura(s) de ${mes} de uma vez?\n\n` +
       'Emitir é o ato que fecha o valor: depois dele a fatura não muda mais de valor, ' +
-      'e é a partir daí que ela pode virar boleto.')) return;
+      'e é a partir daí que ela pode virar boleto.' +
+      (t.semTarifa === 0 ? '' :
+        `\n\n⚠ ${t.semTarifa} de ${t.rascunhos} sairão SEM tarifa da concessionária — ` +
+        'cobrando só o crédito injetado. Lançar as tarifas (`npm run tarifas`) só é ' +
+        'possível em rascunho; depois de emitida a correção é cancelar e recompor.'))) return;
     const ok = await acao.executar(() => api.post(`/faturamento/${competenciaISO(mes)}/emitir`));
     if (ok) { acao.anunciar(`${rascunhos} fatura(s) emitida(s).`); recarregar(); }
   };
@@ -102,6 +110,7 @@ export function TelaFaturas() {
   };
 
   const rascunhos = lista.filter((f) => podeEmitirFatura(f.status)).length;
+  const tarifas = conferirTarifas(lista, (id) => numeroDaUc.get(id));
 
   return (
     <Pagina titulo="Faturas"
@@ -123,6 +132,32 @@ export function TelaFaturas() {
         </div>
         {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
         {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
+
+        {/*
+          A TARIFA DA CONCESSIONARIA QUE NAO FOI LANCADA — `Q-TARIFA-CONC-01`.
+
+          Isto conta, e nao decide: uma competência pode legitimamente não levar
+          tarifa da distribuidora, e essa pergunta tem dono e não é esta tela. O
+          que não pode continuar é a ausência ser INVISÍVEL — `valor_total_centavos`
+          é coluna gerada, a parcela ausente vale zero, e a fatura sai menor sem
+          erro, sem log e sem recusa.
+        */}
+        {tarifas.semTarifa > 0 && (
+          <Aviso tipo="alerta">
+            <strong>{tarifas.semTarifa} de {tarifas.rascunhos} rascunho(s) sem tarifa da
+            concessionária</strong> — sairiam cobrando <strong>só o crédito injetado</strong>.
+            A ordem é <strong>compor → <code>npm run tarifas</code> → emitir</strong>: lançar as
+            tarifas só é possível em rascunho, e depois de emitida a correção é cancelar e
+            recompor, com motivo na trilha.
+            <br />
+            <span className="fraco" style={{ fontSize: 12 }}>
+              UC: {tarifas.ucsSemTarifa.slice(0, 12).join(', ')}
+              {tarifas.ucsSemTarifa.length > 12 ? `, +${tarifas.ucsSemTarifa.length - 12}` : ''}
+              {' · '}Se esta competência realmente não leva tarifa da distribuidora, emitir está
+              certo — é a pergunta (a) da <code>Q-TARIFA-CONC-01</code>.
+            </span>
+          </Aviso>
+        )}
       </div>
 
       {/*

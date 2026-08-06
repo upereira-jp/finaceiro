@@ -167,6 +167,26 @@ async function main(): Promise<void> {
     const total = fs.reduce((s, f) => s + (f.valor_total_centavos ?? 0), 0);
     console.log(`\n  faturado na competencia: ${emReais(total)} em ${fs.length} fatura(s), todas em RASCUNHO.`);
     console.log('  Compor e emitir sao atos separados (PRD 9): confira antes de emitir.');
+
+    /*
+     * SAO TRES PASSOS E NAO DOIS, e ate 06/08 nenhum documento dizia isso.
+     *
+     * `valor_total_centavos` e coluna GERADA e a tarifa da concessionaria tem
+     * default 0: sem o lancamento, este lote emite cobrando SO o credito - sem
+     * erro, sem log e sem recusa. E `lancarTarifasPorUC` so aceita RASCUNHO,
+     * entao a janela e agora. Depois de emitida, corrigir e cancelar.
+     *
+     * Isto CONTA e nao decide (regra 10): zero pode ser o valor certo, e essa e
+     * a pergunta (a) da `Q-TARIFA-CONC-01`, que tem dono e nao e este script.
+     */
+    const semTarifa = fs.filter((f) => !f.valor_tarifas_concessionaria_centavos).length;
+    console.log(`\n  tarifa da concessionaria lancada em ${fs.length - semTarifa} de ${fs.length}.`);
+    if (semTarifa > 0) {
+      console.log(`  ATENCAO: ${semTarifa} fatura(s) sairiam cobrando SO o credito injetado.`);
+      console.log('  A ordem e:  compor  ->  npm run tarifas  ->  emitir');
+      console.log('  Lancar tarifa so funciona em RASCUNHO. Se esta competencia realmente nao');
+      console.log('  leva tarifa da distribuidora, emitir esta certo - Q-TARIFA-CONC-01 (a).');
+    }
   }
 
   if (ensaio) {
