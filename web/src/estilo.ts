@@ -578,16 +578,60 @@ export const ESTILO = `
        marcado com a classe naoimprime, que sao os controles da propria previa. */
     body * { visibility: hidden; }
     #documento, #documento * { visibility: visible; }
+    /* ------------------------------------------- as paginas em branco (06/08)
+       MEDIDO, e o defeito era ANTERIOR ao lote: imprimir UMA fatura produzia um
+       PDF de CINCO paginas - a fatura na primeira e quatro em branco atras.
+
+       A causa e que "visibility: hidden" ESCONDE MAS NAO DESOCUPA. A aba
+       Documento inteira - logo, campos, editor de layout, painel do QR -
+       continuava ocupando a altura dela, e a altura e o que o navegador
+       pagina. O documento nem entrava na conta: ele e "position: absolute" e
+       flutua por cima.
+
+       O conserto tira do LAYOUT tudo que nao e o documento nem caminho ate ele.
+       Os ancestrais sobrevivem por ":has(#documento)" e desabam para a altura
+       do que sobrou dentro; o resto sai da conta de altura de verdade.
+
+       ONDE ISSO FALHA E COMO: navegador sem ":has()" descarta a regra inteira
+       (seletor invalido) e volta ao comportamento de antes - paginas em branco,
+       nunca fatura faltando. E a direcao certa da falha. */
+    body *:not(:has(#documento)):not(#documento):not(#documento *) { display: none !important; }
     #documento .naoimprime, .naoimprime { display: none !important; }
     #documento {
       position: absolute; left: 0; top: 0; width: 100%;
       border: none; border-radius: 0; padding: 0; max-width: none; box-shadow: none;
     }
     /* A folha imprime em tamanho REAL: a escala e da tela, nunca do papel. */
-    #documento.folha {
+    #documento .folha {
       width: var(--folha-w); height: var(--folha-h);
       border: none; box-shadow: none;
     }
+    /* ------------------------------------------------ o LOTE (06/08/2026)
+       "#documento" DEIXOU DE SER A FOLHA E PASSOU A SER O RECIPIENTE, e o
+       seletor acima mudou junto: era "#documento.folha" (a mesma caixa), e
+       agora e "#documento .folha" (as folhas dentro). Sem essa troca o lote
+       imprimiria a primeira pagina e mais nada - "id" e unico por documento.
+
+       UMA FOLHA POR PAGINA. As duas formas do corte estao escritas porque uma
+       delas e a que o navegador de quem opera entende: "break-before" e a
+       moderna e "page-break-before" e o apelido legado, e as duas dizem a
+       mesma coisa. Sem elas, 28 folhas de 297 mm saem emendadas e o corte cai
+       no meio do valor a pagar.
+
+       O CORTE E NO "folha-item" E NAO NO "folha", e a diferenca nao e estilo:
+       cada folha vive dentro do seu proprio palco de escala, entao duas folhas
+       NUNCA sao irmas no DOM e "+" entre elas nao casaria nunca. O item e o
+       envelope de um documento inteiro - o aviso de layout e a folha -, e e
+       nesse nivel que as paginas sao irmas. */
+    #documento .folha-item + .folha-item { break-before: page; page-break-before: always; }
+    #documento .folha { break-inside: avoid; page-break-inside: avoid; }
+    /* O RECORTE DA TELA NAO PODE VIAJAR PARA O PAPEL. Na previa, a folha vive
+       dentro de uma caixa de altura ESCALADA com "overflow: hidden" - e isso
+       so existe para a pagina nao ficar com um vao branco embaixo do zoom.
+       Impresso, a folha volta ao tamanho real e a caixa a cortaria em ~30% da
+       altura. Antes isto nao aparecia por acidente: a folha ERA o
+       "position: absolute" da regra acima e escapava do pai que a cortava. */
+    #documento .folha-recorte { height: auto !important; overflow: visible !important; }
     .folha-palco { transform: none !important; }
     .folha .margem-guia { display: none !important; }
     /* SEM "@page" AQUI. O papel e do tenant e a regra e injetada em runtime por

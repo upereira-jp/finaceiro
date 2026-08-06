@@ -21,13 +21,17 @@ import { useEffect, useRef, useState } from 'react';
 import {
   api, buscarBinario,
   type IdentidadeDeCobranca, type CampoDoDocumento, type DocumentoDaFatura, type Fatura,
-  type QrDoDocumento, type QrDeConferencia, type BlocoComposto,
+  type QrDoDocumento, type QrDeConferencia, type BlocoComposto, type UnidadeConsumidora,
 } from '../api.ts';
-import { useAcao, useDados } from '../dados.ts';
+import { emLotes, useAcao, useDados } from '../dados.ts';
 import {
-  Pagina, Aviso, Campo, Tabela, linha, Icone, Interruptor, BotaoDeIcone, CampoData, Escolha, AjudaDoMes } from '../ui.tsx';
+  Pagina, Aviso, Campo, Tabela, linha, rotulo, Icone, Interruptor, BotaoDeIcone, CampoData, Escolha, AjudaDoMes } from '../ui.tsx';
 import { competenciaISO, paraCentavos, emReais } from '../dinheiro.ts';
-import { mover, paraEnvio, type CampoConfigurado } from '../cobranca-regras.ts';
+import { mover, paraEnvio, type CampoConfigurado, type StatusFatura } from '../cobranca-regras.ts';
+import {
+  selecaoDoLote, separarComposicao, frasePreImpressao, STATUS_PADRAO_DO_LOTE, PORQUE_FORA,
+  type Composicao, type ResultadoDaComposicao,
+} from '../lote-de-documentos.ts';
 import { escalaDaPrevia, regraDaPagina, PX_POR_MM } from '../layout-regras.ts';
 import { useLargura } from '../medir-largura.ts';
 import { EditorDeLayout, estiloDoBloco } from './layout-editor.tsx';
@@ -385,8 +389,20 @@ function ConferirQr({ temIdentidade }: { temIdentidade: boolean }) {
 function Previa({ logoUrl }: { logoUrl: string | null }) {
   const [mes, setMes] = useState(() => new Date().toISOString().slice(0, 7));
   const [faturaId, setFaturaId] = useState('');
+  const [emLote, setEmLote] = useState(false);
 
   const faturas = useDados<Fatura[]>(() => api.get(`/faturamento/${competenciaISO(mes)}`), [mes]);
+  /*
+   * O NUMERO DA UC NAO VEM NA FATURA, e ele e a unica coluna que quem opera
+   * reconhece — o mesmo motivo (e o mesmo mapa) da tela de Faturas. Aqui ele
+   * serve a duas coisas: o seletor deixa de listar uuid, e a UC que NAO compos
+   * no lote pode ser procurada por um numero em vez de por um prefixo de id.
+   */
+  const ucs = useDados<UnidadeConsumidora[]>(() => api.get('/unidades-consumidoras?limite=500'));
+  const numeroDaUc = new Map((ucs.dado ?? []).map((u) => [u.id, u.numero_uc]));
+  const rotuloDaFatura = (f: Fatura) =>
+    `${numeroDaUc.get(f.unidade_consumidora_id) ?? `fatura ${f.id.slice(0, 8)}`} · ${f.status}`;
+
   const doc = useDados<DocumentoDaFatura | null>(
     async () => (faturaId ? api.get<DocumentoDaFatura>(`/faturas/${faturaId}/documento`) : null),
     [faturaId],
@@ -402,29 +418,177 @@ function Previa({ logoUrl }: { logoUrl: string | null }) {
             <CampoData mes valor={mes} rotuloAcessivel="Mês de referência" style={{ width: 'auto' }}
                        ao={(v) => { setMes(v); setFaturaId(''); }} /><AjudaDoMes />
           </div>
-          <div style={{ flex: '1 1 260px' }}>
-            <label>Fatura</label>
-            <Escolha valor={faturaId} ao={setFaturaId} rotuloAcessivel="Fatura"
-                     primeira="Escolha uma fatura…"
-                     opcoes={(faturas.dado ?? []).map((f) => ({
-                       valor: f.id,
-                       texto: `${String(f.competencia).slice(0, 7)} · ${f.status} · ${f.id.slice(0, 8)}`,
-                     }))} />
-          </div>
           <div style={{ alignSelf: 'end' }}>
-            <button className="primario" onClick={() => window.print()} disabled={!doc.dado}>
-              <Icone nome="imprimir" tamanho={15} peso="bold" /> Imprimir / salvar PDF
-            </button>
+            <Interruptor ligado={emLote} ao={setEmLote}
+                         rotulo={`Imprimir o mês inteiro${faturas.dado ? ` (${faturas.dado.length} fatura(s))` : ''}`} />
           </div>
         </div>
+
         {faturas.erro && <Aviso tipo="erro">Falha ao ler as faturas: {faturas.erro}</Aviso>}
+        {ucs.erro && (
+          <Aviso tipo="alerta">
+            Falha ao ler as unidades consumidoras: {ucs.erro} — as faturas aparecem pelo
+            identificador interno em vez do número da UC.
+          </Aviso>
+        )}
         {faturas.dado?.length === 0 && (
           <Aviso tipo="alerta">Nenhuma fatura em {mes} — compor o lote é na aba Carteira.</Aviso>
         )}
-        {doc.erro && <Aviso tipo="erro">Falha ao compor o documento: {doc.erro}</Aviso>}
+
+        {!emLote && (
+          <div style={{ ...linha, gap: 12, marginTop: 12 }}>
+            <div style={{ flex: '1 1 260px' }}>
+              <label>Fatura</label>
+              <Escolha valor={faturaId} ao={setFaturaId} rotuloAcessivel="Fatura"
+                       primeira="Escolha uma fatura…"
+                       opcoes={(faturas.dado ?? []).map((f) => ({
+                         valor: f.id, texto: rotuloDaFatura(f),
+                       }))} />
+            </div>
+            <div style={{ alignSelf: 'end' }}>
+              <button className="primario" onClick={() => window.print()} disabled={!doc.dado}>
+                <Icone nome="imprimir" tamanho={15} peso="bold" /> Imprimir / salvar PDF
+              </button>
+            </div>
+          </div>
+        )}
+        {!emLote && doc.erro && <Aviso tipo="erro">Falha ao compor o documento: {doc.erro}</Aviso>}
       </div>
 
-      {doc.dado && <Documento doc={doc.dado} logoUrl={logoUrl} />}
+      {emLote
+        ? <Lote faturas={faturas.dado ?? []} rotuloDaFatura={rotuloDaFatura} logoUrl={logoUrl} mes={mes} />
+        : doc.dado && <Documento doc={doc.dado} logoUrl={logoUrl} />}
+    </>
+  );
+}
+
+/**
+ * A IMPRESSAO EM LOTE — o que fechava o caminho da fatura pela ponta manual.
+ *
+ * O documento sempre pode sair; o que nao havia era sair em MASSA. Com 28
+ * faturas na competencia, a previa de uma fatura por vez custa 28 selecoes e 28
+ * impressoes, e o modo de falha de um trabalho manual repetido nao e o erro, e a
+ * OMISSAO: ninguem percebe a que ficou sem imprimir.
+ *
+ * TRES COISAS DELIBERADAS, e as tres sao sobre contar:
+ *
+ *   - COMPOR E UM ATO SEPARADO de imprimir. Sao N requisicoes ao servidor, e
+ *     dispara-las ao trocar de aba faria o lote acontecer sem ninguem pedir.
+ *     Mesmo desenho do ensaio/valendo do faturamento;
+ *   - UMA FALHA NAO DERRUBA AS OUTRAS E NAO SOME. `emLotes` rejeita o conjunto
+ *     quando um item rejeita, e ali isso e o certo — aqui nao: 27 papeis de uma
+ *     competencia de 28 e exatamente a omissao que este bloco existe para
+ *     impedir. Entao cada composicao e capturada e CONTADA;
+ *   - O QUE FICA DE FORA APARECE. `selecaoDoLote` separa por status com o motivo
+ *     escrito, e incluir e um clique. O servidor nao tem opiniao sobre qual
+ *     status imprime (`documento.paraFatura` compoe qualquer uma), entao
+ *     descartar em silencio seria a tela inventando regra — regra 10.
+ */
+function Lote({ faturas, rotuloDaFatura, logoUrl, mes }: {
+  faturas: readonly Fatura[];
+  rotuloDaFatura: (f: Fatura) => string;
+  logoUrl: string | null;
+  mes: string;
+}) {
+  const [incluidos, setIncluidos] = useState<StatusFatura[]>([...STATUS_PADRAO_DO_LOTE]);
+  const [composicao, setComposicao] = useState<ResultadoDaComposicao<DocumentoDaFatura> | null>(null);
+  const acao = useAcao();
+
+  const selecao = selecaoDoLote(faturas, incluidos);
+
+  // Trocar o mes ou a selecao invalida o que ja foi composto: imprimir uma pilha
+  // montada para OUTRO conjunto e a falha silenciosa mais cara possivel aqui.
+  useEffect(() => { setComposicao(null); }, [mes, incluidos]);
+
+  const compor = async () => {
+    const alvos = selecao.imprimir;
+    if (!alvos.length) return;
+    const ok = await acao.executar(async () => {
+      const rs = await emLotes<Fatura, Composicao<DocumentoDaFatura>>(alvos, async (f) => {
+        try {
+          return { ok: true, doc: await api.get<DocumentoDaFatura>(`/faturas/${f.id}/documento`) };
+        } catch (e: any) {
+          return { ok: false, fatura_id: f.id, rotulo: rotuloDaFatura(f), erro: e?.message ?? String(e) };
+        }
+      });
+      setComposicao(separarComposicao(rs));
+    });
+    if (ok) acao.anunciar(`${alvos.length} documento(s) pedidos ao servidor.`);
+  };
+
+  const alternarStatus = (s: StatusFatura) =>
+    setIncluidos((atual) => (atual.includes(s) ? atual.filter((x) => x !== s) : [...atual, s]));
+
+  return (
+    <>
+      <div className="cartao naoimprime" style={{ marginBottom: 20 }}>
+        <h3 style={{ marginTop: 0 }}><Icone nome="faturas" tamanho={16} /> O lote de {mes}</h3>
+
+        {selecao.fora.length > 0 && (
+          <Tabela cabecalho={<><th>Fora do lote</th><th>Quantas</th><th>Por quê</th><th /></>}>
+            {selecao.fora.map((x) => (
+              <tr key={x.status}>
+                <td><strong>{rotulo(x.status)}</strong></td>
+                <td className="num">{x.quantidade}</td>
+                <td className="sub">{x.porque}</td>
+                <td>
+                  <button onClick={() => alternarStatus(x.status)}>
+                    <Icone nome="acrescentar" tamanho={14} /> Incluir
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </Tabela>
+        )}
+        {incluidos.filter((s) => !STATUS_PADRAO_DO_LOTE.includes(s)).map((s) => (
+          <Aviso key={s} tipo="alerta">
+            <strong>{rotulo(s)}</strong> está no lote por escolha sua — {PORQUE_FORA[s]}.{' '}
+            <button onClick={() => alternarStatus(s)}>Tirar do lote</button>
+          </Aviso>
+        ))}
+
+        <p className="sub" style={{ marginTop: 12 }}>
+          {frasePreImpressao({
+            compostos: composicao ? composicao.compostos.length : selecao.imprimir.length,
+            falhas: composicao?.falhas.length ?? 0,
+            fora: selecao.fora.reduce((t, x) => t + x.quantidade, 0),
+            total: selecao.total,
+          })}
+        </p>
+
+        <div style={{ ...linha, gap: 8 }}>
+          <button className={composicao ? '' : 'primario'} onClick={() => void compor()}
+                  disabled={acao.ocupado || !selecao.imprimir.length}>
+            {acao.ocupado ? <Icone nome="carregando" tamanho={15} /> : <Icone nome="documento" tamanho={15} peso="bold" />}
+            {composicao ? 'Compor de novo' : `Compor os ${selecao.imprimir.length} documentos`}
+          </button>
+          <button className="primario" onClick={() => window.print()}
+                  disabled={!composicao?.compostos.length}>
+            <Icone nome="imprimir" tamanho={15} peso="bold" />
+            Imprimir {composicao?.compostos.length ?? ''} / salvar PDF
+          </button>
+        </div>
+
+        {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
+
+        {/* A FALHA E NOMEADA POR UC, e nao contada em agregado: "1 documento
+            falhou" manda procurar; "UC 000123 falhou: ..." manda consertar. */}
+        {composicao && composicao.falhas.length > 0 && (
+          <Aviso tipo="erro">
+            {composicao.falhas.length} documento(s) NÃO compuseram e <strong>não</strong> estão
+            na pilha abaixo:
+            <ul style={{ margin: '6px 0 0' }}>
+              {composicao.falhas.map((f) => (
+                <li key={f.fatura_id}><strong>{f.rotulo}</strong> — {f.erro}</li>
+              ))}
+            </ul>
+          </Aviso>
+        )}
+      </div>
+
+      {composicao && composicao.compostos.length > 0 && (
+        <Documentos docs={composicao.compostos} logoUrl={logoUrl} />
+      )}
     </>
   );
 }
@@ -443,12 +607,35 @@ function Previa({ logoUrl }: { logoUrl: string | null }) {
  * receberia a mesma fatura sem o negrito, e nenhum dos dois lados pareceria
  * errado. Agora peso, tamanho e alinhamento sao dado do bloco.
  */
+/**
+ * UM documento — a previa de uma fatura so. Continua sendo o caminho normal.
+ *
+ * E um caso de `Documentos` com uma folha, e nao um componente irmao: o dia em
+ * que o desenho da folha divergir entre "uma" e "o mes inteiro" e o dia em que a
+ * previa deixa de provar o que sai da impressora.
+ */
 function Documento({ doc, logoUrl }: { doc: DocumentoDaFatura; logoUrl: string | null }) {
-  const { medidas, area, blocos, problemas } = doc.layout;
-  // `ResizeObserver`, nao efeito com `clientWidth` - ver `medir-largura.ts`.
-  const [palco, larguraPx] = useLargura<HTMLDivElement>();
-  const escala = escalaDaPrevia(larguraPx, medidas.largura_mm);
-  const papelCss = PAPEL_CSS[doc.layout.folha.papel] ?? 'A4';
+  return <Documentos docs={[doc]} logoUrl={logoUrl} />;
+}
+
+/**
+ * N documentos numa pilha imprimivel — a impressao em LOTE (06/08/2026).
+ *
+ * `id="documento"` MUDOU DE ELEMENTO, e essa e a mudanca de verdade: ele era a
+ * propria folha e agora e o RECIPIENTE das folhas. O `estilo.ts` mudou junto
+ * (`#documento.folha` -> `#documento .folha`), e os dois so fazem sentido
+ * juntos - `id` e unico por documento, entao a pilha nao teria como existir com
+ * o desenho antigo.
+ *
+ * A REGRA `@page` SAI UMA VEZ, e nao uma por folha. Ela e do TENANT (o papel
+ * gravado na aba Documento), nao da fatura: 28 copias identicas da mesma regra
+ * nao mudariam a impressao, mas fariam parecer que o papel pode variar dentro
+ * de um lote - e ele nao pode.
+ */
+function Documentos({ docs, logoUrl }: { docs: readonly DocumentoDaFatura[]; logoUrl: string | null }) {
+  const primeiro = docs[0];
+  if (!primeiro) return null;
+  const papelCss = PAPEL_CSS[primeiro.layout.folha.papel] ?? 'A4';
 
   return (
     <>
@@ -456,8 +643,26 @@ function Documento({ doc, logoUrl }: { doc: DocumentoDaFatura; logoUrl: string |
           morar no `estilo.ts` com o resto - e sem ela o navegador usaria o papel
           padrao do SISTEMA de quem imprime, que foi o defeito que a migration 23
           nomeou: a mesma fatura saindo com geometria diferente em duas maquinas. */}
-      <style>{regraDaPagina(papelCss, doc.layout.folha.orientacao)}</style>
+      <style>{regraDaPagina(papelCss, primeiro.layout.folha.orientacao)}</style>
 
+      <div id="documento">
+        {docs.map((d) => <Folha key={d.fatura_id} doc={d} logoUrl={logoUrl} />)}
+      </div>
+    </>
+  );
+}
+
+/** Uma folha e o que vem junto dela na tela. `folha-item` e o nivel em que duas
+ *  paginas sao IRMAS no DOM, e por isso e nele que o corte de pagina do
+ *  `estilo.ts` casa — dentro, cada folha tem o seu proprio palco de escala. */
+function Folha({ doc, logoUrl }: { doc: DocumentoDaFatura; logoUrl: string | null }) {
+  const { medidas, area, blocos, problemas } = doc.layout;
+  // `ResizeObserver`, nao efeito com `clientWidth` - ver `medir-largura.ts`.
+  const [palco, larguraPx] = useLargura<HTMLDivElement>();
+  const escala = escalaDaPrevia(larguraPx, medidas.largura_mm);
+
+  return (
+    <div className="folha-item">
       {problemas.length > 0 && (
         // `naoimprime` num <div> em volta, e nao no Aviso: o componente nao
         // aceita `className`, e alargar a assinatura dele para um caso so
@@ -469,9 +674,14 @@ function Documento({ doc, logoUrl }: { doc: DocumentoDaFatura; logoUrl: string |
         </div>
       )}
 
-      <div ref={palco} style={{ height: medidas.altura_mm * PX_POR_MM * escala + 2, overflow: 'hidden' }}>
+      {/* `folha-recorte` existe para o zoom da tela nao deixar um vao branco
+          embaixo - e o `estilo.ts` o DESFAZ na impressao, senao ele cortaria a
+          folha em tamanho real. Antes isso nao aparecia porque a folha era o
+          `position: absolute` e escapava do pai. */}
+      <div ref={palco} className="folha-recorte"
+           style={{ height: medidas.altura_mm * PX_POR_MM * escala + 2, overflow: 'hidden' }}>
         <div className="folha-palco" style={{ ['--escala' as any]: escala }}>
-          <div id="documento" className="folha" style={{
+          <div className="folha" style={{
             ['--folha-w' as any]: `${medidas.largura_mm}mm`,
             ['--folha-h' as any]: `${medidas.altura_mm}mm`,
           }}>
@@ -489,7 +699,7 @@ function Documento({ doc, logoUrl }: { doc: DocumentoDaFatura; logoUrl: string |
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }
 
