@@ -14,7 +14,7 @@
 > | **Banco** | **24 migrations em produção = 24 no repositório.** Nenhuma pendente, e esta sessão não abriu nenhuma |
 > | **Suíte** | `EXIT=0`, **1549** linhas `ok`. Delta **18** — 15 na aba Documento, 3 na guarda do pagador |
 > | **Produção** | intocada |
-> | **Publicação** | **6 commits fora do `origin/main` + esta sessão.** Pela primeira vez desde 04/08 há mudança que **toca a SPA** — ou seja, o deploy voltou a ser necessário para que isto chegue a quem opera |
+> | **Publicação** | **10 commits fora do `origin/main`** — 7 herdados das sessões 21 e anteriores, **3 desta**. Contado, não estimado: a `RESUMO-SESSAO-21` dizia 6 e eram 7. Pela primeira vez desde 04/08 há mudança que **toca a SPA** — ou seja, o deploy voltou a ser necessário para que isto chegue a quem opera |
 >
 > **A fila continua em `PENDENCIAS-2026-08-05.md`.** Nada nela foi resolvido hoje: os cinco insumos são humanos.
 
