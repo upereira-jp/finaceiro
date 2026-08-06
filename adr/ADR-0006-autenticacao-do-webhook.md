@@ -2,8 +2,8 @@
 
 | Campo | Valor |
 |---|---|
-| **Status** | **Proposta** — aguarda decisão de Vinicius Leal (`CLAUDE.md` regra 10) |
-| **Data** | 05/08/2026 |
+| **Status** | ✅ **ACEITA em 06/08/2026** por Vinicius Leal — as **quatro** decisões respondidas. A 1 foi decidida **depois** de a medição de 06/08 tirar duas opções da mesa; ver a §2.3 |
+| **Data** | 05/08/2026 · decidida em 06/08/2026 |
 | **Decisor** | Vinicius Leal |
 | **Resolve** | `Q-WEBHOOK-01` · o critério de saída da F2 no `PRD` §10 |
 | **Base factual** | Código medido em 05/08/2026 — `src/http/servidor.ts`, `src/http/rotas.ts`, `src/db/contexto.ts`, `src/repos/liquidacao.ts` |
@@ -78,6 +78,19 @@ Três consequências, todas registradas em `src/dominio/planilha-enderecos.ts`:
 2. **`cep` sem máscara e `uf` de duas letras** batem exatamente com o que o importador já normaliza;
 3. **`email` existe no payload e não existe no nosso tipo `Pagador`** (`src/sicoob/porta.ts`). Medido: **3 de 29** clientes faturáveis têm e-mail, e **29 de 29** têm telefone. Não é bloqueio — é lacuna nomeada para quando o adaptador for escrito.
 
+### 2.3 — 06/08: a metade que faltava foi medida, e ela DECIDE a §3
+
+A §2.1 dizia que o lado de entrada *"não é público"* e que o pré-requisito virava **perguntar**. Medido em 06/08 em fonte de terceiro — biblioteca de integração em produção contra a API real, não documentação do banco. **Duas coisas, e as duas fecham opções:**
+
+| O que foi medido | Consequência |
+|---|---|
+| *"O POST não possui cabeçalhos especiais"*, `Content-Type: application/json` | **A opção A (cabeçalho com segredo) e a B (HMAC) deixam de ser exercíveis.** Não há o que comparar. A recomendação original — A como alvo, B se eles assinassem — **não pode ser implementada**, e teria sido descoberta na primeira chamada real |
+| O manual oficial da API Pix: *"as notificações oriundas do Sicoob ao usuário recebedor trafegarão utilizando um canal **mTLS**"* | **A opção C é a que a outra ponta oferece.** A §2 previa exatamente isto: *"se a Sicoob só oferecer um dos três, a decisão está tomada pela outra ponta"* |
+
+**E um terceiro achado, que não é de autenticação mas é de rota, e custa um 404 silencioso:** o Sicoob **acrescenta `/pix` ao final da URL cadastrada**. Registrar `…/api/pix` faz o POST chegar em `…/api/pix/pix`. Quem implementar a Decisão 4 precisa saber disso antes de declarar o padrão da rota.
+
+> **Ressalva que fica no registro:** a documentação pública do Sicoob é reconhecidamente incompleta — *"em alguns tópicos é completamente ausente"* —, e a requisição de entrada continua **sem documentação do próprio banco**. O que sustenta a §2.3 é medição de terceiro mais o manual do BACEN. **Não é resposta recebida da Sicoob**, e a confirmação continua sendo contra o sandbox.
+
 ---
 
 ## 3. Decisão 1 — o que autentica
@@ -90,7 +103,20 @@ Três consequências, todas registradas em `src/dominio/planilha-enderecos.ts`:
 | **D. Segredo no caminho da URL** | `/liquidacoes/webhook-sicoob/<segredo>` | Baixíssimo | **Não** — funciona com qualquer emissor |
 | **E. Lista de IPs** | Faixa de origem | Baixo | Não |
 
-**Recomendação: A como alvo, D como plano B declarado, E sempre — e nunca E sozinha.**
+> ### ✅ DECIDIDO em 06/08: **C (mTLS) + E (faixa de IP)**
+>
+> A recomendação abaixo — *A como alvo, D como plano B* — **está superada pela §2.3 e o corpo dela fica intacto de propósito**: ele registra o que se sabia em 05/08, e reescrevê-lo apagaria a razão pela qual a medição do dia seguinte valeu a pena. **A e B não são exercíveis** (não há cabeçalho); **D foi preterida** por segredo em URL vazar em `access.log`, `Referer` e histórico de intermediário — o argumento que este ADR já fazia contra ela, e que continua valendo mesmo com ela tendo ficado mais fácil.
+>
+> **O que a decisão acarreta, e precisa estar escrito antes de alguém codar:**
+>
+> - **o TLS tem de chegar ao Node, ou o proxy tem de repassar o certificado.** É a única mudança de infraestrutura que este ADR pede, e ela é no **mesmo VPS do CRM** — o `README` afirma que ele roda *"sem alterar uma linha da configuração dele"*, e essa promessa precisa continuar verdadeira: a verificação de certificado de cliente vale para o nosso `server`, não para o dele;
+> - **o modo de falha é silencioso e é o pior possível.** Proxy que não repassa o certificado entrega uma requisição indistinguível de uma autenticada. Então a rota **recusa por ausência**: sem certificado verificado, `404` — e há teste que afirma isso nos dois sentidos;
+> - **não está medido que a Sicoob apresenta certificado de cliente de fato.** O manual do BACEN declara o canal; a biblioteca de terceiro fala de cabeçalhos e não de TLS. **A verificação é o primeiro webhook do sandbox**, e ela é pré-requisito de ligar a rota em produção — não de escrevê-la;
+> - **a faixa de IP entra sempre e nunca sozinha**, como já dizia a recomendação original.
+>
+> **O plano B, se o sandbox mostrar que não há certificado de cliente:** este ADR ganha revisão e a escolha volta a ser entre D e E, com a evidência na mão. Não é reabertura — é a condição que a própria decisão nomeia.
+
+**Recomendação original (05/08): A como alvo, D como plano B declarado, E sempre — e nunca E sozinha.**
 
 **Por que não D como primeira escolha, mesmo sendo a que funciona com qualquer emissor:** segredo em URL vaza por caminhos que ninguém controla — log de acesso do proxy, `Referer`, histórico de qualquer intermediário. Um segredo em cabeçalho não aparece em `access.log` por padrão; um no caminho aparece **sempre**.
 
@@ -108,6 +134,8 @@ Duas formas, e a diferença entre elas é **em que ordem se descobre o tenant e 
 
 **(ii) Pela credencial.** O segredo é **por tenant** e emitido por nós quando o `conector_cobranca` é configurado. Segredo → tenant é **uma** busca, e ela *é* a autenticação. O identificador do payload passa a ser resolvido **dentro** do contexto daquele tenant, pela RLS, como todo o resto do sistema.
 
+> ### ✅ DECIDIDO em 06/08: **(ii), pela credencial.**
+
 **Recomendação: (ii).** Ela não tem leitura fora de contexto, não tem oráculo, e — o que decide — **fecha a confusão entre tenants por construção**: com (i), quem tivesse o segredo de um tenant poderia baixar fatura de outro se a ordem "verifica e depois resolve" fosse invertida por alguém que não conhecesse a armadilha. Com (ii) essa inversão não é expressável: não existe tenant antes da credencial.
 
 ---
@@ -123,6 +151,10 @@ O contexto exige `usuarioId` em forma de UUID (`contexto.ts:79`), `liquidacao.ba
 | **A. Reusar o `auth_user_id` de uma pessoa** | É o que os scripts fazem hoje (`--auth-user`). **Descartar:** a trilha passaria a dizer que o Vinicius baixou uma fatura às 3h da manhã, e ela estaria mentindo. Trilha que mente é pior que trilha ausente |
 | **B. Afrouxar o contexto para aceitar usuário nulo** | **Descartar:** abre a exceção no ponto único de emissão de contexto, que é a peça que o `ADR-0003` existe para manter sem exceção |
 | **C. Usuário de serviço por tenant** | Uma linha de `usuario` que representa o conector, com vínculo de papel suficiente para `escrever_carteira`. **Recomendada** |
+
+> ### ✅ DECIDIDO em 06/08: **C — usuário de serviço por tenant, sem caminho de login.**
+>
+> Acarreta **provisionamento novo por tenant**, na forma do `scripts/provisionar-tenant.sql`: script, não migration, e o papel é o *mínimo* que faz `escrever_carteira` passar — não `admin`.
 
 **Recomendação: C.** A trilha passa a dizer a verdade — *o conector de cobrança da Sicoob baixou esta fatura* —, o RBAC continua sendo RBAC, e não há exceção no contexto. Há precedente no projeto: `scripts/provisionar-tenant.sql` já cria o vínculo admin e o `conector_crm` como provisionamento, não como migration.
 
@@ -143,6 +175,12 @@ if (metodo === 'GET' && caminho === '/publico/config') return responder(res, con
 | **A. Mais uma condição literal** | **Descartar.** Duas viram cinco, e o dia em que alguém acrescentar a sexta sem querer é o dia em que uma rota fica pública sem que nada acuse |
 | **B. A rota DECLARA o modo** | Cada entrada da tabela diz `auth: 'sessao' \| 'publica' \| 'webhook'`, e o servidor despacha pelo que está declarado. **Recomendada** |
 
+> ### ✅ DECIDIDO em 06/08: **B — a rota declara o modo.**
+>
+> E o invariante que nasce junto vale para a implementação: **`auth: 'webhook'` não significa "sem autenticação"**, significa "autenticado por outro mecanismo" — que agora é nomeado, é o mTLS da Decisão 1. Rota marcada `webhook` que não passe pela verificação de certificado é um buraco com nome bonito.
+>
+> **E a armadilha da §2.3 aterrissa aqui:** o Sicoob acrescenta `/pix` à URL cadastrada, então o padrão declarado tem de casar com o caminho que **chega**, não com o que se registrou.
+
 **Recomendação: B**, e o argumento é o mesmo que este projeto já aplicou à navegação, à iconografia e à matriz de papéis: **vira dado, e dado tem teste**.
 
 O que B torna possível e A não:
@@ -158,7 +196,9 @@ O que B torna possível e A não:
 
 **Destrava:** o webhook real entrar. E, com ele, o critério de saída da F2 do `PRD` §10 — *"boleto liquidado no sandbox baixa a fatura automaticamente"* — passa a ser **testável**, que hoje não é.
 
-**Não destrava:** boleto nenhum. Continuam faltando o certificado A1 e a credencial (`Q-SICOOB-01`, externo) e o `src/sicoob/http.ts` (que o `ADR-0005` acabou de permitir escrever). E **a §2 continua valendo**: enquanto a documentação da Cobrança v3 não for lida contra este problema, a Decisão 1 está escolhida pela metade.
+**Não destrava:** boleto nenhum. Continuam faltando o certificado A1 e a credencial (`Q-SICOOB-01`, externo) e o `src/sicoob/http.ts`.
+
+> **Este parágrafo dizia que a Decisão 1 estava "escolhida pela metade" enquanto a documentação não fosse lida.** Ela foi lida em 05/08 e **medida por outra fonte em 06/08** (§2.3), e a Decisão 1 está tomada. O que resta não é leitura nem escolha: é **uma verificação empírica** — que a Sicoob de fato apresenta certificado de cliente. Ela é pré-requisito de **ligar** a rota, não de escrevê-la, e acontece no primeiro webhook do sandbox.
 
 **A consulta ativa diária já cobre o buraco enquanto isso**, e é por isso que nada disto é emergência: `GET /boletos/situacao` existe justamente para capturar liquidação cujo webhook falhou (`PRD` §6). Sem webhook o dinheiro não se perde — ele chega **no dia seguinte**, e a baixa manual continua funcionando hoje.
 
@@ -168,7 +208,9 @@ O que B torna possível e A não:
 
 | Questão | Por quê |
 |---|---|
-| **O que a Sicoob suporta na ENTRADA** | §2.1. Medido em 05/08: **não é público**. Deixou de ser "ler a documentação" e passou a ser **perguntar ao suporte** ou abrir a aplicação no portal e ver o que a configuração de webhook oferece — pergunta com destinatário, não leitura pendente |
+| ~~**O que a Sicoob suporta na ENTRADA**~~ | ✅ **respondido em 06/08 pela §2.3**, e não pelo suporte: sem cabeçalho especial, e canal mTLS pelo manual do BACEN. **Fica aberto só o que nenhuma leitura resolve** — se a Sicoob apresenta certificado de cliente **de fato**. Verificação, não pergunta |
+| **O TLS do VPS** | A Decisão 1 exige o certificado de cliente chegando ao Node ou repassado pelo proxy, **no mesmo VPS do CRM**. Quem configura, e como se prova que a verificação está ligada, é trabalho nomeado e não feito |
+| **O `/pix` que a Sicoob acrescenta** | §2.3. O padrão da rota tem de casar com o caminho que **chega**, não com o registrado |
 | `client_secret` existe? | §2.1. Em Keycloak com mTLS o certificado pode ser a credencial inteira. Confirma-se contra o sandbox, e muda o que a resolvedora do `ADR-0005` devolve |
 | `email` no pagador | §2.2. Está no payload deles e não no nosso tipo `Pagador`. 3 de 29 clientes têm |
 | Rotação do segredo do webhook | Mesma classe da rotação do A1, que o `ADR-0005` §6 já deixou aberta |
