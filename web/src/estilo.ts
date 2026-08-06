@@ -51,8 +51,9 @@ export const ESTILO = `
     -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
   }
   ::selection { background: var(--acento-suave); }
-  /* --acento-forte, e nao --acento: link e TEXTO, e o laranja da marca como
-     texto da 2.35:1 no branco - reprova a restricao 1 do tema. */
+  /* --acento-forte, e nao --acento: link e TEXTO, e o laranja da marca como texto
+     reprova a restricao 1 do tema em qualquer superficie clara - 2.35:1 no branco
+     com o laranja de 28/07, 2.41:1 no creme com o Orange de 06/08. */
   a { color: var(--acento-forte); }
   code, pre, .mono { font-family: var(--fonte-mono); font-size: .92em; }
   /* Numero em qualquer lugar sai tabular. Fora da tabela tambem: valor que muda
@@ -70,10 +71,30 @@ export const ESTILO = `
      linhas irregulares - o desenho antigo dependia de 'flex-wrap' para caber. */
   .topo { position: sticky; top: 0; z-index: 20; }
   .filete { height: 3px; background: var(--gradiente); }
+  /* A FAIXA E NAVY DESDE 06/08, e essa e a mudanca estrutural da paleta nova.
+     Antes ela era '--fundo2' - a mesma superficie do cartao -, e sobre uma pagina
+     creme isso a deixaria BRANCA: o elemento que deve dominar seria o mais claro
+     da tela. Consequencia de leitura, e ela e o ganho: a pagina passou a ter duas
+     zonas de peso - a faixa escura, que diz ONDE VOCE ESTA, e o creme, onde o
+     trabalho acontece. */
   .barra {
     display: flex; align-items: center; gap: 14px;
-    padding: 9px 20px; background: var(--fundo2);
-    border-bottom: 1px solid var(--borda-suave);
+    padding: 9px 20px; background: var(--topo); color: var(--topo-texto);
+    border-bottom: 1px solid var(--topo-veu);
+  }
+  /* Dentro da faixa escura, o que era '--fraco' (medido contra superficie CLARA)
+     ficaria ilegivel. Os seletores abaixo existem por isso, e nao por estilo:
+     rotulo, select e botao da sessao passaram a pousar no Navy. O branco
+     translucido, e nao um token novo, porque ele funciona sobre AS DUAS variantes
+     de navy - a do tema claro e a do escuro - sem virar duas cores para manter. */
+  .barra .fraco, .barra .sub, .barra label { color: var(--topo-fraco); }
+  .barra .campo-caixa select, .barra button {
+    background: var(--topo-veu); color: var(--topo-texto);
+    border-color: var(--topo-veu-forte);
+  }
+  .barra button:hover:not(:disabled) {
+    background: var(--topo-veu-forte); color: var(--topo-texto);
+    border-color: var(--topo-veu-forte);
   }
   .marca-app {
     display: inline-flex; align-items: center; gap: 9px;
@@ -92,28 +113,33 @@ export const ESTILO = `
      empurraria os vizinhos 2px para cima ao trocar de tela. */
   .barra-nav {
     display: flex; align-items: stretch; gap: 1px; overflow-x: auto;
-    padding: 0 12px; background: var(--fundo2);
+    padding: 0 12px; background: var(--topo);
     border-bottom: 1px solid var(--borda); box-shadow: var(--sombra-1);
     scrollbar-width: thin;
   }
   .barra-nav a {
     display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
-    padding: 9px 11px; text-decoration: none; color: var(--fraco);
+    padding: 9px 11px; text-decoration: none; color: var(--topo-fraco);
     font-size: 13.5px; font-weight: 500;
     border-bottom: 2px solid transparent; border-radius: var(--raio-pequeno) var(--raio-pequeno) 0 0;
     transition: color .16s ease, background-color .16s ease, border-color .16s ease;
   }
-  .barra-nav a:hover { color: var(--texto); background: var(--fundo-hover); }
+  .barra-nav a:hover { color: var(--topo-texto); background: var(--topo-veu); }
   .barra-nav a:hover .ic { transform: translateY(-1px) scale(1.08); }
+  /* O ATIVO E O ORANGE SOBRE O NAVY, e aqui ele NAO usa o '--acento-forte':
+     aquele token existe para o laranja pousar em superficie CLARA. Sobre a faixa
+     escura o Orange entregue vale como esta - 5.93:1. O esfumado de baixo saiu
+     junto: sobre escuro ele virava borrao, e quem carrega o sinal sao a cor e o
+     filete de 2px. */
   .barra-nav a.ativo {
-    color: var(--acento-forte); font-weight: 600;
+    color: var(--acento); font-weight: 600;
     border-bottom-color: var(--acento);
-    background: linear-gradient(to top, var(--acento-suave), transparent);
+    background: var(--topo-ativo);
   }
-  .barra-nav a.ativo .ic { color: var(--acento-forte); }
+  .barra-nav a.ativo .ic { color: var(--acento); }
   /* A divisoria entre cadastro e dinheiro. A fronteira e dado ('grupo', em
      navegacao.ts) e ate 29/07 era invisivel: doze abas iguais em fila. */
-  .barra-nav .divisor { width: 1px; background: var(--borda); margin: 9px 9px; flex: none; }
+  .barra-nav .divisor { width: 1px; background: var(--topo-veu-forte); margin: 9px 9px; flex: none; }
 
   /* -------------------------------------------------- o menu suspenso
      Usado pela area do usuario e pelo seletor de tema. Sombra do terceiro degrau
@@ -531,10 +557,10 @@ export const ESTILO = `
      sai pelo dialogo do proprio sistema, e o que o define e este bloco. Sem ele,
      window.print() imprimiria a barra de navegacao e os botoes junto. */
   .documento {
-    background: #fff; color: #111; padding: 32px; border: 1px solid var(--borda);
+    background: #fff; color: #14213D; padding: 32px; border: 1px solid var(--borda);
     border-radius: var(--raio-cartao); max-width: 800px; box-shadow: var(--sombra-2);
   }
-  .documento table td { padding: 7px 4px; border-bottom: 1px solid #eee; }
+  .documento table td { padding: 7px 4px; border-bottom: 1px solid #E4DFD4; }
   .documento thead th { background: none; }
 
   /* ------------------------------------------------ a FOLHA (migration 23)
@@ -555,7 +581,7 @@ export const ESTILO = `
   .folha {
     position: relative;
     width: var(--folha-w); height: var(--folha-h);
-    background: #fff; color: #111;
+    background: #fff; color: #14213D;
     box-shadow: var(--sombra-2); border: 1px solid var(--borda);
     overflow: hidden;
   }
@@ -566,12 +592,13 @@ export const ESTILO = `
   }
   .bloco { position: absolute; overflow: hidden; box-sizing: border-box; }
   .bloco table { width: 100%; border-collapse: collapse; }
-  .bloco table td { padding: 4px 2px; border-bottom: 1px solid #eee; }
-  .bloco-borda { border: 1px solid #111; }
-  /* O cinza do fundo e o MESMO "#eee" da borda da tabela, e nao um quarto tom:
-     a lista de excecoes deste bloco e fechada de proposito, e "quase igual"
-     seria a quarta cor de papel entrando por reuso preguicoso. */
-  .bloco-fundo { background: #eee; }
+  .bloco table td { padding: 4px 2px; border-bottom: 1px solid #E4DFD4; }
+  .bloco-borda { border: 1px solid #14213D; }
+  /* O CREME DA MARCA, e nao um cinza: e o bloco "secundario" da paleta de 06/08
+     ("Cream - fundo geral da pagina e de blocos secundarios, tarjas de corte"),
+     aplicado ao unico lugar do papel que tem esse papel. Continua sendo UMA cor
+     e nao "quase igual" a outra - a lista deste bloco e fechada de proposito. */
+  .bloco-fundo { background: #F6F2EA; }
 
   @media print {
     /* Tudo fora do documento sai da pagina impressa - inclusive o que esta

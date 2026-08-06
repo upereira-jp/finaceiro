@@ -1,9 +1,48 @@
 // O TEMA. Cores, espaçamento e tipografia, num lugar só.
 //
-// A PALETA DE MARCA VEIO DA G3 EM 28/07/2026 e substitui a provisória que estava
-// aqui — o cinza neutro com azul de acento que eu havia escolhido para as telas
-// serem legíveis antes de existir identidade. Os valores de marca abaixo estão
-// marcados `[G3]` e não se alteram por conveniência de implementação.
+// ============================================================================
+// EM 06/08/2026 A PALETA TROCOU INTEIRA, a pedido do dono. Navy + Creme, com o
+// laranja passando de identidade a AÇÃO.
+//
+//   Navy    #14213D  (variante #1C2C4E)  dominante: topo, texto principal,
+//                                        bordas de destaque
+//   Cream   #F6F2EA                      fundo geral e blocos secundários
+//   Orange  #E8843C                      ação: botão primário, valores totais,
+//                                        navegação ativa
+//   Gold    #F4A65A                      realce pontual: foco de input
+//   Gray    #8F939D                      labels, texto secundário, ícones
+//   Linhas  #E4DFD4 / #D8D2C6            divisórias sutis
+//
+// O QUE A TROCA MUDOU DE ESTRUTURA, e não é cosmético: antes a marca era o
+// laranja e o resto era neutro; agora **a marca é o Navy** e o laranja ficou
+// reservado ao que se CLICA e ao que se PAGA. Isso é uma hierarquia a mais na
+// tela — quem opera passa a distinguir "onde estou" (navy) de "o que faço"
+// (laranja) por cor, e não só por posição.
+//
+// TRÊS CORES ENTREGUES NÃO PASSAM ONDE FORAM PEDIDAS, e isso foi MEDIDO antes de
+// escrito. As três são pedidas para TEXTO ou para FOCO, e as três reprovam:
+//
+//   Gray   #8F939D  sobre o creme  2.75:1   (AA de texto pede 4.5)
+//   Orange #E8843C  sobre o creme  2.41:1   (idem — o mesmo caso de 28/07)
+//   Gold   #F4A65A  sobre o creme  1.80:1   (WCAG 1.4.11 pede 3 para foco)
+//
+// Nenhuma foi descartada e nenhuma foi "aproximada no olho": cada uma tem um
+// token DERIVADO na mesma matiz, achado por busca (o fator mais alto que ainda
+// passa em TODAS as superfícies), e o valor entregue continua governando onde
+// ele passa — o Orange segue sendo o fundo do botão, o Gold segue sendo o foco
+// no tema escuro. Onde a cor entregue vale como está, ela está marcada `[G3]`.
+//
+// E O NAVY SOBRE O ORANGE DÁ 5.93:1 — o texto do botão primário deixou de ser
+// uma tinta neutra e passou a ser a própria cor dominante. É a única das quatro
+// combinações de marca que passa AA (branco sobre o Orange daria 2.69:1).
+// ============================================================================
+//
+// A PALETA DE MARCA ANTERIOR VEIO DA G3 EM 28/07/2026 e substituiu a provisória
+// que estava aqui — o cinza neutro com azul de acento que eu havia escolhido para
+// as telas serem legíveis antes de existir identidade. O histórico abaixo fica
+// intacto: ele explica POR QUE cada token existe, e os tokens não mudaram — só os
+// valores dentro deles. Onde o texto antigo cita `#F39200` ou `#0E1014`, leia
+// "o acento de então" e "a tinta de então".
 //
 // EM 29/07/2026 O DONO PEDIU DUAS MUDANÇAS DE USO, e nenhuma mexe nos valores
 // `[G3]`: (1) o sistema abria escuro para quem tem o sistema operacional escuro,
@@ -100,9 +139,11 @@ export type Paleta = {
    *  claro, texto branco em cima dele fica ilegível — e um `#fff` cravado no CSS
    *  seria justamente o valor que ninguém lembra de trocar junto.
    *
-   *  FOI EXATAMENTE O QUE ACONTECEU. Branco sobre o `#F39200` da G3 dá **2.35:1**
-   *  e reprova; a tinta escura da própria marca dá **8.09:1**. O token existia
-   *  para este dia. */
+   *  FOI EXATAMENTE O QUE ACONTECEU, DUAS VEZES. Em 28/07, branco sobre o
+   *  `#F39200` de então dava **2.35:1**; em 06/08, branco sobre o Orange
+   *  `#E8843C` dá **2.69:1** — reprova de novo, e pela mesma razão. O que passa
+   *  é a tinta dominante da própria marca: **Navy sobre Orange, 5.93:1**. O
+   *  token existia para os dois dias. */
   acentoTexto: string;
   /** O acento QUANDO ELE É O TEXTO, e não o fundo. Medido em 28/07 e REMEDIDO em
    *  29/07, quando o `--acento-suave` e o fundo creme entraram:
@@ -117,7 +158,13 @@ export type Paleta = {
    *  `#A34E00` veio da pesquisa de 29/07 (é o degrau que Cloudflare e HubSpot
    *  usam para "o laranja da marca quando vira texto"): mais escuro que a marca
    *  o bastante para AA, e na MESMA matiz — o olho lê como a mesma cor, em vez
-   *  do marrom que um escurecimento por brilho puro produziria. */
+   *  do marrom que um escurecimento por brilho puro produziria.
+   *
+   *  EM 06/08 O DEGRAU FOI REFEITO PELO MESMO CRITÉRIO, com a paleta nova, e
+   *  desta vez por BUSCA em vez de por referência: o Orange `#E8843C` escalado
+   *  nos três canais (que é o que preserva a matiz) até o fator mais alto que
+   *  ainda passa 4.5:1 nas cinco superfícies — **`#995728`, fator 0.66, pior par
+   *  4.55:1**. O Orange puro sobre o creme daria 2.41:1. */
   acentoForte: string;
   /** [derivado, 29/07] O acento no HOVER do botão primário. A regra veio da
    *  pesquisa (HubSpot #FF4800→#C93700, Cloudflare idem): estado de botão
@@ -133,6 +180,42 @@ export type Paleta = {
    *  fundo adjacente (WCAG 1.4.11): `#D97A00` dava 2.98:1 sobre `--fundo` e
    *  reprovava por um fio; `#CE7400` dá 3.43:1 no branco e 3.28:1 no off-white. */
   foco: string;
+  /**
+   * [06/08] A FAIXA DO TOPO, e ela é token novo porque o pedido é estrutural e
+   * não de valor: *"Navy — cor dominante: topo"*.
+   *
+   * Até 06/08 o topo era `--fundo2` — a mesma superfície do cartão. Com a paleta
+   * nova isso o deixaria BRANCO sobre uma página creme, e o topo deixaria de ser
+   * o elemento dominante para virar o mais claro da tela. Reaproveitar `--fundo2`
+   * também não sobrevive ao tema escuro, onde ele já é escuro: o topo sumiria
+   * dentro da página.
+   *
+   * Então são três tokens e não um: a faixa, a tinta que pousa nela, e a tinta
+   * APAGADA da navegação inativa. Sem o terceiro, "onde estou" e "para onde posso
+   * ir" ficariam com o mesmo peso dentro de uma faixa escura.
+   */
+  topo: string;
+  topoTexto: string;
+  topoFraco: string;
+  /**
+   * [06/08] O VEU sobre a faixa — o fundo e a borda dos controles que vivem
+   * DENTRO do topo (seletor de tenant, botao de tema, area do usuario).
+   *
+   * E branco translucido e nao cor solida por uma razao que vale os dois temas: o
+   * mesmo valor funciona sobre o Navy do claro e sobre a variante do escuro,
+   * entao um controle na barra nao precisa de duas cores para manter. Mesma ideia
+   * do --brilho, que ja existia.
+   *
+   * SAO DOIS DEGRAUS E NAO SEIS. A primeira versao disto tinha seis alfas
+   * escritos a mao (0.07, 0.08, 0.14, 0.16, 0.18, 0.28) — que e exatamente o
+   * box-shadow a mao que o acabamento de 30/07 tirou daqui. Repouso e realce, e
+   * nada entre os dois.
+   */
+  topoVeu: string;
+  topoVeuForte: string;
+  /** [06/08] O lastro do item ATIVO da navegacao. Laranja no claro, dourado no
+   *  escuro — segue o --acento de cada tema, porque e o mesmo sinal. */
+  topoAtivo: string;
   /** [derivado, 29/07] A cor da sombra dos cartões. Vive aqui porque `ui.tsx`
    *  não tem cor literal — nem em rgba. */
   sombra: string;
@@ -174,31 +257,39 @@ export type Paleta = {
  * dizia que ele havia sobrado saiu daqui para o tipo `fundoRecuo`.
  */
 export const CLARO: Paleta = {
-  fundo: '#FAFAF7',        // [G3] --bg
-  fundo2: '#FFFFFF',       // [G3] --bg-card
-  fundoRecuo: '#F2F1EC',   // [G3] --bg-soft   · 16.84:1, 5.75:1 e 5.31:1
-  fundoHover: '#F7F6F2',   // [derivado] entre --bg e --bg-soft · --foco sobre ele 3.17:1
-  texto: '#0E1014',        // [G3] --ink        · 18.21:1 e 19.04:1
-  fraco: '#5A5E66',        // [G3] --ink-3      · 6.22:1 e 6.51:1
-  borda: '#E6E5DF',        // [G3] --line
-  bordaSuave: '#EFEEEA',   // [derivado] a divisória interna · 1.16:1 contra o branco
-  acento: '#F39200',       // [G3] --brand-orange
-  acentoTexto: '#0E1014',  // [G3] --ink sobre o acento · 8.09:1 (branco daria 2.35:1)
-  acentoForte: '#8F5600',  // [derivado] ver o porquê do degrau extra no tipo · 6.00:1, 5.74:1 e 5.26:1
-  acentoHover: '#DC7C00',  // [derivado] a marca escurecida · --acento-texto sobre ele 6.28:1
-  acentoSuave: '#FDEEDA',  // [derivado] o laranja como superfície de destaque
-  foco: '#CE7400',         // [derivado] 3.43:1 e 3.28:1 — não-texto pede 3:1
-  sombra: 'rgba(14, 16, 20, 0.06)',
-  sombraForte: 'rgba(14, 16, 20, 0.14)',
+  fundo: '#F6F2EA',        // [G3] Cream — o fundo geral da página
+  fundo2: '#FFFFFF',       // [derivado] o cartão SOBE do creme, e é o que dá a camada
+  fundoRecuo: '#EDE7DB',   // [derivado] o creme aprofundado · texto 13.0:1, fraco 4.6:1
+  fundoHover: '#F1ECE1',   // [derivado] entre o fundo e o recuo · --foco sobre ele 3.2:1
+  texto: '#14213D',        // [G3] Navy — texto principal · 14.31:1 e 15.97:1
+  fraco: '#66686F',        // [derivado do Gray #8F939D] o Gray puro dá 2.75:1 — ver a nota
+  borda: '#D8D2C6',        // [G3] a linha de contorno
+  bordaSuave: '#E4DFD4',   // [G3] a divisória interna · 1.19:1 contra o creme
+  acento: '#E8843C',       // [G3] Orange — ação: botão primário, navegação ativa, filete
+  acentoTexto: '#14213D',  // [G3] Navy sobre o Orange · 5.93:1 (branco daria 2.69:1)
+  acentoForte: '#995728',  // [derivado do Orange] o laranja como TEXTO · pior par 4.55:1
+  acentoHover: '#CC7435',  // [derivado] o Orange escurecido · --acento-texto sobre ele 4.65:1
+  acentoSuave: '#FBEADB',  // [derivado] o laranja como superfície de destaque
+  topo: '#14213D',         // [G3] Navy — a faixa dominante
+  topoTexto: '#F6F2EA',    // [G3] Cream sobre Navy · 14.31:1
+  topoFraco: '#999DA8',    // [derivado do Gray] a navegação inativa · 4.54:1 sobre o Navy
+  topoVeu: 'rgba(255, 255, 255, 0.09)',
+  topoVeuForte: 'rgba(255, 255, 255, 0.20)',
+  topoAtivo: 'rgba(232, 132, 60, 0.14)',   // o Orange como lastro
+  foco: '#B07841',         // [derivado do Gold #F4A65A] o Gold puro dá 1.80:1 — ver a nota
+  // A sombra puxa o NAVY e não um preto neutro: sombra cinza sobre creme
+  // acinzenta a página inteira, e o creme é o que a paleta tem de mais visível.
+  sombra: 'rgba(20, 33, 61, 0.07)',
+  sombraForte: 'rgba(20, 33, 61, 0.16)',
   brilho: 'rgba(255, 255, 255, 0.55)',
-  gradiente: 'linear-gradient(90deg, #F39200, #FFA827)', // [G3] orange → orange-soft
+  gradiente: 'linear-gradient(90deg, #E8843C, #F4A65A)', // [G3] Orange → Gold
   // [derivado] A G3 não entregou os três estados semânticos. Verificados contra
   // as superfícies NOVAS, inclusive sobre o --acento-suave.
   erro: '#B42318',         // 6.29:1 e 6.05:1 sobre o próprio fundo de aviso · 5.77:1 sobre o suave
   erroFundo: '#FEF3F2',
   ok: '#067647',           // 5.44:1 e 5.69:1 · 4.99:1 sobre o suave
   okFundo: '#ECFDF3',      // [derivado, 30/07] · --ok sobre ele 5.40:1
-  alerta: '#B54708',       // 5.19:1 e 5.20:1 sobre o próprio fundo de aviso · 4.76:1 sobre o suave
+  alerta: '#B14608',       // [derivado] escurecido 3% em 06/08: o creme aprofundado dava 4.41:1 · pior par 4.55:1
   alertaFundo: '#FFFAEB',
 };
 
@@ -223,31 +314,44 @@ export const CLARO: Paleta = {
  * escuro destacar é clarear.
  */
 export const ESCURO: Paleta = {
-  fundo: '#0E1014',        // [G3] --ink, usado como superfície
-  fundo2: '#191C21',       // [derivado] segundo nível
-  fundoRecuo: '#12151A',   // [derivado, 30/07] · texto 18.29:1, fraco 5.56:1, acento 9.48:1
-  fundoHover: '#1E222A',   // [derivado, 30/07] · texto 15.94:1, fraco 4.84:1, acento 8.26:1
-  texto: '#FFFFFF',        // [G3] o texto do aside escuro · 19.04:1 e 17.08:1
-  fraco: '#8A8E94',        // [G3] --ink-4 · 5.78:1 e 5.19:1
-  borda: '#2A2D33',        // [G3] --ink-2, usado como linha
-  bordaSuave: '#22262C',   // [derivado, 30/07] · 1.12:1 contra o cartão
-  acento: '#FFA827',       // [G3] --brand-orange-soft · 9.87:1
-  acentoTexto: '#0E1014',  // [G3] --ink sobre o acento · 9.87:1
+  fundo: '#14213D',        // [G3] Navy, usado como superfície — é a cor dominante
+  fundo2: '#1C2C4E',       // [G3] a VARIANTE entregue, e ela é exatamente o segundo nível
+  fundoRecuo: '#182642',   // [derivado] entre a página e o cartão · texto 13.5:1
+  fundoHover: '#243458',   // [derivado] no escuro, destacar é CLAREAR acima do cartão
+  texto: '#F6F2EA',        // [G3] Cream sobre Navy · 14.31:1 e 12.38:1
+  fraco: '#999DA8',        // [derivado do Gray] o Gray CLAREADO 7% · pior par 4.54:1
+  borda: '#2C3A5C',        // [derivado] a linha, um degrau acima do cartão
+  bordaSuave: '#22304F',   // [derivado] a divisória interna · 1.13:1 contra o cartão
+  acento: '#F4A65A',       // [G3] GOLD — e a troca é a mesma lógica de antes, ver a nota
+  acentoTexto: '#14213D',  // [G3] Navy sobre o Gold · 7.95:1
   // No escuro o acento NÃO precisa escurecer para virar texto — precisa
   // continuar claro. O token é o mesmo valor, e isso é resposta, não descuido.
-  acentoForte: '#FFA827',  // 9.87:1 e 8.85:1
-  // O hover ESCURECE aqui tambem: do soft para o laranja-base da marca.
-  // --acento-texto sobre ele: 8.09:1.
-  acentoHover: '#F39200',
-  acentoSuave: '#2E2113',  // [derivado, 29/07] texto 15.64:1, acento 8.10:1, fraco 4.75:1
-  foco: '#FFA827',         // [derivado, 29/07] 9.87:1 — folga sobre os 3:1 pedidos
+  acentoForte: '#F4A65A',  // 7.95:1 e 6.90:1
+  // O hover ESCURECE aqui tambem: do Gold para o Orange da marca.
+  // --acento-texto sobre ele: 5.93:1.
+  acentoHover: '#E8843C',
+  acentoSuave: '#3A2A18',  // [derivado] o laranja como superfície · texto 12.3:1, acento 6.9:1
+  // No escuro a faixa não pode ser o mesmo navy da página, senão ela some — e
+  // TAMBÉM não pode ser a variante `#1C2C4E`, que é o cartão: a primeira versão
+  // disto usou a variante e a FOTO mostrou o defeito na hora — barra e cartão
+  // ficaram indistinguíveis, e a tela perdeu a hierarquia que a mudança existia
+  // para criar. No escuro a faixa AFUNDA em vez de subir, que é o inverso do
+  // claro e a mesma lógica do `--fundo-recuo`: o papel é separar, e a direção
+  // depende do tema.
+  topo: '#0F1830',         // [derivado] o navy afundado · Cream sobre ele 16.02:1
+  topoTexto: '#F6F2EA',    // [G3] Cream
+  topoFraco: '#999DA8',    // [derivado do Gray] · sobre a variante, ver a nota do tipo
+  topoVeu: 'rgba(255, 255, 255, 0.09)',
+  topoVeuForte: 'rgba(255, 255, 255, 0.20)',
+  topoAtivo: 'rgba(244, 166, 90, 0.14)',   // o Gold como lastro — segue o acento do escuro
+  foco: '#F4A65A',         // [G3] Gold — no escuro ele passa direto, com folga sobre os 3:1
   sombra: 'rgba(0, 0, 0, 0.45)',
   sombraForte: 'rgba(0, 0, 0, 0.65)',
   brilho: 'rgba(255, 255, 255, 0.30)',
-  gradiente: 'linear-gradient(90deg, #F39200, #FFA827)', // [G3] o mesmo filete
+  gradiente: 'linear-gradient(90deg, #E8843C, #F4A65A)', // [G3] o mesmo filete Orange → Gold
   // [derivado] Os três estados. O âmbar puxa para amarelo aqui de propósito,
   // para afastar do laranja do acento — ver a nota de adjacência no cabeçalho.
-  erro: '#FF6B6B',         // 6.86:1 e 6.16:1 · 6.25:1 sobre o fundo de aviso
+  erro: '#FF6E6E',         // [derivado] clareado 1% em 06/08: o hover navy dava 4.43:1 · pior par 4.51:1
   erroFundo: '#2A1416',
   ok: '#4ADE80',           // 10.93:1 e 9.80:1
   okFundo: '#12261A',      // [derivado, 30/07] · --ok sobre ele 9.14:1
@@ -365,6 +469,8 @@ const variaveis = (p: Paleta) => `
     --acento: ${p.acento}; --acento-texto: ${p.acentoTexto};
     --acento-forte: ${p.acentoForte}; --acento-hover: ${p.acentoHover}; --acento-suave: ${p.acentoSuave};
     --foco: ${p.foco}; --sombra: ${p.sombra}; --sombra-forte: ${p.sombraForte};
+    --topo: ${p.topo}; --topo-texto: ${p.topoTexto}; --topo-fraco: ${p.topoFraco};
+    --topo-veu: ${p.topoVeu}; --topo-veu-forte: ${p.topoVeuForte}; --topo-ativo: ${p.topoAtivo};
     --brilho: ${p.brilho}; --gradiente: ${p.gradiente};
     --erro: ${p.erro}; --erro-fundo: ${p.erroFundo};
     --ok: ${p.ok}; --ok-fundo: ${p.okFundo};

@@ -82,10 +82,29 @@ chk('I1b', literais(foraDoDocumento).length === 0,
 // excecao nova; escrever `#f2f2f2` e. Agora a comparacao e o CONJUNTO, na ordem
 // da primeira aparicao, e a propriedade que importa continua inteira: a quarta
 // cor de papel para esta linha, e trocar `#fff` por `#fefefe` tambem.
-const ESPERADAS = ['#fff', '#111', '#eee'];
+// EM 06/08 AS TRES VIRARAM QUATRO, e esta linha existe para essa entrada doer.
+//
+// A QUARTA E `#E4DFD4`, a cor de LINHA da paleta nova. Ela entrou porque o papel
+// tinha uma divisoria interna de tabela em `#eee` - um cinza neutro que, ao lado
+// de um documento agora inteiro em Navy sobre Creme, e a unica coisa que continua
+// pertencendo a outra paleta. As duas alternativas eram piores: reusar o `#F6F2EA`
+// do bloco secundario faria a divisoria quase sumir contra o papel branco, e
+// manter o `#eee` guardaria uma cor orfa no unico lugar do sistema onde cor e
+// escrita a mao.
+//
+// E A TROCA DE VALOR DAS OUTRAS TRES: A paleta nova pos
+// Navy no texto e nas bordas de destaque do papel, e Creme no bloco secundario -
+// "#111" virou "#14213D" e "#eee" virou "#F6F2EA". O branco do papel nao se mexe.
+//
+// E A REGRA QUE GOVERNA O BLOCO NAO MUDOU: sao LITERAIS, nao `var(--texto)`. O
+// motivo esta escrito no `estilo.ts` e vale igual com Navy - o documento e
+// IMPRESSO, e puxar token de tema faria a mesma fatura sair de duas cores
+// dependendo de quem imprime. Trocar o VALOR de uma excecao nomeada e barato;
+// trocar a NATUREZA dela, de literal para token, nao passaria daqui.
+const ESPERADAS = ['#fff', '#14213D', '#E4DFD4', '#F6F2EA'];
 const achadas = [...new Set(literais(dentroDoDocumento))];
 chk('I1c', JSON.stringify(achadas) === JSON.stringify(ESPERADAS),
-    `no documento impresso, exatamente ${ESPERADAS.join(' ')} — papel e preto sobre branco, `
+    `no documento impresso, exatamente ${ESPERADAS.join(' ')} — Navy sobre branco, `
     + `independente do tema da tela (achadas: ${achadas.join(' ') || 'nenhuma'})`);
 
 // ------------------------------------------------------- I2 o movimento, fechado

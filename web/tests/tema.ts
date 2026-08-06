@@ -27,7 +27,14 @@
 import { CLARO, ESCURO, VARIAVEIS_CSS, TIPOGRAFIA, FONTE_CSS, type Paleta } from '../src/tema.ts';
 
 let falhas = 0;
+// O TOTAL E CONTADO, e nao escrito no rodape. Ate 06/08/2026 a ultima linha
+// dizia "139 verificacoes" enquanto a suite ja tinha 147 - os tres tokens do
+// topo entraram e o numero fixo nao acompanhou. E a mesma classe que a K2d, a
+// W8h e a N58 pegaram, e que `tests/repos-carteira.ts` ja tinha corrigido do
+// mesmo jeito: um numero fixo medindo outra coisa.
+let total = 0;
 const chk = (id: string, cond: boolean, d: string) => {
+  total++;
   if (!cond) falhas++;
   console.log(`${cond ? 'ok   ' : 'FALHA'} ${id.padEnd(6)} ${d}`);
 };
@@ -179,6 +186,53 @@ for (const chave of Object.keys(CLARO) as Array<keyof Paleta>) {
       `${nome} sai no bloco escuro com o valor da Paleta`);
 }
 
+// ------------------------------------------------------ T6 a faixa do topo
+//
+// A FAIXA NÃO ESTAVA COBERTA POR NADA. As `SUPERFICIES` da T1 são as quatro em
+// que o CONTEÚDO pousa; a barra é uma quinta superfície, com tintas próprias
+// (`--topo-texto`, `--topo-fraco`) e com a navegação ativa em `--acento` por
+// cima. Nenhum desses três pares aparece na T1, e o motivo é estrutural: eles
+// não pousam nas mesmas superfícies que o resto.
+//
+// E A T6c EXISTE POR UM DEFEITO QUE A FOTO PEGOU E NENHUM CÁLCULO PEGARIA. A
+// primeira versão do tema escuro usou a variante `#1C2C4E` para a faixa — que é
+// exatamente o valor de `--fundo2`, o cartão. Contraste de texto: perfeito, tudo
+// passava. Na tela, barra e cartão viraram a mesma cor e a hierarquia que a
+// mudança existia para criar não existia. Contraste de TEXTO não mede separação
+// entre SUPERFÍCIES vizinhas — são duas perguntas diferentes.
+
+for (const [nome, p] of [['claro', CLARO], ['escuro', ESCURO]] as Array<[string, Paleta]>) {
+  chk('T6', contraste(p.topoTexto, p.topo) >= 4.5,
+      `${nome}: --topo-texto sobre --topo = ${contraste(p.topoTexto, p.topo).toFixed(2)}:1`);
+  chk('T6b', contraste(p.topoFraco, p.topo) >= 4.5,
+      `${nome}: a navegação INATIVA (--topo-fraco) sobre --topo = ${contraste(p.topoFraco, p.topo).toFixed(2)}:1`);
+  chk('T6c', contraste(p.acento, p.topo) >= 4.5,
+      `${nome}: a navegação ATIVA (--acento) sobre --topo = ${contraste(p.acento, p.topo).toFixed(2)}:1 — ` +
+      'e é por isso que ela não usa --acento-forte, que é o laranja para superfície CLARA');
+  /*
+   * A SEPARAÇÃO ENTRE A FAIXA E O CARTÃO. 1.2:1 é baixo de propósito: não é
+   * contraste de leitura, é a diferença que o olho precisa para ver DUAS caixas.
+   *
+   * E É SÓ CONTRA O CARTÃO, não contra a página — a primeira versão desta
+   * verificação exigia os dois e era uma regra que o meio não cumpre. Medido: no
+   * tema escuro, com a página em `#14213D`, **nem o preto puro separa 1.2** dela
+   * (o teto é 1.31:1). Exigir isso do tom seria pedir o impossível de uma
+   * superfície e depois afrouxar o número até passar — que é medir o teste, não
+   * o tema.
+   *
+   * Quem separa a faixa da página é a BORDA e a sombra, que já existem no
+   * `estilo.ts`. Contra o cartão é diferente e é onde estava o defeito real: os
+   * dois são caixas que aparecem juntas na mesma tela, e quando têm o mesmo tom
+   * a hierarquia desaparece — foi o que a foto pegou no primeiro tema escuro,
+   * com `--topo` e `--fundo2` no mesmo `#1C2C4E`.
+   */
+  {
+    const r = contraste(p.topo, p.fundo2);
+    chk('T6d', r >= 1.2,
+        `${nome}: a faixa se separa do CARTÃO = ${r.toFixed(2)}:1 (o olho precisa de 1.2 para ver duas caixas)`);
+  }
+}
+
 // ------------------------------------------------- T5 a fonte não pode travar
 //
 // O `tema.ts` prometia desde o início que a tela não espera webfont, e em 30/07
@@ -199,4 +253,4 @@ chk('T5e', FONTE_CSS.includes('/fontes/') && !/https?:\/\//.test(FONTE_CSS),
 
 console.log();
 if (falhas > 0) { console.log(`--- tema: ${falhas} FALHA(S)`); process.exit(1); }
-console.log('--- tema (contraste e tokens): 139 verificacoes, 0 falhas');
+console.log(`--- tema (contraste e tokens): ${total} verificacoes, 0 falhas`);
