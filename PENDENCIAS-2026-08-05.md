@@ -1,5 +1,18 @@
 # PENDÊNCIAS — 05/08/2026
 
+> ## ⚠️ VENCIDA EM QUATRO PONTOS — remedido em 06/08
+>
+> **O corpo abaixo fica intacto**, porque é registro datado e reescrevê-lo falsificaria a medição de 05/08. O que mudou está aqui, e **a fila vigente é a `RETOMADA-2026-08-06.md` §3**.
+>
+> | Item do corpo | Dizia em 05/08 | Está em 06/08 |
+> |---|---|---|
+> | **1.5** identidade de cobrança | 🔴 pendente, dono | ✅ **fechada.** Chave `66714022000121`, recebedor `G3 GESTAO ENERGIA SOLAR`, cidade `GOIANIA`, migrada para a tabela `chave_pix` pela migration 25 |
+> | **2.4** `Q-WEBHOOK-01` | 🟡 proposta, aguarda decisão | ✅ **`ADR-0006` aceito em 06/08**, com as quatro decisões |
+> | **2.6** o `?? ''` de `boleto.ts:164` | 🔴 sem guarda | ✅ **consertado na sessão 22.** `boleto.registrar()` recusa pagador sem CPF/CNPJ com `PagadorSemDocumento` (422), nomeando a UC, **antes** de criar a linha |
+> | **§5** publicação | 5 commits fora do `origin/main`, 24 migrations | **25 migrations em produção = 25 no repositório**, `origin/main` em `32e8b92`, deploy concluído em 06/08 às 20:45 |
+>
+> **E um passo que esta lista não tinha, e nenhuma outra tinha:** entre *compor o lote* e *emitir* existe um terceiro ato — **`npm run tarifas`**. Sem ele a fatura sai cobrando só o crédito, **sem erro e sem recusa** (`Q-TARIFA-CONC-01`). O "caminho mais curto" do fim deste arquivo vai de compor direto para a competência, e está errado por omissão. Desde 06/08 a tela de Faturas e o `npm run faturar` **contam** quantas sairiam assim.
+
 | Campo | Valor |
 |---|---|
 | **Medido em** | 05/08/2026, contra **produção** e contra o **CRM real**, pela `financeiro_ro` |
