@@ -728,6 +728,28 @@ export const ROTAS: Rota[] = [
     metodo: 'POST', padrao: '/cobranca/identidade',
     handler: (req, app) => emTenant(app, req, async () => criado(await documento.salvarIdentidade(req.corpo ?? {}))),
   },
+  /*
+   * O BANCO DE CHAVES (migration 25). Ate 06/08 a chave morava em quatro colunas
+   * da identidade, o que comportava exatamente uma - sem apelido, sem titular e
+   * sem historia. Agora ela e uma LINHA, e a identidade so aponta para a padrao.
+   *
+   * NAO HA DELETE, e isso e do banco e nao desta tabela de rotas: chave que ja
+   * pagou fatura e referenciada por ela, e apagar reescreveria o destino de um
+   * documento que circulou. Tirar de uso e `ativa: false`, pelo PUT.
+   */
+  {
+    metodo: 'GET', padrao: '/cobranca/chaves-pix',
+    handler: (req, app) => emTenant(app, req, async () => ok(await documento.chavesPix())),
+  },
+  {
+    metodo: 'POST', padrao: '/cobranca/chaves-pix',
+    handler: (req, app) => emTenant(app, req, async () => criado(await documento.criarChavePix(req.corpo ?? {}))),
+  },
+  {
+    metodo: 'PUT', padrao: '/cobranca/chaves-pix/:id',
+    handler: (req, app) => emTenant(app, req, async () =>
+      ok(await documento.editarChavePix(req.params.id!, req.corpo ?? {}))),
+  },
   {
     /*
      * O QR DE CONFERENCIA, e ele existe por uma medicao de 30/07: producao tinha

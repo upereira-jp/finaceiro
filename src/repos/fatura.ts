@@ -18,6 +18,7 @@
 // aritmetica - mora em src/dominio/faturamento.ts, testavel sem banco.
 
 import { dbt } from '../db/tipado.ts';
+import { chavePixPadrao } from './documento.ts';
 import { tenantCorrente, exigir, db } from '../db/contexto.ts';
 import {
   triar, competencia as normalizar, competenciaISO,
@@ -168,6 +169,22 @@ export async function comporLote(
   const tenant = tenantCorrente();
   const triadas = (await candidatas(c)).map((l) => triar(l, c));
 
+  /*
+   * A CHAVE PIX E CARIMBADA AQUI, uma vez para o lote inteiro (migration 25).
+   *
+   * Ela vem da chave PADRAO do tenant, e `null` e legitimo - tenant sem Pix
+   * cadastrado compoe, emite e cobra; o que ele nao tem e faixa de pagamento, e
+   * o documento diz isso com motivo em vez de sair com um QR que nao resolve.
+   *
+   * POR QUE CARIMBAR NA COMPOSICAO E NAO LER NA HORA DE IMPRIMIR: a segunda via
+   * tem de sair identica a primeira. Ler o padrao no momento da impressao faria
+   * o destino mudar quando alguem trocasse a chave padrao - sem erro e sem log,
+   * e com o cliente segurando dois papeis com QRs diferentes para a mesma
+   * divida. Depois de emitida o gatilho `fatura_chave_pix_congelada` impede a
+   * troca; entre compor e emitir ela ainda e livre, de proposito.
+   */
+  const chavePadrao = await chavePixPadrao();
+
   let criadas = 0;
   for (const t of triadas) {
     if (!t.faturar) continue;
@@ -186,7 +203,7 @@ export async function comporLote(
           tenant_id, contrato_id, unidade_consumidora_id, usina_id, competencia,
           geracao_kwh_competencia, percentual_rateio_aplicado, consumo_kwh, tarifa_reais_por_kwh,
           valor_consumo_centavos, valor_tarifas_concessionaria_centavos,
-          flag_fatura_cheia, vencimento, status)
+          flag_fatura_cheia, vencimento, status, chave_pix_id)
         SELECT ${tenant}::uuid,
                ${t.contrato_id}::uuid,
                uc.id,
@@ -202,7 +219,8 @@ export async function comporLote(
                ${tarifas}::integer,
                ${t.flag_fatura_cheia}::boolean,
                ${t.vencimento.toISOString().slice(0, 10)}::date,
-               'rascunho'
+               'rascunho',
+               ${chavePadrao?.id ?? null}::uuid
           FROM unidade_consumidora uc
           JOIN usina_geracao g
             ON g.tenant_id = uc.tenant_id AND g.usina_id = uc.usina_id

@@ -263,12 +263,28 @@ export type UsoDaUsina = {
   geracao_kwh: string | null; consumo_faturado_kwh: string | null; saldo_kwh: string | null;
 };
 
+/** Uma linha do banco de chaves (migration 25). O `apelido` e o que se escolhe:
+ *  uma chave Pix nao se reconhece de cor, e conferir CNPJ digito a digito na
+ *  hora de faturar e onde o erro passa sem ninguem ver. */
+export type ChavePix = {
+  id: string;
+  apelido: string;
+  tipo: string;
+  chave: string;
+  recebedor_nome: string;
+  recebedor_cidade: string;
+  titular_nome: string | null;
+  titular_documento: string | null;
+  observacao: string | null;
+  ativa: boolean;
+};
+
 export type IdentidadeDeCobranca = {
   id: string;
-  pix_chave: string | null;
-  pix_tipo_chave: string | null;
-  pix_recebedor_nome: string | null;
-  pix_recebedor_cidade: string | null;
+  /** A chave SUGERIDA ao compor. Quem decide de fato e `fatura.chave_pix_id`,
+   *  que congela na emissao - por isso trocar aqui nao mexe no ja composto. */
+  chave_pix_padrao_id: string | null;
+  chave_pix: ChavePix | null;
   /** Metadado da logo. O binario vem por `GET /cobranca/logo`, nunca aqui. */
   logo_mime: string | null;
   logo_bytes: number | null;

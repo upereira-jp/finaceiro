@@ -30,6 +30,19 @@ import {
 } from '../dominio/layout-visual.ts';
 import { pixEstatico } from '../dominio/brcode.ts';
 import { svgDoBrCode } from '../dominio/qrcode.ts';
+import { conferirChavePix } from '../dominio/chave-pix.ts';
+
+export class ChavePixInvalida extends Error {
+  readonly status = 422;
+  constructor(motivo: string) {
+    super(
+      `A chave Pix nao confere com o tipo declarado: ${motivo} Nada foi gravado. ` +
+      'Um QR com chave errada e valido pelo padrao e o aplicativo do banco ACEITA - ' +
+      'quem descobre e o cliente, depois de pagar (Pix estatico nao tem txid por fatura).'
+    );
+    this.name = 'ChavePixInvalida';
+  }
+}
 
 export class IdentidadeNaoCadastrada extends Error {
   readonly status = 412;
@@ -51,13 +64,18 @@ export class FaturaSemDocumento extends Error {
   }
 }
 
-// ------------------------------------------------------------------ identidade
+// ------------------------------------------------------- o banco de chaves Pix
 
-export type NovaIdentidade = {
-  pix_chave?: string | null;
-  pix_tipo_chave?: 'cpf' | 'cnpj' | 'email' | 'telefone' | 'aleatoria' | null;
-  pix_recebedor_nome?: string | null;
-  pix_recebedor_cidade?: string | null;
+export type NovaChavePix = {
+  apelido: string;
+  tipo: 'cpf' | 'cnpj' | 'email' | 'telefone' | 'aleatoria';
+  chave: string;
+  recebedor_nome: string;
+  recebedor_cidade: string;
+  titular_nome?: string | null;
+  titular_documento?: string | null;
+  observacao?: string | null;
+  ativa?: boolean;
 };
 
 const texto = (v: unknown): string | null => {
@@ -66,25 +84,137 @@ const texto = (v: unknown): string | null => {
   return s ? s : null;
 };
 
+export class ChavePixNaoEncontrada extends Error {
+  readonly status = 404;
+  constructor(id: string) {
+    super(`Chave Pix ${id} nao encontrada neste tenant.`);
+    this.name = 'ChavePixNaoEncontrada';
+  }
+}
+
+/**
+ * O CAMPO OBRIGATORIO QUE FALTA, nomeado. Existe porque o `NOT NULL` do banco
+ * devolveria a coluna crua ("recebedor_cidade") a quem preencheu um formulario
+ * cujo rotulo e "Cidade do recebedor".
+ */
+function exigirCampos(e: NovaChavePix): {
+  apelido: string; recebedor_nome: string; recebedor_cidade: string;
+} {
+  const apelido = texto(e.apelido);
+  const recebedor_nome = texto(e.recebedor_nome);
+  const recebedor_cidade = texto(e.recebedor_cidade);
+  const faltando = [
+    ['apelido', apelido], ['nome do recebedor', recebedor_nome], ['cidade do recebedor', recebedor_cidade],
+  ].filter(([, v]) => !v).map(([n]) => n);
+  if (faltando.length > 0) {
+    throw Object.assign(
+      new TypeError(
+        `Falta preencher: ${faltando.join(', ')}. Uma chave Pix so serve completa - `
+        + 'o BR Code carrega os tres, e o banco recusa a linha pela metade.'
+      ), { status: 422 },
+    );
+  }
+  return { apelido: apelido!, recebedor_nome: recebedor_nome!, recebedor_cidade: recebedor_cidade! };
+}
+
+/**
+ * Cadastra uma chave. A conferencia contra o TIPO acontece aqui, e nao no banco,
+ * porque so a aplicacao sabe o que e digito verificador - ver `chave-pix.ts`.
+ *
+ * A CHAVE VAI NORMALIZADA. Recusar a mascara mandaria apagar pontos a mao;
+ * grava-la mandaria o cliente pagar para lugar nenhum, e esse e o unico erro
+ * deste caminho que o aplicativo do banco ACEITA.
+ */
+export async function criarChavePix(e: NovaChavePix) {
+  await exigir('administrar');
+  const { apelido, recebedor_nome, recebedor_cidade } = exigirCampos(e);
+  const c = conferirChavePix(e.tipo, e.chave);
+  if (!c.ok) throw new ChavePixInvalida(c.motivo);
+
+  return dbt().chave_pix.create({
+    data: {
+      tenant_id: tenantCorrente(),
+      apelido, tipo: e.tipo, chave: c.chave, recebedor_nome, recebedor_cidade,
+      titular_nome: texto(e.titular_nome),
+      titular_documento: texto(e.titular_documento),
+      observacao: texto(e.observacao),
+      ativa: e.ativa ?? true,
+    },
+  });
+}
+
+/**
+ * Edita uma chave. A chave EM SI e editavel de proposito, ao contrario do tier
+ * do contrato: um erro de digitacao aqui nao tem outro caminho de conserto, e as
+ * faturas que ja a usaram guardam `chave_pix_id` - elas apontam para a LINHA.
+ *
+ * O que protege o documento ja emitido nao e a imutabilidade da chave, e sim o
+ * gatilho `fatura_chave_pix_congelada`: a fatura nao troca de linha depois de
+ * emitida. Editar a linha errada continua sendo possivel, e por isso a trilha
+ * da regra 9 grava antes e depois.
+ */
+export async function editarChavePix(id: string, e: NovaChavePix) {
+  await exigir('administrar');
+  const { apelido, recebedor_nome, recebedor_cidade } = exigirCampos(e);
+  const c = conferirChavePix(e.tipo, e.chave);
+  if (!c.ok) throw new ChavePixInvalida(c.motivo);
+
+  const atual = await dbt().chave_pix.findFirst({ where: { id, tenant_id: tenantCorrente() } });
+  if (!atual) throw new ChavePixNaoEncontrada(id);
+
+  return dbt().chave_pix.update({
+    where: { id },
+    data: {
+      apelido, tipo: e.tipo, chave: c.chave, recebedor_nome, recebedor_cidade,
+      titular_nome: texto(e.titular_nome),
+      titular_documento: texto(e.titular_documento),
+      observacao: texto(e.observacao),
+      ativa: e.ativa ?? atual.ativa,
+      atualizado_em: new Date(),
+    },
+  });
+}
+
+/** As chaves do tenant, pelo apelido - que e por ele que se escolhe. Traz as
+ *  inativas tambem: some-las esconderia a chave que uma fatura antiga usou. */
+export async function chavesPix() {
+  await exigir('ler');
+  return dbt().chave_pix.findMany({
+    where: { tenant_id: tenantCorrente() }, orderBy: { apelido: 'asc' },
+  });
+}
+
+// ------------------------------------------------------------------ identidade
+
+export type NovaIdentidade = {
+  chave_pix_padrao_id?: string | null;
+};
+
 /**
  * Grava a identidade. `upsert` por tenant, como o `conector_cobranca`: um tenant,
  * uma identidade.
  *
- * O CHECK `identidade_pix_completo_ou_ausente` do banco recusa Pix pela metade -
- * chave sem nome de recebedor gera um BR Code que alguns aplicativos aceitam e
- * outros recusam, e esse modo de falha aparece no celular do cliente. Aqui os
- * quatro campos sao normalizados juntos para o erro sair do lado certo.
+ * ELA DEIXOU DE GUARDAR A CHAVE e passou a APONTAR para uma (migration 25). As
+ * quatro colunas de Pix viviam aqui e comportavam exatamente uma chave, sem nome
+ * e sem titular. O que a identidade guarda agora e a ESCOLHA PADRAO - quem
+ * decide de fato e `fatura.chave_pix_id`, que congela na emissao.
+ *
+ * `null` e legitimo e significa "este tenant nao tem Pix": o documento cai na
+ * faixa `nenhuma`, com motivo, em vez de sair com um QR que nao resolve.
  */
 export async function salvarIdentidade(e: NovaIdentidade) {
   await exigir('administrar');
   const tenant_id = tenantCorrente();
-  const dados = {
-    pix_chave: texto(e.pix_chave),
-    pix_tipo_chave: texto(e.pix_tipo_chave) as NovaIdentidade['pix_tipo_chave'] ?? null,
-    pix_recebedor_nome: texto(e.pix_recebedor_nome),
-    pix_recebedor_cidade: texto(e.pix_recebedor_cidade),
-    atualizado_em: new Date(),
-  };
+
+  const chave_pix_padrao_id = texto(e.chave_pix_padrao_id);
+  if (chave_pix_padrao_id !== null) {
+    // A FK composta ja recusaria chave de outro tenant com 23503, mas o erro
+    // chegaria como "ReferenciaInvalida" generico. Conferir aqui nomeia o id.
+    const existe = await dbt().chave_pix.findFirst({ where: { id: chave_pix_padrao_id, tenant_id } });
+    if (!existe) throw new ChavePixNaoEncontrada(chave_pix_padrao_id);
+  }
+
+  const dados = { chave_pix_padrao_id, atualizado_em: new Date() };
   return dbt().identidade_de_cobranca.upsert({
     where: { tenant_id }, create: { tenant_id, ...dados }, update: dados,
   });
@@ -95,7 +225,18 @@ export async function salvarIdentidade(e: NovaIdentidade) {
  *  destas nao pode arrastar 300 KB. */
 export async function identidade() {
   await exigir('ler');
-  return dbt().identidade_de_cobranca.findFirst({ where: { tenant_id: tenantCorrente() } });
+  // `include` da chave padrao: quem le a identidade quer saber PARA ONDE o
+  // dinheiro vai, e uma segunda consulta em cada chamador seria a mesma leitura
+  // escrita seis vezes - `paraFatura` ja faz seis em paralelo.
+  return dbt().identidade_de_cobranca.findFirst({
+    where: { tenant_id: tenantCorrente() }, include: { chave_pix: true },
+  });
+}
+
+/** A chave PADRAO do tenant, ou `null`. E o que `comporLote` carimba na fatura. */
+export async function chavePixPadrao() {
+  const ident = await identidade();
+  return ident?.chave_pix ?? null;
 }
 
 /**
@@ -132,11 +273,11 @@ export async function qrDeConferencia(valorCentavos: number) {
       ), { status: 412 },
     );
   }
-  if (!ident.pix_chave || !ident.pix_recebedor_nome || !ident.pix_recebedor_cidade) {
+  if (!ident.chave_pix) {
     throw Object.assign(
       new Error(
-        'A identidade de cobranca esta incompleta: o Pix exige chave, nome e cidade do recebedor. '
-        + 'O banco ja recusa a gravacao pela metade, entao isto so acontece com linha antiga.'
+        'A identidade de cobranca nao tem chave Pix padrao escolhida. Cadastre uma chave na aba '
+        + 'Documento e marque-a como padrao - o QR sai dela, do nome e da cidade do recebedor.'
       ), { status: 412 },
     );
   }
@@ -150,16 +291,20 @@ export async function qrDeConferencia(valorCentavos: number) {
   }
 
   const brcode = pixEstatico({
-    chave: ident.pix_chave,
-    recebedorNome: ident.pix_recebedor_nome,
-    recebedorCidade: ident.pix_recebedor_cidade,
+    chave: ident.chave_pix.chave,
+    recebedorNome: ident.chave_pix.recebedor_nome,
+    recebedorCidade: ident.chave_pix.recebedor_cidade,
     valorCentavos,
   });
   return {
     brcode,
     ...qrDe(brcode),
-    recebedor: ident.pix_recebedor_nome,
-    cidade: ident.pix_recebedor_cidade,
+    recebedor: ident.chave_pix.recebedor_nome,
+    cidade: ident.chave_pix.recebedor_cidade,
+    /* O APELIDO viaja junto, e nao e enfeite: ele e a unica coisa que diz QUAL
+     * das chaves cadastradas desenhou este QR. Sem ele, conferir a chave certa
+     * exigiria comparar o campo 01 do payload de cor. */
+    apelido: ident.chave_pix.apelido,
     valor_centavos: valorCentavos,
     /* A advertencia viaja COM o payload e nao so na tela: o CRM consome esta
      * mesma API, e um consumidor que pintasse o QR sem o aviso poria a chave
@@ -459,7 +604,15 @@ export type DocumentoDaFatura = {
         tipo: 'boleto'; linha_digitavel: string | null; codigo_barras: string | null;
         pix_copia_e_cola: string | null; qr: QrDoDocumento | null; qr_motivo?: string;
       }
-    | { tipo: 'pix'; brcode: string; qr: QrDoDocumento | null; qr_motivo?: string; conciliacao: 'manual' }
+    | {
+        tipo: 'pix'; brcode: string; qr: QrDoDocumento | null; qr_motivo?: string;
+        conciliacao: 'manual';
+        /* QUAL das chaves cadastradas desenhou este QR. Nao e enfeite: com um
+         * banco de chaves, "o QR esta certo?" deixou de ter resposta olhando o
+         * desenho - o apelido e a unica forma de conferir sem ler o campo 01 do
+         * payload de cor. O CRM consome esta mesma rota e ve o mesmo. */
+        apelido: string;
+      }
     | { tipo: 'nenhuma'; motivo: string };
 };
 
@@ -500,8 +653,22 @@ export async function paraFatura(faturaId: string, opcoes: OpcoesDoDocumento = {
   const f = await dbt().fatura.findFirst({ where: { id: faturaId } });
   if (!f) throw new FaturaSemDocumento(faturaId);
 
-  const [uc, ident, cfg, bol, folha, blocosDoTenant] = await Promise.all([
+  const [uc, chaveDaFatura, ident, cfg, bol, folha, blocosDoTenant] = await Promise.all([
     dbt().unidade_consumidora.findFirst({ where: { id: f.unidade_consumidora_id }, include: { cliente: true } }),
+    /* A CHAVE VEM DA FATURA, e nao da identidade. A identidade so guarda o
+      * PADRAO, e o padrao pode ter mudado desde que esta fatura foi emitida -
+      * ler dela faria a segunda via sair com destino diferente da primeira, que
+      * e exatamente o que o gatilho `fatura_chave_pix_congelada` impede do lado
+      * do banco. A identidade continua sendo lida por causa da LOGO. */
+    /* Sem chave nao ha consulta a fazer, e o `?? ''` que estava aqui era um
+     * defeito meu: string vazia nao e uuid e o Postgres levanta 22P02 - a
+     * fatura sem chave (legitima) derrubava o documento inteiro. */
+    f.chave_pix_id
+      ? dbt().chave_pix.findFirst({ where: { tenant_id, id: f.chave_pix_id } })
+      : Promise.resolve(null),
+    /* A identidade continua sendo lida, e agora SO pela logo - ela deixou de ser
+     * a fonte da chave na migration 25. Sao duas leituras porque sao duas
+     * perguntas: "de quem e este documento" e "para onde ESTA fatura cobra". */
     dbt().identidade_de_cobranca.findFirst({ where: { tenant_id } }),
     campos(),
     dbt().boleto.findFirst({ where: { fatura_id: faturaId } }),
@@ -561,7 +728,7 @@ export async function paraFatura(faturaId: string, opcoes: OpcoesDoDocumento = {
             : {}),
         }
       : null,
-    pagamento: faixaDePagamento(f, ident, bol),
+    pagamento: faixaDePagamento(f, chaveDaFatura, bol),
   };
 }
 
@@ -571,7 +738,7 @@ export async function paraFatura(faturaId: string, opcoes: OpcoesDoDocumento = {
  * `txid` por fatura - o dinheiro chega sem dizer de quem e -, e por isso ele e o
  * SUBSTITUTO enquanto o A1 nao existe, nunca o preferido.
  */
-function faixaDePagamento(f: any, ident: any, bol: any): DocumentoDaFatura['pagamento'] {
+function faixaDePagamento(f: any, chave: any, bol: any): DocumentoDaFatura['pagamento'] {
   if (bol && bol.status === 'registrado') {
     return {
       tipo: 'boleto',
@@ -599,20 +766,25 @@ function faixaDePagamento(f: any, ident: any, bol: any): DocumentoDaFatura['paga
     };
   }
 
-  if (ident?.pix_chave && ident.pix_recebedor_nome && ident.pix_recebedor_cidade) {
+  if (chave) {
+    /* As tres colunas sao NOT NULL na `chave_pix` - uma linha nao existe pela
+     * metade, ao contrario das quatro colunas soltas que ela substituiu. Entao
+     * a condicao aqui e a EXISTENCIA da linha, e nao a conferencia campo a
+     * campo que o `identidade_pix_completo_ou_ausente` exigia. */
     const brcode = pixEstatico({
-      chave: ident.pix_chave,
-      recebedorNome: ident.pix_recebedor_nome,
-      recebedorCidade: ident.pix_recebedor_cidade,
+      chave: chave.chave,
+      recebedorNome: chave.recebedor_nome,
+      recebedorCidade: chave.recebedor_cidade,
       valorCentavos: f.valor_total_centavos,
     });
-    return { tipo: 'pix', brcode, ...qrDe(brcode), conciliacao: 'manual' };
+    return { tipo: 'pix', brcode, ...qrDe(brcode), conciliacao: 'manual', apelido: chave.apelido };
   }
 
   return {
     tipo: 'nenhuma',
     motivo: bol
-      ? `Existe boleto nesta fatura, em "${bol.status}", e nao ha chave Pix cadastrada para substituir a faixa.`
-      : 'Sem boleto registrado (falta o certificado A1 - Q-SICOOB-01) e sem chave Pix na identidade de cobranca.',
+      ? `Existe boleto nesta fatura, em "${bol.status}", e ela nao carrega chave Pix para substituir a faixa.`
+      : 'Sem boleto registrado (falta o certificado A1 - Q-SICOOB-01) e sem chave Pix nesta fatura. '
+        + 'A chave e carimbada ao COMPOR o lote: fatura anterior a migration 25, ou tenant sem chave padrao.',
   };
 }

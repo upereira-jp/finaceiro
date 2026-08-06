@@ -20,7 +20,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   api, buscarBinario,
-  type IdentidadeDeCobranca, type CampoDoDocumento, type DocumentoDaFatura, type Fatura,
+  type IdentidadeDeCobranca, type ChavePix, type CampoDoDocumento, type DocumentoDaFatura, type Fatura,
   type QrDoDocumento, type QrDeConferencia, type BlocoComposto, type UnidadeConsumidora,
 } from '../api.ts';
 import { emLotes, useAcao, useDados } from '../dados.ts';
@@ -64,17 +64,18 @@ export function TelaDocumento() {
   const ident = useDados<IdentidadeDeCobranca | null>(() => api.get('/cobranca/identidade'));
   const cfg = useDados<CampoDoDocumento[]>(() => api.get('/cobranca/campos'));
 
-  const [pix, setPix] = useState({ chave: '', tipo: '', nome: '', cidade: '' });
+  const chaves = useDados<ChavePix[]>(() => api.get('/cobranca/chaves-pix'));
+  const [pix, setPix] = useState({ apelido: '', chave: '', tipo: 'cnpj', nome: '', cidade: '' });
+  const [padrao, setPadrao] = useState<string>('');
   const [lista, setLista] = useState<CampoConfigurado[] | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
-  // Preenche os campos do Pix uma vez, quando a identidade chega.
+  // A identidade nao carrega mais a chave, so APONTA para ela (migration 25).
+  // O formulario abaixo cadastra chave NOVA e nasce vazio de proposito: ele nao
+  // edita a atual, e preenche-lo com ela convidaria a sobrescrever sem querer.
   useEffect(() => {
     if (!ident.dado) return;
-    setPix({
-      chave: ident.dado.pix_chave ?? '', tipo: ident.dado.pix_tipo_chave ?? '',
-      nome: ident.dado.pix_recebedor_nome ?? '', cidade: ident.dado.pix_recebedor_cidade ?? '',
-    });
+    setPadrao(ident.dado.chave_pix_padrao_id ?? '');
   }, [ident.dado?.id, ident.dado?.atualizado_em]);
 
   // A configuracao VAZIA nao e lista vazia: e "usa o padrao". A tela mostra o
@@ -102,12 +103,27 @@ export function TelaDocumento() {
     return () => { vivo = false; if (url) URL.revokeObjectURL(url); };
   }, [ident.dado?.logo_sha256]);
 
-  const salvarPix = async () => {
-    const ok = await acao.executar(() => api.post('/cobranca/identidade', {
-      pix_chave: pix.chave, pix_tipo_chave: pix.tipo || null,
-      pix_recebedor_nome: pix.nome, pix_recebedor_cidade: pix.cidade,
+  const cadastrarChave = async () => {
+    const ok = await acao.executar(() => api.post('/cobranca/chaves-pix', {
+      apelido: pix.apelido || pix.nome, tipo: pix.tipo, chave: pix.chave,
+      recebedor_nome: pix.nome, recebedor_cidade: pix.cidade,
     }));
-    if (ok) { acao.anunciar('Identidade salva.'); ident.recarregar(); }
+    if (ok) {
+      acao.anunciar('Chave cadastrada.');
+      setPix({ apelido: '', chave: '', tipo: 'cnpj', nome: '', cidade: '' });
+      chaves.recarregar();
+    }
+  };
+
+  /* Escolher a padrao e um POST proprio, separado do cadastro. Sao dois atos: um
+   * acrescenta destino possivel, o outro decide para onde o proximo lote vai
+   * cobrar - e juntar os dois num botao so faria cadastrar mudar o destino das
+   * faturas que ainda vao ser compostas, sem ninguem ter pedido. */
+  const escolherPadrao = async (id: string) => {
+    const ok = await acao.executar(() => api.post('/cobranca/identidade', {
+      chave_pix_padrao_id: id || null,
+    }));
+    if (ok) { acao.anunciar('Chave padrão definida.'); ident.recarregar(); }
   };
 
   const enviarLogo = async (arquivo: File) => {
@@ -200,15 +216,35 @@ export function TelaDocumento() {
           você. <strong>A conciliação é manual:</strong> um Pix estático não carrega identificador por
           fatura, então o dinheiro chega sem dizer de quem é — a baixa é na aba Faturas.
         </p>
+        {/* AS CHAVES CADASTRADAS, e a escolha da padrao. O apelido e o que se
+            escolhe: a chave em si nao se reconhece de cor, e conferir um CNPJ
+            digito a digito na hora de faturar e onde o erro passa. */}
+        {(chaves.dado ?? []).length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <Campo rotulo="Chave usada ao compor o lote" valor={padrao}
+                   ao={(v) => { setPadrao(v); void escolherPadrao(v); }}
+                   opcoes={[{ valor: '', texto: '— nenhuma —' }].concat(
+                     (chaves.dado ?? []).filter((c) => c.ativa).map((c) => ({
+                       valor: c.id, texto: `${c.apelido} — ${c.chave}`,
+                     })))} />
+            <p className="sub" style={{ marginBottom: 0 }}>
+              A fatura <strong>guarda a chave que usou</strong>: trocar aqui muda o próximo lote e
+              não mexe no que já foi composto — a segunda via de uma fatura sai igual à primeira.
+            </p>
+          </div>
+        )}
+
+        <h3 style={{ marginBottom: 4 }}>Cadastrar uma chave</h3>
         <div style={{ ...linha, gap: 12 }}>
+          <Campo rotulo="Apelido" valor={pix.apelido} ao={(v) => setPix({ ...pix, apelido: v })} />
           <Campo rotulo="Chave Pix" valor={pix.chave} ao={(v) => setPix({ ...pix, chave: v })} />
           <Campo rotulo="Tipo da chave" valor={pix.tipo} ao={(v) => setPix({ ...pix, tipo: v })}
                  opcoes={['cpf', 'cnpj', 'email', 'telefone', 'aleatoria'].map((t) => ({ valor: t, texto: t }))} />
           <Campo rotulo="Nome do recebedor (25)" valor={pix.nome} ao={(v) => setPix({ ...pix, nome: v })} />
           <Campo rotulo="Cidade (15)" valor={pix.cidade} ao={(v) => setPix({ ...pix, cidade: v })} />
           <div style={{ alignSelf: 'end' }}>
-            <button className="primario" onClick={() => void salvarPix()} disabled={acao.ocupado}>
-              <Icone nome={acao.ocupado ? 'carregando' : 'confirmar'} tamanho={15} peso="bold" /> Salvar
+            <button className="primario" onClick={() => void cadastrarChave()} disabled={acao.ocupado}>
+              <Icone nome={acao.ocupado ? 'carregando' : 'acrescentar'} tamanho={15} peso="bold" /> Cadastrar
             </button>
           </div>
         </div>

@@ -109,7 +109,7 @@ const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
 const DISTRIB = 'Equatorial';
 
 // ================================================================ fixture
-let ucId: string; let faturaA: string; let faturaB: string;
+let ucId: string; let faturaA: string; let faturaB: string; let usinaA: string;
 
 /*
  * A TARIFA E CONDICIONAL, e a razao e do harness: `tests/repos.sh` roda todas as
@@ -156,6 +156,17 @@ const garantirTarifa = async (emT: <T>(f: () => Promise<T>) => Promise<T>) => {
   await emA(() => usinaRepo.registrarGeracao({
     usina_id: u.id, competencia: mes(2027, 3), geracao_kwh: '8000.0000', origem: 'local',
   }));
+  /* A CHAVE VEM ANTES DO LOTE, e a ordem e a propria regra: `comporLote`
+   * CARIMBA a chave padrao em cada fatura (migration 25). Compor antes de haver
+   * chave produz fatura sem faixa de pagamento - estado legitimo, e e o que a
+   * W5 exercita de proposito. */
+  usinaA = u.id;
+  const chaveA = await emA(() => documento.criarChavePix({
+    apelido: 'G3 SOLAR LTDA', tipo: 'cnpj', chave: '11222333000181',
+    recebedor_nome: 'G3 SOLAR LTDA', recebedor_cidade: 'GOIANIA',
+  }));
+  await emA(() => documento.salvarIdentidade({ chave_pix_padrao_id: chaveA.id }));
+
   await emA(() => fatura.comporLote('2027-03-01', {
     tarifas_concessionaria_centavos: { [uc.id]: 5_000 },
   }));
@@ -194,48 +205,85 @@ const garantirTarifa = async (emT: <T>(f: () => Promise<T>) => Promise<T>) => {
     .find((f: any) => f.unidade_consumidora_id === ucB.id)!.id;
 }
 
-// ===================================================== W1 a identidade
+// ============================== W1 o banco de chaves Pix e a identidade
+//
+// ESTE BLOCO MUDOU DE FORMA na migration 25, e a mudanca merece nota porque uma
+// das verificacoes NAO TEM MAIS COMO EXISTIR: a `W1d` afirmava o CHECK
+// `identidade_pix_completo_ou_ausente`, que recusava "Pix pela metade" nas
+// quatro colunas soltas. As colunas sairam, o CHECK saiu com elas, e a GARANTIA
+// nao - ela mudou de mecanismo: agora a chave e uma LINHA com tres colunas
+// `NOT NULL`, e linha nao existe pela metade. A W1d passou a afirmar isso.
+//
+// Apagar a verificacao teria perdido a garantia de vista; deixa-la como estava
+// seria medir um CHECK que nao existe. E a mesma escolha da `Y5c` na sessao 22.
 {
-  const antes = await emA(() => documento.identidade());
-  chk('W1a', antes === null, 'tenant sem identidade le NULL, nao erro - "nao cadastrada" e estado legitimo');
+  // O tenant B nao tem identidade: "nao cadastrada" e estado legitimo, e o
+  // caminho que le tem de devolver NULL em vez de levantar.
+  chk('W1a', (await emB(() => documento.identidade())) === null,
+    'tenant sem identidade le NULL, nao erro - "nao cadastrada" e estado legitimo');
 
-  const i = await emA(() => documento.salvarIdentidade({
-    pix_chave: '11222333000181', pix_tipo_chave: 'cnpj',
-    pix_recebedor_nome: 'G3 SOLAR LTDA', pix_recebedor_cidade: 'GOIANIA',
-  }));
-  chk('W1b', i.pix_chave === '11222333000181' && i.tenant_id === A,
-    'a identidade grava no tenant corrente');
+  const k = (await emA(() => documento.chavesPix()))[0]!;
+  chk('W1b', k.chave === '11222333000181' && k.tenant_id === A && k.apelido === 'G3 SOLAR LTDA',
+    'a chave da fixture esta cadastrada no tenant corrente, com apelido proprio');
 
-  // UPSERT por tenant: um tenant, uma identidade. Salvar de novo ATUALIZA.
-  await emA(() => documento.salvarIdentidade({
-    pix_chave: '11222333000181', pix_tipo_chave: 'cnpj',
-    pix_recebedor_nome: 'G3 SOLAR ENERGIA', pix_recebedor_cidade: 'GOIANIA',
-  }));
-  const depois = await emA(() => documento.identidade());
-  chk('W1c', depois!.pix_recebedor_nome === 'G3 SOLAR ENERGIA' && depois!.id === i.id,
-    'salvar de novo ATUALIZA a mesma linha (upsert por tenant), nao cria a segunda');
+  const lida = await emA(() => documento.identidade());
+  chk('W1c', lida!.chave_pix_padrao_id === k.id && lida!.chave_pix!.chave === '11222333000181',
+    'a identidade APONTA para a chave, e `identidade()` a traz junto - uma leitura, nao duas');
 
   /*
-   * O CHECK `identidade_pix_completo_ou_ausente` E DO BANCO, e este e o teste dele.
-   * Pix pela metade - chave sem nome de recebedor - gera BR Code que alguns
-   * aplicativos aceitam e outros recusam, e o sintoma aparece no celular de quem ia
-   * pagar. O banco recusa antes.
+   * A GARANTIA DO ANTIGO CHECK, no mecanismo novo. "Pix pela metade" gerava um
+   * BR Code que alguns aplicativos aceitam e outros recusam, com o sintoma no
+   * celular de quem ia pagar. Agora a recusa e da aplicacao e vem NOMEADA, com o
+   * campo que falta - o `NOT NULL` sozinho devolveria a coluna crua.
    */
-  const e = await lancou(() => emA(() => documento.salvarIdentidade({
-    pix_chave: '11222333000181', pix_tipo_chave: 'cnpj',
-    pix_recebedor_nome: null, pix_recebedor_cidade: null,
+  const meia = await lancou(() => emA(() => documento.criarChavePix({
+    apelido: 'incompleta', tipo: 'cnpj', chave: '11222333000181',
+    recebedor_nome: 'G3 SOLAR LTDA', recebedor_cidade: '',
   })));
-  chk('W1d', e !== null, `Pix pela metade (chave sem recebedor) e RECUSADO pelo banco: ${e?.constructor?.name}`);
+  chk('W1d', meia !== null && /cidade do recebedor/.test(String(meia)),
+    `chave sem cidade e RECUSADA, nomeando o campo: ${String(meia).slice(0, 60)}`);
 
-  // Isolamento: o B nao ve a identidade do A.
+  /*
+   * A GUARDA DA CHAVE pelo caminho do repositorio, nos dois sentidos. A suite
+   * pura `tests/chave-pix.ts` ja exercita a funcao; o que se afirma AQUI e que
+   * ela esta LIGADA - `Q-PECA-NAO-PLUGADA-01` e a classe que este projeto
+   * registrou depois de achar tres pecas prontas e nao plugadas numa tarde.
+   */
+  const comMascara = await emA(() => documento.criarChavePix({
+    apelido: 'com mascara', tipo: 'cnpj', chave: '11.222.333/0001-81',
+    recebedor_nome: 'G3 SOLAR LTDA', recebedor_cidade: 'GOIANIA',
+  }).catch((e) => e));
+  chk('W1g', comMascara instanceof Error && /unicidade|Unico|constraint|P2002/i.test(String(comMascara)),
+    'a mascara e NORMALIZADA antes de gravar - por isso ela colide com a chave que ja existe, '
+    + 'em vez de virar uma segunda linha apontando para o mesmo destino');
+
+  const digitoErrado = await lancou(() => emA(() => documento.criarChavePix({
+    apelido: 'digito errado', tipo: 'cnpj', chave: '11222333000182',
+    recebedor_nome: 'G3 SOLAR LTDA', recebedor_cidade: 'GOIANIA',
+  })));
+  chk('W1h', digitoErrado !== null && /ChavePixInvalida/.test(String(digitoErrado?.constructor?.name ?? digitoErrado)),
+    'digito verificador que nao fecha e recusado pelo REPOSITORIO, e nao pela Sicoob depois');
+
+  // Apontar chave que nao e deste tenant: a FK composta recusaria com 23503
+  // generico, e a guarda nomeia o id antes disso.
+  const forasteira = await lancou(() => emA(() =>
+    documento.salvarIdentidade({ chave_pix_padrao_id: '00000000-0000-4000-8000-000000000000' })));
+  chk('W1i', forasteira !== null, 'apontar chave inexistente ou de outro tenant e recusado, com o id nomeado');
+
+  // Isolamento: o B nao ve a identidade nem a chave do A.
   const noB = await emB(() => documento.identidade());
-  chk('W1e', noB === null, 'o tenant B nao ve a identidade do A (policy, role sem BYPASSRLS)');
+  const chavesNoB = await emB(() => documento.chavesPix());
+  chk('W1e', noB === null && chavesNoB.length === 0,
+    'o tenant B nao ve a identidade nem as chaves do A (policy, role sem BYPASSRLS)');
 
   // Papel: `leitura` LE e nao ESCREVE. A matriz e aplicada no repositorio.
-  const podeLer = await emALeitura(() => documento.identidade());
-  const naoEscreve = await lancou(() => emALeitura(() => documento.salvarIdentidade({ pix_chave: 'x' })));
+  const podeLer = await emALeitura(() => documento.chavesPix());
+  const naoEscreve = await lancou(() => emALeitura(() => documento.criarChavePix({
+    apelido: 'x', tipo: 'cnpj', chave: '11222333000181',
+    recebedor_nome: 'X', recebedor_cidade: 'GOIANIA',
+  })));
   chk('W1f', podeLer !== null && naoEscreve !== null,
-    'papel `leitura` le a identidade e NAO a escreve (exigir no repositorio, nao no handler)');
+    'papel `leitura` le as chaves e NAO as escreve (exigir no repositorio, nao no handler)');
 }
 
 // ===================================================== W2 a logo, e o gatilho
@@ -419,24 +467,40 @@ const garantirTarifa = async (emT: <T>(f: () => Promise<T>) => Promise<T>) => {
 
 // ===================================================== W5 sem chave Pix, e com boleto
 {
-  // Estado `nenhuma`: o tenant apaga a chave Pix e nao ha boleto.
-  await emA(() => documento.salvarIdentidade({
-    pix_chave: null, pix_tipo_chave: null, pix_recebedor_nome: null, pix_recebedor_cidade: null,
+  /*
+   * Estado `nenhuma`, e desde a migration 25 ele NAO se produz apagando a chave
+   * do tenant: a fatura carrega a SUA, e apagar o padrao nao mexe no que ja foi
+   * carimbado - que e exatamente a garantia que o congelamento existe para dar.
+   *
+   * O estado real e outro e continua acontecendo: fatura composta quando nao
+   * havia chave padrao. E o caso de toda fatura anterior a esta migration.
+   */
+  const chavePadrao = (await emA(() => documento.identidade()))!.chave_pix_padrao_id!;
+  await emA(() => documento.salvarIdentidade({ chave_pix_padrao_id: null }));
+
+  await emA(() => usinaRepo.registrarGeracao({
+    usina_id: usinaA, competencia: mes(2027, 4), geracao_kwh: '8000.0000', origem: 'local',
   }));
-  const semNada = await emA(() => documento.paraFatura(faturaA));
+  await emA(() => fatura.comporLote('2027-04-01', {
+    tarifas_concessionaria_centavos: { [ucId]: 5_000 },
+  }));
+  const semChave = (await emA(() => fatura.daCompetencia('2027-04-01')))
+    .find((f: any) => f.unidade_consumidora_id === ucId)!.id;
+
+  const semNada = await emA(() => documento.paraFatura(semChave));
   chk('W5a', semNada.pagamento.tipo === 'nenhuma'
     && semNada.pagamento.motivo.includes('A1'),
-    'sem boleto e sem chave Pix a faixa e `nenhuma`, e o motivo NOMEIA o A1 (Q-SICOOB-01)');
+    'fatura composta SEM chave padrao: a faixa e `nenhuma`, e o motivo NOMEIA o A1 (Q-SICOOB-01)');
 
-  // A logo sobrevive ao apagar do Pix: sao metadados independentes na mesma linha.
-  chk('W5b', semNada.logo?.mime === 'image/png',
-    'apagar a chave Pix nao apaga a logo - o gatilho so mexe no que e da logo');
+  // E o congelamento pelo outro lado: a faturaA, composta COM chave, continua
+  // com a dela mesmo com o padrao do tenant apagado.
+  const aindaTem = await emA(() => documento.paraFatura(faturaA));
+  chk('W5b', aindaTem.pagamento.tipo === 'pix' && aindaTem.logo?.mime === 'image/png',
+    'apagar o padrao do tenant NAO tira a faixa da fatura ja composta - ela carrega a chave dela '
+    + '- e a logo continua, porque sao metadados independentes');
 
-  // Volta a chave e emite + registra boleto, para o estado `boleto`.
-  await emA(() => documento.salvarIdentidade({
-    pix_chave: '11222333000181', pix_tipo_chave: 'cnpj',
-    pix_recebedor_nome: 'G3 SOLAR LTDA', pix_recebedor_cidade: 'GOIANIA',
-  }));
+  // Volta o padrao e emite + registra boleto, para o estado `boleto`.
+  await emA(() => documento.salvarIdentidade({ chave_pix_padrao_id: chavePadrao }));
   await emA(() => fatura.emitir(faturaA));
   await emA(() => boletoRepo.registrar(faturaA, new CobrancaFalsa('SICOOB-T')));
 
@@ -513,7 +577,7 @@ const garantirTarifa = async (emT: <T>(f: () => Promise<T>) => Promise<T>) => {
    * recebedor e cidade vem da linha do banco, nao de constante do codigo.
    */
   const ident = await emA(() => documento.identidade());
-  chk('W7c', q.recebedor === ident!.pix_recebedor_nome && q.cidade === ident!.pix_recebedor_cidade,
+  chk('W7c', q.recebedor === ident!.chave_pix!.recebedor_nome && q.cidade === ident!.chave_pix!.recebedor_cidade,
       'recebedor e cidade saem da identidade REAL do tenant, e nao de valor fixo - e o que faz este '
       + 'QR provar alguma coisa sobre o QR de verdade');
 
