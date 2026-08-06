@@ -4,7 +4,7 @@
 |---|---|
 | **Foco** | **A última milha da fatura: o documento passou a sair em LOTE.** Era o único passo do caminho da primeira fatura que ainda era código, e ele estava na ponta que ninguém tinha olhado — a entrega. Depois dele, a **guarda do pagador** da `Q-PAGADOR-01`, que era a outra pendência de código com opção já nomeada |
 | **Método** | Percorrer o caminho **inteiro** contra o código, não contra o índice. E medir a **linha de base** antes de atribuir defeito: dois dos três achados desta sessão são anteriores ao que eu escrevi, e só dá para dizer isso porque a base foi medida |
-| **Resultado** | **1531 → 1549 verificações** · `EXIT=0` · **0 migrations** · nada escrito em produção · **nada publicado** |
+| **Resultado** | **1531 → 1569 verificações** · `EXIT=0` · **0 migrations** · nada escrito em produção · **PUBLICADO em 06/08** |
 | **Não feito** | Os cinco insumos humanos, que continuam humanos. E o `src/sicoob/http.ts`, pelas três razões da `RESUMO-SESSAO-21` §5, que não mudaram |
 
 > # ESTADO ATUAL — 06/08/2026, fim da sessão
@@ -14,7 +14,7 @@
 > | **Banco** | **24 migrations em produção = 24 no repositório.** Nenhuma pendente, e esta sessão não abriu nenhuma |
 > | **Suíte** | `EXIT=0`, **1549** linhas `ok`. Delta **18** — 15 na aba Documento, 3 na guarda do pagador |
 > | **Produção** | intocada |
-> | **Publicação** | **10 commits fora do `origin/main`** — 7 herdados das sessões 21 e anteriores, **3 desta**. Contado, não estimado: a `RESUMO-SESSAO-21` dizia 6 e eram 7. Pela primeira vez desde 04/08 há mudança que **toca a SPA** — ou seja, o deploy voltou a ser necessário para que isto chegue a quem opera |
+> | **Publicação** | ✅ **`0f48e7e` no ar.** Os 13 commits foram publicados em duas levas — a fatura em lote e a guarda do pagador às 13h55, a paleta às 14h44. **Zero migrations nas duas.** Bundle `index-Behx_OZi.js`, byte-idêntico ao compilado no Codespace; a guarda de arranque passou dizendo *"client gerado cobre as 36 tabelas de public"*; os **9 invariantes de catálogo** passam contra produção; dados intactos — **86 clientes, 41 UCs, 0 contratos, 0 faturas**. A paleta foi conferida **no bundle servido**, e não só pelo nome do arquivo: `#14213D`, `#F6F2EA`, `#E8843C` e `#F4A65A` estão lá |
 >
 > **A fila continua em `PENDENCIAS-2026-08-05.md`.** Nada nela foi resolvido hoje: os cinco insumos são humanos.
 
