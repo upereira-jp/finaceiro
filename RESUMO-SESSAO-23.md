@@ -5,7 +5,8 @@
 | **Foco** | **Mitigar tudo que dá antes do portal da Sicoob.** O pedido foi esse, e o critério de "dá" ficou: não depende de ninguém de fora, e não é decisão com dono |
 | **Método** | Percorrer as próximas ações da `RETOMADA-2026-08-06` uma a uma e separar em três pilhas — *o que eu resolvo*, *o que é insumo humano*, *o que espera a Sicoob*. A primeira pilha era maior do que a retomada supunha, e a razão está na §3 |
 | **Resultado** | **1607 → 1618 verificações** · `EXIT=0` · catálogo **9/9 contra produção** · **0 migrations** · **nada escrito em produção** |
-| **Não feito, e de propósito** | `src/sicoob/http.ts` · a decisão do nome do DICT · a `Q-FATCHEIA-01` · a competência · os cinco insumos humanos · **o deploy** |
+| **Não feito, e de propósito** | `src/sicoob/http.ts` · a decisão do nome do DICT · a `Q-FATCHEIA-01` · a competência · os cinco insumos humanos |
+| **Publicado** | ✅ **`34d028c` no ar às 21:39 de 06/08**, a pedido do dono. Bundle `index-DN-7K2b1.js`, `sha256` do servido idêntico ao compilado; o aviso da tarifa conferido **dentro** do bundle servido; guarda de arranque com 37 tabelas; catálogo 9/9; dados intactos. **Zero migrations** — 25 = 25 |
 
 > **Nenhuma decisão de projeto foi tomada nesta sessão.** Onde apareceu escolha, ela virou pergunta com dono ou entrada no `QUESTOES.md` — regra 10. As três entregas abaixo são *deixar de esconder*, *deixar executável* e *deixar provado*.
 
@@ -24,6 +25,8 @@ E ela tinha razão em desconfiar: **foi assim que a aba Documento passou quebrad
 | **o dado** | `psql` contra produção | `chave_pix` com apelido `G3 GESTAO ENERGIA SOLAR`, tipo `cnpj`, chave `66714022000121`; `identidade_de_cobranca.chave_pix_padrao_id` apontando para ela; **15** `campo_do_documento`; `layout_do_documento` com **0** linhas, que é o caso normal |
 | **o bundle** | `curl` do que produção **serve**, `sha256` contra `web/dist` | `index-ifeZbjC7.js`, **byte-idêntico**. E contém `chaves-pix`, `Chave usada ao compor o lote` e `cobranca/identidade` |
 | **a tela** | o bundle servido, renderizado em Chromium com o payload de produção | monta inteira, **sem erro em painel nenhum**, e o seletor sai com `G3 GESTAO ENERGIA SOLAR — 66714022000121` |
+
+*(O bundle citado é o que estava no ar **quando a medição foi feita**. Depois da publicação das 21:39 produção serve o `index-DN-7K2b1.js`, e a aba foi renderizada de novo sobre ele, com o mesmo resultado — §4 da `RETOMADA-2026-08-06`.)*
 
 **O que isso NÃO cobre, e a distinção é a mesma que o `401` ensinou.** A camada HTTP do processo no ar não foi exercida com credencial válida — medido: `/api/cobranca/chaves-pix` responde **401** e `/api/rota-que-nao-existe` responde **404**, o que prova roteamento e não funcionamento. O código no VPS tem a rota (conferido no arquivo do servidor). **O login do dono continua sendo o único teste que fecha os dois lados** — o que mudou é que o modo de falha de 30/07, *a tela quebrar ao montar*, passou a estar medido em vez de suposto.
 
@@ -96,7 +99,7 @@ A `RETOMADA` §2 dizia, sobre o nome do recebedor divergir do DICT: *"Alinhar cu
 2. **Alinhar o nome do DICT.** É escolha do dono sobre o que o pagador vê. Fiz o comando existir; não usei o comando;
 3. **Travar a emissão sem tarifa da concessionária.** Seria a tela inventando regra de negócio sobre uma pergunta que tem dono. Contei;
 4. **Formulário de edição de chave na aba Documento.** É tela nova com testes próprios, e o caminho do script cobre a necessidade de hoje. Fica registrado como não plugado em vez de meio-feito;
-5. **O deploy.** Toca a SPA, e publicar é ato do dono.
+5. **O deploy — até o dono pedir.** Toca a SPA, e publicar é ato dele. Pedido e feito no mesmo dia, às 21:39; a conferência está na `RETOMADA-2026-08-06` §4.
 
 ---
 
@@ -104,6 +107,6 @@ A `RETOMADA` §2 dizia, sobre o nome do recebedor divergir do DICT: *"Alinhar cu
 
 **A próxima ação continua sendo o portal — e agora tem folha.** `SICOOB-portal-2026-08-06.md` fica aberta ao lado do navegador: os nove itens com o **consumidor de cada um aqui dentro**, o que muda conforme a resposta, e o §0 com o que **já está resolvido** (`ADR-0005` e `ADR-0006`, os dois aceitos), para a passada não gastar pergunta com isso.
 
-**Antes disso, uma coisa que não é insumo: o deploy.** Sem ele o aviso da tarifa não existe para quem opera. Não há migration desta vez — `git pull` → **`prisma generate`** → `web:build` → `restart`, e o `generate` não é opcional.
+**O deploy já foi feito** — 21:39 de 06/08, sem migration, conferido na `RETOMADA-2026-08-06` §4. O aviso da tarifa já existe para quem opera.
 
 **E o que continua humano:** os cinco insumos, a `Q-FATCHEIA-01` e a competência. Nenhum deles andou hoje, e nenhum andava por código.
