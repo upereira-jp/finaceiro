@@ -112,6 +112,26 @@ A questão nomeava três opções, e dizia da primeira que era *"barata, indepen
 
 ---
 
+## 4.2 A paleta trocou inteira — Navy e Creme, com o laranja virando AÇÃO
+
+A pedido do dono, e a mudança **não é de valor, é de hierarquia**. Antes a marca era o laranja e o resto era neutro; agora **a marca é o Navy** e o laranja ficou reservado ao que se **clica** e ao que se **paga**. A página passou a ter duas zonas de peso — a faixa escura do topo, que diz *onde você está*, e o creme, onde o trabalho acontece.
+
+**Três cores entregues não passam onde foram pedidas, e isso foi medido antes de escrito.** As três são pedidas para texto ou para foco:
+
+| | sobre o creme | pede |
+|---|--:|--:|
+| Gray `#8F939D` | **2.75:1** | 4.5 (AA de texto) |
+| Orange `#E8843C` | **2.41:1** | 4.5 |
+| Gold `#F4A65A` | **1.80:1** | 3.0 (WCAG 1.4.11, foco) |
+
+Nenhuma foi descartada e nenhuma foi aproximada no olho: cada uma ganhou um token **derivado na mesma matiz**, achado por busca — o fator mais alto que ainda passa nas cinco superfícies. Onde a cor entregue vale como está, ela segue marcada `[G3]` — e **o Navy sobre o Orange dá 5.93:1**, então o texto do botão primário deixou de ser tinta neutra e passou a ser a própria cor dominante.
+
+**O que a foto pegou e nenhum cálculo pegaria.** No primeiro tema escuro a faixa do topo usou a variante `#1C2C4E` — que é exatamente o valor do **cartão**. Contraste de texto: perfeito, tudo passava. Na tela, barra e cartão viraram a mesma cor, e a hierarquia que a mudança existia para criar não existia. **Contraste de texto não mede separação entre superfícies vizinhas** — são duas perguntas diferentes, e agora a segunda tem teste.
+
+**A lista fechada de cores do papel passou de três para quatro, e a entrada doeu — como o desenho dela pede.** `#111` virou `#14213D`, `#eee` virou `#F6F2EA`, e a divisória interna de tabela ganhou o `#E4DFD4` da paleta: era a única cor do documento que continuava pertencendo à paleta antiga. A **natureza** da exceção não mudou — continuam literais e não `var(--texto)`, porque o papel é impresso e puxar token de tema faria a mesma fatura sair de duas cores dependendo de quem imprime.
+
+---
+
 ## 5. Erros meus desta sessão
 
 | O erro | Como apareceu | O que ficou |
@@ -120,6 +140,9 @@ A questão nomeava três opções, e dizia da primeira que era *"barata, indepen
 | **Nomeei uma prop `rotulo`, sombreando o `rotulo` do `ui.tsx`** | o `tsc` | Barato. Registrado porque foi copiar a forma da tela vizinha sem olhar o que o nome já significava ali |
 | **A primeira `D12` caiu — e o teste estava certo** | a própria verificação | Ela nega a existência de `#documento.folha`, e o **comentário** do `estilo.ts` cita essa forma para explicar o que mudou. Casar contra comentário faz o teste medir a documentação em vez da regra. O conserto foi tirar os comentários antes de casar, não afrouxar a asserção |
 | **Quase atribuí a mim um defeito anterior** | medir a linha de base | O PDF de uma fatura tinha 4 páginas com o meu código, e eu ia consertar como se fosse meu. Recompilar o original mostrou **5** — o defeito era anterior e o meu já o tinha reduzido. Sem a base medida, o registro desta sessão diria a coisa errada |
+| **Escrevi crases dentro de um template literal** | o `tsc`, na hora | O `ESTILO` é uma template string, e as crases que eu usei para citar `--fundo2` num comentário **fecharam a string**. Barato porque falhou já — registrado porque foi o mesmo descuido de escrever markdown dentro de código |
+| **Pus seis alfas escritos à mão no CSS do topo** | a verificação `I1b`, vermelha | *"Fora do documento impresso, zero cor literal"* — e eu tinha posto oito. O conserto não foi abrir exceção: foi virar **dois tokens de véu**, que é o mesmo que o acabamento de 30/07 fez com a sombra. Seis alfas ad-hoc eram a coisa que aquele acabamento tinha tirado do arquivo |
+| **Escrevi um limiar que o meio não cumpre** | a própria `T6d`, vermelha | Exigi que a faixa se separasse 1.2:1 da **página** além do cartão. No escuro, **nem o preto puro** separa 1.2 de `#14213D` — o teto é 1.31. Quem separa ali é a borda. O conserto foi tirar a exigência impossível e **escrever por quê**, não afrouxar o número até passar |
 
 ---
 
