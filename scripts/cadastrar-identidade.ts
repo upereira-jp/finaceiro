@@ -14,6 +14,28 @@
 //        [--apelido "Conta principal"]
 //   npm run identidade -- --valendo --auth-user <uuid> ... (idem)
 //   npm run identidade -- --ver     --auth-user <uuid>      (so le)
+//   npm run identidade -- --editar "<apelido ou uuid>" --ensaio --auth-user <uuid> \
+//        --tipo cnpj --chave 66714022000121 \
+//        --nome "CONSORCIO G GESTAO SOLAR" --cidade GOIANIA
+//
+// O `--editar` ENTROU EM 06/08, e ele fecha uma peca nao plugada. A rota
+// `PUT /cobranca/chaves-pix/:id` existia desde a migration 25 e **nao tinha
+// nenhum chamador**: nem a aba Documento, que so cadastra, nem script nenhum.
+// A `RETOMADA-2026-08-06` §2 dizia que alinhar o nome do recebedor ao do DICT
+// "custa um comando" - e o comando nao existia. Reexecutar o cadastro nao serve:
+// `chave_pix_chave_unica` recusa a mesma chave, entao a saida seria `UPDATE` a
+// mao, por fora do contexto de tenant e da conferencia de chave.
+//
+// TRES COISAS QUE O `--editar` PRESERVA, e as tres sao por modo de falha medido:
+//   titular_nome/documento/observacao  `editarChavePix` reescreve os tres com o
+//        que receber, e `texto(undefined)` e NULL. Nao passa-los apagaria o
+//        titular ao trocar so o nome do recebedor - e em silencio, que e o mesmo
+//        defeito que a `SPEC-002` R25 corrigiu no conector em 03/08
+//   `ativa`                            idem: editar nao e reativar
+//   a chave PADRAO do tenant           editar NAO mexe em quem e a padrao.
+//        Cadastrar aponta (ato de criar destino); editar corrige uma linha que ja
+//        existe, e trocar o destino do proximo lote sem ninguem pedir e o mesmo
+//        acoplamento que a aba Documento separa em dois botoes de proposito
 //
 // POR QUE SCRIPT, havendo TELA. A aba Documento faz isto em quatro campos, e
 // continua sendo o caminho de todo dia. O script existe por uma razao que a tela
@@ -42,7 +64,7 @@
 
 import { iniciar, encerrarApp } from '../src/app.ts';
 import {
-  salvarIdentidade, identidade, qrDeConferencia, criarChavePix, chavesPix,
+  salvarIdentidade, identidade, qrDeConferencia, criarChavePix, editarChavePix, chavesPix,
 } from '../src/repos/documento.ts';
 import { conferirChavePix, TIPOS_DE_CHAVE_PIX } from '../src/dominio/chave-pix.ts';
 import { apenasAscii } from '../src/dominio/brcode.ts';
@@ -70,9 +92,15 @@ function mostrar(rotulo: string, de: string, para: string, teto?: number) {
 
 async function main(): Promise<void> {
   const ver = tem('ver');
+  const editar = arg('editar');
   const ensaio = tem('ensaio'), valendo = tem('valendo');
   if (!ver && ensaio === valendo) {
     console.error('ERRO: informe --ensaio (ROLLBACK), --valendo (COMMIT) ou --ver (so leitura).');
+    process.exit(2);
+  }
+  if (tem('editar') && !editar) {
+    console.error('ERRO: --editar precisa do apelido ou do uuid da chave a corrigir.');
+    console.error('       `npm run identidade -- --ver --auth-user <uuid>` lista as cadastradas.');
     process.exit(2);
   }
   const authUserId = arg('auth-user');
@@ -87,7 +115,11 @@ async function main(): Promise<void> {
    * chave so os dois coincidem, e exigir que a pessoa digite duas vezes o mesmo
    * texto produz divergencia por digitacao, nao informacao. Quem tem varias
    * chaves passa `--apelido` e e ai que ele ganha funcao. */
-  const apelido = arg('apelido') ?? nome;
+  /* No `--editar` o apelido NAO cai no `--nome`: mudar o nome do recebedor por
+   * causa do DICT renomearia a chave na lista da tela junto, e sao coisas
+   * diferentes - uma e o que o pagador ve, a outra e como quem opera a reconhece.
+   * Sem `--apelido`, o apelido atual fica como esta (resolvido no `trabalho`). */
+  const apelido = arg('apelido') ?? (editar ? undefined : nome);
 
   // CONFERENCIA ANTES DE ABRIR CONEXAO. Um erro de digitacao nao precisa de
   // banco para ser encontrado, e descobri-lo depois do login confunde a causa.
@@ -117,8 +149,9 @@ async function main(): Promise<void> {
     mostrar('recebedor', nome!, apenasAscii(nome!, 25), 25);
     mostrar('cidade', cidade!, apenasAscii(cidade!, 15), 15);
     console.log(`\n  tipo       ${tipo}`);
-    console.log(`  apelido    ${JSON.stringify(apelido)}`
-      + (arg('apelido') ? '' : '   (veio de --nome; use --apelido para diferenciar)'));
+    console.log(`  apelido    ${apelido === undefined ? '(o atual, inalterado)' : JSON.stringify(apelido)}`
+      + (arg('apelido') || editar ? '' : '   (veio de --nome; use --apelido para diferenciar)'));
+    if (editar) console.log(`  editando   ${JSON.stringify(editar)}`);
 
     // O corte NAO acontece em silencio: o banco recusa acima de 25 e 15, entao
     // o nome cortado nunca chega a ser gravado. Avisar aqui e a diferenca entre
@@ -152,6 +185,58 @@ async function main(): Promise<void> {
         + (c.ativa ? '' : '  (inativa)'));
     }
     if (ver) return { cadastradas };
+
+    if (editar) {
+      const alvo = cadastradas.find((c) => c.id === editar || c.apelido === editar);
+      if (!alvo) {
+        throw new Error(
+          `Nenhuma chave com apelido ou id ${JSON.stringify(editar)} neste tenant. `
+          + `Ha ${cadastradas.length}: ${cadastradas.map((c) => c.apelido).join(', ') || '(nenhuma)'}.`);
+      }
+
+      /*
+       * OS TRES CAMPOS QUE NAO ESTAO NA LINHA DE COMANDO VAO JUNTO, com o valor
+       * ATUAL. `editarChavePix` reescreve a linha inteira e `texto(undefined)` e
+       * NULL: sem isto, corrigir o nome do recebedor apagaria titular e
+       * observacao em silencio - o mesmo defeito que a R25 corrigiu no conector.
+       */
+      const editada = await editarChavePix(alvo.id, {
+        apelido: apelido ?? alvo.apelido,
+        tipo: tipo as never, chave: chave!,
+        recebedor_nome: nome!, recebedor_cidade: cidade!,
+        titular_nome: alvo.titular_nome, titular_documento: alvo.titular_documento,
+        observacao: alvo.observacao, ativa: alvo.ativa,
+      });
+
+      console.log('\n  DEPOIS, campo a campo:');
+      for (const [rotulo, de, para] of [
+        ['apelido', alvo.apelido, editada.apelido],
+        ['tipo', alvo.tipo, editada.tipo],
+        ['chave', alvo.chave, editada.chave],
+        ['recebedor', alvo.recebedor_nome, editada.recebedor_nome],
+        ['cidade', alvo.recebedor_cidade, editada.recebedor_cidade],
+      ] as const) {
+        console.log(`    ${rotulo.padEnd(10)} ${de === para ? '==' : '->'} ${JSON.stringify(para)}`
+          + (de === para ? '' : `   (era ${JSON.stringify(de)})`));
+      }
+
+      /* A PADRAO NAO MUDA AQUI, e a linha existe para dizer isso em vez de o
+       * leitor supor. `atual` foi lido antes da edicao, e o id nao muda. */
+      console.log(`\n  padrao do tenant: ${atual?.chave_pix_padrao_id === alvo.id
+        ? 'esta mesma linha (inalterado)' : `outra linha (${atual?.chave_pix_padrao_id ?? 'nenhuma'}) - inalterado`}`);
+
+      /* O BR CODE SO SAI SE A LINHA EDITADA FOR A PADRAO. `qrDeConferencia` le a
+       * PADRAO do tenant, nao a linha que se acabou de mexer: imprimi-lo aqui
+       * mostraria o payload de OUTRA chave logo abaixo do "recebedor -> X", e o
+       * leitor concluiria que a edicao nao pegou. */
+      const ehPadrao = atual?.chave_pix_padrao_id === alvo.id;
+      if (!ehPadrao) {
+        console.log('\n  (sem BR Code: esta linha nao e a chave padrao, e o QR sai da padrao)');
+        return { depois: editada };
+      }
+      const qr = await qrDeConferencia(VALOR_DE_CONFERENCIA_CENTAVOS);
+      return { depois: editada, qr };
+    }
 
     // Passa a chave BRUTA de proposito: quem normaliza e o repositorio, e mandar
     // daqui a ja normalizada faria este script exercitar um caminho que a tela

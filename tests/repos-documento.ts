@@ -284,6 +284,57 @@ const garantirTarifa = async (emT: <T>(f: () => Promise<T>) => Promise<T>) => {
   })));
   chk('W1f', podeLer !== null && naoEscreve !== null,
     'papel `leitura` le as chaves e NAO as escreve (exigir no repositorio, nao no handler)');
+
+  /*
+   * W1j a W1m — `editarChavePix`, que ate 06/08 NAO TINHA TESTE e NAO TINHA
+   * CHAMADOR. A rota `PUT /cobranca/chaves-pix/:id` existia desde a migration 25,
+   * a aba Documento so cadastra, e nenhum script a alcancava: `Q-PECA-NAO-
+   * PLUGADA-01` de novo, e desta vez na peca que a `RETOMADA-2026-08-06` §2
+   * chamava de "um comando" para alinhar o nome do recebedor ao do DICT.
+   *
+   * O motivo de existir agora e concreto: o nome que o DICT devolve
+   * ("consorcio G gestao solar") e o do campo 59 do BR Code nao sao o mesmo, e
+   * corrigir isso pelo cadastro e impossivel - `chave_pix_chave_unica` recusa a
+   * mesma chave. A alternativa seria `UPDATE` a mao, por fora do contexto de
+   * tenant e da conferencia de chave.
+   */
+  const paraEditar = await emA(() => documento.criarChavePix({
+    apelido: 'a corrigir', tipo: 'cnpj', chave: '19131243000197',
+    recebedor_nome: 'NOME ANTIGO', recebedor_cidade: 'GOIANIA',
+    titular_nome: 'G3 GESTAO ENERGIA SOLAR LTDA', titular_documento: '19131243000197',
+    observacao: 'conferida no DICT',
+  }));
+
+  const corrigida = await emA(() => documento.editarChavePix(paraEditar.id, {
+    apelido: paraEditar.apelido, tipo: 'cnpj', chave: paraEditar.chave,
+    recebedor_nome: 'NOME NOVO', recebedor_cidade: paraEditar.recebedor_cidade,
+    titular_nome: paraEditar.titular_nome, titular_documento: paraEditar.titular_documento,
+    observacao: paraEditar.observacao, ativa: paraEditar.ativa,
+  }));
+  chk('W1j', corrigida.recebedor_nome === 'NOME NOVO' && corrigida.id === paraEditar.id,
+    'editar troca o nome do recebedor NA MESMA LINHA - a fatura guarda `chave_pix_id`, e uma linha nova a deixaria apontando para o texto velho');
+  chk('W1k', corrigida.titular_nome === 'G3 GESTAO ENERGIA SOLAR LTDA' && corrigida.observacao === 'conferida no DICT',
+    'titular e observacao SOBREVIVEM quando sao passados de volta - e o que o script tem de fazer');
+
+  /*
+   * O SENTIDO PERIGOSO, afirmado de proposito: `editarChavePix` reescreve a
+   * linha INTEIRA, e `texto(undefined)` e NULL. Quem chamar sem devolver os tres
+   * campos APAGA os tres, sem erro. Isto nao e um defeito a consertar aqui - e o
+   * contrato do repositorio -, e a verificacao existe para que o dia em que
+   * alguem mudar isso nao passe em silencio pelos chamadores.
+   */
+  const semTitular = await emA(() => documento.editarChavePix(paraEditar.id, {
+    apelido: paraEditar.apelido, tipo: 'cnpj', chave: paraEditar.chave,
+    recebedor_nome: 'NOME NOVO', recebedor_cidade: paraEditar.recebedor_cidade,
+  }));
+  chk('W1l', semTitular.titular_nome === null && semTitular.observacao === null,
+    'editar SEM devolver titular/observacao os APAGA - o contrato e "a linha inteira", e o script devolve os tres por isso');
+
+  // Editar NAO escolhe a padrao. Sao dois atos, e a aba Documento os separa em
+  // dois botoes pelo mesmo motivo: um acrescenta destino, o outro decide destino.
+  const identDepois = await emA(() => documento.identidade());
+  chk('W1m', identDepois!.chave_pix_padrao_id !== paraEditar.id,
+    'editar uma chave NAO a torna a padrao - trocar o destino do proximo lote sem ninguem pedir seria a tela decidindo');
 }
 
 // ===================================================== W2 a logo, e o gatilho
