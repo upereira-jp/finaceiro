@@ -200,7 +200,7 @@ const enderecoDe = async (numero: string): Promise<any> => {
     const l = r[0]!;
     return {
       nome: l.nome,
-      documento: l.documento ?? '',      // o `?? ''` de boleto.ts:164 - Q-PAGADOR-01
+      documento: l.documento,            // CRU: o `?? ''` de boleto.ts saiu em 06/08 (Q-PAGADOR-01)
       endereco: {
         logradouro: l.endereco_logradouro, numero: l.endereco_numero,
         bairro: l.endereco_bairro, municipio: l.endereco_municipio,
@@ -219,14 +219,26 @@ const enderecoDe = async (numero: string): Promise<any> => {
       'com o lote, o mesmo pagador vai completo - o circuito fecha');
 
   /*
-   * E O `?? ''` CONTINUA LA, de propósito: a `Q-PAGADOR-01` registra a guarda
-   * como pendente e nao decidida. Prender isto aqui e o registro executavel de
-   * que o endereco foi resolvido e o DOCUMENTO nao - as duas metades do pagador
-   * sao questoes diferentes, e so uma foi fechada.
+   * A OUTRA METADE DA `Q-PAGADOR-01`, e em 06/08/2026 ela MUDOU DE ESTADO.
+   *
+   * O que este bloco mediu ate aqui continua verdade e continua importando: o
+   * endereco entra por planilha e o documento **nao vem do CRM** - as duas
+   * metades sao questoes diferentes, e a de dados segue aberta.
+   *
+   * O que deixou de ser verdade e a segunda parte da frase antiga. Ate 06/08 esta
+   * verificacao dizia que `boleto.ts` mandava `?? ''` **sem guarda**, e era o
+   * registro executavel disso. A guarda existe: `PagadorSemDocumento`, 422, antes
+   * de tocar a porta e antes de criar linha de boleto - exercitada em `K17c`-`K17e`
+   * de `tests/repos-carteira.ts`, contra a funcao de verdade e nao contra um
+   * espelho como este.
+   *
+   * ENTAO A AFIRMACAO AQUI ENCOLHEU DE PROPOSITO, em vez de ser apagada: ela
+   * mede o DADO, que e o que este arquivo sabe medir. Deixar a frase velha seria
+   * a classe do indice vencido que este repositorio ja pagou quatro vezes.
    */
-  chk('Y5c', depois.documento === '',
-      'e o documento do pagador SEGUE vazio - endereco e documento sao duas questoes, '
-      + 'e o `?? \'\'` de boleto.ts:164 continua sem guarda (Q-PAGADOR-01)');
+  chk('Y5c', depois.documento === null,
+      'e o documento do pagador SEGUE ausente no dado - o lote de endereco nao o traz, e nenhuma '
+      + 'view do CRM o expoe. Quem RECUSA o boleto por isso agora e a guarda de boleto.ts (K17c)');
 }
 
 // ---------------------------------------------------- Y6 o isolamento

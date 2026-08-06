@@ -41,6 +41,25 @@ export class FaturaSemBoleto extends Error {
   }
 }
 
+/**
+ * O pagador sem CPF/CNPJ. `422`, e nao `502` — ver a guarda em `registrar()`.
+ *
+ * A MENSAGEM NOMEIA A UC, e isso nao e enfeite: quem le esta frase esta num lote
+ * de 28 boletos e precisa saber QUAL cliente falta, nao que "algum" falta. O nome
+ * vem junto porque numero de UC nao se reconhece de cabeca.
+ */
+export class PagadorSemDocumento extends Error {
+  readonly status = 422;
+  constructor(nome: string | null, numeroUc: string) {
+    super(
+      `A UC ${numeroUc} nao tem CPF/CNPJ do cliente${nome ? ` (${nome})` : ''}, e boleto sem ` +
+      'identificacao do pagador o banco recusa. O dado entra por `npm run documentos` — ' +
+      'preenchido, peca o boleto de novo. Nada foi enviado a Sicoob e nenhum boleto foi criado.'
+    );
+    this.name = 'PagadorSemDocumento';
+  }
+}
+
 /** O conector do tenant corrente, ou erro. Nunca devolve credencial ao chamador
  *  alem da referencia - e a referencia nao e segredo. */
 async function conector() {
@@ -124,6 +143,32 @@ export async function registrar(faturaId: string, cobranca: PortaDeCobranca): Pr
     include: { cliente: true },
   });
   if (!uc?.cliente) throw Object.assign(new Error('Cliente da fatura nao encontrado.'), { status: 404 });
+  /*
+   * O PAGADOR SEM IDENTIFICACAO PARA AQUI, e ate 06/08/2026 nao parava: a linha
+   * do `pagador` mandava `documento ?? ''` e a string vazia ia para o banco.
+   *
+   * POR QUE A RECUSA E NOSSA E NAO DELES. Sem guarda, quem recusa e a Sicoob, e a
+   * recusa volta pelo `catch` la embaixo traduzida em **502** - o codigo que diz
+   * "o outro lado falhou". O defeito nao e do outro lado: e um CPF que ninguem
+   * digitou, e o conserto e `npm run documentos`. Um 502 manda procurar
+   * indisponibilidade de banco; esta mensagem manda preencher um campo.
+   *
+   * E POR QUE ANTES DE CRIAR A LINHA, que e a parte que nao e obvia. Todo o resto
+   * deste arquivo trabalha para que a linha nasca ANTES da chamada - se a rede
+   * cair no meio, existe boleto no banco e precisa existir do nosso lado tambem.
+   * Aqui e o contrario: nada foi tentado, porque nao ha o que tentar. Criar a
+   * linha poria na fila de retentativa do `PRD` 6 um boleto que **nao pode dar
+   * certo** ate alguem digitar um documento - e a fila, por decisao registrada
+   * em `dominio/agenda.ts`, NUNCA DESISTE SOZINHA. Seria uma tentativa a cada
+   * `tetoSegundos`, para sempre, contra a mesma ausencia.
+   *
+   * Metade aberta da `Q-PAGADOR-01`. A outra metade - o endereco - fechou em
+   * 05/08 com `npm run enderecos`, e NAO entra nesta guarda: o que a Sicoob
+   * exige de fato de endereco nao esta medido (item (c) da questao), e recusar
+   * por um campo que talvez seja opcional bloquearia boleto que sairia.
+   */
+  const documentoDoPagador = uc.cliente.documento?.trim();
+  if (!documentoDoPagador) throw new PagadorSemDocumento(uc.cliente.nome, uc.numero_uc);
 
   const total = f.valor_total_centavos ?? 0;
   const existente = await dbt().boleto.findFirst({ where: { fatura_id: faturaId } });
@@ -161,7 +206,9 @@ export async function registrar(faturaId: string, cobranca: PortaDeCobranca): Pr
       vencimento: f.vencimento,
       pagador: {
         nome: uc.cliente.nome,
-        documento: uc.cliente.documento ?? '',
+        // Sem `?? ''`: a guarda la em cima ja garantiu que ha documento, e
+        // deixar o fallback aqui manteria vivo o caminho que ela fecha.
+        documento: documentoDoPagador,
         endereco: {
           logradouro: uc.endereco_logradouro, numero: uc.endereco_numero,
           bairro: uc.endereco_bairro, municipio: uc.endereco_municipio,

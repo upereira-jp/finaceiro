@@ -493,6 +493,70 @@ let liquidacaoJulho: string;
       'a retentativa REAPROVEITA a linha em vez de criar um segundo boleto (PRD 6)');
 }
 
+// -------------------------------------- K17c-e o pagador sem documento (Q-PAGADOR-01)
+/*
+ * A METADE ABERTA DA `Q-PAGADOR-01`, fechada em 06/08/2026. Ate aqui
+ * `boleto.ts` mandava `documento ?? ''` e a string vazia viajava: quem recusava
+ * era a Sicoob, e a recusa voltava pelo `catch` traduzida em **502** - o codigo
+ * que diz "o outro lado falhou", quando o que faltava era um CPF que ninguem
+ * digitou.
+ *
+ * AS TRES VERIFICACOES MEDEM COISAS DIFERENTES, e a terceira e a que importa
+ * mais e seria a mais facil de esquecer: a linha do boleto NAO pode nascer. Todo
+ * o resto deste arquivo trabalha para que ela nasca antes da chamada - mas aqui
+ * nada foi tentado, e uma linha `pendente` poria na fila do `PRD` 6 um boleto
+ * que nao pode dar certo ate alguem digitar um documento. A fila, por decisao
+ * registrada em `dominio/agenda.ts`, **nunca desiste sozinha**.
+ */
+{
+  const semDocumento = await emA(() => clienteRepo.criar({ nome: 'K17 pagador sem CPF' }));
+  const ucSemDoc = await emA(() => ucRepo.criar({
+    cliente_id: semDocumento.id, numero_uc: 'K17-SEM-DOC', distribuidora: 'Equatorial',
+    data_vencimento: new Date('2026-11-10T00:00:00Z'),
+  }));
+  await emA(() => rateio.definirRateio({
+    unidade_consumidora_id: ucSemDoc.id, usina_id: usinaComDono, percentual_rateio: '5.0000',
+  }));
+  await emA(() => usinaRepo.registrarGeracao({
+    usina_id: usinaComDono, competencia: mes(2026, 11), geracao_kwh: '10000.0000', origem: 'local',
+  }));
+  /*
+   * O CLIENTE GANHA DOCUMENTO PARA O CONTRATO ATIVAR (R9) E O PERDE DEPOIS, e o
+   * caminho torto e o ponto: sem ele nao ha fatura, e sem fatura nao ha boleto
+   * para recusar. E ele NAO e artificial - `contrato.ativar()` confere o
+   * documento uma vez, no ato; nada impede a linha de mudar depois, e a guarda
+   * do boleto existe justamente porque a checagem da R9 e de OUTRO momento.
+   */
+  await emA(() => clienteRepo.lancarDocumentosPorCliente(new Map([[semDocumento.id, '55678901257']])));
+  const ct = await emA(() => contrato.rascunhar({
+    cliente_id: semDocumento.id, unidade_consumidora_id: ucSemDoc.id, usina_id: usinaComDono,
+    originador_id: orgId, data_fechamento: new Date('2026-10-01T00:00:00Z'),
+    valor_referencia_centavos: 100_000, valor_referencia_origem: 'local',
+  }));
+  await emA(() => contrato.ativar(ct.id));
+  await emA(() => fatura.comporLote('2026-11-01'));
+  await emA(() => fatura.emitirLote('2026-11-01'));
+  const alvoSemDoc = (await emA(() => fatura.daCompetencia('2026-11-01')))
+    .find((f) => f.unidade_consumidora_id === ucSemDoc.id)!;
+  await emA(() => db().$executeRawUnsafe(
+    `UPDATE cliente SET documento = NULL, documento_validado = false WHERE id = '${semDocumento.id}'`));
+
+  let subiu: any = null;
+  try { await emA(() => boleto.registrar(alvoSemDoc.id, cobranca)); }
+  catch (e) { subiu = e; }
+
+  chk('K17c', subiu?.name === 'PagadorSemDocumento' && subiu?.status === 422,
+      'boleto de pagador sem CPF/CNPJ para AQUI, com erro nomeado e 422 - nao vira 502 da Sicoob, '
+      + 'que mandaria procurar indisponibilidade de banco onde falta um campo');
+  chk('K17d', /K17-SEM-DOC/.test(subiu?.message ?? '') && /npm run documentos/.test(subiu?.message ?? ''),
+      'a mensagem diz QUAL UC e o que fazer - num lote de 28, "algum cliente" nao e acionavel');
+
+  const nenhum = await emA(() => boleto.porFatura(alvoSemDoc.id));
+  chk('K17e', nenhum == null,
+      'e NENHUMA linha de boleto foi criada: nada foi tentado, e uma linha pendente poria na fila '
+      + 'do PRD 6 um boleto que nao pode dar certo - e a fila nunca desiste sozinha');
+}
+
 // ---------------------------------------------------- K18 prontidao: nao medido nao e ok
 {
   /*
