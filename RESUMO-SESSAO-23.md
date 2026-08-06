@@ -105,7 +105,9 @@ A `RETOMADA` §2 dizia, sobre o nome do recebedor divergir do DICT: *"Alinhar cu
 
 ## 6. Para quem abrir a próxima sessão
 
-**A próxima ação continua sendo o portal — e agora tem folha.** `SICOOB-portal-2026-08-06.md` fica aberta ao lado do navegador: os nove itens com o **consumidor de cada um aqui dentro**, o que muda conforme a resposta, e o §0 com o que **já está resolvido** (`ADR-0005` e `ADR-0006`, os dois aceitos), para a passada não gastar pergunta com isso.
+**A próxima ação continua sendo o portal — e agora tem folha.** `SICOOB-portal-2026-08-06.md`: cinco passos, **lacunas para preencher enquanto navega**, e uma tabela de *se vier X, então Y*. A pedido do dono ela ficou **enxuta e imperativa** — o *porquê* de cada item continua na §1 da `RETOMADA-2026-08-06`, e quem vai ao portal leva a folha, não a §1.
+
+**E uma coisa que a folha diz e que vale repetir:** o portal **não move a primeira fatura**. São duas cadeias. O que segura o faturamento são sete linhas de planilha e decisão — nenhuma delas depende da Sicoob, porque o meio de pagamento de hoje é o Pix estático, que já está no ar com a chave cadastrada.
 
 **O deploy já foi feito** — 21:39 de 06/08, sem migration, conferido na `RETOMADA-2026-08-06` §4. O aviso da tarifa já existe para quem opera.
 

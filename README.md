@@ -176,7 +176,7 @@ Nesta ordem. Cada documento pressupõe o anterior.
 1. **`RESUMO-SESSAO-23.md`** — **comece por aqui.** A sessão que mitigou o que não depende de ninguém de fora, **sem tomar decisão nenhuma**. A §1 é a aba Documento deixando de ser suposição — e diz, com a mesma precisão, **o que a medição não cobre**; a §2 é a `Q-TARIFA-CONC-01` perdendo o silêncio sem perder a pergunta; a §3 é o **quarto caso da `Q-PECA-NAO-PLUGADA-01`**, achado pela varredura que a própria entrada prescreveu — *"custa um comando"* e o comando não existia. A §4 são três erros meus, e o primeiro é o **instrumento de medida mentindo sobre produção**
 1. **`RESUMO-SESSAO-22.md`** — a sessão anterior, e a que fechou o último passo do caminho da primeira fatura que ainda era código. A última milha da fatura: o documento passou a sair **em lote**, e era o único passo do caminho que ainda era código. A §2 são os **dois defeitos que só o PDF pega** — e o maior deles é **anterior**: imprimir *uma* fatura produzia um PDF de **cinco** páginas, quatro em branco. A §3 é a lacuna que o caminho ponta a ponta achou (a fatura sai com o valor **incompleto**, em silêncio) e a §4 mede a `Q-FATCHEIA-01`: em 2026-06 seriam **0 de 29** cheias
 1. **`RESUMO-SESSAO-21.md`** — duas sessões atrás. Os dois últimos insumos em massa ganharam importador (contratos e endereço do pagador), o `ADR-0005` foi decidido e a `Q-WEBHOOK-01` ganhou desenho. A §2 são as duas medições que **encolheram o caminho crítico sem nenhuma decisão**; a §4 é a leitura que respondeu metade de um ADR; e a **§5 é o que eu decidi NÃO fazer, e por quê** — o `src/sicoob/http.ts` é escrevível e continua não escrito
-1. **`SICOOB-portal-2026-08-06.md`** — **se você vai abrir o portal do Sicoob, é esta que fica aberta ao lado do navegador.** Os nove itens a colher numa passada só, cada um com **o consumidor dele aqui dentro** e o que muda conforme a resposta. O §0 é o que **já está resolvido** — para a passada não gastar pergunta com `ADR-0005` e `ADR-0006`, que já foram aceitos
+1. **`SICOOB-portal-2026-08-06.md`** — **se você vai abrir o portal do Sicoob, abra esta junto.** Cinco passos, com **lacunas para preencher enquanto navega** e uma tabela de *se vier X, então Y*. Diz o que já está decidido (para não gastar pergunta) e o que o portal **não** resolve — inclusive que a primeira fatura não depende dele
 1. **`SICOOB-contrato-medido-2026-08-05.md`** — se a pergunta é *"como escrevo o adaptador da Sicoob?"*, comece aqui. Os três verbos da porta com caminho, corpo, resposta e erro. A §3.2 é a armadilha que mais custa (**`valor` é decimal, não centavos**) e a §4 é o que **não** está medido
 1. **`RESUMO-SESSAO-20.md`** — Duas entregas: o conector passou a ler as **dez** views e a conferir o eixo do originador sozinho (a §1.1 e o assunto — a causa raiz nao era ler oito, era **nao contar**), e o **layout da fatura virou posicao** (a §2.1 sao os tres defeitos silenciosos que o pedido do dono desenterrou). A §3 lista **seis erros meus**, e **dois deles so apareceram ao FOTOGRAFAR a tela**
 1. **`PLANO-layout-visual-2026-08-03.md`** — se a pergunta e *"como o documento da fatura e montado?"*, comece aqui. A §2 sao os **oito pontos de melhoria** do processo anterior, tres deles defeito e nao limitacao; o bloco EXECUTADO traz o que apareceu ao construir
@@ -307,16 +307,14 @@ RESUMO-SESSAO-21.md          passagem da sessao 21. Os dois
                              que eu decidi NAO FAZER: o src/sicoob/http.ts e
                              escrevivel e continua nao escrito, por Q-PECA-NAO-
                              PLUGADA-01
-SICOOB-portal-2026-08-06.md  A FOLHA DA PASSADA NO PORTAL, para ficar aberta ao
-                             lado do navegador. Os nove itens da RETOMADA 1 com o
-                             CONSUMIDOR de cada um aqui dentro e o que muda
-                             conforme a resposta - a parte que nao da para
-                             reconstruir depois olhando a anotacao. O 0 e o que JA
-                             esta resolvido (ADR-0005 e ADR-0006, os dois aceitos),
-                             para a passada nao gastar pergunta com isso; o 2 e a
-                             pergunta que pode encurtar a fila inteira (se a `cob`
-                             da API Pix estiver disponivel, a cobranca concilia
-                             sozinha e nao depende do contrato de cobranca)
+SICOOB-portal-2026-08-06.md  O QUE FAZER NO PORTAL, em cinco passos e com
+                             LACUNAS PARA PREENCHER enquanto navega. Depois, uma
+                             tabela de "se vier X, entao Y". Diz o que ja esta
+                             decidido, para nao gastar pergunta, e o que o portal
+                             NAO resolve - a conta PJ, o A1, e a primeira fatura,
+                             que nao depende dele. A pergunta que pode encurtar a
+                             fila inteira e se da para marcar Pix `cob`: com ela a
+                             cobranca concilia sozinha
 SICOOB-contrato-medido-2026-08-05.md
                              O CONTRATO DA API, medido na documentacao publica.
                              Os tres verbos da porta com caminho, corpo, resposta
