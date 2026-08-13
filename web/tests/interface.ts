@@ -101,7 +101,25 @@ chk('I1b', literais(foraDoDocumento).length === 0,
 // IMPRESSO, e puxar token de tema faria a mesma fatura sair de duas cores
 // dependendo de quem imprime. Trocar o VALOR de uma excecao nomeada e barato;
 // trocar a NATUREZA dela, de literal para token, nao passaria daqui.
-const ESPERADAS = ['#fff', '#14213D', '#E4DFD4', '#F6F2EA'];
+//
+// EM 12/08 AS QUATRO VIRARAM SEIS, e esta linha existe para essa entrada doer. As
+// duas novas chegaram com a faixa de pagamento do modelo G3 — o primeiro pedaco
+// daquele desenho a entrar, e o unico que nao depende do leitor da Equatorial
+// (`PLANO-documento-modelo-g3-2026-08-12.md` §6):
+//
+//   #E8843C  o Orange. No papel ele tem UM uso: o valor a pagar. E o unico numero
+//            colorido da faixa, e e por ele que a pessoa acha quanto deve. A
+//            alternativa era `var(--acento)`, e ela reprova pela regra deste
+//            proprio bloco: o token e Orange no tema claro e GOLD no escuro, entao
+//            a mesma fatura sairia de duas cores conforme quem mandou imprimir;
+//   #8F939D  o Gray, nos rotulos caixa-alta. Ele e o unico valor da paleta da G3
+//            que a INTERFACE nao pode usar — 2,75:1 sobre o creme, e `tema.ts`
+//            derivou o `--fraco` por causa disso. No papel o par e outro: cinza
+//            sobre BRANCO, 4,02:1, que passa AA. Reusar `--fraco` aqui traria de
+//            volta o problema do paragrafo acima, e ainda por cima para consertar
+//            um contraste que neste fundo nao esta quebrado. Registrado na
+//            `Q-DOCG3-07`.
+const ESPERADAS = ['#fff', '#14213D', '#E4DFD4', '#F6F2EA', '#E8843C', '#8F939D'];
 const achadas = [...new Set(literais(dentroDoDocumento))];
 chk('I1c', JSON.stringify(achadas) === JSON.stringify(ESPERADAS),
     `no documento impresso, exatamente ${ESPERADAS.join(' ')} — Navy sobre branco, `
@@ -230,7 +248,19 @@ chk('I5h', Object.values(ICONE_DO_STATUS_DA_FATURA)
 
 chk('I6', !/border-collapse:\s*separate/.test(REGRAS) && /border-collapse:\s*collapse/.test(REGRAS),
     'a tabela colapsa a borda — e o que permite UMA linha entre celulas, nao duas');
-chk('I6b', !new RegExp('(th|td)[^{]*\\{[^}]*border-(left|right):(?!\\s*(0|none))').test(REGRAS),
+// O PADRAO FOI APERTADO EM 12/08, e ele estava FROUXO nos dois sentidos - a
+// mensagem sempre disse "th ou td" e o regex dizia outra coisa:
+//
+//   1. `(th|td)` SEM FRONTEIRA casava o "th" de `width`. Entao `min-width: 0` numa
+//      regra e um `border-left` na regra SEGUINTE bastavam para reprovar, e nenhum
+//      dos dois tem a ver com tabela. Foi o que a faixa de pagamento encostou;
+//   2. `[^{]*` NAO EXCLUI `}`, entao a busca atravessava o fim da regra e colava um
+//      seletor de tabela numa declaracao de outro seletor qualquer, varias regras
+//      abaixo.
+//
+// O que a verificacao existe para prender continua preso, e agora e so isso:
+// `td`/`th` como SELETOR, e a borda dentro da PROPRIA regra dele.
+chk('I6b', !new RegExp('\\b(th|td)\\b[^{}]*\\{[^}]*border-(left|right):(?!\\s*(0|none))').test(REGRAS),
     'nenhuma borda vertical em th ou td: era o pedido de "remover linhas verticais entre celulas"');
 chk('I6c', /tbody td\s*\{[^}]*border-bottom: 1px solid var\(--borda-suave\)/.test(REGRAS),
     'a divisoria entre linhas e a --borda-suave (1.16:1), nao a --borda do contorno');

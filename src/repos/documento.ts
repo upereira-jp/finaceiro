@@ -21,7 +21,8 @@
 import { dbt } from '../db/tipado.ts';
 import { tenantCorrente, exigir } from '../db/contexto.ts';
 import {
-  linhasDoDocumento, type ConfiguracaoDeCampo, type CampoDeFatura,
+  linhasDoDocumento, emReais, dataBr,
+  type ConfiguracaoDeCampo, type CampoDeFatura,
   type DadosDaFatura, type LinhaDoDocumento,
 } from '../dominio/layout-do-documento.ts';
 import {
@@ -598,15 +599,48 @@ export type DocumentoDaFatura = {
    * `qr` acompanha as duas primeiras quando ha BR Code. `null` com `qr_motivo`
    * preenchido significa que o desenho falhou e o codigo segue pagavel por
    * copia-e-cola - nunca um QR mudo no lugar de um erro.
+   *
+   * `vencimento_br` E `valor_br` VEM FORMATADOS, e o sufixo e deliberado: o
+   * `vencimento` do topo deste tipo e ISO e o `valor_total_centavos` e inteiro, e
+   * dois campos com o mesmo nome e formatos diferentes seria pior que dois nomes.
+   *
+   * POR QUE ELES EXISTEM, ja que os crus estao logo acima: a partir de 12/08 a
+   * faixa imprime vencimento e valor DENTRO dela (modelo G3), e a alternativa era
+   * a tela formata-los. `documento.tsx` proibe isso na primeira tela do arquivo -
+   * *"dinheiro e data ja vem formatados do servidor, e a tela NAO os reformata"* -
+   * e o motivo vale inteiro aqui: `emReais` existe nos DOIS lados (`web/src/
+   * dinheiro.ts` e `dominio/layout-do-documento.ts`), entao formatar na tela poria
+   * o mesmo total na tabela e na faixa por dois caminhos que podem divergir. E o
+   * CRM, que consome esta rota e nao roda React, nao teria nenhum dos dois.
+   *
+   * NAO da para tirar isso de `linhas[]`: aquela lista obedece a configuracao de
+   * campos do tenant, e quem esconder `vencimento` da tabela esconderia o
+   * vencimento da FAIXA junto - que e onde ele mais precisa aparecer.
    */
   pagamento:
     | {
         tipo: 'boleto'; linha_digitavel: string | null; codigo_barras: string | null;
         pix_copia_e_cola: string | null; qr: QrDoDocumento | null; qr_motivo?: string;
+        /* O IDENTIFICADOR DO BOLETO NO BANCO, e ele passou a viajar em 12/08 com a
+         * faixa nova. Nao e dado novo - `boleto.nosso_numero` existe desde a
+         * migration da carteira e e o que a Sicoob devolve ao registrar. O que
+         * mudou e que agora ele CHEGA ao papel: e por ele que a pessoa acha o
+         * titulo quando liga para o banco, e o modelo G3 o imprime ao lado do
+         * vencimento. Nulo enquanto o boleto nao registrou. */
+        nosso_numero: string | null;
+        vencimento_br: string; valor_br: string;
       }
     | {
         tipo: 'pix'; brcode: string; qr: QrDoDocumento | null; qr_motivo?: string;
         conciliacao: 'manual';
+        vencimento_br: string; valor_br: string;
+        /* QUEM RECEBE, por extenso. Ja viajava dentro do BR Code (campo 59) e ja
+         * aparecia no painel de conferencia; o que nao havia era a faixa impressa
+         * dizer para quem o dinheiro vai sem obrigar quem le a decodificar o
+         * payload. O `apelido` abaixo continua sendo o nome INTERNO da chave - os
+         * dois nao se substituem: um identifica a chave para quem opera, o outro
+         * identifica o destinatario para quem paga. */
+        recebedor_nome: string;
         /* QUAL das chaves cadastradas desenhou este QR. Nao e enfeite: com um
          * banco de chaves, "o QR esta certo?" deixou de ter resposta olhando o
          * desenho - o apelido e a unica forma de conferir sem ler o campo 01 do
@@ -739,12 +773,29 @@ export async function paraFatura(faturaId: string, opcoes: OpcoesDoDocumento = {
  * SUBSTITUTO enquanto o A1 nao existe, nunca o preferido.
  */
 function faixaDePagamento(f: any, chave: any, bol: any): DocumentoDaFatura['pagamento'] {
+  /* Formatados UMA vez, pelos mesmos formatadores que compoem `linhas[]` - e nao
+   * por um par proprio. Se o documento passar a escrever data ou dinheiro de outro
+   * jeito, a faixa acompanha sozinha; um segundo formatador aqui seria a divergencia
+   * que este projeto ja registrou duas vezes.
+   *
+   * O TOTAL NULO SAI "—" E NAO "R$ 0,00", pela R9 e pelo mesmo motivo que o resto
+   * do documento: a coluna e GENERATED ALWAYS e aceita nulo, e um total desconhecido
+   * impresso como zero e vazio virando numero. Note que o caso quase nao chega aqui
+   * - o ramo do Pix abaixo recusa faixa sem valor -, mas o do boleto chega: um
+   * boleto registrado tem valor no BANCO, e a coluna gerada daqui pode estar nula. */
+  const vencimento_br = dataBr(String(f.vencimento instanceof Date
+    ? f.vencimento.toISOString()
+    : f.vencimento));
+  const valor_br = f.valor_total_centavos == null ? '—' : emReais(Number(f.valor_total_centavos));
+
   if (bol && bol.status === 'registrado') {
     return {
       tipo: 'boleto',
       linha_digitavel: bol.linha_digitavel ?? null,
       codigo_barras: bol.codigo_barras ?? null,
       pix_copia_e_cola: bol.pix_copia_e_cola ?? null,
+      nosso_numero: bol.nosso_numero ?? null,
+      vencimento_br, valor_br,
       // O Pix DO BANCO tambem ganha desenho. Ele e melhor que o nosso estatico -
       // tem `txid` e concilia sozinho -, entao seria estranho desenhar so o pior.
       ...qrDe(bol.pix_copia_e_cola ?? null),
@@ -777,7 +828,11 @@ function faixaDePagamento(f: any, chave: any, bol: any): DocumentoDaFatura['paga
       recebedorCidade: chave.recebedor_cidade,
       valorCentavos: f.valor_total_centavos,
     });
-    return { tipo: 'pix', brcode, ...qrDe(brcode), conciliacao: 'manual', apelido: chave.apelido };
+    return {
+      tipo: 'pix', brcode, ...qrDe(brcode), conciliacao: 'manual',
+      vencimento_br, valor_br,
+      recebedor_nome: chave.recebedor_nome, apelido: chave.apelido,
+    };
   }
 
   return {

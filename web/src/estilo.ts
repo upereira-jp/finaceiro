@@ -600,6 +600,80 @@ export const ESTILO = `
      e nao "quase igual" a outra - a lista deste bloco e fechada de proposito. */
   .bloco-fundo { background: #F6F2EA; }
 
+  /* ------------------------------------------- a faixa de pagamento (12/08/2026)
+     O DESENHO VEIO DO MODELO G3 ("g3_fatura_unificada"), e este e o primeiro
+     pedaco dele a entrar - o unico que nao depende do leitor da Equatorial, porque
+     beneficiario, nosso numero, vencimento, valor, QR e linha digitavel ja existem.
+     Ver "PLANO-documento-modelo-g3-2026-08-12.md" §6.
+
+     AS DUAS CORES NOVAS DA EXCECAO NOMEADA, e elas doem de proposito (I1c):
+
+       #E8843C  o Orange da marca, e no papel ele tem UM uso so: o valor a pagar.
+                No modelo G3 e o unico numero colorido da faixa, e e o que a pessoa
+                procura primeiro. Puxar --acento faria a mesma fatura sair laranja
+                no tema claro e DOURADA no escuro - o defeito que este bloco inteiro
+                existe para impedir;
+       #8F939D  o Gray da marca, nos rotulos caixa-alta. Em TELA ele reprova AA
+                (2,75:1 sobre o creme, medido em "tema.ts") e por isso a interface
+                usa o "--fraco" derivado. Aqui e tinta em PAPEL, contra branco:
+                4,02:1, e o par que a interface reprovava nao e este. A distincao
+                esta registrada na "Q-DOCG3-07".
+
+     A CAIXA NAO PODE QUEBRAR NO MEIO: "break-inside: avoid" vale para o dia em que
+     o documento tiver mais de uma folha. Hoje ele tem uma, e a regra nao custa. */
+  .faixa-pgto {
+    border: 1px solid #14213D; display: flex; flex-direction: column;
+    break-inside: avoid; page-break-inside: avoid; height: 100%;
+  }
+  .faixa-pgto-topo {
+    background: #14213D; color: #F6F2EA;
+    padding: 2mm 3mm; display: flex; align-items: baseline; justify-content: space-between;
+    text-transform: uppercase; letter-spacing: .2em; font-size: 9pt;
+  }
+  /* Os campos do cabecalho. O beneficiario cresce e empurra os numeros para a
+     direita ("margin-right: auto"); os numeros ficam do tamanho do conteudo.
+     E "flex" e nao "grid" de colunas fixas porque a linha tem TRES ou QUATRO campos
+     conforme o caminho - o boleto nao tem beneficiario para mostrar (Q-DOCG3-08) -,
+     e um "grid-template-columns" de quatro deixaria a primeira coluna esticando o
+     "Nosso numero" no lugar de um beneficiario que nao existe. */
+  .faixa-pgto-campos {
+    display: flex; flex-wrap: wrap; gap: 4mm;
+    padding: 2.5mm 3mm; border-bottom: 1px solid #E4DFD4; align-items: end;
+  }
+  .faixa-pgto-campos > :first-child { margin-right: auto; }
+  .faixa-pgto-rot {
+    text-transform: uppercase; letter-spacing: .12em; font-size: 6.5pt; color: #8F939D;
+  }
+  .faixa-pgto-val { font-size: 10pt; font-weight: 600; }
+  .faixa-pgto-total { font-size: 13pt; font-weight: 700; color: #E8843C; }
+  /* As duas formas de pagar, lado a lado. "1fr" cada, e a divisoria e a borda da
+     segunda - nao um filete separado, que somaria largura e desalinharia o par. */
+  .faixa-pgto-vias { display: grid; gap: 0; flex: 1; min-height: 0; }
+  .faixa-pgto-via { padding: 2.5mm 3mm; min-width: 0; display: flex; flex-direction: column; gap: 1.5mm; }
+  .faixa-pgto-via + .faixa-pgto-via { border-left: 1px solid #E4DFD4; }
+  /* O QR VEM DO SERVIDOR COM O TAMANHO DELE (220 px) E AQUI ELE SE AJUSTA A CAIXA.
+     Nao e o mesmo caso do painel de conferencia, onde a caixa LE o desenho
+     ("ladoDoQr"): la nao ha papel, entao o tamanho natural e o certo. Aqui a caixa
+     e milimetro de folha e quem cede e o desenho - SVG e vetor, entao encolher nao
+     perde modulo, ao contrario de reescalar um bitmap. */
+  .faixa-pgto-qr { width: 30mm; height: 30mm; flex: none; align-self: center; }
+  .faixa-pgto-qr svg { width: 100%; height: 100%; display: block; }
+  /* Linha digitavel e copia-e-cola: monoespacada e quebrando em qualquer ponto -
+     sao cadeias sem espaco, e sem isto elas estouram a coluna. */
+  .faixa-pgto-codigo {
+    font-family: var(--fonte-mono); font-size: 6.5pt; line-height: 1.35;
+    word-break: break-all; background: #F6F2EA; padding: 1.5mm;
+  }
+  .faixa-pgto-linha {
+    font-family: var(--fonte-mono); font-size: 8.5pt; font-weight: 600;
+    letter-spacing: .02em; text-align: center;
+  }
+  .faixa-pgto-nota { font-size: 7pt; color: #8F939D; }
+  .faixa-pgto-rodape {
+    padding: 1.5mm 3mm; border-top: 1px solid #E4DFD4;
+    font-size: 6pt; letter-spacing: .04em; color: #8F939D; line-height: 1.35;
+  }
+
   @media print {
     /* Tudo fora do documento sai da pagina impressa - inclusive o que esta
        marcado com a classe naoimprime, que sao os controles da propria previa. */

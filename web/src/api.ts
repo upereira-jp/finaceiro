@@ -416,8 +416,19 @@ export type DocumentoDaFatura = {
     | {
         tipo: 'boleto'; linha_digitavel: string | null; codigo_barras: string | null;
         pix_copia_e_cola: string | null; qr: QrDoDocumento | null; qr_motivo?: string;
+        /** O identificador do titulo no banco. Nulo enquanto nao registrou. */
+        nosso_numero: string | null;
+        /** JA FORMATADOS pelo servidor - a tela nao os reformata. O sufixo separa
+         *  do `vencimento` ISO e do `valor_total_centavos` inteiro do topo. */
+        vencimento_br: string; valor_br: string;
       }
-    | { tipo: 'pix'; brcode: string; qr: QrDoDocumento | null; qr_motivo?: string; conciliacao: 'manual' }
+    | {
+        tipo: 'pix'; brcode: string; qr: QrDoDocumento | null; qr_motivo?: string;
+        conciliacao: 'manual';
+        vencimento_br: string; valor_br: string;
+        /** Quem recebe, por extenso - o campo 59 do BR Code, legivel no papel. */
+        recebedor_nome: string;
+      }
     | { tipo: 'nenhuma'; motivo: string };
 };
 

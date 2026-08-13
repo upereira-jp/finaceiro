@@ -20,9 +20,14 @@
 
 import {
   areaDaFolha, medidasComOrientacao, naGrade, arrastar, redimensionar,
-  escalaDaPrevia, regraDaPagina, blocoNovo, PASSO_MM, MINIMO_MM,
+  escalaDaPrevia, regraDaPagina, blocoNovo, ladoDoQr, PASSO_MM, MINIMO_MM,
   type FolhaDoEditor, type Retangulo,
 } from '../src/layout-regras.ts';
+// O W10 compara a leitura da TELA contra a emissao do SERVIDOR - saida contra
+// saida, e nao contra um SVG que eu escreveria a mao aqui. Um SVG de mentira
+// concordaria comigo por construcao, que e exatamente o defeito que ele prende.
+import { svgDoBrCode, paraSvg, codificar } from '../../src/dominio/qrcode.ts';
+import { pixEstatico } from '../../src/dominio/brcode.ts';
 
 let falhas = 0;
 const chk = (id: string, cond: boolean, d: string) => {
@@ -219,6 +224,44 @@ console.log('== o editor de layout: arrastar, redimensionar, prender e escalar =
 
   chk('W9c', blocoNovo('linha', area).altura_mm === 1,
       'o filete nasce com 1mm de altura, nao com os 20 do bloco comum');
+}
+
+// ---- W10: a caixa do QR le o tamanho do desenho, e nunca o contrario.
+//
+// O DEFEITO QUE ISTO PRENDE, medido em 09/08/2026 no bundle que producao serve: a
+// tela declarava uma caixa de 180x180 e o servidor mandava um SVG de 220x220. O
+// desenho vazava 40 px, e o texto seguinte - pintado depois, por ordem de arvore -
+// caia POR CIMA do QR: 24 px da legenda no lado direito e a largura inteira do
+// paragrafo de baixo, sobre o padrao localizador. Nao havia erro, nao havia log:
+// so um QR que a camera nao le, num painel que existe para ser lido por camera.
+//
+// O sentido perigoso e o que W10a afirma: o numero NAO pode ser escolhido dos dois
+// lados. Se o servidor mudar `lado`, a tela acompanha sem ninguem lembrar dela.
+{
+  const brcode = pixEstatico({
+    chave: '66714022000121', recebedorNome: 'G3 GESTAO ENERGIA SOLAR',
+    recebedorCidade: 'GOIANIA', valorCentavos: 12345,
+  });
+
+  for (const lado of [220, 160, 300]) {
+    const { svg } = svgDoBrCode(brcode, { nivel: 'M', lado });
+    chk('W10a', ladoDoQr(svg) === lado,
+        `a tela le ${lado} do SVG que o servidor emitiu com lado ${lado} - o tamanho tem UMA fonte, e ela e o desenho`);
+  }
+
+  // Sem `lado`, o SVG so tem viewBox - e o viewBox esta em MODULOS, nao em pixels.
+  // Devolver 57 aqui daria uma caixa de 57 px em volta de um desenho de 300, que e
+  // o mesmo defeito com outro numero.
+  const semLado = paraSvg(codificar(brcode, { nivel: 'M' }));
+  chk('W10b', /viewBox="0 0 \d+ \d+"/.test(semLado) && ladoDoQr(semLado) === null,
+      'SVG sem width/height devolve null (a caixa se ajusta ao conteudo) e NUNCA o numero do viewBox');
+
+  const { svg } = svgDoBrCode(brcode, { nivel: 'M', lado: 220 });
+  chk('W10c', ladoDoQr(svg.replace('height="220"', 'height="180"')) === null,
+      'lados diferentes devolvem null em vez de adivinhar qual dos dois vale');
+
+  chk('W10d', ladoDoQr('<div>nao sou svg</div>') === null && ladoDoQr('') === null,
+      'entrada que nao e SVG nao vira tamanho');
 }
 
 console.log(`\n${falhas === 0 ? 'TODAS PASSARAM' : `${falhas} FALHA(S)`}`);

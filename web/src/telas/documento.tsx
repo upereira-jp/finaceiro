@@ -32,7 +32,7 @@ import {
   selecaoDoLote, separarComposicao, frasePreImpressao, STATUS_PADRAO_DO_LOTE, PORQUE_FORA,
   type Composicao, type ResultadoDaComposicao,
 } from '../lote-de-documentos.ts';
-import { escalaDaPrevia, regraDaPagina, PX_POR_MM } from '../layout-regras.ts';
+import { escalaDaPrevia, regraDaPagina, ladoDoQr, PX_POR_MM } from '../layout-regras.ts';
 import { useLargura } from '../medir-largura.ts';
 import { EditorDeLayout, estiloDoBloco } from './layout-editor.tsx';
 
@@ -785,7 +785,10 @@ function ConteudoDoBloco(
       </table>
     );
   }
-  if (b.tipo === 'pagamento') return <FaixaDePagamento pagamento={doc.pagamento} />;
+  // A FAIXA RECEBE O DOCUMENTO INTEIRO, e nao so `doc.pagamento`: o modelo G3 poe
+  // vencimento e valor DENTRO da caixa de pagamento, ao lado do nosso numero, e os
+  // dois moram no topo do documento - nao na faixa.
+  if (b.tipo === 'pagamento') return <FaixaDePagamento doc={doc} />;
   return null;
 }
 
@@ -799,6 +802,10 @@ function ConteudoDoBloco(
  * nenhum dado de fatura, cliente ou chave Pix atravessa a string. A verificacao
  * `Q13c` de `tests/qrcode.ts` prende isso - o atributo nao aceita caractere fora de
  * `[Mhvz0-9 -]`. Se alguem um dia interpolar texto no SVG, aquele teste cai antes.
+ *
+ * A CAIXA NAO DECLARA TAMANHO, ELA LE O DO DESENHO (`ladoDoQr`). Ate 09/08/2026 ela
+ * dizia `180x180` e o SVG vinha com 220 - o desenho vazava 40 px e o texto seguinte
+ * era pintado por cima dele. Ver o comentario de `ladoDoQr` para o que foi medido.
  */
 function Qr({ qr, motivo, rotulo }: { qr: QrDoDocumento | null; motivo?: string; rotulo: string }) {
   if (!qr) {
@@ -808,11 +815,14 @@ function Qr({ qr, motivo, rotulo }: { qr: QrDoDocumento | null; motivo?: string;
       ? <p className="sub naoimprime" style={{ marginTop: 8 }}>O desenho do QR não pôde ser gerado: {motivo}</p>
       : null;
   }
+  const lado = ladoDoQr(qr.svg);
   return (
     <figure style={{ margin: '12px 0 0', display: 'flex', gap: 16, alignItems: 'center' }}>
       <div
         aria-label={rotulo}
-        style={{ width: 180, height: 180, flex: '0 0 auto' }}
+        /* `display: flex` tira a folga de linha de base que um SVG em linha deixa
+         * embaixo - sem ela a caixa fica alguns pixels mais alta que o desenho. */
+        style={{ flex: '0 0 auto', display: 'flex', width: lado ?? undefined, height: lado ?? undefined }}
         dangerouslySetInnerHTML={{ __html: qr.svg }}
       />
       <figcaption className="sub" style={{ margin: 0 }}>
@@ -826,48 +836,176 @@ function Qr({ qr, motivo, rotulo }: { qr: QrDoDocumento | null; motivo?: string;
   );
 }
 
-function FaixaDePagamento({ pagamento }: { pagamento: DocumentoDaFatura['pagamento'] }) {
-  if (pagamento.tipo === 'boleto') {
+/**
+ * A FAIXA DE PAGAMENTO NO DESENHO DO MODELO G3 (12/08/2026).
+ *
+ * DE ONDE VEIO: `github.com/lealvbl-stack/g3_fatura_unificada`, a caixa de
+ * pagamento da folha 2. E o primeiro pedaco daquele modelo a entrar, e entrou
+ * sozinho por um motivo: **e o unico que nao depende do leitor da Equatorial.**
+ * Beneficiario, nosso numero, vencimento, valor, QR e linha digitavel ja existem
+ * no payload hoje. Os paineis de economia, desconto, CO2 e historico nao existem
+ * e nao foram inventados - ver `PLANO-documento-modelo-g3-2026-08-12.md` §4.
+ *
+ * O QUE O DESENHO MUDA, e nao e enfeite: a faixa antiga era um filete tracejado
+ * com dois codigos empilhados, e as duas formas de pagar disputavam a mesma
+ * coluna. Aqui elas sao **duas vias lado a lado**, com a caixa fechada por borda
+ * - que e como um documento de cobranca se le: primeiro para quem, quanto e ate
+ * quando; depois por qual caminho.
+ *
+ * DUAS COISAS DO MODELO ORIGINAL **NAO** ENTRARAM, e as duas sao decisao aberta:
+ * o codigo de barras (nao temos codificador - `Q-DOCG3-06`) e a Barlow Semi
+ * Condensed, que no modelo carrega todo numero grande (`Q-DOCG3-05`). A estrutura,
+ * a hierarquia e as cores sao as do modelo; a fonte e a do sistema.
+ *
+ * O RODAPE LEGAL SO APARECE NO BOLETO. No modelo ele e texto fixo do Bancoob/
+ * Sicoob, e ele so e verdade quando o titulo foi registrado la - imprimi-lo sob um
+ * Pix estatico nosso seria dizer que o banco responde por um documento que ele
+ * nunca viu.
+ */
+function FaixaDePagamento({ doc }: { doc: DocumentoDaFatura }) {
+  const { pagamento } = doc;
+
+  if (pagamento.tipo === 'nenhuma') {
     return (
-      <div style={{ marginTop: 24, borderTop: '2px dashed var(--borda)', paddingTop: 16 }}>
-        <div className="fraco" style={{ fontSize: 12 }}>PAGUE COM O BOLETO</div>
-        <code style={{ fontSize: 15, wordBreak: 'break-all' }}>{pagamento.linha_digitavel ?? '—'}</code>
-        {pagamento.pix_copia_e_cola && (
-          <>
-            <div className="fraco" style={{ fontSize: 12, marginTop: 12 }}>OU PIX (copia e cola)</div>
-            <code style={{ fontSize: 11, wordBreak: 'break-all' }}>{pagamento.pix_copia_e_cola}</code>
-            <Qr qr={pagamento.qr} motivo={pagamento.qr_motivo} rotulo="QR Code do Pix do boleto" />
-          </>
-        )}
+      <div className="faixa-pgto">
+        <div className="faixa-pgto-topo"><span>Pagamento</span></div>
+        <div className="faixa-pgto-via">
+          <div className="faixa-pgto-rot">Sem faixa de pagamento</div>
+          <div className="faixa-pgto-nota">{pagamento.motivo}</div>
+        </div>
       </div>
     );
   }
 
-  if (pagamento.tipo === 'pix') {
-    return (
-      <div style={{ marginTop: 24, borderTop: '2px dashed var(--borda)', paddingTop: 16 }}>
-        <div className="fraco" style={{ fontSize: 12 }}>PAGUE COM PIX — aponte a câmera ou copie o código</div>
-        <Qr qr={pagamento.qr} motivo={pagamento.qr_motivo} rotulo="QR Code do Pix" />
-        <code style={{ fontSize: 11, wordBreak: 'break-all', display: 'block', marginTop: 12 }}>
-          {pagamento.brcode}
-        </code>
-        {/*
-          O QUE CONTINUA VERDADE DEPOIS DE O DESENHO EXISTIR: o Pix estatico nao
-          carrega `txid` por fatura, entao o dinheiro chega sem dizer de quem e. O
-          desenho nao muda isso, e a frase fica.
-        */}
-        <p className="sub naoimprime" style={{ marginTop: 8, marginBottom: 0 }}>
-          Conciliação <strong>manual</strong>: um Pix estático não carrega identificador por fatura,
-          então a baixa é dada na aba Faturas. Isso não muda com o QR.
-        </p>
-      </div>
-    );
-  }
+  const boleto = pagamento.tipo === 'boleto';
+  // O Pix do BOLETO e o do banco (tem `txid`); o outro e o nosso estatico. As duas
+  // vias so aparecem quando ha as duas - um `1fr 1fr` fixo deixaria meia caixa
+  // vazia na fatura que so tem Pix, que e a maioria enquanto o A1 nao existe.
+  const temPix = boleto ? !!pagamento.pix_copia_e_cola : true;
+  const temBoleto = boleto;
+  const vias = [temPix, temBoleto].filter(Boolean).length;
 
   return (
-    <div style={{ marginTop: 24, borderTop: '2px dashed var(--borda)', paddingTop: 16 }}>
-      <div className="fraco" style={{ fontSize: 12 }}>SEM FAIXA DE PAGAMENTO</div>
-      <p className="sub" style={{ marginBottom: 0 }}>{pagamento.motivo}</p>
+    <div className="faixa-pgto">
+      <div className="faixa-pgto-topo">
+        <span>Pagamento</span>
+        <span style={{ letterSpacing: '.06em', fontSize: '7pt' }}>
+          {boleto ? 'Boleto registrado' : 'Pix'}
+        </span>
+      </div>
+
+      {/* QUEM, QUANTO E ATE QUANDO. O nosso numero so existe no boleto; no Pix o
+          lugar dele fica com o apelido da chave, que e o que identifica o destino
+          quando ha mais de uma cadastrada. */}
+      <div className="faixa-pgto-campos">
+        {/* O BENEFICIARIO SO APARECE QUANDO EXISTE, e a ausencia dele no boleto nao
+            e descuido: `identidade_de_cobranca` NAO tem razao social nem CNPJ (so
+            logo e chave padrao), entao no caminho do boleto nao ha nome de quem
+            recebe em lugar nenhum do schema. O Pix tem, porque a `chave_pix` carrega
+            `recebedor_nome` - o campo 59 do BR Code.
+
+            IMPRIMIR "—" SOB O ROTULO SERIA PIOR QUE OMITIR: no modelo G3 este e o
+            campo do aviso anti-golpe (*"confira sempre se o beneficiario e..."*), e
+            um travessao ali ensina o cliente a aceitar fatura sem beneficiario.
+            Registrado na `Q-DOCG3-08`. */}
+        {pagamento.tipo === 'pix' && (
+          <div>
+            <div className="faixa-pgto-rot">Beneficiário</div>
+            <div className="faixa-pgto-val">{pagamento.recebedor_nome}</div>
+          </div>
+        )}
+        {boleto && (
+          <div>
+            <div className="faixa-pgto-rot">Nosso número</div>
+            <div className="faixa-pgto-val">{pagamento.nosso_numero ?? '—'}</div>
+          </div>
+        )}
+        <div>
+          <div className="faixa-pgto-rot">Vencimento</div>
+          {/* JA VEM FORMATADO, e a tela nao o reformata - a regra da primeira tela
+              deste arquivo. `doc.vencimento` continua ISO ao lado, e e ele que um
+              consumidor que queira reordenar por data deve usar. */}
+          <div className="faixa-pgto-val">{pagamento.vencimento_br}</div>
+        </div>
+        <div>
+          <div className="faixa-pgto-rot">Valor do documento</div>
+          {/* "—" quando o total e nulo (coluna gerada, aceita nulo) - nunca zero. A
+              decisao e do servidor, e a tela so pinta o que ele escreveu. */}
+          <div className="faixa-pgto-total">{pagamento.valor_br}</div>
+        </div>
+      </div>
+
+      <div className="faixa-pgto-vias"
+           style={{ gridTemplateColumns: `repeat(${vias || 1}, minmax(0, 1fr))` }}>
+        {temPix && (
+          <div className="faixa-pgto-via">
+            <div className="faixa-pgto-rot" style={{ textAlign: 'center' }}>Pague com Pix</div>
+            <QrDaFaixa qr={pagamento.qr} motivo={pagamento.qr_motivo}
+                       rotulo={boleto ? 'QR Code do Pix do boleto' : 'QR Code do Pix'} />
+            <div className="faixa-pgto-nota" style={{ textAlign: 'center' }}>
+              Aponte a câmera do aplicativo do seu banco
+            </div>
+            <div className="faixa-pgto-codigo">
+              {boleto ? pagamento.pix_copia_e_cola : pagamento.brcode}
+            </div>
+          </div>
+        )}
+
+        {temBoleto && (
+          <div className="faixa-pgto-via">
+            <div className="faixa-pgto-rot" style={{ textAlign: 'center' }}>Pague com boleto</div>
+            {/* O CODIGO DE BARRAS FALTA E ELE E DITO, nao desenhado por aproximacao:
+                o modelo G3 usa JsBarcode e nos nao temos codificador de barras
+                (`Q-DOCG3-06`). A linha digitavel paga em qualquer banco e por
+                digitacao, entao a fatura sai completa - o que falta e a leitura
+                otica. Um retangulo listrado no lugar seria pior que a ausencia. */}
+            <div className="faixa-pgto-linha" style={{ marginTop: 'auto' }}>
+              {pagamento.linha_digitavel ?? '—'}
+            </div>
+            <div className="faixa-pgto-nota" style={{ textAlign: 'center', marginBottom: 'auto' }}>
+              Pagável em qualquer banco até o vencimento
+            </div>
+          </div>
+        )}
+      </div>
+
+      {boleto
+        ? (
+          <div className="faixa-pgto-rodape">
+            <div>EMITIDO PELA COOPERATIVA CONTRATANTE SEM RESPONSABILIDADE DO BANCOOB</div>
+          </div>
+        )
+        : (
+          /* O QUE CONTINUA VERDADE DEPOIS DE O DESENHO EXISTIR: o Pix estatico nao
+             carrega `txid` por fatura, entao o dinheiro chega sem dizer de quem e.
+             A frase ficava fora do papel (`naoimprime`) na faixa antiga e continua:
+             e instrucao para quem OPERA, nao para quem paga. */
+          <div className="faixa-pgto-rodape naoimprime">
+            Conciliação <strong>manual</strong>: um Pix estático não carrega identificador por
+            fatura, então a baixa é dada na aba Faturas. Isso não muda com o QR.
+          </div>
+        )}
     </div>
+  );
+}
+
+/**
+ * O QR DENTRO DA FAIXA — a mesma matriz do servidor, na medida do papel.
+ *
+ * Separado do `Qr` de cima porque as duas caixas resolvem problemas opostos, e
+ * juntar as duas num componente com bandeira faria a proxima pessoa achar que ha
+ * uma regra so. No painel de conferencia a caixa LE o desenho (`ladoDoQr`) porque
+ * nao ha papel e o tamanho natural e o certo. Aqui a caixa e milimetro de folha:
+ * quem cede e o desenho, e ele cede sem perder nada por ser vetor.
+ */
+function QrDaFaixa({ qr, motivo, rotulo }: { qr: QrDoDocumento | null; motivo?: string; rotulo: string }) {
+  if (!qr) {
+    return motivo
+      ? <div className="faixa-pgto-nota">O desenho do QR não pôde ser gerado: {motivo}</div>
+      : null;
+  }
+  return (
+    <div className="faixa-pgto-qr" aria-label={rotulo}
+         dangerouslySetInnerHTML={{ __html: qr.svg }} />
   );
 }

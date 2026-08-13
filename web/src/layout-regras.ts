@@ -193,6 +193,43 @@ export function regraDaPagina(cssDoPapel: string, orientacao: string): string {
 }
 
 /**
+ * O LADO QUE O DESENHO DO QR OCUPA, LIDO DO PROPRIO SVG.
+ *
+ * MEDIDO EM 09/08/2026, no bundle que producao serve: a caixa do QR na tela era
+ * `180x180` escrita a mao, e o SVG que o servidor manda tem `width="220"
+ * height="220"` (`svgDoBrCode(..., { lado: 220 })`). O desenho vazava **40 px
+ * para a direita e 40 px para baixo** da propria caixa, e como conteudo em linha
+ * e pintado em ordem de arvore, o texto que vem DEPOIS era pintado POR CIMA do
+ * QR: a legenda entrava 24 px no lado direito e o paragrafo "Copia e cola" cruzava
+ * os 220 px de baixo, em cima do padrao localizador. Um QR com texto por cima nao
+ * le - e o painel existe justamente para ser lido por uma camera.
+ *
+ * O DEFEITO NAO ERA O NUMERO ERRADO, ERA HAVER DOIS. O tamanho do desenho e
+ * decidido no servidor, que e onde ele tem de ser decidido: o CRM consome o mesmo
+ * payload e nao roda React. Enquanto a tela tambem afirmasse um tamanho, as duas
+ * verdades podiam divergir - e divergiam em silencio, porque nada falha quando um
+ * SVG transborda a caixa. Entao a tela parou de afirmar e passou a LER.
+ *
+ * Devolve `null` quando o SVG nao declara os dois lados, ou quando eles nao sao
+ * iguais: nesse caso a caixa nao fixa tamanho nenhum e se ajusta ao conteudo, que
+ * tambem nao sobrepoe. Fallback que encolhe o desenho seria pior - reescalar
+ * modulo de QR e o que faz camera errar leitura.
+ */
+export function ladoDoQr(svg: string): number | null {
+  // So a TAG DE ABERTURA: o `<rect>` do fundo branco tambem tem width e height,
+  // e sao as medidas do viewBox (57), nao as da tela.
+  const abertura = svg.match(/<svg\b[^>]*>/);
+  if (!abertura) return null;
+  const largura = abertura[0].match(/\swidth="(\d+(?:\.\d+)?)"/);
+  const altura = abertura[0].match(/\sheight="(\d+(?:\.\d+)?)"/);
+  if (!largura || !altura) return null;
+  const l = Number(largura[1]);
+  // Quadrado por construcao. Lados diferentes significam que a premissa mudou, e
+  // ai a caixa nao adivinha qual dos dois vale.
+  return Number.isFinite(l) && l > 0 && l === Number(altura[1]) ? l : null;
+}
+
+/**
  * Um bloco novo, colocado no canto superior esquerdo da area util.
  *
  * NAO no centro, e nao sob o cursor: o canto e previsivel, e um bloco que nasce

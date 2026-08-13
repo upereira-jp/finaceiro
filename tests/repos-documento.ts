@@ -499,6 +499,32 @@ const garantirTarifa = async (emT: <T>(f: () => Promise<T>) => Promise<T>) => {
       `o QR vem desenhado: versao ${doc.pagamento.qr?.versao}, ${doc.pagamento.qr?.modulos} modulos, nivel ${doc.pagamento.qr?.nivel}`);
     chk('W4k', doc.pagamento.conciliacao === 'manual' && doc.pagamento.qr_motivo === undefined,
       'a conciliacao continua MANUAL - o desenho do QR nao cria `txid` por fatura');
+
+    /*
+     * O QUE A FAIXA DO MODELO G3 IMPRIME, e ele entrou em 12/08 (`PLANO-documento-
+     * modelo-g3-2026-08-12.md` §6). As tres verificacoes abaixo prendem a coisa que
+     * o desenho novo poderia perder em silencio: a faixa passou a mostrar quem
+     * recebe, quando vence e quanto e - e nenhum dos tres pode ser reformatado pela
+     * tela, porque `emReais` existe nos dois lados e duas formatacoes do mesmo total
+     * e como duas telas passam a discordar.
+     *
+     * W4o compara com a LINHA do documento em vez de com uma constante: se o
+     * formatador mudar, os dois mudam juntos ou a verificacao cai. Uma string
+     * cravada aqui concordaria comigo por construcao e deixaria a divergencia
+     * passar, que e exatamente o defeito que ela existe para prender.
+     */
+    chk('W4o', doc.pagamento.recebedor_nome === 'G3 SOLAR LTDA',
+      `a faixa diz QUEM recebe por extenso, sem obrigar a decodificar o BR Code: "${doc.pagamento.recebedor_nome}"`);
+
+    const linhaDoTotal = doc.linhas.find((l) => l.campo === 'valor_total_centavos');
+    chk('W4p', doc.pagamento.valor_br === linhaDoTotal?.valor,
+      `o valor da faixa e o MESMO texto da linha do total, pelo mesmo formatador `
+      + `(faixa "${doc.pagamento.valor_br}" == linha "${linhaDoTotal?.valor}")`);
+
+    const linhaDoVenc = doc.linhas.find((l) => l.campo === 'vencimento');
+    chk('W4q', doc.pagamento.vencimento_br === linhaDoVenc?.valor
+      && /^\d{2}\/\d{2}\/\d{4}$/.test(doc.pagamento.vencimento_br),
+      `o vencimento da faixa vem FORMATADO e igual ao da linha: "${doc.pagamento.vencimento_br}"`);
   }
 
   // Isolamento: a fatura do B e 404 no A, e nao um documento do vizinho.

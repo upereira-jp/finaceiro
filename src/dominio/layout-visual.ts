@@ -134,6 +134,18 @@ export type Bloco = {
  * As medidas sao as do A4 com 16 mm de margem - area imprimivel de 178 x 265 mm.
  * Num papel menor os blocos passam a acusar `fora_da_pagina`, e isso e o certo:
  * trocar de papel sem reposicionar E uma mudanca que precisa ser vista.
+ *
+ * O BLOCO DE PAGAMENTO ERA 90 mm, E O CONTEUDO NAO CABIA - medido em 09/08/2026,
+ * em Chromium com `media: print`, sobre o bundle real: a faixa do Pix ocupa
+ * 340,8 px (rotulo + 220 px de QR + o copia-e-cola) e 90 mm sao 340,2 px. O
+ * copia-e-cola terminava 0,6 px depois da borda e o `.bloco` tem
+ * `overflow: hidden`, entao a ultima linha saia cortada na fatura do cliente.
+ *
+ * Isso nao aparecia antes porque a CAIXA do QR mentia sobre o tamanho dele
+ * (`ladoDoQr`, em `web/src/layout-regras.ts`): o desenho vazava 40 px e o
+ * copia-e-cola era pintado POR CIMA do QR em vez de empurrado para baixo. Ou
+ * seja, o bloco sempre foi pequeno demais para o que ele pinta - o que mudou e
+ * que agora da para medir.
  */
 export function layoutPadrao(): Bloco[] {
   const b = (o: Partial<Bloco> & { id: string; tipo: TipoDeBloco; x_mm: number; y_mm: number;
@@ -147,7 +159,10 @@ export function layoutPadrao(): Bloco[] {
         texto: 'FATURA', alinhamento: 'direita', tamanho_pt: 16, peso: 'forte' }),
     b({ id: 'padrao-linha',     tipo: 'linha',            x_mm: 16,  y_mm: 40, largura_mm: 178, altura_mm: 1 }),
     b({ id: 'padrao-tabela',    tipo: 'tabela_de_campos', x_mm: 16,  y_mm: 46, largura_mm: 178, altura_mm: 120 }),
-    b({ id: 'padrao-pagamento', tipo: 'pagamento',        x_mm: 16,  y_mm: 174, largura_mm: 178, altura_mm: 90 }),
+    // 96 mm, e nao os 90,2 que a conta pede: folga de 5 mm para o boleto, que
+    // pinta linha digitavel E copia-e-cola acima do mesmo QR. 174 + 96 = 270,
+    // dentro dos 281 da area imprimivel do A4.
+    b({ id: 'padrao-pagamento', tipo: 'pagamento',        x_mm: 16,  y_mm: 174, largura_mm: 178, altura_mm: 96 }),
   ];
 }
 
