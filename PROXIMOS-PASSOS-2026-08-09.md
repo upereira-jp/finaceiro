@@ -82,6 +82,20 @@ Os três primeiros são **independentes entre si** e podem correr em paralelo.
 > **E o `B2` está respondido: não há `client_secret`.** O certificado *é* a credencial, e a resolvedora do `ADR-0005` devolve **dois** campos. Ver `Q-SICOOB-01`, e as duas questões novas — `Q-SICOOB-PIXCHAVE-01` e `Q-SICOOB-PARCEIRA-01`.
 >
 > **O bloco 1 abaixo continua válido como roteiro do que ainda não foi visto** — os itens 4 (webhook) e 5 (contrato de cobrança) seguem em branco, e é neles que a folha ainda tem lacuna.
+>
+> ### 13/08, à tarde — o gerente respondeu, e a resposta foi um manual de portal
+>
+> Registro em `RESPOSTA-gerente-sicoob-2026-08-13.md`. O documento é do **próprio Sicoob** (22/11/2024) e responde **3 das 7 perguntas** — as três do certificado:
+>
+> - **A1 ICP-Brasil** para o CNPJ do cooperado, confirmado por fonte primária e não mais por vídeo;
+> - **sobe somente a chave pública**, em `.PEM`, `.CRT` **ou** `.CER`. O risco que motivou a pergunta — o formulário pedir o `.pfx` — **não existe**, e o `ADR-0005` sai **confirmado, não emendado**;
+> - qualquer AC do ICP-Brasil serve.
+>
+> **A compra do A1 deixou de ter pergunta em aberto.** É o que esta resposta destrava, e é só isso: **nenhuma linha de código passou a ser escrevível.**
+>
+> **As quatro que não vieram são as quatro que travam** — sandbox (`1d`), os três campos do contrato (`B4`), a chave Pix (`Q-SICOOB-PIXCHAVE-01`) e a autenticação do webhook (`Q-WEBHOOK-01`). **A lição é de destinatário, e ela vale para a repergunta:** três delas nunca foram de gerente de conta. A repartição está na §6 do registro.
+>
+> **E o manual trouxe três coisas que ninguém tinha perguntado:** há um **terceiro login** no meio da criação do aplicativo (App Sicoob Mobile Banking, que não é a senha do portal nem o token da API), o **segundo fator trava o fluxo** e depende de notificação ativa no celular, e a **ativação do PJ** tem caminho exato — mais um segundo caminho, o **Sicoobnet Empresarial**. Do plural em *"os **responsáveis** pela conta"* nasceu a **`Q-SICOOB-AUTORIZA-01`**: dois minutos de conferência que vêm **antes** de comprar o A1, porque descobrir que falta um segundo autorizador depois do desembolso custa a espera mais o dinheiro já gasto.
 
 ## B.0 Onde ela está
 
@@ -91,8 +105,10 @@ Os três primeiros são **independentes entre si** e podem correr em paralelo.
 | ✅ **decidido** | `ADR-0005` (cofre do segredo) e `ADR-0006` (as **quatro** decisões do webhook: mTLS + faixa de IP · tenant pela credencial · usuário de serviço por tenant · a rota **declara** o modo de auth) |
 | ✅ **medido** | os três verbos da porta, com caminho, corpo, resposta e erro — `SICOOB-contrato-medido-2026-08-05.md`. **Nunca exercido contra a API real** |
 | ✅ **13/08** | **portal aberto, conta PJ reconhecida, `B2` respondido** — folha preenchida |
+| ✅ **13/08, tarde** | **manual do Sicoob recebido do gerente** — o certificado deixou de depender de vídeo de terceiro, e **a compra do A1 não tem mais pergunta em aberto**. Não destrava código |
 | 🔴 **não existe** | `src/sicoob/http.ts`. O que existe é `porta.ts` e `falso.ts` |
 | 🔴 **externo** | **o A1 e-CNPJ, e só ele** (`Q-SICOOB-01`). A credencial deixou de ser incógnita: é o próprio certificado mais o `client_id` |
+| 🔴 **sem dono certo** | **três perguntas foram para o gerente e não eram dele** — sandbox e webhook são do suporte técnico, os três campos do contrato são da cooperativa. Reperguntar tudo a ele não traz resposta |
 
 **E o que nada disto move:** a primeira fatura. O meio de pagamento de hoje é o **Pix estático**, já no ar com a chave cadastrada, e a triagem não recusa por ausência de boleto.
 
