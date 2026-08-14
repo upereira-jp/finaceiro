@@ -121,6 +121,55 @@ Entregas da F0 conforme `PRD-v2.2` §10:
 <br>**O que isto muda:** a opção (a) segue sendo a decisão certa, mas **não é executável hoje para `unidade_consumidora`**. `usina` e `usina_geracao` são executáveis assim que a distribuidora for decidida. A F-01 deixou de ser pergunta de planejamento e virou **pré-requisito medido** do espelho de UC | Vinicius |
 | Q-CICLO-ORFAO-01 | 🟡 | **Com a R13 implementada, um ciclo morto por `kill` deixa `conector_execucao` em `em_andamento` para sempre — e o `EXCLUDE` trava o conector.** Antes da correção da `Q-LOTE-01` o ciclo inteiro era uma transação, então qualquer morte revertia a linha de abertura e o problema não existia; ele nasce da R13, que **exige** que a abertura commite antes dos lotes. O caminho normal está coberto e foi escrito junto: exceção em qualquer fase fecha o registro em `parcial` (§7) ou `erro`, na transação seguinte, e o erro original é relançado. **O que não está coberto é a morte que não passa por `catch`** — `SIGKILL`, OOM, queda do processo entre dois lotes. A `CHECK execucao_fim_coerente` da migration 14 impede que a linha fique meio-fechada, e o comentário dela já nomeava o risco: *"sem isto um ciclo que morre no meio fica 'em_andamento' para sempre e o 'segundo ciclo não inicia' da §7 trava o conector permanentemente"*. **Não improvisei um prazo de expiração.** Escolher "em andamento há mais de N minutos pode ser tomado" é decidir, no código, quanto tempo um ciclo legítimo pode demorar — e errar para menos faz dois ciclos processarem o mesmo lote em paralelo, que é exatamente o que a §7 proíbe. Enquanto não houver decisão, o desbloqueio é operacional e explícito: `UPDATE conector_execucao SET terminado_em = now(), status = 'erro' WHERE status = 'em_andamento'`, com a `CHECK` garantindo coerência. **Decidir:** (a) conviver — hoje o ciclo é disparado à mão e quem o matou sabe destravar; (b) prazo de expiração declarado, com o `iniciado_em` como âncora e o número saindo de medição, não de estimativa; (c) `heartbeat` — o ciclo carimba uma coluna a cada lote e a tomada exige silêncio maior que o intervalo de lote, que é o único critério que não depende de adivinhar a duração total. A (c) é a que sobrevive ao crescimento, e custa uma coluna | Vinicius |
 
+> ## MEDIDO EM 14/08/2026 — a `Q-VALOR-01` (b) deixou de ser dívida de redação e virou **o** bloqueio da primeira fatura
+>
+> A `RETOMADA-2026-08-15` §7.1 afirma, em linha de comando pronta para copiar, que
+> *"o conector semeia a tarifa a partir do card no próximo `npm run ciclo`"*.
+> **Rodado valendo em 14/08 às 12:0x, contra produção: `unidade_consumidora.tarifa_reais_por_kwh`
+> ficou em 0 de 41.** Não é falha do ciclo — ele saiu `status ok`, 108 lidos, 0 recusados.
+>
+> **A corrente, e onde ela arrebenta:**
+>
+> | Elo | Estado medido |
+> |---|---|
+> | `financeiro.vendas_ganhas` no CRM tem `consumo_kwh` **e** `consumo_reais` | **45 de 55 cards** — o dado existe |
+> | `src/crm/leitura.ts:87` **lê** `consumo_reais` | sim, e o tipo o declara (`leitura.ts:228`) |
+> | `sincronizacao.ts` grava no espelho do cliente | **cinco colunas: `nome`, `telefone`, `email`, `origem`, `consumo_kwh`.** `consumo_reais` é lido e **descartado** |
+> | `cliente.consumo_referencia_centavos` | **0 de 88**, e o ciclo de 14/08 não mudou isso |
+> | `tarifaDoCliente(consumo_kwh, consumo_referencia_centavos)` | devolve `null` na primeira linha: `centavos == null` |
+> | `unidade_consumidora.tarifa_reais_por_kwh` | **0 de 41** |
+>
+> **Isto não é defeito novo — é a `Q-VALOR-01` (b) exatamente como ela foi escrita em 27/07**,
+> e o comentário em `sincronizacao.ts:338-343` a cita pelo nome. O que mudou é a
+> **consequência**: em 27/07 não gravar a semente era uma coluna vazia sem
+> consumidor; desde a migration 30, que moveu a tarifa para a UC e apagou a tabela
+> `tarifa`, essa coluna vazia é o **único** insumo da tarifa, e sem tarifa a
+> composição do lote levanta pela R26. A dívida de 27/07 virou o caminho crítico.
+>
+> **Não improvisei o arredondamento, e é o mesmo motivo de 27/07:** converter
+> `consumo_reais` em centavos exige decidir o que fazer com o que passa de duas
+> casas, e a R23 proíbe `round()` em intermediário. Regra 10.
+>
+> **Decidir (dono: Vinicius), e as duas primeiras são de uma linha de código cada:**
+> **(a)** definir a regra de arredondamento de `consumo_reais` → centavos e o
+> conector passa a gravar a semente — fecha a `Q-VALOR-01` (b) pelo que ela pedia;
+> **(b)** derivar a tarifa **direto** do texto de `consumo_reais` por decimal
+> exato, sem passar por centavos — `paraDecimal` já existe e o arredondamento em
+> seis casas *"meio para cima"* já está decidido e testado dentro de
+> `tarifaDoCliente`; deixa `consumo_referencia_centavos` vazia e a (b) da
+> `Q-VALOR-01` aberta pelo mérito dela; **(c)** não semear — a operação digita as
+> 41 na aba Unidades, que é o caminho que já existe e não depende de decisão nenhuma.
+>
+> **A ressalva da `RETOMADA` §3.3 vale para (a) e (b) e não some com elas:** os três
+> valores do card são **redondos em duas casas nos 45 cards, sem exceção**, e a
+> tarifa medida na fatura real tem **seis** (`1,185396` contra `1,130000`). Redondo
+> em 45 de 45 é assinatura de digitação humana — por isso o card é **semente e não
+> verdade**, e por isso (c) não é o caminho pobre.
+>
+> **Enquanto não houver decisão, o estado é honesto e não silencioso:** a R26
+> levanta em vez de tratar base nula como zero, que é exatamente o que a
+> `Q-TARIFA-CRM-02` mandou preservar quando a aba Tarifas saiu.
+
 ## 5. F2 — faturamento
 
 | ID | Nível | Pergunta | Quem |
