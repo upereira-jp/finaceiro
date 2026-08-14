@@ -777,23 +777,16 @@ export const ESTILO = `
     border-radius: var(--raio-cartao); box-shadow: var(--sombra-1);
   }
 
-  /* O CADASTRO DOBRADO. O "summary" continua "display: list-item" - e o que
-     desenha o triangulo nativo de abrir/fechar, e ele some com "display: flex".
-     O icone e que muda: ".ic" e "display: block" no arquivo inteiro (e certo, ele
-     vive dentro de flex), e dentro de um list-item isso o joga para a linha de
-     baixo. Aqui ele volta a ser inline. */
-  .fu-cadastro > summary {
-    cursor: pointer; font-weight: 600; font-size: 15px;
-    padding: 4px 6px; margin: -4px -6px; border-radius: var(--raio-pequeno);
-    transition: background-color .14s ease, color .14s ease;
-  }
-  .fu-cadastro > summary .ic { display: inline-block; vertical-align: -3px; }
-  /* O SUMMARY E FOCAVEL POR TECLADO E NAO TINHA ANEL NENHUM. A regra geral de
-     foco la em cima alcanca "a", "button", "th .ordenar" e ".interruptor" - e o
-     "summary" nao e nenhum dos quatro. Quem navega por Tab chegava nele sem
-     nenhum sinal na tela de que havia chegado. */
-  .fu-cadastro > summary:hover { background: var(--fundo-hover); }
-  .fu-cadastro > summary:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px; }
+  /* O CADASTRO DEIXOU DE SER UM "details" EM 14/08 e virou a terceira ABA.
+     Dobrado no pe da aba 1, ele parecia rodape de uma tela de conferencia - e
+     ele nao e: e o que a folha IMPRIME, e "Cadastro de Fatura" e uma
+     funcionalidade nomeada pelo dono. As quatro regras de ".fu-cadastro" com "summary"
+     sairam junto; o anel de foco que uma delas trazia continua valendo para
+     qualquer summary do sistema, na regra abaixo.
+
+     "summary" NAO E ALCANCADO pela regra geral de foco (a/button/th/.interruptor),
+     e quem navega por Tab chegava nele sem sinal nenhum na tela. */
+  summary:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px; }
 
   @media (prefers-reduced-motion: reduce) {
     /* WCAG 2.3.3. Nao e cortesia: ha gente para quem movimento na tela e
