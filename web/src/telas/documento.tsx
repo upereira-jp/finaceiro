@@ -17,7 +17,7 @@
 // formatacoes do mesmo valor e como duas telas passam a discordar. O que chega em
 // `linha.valor` vai para a tela como esta.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   api, buscarBinario,
   type IdentidadeDeCobranca, type ChavePix, type CampoDoDocumento, type DocumentoDaFatura, type Fatura,
@@ -34,6 +34,7 @@ import {
 } from '../lote-de-documentos.ts';
 import { escalaDaPrevia, regraDaPagina, ladoDoQr, PX_POR_MM } from '../layout-regras.ts';
 import { useLargura } from '../medir-largura.ts';
+import { FaturaUnificada } from './fatura-unificada.tsx';
 
 /** Os 16 do enum `campo_de_fatura` (migration 19). A tela nao inventa nome de
  *  campo: o banco recusaria, e o erro sairia do lado errado. */
@@ -188,17 +189,33 @@ export function TelaDocumento() {
 
   return (
     <Pagina titulo="Documento"
-            sub="A logo, os campos e a prévia. É este documento que o cliente recebe — e a mesma rota que o CRM vai consumir.">
+            sub="Sobe a fatura da Equatorial, confere os dados e emite a fatura unificada. É este documento que o cliente recebe — e a mesma rota que o CRM vai consumir.">
 
       {ident.erro && <Aviso tipo="erro">Não foi possível ler a identidade: {ident.erro}</Aviso>}
       {semIdentidade && (
         <Aviso tipo="alerta">
-          <strong>Nenhuma identidade de cobrança cadastrada.</strong> Salve os dados abaixo primeiro —
-          a logo pendura na identidade por chave estrangeira, e é ela que carrega a trilha de auditoria.
+          <strong>Nenhuma identidade de cobrança cadastrada.</strong> Salve os dados no fim desta aba
+          primeiro — a logo pendura na identidade por chave estrangeira, e é ela que carrega a trilha
+          de auditoria.
         </Aviso>
       )}
       {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
       {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
+
+      {/* ============================ AS DUAS ABAS DA TELA DEFINITIVA (14/08/2026)
+          Portadas de `g3_fatura_unificada`. Elas sao AGORA o processo do Documento:
+          a leitura do PDF da Equatorial substitui a digitacao campo a campo, e a
+          folha do cliente sai da fatura da distribuidora, nao da nossa.
+
+          O CADASTRO DESCE PARA O PE DA ABA 1, e nao sai. A referencia e de um
+          tenant so e traz emissor, logo e Pix no codigo; aqui cada um deles e uma
+          linha em banco com trilha de auditoria, e eles continuam sendo o que a
+          folha imprime. O que mudou e a ordem: primeiro o trabalho, depois a
+          configuracao que ele consome. */}
+      <FaturaUnificada
+        logoUrl={logoUrl}
+        emissaoExtra={<Previa logoUrl={logoUrl} />}
+        cadastro={<Cadastro>
 
       {/* -------------------------------------------------------- quem emite */}
       <div className="cartao" style={{ marginBottom: 20 }}>
@@ -367,13 +384,38 @@ export function TelaDocumento() {
         )}
       </div>
 
-      {/* ANTES da Previa de proposito: a Previa exige fatura, e enquanto nao houver
-          uma este painel e o unico caminho para o teste de campo do QR. Poe-lo
-          embaixo esconderia a saida atras de um "Nenhuma fatura em ...". */}
+      {/* O teste de campo do QR fica junto do cadastro do Pix, que e o que ele
+          confere — e nao mais antes da Previa: a Previa saiu para a aba 2. */}
       <ConferirQr temIdentidade={!!ident.dado} />
 
-      <Previa logoUrl={logoUrl} />
+        </Cadastro>}
+      />
     </Pagina>
+  );
+}
+
+/**
+ * O CADASTRO, dobrado.
+ *
+ * Sao quatro cartoes que se mexe uma vez por tenant e depois nunca mais, e eles
+ * ocupavam a tela inteira acima do trabalho do dia. Dobrados, continuam a um
+ * clique e param de competir com a conferencia dos campos.
+ *
+ * `<details>` NATIVO e nao um estado de React: ele abre sem JavaScript, o teclado
+ * ja chega nele e o navegador ja anuncia expandido/recolhido para leitor de tela.
+ */
+function Cadastro({ children }: { children: ReactNode }) {
+  return (
+    <details className="cartao naoimprime fu-cadastro" style={{ marginTop: 20 }}>
+      <summary>
+        <Icone nome="engrenagem" tamanho={16} /> Cadastro da fatura — emissor, logo, Pix e campos
+      </summary>
+      <p className="sub" style={{ marginTop: 10 }}>
+        Configuração por tenant. O que está aqui é o que a folha imprime no cabeçalho, no rodapé e
+        na faixa de pagamento — mexe-se uma vez, não a cada fatura.
+      </p>
+      {children}
+    </details>
   );
 }
 

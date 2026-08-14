@@ -28,6 +28,9 @@ import * as split from '../repos/split.ts';
 import * as contaPagar from '../repos/conta_pagar.ts';
 import * as documento from '../repos/documento.ts';
 import * as leitor from '../concessionaria/leitor-visao.ts';
+import { calcular, CAMPOS_VAZIOS, PARAMETROS_PADRAO,
+  type CamposDaFaturaUnificada, type ParametrosDaEmissao } from '../dominio/fatura-unificada.ts';
+import { comporFolhas, BOLETO_VAZIO, type DadosDoBoleto } from '../dominio/folha-unificada.ts';
 import { prontidao } from '../repos/prontidao.ts';
 
 export type Requisicao = {
@@ -862,6 +865,45 @@ export const ROTAS: Rota[] = [
    * O TETO DE 32 MB E DA API e esta escrito aqui porque a mensagem importa: um
    * PDF de fatura tem centenas de KB, e quem sobe 40 MB subiu a coisa errada.
    */
+  /*
+   * A COMPOSICAO DA FOLHA UNIFICADA. E o coracao da aba nova: entra o que a
+   * pessoa tem na tela - campos lidos, ja corrigidos a mao, mais os parametros -
+   * e saem as duas folhas prontas.
+   *
+   * POR QUE NO SERVIDOR, se a referencia calcula no navegador. Duas razoes, e as
+   * duas ja estao escritas noutro lugar deste sistema:
+   *
+   *   - a regra 1. A conta e em centavo inteiro, e o modulo que a faz e
+   *     `fatura-unificada.ts`. Recalcular na tela seria a SEGUNDA implementacao
+   *     da mesma conta, em float, e as duas divergiriam no dia em que alguem
+   *     declarasse 0,35%;
+   *   - o CRM consome as mesmas rotas e nao roda React (decisao 4 da
+   *     `Q-DOCFATURA-01`). Se a composicao morasse na tela, publicar seria
+   *     reescrever.
+   *
+   * NAO ESCREVE NADA. E `exigir('ler')` por dentro, como toda composicao de
+   * documento - a pessoa esta conferindo, nao emitindo.
+   */
+  {
+    metodo: 'POST', padrao: '/faturas/unificada/compor',
+    handler: (req, app) => emTenant(app, req, async () => {
+      const campos = { ...CAMPOS_VAZIOS, ...(req.corpo?.campos ?? {}) } as CamposDaFaturaUnificada;
+      const parametros = { ...PARAMETROS_PADRAO, ...(req.corpo?.parametros ?? {}) } as ParametrosDaEmissao;
+      const boleto = { ...BOLETO_VAZIO, ...(req.corpo?.boleto ?? {}) } as DadosDoBoleto;
+
+      const ident = await documento.identidade();
+      const conta = calcular(campos, parametros);
+      const folhas = comporFolhas(
+        campos, conta,
+        { razao_social: ident?.razao_social ?? null, cnpj: ident?.cnpj ?? null },
+        boleto,
+      );
+      /* A CONTA VIAJA JUNTO com as folhas, e nao so o que esta impresso: o painel
+       * da aba 1 mostra total, energia G3 e repasses ANTES de a folha existir, e
+       * ele nao pode recalcular do lado de la. */
+      return ok({ conta, ...folhas });
+    }),
+  },
   {
     metodo: 'POST', padrao: '/faturas/ler-fatura',
     handler: (req, app) => emTenant(app, req, async () => {

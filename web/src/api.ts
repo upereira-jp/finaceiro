@@ -340,6 +340,113 @@ export type QrDoDocumento = {
   nivel: string;
   modulos: number;
 };
+// ===================================================== a fatura unificada
+//
+// Espelha `src/dominio/fatura-unificada.ts` e `folha-unificada.ts`. A tela NAO
+// calcula e NAO compoe: manda os campos, recebe a conta e as duas folhas. E a
+// mesma regra do resto deste arquivo, e aqui ela tem peso extra - recalcular na
+// tela seria a segunda implementacao da conta, em float, contra a regra 1.
+
+/** Os 21 campos lidos da fatura da Equatorial. Todos STRING, como saem do leitor. */
+export type CamposDaFatura = {
+  cliente: string; documento: string; endereco: string; unidade_consumidora: string;
+  classificacao: string; mes_referencia: string; data_emissao: string;
+  leitura_anterior: string; leitura_atual: string; dias_faturados: string;
+  vencimento: string; energia_compensada_kwh: string; tarifa_kwh: string;
+  consumo_nao_compensado_kwh: string; consumo_nao_compensado_valor: string;
+  iluminacao_publica: string; bandeira_tarifaria: string; bandeira_valor: string;
+  outros_encargos: string; valor_total_equatorial: string;
+  historico_consumo: Array<{ mes: string; kwh: string }>;
+};
+
+export const CAMPOS_DA_FATURA_VAZIOS: CamposDaFatura = {
+  cliente: '', documento: '', endereco: '', unidade_consumidora: '', classificacao: '',
+  mes_referencia: '', data_emissao: '', leitura_anterior: '', leitura_atual: '',
+  dias_faturados: '', vencimento: '', energia_compensada_kwh: '', tarifa_kwh: '',
+  consumo_nao_compensado_kwh: '', consumo_nao_compensado_valor: '', iluminacao_publica: '',
+  bandeira_tarifaria: '', bandeira_valor: '', outros_encargos: '',
+  valor_total_equatorial: '', historico_consumo: [],
+};
+
+export type ParametrosDaEmissao = { percentual_desconto: string; fator_emissao: string };
+export const PARAMETROS_PADRAO: ParametrosDaEmissao = {
+  percentual_desconto: '20', fator_emissao: '0,029',
+};
+
+export type BoletoLido = {
+  linha_digitavel: string; pix_copia_e_cola: string; beneficiario: string;
+  vencimento: string; valor: string; nosso_numero: string; instrucoes: string[];
+};
+export const BOLETO_LIDO_VAZIO: BoletoLido = {
+  linha_digitavel: '', pix_copia_e_cola: '', beneficiario: '', vencimento: '',
+  valor: '', nosso_numero: '', instrucoes: [],
+};
+
+/** A conta, em centavos inteiros. Vem do servidor; a tela nunca a refaz. */
+export type ContaDaFatura = {
+  compensada_kwh: string; tarifa_kwh: string; tarifa_g3: string; percentual_desconto: string;
+  integral_centavos: number; desconto_centavos: number; energia_g3_centavos: number;
+  total_equatorial_centavos: number; nao_compensado_centavos: number;
+  iluminacao_publica_centavos: number; bandeira_centavos: number; demais_centavos: number;
+  outros_encargos_lidos_centavos: number; residuo_discorda: boolean;
+  total_centavos: number; sem_g3_centavos: number;
+  co2_kg: string; consumo_do_mes_kwh: string;
+};
+
+export type Par = { rotulo: string; valor: string };
+export type LinhaDetalhada = {
+  descricao: string; kwh: string; tarifa: string;
+  tarifa_cheia?: string; valor: string; valor_cheio?: string;
+};
+export type BarraDoHistorico = { mes: string; kwh: string; altura_pct: number; atual: boolean };
+
+export type FolhaUnificada = {
+  numero_da_fatura: string;
+  folha1: {
+    cabecalho: { assinatura: string; emissor: string | null };
+    cliente: { nome: string; documento: string; meta: Par[] };
+    cartoes: {
+      sem_g3: { rotulo: string; valor: string };
+      desconto: { rotulo: string; percentual: string; valor: string };
+      com_g3: { rotulo: string; valor: string };
+      nota: string;
+    } | null;
+    total: { rotulo: string; detalhe: string; valor: string; vencimento: string; nota: string };
+    aviso: { titulo: string; corpo: string };
+    detalhamento: {
+      titulo: string;
+      energia: { titulo: string; linhas: LinhaDetalhada[] };
+      repasses: { titulo: string; nota: string; linhas: LinhaDetalhada[]; subtotal: string };
+      total: { rotulo: string; valor: string };
+    } | null;
+    rodape: { emissor: string | null; paginacao: string };
+  };
+  folha2: {
+    cabecalho: { emissor: string | null; identificacao: string };
+    historico: { titulo: string; nota: string; barras: BarraDoHistorico[] } | null;
+    historico_motivo: string | null;
+    indicadores: {
+      economia: { rotulo: string; valor: string; nota: string };
+      consumo: { rotulo: string; valor: string };
+      co2: { rotulo: string; valor: string; nota: string };
+    };
+    pagamento: {
+      titulo: string; beneficiario: string | null; campos: Par[]; instrucoes: string[];
+      qr: { svg: string; versao: number } | null; qr_motivo: string | null;
+      pix_texto: string | null;
+      barras: { svg: string } | null; barras_motivo: string | null;
+      linha_formatada: string | null; rodape_legal: string[];
+    };
+    rodape: {
+      telefone: string; emissor: string | null; endereco: string | null;
+      email: string | null; informacoes: string[];
+    };
+  };
+};
+
+/** O retorno de `POST /faturas/unificada/compor`. */
+export type ComposicaoUnificada = FolhaUnificada & { conta: ContaDaFatura };
+
 /**
  * A FOLHA 1 DO MODELO G3, composta pelo SERVIDOR.
  *

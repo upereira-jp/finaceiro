@@ -522,6 +522,108 @@ export const ESTILO = `
   .ic-sim { animation: traco-do-check .5s ease-out; }
   .ic-nao { animation: traco-do-check .5s ease-out; }
 
+  /* ================= A TELA DAS DUAS ABAS (14/08/2026, "fu-" de fatura unificada)
+     TUDO AQUI E CROMO DE INTERFACE E USA TOKEN, nunca as cores da folha. A folha
+     imprime e por isso tem literal de tinta, dentro da excecao nomeada la embaixo;
+     esta tela tem tema claro e escuro, e uma tinta fixa aqui sairia navy sobre navy
+     no tema escuro. O invariante I1b prende isso, e prende ate no comentario -
+     escrever a cor por extenso nesta linha derruba a verificacao, de proposito.
+
+     PREFIXO PROPRIO porque estas classes tem tempo de vida diferente das ".g3-":
+     aquelas desenham papel e ficam; estas desenham a esteira de conferencia. */
+  .fu-abas {
+    display: flex; align-items: center; gap: 4px;
+    border-bottom: 1px solid var(--borda); margin-bottom: var(--gap); padding-bottom: 0;
+  }
+  .fu-aba {
+    background: none; border: none; border-bottom: 2px solid transparent;
+    padding: 9px 14px; margin-bottom: -1px; border-radius: 0;
+    font-size: 13.5px; font-weight: 500; color: var(--fraco); cursor: pointer;
+  }
+  .fu-aba:hover { color: var(--texto); }
+  .fu-aba.ativa { color: var(--texto); border-bottom-color: var(--acento); font-weight: 600; }
+  .fu-aba-traco { width: 18px; height: 1px; background: var(--borda); }
+
+  /* A COLUNA DA ESQUERDA E MAIS ESTREITA: nela ficam os dois envios e o painel de
+     conferencia; a direita e a que se le campo a campo. Abaixo de 1100px as duas
+     empilham - a esquerda primeiro, que e por onde o trabalho comeca. */
+  .fu-grade { display: grid; grid-template-columns: 0.85fr 1.15fr; gap: var(--gap); align-items: start; }
+  .fu-coluna { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
+  @media (max-width: 1100px) { .fu-grade { grid-template-columns: 1fr; } }
+
+  .fu-rotulo {
+    font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--fraco); font-weight: 600; margin-bottom: 8px;
+  }
+  /* A AREA DE ENVIO E UM <label> e nao um <div> com "onClick": o input de arquivo
+     fica escondido dentro dela, e assim o teclado chega ao controle - clicar na
+     area e clicar no input, sem uma linha de JavaScript no meio. */
+  .fu-solta {
+    display: block; border: 1.5px dashed var(--borda); border-radius: var(--raio-cartao);
+    padding: 22px 16px; text-align: center; cursor: pointer;
+    transition: border-color .15s ease, background .15s ease;
+  }
+  .fu-solta:hover { border-color: var(--acento); background: var(--acento-suave); }
+  .fu-solta:focus-within { border-color: var(--acento); outline: 2px solid var(--acento); outline-offset: 2px; }
+  .fu-solta-titulo { font-size: 14px; font-weight: 600; }
+  .fu-solta-sub { font-size: 12.5px; color: var(--fraco); margin-top: 4px; line-height: 1.4; }
+  .fu-status { font-size: 12.5px; color: var(--fraco); margin-top: 10px; line-height: 1.45; }
+  .fu-status.ok { color: var(--ok); }
+  .fu-status.alerta { color: var(--alerta); }
+
+  /* O PAINEL DO VALOR A GERAR. E o unico bloco desta tela com fundo cheio, e o
+     motivo e de uso: quem opera abre a aba, sobe o PDF e precisa deste numero para
+     digitar no internet banking. Ele nao pode estar no meio de trinta campos. */
+  .fu-painel {
+    background: var(--texto); color: var(--fundo);
+    border-radius: var(--raio-cartao); padding: 16px 18px;
+  }
+  .fu-painel-rot { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; opacity: .7; }
+  .fu-painel-total { font-size: 30px; font-weight: 700; line-height: 1.05; margin-top: 4px; }
+  .fu-painel-sub { font-size: 12.5px; opacity: .75; margin-top: 4px; }
+  .fu-painel-par {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--borda);
+  }
+  .fu-painel-cap { font-size: 11px; opacity: .7; }
+  .fu-painel-val { font-size: 15px; font-weight: 600; margin-top: 2px; }
+
+  .fu-cabeca { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+  .fu-secao { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--borda); }
+  .fu-secao-tit { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+  .fu-alerta {
+    border-left: 3px solid var(--alerta); background: var(--alerta-fundo);
+    padding: 9px 12px; margin-bottom: 8px; font-size: 13px; line-height: 1.45;
+    border-radius: 0 var(--raio) var(--raio) 0;
+  }
+  /* "input, select, textarea" la em cima ja da fundo, borda, tinta e anel de foco.
+     Aqui so entra o que e proprio da area: ela cresce na vertical, e a variante
+     monoespacada quebra em qualquer ponto - linha digitavel e copia-e-cola sao
+     cadeias sem espaco e sem "break-all" elas estouram a coluna. */
+  .fu-area { resize: vertical; }
+  .fu-area.mono { font-family: var(--fonte-mono); font-size: 12px; word-break: break-all; }
+
+  /* O HISTORICO E EDITAVEL porque e o campo que o extrator mais erra: a tabela
+     lateral da Equatorial e desenhada em cinza claro e treze linhas altas. */
+  .fu-hist-edit { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px; }
+  .fu-hist-item { display: flex; align-items: center; gap: 6px; }
+  .fu-hist-mes { font-size: 12px; color: var(--fraco); width: 58px; flex: none; }
+  .fu-hist-kwh {
+    min-width: 0; padding: 5px 8px; font-size: 12.5px;
+    text-align: right; font-variant-numeric: tabular-nums;
+  }
+  .fu-hist-un { font-size: 11px; color: var(--fraco); flex: none; }
+
+  .fu-barra { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: var(--gap); }
+
+  /* O CADASTRO DOBRADO. O "summary" continua "display: list-item" - e o que
+     desenha o triangulo nativo de abrir/fechar, e ele some com "display: flex".
+     O icone e que muda: ".ic" e "display: block" no arquivo inteiro (e certo, ele
+     vive dentro de flex), e dentro de um list-item isso o joga para a linha de
+     baixo. Aqui ele volta a ser inline. */
+  .fu-cadastro > summary { cursor: pointer; font-weight: 600; font-size: 15px; }
+  .fu-cadastro > summary .ic { display: inline-block; vertical-align: -3px; }
+
   @media (prefers-reduced-motion: reduce) {
     /* WCAG 2.3.3. Nao e cortesia: ha gente para quem movimento na tela e
        sintoma. A regra desliga ANIMACAO e TRANSICAO de tudo, inclusive o que
@@ -559,6 +661,7 @@ export const ESTILO = `
      composicao posicionada - eram posicionamento absoluto em milimetro, e o
      modelo fixo compoe em fluxo. */
   .folha-palco { transform: scale(var(--escala, 1)); transform-origin: top left; }
+
 
   /* --------------------------------------- a FOLHA 1 DO MODELO G3 (14/08/2026)
      O DESTINO DA Q-DOCFATURA-01, e agora ele e o que a tela mostra por padrao.
@@ -658,6 +761,128 @@ export const ESTILO = `
   /* AUSENTE FICA CINZA E NAO SOME: o travessao e informacao — diz que o campo
      existe e o dado nao chegou. Some-lo faria a linha parecer nunca ter existido. */
   .g3-tabela-val.ausente { color: #8F939D; font-weight: 400; }
+
+  /* ------------------------------- OS TRES CARTOES (14/08/2026, aba unificada)
+     A COMPARACAO E ENERGIA CONTRA ENERGIA, e o desenho tem de dizer isso sem
+     legenda: o primeiro cartao e o consumo integral, o do meio e o desconto e o
+     terceiro e o que sobra. So o do meio e laranja - ele e o unico numero que a
+     pessoa procura nesta faixa, e o mesmo criterio do valor a pagar. */
+  .g3-cartoes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6pt; margin-top: 11pt; }
+  .g3-cartao { padding: 9pt 11pt; border: 1px solid #E4DFD4; }
+  .g3-cartao.sem { background: #F6F2EA; }
+  /* O TACHADO E DO CARTAO INTEIRO, e nao da tipografia: "line-through" num numero
+     de 20pt fica um risco fino que some na impressao domestica. A opacidade diz a
+     mesma coisa - este valor nao e o que se paga - e sobrevive a tinta economica. */
+  .g3-cartao.sem .g3-cartao-val { opacity: .55; text-decoration: line-through; text-decoration-thickness: 1pt; }
+  .g3-cartao.desconto { background: #E8843C; border-color: #E8843C; }
+  .g3-cartao.com { background: #14213D; border-color: #14213D; color: #fff; }
+  .g3-cartao-rot { font-size: 7.5pt; letter-spacing: .12em; text-transform: uppercase; color: #8F939D; }
+  .g3-cartao.desconto .g3-cartao-rot { color: #14213D; }
+  .g3-cartao.com .g3-cartao-rot { color: #E4DFD4; }
+  .g3-cartao-linha { display: flex; align-items: baseline; justify-content: space-between; gap: 5pt; }
+  .g3-cartao-pct { font-size: 9pt; font-weight: 700; color: #14213D; white-space: nowrap; }
+  .g3-cartao-val { font-size: 17pt; font-weight: 700; margin-top: 3pt; line-height: 1.05; }
+  .g3-cartao-nota { font-size: 7.5pt; color: #8F939D; margin-top: 3pt; line-height: 1.35; }
+
+  /* -------------------------------------------------- o detalhamento da fatura
+     QUATRO COLUNAS EM GRADE, pelo mesmo motivo de ".g3-tabela": a descricao cresce
+     e as tres colunas numericas ficam do tamanho do conteudo, alinhadas a direita.
+     "tabular-nums" alinha as casas decimais em coluna - sem isso, "1.185396" e
+     "0,72" nao encostam na mesma virgula e a coluna parece torta. */
+  .g3-det { margin-top: 11pt; }
+  .g3-det-tit {
+    font-size: 10.5pt; font-weight: 600; letter-spacing: .04em;
+    text-transform: uppercase; padding-bottom: 4pt; border-bottom: 1px solid #14213D;
+  }
+  .g3-det-grade { font-size: 9pt; font-variant-numeric: tabular-nums; }
+  .g3-det-cab, .g3-det-linha, .g3-det-total {
+    display: grid; grid-template-columns: 1fr 8mm 20mm 22mm; gap: 6pt; align-items: baseline;
+  }
+  .g3-det-cab {
+    font-size: 7pt; letter-spacing: .12em; text-transform: uppercase;
+    color: #8F939D; padding: 3pt 0;
+  }
+  .g3-det-secao {
+    font-size: 8.5pt; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+    background: #F6F2EA; padding: 2.5pt 4pt; margin-top: 3pt;
+  }
+  .g3-det-linha { padding: 2.5pt 4pt; border-bottom: 1px solid #E4DFD4; }
+  .g3-det-linha.subtotal { border-bottom: none; }
+  .g3-det-total {
+    background: #14213D; color: #fff; padding: 5pt 4pt; margin-top: 4pt;
+    font-size: 11pt; font-weight: 700;
+  }
+  /* ESCOPADAS AO DETALHAMENTO, e nao a folha inteira. Um ".g3 .fraca" solto
+     colidiria com ".g3-total-sub.fraca" - mesma especificidade, vence a ultima -
+     e pintaria de cinza um texto que vive sobre a barra navy. */
+  .g3-det .dir, .g3-hist .dir { text-align: right; }
+  .g3-det .forte { font-weight: 600; }
+  .g3-det .fraca, .g3-hist-tit .fraca { color: #8F939D; font-weight: 400; }
+  /* O CHEIO TACHADO ACIMA DO COM DESCONTO. Aqui o risco cabe - e 7,5pt, e o
+     proposito e mostrar a diferenca entre os dois, nao ser lido de longe. */
+  .g3-det .tachado { font-size: 7.5pt; color: #8F939D; text-decoration: line-through; }
+
+  /* ----------------------------------------------------- a FOLHA 2 (14/08/2026)
+     A segunda folha nao repete o cabecalho inteiro: ela se identifica em uma linha
+     e entrega o espaco ao grafico e a caixa de pagamento. */
+  .g3-topo-curto {
+    display: flex; align-items: center; justify-content: space-between; gap: 12pt;
+    padding-bottom: 7pt; border-bottom: 1px solid #E4DFD4;
+  }
+  .g3-topo-curto img { height: 22pt; width: auto; display: block; }
+  .g3-segunda { gap: 0; }
+
+  /* O GRAFICO DE CONSUMO. Barras em "flex" com altura percentual - a proporcao vem
+     do SERVIDOR ja calculada ("altura_pct"), e a tela nao divide nada. */
+  .g3-hist { margin-top: 11pt; }
+  .g3-hist-tit {
+    font-size: 10.5pt; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+    padding-bottom: 5pt; border-bottom: 1px solid #14213D;
+  }
+  .g3-hist-barras {
+    display: flex; align-items: flex-end; gap: 2pt; height: 34mm; margin-top: 7pt;
+  }
+  .g3-hist-col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
+  .g3-hist-num {
+    font-size: 6pt; text-align: center; color: #8F939D; padding-bottom: 1.5pt;
+    font-variant-numeric: tabular-nums;
+  }
+  /* "min-height" para que um mes de consumo quase zero continue sendo uma barra e
+     nao um vao - a coluna precisa existir para o rotulo do mes ter dono. */
+  .g3-hist-barra { background: #E4DFD4; min-height: 1.5pt; }
+  .g3-hist-barra.atual { background: #E8843C; }
+  .g3-hist-meses {
+    display: flex; gap: 2pt; margin-top: 2.5pt;
+    border-top: 1px solid #E4DFD4; padding-top: 2.5pt;
+  }
+  .g3-hist-meses > div { flex: 1; font-size: 6pt; text-align: center; color: #8F939D; }
+
+  /* Os tres indicadores. O da economia ocupa duas colunas: e o numero pelo qual o
+     cliente abre a segunda folha. */
+  .g3-indicadores { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 6pt; margin-top: 10pt; }
+  .g3-ind { border: 1px solid #E4DFD4; padding: 8pt 10pt; }
+  .g3-ind.destaque { background: #F6F2EA; border-color: #E4DFD4; }
+  .g3-ind-val { font-size: 13pt; font-weight: 700; margin-top: 2pt; }
+  .g3-ind-val.grande { font-size: 21pt; color: #E8843C; line-height: 1.05; }
+  .g3-ind-nota { font-size: 7pt; color: #8F939D; margin-top: 2pt; line-height: 1.3; }
+
+  /* As duas pecas que a faixa de 12/08 nao tinha, porque naquele caminho o boleto
+     vinha sem instrucoes e o codigo de barras ainda era a "Q-DOCG3-06" em aberto. */
+  .faixa-pgto-instr {
+    padding: 2mm 3mm; border-bottom: 1px solid #E4DFD4; font-size: 7pt; line-height: 1.4;
+  }
+  /* A ALTURA DA BARRA E FIXA EM MILIMETRO e a largura estica: leitor otico le a
+     PROPORCAO entre estreita e larga na horizontal, e a altura so precisa dar
+     margem para o feixe. 13mm e o minimo confortavel para leitura de balcao. */
+  .faixa-pgto-barras { height: 13mm; width: 100%; }
+  .faixa-pgto-barras svg { width: 100%; height: 100%; display: block; }
+
+  .g3-rodape-2 {
+    margin-top: auto; padding-top: 10pt; border-top: 1px solid #E4DFD4;
+    display: grid; grid-template-columns: 1fr 1.2fr; gap: 12pt;
+    font-size: 7pt; color: #8F939D; line-height: 1.45;
+  }
+  .g3-tel-num { font-size: 13pt; font-weight: 700; color: #14213D; }
 
   /* O QUE FALTA, DITO NA TELA E NUNCA NO PAPEL. "naoimprime" nao basta como
      intencao: esta caixa e conferencia de quem opera, e imprimi-la entregaria ao
