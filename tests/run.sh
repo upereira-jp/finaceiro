@@ -59,12 +59,11 @@ aplicar fin_seed
 $P -d fin_seed -c "INSERT INTO tenant (id,razao_social,cnpj) VALUES ('$TENANT_SEED','Seed','99999999000199')" > /dev/null
 for i in 1 2; do
   psql -h 127.0.0.1 -U "$PGUSER" -d fin_seed -q -v ON_ERROR_STOP=1 -v tenant="'$TENANT_SEED'" \
-    -f prisma/seed/regra_comissao_e_tarifa.sql 2>&1 \
+    -f prisma/seed/regra_comissao.sql 2>&1 \
     | grep -E 'NOTICE' | sed "s|^psql:[^ ]* ||; s/NOTICE:  /passada $i: /"
 done
 $P -d fin_seed -tA -c "
-SELECT 'recalculo de 2026-03-15 acha '||count(*)||' regra(s) e '||
-       (SELECT count(*) FROM tarifa WHERE daterange(vigencia_inicio,vigencia_fim,'[)') @> '2026-03-15'::date)||' tarifa(s)'
+SELECT 'recalculo de 2026-03-15 acha '||count(*)||' regra(s) de comissao'
 FROM regra_comissao WHERE daterange(vigencia_inicio,vigencia_fim,'[)') @> '2026-03-15'::date;"
 
 echo

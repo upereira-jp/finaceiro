@@ -13,6 +13,7 @@ SET client_min_messages = notice;
 DO $bloco$
 DECLARE
   A uuid; B uuid; uA uuid; uSup uuid; uAdm uuid; usinaA uuid; donoB uuid; utA uuid;
+  cliA uuid; ucA uuid;
   falhas int := 0; n int; x numeric; txt text;
 BEGIN
   -- ============================================================== fixture
@@ -30,7 +31,7 @@ BEGIN
   INSERT INTO plataforma_admin (usuario_id, tier) VALUES (uSup, 'plataforma_suporte');
   INSERT INTO plataforma_admin (usuario_id, tier) VALUES (uAdm, 'plataforma_admin');
 
-  INSERT INTO cliente (tenant_id, nome) VALUES (A, 'Cliente do A');
+  INSERT INTO cliente (tenant_id, nome) VALUES (A, 'Cliente do A') RETURNING id INTO cliA;
   INSERT INTO cliente (tenant_id, nome) VALUES (B, 'Cliente do B');
 
   INSERT INTO dono_usina (tenant_id, nome, natureza, documento, documento_tipo,
@@ -41,10 +42,13 @@ BEGIN
   INSERT INTO usina (tenant_id, codigo_geradora, distribuidora)
     VALUES (A,'USINA-001','Equatorial') RETURNING id INTO usinaA;
 
-  INSERT INTO tarifa (tenant_id, distribuidora, tarifa_reais_por_kwh, vigencia_inicio)
-    VALUES (A,'Equatorial',1.130000,'-infinity');
-  -- Segunda concessionaria cadastrada e SEM tarifa: e o caso real da ausencia -
-  -- distribuidora nova entra no cadastro antes de alguem lancar a tarifa dela.
+  -- UMA UC SEM TARIFA, e a ausencia e o caso real: a UC entra no cadastro
+  -- antes de alguem lancar a tarifa dela. E o insumo da secao E.
+  INSERT INTO unidade_consumidora (tenant_id, cliente_id, numero_uc, distribuidora, usina_id, percentual_rateio)
+    VALUES (A, cliA, 'UC-AUD-1', 'Equatorial', usinaA, 10) RETURNING id INTO ucA;
+
+  -- Segunda concessionaria cadastrada: ela serve as FKs de UC/usina, e a
+  -- ausencia de tarifa que a secao E mede passou a ser da UC (migration 30).
   INSERT INTO distribuidora (nome) VALUES ('CELG') ON CONFLICT DO NOTHING;
   -- 25 + 25, e nao 50: desde a migration 17 a linha e por PARCELA (PRD 5.4).
   INSERT INTO regra_comissao (tenant_id, originador_tipo, percentual, parcela, vigencia_inicio)
@@ -218,22 +222,26 @@ BEGIN
   ELSE RAISE WARNING 'FALHA D5 vazou % linha(s) de auditoria do tenant B', n; falhas := falhas + 1; END IF;
 
   -- ============================================================== E. preco que falha alto
-  -- FURO: tarifa_vigente devolvia NULL na ausencia, e consumo_centavos(x, NULL)
-  -- devolve NULL. Base de faturamento NULL soma como nada e coalesce como zero -
-  -- o modo de falha silenciosa que este projeto persegue na RLS, dentro da
-  -- funcao que calcula dinheiro.
+  -- FURO: a leitura da tarifa devolvia NULL na ausencia, e consumo_centavos(x,
+  -- NULL) devolve NULL. Base de faturamento NULL soma como nada e coalesce como
+  -- zero - o modo de falha silenciosa que este projeto persegue na RLS, dentro
+  -- da funcao que calcula dinheiro.
+  --
+  -- A FONTE MUDOU NA MIGRATION 30 (a tarifa e da UC, nao da distribuidora) e o
+  -- INVARIANTE NAO: ausencia levanta, presenca devolve. E o que E1 e E2 medem.
   BEGIN
-    SELECT app.tarifa_vigente('CELG', date '2026-07-01') INTO x;
-    RAISE WARNING 'FALHA E1 distribuidora sem tarifa devolveu % em vez de levantar', coalesce(x::text,'NULL');
+    SELECT app.tarifa_da_uc(ucA) INTO x;
+    RAISE WARNING 'FALHA E1 UC sem tarifa devolveu % em vez de levantar', coalesce(x::text,'NULL');
     falhas := falhas + 1;
   EXCEPTION WHEN no_data_found THEN
-    RAISE NOTICE 'ok   E1   distribuidora sem tarifa levanta no_data_found, nao devolve NULL';
+    RAISE NOTICE 'ok   E1   UC sem tarifa levanta no_data_found, nao devolve NULL';
   END;
 
-  -- E2 NEGA-TUDO: com tarifa vigente, devolve o valor.
-  SELECT app.tarifa_vigente('Equatorial', date '2026-07-01') INTO x;
-  IF x = 1.130000 THEN RAISE NOTICE 'ok   E2   tarifa vigente devolve 1,130000 R$/kWh';
-  ELSE RAISE WARNING 'FALHA E2 tarifa vigente devolveu %', coalesce(x::text,'NULL'); falhas := falhas + 1; END IF;
+  -- E2 NEGA-TUDO: com tarifa preenchida, devolve o valor.
+  UPDATE unidade_consumidora SET tarifa_reais_por_kwh = 1.130000 WHERE id = ucA;
+  SELECT app.tarifa_da_uc(ucA) INTO x;
+  IF x = 1.130000 THEN RAISE NOTICE 'ok   E2   a tarifa da UC devolve 1,130000 R$/kWh';
+  ELSE RAISE WARNING 'FALHA E2 a tarifa da UC devolveu %', coalesce(x::text,'NULL'); falhas := falhas + 1; END IF;
 
   BEGIN
     SELECT app.percentual_comissao('parceiro_captador_senior', 1::smallint, date '2026-03-01') INTO x;

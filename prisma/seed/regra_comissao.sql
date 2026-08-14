@@ -61,27 +61,26 @@ WHERE NOT EXISTS (
 );
 
 -- ---------------------------------------------------------------- tarifa
--- 1,130000 R$/kWh. Derivada de consumo_reais / consumo_kwh, exata em 5 de 5
--- ganhos medidos. NAO e "fator de consumo": e preco por unidade, R22.
+-- ELA SAIU DAQUI EM 14/08/2026, com a migration 30, e a tabela `tarifa` junto.
 --
--- A distribuidora entra como texto porque a SPEC-001 3.3 nao criou tabela de
--- distribuidora. Enquanto for uma, o custo de nao ter e zero; na segunda,
--- vira Q-SPEC001 nova em vez de virar string divergente ('Equatorial' vs
--- 'EQUATORIAL GO' vs 'Equatorial Goias').
-INSERT INTO tarifa (id, tenant_id, distribuidora, tarifa_reais_por_kwh, vigencia_inicio)
-SELECT gen_random_uuid(), :tenant::uuid, 'Equatorial', 1.130000, '-infinity'::date
-WHERE NOT EXISTS (
-  SELECT 1 FROM tarifa t
-  WHERE t.tenant_id = :tenant::uuid AND t.distribuidora = 'Equatorial'
-);
+-- O seed inseria 1,130000 R$/kWh para 'Equatorial', derivado de
+-- consumo_reais / consumo_kwh e "exato em 5 de 5 ganhos medidos". A medicao de
+-- 14/08 sobre os 41 cards mostrou que a amostra de 5 escondia a variacao: 35
+-- UCs a 1,130000, 4 a 1,16 e 2 a 1,180000 - e a fatura real da Equatorial traz
+-- 1,185396, com seis casas.
+--
+-- Uma tarifa por distribuidora obrigaria as 41 a compartilharem um numero que 6
+-- delas contradizem, e o seed a plantaria como se fosse verdade. Hoje ela e
+-- `unidade_consumidora.tarifa_reais_por_kwh`, preenchida na aba Unidades ou
+-- semeada pelo conector a partir do card - e NENHUM seed a inventa, porque
+-- inventar preco por unidade e o improviso que a regra 10 proibe.
 
 -- ---------------------------------------------------------------- conferencia
 DO $$
-DECLARE nr int; nt int;
+DECLARE nr int;
 BEGIN
   SELECT count(*) INTO nr FROM regra_comissao;
-  SELECT count(*) INTO nt FROM tarifa;
-  RAISE NOTICE 'seed: % regra(s) de comissao, % tarifa(s)', nr, nt;
+  RAISE NOTICE 'seed: % regra(s) de comissao', nr;
   IF nr < 10 THEN RAISE EXCEPTION 'esperadas 10 regras de comissao (5 tipos x 2 parcelas), ha %', nr; END IF;
 END $$;
 

@@ -52,8 +52,9 @@ BEGIN
                         valor_referencia_centavos,valor_referencia_origem,status)
     VALUES (T,cli,uc2,us,'2026-05-01',100000,'local','ativo') RETURNING id INTO k2;
 
-  INSERT INTO tarifa (tenant_id,distribuidora,tarifa_reais_por_kwh,vigencia_inicio)
-    VALUES (T,'Equatorial',1.130000,'-infinity');
+  -- A tarifa e da UC desde a migration 30 - a tabela `tarifa` saiu.
+  UPDATE unidade_consumidora SET tarifa_reais_por_kwh = 1.130000
+   WHERE tenant_id = T AND id IN (uc1, uc2);
   -- Duas linhas, dois INSERTs: `RETURNING ... INTO` com duas linhas levanta
   -- "query returned more than one row", e o id que interessa e o da 1a parcela.
   INSERT INTO regra_comissao (tenant_id,originador_tipo,percentual,parcela,vigencia_inicio)

@@ -16,10 +16,6 @@ BEGIN
   INSERT INTO usina (tenant_id, codigo_geradora, distribuidora) VALUES (T,'G1','Equatorial') RETURNING id INTO us;
   INSERT INTO originador (tenant_id,nome,natureza,tipo,documento,documento_tipo)
     VALUES (T,'O','pf','parceiro_captador','52998224725','cpf') RETURNING id INTO org;
-  INSERT INTO tarifa (tenant_id,distribuidora,tarifa_reais_por_kwh,vigencia_inicio,vigencia_fim)
-    VALUES (T,'Equatorial',1.130000,'-infinity','2026-07-01');
-  INSERT INTO tarifa (tenant_id,distribuidora,tarifa_reais_por_kwh,vigencia_inicio)
-    VALUES (T,'Equatorial',1.187650,'2026-07-01');
   -- A quebra do PRD 5.4: captador 30+20, senior 30+30. Desde a migration 17 a
   -- linha e por PARCELA, e a 2a e a que distingue os dois tiers - na 1a ambos
   -- pagam 30, e um teste que nao distingue nao prova nada.
@@ -99,17 +95,34 @@ BEGIN
   -- ---------------------------------------------------- R23 um arredondamento
   PERFORM set_config('app.tenant_id', T::text, true);
   PERFORM set_config('app.usuario_id', usr::text, true);
-  v := app.tarifa_vigente('Equatorial','2026-03-15');
+  -- A TARIFA E DA UC desde a migration 30. As duas verificacoes abaixo mediam
+  -- o REAJUSTE por vigencia; o que sobrevive delas e o que a R23 de fato afirma:
+  -- a mesma quantidade de kWh com duas tarifas diferentes produz dois valores
+  -- diferentes, e o arredondamento e um so, no fim.
+  UPDATE unidade_consumidora SET tarifa_reais_por_kwh = 1.130000 WHERE id = uc1;
+  v := app.tarifa_da_uc(uc1);
   c := app.consumo_centavos(1234.567, v);
   IF v = 1.130000 AND c = 139506 THEN
-    RAISE NOTICE 'ok  R23 competencia de marco: tarifa 1,130000 -> % centavos', c;
-  ELSE RAISE WARNING 'FALHA R23 marco: tarifa=% centavos=%', v, c; falhas := falhas + 1; END IF;
+    RAISE NOTICE 'ok  R23 tarifa 1,130000 -> % centavos', c;
+  ELSE RAISE WARNING 'FALHA R23: tarifa=% centavos=%', v, c; falhas := falhas + 1; END IF;
 
-  v := app.tarifa_vigente('Equatorial','2026-08-15');
+  UPDATE unidade_consumidora SET tarifa_reais_por_kwh = 1.187650 WHERE id = uc1;
+  v := app.tarifa_da_uc(uc1);
   c := app.consumo_centavos(1234.567, v);
   IF v = 1.187650 AND c = 146623 THEN
-    RAISE NOTICE 'ok  R23 competencia de agosto: tarifa reajustada 1,187650 -> % centavos', c;
-  ELSE RAISE WARNING 'FALHA R23 agosto: tarifa=% centavos=%', v, c; falhas := falhas + 1; END IF;
+    RAISE NOTICE 'ok  R23 tarifa reajustada 1,187650 -> % centavos', c;
+  ELSE RAISE WARNING 'FALHA R23 reajuste: tarifa=% centavos=%', v, c; falhas := falhas + 1; END IF;
+
+  -- R26 pelo caminho novo: UC SEM tarifa levanta, nao devolve NULL.
+  UPDATE unidade_consumidora SET tarifa_reais_por_kwh = NULL WHERE id = uc1;
+  BEGIN
+    v := app.tarifa_da_uc(uc1);
+    RAISE WARNING 'FALHA R26: UC sem tarifa devolveu % em vez de levantar', coalesce(v::text,'NULL');
+    falhas := falhas + 1;
+  EXCEPTION WHEN no_data_found THEN
+    RAISE NOTICE 'ok  R26 UC sem tarifa levanta no_data_found - ausencia de preco nao vira zero';
+  END;
+  UPDATE unidade_consumidora SET tarifa_reais_por_kwh = 1.187650 WHERE id = uc1;
 
   -- ---------------------------------------------------- R22 o custo de errar
   IF app.consumo_centavos(1234.567, round(1.187650*100)/100) - 146623 = 290 THEN

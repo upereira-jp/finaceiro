@@ -108,17 +108,20 @@ model boleto {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model campo_do_documento {
-  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenant_id     String          @db.Uuid
-  campo         campo_de_fatura
-  rotulo        String?
-  ordem         Int             @default(0) @db.SmallInt
-  visivel       Boolean         @default(true)
-  atualizado_em DateTime        @default(now()) @db.Timestamptz(6)
-  tenant        tenant          @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id        String           @db.Uuid
+  campo            campo_de_fatura
+  rotulo           String?
+  ordem            Int              @default(0) @db.SmallInt
+  visivel          Boolean          @default(true)
+  atualizado_em    DateTime         @default(now()) @db.Timestamptz(6)
+  modelo_id        String           @db.Uuid
+  modelo_de_fatura modelo_de_fatura @relation(fields: [tenant_id, modelo_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "campo_do_documento_modelo_fk")
+  tenant           tenant           @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@unique([tenant_id, id], map: "campo_do_documento_id_tenant")
-  @@unique([tenant_id, campo], map: "campo_do_documento_unico")
+  @@unique([tenant_id, modelo_id, campo], map: "campo_do_documento_unico")
+  @@index([tenant_id, modelo_id, ordem], map: "campo_do_documento_modelo_idx")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -353,6 +356,7 @@ model contrato {
 
   @@unique([tenant_id, id], map: "contrato_id_tenant")
   @@unique([tenant_id, uc_vigente], map: "contrato_vigente_unico_por_uc")
+  @@index([tenant_id, unidade_consumidora_id], map: "contrato_uc_idx")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -360,7 +364,6 @@ model contrato {
 model distribuidora {
   nome                                                                 String                @id
   ativa                                                                Boolean               @default(true)
-  tarifa_tarifa_distribuidoraTodistribuidora                           tarifa[]              @relation("tarifa_distribuidoraTodistribuidora")
   unidade_consumidora_unidade_consumidora_distribuidoraTodistribuidora unidade_consumidora[] @relation("unidade_consumidora_distribuidoraTodistribuidora")
   usina_usina_distribuidoraTodistribuidora                             usina[]               @relation("usina_distribuidoraTodistribuidora")
 }
@@ -434,6 +437,7 @@ model fatura {
   @@index([tenant_id, competencia, status], map: "fatura_competencia_idx")
   @@index([tenant_id, contrato_id], map: "fatura_contrato_idx")
   @@index([tenant_id, vencimento], map: "fatura_vencimento_idx", where: raw("(status = ANY (ARRAY['emitida'::status_fatura, 'vencida'::status_fatura]))"))
+  @@index([tenant_id, usina_id, competencia], map: "fatura_usina_competencia_idx")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -450,12 +454,19 @@ model identidade_de_cobranca {
   chave_pix_padrao_id String?           @db.Uuid
   razao_social        String?
   cnpj                String?
+  telefone            String?
+  endereco            String?
+  email               String?
+  site                String?
+  modelo_padrao_id    String?           @db.Uuid
   chave_pix           chave_pix?        @relation(fields: [tenant_id, chave_pix_padrao_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "identidade_chave_pix_fk")
   tenant              tenant            @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  modelo_de_fatura    modelo_de_fatura? @relation(fields: [tenant_id, modelo_padrao_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "identidade_modelo_fk")
   logo_de_cobranca    logo_de_cobranca?
 
   @@unique([tenant_id, chave_pix_padrao_id], map: "identidade_chave_pix_unico")
   @@unique([tenant_id, id], map: "identidade_de_cobranca_id_tenant")
+  @@unique([tenant_id, modelo_padrao_id], map: "identidade_modelo_unico")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -645,69 +656,55 @@ model split_item {
   @@index([tenant_id, split_execucao_id], map: "split_item_execucao_idx")
 }
 
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-/// This table contains exclusion constraints and requires additional setup for migrations. Visit https://pris.ly/d/exclusion-constraints for more info.
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model tarifa {
-  id                                                String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenant_id                                         String        @db.Uuid
-  distribuidora                                     String
-  tarifa_reais_por_kwh                              Decimal       @db.Decimal(12, 6)
-  vigencia_inicio                                   DateTime      @db.Date
-  vigencia_fim                                      DateTime?     @db.Date
-  distribuidora_tarifa_distribuidoraTodistribuidora distribuidora @relation("tarifa_distribuidoraTodistribuidora", fields: [distribuidora], references: [nome], onDelete: NoAction, onUpdate: NoAction, map: "tarifa_distribuidora_fk")
-  tenant                                            tenant        @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-
-  @@unique([tenant_id, id], map: "tarifa_id_tenant")
-}
-
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model tenant {
-  id                     String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  razao_social           String
-  cnpj                   String                  @unique(map: "tenant_cnpj_unico")
-  status                 tenant_status           @default(ativo)
-  data_ativacao          DateTime?               @db.Date
-  criado_em              DateTime                @default(now()) @db.Timestamptz(6)
-  atualizado_em          DateTime                @default(now()) @db.Timestamptz(6)
-  acesso_plataforma_log  acesso_plataforma_log[]
-  agenda_execucao        agenda_execucao[]
-  boleto                 boleto[]
-  campo_do_documento     campo_do_documento[]
-  categoria              categoria[]
-  centro_custo           centro_custo[]
-  chave_pix              chave_pix[]
-  cliente                cliente[]
-  cliente_estado_crm     cliente_estado_crm[]
-  conector_cobranca      conector_cobranca?
-  conector_crm           conector_crm?
-  conector_execucao      conector_execucao[]
-  conta_pagar            conta_pagar[]
-  contrato               contrato[]
-  dono_usina             dono_usina[]
-  fatura                 fatura[]
-  identidade_de_cobranca identidade_de_cobranca?
-  liquidacao             liquidacao[]
-  logo_de_cobranca       logo_de_cobranca?
-  originador             originador[]
-  pagamento              pagamento[]
-  regra_comissao         regra_comissao[]
-  regra_repasse          regra_repasse[]
-  split_execucao         split_execucao[]
-  split_item             split_item[]
-  tarifa                 tarifa[]
-  unidade_consumidora    unidade_consumidora[]
-  usina                  usina[]
-  usina_geracao          usina_geracao[]
-  usuario_tenant         usuario_tenant[]
+  id                            String                          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  razao_social                  String
+  cnpj                          String                          @unique(map: "tenant_cnpj_unico")
+  status                        tenant_status                   @default(ativo)
+  data_ativacao                 DateTime?                       @db.Date
+  criado_em                     DateTime                        @default(now()) @db.Timestamptz(6)
+  atualizado_em                 DateTime                        @default(now()) @db.Timestamptz(6)
+  acesso_plataforma_log         acesso_plataforma_log[]
+  agenda_execucao               agenda_execucao[]
+  boleto                        boleto[]
+  campo_do_documento            campo_do_documento[]
+  campo_personalizado_da_fatura campo_personalizado_da_fatura[]
+  categoria                     categoria[]
+  centro_custo                  centro_custo[]
+  chave_pix                     chave_pix[]
+  cliente                       cliente[]
+  cliente_estado_crm            cliente_estado_crm[]
+  conector_cobranca             conector_cobranca?
+  conector_crm                  conector_crm?
+  conector_execucao             conector_execucao[]
+  conta_pagar                   conta_pagar[]
+  contrato                      contrato[]
+  dono_usina                    dono_usina[]
+  fatura                        fatura[]
+  identidade_de_cobranca        identidade_de_cobranca?
+  liquidacao                    liquidacao[]
+  logo_de_cobranca              logo_de_cobranca?
+  modelo_de_fatura              modelo_de_fatura[]
+  originador                    originador[]
+  pagamento                     pagamento[]
+  registro_de_fatura_unificada  registro_de_fatura_unificada[]
+  regra_comissao                regra_comissao[]
+  regra_repasse                 regra_repasse[]
+  split_execucao                split_execucao[]
+  split_item                    split_item[]
+  unidade_consumidora           unidade_consumidora[]
+  usina                         usina[]
+  usina_geracao                 usina_geracao[]
+  usuario_tenant                usuario_tenant[]
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model unidade_consumidora {
-  id                                                             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenant_id                                                      String          @db.Uuid
-  cliente_id                                                     String          @db.Uuid
+  id                                                             String                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id                                                      String                         @db.Uuid
+  cliente_id                                                     String                         @db.Uuid
   numero_uc                                                      String
   distribuidora                                                  String
   endereco_logradouro                                            String?
@@ -717,26 +714,30 @@ model unidade_consumidora {
   endereco_municipio                                             String?
   endereco_uf                                                    String?
   endereco_cep                                                   String?
-  titularidade                                                   titularidade_uc @default(propria)
-  usina_id                                                       String?         @db.Uuid
-  percentual_rateio                                              Decimal?        @db.Decimal(7, 4)
-  data_vencimento                                                DateTime?       @db.Date
-  status                                                         status_uc       @default(ativa)
-  crm_usina_cliente_id                                           String?         @db.Uuid
+  titularidade                                                   titularidade_uc                @default(propria)
+  usina_id                                                       String?                        @db.Uuid
+  percentual_rateio                                              Decimal?                       @db.Decimal(7, 4)
+  data_vencimento                                                DateTime?                      @db.Date
+  status                                                         status_uc                      @default(ativa)
+  crm_usina_cliente_id                                           String?                        @db.Uuid
   rateio_situacao                                                String?
   rateio_em_troca_titularidade                                   Boolean?
-  rateio_situacao_lida_em                                        DateTime?       @db.Timestamptz(6)
+  rateio_situacao_lida_em                                        DateTime?                      @db.Timestamptz(6)
+  tarifa_reais_por_kwh                                           Decimal?                       @db.Decimal(12, 6)
   contrato                                                       contrato[]
   fatura                                                         fatura[]
-  cliente                                                        cliente         @relation(fields: [tenant_id, cliente_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "uc_cliente_fk")
-  distribuidora_unidade_consumidora_distribuidoraTodistribuidora distribuidora   @relation("unidade_consumidora_distribuidoraTodistribuidora", fields: [distribuidora], references: [nome], onDelete: NoAction, onUpdate: NoAction, map: "uc_distribuidora_fk")
-  usina                                                          usina?          @relation(fields: [tenant_id, usina_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "uc_usina_fk")
-  tenant                                                         tenant          @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  registro_de_fatura_unificada                                   registro_de_fatura_unificada[]
+  cliente                                                        cliente                        @relation(fields: [tenant_id, cliente_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "uc_cliente_fk")
+  distribuidora_unidade_consumidora_distribuidoraTodistribuidora distribuidora                  @relation("unidade_consumidora_distribuidoraTodistribuidora", fields: [distribuidora], references: [nome], onDelete: NoAction, onUpdate: NoAction, map: "uc_distribuidora_fk")
+  usina                                                          usina?                         @relation(fields: [tenant_id, usina_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "uc_usina_fk")
+  tenant                                                         tenant                         @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@unique([tenant_id, crm_usina_cliente_id], map: "uc_crm_unico", where: raw("(crm_usina_cliente_id IS NOT NULL)"))
   @@unique([tenant_id, id], map: "uc_id_tenant")
   @@unique([tenant_id, numero_uc], map: "uc_numero_unico")
   @@index([tenant_id, id], map: "uc_rateio_ativado", where: raw("(rateio_situacao = 'ativado'::text)"))
+  @@index([tenant_id, cliente_id], map: "unidade_consumidora_cliente_idx")
+  @@index([tenant_id, usina_id], map: "unidade_consumidora_usina_idx")
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -805,6 +806,108 @@ model usuario_tenant {
   usuario    usuario      @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@unique([usuario_id, tenant_id], map: "usuario_tenant_unico")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model campo_personalizado_da_fatura {
+  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id        String           @db.Uuid
+  modelo_id        String           @db.Uuid
+  chave            String
+  rotulo           String
+  origem           origem_do_campo  @default(fixo)
+  valor            String?
+  ordem            Int              @default(0) @db.SmallInt
+  visivel          Boolean          @default(true)
+  criado_em        DateTime         @default(now()) @db.Timestamptz(6)
+  atualizado_em    DateTime         @default(now()) @db.Timestamptz(6)
+  modelo_de_fatura modelo_de_fatura @relation(fields: [tenant_id, modelo_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "campo_personalizado_modelo_fk")
+  tenant           tenant           @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "campo_personalizado_tenant_fk")
+
+  @@unique([tenant_id, modelo_id, chave], map: "campo_personalizado_chave_unica")
+  @@unique([tenant_id, id], map: "campo_personalizado_id_tenant")
+  @@index([tenant_id, modelo_id, ordem], map: "campo_personalizado_modelo_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model modelo_de_fatura {
+  id                            String                          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id                     String                          @db.Uuid
+  nome                          String
+  descricao                     String?
+  assinatura                    String                          @default("Energia Solar por Assinatura")
+  aviso_titulo                  String                          @default("Não pague a conta da Equatorial")
+  aviso_corpo                   String                          @default("Sua conta é unificada — o valor da distribuidora já está incluído neste boleto. Pagar a conta da Equatorial gera duplicidade.")
+  percentual_desconto_padrao    Decimal                         @default(20) @db.Decimal(5, 2)
+  fator_emissao_padrao          Decimal                         @default(0.029) @db.Decimal(12, 6)
+  multa_percentual              Decimal                         @default(2) @db.Decimal(5, 2)
+  juros_mes_percentual          Decimal                         @default(1) @db.Decimal(5, 2)
+  rodape_legal                  String[]                        @default([])
+  nota_do_fator                 String                          @default("Fator médio da margem de operação do SIN · MCTI/SIRENE")
+  ativo                         Boolean                         @default(true)
+  criado_em                     DateTime                        @default(now()) @db.Timestamptz(6)
+  atualizado_em                 DateTime                        @default(now()) @db.Timestamptz(6)
+  campo_do_documento            campo_do_documento[]
+  campo_personalizado_da_fatura campo_personalizado_da_fatura[]
+  identidade_de_cobranca        identidade_de_cobranca?
+  tenant                        tenant                          @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "modelo_de_fatura_tenant_fk")
+
+  @@unique([tenant_id, id], map: "modelo_de_fatura_id_tenant")
+  @@unique([tenant_id, nome], map: "modelo_de_fatura_nome_unico")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model registro_de_fatura_unificada {
+  id                          String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id                   String               @db.Uuid
+  numero_uc                   String
+  competencia                 DateTime             @db.Date
+  unidade_consumidora_id      String?              @db.Uuid
+  cliente_nome                String?
+  cliente_documento           String?
+  endereco                    String?
+  classificacao               String?
+  data_emissao                DateTime?            @db.Date
+  leitura_anterior            DateTime?            @db.Date
+  leitura_atual               DateTime?            @db.Date
+  dias_faturados              Int?                 @db.SmallInt
+  vencimento                  DateTime?            @db.Date
+  bandeira_tarifaria          String?
+  compensada_kwh              Decimal              @db.Decimal(14, 3)
+  nao_compensado_kwh          Decimal              @default(0) @db.Decimal(14, 3)
+  tarifa_kwh                  Decimal              @db.Decimal(12, 6)
+  percentual_desconto         Decimal              @db.Decimal(5, 2)
+  fator_emissao               Decimal              @db.Decimal(12, 6)
+  integral_centavos           Int
+  desconto_centavos           Int
+  energia_g3_centavos         Int
+  nao_compensado_centavos     Int
+  iluminacao_publica_centavos Int
+  bandeira_centavos           Int
+  demais_centavos             Int
+  total_equatorial_centavos   Int
+  total_centavos              Int
+  linha_digitavel             String?
+  pix_copia_e_cola            String?
+  nosso_numero                String?
+  instrucoes                  String[]             @default([])
+  historico_consumo           Json                 @default("[]")
+  campos_personalizados       Json                 @default("{}")
+  criado_em                   DateTime             @default(now()) @db.Timestamptz(6)
+  atualizado_em               DateTime             @default(now()) @db.Timestamptz(6)
+  tenant                      tenant               @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "registro_fatura_unificada_tenant_fk")
+  unidade_consumidora         unidade_consumidora? @relation(fields: [tenant_id, unidade_consumidora_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "registro_fatura_unificada_uc_fk")
+
+  @@unique([tenant_id, id], map: "registro_fatura_unificada_id_tenant")
+  @@unique([tenant_id, numero_uc, competencia], map: "registro_fatura_unificada_unico")
+  @@index([tenant_id, competencia(sort: Desc)], map: "registro_fatura_unificada_competencia_idx")
+  @@index([tenant_id, unidade_consumidora_id], map: "registro_fatura_unificada_uc_idx")
 }
 
 /// This enum is commented in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -997,4 +1100,10 @@ enum titularidade_uc {
 enum valor_referencia_origem {
   crm_consumo_reais
   local
+}
+
+/// This enum is commented in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+enum origem_do_campo {
+  fixo
+  variavel
 }

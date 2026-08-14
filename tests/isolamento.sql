@@ -88,15 +88,54 @@ BEGIN
         RAISE WARNING 'FALHA vigencia sobreposta em regra_comissao: ACEITOU'; falhas:=falhas+1;
   EXCEPTION WHEN exclusion_violation THEN RAISE NOTICE 'ok  regra_comissao recusa vigencia sobreposta'; END;
 
-  INSERT INTO tarifa (tenant_id,distribuidora,tarifa_reais_por_kwh,vigencia_inicio,vigencia_fim) VALUES (A,'Equatorial',1.130000,'2026-01-01','2026-07-01');
-  INSERT INTO tarifa (tenant_id,distribuidora,tarifa_reais_por_kwh,vigencia_inicio) VALUES (A,'Equatorial',1.187650,'2026-07-01');
-  RAISE NOTICE 'ok  tarifa aceita vigencias adjacentes com [)';
-
   -- ------------------------------------------- 11  R22: tarifa nao e inteira
+  -- A TARIFA MUDOU DE LUGAR na migration 30 - saiu da tabela `tarifa` (chave
+  -- distribuidora + vigencia) e virou coluna da UC, porque a granularidade real
+  -- e POR CLIENTE: medido em 14/08, 35 UCs a 1,130000, 4 a 1,16 e 2 a 1,180000.
+  -- A R22 nao mudou e continua sendo o que se afirma aqui: seis casas, nunca
+  -- inteiro. Truncar 1,187650 em centavos cobra R$ 2,90 a mais numa UC num mes.
   SELECT count(*) INTO n FROM information_schema.columns
-   WHERE table_name='tarifa' AND column_name='tarifa_reais_por_kwh' AND data_type='numeric' AND numeric_scale=6;
-  IF n=1 THEN RAISE NOTICE 'ok  tarifa e numeric(_,6), nao inteiro (R22)';
-  ELSE RAISE WARNING 'FALHA R22: tarifa nao e numeric com 6 decimais'; falhas:=falhas+1; END IF;
+   WHERE table_name='unidade_consumidora' AND column_name='tarifa_reais_por_kwh'
+     AND data_type='numeric' AND numeric_scale=6;
+  IF n=1 THEN RAISE NOTICE 'ok  a tarifa da UC e numeric(_,6), nao inteiro (R22)';
+  ELSE RAISE WARNING 'FALHA R22: a tarifa da UC nao e numeric com 6 decimais'; falhas:=falhas+1; END IF;
+
+  -- ------------------------------------- 11-a  os dois CHECKs da tarifa da UC
+  -- Regra 8: a migration 30 criou dois CHECKs e nenhum teste os afirmava. Eles
+  -- decidem o numero que multiplica todo kWh e vira o valor cobrado do cliente.
+  DECLARE ucT uuid;
+  BEGIN
+    SELECT id INTO ucT FROM unidade_consumidora WHERE tenant_id = A LIMIT 1;
+    IF ucT IS NULL THEN
+      RAISE WARNING 'FALHA: sem UC na fixture para medir os CHECKs da tarifa'; falhas := falhas + 1;
+    ELSE
+      BEGIN
+        UPDATE unidade_consumidora SET tarifa_reais_por_kwh = -1 WHERE id = ucT;
+        RAISE WARNING 'FALHA: tarifa NEGATIVA aceita'; falhas := falhas + 1;
+      EXCEPTION WHEN check_violation THEN
+        RAISE NOTICE 'ok  tarifa negativa recusada (uc_tarifa_positiva)';
+      END;
+      BEGIN
+        -- 118,54 e o erro de digitacao que de fato acontece: centavos no campo de
+        -- reais, quando a tarifa real e 1,185396.
+        UPDATE unidade_consumidora SET tarifa_reais_por_kwh = 118.54 WHERE id = ucT;
+        RAISE WARNING 'FALHA: tarifa de 118,54 R$/kWh aceita'; falhas := falhas + 1;
+      EXCEPTION WHEN check_violation THEN
+        RAISE NOTICE 'ok  tarifa fora da ordem de grandeza recusada - 118,54 e "digitou centavos no campo de reais"';
+      END;
+      -- E o aperto NAO virou nega-tudo: a tarifa real entra.
+      UPDATE unidade_consumidora SET tarifa_reais_por_kwh = 1.185396 WHERE id = ucT;
+      RAISE NOTICE 'ok  a tarifa medida na fatura real (1,185396) entra normalmente';
+    END IF;
+  END;
+
+  -- ------------------------------------- 11-b  a tabela `tarifa` SAIU (migration 30)
+  -- Duas fontes para o mesmo numero e o comeco de alguem editar uma e faturar
+  -- pela outra. A verificacao existe para o dia em que alguem a recriar.
+  SELECT count(*) INTO n FROM information_schema.tables
+   WHERE table_schema='public' AND table_name='tarifa';
+  IF n=0 THEN RAISE NOTICE 'ok  a tabela `tarifa` nao existe mais - a tarifa e da UC';
+  ELSE RAISE WARNING 'FALHA: a tabela `tarifa` voltou a existir'; falhas:=falhas+1; END IF;
 
   -- ------------------------------------------- 12  RLS sob a role da aplicacao
   SET LOCAL ROLE app_financeiro;
