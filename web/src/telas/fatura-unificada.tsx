@@ -180,7 +180,7 @@ function Status({ tom, children }: { tom?: 'ok' | 'alerta'; children: ReactNode 
 type Aba = 'leitura' | 'emissao' | 'cadastro';
 
 /**
- * `cadastro` e `emissaoExtra` sao pedacos que a ABA HOSPEDA, e nao esta tela.
+ * `cadastro` e um pedaco que a ABA HOSPEDA, e nao esta tela.
  *
  * A referencia e de um tenant so e por isso tem logo, emissor e chave Pix no
  * codigo. Aqui isso e cadastro por tenant, e ele mora em `documento.tsx` com o
@@ -196,14 +196,11 @@ type Aba = 'leitura' | 'emissao' | 'cadastro';
  * ganha endereco proprio, nao rola junto com trinta campos de conferencia, e para
  * de competir com o trabalho do dia por espaco vertical.
  */
-export function FaturaUnificada({ logoUrl, tenantId, cadastro, emissaoExtra }: {
+export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
   logoUrl: string | null;
   /** Do `useSessao`. E a chave do rascunho — ver `RASCUNHO`. */
   tenantId: string | null;
   cadastro?: ReactNode;
-  /** A Previa em lote (`documento.tsx`). Fica no pe da aba 1 desde 14/08 — ver a
-   *  nota no lugar onde ela e renderizada. */
-  emissaoExtra?: ReactNode;
 }) {
   const [aba, setAba] = useState<Aba>('leitura');
   const rascunho = lerRascunho(tenantId);
@@ -388,17 +385,15 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro, emissaoExtra }: {
             irParaEmissao={() => irPara('emissao')}
           />
         )}
-        {aba === 'leitura' && emissaoExtra}
-        {/* A ABA 2 NAO HOSPEDA MAIS A PREVIA EM LOTE, e o motivo e um defeito
-            medido: `AbaDeEmissao` monta `<div id="documento">` com as duas folhas,
-            e a Previa monta um SEGUNDO `<div id="documento">` assim que uma fatura
-            e escolhida. O CSS de impressao e seletor de `id`, e seletor de `id`
-            casa TODOS os elementos com aquele id — imprimir a fatura unificada
-            arrastava a folha da Previa junto, na mesma pilha.
-
-            A Previa desceu para o pe da aba 1, junto do resto do trabalho de
-            conferencia: ela imprime faturas JA EMITIDAS no sistema, que e outro
-            fluxo do mesmo dia, e nunca as duas coisas ao mesmo tempo. */}
+        {/* A PREVIA EM LOTE SAIU DA TELA INTEIRA em 14/08 (tarde), e nao so desta
+            aba — ver o bloco no pe de `documento.tsx`. Enquanto ela existiu, o
+            lugar dela foi decidido por um defeito medido que vale registrar,
+            porque a causa continua viva: `AbaDeEmissao` monta `<div
+            id="documento">`, o CSS de impressao e seletor de `id`, e seletor de
+            `id` casa TODOS os elementos com aquele id. Duas folhas com o mesmo id
+            na arvore imprimem juntas. Hoje so existe uma — e e por isso que
+            qualquer coisa que volte a montar `id="documento"` tem de vir com o
+            teste `W-imprime-uma-folha-so` junto. */}
         {aba === 'emissao' && <AbaDeEmissao composicao={composicao} logoUrl={logoUrl} />}
         {aba === 'cadastro' && cadastro}
       </div>
