@@ -194,7 +194,108 @@ export function textoParaCentavos(bruto: string, campo = 'valor'): Centavos {
   return multiplicarEmCentavos(paraDecimal(bruto, campo), { valor: 1n, escala: 0 });
 }
 
+/**
+ * O MESMO DECIMAL, NA PONTUACAO DE QUEM LE — e ele existe por um defeito medido.
+ *
+ * `decimalParaTexto` emite PONTO como separador decimal, porque e a forma de
+ * troca: e ela que viaja em JSON, que vai para `numeric` e que os testes
+ * comparam. Ate 14/08 a folha imprimia a saida dela CRUA, e o resultado era uma
+ * fatura brasileira misturando as duas pontuacoes na mesma linha:
+ *
+ *     Tarifa R$ 1.185396      Valor R$ 35,56
+ *
+ * Um cliente que le "1.185396" numa coluna de reais le "um mil cento e oitenta e
+ * cinco". Nao e detalhe de gosto: e a coluna que prova a tarifa cheia contra a
+ * com desconto, e ela e o numero que o cliente confere na conta da distribuidora.
+ *
+ * SEPARADOR DE MILHAR JUNTO, pelo mesmo motivo: "1265 kWh" e legivel, "12650
+ * kWh" ja nao e, e a folha imprime consumo de UC comercial.
+ *
+ * A separacao entre as duas funcoes e a mesma que este projeto ja faz com
+ * dinheiro: `Centavos` e o dado, `emReais` e a apresentacao. Aqui `Decimal` e o
+ * dado e esta e a apresentacao — e por isso ela nao devolve `Decimal`, devolve
+ * texto pronto para pousar no papel.
+ */
+export function decimalBr(d: Decimal, casas: number): string {
+  const cru = decimalParaTexto(d, casas);
+  const neg = cru.startsWith('-');
+  const [inteira = '0', fracao] = (neg ? cru.slice(1) : cru).split('.');
+  const comMilhar = inteira.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `${neg ? '-' : ''}${comMilhar}${fracao ? `,${fracao}` : ''}`;
+}
+
 // ------------------------------------------------------------------ a conta
+
+/**
+ * O TETO DO DESCONTO, E ELE NASCEU DE UMA MEDICAO EM 14/08.
+ *
+ * `aplicarPercentual` recusa base negativa e percentual negativo, e nada mais.
+ * Com **150%** sobre 500 kWh a R$ 1,185396, a conta inteira sai e a folha
+ * IMPRIME:
+ *
+ *     integral   R$   592,70
+ *     desconto   R$   889,05   <- maior que o integral
+ *     energia G3 -R$  296,35
+ *     total      -R$  196,35   <- "Valor total a pagar" NEGATIVO
+ *
+ * E os tres cartoes SAEM, porque a condicao que os libera e `integral > 0` — que
+ * continua verdadeira. Uma folha de cobranca com total negativo e um documento
+ * que o cliente nao contesta: ele paga zero e esta certo.
+ *
+ * O TETO E 50 E O NUMERO TEM ORIGEM: e o `max` do controle da referencia
+ * (`min 0, max 50, step 0.5`), o unico valor medido que existe para isto. Nao e
+ * "um numero que pareceu razoavel" — regra 10.
+ *
+ * ELE VIVE NO SERVIDOR e nao no `<input>`: a rota e a mesma que o CRM consome, e
+ * um `max` de HTML nao protege quem nao roda HTML. O CHECK
+ * `modelo_desconto_na_faixa` da migration 28 e a terceira camada, para o valor
+ * que vem gravado no modelo.
+ */
+export class PercentualForaDaFaixa extends RangeError {
+  readonly status = 422;
+  constructor(valor: string) {
+    super(
+      `O desconto de ${valor}% esta fora da faixa 0..50. Nada foi composto. `
+      + 'Acima de 100% a energia com desconto fica NEGATIVA e a folha imprime um '
+      + '"Valor total a pagar" negativo, com os tres cartoes normais em cima dele '
+      + '- medido em 14/08/2026. O teto de 50 vem do controle da referencia.'
+    );
+    this.name = 'PercentualForaDaFaixa';
+  }
+}
+
+const CEM = 100n;
+
+function exigirPercentualNaFaixa(perc: Decimal, texto: string): void {
+  const escala = 10n ** BigInt(perc.escala);
+  if (perc.valor < 0n || perc.valor > CEM * escala / 2n) throw new PercentualForaDaFaixa(texto);
+}
+
+/**
+ * A SERIE DE kWh NUMA ESCALA SO — e ela conserta um defeito medido em 14/08.
+ *
+ * `paraDecimal` devolve `{valor, escala}`, e ate aqui os dois consumidores do
+ * historico usavam so `.valor`, jogando a escala fora. O extrator produz escalas
+ * MISTURADAS de proposito (`numeroParaTexto(kwh, 0)` preserva a casa decimal
+ * quando ela existe), e a pessoa tambem pode digitar "130,5" no campo editavel.
+ *
+ * O efeito era aritmetica entre grandezas incomparaveis: `"320.5"` vira `3205n`
+ * e `"340"` vira `340n`, entao a barra de **320,5 kWh saia com 100% de altura e
+ * a de 340 kWh com 10%** — no papel que vai ao cliente. E `historicoPlausivel`
+ * aprovava a serie, porque a variacao artificial de dez vezes e exatamente o que
+ * ela procura para dizer "isto parece consumo real".
+ *
+ * O padrao ja existia neste arquivo, em `consumoMes`: leva tudo a maior escala
+ * multiplicando pela diferenca de potencia. Aqui ele vira funcao, porque agora
+ * tem tres chamadores.
+ */
+export function serieNaMesmaEscala(
+  historico: ReadonlyArray<{ kwh: string }>, campo = 'historico',
+): bigint[] {
+  const ds = historico.map((h) => paraDecimal(h.kwh, campo));
+  const escala = ds.reduce((a, d) => (d.escala > a ? d.escala : a), 0);
+  return ds.map((d) => d.valor * 10n ** BigInt(escala - d.escala));
+}
 
 export type ContaDaFatura = {
   /** kWh compensados, decimal em STRING. */
@@ -259,6 +360,7 @@ export function calcular(c: CamposDaFaturaUnificada, p: ParametrosDaEmissao): Co
   const fator = paraDecimal(p.fator_emissao, 'fator_emissao');
   const perc = paraDecimal(p.percentual_desconto, 'percentual_desconto');
   const percTxt = decimalParaTexto(perc, 2);
+  exigirPercentualNaFaixa(perc, percTxt);
 
   const integral = multiplicarEmCentavos(kwh, tarifa);
   const desconto = aplicarPercentual(integral, percTxt, 'percentual_desconto');
@@ -311,10 +413,25 @@ export function calcular(c: CamposDaFaturaUnificada, p: ParametrosDaEmissao): Co
     bandeira_centavos: band,
     demais_centavos: demais,
     outros_encargos_lidos_centavos: outrosLidos,
-    /* So acusa quando o extrator DISSE alguma coisa: `outros_encargos` zerado e
-     * "nao achei", nao "achei zero", e cobrar coerencia de um campo em branco
-     * transformaria toda fatura sem essa linha num alerta. */
-    residuo_discorda: outrosLidos !== 0 && outrosLidos !== demais,
+    /*
+     * SO ACUSA QUANDO O EXTRATOR DISSE ALGUMA COISA — e a forma de saber isso
+     * MUDOU em 14/08, porque a primeira estava medindo a coisa errada.
+     *
+     * A condicao era `outrosLidos !== 0`, herdada da referencia, onde o JSON e
+     * livre e o campo ausente chega `undefined`. Aqui o `SCHEMA_DA_FATURA` poe
+     * `outros_encargos` em `required` e o prompt manda somar os demais itens —
+     * entao o modelo devolve `0` quando nao acha, e `numeroParaTexto(0, 2)` da
+     * `"0.00"`, que vira `outrosLidos === 0`. Resultado medido: **a guarda nunca
+     * disparava no caminho real**, e o residuo continuava absorvendo em silencio
+     * todo erro de leitura das outras tres parcelas — que e exatamente o que ela
+     * existe para acusar.
+     *
+     * A distincao entre AUSENTE e ZERO existe, e ela esta na STRING: e por isso
+     * que este arquivo recebe os 21 campos como texto (ver o cabecalho do tipo).
+     * Campo em branco continua nao acusando; `"0,00"` lido de uma fatura cujo
+     * residuo da R$ 12,40 passa a acusar.
+     */
+    residuo_discorda: c.outros_encargos.trim() !== '' && outrosLidos !== demais,
 
     total_centavos: energiaG3 + totalEq,
     sem_g3_centavos: integral + totalEq,
@@ -337,12 +454,17 @@ export function calcular(c: CamposDaFaturaUnificada, p: ParametrosDaEmissao): Co
  */
 export function historicoPlausivel(historico: ReadonlyArray<{ kwh: string }>): boolean {
   if (historico.length < 3) return false;
-  const v = historico.map((h) => paraDecimal(h.kwh, 'historico').valor);
+  const v = serieNaMesmaEscala(historico);
   const max = v.reduce((a, b) => (b > a ? b : a));
   const min = v.reduce((a, b) => (b < a ? b : a));
   if (max === min) return false;
-  const passos = v.slice(1).map((x, i) => x - v[i]);
+  const passos = v.slice(1).map((x, i) => x - v[i]!);
   const pmax = passos.reduce((a, b) => (b > a ? b : a));
   const pmin = passos.reduce((a, b) => (b < a ? b : a));
-  return pmax - pmin > 1n;
+  /* O criterio de 1 kWh e da referencia e vale em kWh INTEIRO. Com a serie
+   * normalizada numa escala comum, "1" precisa acompanhar a escala - senao uma
+   * serie em decimos ("120.0", "130.5") teria os passos multiplicados por 10 e
+   * o piso continuaria valendo 1, aprovando variacao de 0,1 kWh. */
+  const escala = historico.reduce((a, h) => Math.max(a, paraDecimal(h.kwh, 'historico').escala), 0);
+  return pmax - pmin > 10n ** BigInt(escala);
 }

@@ -21,13 +21,18 @@
 import { dbt } from '../db/tipado.ts';
 import { tenantCorrente, exigir } from '../db/contexto.ts';
 import { emReais } from '../dominio/centavos.ts';
-import { conferirBoleto, linhaDigitavelFormatada } from '../dominio/linha-digitavel.ts';
-import { folha1, linhaDoEmissor, type FolhaG3, type EmissorDaFatura } from '../dominio/folha-g3.ts';
+import {
+  conferirBoleto, linhaDigitavelFormatada, explicarDivergencia,
+  type ConferenciaDoBoleto,
+} from '../dominio/linha-digitavel.ts';
+import {
+  folha1, linhaDoEmissor, TEXTOS_DA_FOLHA_PADRAO,
+  type FolhaG3, type EmissorDaFatura, type TextosDaFolha,
+} from '../dominio/folha-g3.ts';
+import { type TextosDoModelo } from '../dominio/folha-unificada.ts';
+import { paraDecimal, decimalParaTexto } from '../dominio/fatura-unificada.ts';
 import { validarCNPJ, normalizar } from '../dominio/documento.ts';
 
-/** O retorno de `conferirBoleto`, nomeado porque viaja no payload e o CRM
- *  consome esta rota - um tipo anonimo aqui obrigaria o outro lado a redeclarar. */
-export type ConferenciaDoBoleto = ReturnType<typeof conferirBoleto>;
 import {
   linhasDoDocumento, dataBr,
   type ConfiguracaoDeCampo, type CampoDeFatura,
@@ -98,20 +103,6 @@ export class BoletoNaoConfere extends Error {
   }
 }
 
-/** Cada divergencia em uma frase que diz o NUMERO, e nao so o nome do problema. */
-function explicarDivergencia(d: ConferenciaDoBoleto['divergencias'][number]): string {
-  switch (d.tipo) {
-    case 'linha_invalida':
-      return `A linha digitavel nao passa na verificacao de ${d.falhas.join(', ')}.`;
-    case 'codigo_de_barras_discorda':
-      return 'O codigo de barras que o banco gravou nao e o mesmo que a linha digitavel dele remonta '
-           + `(banco ${d.do_banco}, linha ${d.da_linha}).`;
-    case 'valor_discorda':
-      return `O boleto e de ${emReais(d.no_boleto)} e a fatura e de ${emReais(d.na_fatura)}.`;
-    case 'vencimento_discorda':
-      return `O boleto vence em ${dataBr(d.no_boleto)} e a fatura em ${dataBr(d.na_fatura)}.`;
-  }
-}
 
 export class FaturaSemDocumento extends Error {
   readonly status = 404;
@@ -249,6 +240,19 @@ export type NovaIdentidade = {
   razao_social?: string | null;
   /** Com ou sem mascara - normaliza aqui. O DV e conferido, nao so o formato. */
   cnpj?: string | null;
+  /*
+   * O CONTATO IMPRESSO NO RODAPE DA FOLHA 2 (migration 28).
+   *
+   * O tipo `ContatoDoEmissor` existia em `folha-unificada.ts` desde 14/08 e
+   * NENHUM chamador de producao o preenchia - a rota de composicao chamava
+   * `comporFolhas` com quatro argumentos e o quinto caia no default. O rodape da
+   * folha do cliente saia com a linha do emissor e mais nada, e nao havia de
+   * onde tirar o resto: as colunas nao existiam.
+   */
+  telefone?: string | null;
+  endereco?: string | null;
+  email?: string | null;
+  site?: string | null;
 };
 
 export class CnpjDoEmissorInvalido extends Error {
@@ -279,29 +283,59 @@ export async function salvarIdentidade(e: NovaIdentidade) {
   await exigir('administrar');
   const tenant_id = tenantCorrente();
 
-  const chave_pix_padrao_id = texto(e.chave_pix_padrao_id);
-  if (chave_pix_padrao_id !== null) {
-    // A FK composta ja recusaria chave de outro tenant com 23503, mas o erro
-    // chegaria como "ReferenciaInvalida" generico. Conferir aqui nomeia o id.
-    const existe = await dbt().chave_pix.findFirst({ where: { id: chave_pix_padrao_id, tenant_id } });
-    if (!existe) throw new ChavePixNaoEncontrada(chave_pix_padrao_id);
+  /*
+   * ==========================================================================
+   * CAMPO AUSENTE NAO E CAMPO NULO, E CONFUNDIR OS DOIS APAGAVA O EMISSOR.
+   *
+   * DEFEITO MEDIDO EM 14/08. Este `upsert` escrevia a LINHA INTEIRA a cada
+   * chamada, com `texto(e.razao_social)` devolvendo `null` para `undefined`.
+   * A tela tem DOIS botoes que chamam esta funcao, e o segundo mandava um campo
+   * so:
+   *
+   *     escolherPadrao(id) -> POST /cobranca/identidade { chave_pix_padrao_id }
+   *
+   * Consequencia: **trocar a chave Pix padrao apagava razao social e CNPJ**, em
+   * silencio, sem erro e sem log. E a folha voltava a sair sem a linha do emissor
+   * e sem o aviso contra o golpe do boleto - que era, literalmente, o bloqueio
+   * numero 1 da retomada de 14/08.
+   *
+   * O conserto e distinguir "nao mandou" de "mandou vazio", que e o que
+   * `cliente.editar` ja faz. `'campo' in e` responde isso; `e.campo !== undefined`
+   * tambem, mas `in` diz o que se quer dizer.
+   */
+  const dados: Record<string, unknown> = { atualizado_em: new Date() };
+
+  if ('chave_pix_padrao_id' in e) {
+    const chave_pix_padrao_id = texto(e.chave_pix_padrao_id);
+    if (chave_pix_padrao_id !== null) {
+      // A FK composta ja recusaria chave de outro tenant com 23503, mas o erro
+      // chegaria como "ReferenciaInvalida" generico. Conferir aqui nomeia o id.
+      const existe = await dbt().chave_pix.findFirst({ where: { id: chave_pix_padrao_id, tenant_id } });
+      if (!existe) throw new ChavePixNaoEncontrada(chave_pix_padrao_id);
+    }
+    dados.chave_pix_padrao_id = chave_pix_padrao_id;
   }
+
+  if ('razao_social' in e) dados.razao_social = texto(e.razao_social);
 
   /* O CNPJ e conferido pelo DV e nao so pelo formato do CHECK da migration 26.
    * A divisao e a mesma da chave Pix: o banco sabe o que e formato, a aplicacao
    * sabe o que e digito verificador - e um CHECK com a aritmetica do DV dentro
    * seria uma segunda implementacao dela, em SQL, envelhecendo separado. */
-  const cnpjBruto = texto(e.cnpj);
-  let cnpj: string | null = null;
-  if (cnpjBruto !== null) {
-    cnpj = normalizar(cnpjBruto);
-    if (!validarCNPJ(cnpj)) throw new CnpjDoEmissorInvalido(cnpjBruto);
+  if ('cnpj' in e) {
+    const cnpjBruto = texto(e.cnpj);
+    let cnpj: string | null = null;
+    if (cnpjBruto !== null) {
+      cnpj = normalizar(cnpjBruto);
+      if (!validarCNPJ(cnpj)) throw new CnpjDoEmissorInvalido(cnpjBruto);
+    }
+    dados.cnpj = cnpj;
   }
 
-  const dados = {
-    chave_pix_padrao_id, razao_social: texto(e.razao_social), cnpj,
-    atualizado_em: new Date(),
-  };
+  for (const campo of ['telefone', 'endereco', 'email', 'site'] as const) {
+    if (campo in e) dados[campo] = texto(e[campo]);
+  }
+
   return dbt().identidade_de_cobranca.upsert({
     where: { tenant_id }, create: { tenant_id, ...dados }, update: dados,
   });
@@ -412,11 +446,65 @@ export async function qrDeConferencia(valorCentavos: number) {
  * que e SVG nao passa, e o metadado nunca divergir do conteudo nao depende de
  * este codigo estar certo.
  */
+/**
+ * ============================================================================
+ * A LOGO E CONFERIDA AQUI ANTES DE IR AO BANCO — e ate 14/08 nao era.
+ *
+ * A defesa do banco esta certa e e forte: o gatilho `app.propagar_metadado_da_logo`
+ * deriva o mime da ASSINATURA do arquivo e recusa o que nao for PNG ou JPEG, com
+ * uma mensagem escrita para ser lida (*"SVG esta fora de proposito - e documento
+ * com script dentro"*).
+ *
+ * O PROBLEMA ERA O CAMINHO DE VOLTA. `RAISE EXCEPTION` sem SQLSTATE cai em
+ * `P0001`, que nao esta no `switch` de `src/http/erros.ts`. Medido: subir um
+ * WebP, um GIF, um SVG ou uma imagem de 600 KB devolvia **500 "Erro interno."** -
+ * a mensagem que o gatilho escreve com tanto cuidado nunca chegava a ninguem.
+ *
+ * A divisao e a mesma que `salvarIdentidade` ja faz com o CNPJ: o banco guarda o
+ * formato como ULTIMA linha de defesa, e a aplicacao nomeia o erro. As duas
+ * conferencias existem, e nenhuma substitui a outra - esta roda antes e fala
+ * portugues; a do gatilho pega quem chegar por outro caminho.
+ */
+export class LogoGrandeDemais extends Error {
+  readonly status = 413;
+  constructor(bytes: number) {
+    super(
+      `A imagem tem ${Math.round(bytes / 1024)} KB e o teto e 512 KB - o mesmo do banco. `
+      + 'A logo e embutida no HTML do documento, e uma fatura de 600 KB de logo demora a '
+      + 'abrir na tela de quem confere e na impressora de quem emite.'
+    );
+    this.name = 'LogoGrandeDemais';
+  }
+}
+
+export class LogoNaoEPngNemJpeg extends Error {
+  readonly status = 422;
+  constructor(assinatura: string) {
+    super(
+      `A logo nao e PNG nem JPEG: os primeiros bytes sao ${assinatura}. O tipo e reconhecido `
+      + 'pelo CONTEUDO e nao pela extensao, entao renomear nao passa. SVG esta fora de '
+      + 'proposito: e documento com script dentro, e a logo e embutida no HTML do documento.'
+    );
+    this.name = 'LogoNaoEPngNemJpeg';
+  }
+}
+
+/** O mesmo teto do CHECK do banco. Um numero, dois lugares que o conhecem. */
+const TETO_DA_LOGO = 512 * 1024;
+
 export async function salvarLogo(bruto: Uint8Array) {
   await exigir('administrar');
   const tenant_id = tenantCorrente();
   const id = await dbt().identidade_de_cobranca.findFirst({ where: { tenant_id } });
   if (!id) throw new IdentidadeNaoCadastrada();
+
+  if (bruto.length > TETO_DA_LOGO) throw new LogoGrandeDemais(bruto.length);
+  const png = bruto[0] === 0x89 && bruto[1] === 0x50 && bruto[2] === 0x4e && bruto[3] === 0x47;
+  const jpeg = bruto[0] === 0xff && bruto[1] === 0xd8 && bruto[2] === 0xff;
+  if (!png && !jpeg) {
+    throw new LogoNaoEPngNemJpeg(
+      Array.from(bruto.slice(0, 4)).map((b) => b.toString(16).padStart(2, '0')).join(' '));
+  }
 
   /*
    * `Uint8Array.from` COPIA os bytes, e a copia e o que satisfaz o tipo: o Prisma
@@ -467,13 +555,17 @@ export async function definirCampos(
 ) {
   await exigir('administrar');
   const tenant_id = tenantCorrente();
+  /* A CONFIGURACAO PENDE DO MODELO desde a migration 28: o mesmo tenant pode ter
+   * "Fatura unificada" mostrando a tarifa e "Fatura simples" escondendo-a. Sem
+   * modelo nenhum, `modeloPadraoId` cria o "Padrao" - ver a nota la. */
+  const modelo_id = await modeloPadraoId();
 
-  await dbt().campo_do_documento.deleteMany({ where: { tenant_id } });
+  await dbt().campo_do_documento.deleteMany({ where: { tenant_id, modelo_id } });
   if (campos.length === 0) return [];   // volta ao PADRAO, que e vazio no banco
 
   await dbt().campo_do_documento.createMany({
     data: campos.map((c, i) => ({
-      tenant_id,
+      tenant_id, modelo_id,
       campo: c.campo,
       rotulo: texto(c.rotulo),
       // A ordem vem da POSICAO na lista quando nao e declarada: a tela manda os
@@ -487,10 +579,11 @@ export async function definirCampos(
 
 export async function campos(): Promise<ConfiguracaoDeCampo[]> {
   await exigir('ler');
-  const r = await dbt().campo_do_documento.findMany({
-    where: { tenant_id: tenantCorrente() },
+  const modelo_id = (await modeloVigente())?.id;
+  const r = modelo_id ? await dbt().campo_do_documento.findMany({
+    where: { tenant_id: tenantCorrente(), modelo_id },
     orderBy: [{ ordem: 'asc' }, { campo: 'asc' }],
-  });
+  }) : [];
   return r.map((c: any) => ({
     campo: c.campo as CampoDeFatura, rotulo: c.rotulo, ordem: c.ordem, visivel: c.visivel,
   }));
@@ -587,6 +680,8 @@ export type DocumentoDaFatura = {
     | {
         tipo: 'boleto'; linha_digitavel: string | null; codigo_barras: string | null;
         pix_copia_e_cola: string | null; qr: QrDoDocumento | null; qr_motivo?: string;
+        /** As linhas legais do banco, do MODELO. Vazio faz a faixa sumir. */
+        rodape_legal: string[];
         /* O IDENTIFICADOR DO BOLETO NO BANCO, e ele passou a viajar em 12/08 com a
          * faixa nova. Nao e dado novo - `boleto.nosso_numero` existe desde a
          * migration da carteira e e o que a Sicoob devolve ao registrar. O que
@@ -676,7 +771,7 @@ export async function paraFatura(faturaId: string, opcoes: OpcoesDoDocumento = {
   const f = await dbt().fatura.findFirst({ where: { id: faturaId } });
   if (!f) throw new FaturaSemDocumento(faturaId);
 
-  const [uc, chaveDaFatura, ident, cfg, bol] = await Promise.all([
+  const [uc, chaveDaFatura, ident, cfg, bol, modelo, usina] = await Promise.all([
     dbt().unidade_consumidora.findFirst({ where: { id: f.unidade_consumidora_id }, include: { cliente: true } }),
     /* A CHAVE VEM DA FATURA, e nao da identidade. A identidade so guarda o
       * PADRAO, e o padrao pode ter mudado desde que esta fatura foi emitida -
@@ -695,6 +790,14 @@ export async function paraFatura(faturaId: string, opcoes: OpcoesDoDocumento = {
     dbt().identidade_de_cobranca.findFirst({ where: { tenant_id } }),
     campos(),
     dbt().boleto.findFirst({ where: { fatura_id: faturaId } }),
+    /* OS TEXTOS DO MODELO (migration 28). A previa em lote imprimia a assinatura
+     * do topo, o aviso e o rodape legal do BANCO como literais - e as duas
+     * ultimas linhas nomeavam uma cooperativa especifica com o codigo dela. */
+    modeloVigente(),
+    /* A USINA ESTAVA FORA DO `Promise.all` SEM MOTIVO, e ela depende so de `f`,
+     * que ja esta em maos desde a linha do `findFirst` acima. Custava uma viagem
+     * SEQUENCIAL por documento - e o lote de uma competencia paga isso N vezes. */
+    f.usina_id ? dbt().usina.findFirst({ where: { id: f.usina_id } }) : Promise.resolve(null),
   ]);
   /*
    * A LOGO SO E LIDA QUANDO PEDIDA, e a ordem importa: a leitura acima nao a
@@ -703,9 +806,10 @@ export async function paraFatura(faturaId: string, opcoes: OpcoesDoDocumento = {
    * chamada.
    */
   const bin = opcoes.embutirLogo && ident?.logo_mime ? await logo() : null;
-  const usina = f.usina_id
-    ? await dbt().usina.findFirst({ where: { id: f.usina_id } })
-    : null;
+  const textosDaFolha: TextosDaFolha = modelo
+    ? { assinatura: modelo.assinatura, aviso_titulo: modelo.aviso_titulo,
+        aviso_corpo: modelo.aviso_corpo, rodape_legal: modelo.rodape_legal }
+    : TEXTOS_DA_FOLHA_PADRAO;
 
   const iso = (d: unknown): string => (d instanceof Date ? d.toISOString().slice(0, 10) : String(d).slice(0, 10));
 
@@ -760,7 +864,7 @@ export async function paraFatura(faturaId: string, opcoes: OpcoesDoDocumento = {
       vencimento: dados.vencimento,
       valor_total_centavos: f.valor_total_centavos,
       numero_da_fatura: `${dados.numero_uc ?? '000000'}-${dados.competencia.slice(0, 7).replace('-', '')}`,
-    }, emissor),
+    }, emissor, textosDaFolha),
     logo: ident?.logo_mime && ident.logo_bytes != null && ident.logo_sha256
       ? {
           mime: ident.logo_mime, bytes: ident.logo_bytes, sha256: ident.logo_sha256,
@@ -771,7 +875,7 @@ export async function paraFatura(faturaId: string, opcoes: OpcoesDoDocumento = {
             : {}),
         }
       : null,
-    pagamento: faixaDePagamento(f, chaveDaFatura, bol, emissor),
+    pagamento: faixaDePagamento(f, chaveDaFatura, bol, emissor, textosDaFolha.rodape_legal),
   };
 }
 
@@ -821,7 +925,21 @@ function exigirBoletoQueConfere(faturaId: string, bol: any, f: any): Conferencia
   return c;
 }
 
-function faixaDePagamento(f: any, chave: any, bol: any, emissor: EmissorDaFatura): DocumentoDaFatura['pagamento'] {
+function faixaDePagamento(
+  f: any, chave: any, bol: any, emissor: EmissorDaFatura,
+  /*
+   * O RODAPE LEGAL DO BANCO, do modelo (migration 28). Ele era literal na TELA -
+   * `documento.tsx` imprimia "EMITIDO PELA COOPERATIVA CONTRATANTE SEM
+   * RESPONSABILIDADE DO BANCOOB" cravado no JSX -, o que punha o texto de um
+   * banco especifico na fatura de qualquer tenant, e ainda por cima do lado
+   * errado da fronteira: a tela nao decide o que a folha diz.
+   *
+   * VAZIO FAZ A FAIXA SUMIR, e e o padrao. Texto de banco so e verdade quando ha
+   * convenio; afirma-lo sem convenio poe a assinatura de um banco num documento
+   * que ele nunca viu.
+   */
+  rodapeLegal: string[] = [],
+): DocumentoDaFatura['pagamento'] {
   /* Formatados UMA vez, pelos mesmos formatadores que compoem `linhas[]` - e nao
    * por um par proprio. Se o documento passar a escrever data ou dinheiro de outro
    * jeito, a faixa acompanha sozinha; um segundo formatador aqui seria a divergencia
@@ -853,6 +971,7 @@ function faixaDePagamento(f: any, chave: any, bol: any, emissor: EmissorDaFatura
        * mesmo `f.valor_total_centavos` - em centavos inteiros, sem passar pelo
        * `valor_br` ja formatado, que seria texto voltando a virar numero. */
       conferencia: exigirBoletoQueConfere(f.id, bol, f),
+      rodape_legal: rodapeLegal,
       // O Pix DO BANCO tambem ganha desenho. Ele e melhor que o nosso estatico -
       // tem `txid` e concilia sozinho -, entao seria estranho desenhar so o pior.
       ...qrDe(bol.pix_copia_e_cola ?? null),
@@ -899,4 +1018,298 @@ function faixaDePagamento(f: any, chave: any, bol: any, emissor: EmissorDaFatura
       : 'Sem boleto registrado (falta o certificado A1 - Q-SICOOB-01) e sem chave Pix nesta fatura. '
         + 'A chave e carimbada ao COMPOR o lote: fatura anterior a migration 25, ou tenant sem chave padrao.',
   };
+}
+
+// =========================================================== o modelo de fatura
+//
+// O TEMPLATE (migration 28). Ele guarda COMO a folha le - assinatura, textos do
+// aviso, parametros padrao, rodape legal - e e de quem pendem os campos, os
+// campos personalizados e a escolha de qual configuracao esta valendo.
+//
+// A DIVISAO COM A IDENTIDADE E A DECISAO DO DESENHO: `identidade_de_cobranca` diz
+// QUEM emite (uma por tenant); `modelo_de_fatura` diz COMO a folha le (varias).
+// A empresa e uma so, e a mesma empresa fatura de mais de um jeito.
+
+/** Os textos do modelo, no formato que `comporFolhas` consome. */
+export type TextosDoModeloVigente = TextosDoModelo & {
+  id: string;
+  nome: string;
+  percentual_desconto_padrao: string;
+  fator_emissao_padrao: string;
+};
+
+export class ModeloNaoEncontrado extends Error {
+  readonly status = 404;
+  constructor(id: string) {
+    super(`Modelo de fatura ${id} nao encontrado neste tenant.`);
+    this.name = 'ModeloNaoEncontrado';
+  }
+}
+
+/**
+ * O ID DO MODELO QUE ESTA VALENDO, criando o "Padrao" se ainda nao houver.
+ *
+ * A criacao sob demanda e deliberada e vale ser justificada, porque o padrao
+ * deste projeto e o contrario - `identidade_de_cobranca` NAO nasce sozinha, e a
+ * tela avisa que ela falta.
+ *
+ * A diferenca e o que a ausencia SIGNIFICA nos dois casos. Identidade ausente e
+ * informacao: ninguem sabe quem emite, e inventar um emissor poria um nome
+ * errado na fatura. Modelo ausente nao e informacao nenhuma - os textos padrao
+ * ja existem em `TEXTOS_PADRAO` e a folha ja sai com eles. Exigir que a pessoa
+ * clique em "criar modelo" antes de renomear um campo seria um passo que so
+ * existe para o banco.
+ *
+ * A migration 28 ja criou um para todo tenant que tinha identidade ou campos.
+ * Esta funcao cobre o tenant NOVO, que nao existia quando ela rodou.
+ */
+export async function modeloPadraoId(): Promise<string> {
+  const tenant_id = tenantCorrente();
+  const ident = await dbt().identidade_de_cobranca.findFirst({ where: { tenant_id } });
+  if (ident?.modelo_padrao_id) return ident.modelo_padrao_id;
+
+  const algum = await dbt().modelo_de_fatura.findFirst({
+    where: { tenant_id, ativo: true }, orderBy: [{ criado_em: 'asc' }],
+  });
+  const modelo = algum ?? await dbt().modelo_de_fatura.create({
+    data: { tenant_id, nome: 'Padrão', descricao: 'Criado automaticamente no primeiro uso.' },
+  });
+
+  /* A identidade passa a APONTAR para ele. `upsert` porque um tenant pode
+   * configurar o documento antes de cadastrar quem emite - e nesse caso a linha
+   * de identidade nasce so com o ponteiro, que e verdade e nao chute. */
+  await dbt().identidade_de_cobranca.upsert({
+    where: { tenant_id },
+    create: { tenant_id, modelo_padrao_id: modelo.id },
+    update: { modelo_padrao_id: modelo.id, atualizado_em: new Date() },
+  });
+  return modelo.id;
+}
+
+/** Os modelos do tenant, o padrao primeiro. */
+export async function modelos() {
+  await exigir('ler');
+  const tenant_id = tenantCorrente();
+  const [lista, ident] = await Promise.all([
+    dbt().modelo_de_fatura.findMany({ where: { tenant_id }, orderBy: [{ nome: 'asc' }] }),
+    dbt().identidade_de_cobranca.findFirst({ where: { tenant_id } }),
+  ]);
+  return lista.map((m) => ({ ...m, padrao: m.id === ident?.modelo_padrao_id }));
+}
+
+export type NovoModelo = {
+  nome?: string;
+  descricao?: string | null;
+  assinatura?: string;
+  aviso_titulo?: string;
+  aviso_corpo?: string;
+  percentual_desconto_padrao?: string;
+  fator_emissao_padrao?: string;
+  multa_percentual?: string;
+  juros_mes_percentual?: string;
+  rodape_legal?: string[];
+  nota_do_fator?: string;
+  ativo?: boolean;
+};
+
+/** Os campos que o formulario manda, ja limpos. `undefined` = nao mexer. */
+function camposDoModelo(e: NovoModelo) {
+  const d: Record<string, unknown> = {};
+  for (const k of ['nome', 'assinatura', 'aviso_titulo', 'aviso_corpo', 'nota_do_fator'] as const) {
+    if (e[k] !== undefined) d[k] = String(e[k] ?? '').trim();
+  }
+  if (e.descricao !== undefined) d.descricao = texto(e.descricao);
+  /* OS QUATRO NUMEROS SAO DECIMAIS E NAO CENTAVOS - regra 1, segundo paragrafo:
+   * percentual e proporcao, fator de emissao e grandeza fisica. Passam por
+   * `paraDecimal` para recusar "vinte por cento" antes do banco, e voltam como
+   * TEXTO, que e o que `numeric` aceita sem passar por float. */
+  const numero = (v: string, campo: string, casas: number) =>
+    decimalParaTexto(paraDecimal(v, campo), casas);
+  if (e.percentual_desconto_padrao !== undefined) {
+    d.percentual_desconto_padrao = numero(e.percentual_desconto_padrao, 'percentual_desconto_padrao', 2);
+  }
+  if (e.fator_emissao_padrao !== undefined) {
+    d.fator_emissao_padrao = numero(e.fator_emissao_padrao, 'fator_emissao_padrao', 6);
+  }
+  if (e.multa_percentual !== undefined) d.multa_percentual = numero(e.multa_percentual, 'multa_percentual', 2);
+  if (e.juros_mes_percentual !== undefined) {
+    d.juros_mes_percentual = numero(e.juros_mes_percentual, 'juros_mes_percentual', 2);
+  }
+  /* O RODAPE LEGAL E UMA LISTA E LINHA VAZIA NAO E LINHA: a tela manda um
+   * `textarea` quebrado por `\n`, e uma linha em branco no meio viraria um vao
+   * em branco no pe da caixa de pagamento. */
+  if (e.rodape_legal !== undefined) {
+    d.rodape_legal = (e.rodape_legal ?? []).map((t) => String(t ?? '').trim()).filter(Boolean);
+  }
+  if (e.ativo !== undefined) d.ativo = Boolean(e.ativo);
+  return d;
+}
+
+export async function criarModelo(e: NovoModelo) {
+  await exigir('administrar');
+  const tenant_id = tenantCorrente();
+  const dados = camposDoModelo(e);
+  if (!dados.nome) throw new TypeError('nome e obrigatorio: e por ele que o modelo e escolhido.');
+  return dbt().modelo_de_fatura.create({ data: { tenant_id, ...(dados as any) } });
+}
+
+export async function salvarModelo(id: string, e: NovoModelo) {
+  await exigir('administrar');
+  const tenant_id = tenantCorrente();
+  const existe = await dbt().modelo_de_fatura.findFirst({ where: { id, tenant_id } });
+  if (!existe) throw new ModeloNaoEncontrado(id);
+  return dbt().modelo_de_fatura.update({
+    where: { id },
+    data: { ...(camposDoModelo(e) as any), atualizado_em: new Date() },
+  });
+}
+
+/** Escolher qual modelo vale. E um ato separado de editar, pelo mesmo motivo da
+ *  chave Pix: um muda o texto, o outro muda o que a proxima fatura imprime. */
+export async function escolherModeloPadrao(id: string) {
+  await exigir('administrar');
+  const tenant_id = tenantCorrente();
+  const existe = await dbt().modelo_de_fatura.findFirst({ where: { id, tenant_id } });
+  if (!existe) throw new ModeloNaoEncontrado(id);
+  return dbt().identidade_de_cobranca.upsert({
+    where: { tenant_id },
+    create: { tenant_id, modelo_padrao_id: id },
+    update: { modelo_padrao_id: id, atualizado_em: new Date() },
+  });
+}
+
+/**
+ * O MODELO VIGENTE NO FORMATO QUE A COMPOSICAO CONSOME.
+ *
+ * Sem modelo cadastrado devolve `null`, e `comporFolhas` cai em `TEXTOS_PADRAO`.
+ * Isto e leitura pura e nao cria nada: criar dentro de uma composicao faria uma
+ * rota de LEITURA escrever, o que quebraria `emRelatorio` e a promessa de que
+ * compor nao muda nada.
+ */
+export async function modeloVigente(): Promise<TextosDoModeloVigente | null> {
+  await exigir('ler');
+  const tenant_id = tenantCorrente();
+  const ident = await dbt().identidade_de_cobranca.findFirst({ where: { tenant_id } });
+  const m = ident?.modelo_padrao_id
+    ? await dbt().modelo_de_fatura.findFirst({ where: { id: ident.modelo_padrao_id, tenant_id } })
+    : await dbt().modelo_de_fatura.findFirst({ where: { tenant_id, ativo: true }, orderBy: [{ criado_em: 'asc' }] });
+  if (!m) return null;
+  return {
+    id: m.id,
+    nome: m.nome,
+    assinatura: m.assinatura,
+    aviso_titulo: m.aviso_titulo,
+    aviso_corpo: m.aviso_corpo,
+    multa_percentual: String(m.multa_percentual),
+    juros_mes_percentual: String(m.juros_mes_percentual),
+    rodape_legal: m.rodape_legal,
+    nota_do_fator: m.nota_do_fator,
+    percentual_desconto_padrao: String(m.percentual_desconto_padrao),
+    fator_emissao_padrao: String(m.fator_emissao_padrao),
+  };
+}
+
+// ================================================= os campos personalizados
+
+export type NovoCampoPersonalizado = {
+  chave: string;
+  rotulo: string;
+  origem?: 'fixo' | 'variavel';
+  valor?: string | null;
+  ordem?: number;
+  visivel?: boolean;
+};
+
+export class ChaveDeCampoInvalida extends Error {
+  readonly status = 422;
+  constructor(chave: string) {
+    super(
+      `A chave "${chave}" nao serve: use minusculas, numeros e sublinhado, comecando por letra `
+      + '(ate 40 caracteres). Ela nao e o rotulo - o rotulo muda, e a chave e o que liga o valor '
+      + 'de uma fatura ja registrada ao campo que o imprime.'
+    );
+    this.name = 'ChaveDeCampoInvalida';
+  }
+}
+
+/** Os campos personalizados do modelo vigente, na ordem em que saem na folha. */
+export async function camposPersonalizados(modeloId?: string) {
+  await exigir('ler');
+  const tenant_id = tenantCorrente();
+  const modelo_id = modeloId ?? (await modeloVigente())?.id;
+  if (!modelo_id) return [];
+  return dbt().campo_personalizado_da_fatura.findMany({
+    where: { tenant_id, modelo_id },
+    orderBy: [{ ordem: 'asc' }, { rotulo: 'asc' }],
+  });
+}
+
+/**
+ * Substitui a lista INTEIRA de campos personalizados do modelo.
+ *
+ * Mesma decisao de `definirCampos`: a lista e a unidade. Um diff perdido
+ * deixaria dois campos com a mesma chave ou um campo orfao, e o sintoma sairia
+ * impresso na fatura do cliente.
+ */
+export async function definirCamposPersonalizados(
+  lista: ReadonlyArray<NovoCampoPersonalizado>,
+) {
+  await exigir('administrar');
+  const tenant_id = tenantCorrente();
+  const modelo_id = await modeloPadraoId();
+
+  const limpos = lista.map((c, i) => {
+    const chave = String(c.chave ?? '').trim().toLowerCase();
+    if (!/^[a-z][a-z0-9_]{0,39}$/.test(chave)) throw new ChaveDeCampoInvalida(c.chave);
+    const origem = c.origem === 'variavel' ? 'variavel' as const : 'fixo' as const;
+    const valor = origem === 'fixo' ? texto(c.valor) : null;
+    if (origem === 'fixo' && valor === null) {
+      throw new TypeError(
+        `O campo "${chave}" e de valor FIXO e veio sem valor. Um rotulo com nada embaixo e a `
+        + 'mesma classe do travessao que este projeto recusa: use origem "variavel" se o valor '
+        + 'muda a cada fatura.'
+      );
+    }
+    return {
+      tenant_id, modelo_id, chave,
+      rotulo: String(c.rotulo ?? '').trim(),
+      origem, valor,
+      ordem: c.ordem ?? i,
+      visivel: c.visivel ?? true,
+    };
+  });
+
+  const chaves = new Set(limpos.map((c) => c.chave));
+  if (chaves.size !== limpos.length) {
+    throw new TypeError('ha duas linhas com a mesma chave - a chave identifica o campo e nao se repete.');
+  }
+
+  await dbt().campo_personalizado_da_fatura.deleteMany({ where: { tenant_id, modelo_id } });
+  if (limpos.length === 0) return 0;
+  await dbt().campo_personalizado_da_fatura.createMany({ data: limpos });
+  return limpos.length;
+}
+
+/**
+ * OS CAMPOS PERSONALIZADOS JA RESOLVIDOS, prontos para a grade da folha 1.
+ *
+ * `valores` sao os de origem `variavel` desta fatura, digitados na aba de
+ * leitura. Os `fixo` vem do proprio cadastro.
+ *
+ * CAMPO SEM VALOR NAO SAI. E a mesma regra do emissor e do beneficiario: um
+ * rotulo com travessao embaixo ensina o cliente a aceitar fatura incompleta. Aqui
+ * o custo de omitir e menor ainda - o campo e do tenant, e quem o criou sabe o
+ * que ele significa.
+ */
+export async function camposPersonalizadosResolvidos(
+  valores: Record<string, string> = {},
+): Promise<Array<{ rotulo: string; valor: string }>> {
+  const lista = await camposPersonalizados();
+  return lista
+    .filter((c) => c.visivel)
+    .map((c) => ({
+      rotulo: c.rotulo,
+      valor: (c.origem === 'fixo' ? c.valor ?? '' : valores[c.chave] ?? '').trim(),
+    }))
+    .filter((c) => c.valor !== '');
 }

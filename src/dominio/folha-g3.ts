@@ -49,6 +49,30 @@ import { emReais, type Centavos } from './centavos.ts';
 import { dataBr, competenciaBr, type LinhaDoDocumento } from './layout-do-documento.ts';
 
 /** Quem emite. Nulo em tudo enquanto o tenant nao cadastrou (migration 26). */
+/**
+ * OS TEXTOS QUE A FOLHA IMPRIME E QUE SAO DO TENANT, nao do codigo.
+ *
+ * Declarados aqui e nao importados de `folha-unificada.ts` para nao inverter a
+ * dependencia: esta folha e a mais antiga das duas e nao conhece a outra. O
+ * repositorio, que conhece as duas, passa o mesmo objeto para os dois lugares.
+ */
+export type TextosDaFolha = {
+  assinatura: string;
+  aviso_titulo: string;
+  aviso_corpo: string;
+  /** As linhas legais do banco, no pe da caixa de pagamento. VAZIO faz a faixa
+   *  sumir - texto de banco so e verdade quando ha convenio. */
+  rodape_legal: string[];
+};
+
+export const TEXTOS_DA_FOLHA_PADRAO: TextosDaFolha = {
+  assinatura: 'Energia Solar por Assinatura',
+  aviso_titulo: 'Não pague a conta da Equatorial',
+  aviso_corpo: 'Sua conta é unificada — o valor da distribuidora já está incluído neste boleto. '
+             + 'Pagar a conta da Equatorial gera duplicidade.',
+  rodape_legal: [],
+};
+
 export type EmissorDaFatura = {
   razao_social: string | null;
   /** 14 digitos, sem mascara. */
@@ -160,12 +184,26 @@ export function mascararDocumento(doc: string | null): string {
  * tela e o CRM - precisa saber que a folha esta incompleta e por que. Uma folha
  * a que faltam duas faixas sem dizer nada parece uma folha pronta.
  */
-export function folha1(d: DadosDaFolha, emissor: EmissorDaFatura): FolhaG3 {
+export function folha1(
+  d: DadosDaFolha,
+  emissor: EmissorDaFatura,
+  /*
+   * OS TEXTOS DO MODELO (migration 28), e o default existe para o tenant que
+   * ainda nao criou modelo nenhum - a folha sai com o que este arquivo dizia
+   * ate 14/08, e nao vazia.
+   *
+   * ELES ERAM LITERAIS AQUI, e o defeito e o mesmo que a migration 26 corrigiu
+   * no emissor: a assinatura do topo e o texto do aviso sao de UMA empresa e de
+   * UMA distribuidora, impressos na folha de todas. "Nao pague a conta da
+   * Equatorial" nao serve a quem fatura contra a CEMIG.
+   */
+  textos: TextosDaFolha = TEXTOS_DA_FOLHA_PADRAO,
+): FolhaG3 {
   const linha = linhaDoEmissor(emissor);
   const ausente = d.valor_total_centavos == null;
 
   return {
-    cabecalho: { assinatura: 'Energia Solar por Assinatura', emissor: linha },
+    cabecalho: { assinatura: textos.assinatura, emissor: linha },
     cliente: {
       nome: d.cliente_nome?.trim() || '—',
       documento: mascararDocumento(d.cliente_documento),
@@ -189,16 +227,16 @@ export function folha1(d: DadosDaFolha, emissor: EmissorDaFatura): FolhaG3 {
       nota: 'Pagável em qualquer banco',
     },
     /*
-     * O AVISO E A FAIXA QUE MAIS TRABALHA NESTA FOLHA, e por isso ele e fixo e
-     * nao configuravel. A conta unificada tem um modo de falha proprio: o cliente
-     * recebe a fatura da Equatorial TAMBEM, porque a distribuidora continua
-     * emitindo a dela, e pagar as duas e duplicidade que ele so descobre depois.
+     * O AVISO E A FAIXA QUE MAIS TRABALHA NESTA FOLHA. Ate 14/08 ele era FIXO
+     * aqui, com o argumento de que a conta unificada tem um modo de falha
+     * proprio - o cliente recebe a fatura da Equatorial TAMBEM, e pagar as duas
+     * e duplicidade que ele so descobre depois.
+     *
+     * O argumento continua valendo e nao decide o que decidia: o modo de falha e
+     * do PRODUTO e existe em qualquer distribuidora; o TEXTO nomeia uma. Ele
+     * passou para o modelo, e o default e exatamente o que estava escrito aqui.
      */
-    aviso: {
-      titulo: 'Não pague a conta da Equatorial',
-      corpo: 'Sua conta é unificada — o valor da distribuidora já está incluído neste boleto. '
-           + 'Pagar a conta da Equatorial gera duplicidade.',
-    },
+    aviso: { titulo: textos.aviso_titulo, corpo: textos.aviso_corpo },
     detalhamento: {
       titulo: 'Detalhamento da fatura',
       linhas: d.linhas.filter((l) => !JA_IMPRESSO_NA_FOLHA.has(l.campo)),

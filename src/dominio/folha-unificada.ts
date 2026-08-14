@@ -26,22 +26,38 @@
 
 import { emReais, type Centavos } from './centavos.ts';
 import { mascararDocumento, linhaDoEmissor, type EmissorDaFatura } from './folha-g3.ts';
-import { historicoPlausivel, paraDecimal, decimalParaTexto,
+import { historicoPlausivel, paraDecimal, decimalBr, serieNaMesmaEscala, textoParaCentavos,
          type CamposDaFaturaUnificada, type ContaDaFatura } from './fatura-unificada.ts';
-import { conferirLinhaDigitavel, linhaDigitavelFormatada,
-         codigoDeBarrasDaLinha } from './linha-digitavel.ts';
+import { conferirLinhaDigitavel, linhaDigitavelFormatada, conferirBoleto, explicarDivergencia,
+         codigoDeBarrasDaLinha, type ConferenciaDoBoleto } from './linha-digitavel.ts';
 import { barrasDoCodigo } from './codigo-de-barras.ts';
 import { svgDoBrCode } from './qrcode.ts';
 
+/**
+ * O BOLETO LIDO, INTEIRO — e ate 14/08 ele chegava pela metade.
+ *
+ * `lerBoletoSicoob` devolve SETE campos e a tela mandava QUATRO ao servidor. Os
+ * tres que ficavam de fora — `beneficiario`, `vencimento` e `valor` — eram
+ * justamente os que respondem as tres perguntas de conferencia da referencia
+ * (§4.1), e por isso as tres comparacoes viviam no React, em float, invisiveis
+ * para o CRM que consome a mesma rota.
+ *
+ * Agora os sete viajam, e a conferencia sai composta daqui junto com as folhas.
+ */
 export type DadosDoBoleto = {
   linha_digitavel: string;
   pix_copia_e_cola: string;
   nosso_numero: string;
   instrucoes: string[];
+  /** O que o PDF do banco diz. Sao a base das tres comparacoes de `alertas`. */
+  beneficiario: string;
+  vencimento: string;
+  valor: string;
 };
 
 export const BOLETO_VAZIO: DadosDoBoleto = {
   linha_digitavel: '', pix_copia_e_cola: '', nosso_numero: '', instrucoes: [],
+  beneficiario: '', vencimento: '', valor: '',
 };
 
 export type Par = { rotulo: string; valor: string };
@@ -78,6 +94,9 @@ export type FolhaUnificada = {
       com_g3: { rotulo: string; valor: string };
       nota: string;
     } | null;
+    /** Por que os cartoes e o detalhamento nao sairam. `null` quando sairam.
+     *  Vai para a TELA e nunca para o papel - ver `cartoes_motivo` na composicao. */
+    cartoes_motivo: string | null;
     total: { rotulo: string; detalhe: string; valor: string; vencimento: string; nota: string };
     aviso: { titulo: string; corpo: string };
     detalhamento: {
@@ -113,12 +132,22 @@ export type FolhaUnificada = {
       barras_motivo: string | null;
       linha_formatada: string | null;
       rodape_legal: string[];
+      /** A conferencia ARITMETICA do boleto contra a conta: valor e vencimento
+       *  saem dos 44 digitos do codigo de barras. Vai no payload, NUNCA no papel
+       *  - o CRM consome a mesma rota e precisa saber tanto quanto a nossa tela,
+       *  e dizer ao cliente que o boleto dele pode estar corrompido nao o ajuda. */
+      conferencia: ConferenciaDoBoleto;
+      /** As tres perguntas da referencia (§4.1) mais o residuo, em frases
+       *  prontas. Compostas AQUI e nao na tela: a comparacao de valor usa o total
+       *  em centavos, e a tela nao pode refazer a conta (regra 1). */
+      alertas: string[];
     };
     rodape: {
       telefone: string;
       emissor: string | null;
       endereco: string | null;
       email: string | null;
+      site: string | null;
       informacoes: string[];
     };
   };
@@ -129,6 +158,49 @@ export type ContatoDoEmissor = {
   telefone: string | null;
   endereco: string | null;
   email: string | null;
+  site: string | null;
+};
+
+/**
+ * OS TEXTOS QUE A FOLHA IMPRIME E QUE NAO SAO DADO DA FATURA.
+ *
+ * Ate 14/08 os cinco eram literais neste arquivo — a assinatura do topo, o
+ * titulo e o corpo do aviso laranja, a linha de multa e juros, e as duas linhas
+ * legais do banco. Dois deles nomeavam uma DISTRIBUIDORA ("Nao pague a conta da
+ * Equatorial") e dois nomeavam uma COOPERATIVA especifica, com o codigo dela
+ * ("COOPERATIVA CONTRATANTE 5004 SICOOB UNICENTRO BR").
+ *
+ * E o mesmo defeito que a migration 26 tirou do emissor, e com as mesmas
+ * palavras: escrever no fonte o dado de uma empresa poe o dado dela na fatura de
+ * outro tenant. Aqui poria o banco de outro tenant, sob a assinatura de um banco
+ * que nunca viu o documento.
+ *
+ * Agora eles vem de `modelo_de_fatura` (migration 28). O default abaixo e o que
+ * a folha usa quando o tenant nao criou modelo nenhum — e `rodape_legal` nasce
+ * VAZIO ali de proposito: ausente e ausente.
+ */
+export type TextosDoModelo = {
+  assinatura: string;
+  aviso_titulo: string;
+  aviso_corpo: string;
+  multa_percentual: string;
+  juros_mes_percentual: string;
+  rodape_legal: string[];
+  nota_do_fator: string;
+};
+
+export const TEXTOS_PADRAO: TextosDoModelo = {
+  assinatura: 'Energia Solar por Assinatura',
+  aviso_titulo: 'Não pague a conta da Equatorial',
+  aviso_corpo: 'Sua conta é unificada — o valor da distribuidora já está incluído neste boleto. '
+             + 'Pagar a conta da Equatorial gera duplicidade.',
+  multa_percentual: '2',
+  juros_mes_percentual: '1',
+  /* VAZIO, e nao as duas linhas do Sicoob: texto de banco so e verdade quando ha
+   * convenio, e afirma-lo sem convenio poe a assinatura de um banco num
+   * documento que ele nunca viu. Vazio faz a faixa sumir. */
+  rodape_legal: [],
+  nota_do_fator: 'Fator médio da margem de operação do SIN · MCTI/SIRENE',
 };
 
 const ou = (v: string | null | undefined, alt = '—') => (v && v.trim() ? v.trim() : alt);
@@ -145,25 +217,54 @@ function numeroDaFatura(uc: string, mes: string): string {
   const m = /^(\d{2})\/(\d{4})$/.exec(String(mes ?? '').trim());
   return `${String(uc ?? '').trim() || '000000'}-${m ? m[2] + m[1] : '000000'}`;
 }
+/**
+ * OS EXTRAS — tudo o que a folha imprime e que NAO esta na fatura da
+ * distribuidora nem na conta.
+ *
+ * Ate 14/08 este parametro tinha tres campos e a rota nunca o passava: chamava
+ * `comporFolhas` com QUATRO argumentos, e o quinto caia no default `{}`. O
+ * efeito estava impresso na folha do cliente:
+ *
+ *   - o rodape da folha 2 saia SEM telefone, endereco e e-mail — e nao havia de
+ *     onde tira-los, porque `identidade_de_cobranca` nao tinha as colunas;
+ *   - o indicador "Voce ja economizou" imprimia o desconto DESTA fatura, com a
+ *     nota "Primeira fatura com a G3 Solar", **para toda fatura, sempre**.
+ *
+ * As tres coisas entraram nas migrations 28 e 29. Este tipo e o contrato entre
+ * elas e o papel.
+ */
+export type ExtrasDaFolha = {
+  contato?: ContatoDoEmissor;
+  /** Os textos que sao do TENANT e nao do codigo. Ver `TextosDoModelo`. */
+  modelo?: TextosDoModelo;
+  /** Os campos que o tenant inventou, ja resolvidos (fixos do modelo + variaveis
+   *  desta fatura). Saem na grade de metadados da folha 1, depois dos oito. */
+  campos_personalizados?: Par[];
+  /** A soma dos descontos das faturas ja REGISTRADAS nesta UC. Vem do
+   *  repositorio (`registro_de_fatura_unificada`), nao daqui. */
+  economia_acumulada_centavos?: Centavos;
+  /** "com a G3 Solar desde <isto>". A competencia do registro mais antigo. */
+  desde?: string;
+};
 
 /**
  * Compoe as duas folhas.
  *
- * `economia_acumulada_centavos` e opcional e vem de fora: e a soma dos descontos
- * das faturas ja registradas nesta UC, e ela mora no repositorio, nao aqui. Sem
- * ela a folha diz "Primeira fatura com a G3 Solar", que e o que a referencia faz.
+ * TUDO O QUE SAI EM NUMERO DECIMAL PASSA POR `decimalBr`, e isso e conserto de
+ * 14/08: a folha imprimia a saida de `decimalParaTexto`, que usa PONTO como
+ * separador decimal porque e a forma de TROCA. Medido numa folha composta, a
+ * mesma linha trazia `Tarifa R$ 1.185396` ao lado de `Valor R$ 35,56` — as duas
+ * pontuacoes na mesma coluna de uma fatura brasileira. Quem le "1.185396" numa
+ * coluna de reais le mil cento e oitenta e cinco.
  */
 export function comporFolhas(
   campos: CamposDaFaturaUnificada,
   conta: ContaDaFatura,
   emissor: EmissorDaFatura,
   boleto: DadosDoBoleto,
-  extras: {
-    contato?: ContatoDoEmissor;
-    economia_acumulada_centavos?: Centavos;
-    desde?: string;
-  } = {},
+  extras: ExtrasDaFolha = {},
 ): FolhaUnificada {
+  const textos = extras.modelo ?? TEXTOS_PADRAO;
   const linhaEmissor = linhaDoEmissor(emissor);
   const mes = competencia(campos.mes_referencia);
   const numero = numeroDaFatura(campos.unidade_consumidora, mes);
@@ -184,7 +285,7 @@ export function comporFolhas(
     sem_g3: { rotulo: 'Seu consumo sem a G3 Solar', valor: emReais(conta.integral_centavos) },
     desconto: {
       rotulo: 'Seu desconto',
-      percentual: `${decimalParaTexto(paraDecimal(conta.percentual_desconto), 0)}%`,
+      percentual: `${decimalBr(paraDecimal(conta.percentual_desconto), 0)}%`,
       valor: emReais(conta.desconto_centavos),
     },
     com_g3: { rotulo: 'Seu consumo com a G3 Solar', valor: emReais(conta.energia_g3_centavos) },
@@ -192,16 +293,36 @@ export function comporFolhas(
         + 'Encargos e tarifas da distribuidora não têm desconto.',
   } : null;
 
-  const naoCompKwh = ou(campos.consumo_nao_compensado_kwh, '—');
+  /*
+   * POR QUE OS CARTOES NAO SAIRAM, EM UMA FRASE — e ela existe porque a tela
+   * reimplementava a pergunta e errava.
+   *
+   * Ate 14/08 `fatura-unificada.tsx` decidia sozinha se avisava, com
+   * `Boolean(energia_compensada_kwh.trim()) && !tarifa_kwh.trim()`. O prompt do
+   * extrator manda *"se a linha CONSUMO NAO COMPENSADO nao existir, retorne 0"*,
+   * e `numeroParaTexto(0, 6)` devolve `"0.000000"` — que e truthy. Medido: **o
+   * aviso nunca aparecia no caminho da extracao**, que e o unico caminho em que
+   * ele importa.
+   *
+   * Agora a razao vem de quem tomou a decisao. Uma implementacao so.
+   */
+  const cartoes_motivo = temTarifa ? null
+    : 'Sem tarifa cheia não há o que comparar: os três cartões e o detalhamento saem '
+    + 'inteiros da folha. A fatura da distribuidora não trouxe a linha CONSUMO NÃO '
+    + 'COMPENSADO — informe a tarifa à mão no campo "Tarifa cheia (R$/kWh)".';
+
+  const naoCompKwh = campos.consumo_nao_compensado_kwh.trim()
+    ? decimalBr(paraDecimal(campos.consumo_nao_compensado_kwh, 'consumo_nao_compensado_kwh'), 0)
+    : '—';
   const detalhamento = temTarifa ? {
     titulo: 'Detalhamento da fatura',
     energia: {
       titulo: 'Energia G3 Solar',
       linhas: [{
         descricao: 'Energia solar compensada',
-        kwh: decimalParaTexto(paraDecimal(conta.compensada_kwh), 0),
-        tarifa: conta.tarifa_g3,
-        tarifa_cheia: conta.tarifa_kwh,
+        kwh: decimalBr(paraDecimal(conta.compensada_kwh), 0),
+        tarifa: decimalBr(paraDecimal(conta.tarifa_g3), 6),
+        tarifa_cheia: decimalBr(paraDecimal(conta.tarifa_kwh), 6),
         valor: emReais(conta.energia_g3_centavos),
         valor_cheio: emReais(conta.integral_centavos),
       }],
@@ -225,33 +346,64 @@ export function comporFolhas(
   } : null;
 
   // ------------------------------------------------------------- folha 2
+  //
+  // O GRAFICO SO EXISTE SOBRE UMA ESCALA SO, e isto e conserto de 14/08: os
+  // valores vinham de `paraDecimal(...).valor`, o inteiro ESCALADO, com a escala
+  // jogada fora. Numa serie com casas decimais misturadas - que e o que o
+  // extrator produz, e o que a pessoa digita no campo editavel - "320.5" virava
+  // 3205n e "340" virava 340n: **a barra de 320,5 kWh saia com 100% de altura e
+  // a de 340 kWh com 10%**, no papel que vai ao cliente. E `historicoPlausivel`
+  // aprovava a serie, porque a variacao artificial de dez vezes e exatamente o
+  // que ela procura para dizer "isto parece consumo real".
   const hist = campos.historico_consumo;
   const plausivel = historicoPlausivel(hist);
-  const valores = hist.map((h) => paraDecimal(h.kwh).valor);
-  const maior = valores.length ? valores.reduce((a, b) => (b > a ? b : a), 1n) : 1n;
   const ultimos = hist.slice(-13);
-  const barras: BarraDoHistorico[] = ultimos.map((h, i) => {
-    const v = paraDecimal(h.kwh).valor;
-    return {
-      mes: h.mes,
-      kwh: decimalParaTexto(paraDecimal(h.kwh), 0),
-      /* A ALTURA E CALCULADA AQUI, em inteiro, e nao na tela. Grandeza fisica
-       * dividida por grandeza fisica da proporcao - nao e dinheiro, e a regra 1
-       * nao se aplica -, mas a tela nao pode dividir: ela pinta o que o servidor
-       * compos, e o CRM consome o mesmo numero. */
-      altura_pct: maior > 0n ? Number((v * 100n) / maior) : 0,
-      atual: i === ultimos.length - 1,
-    };
-  });
+  // E O MAXIMO E DOS 13 DESENHADOS, nao da serie inteira: com 18 meses lidos, o
+  // pico de um mes fora da janela achatava as treze barras visiveis contra um
+  // valor que o cliente nao ve.
+  const valores = serieNaMesmaEscala(ultimos);
+  const maior = valores.length ? valores.reduce((a, b) => (b > a ? b : a), 1n) : 1n;
+  const barras: BarraDoHistorico[] = ultimos.map((h, i) => ({
+    mes: h.mes,
+    kwh: decimalBr(paraDecimal(h.kwh, 'historico'), 0),
+    /* A ALTURA E CALCULADA AQUI, em inteiro, e nao na tela. Grandeza fisica
+     * dividida por grandeza fisica da proporcao - nao e dinheiro, e a regra 1
+     * nao se aplica -, mas a tela nao pode dividir: ela pinta o que o servidor
+     * compos, e o CRM consome o mesmo numero. */
+    altura_pct: maior > 0n ? Number((valores[i]! * 100n) / maior) : 0,
+    atual: i === ultimos.length - 1,
+  }));
 
   const acumulada = extras.economia_acumulada_centavos ?? conta.desconto_centavos;
-  const conferencia = conferirLinhaDigitavel(boleto.linha_digitavel);
-  const cod = conferencia.valida ? codigoDeBarrasDaLinha(boleto.linha_digitavel) : null;
+
+  /*
+   * A CONFERENCIA DO BOLETO, E ELA E ARITMETICA E NAO OPINIAO.
+   *
+   * `conferirLinhaDigitavel` responde "os quatro digitos verificadores batem?".
+   * `conferirBoleto` responde tambem "o VALOR e o VENCIMENTO que os 44 digitos
+   * carregam batem com esta fatura?" - e essa segunda pergunta e a que fechava o
+   * buraco medido em 14/08: os verificadores deixam passar **26 de 126**
+   * corrupcoes de um digito no campo do valor, porque a regra de colapso do
+   * modulo 11 manda resto 0, 10 e 11 para o DV 1.
+   *
+   * ATE AGORA ELA SO EXISTIA NO CAMINHO ANTIGO. `exigirBoletoQueConfere` roda em
+   * `GET /faturas/:id/documento` e levanta `BoletoNaoConfere` (409); a rota da
+   * aba nova nao a chamava, e a folha saia dizendo "Valor do documento
+   * R$ 1.270,70" ao lado de um codigo de barras que carregava R$ 500,00.
+   */
+  const conferencia = conferirBoleto({
+    linha_digitavel: boleto.linha_digitavel || null,
+    codigo_barras: null,
+    valor_total_centavos: conta.total_centavos,
+    vencimento_iso: isoDaData(campos.vencimento),
+  });
+  const conf = conferirLinhaDigitavel(boleto.linha_digitavel);
+  const cod = conf.valida ? codigoDeBarrasDaLinha(boleto.linha_digitavel) : null;
 
   return {
     numero_da_fatura: numero,
     folha1: {
-      cabecalho: { assinatura: 'Energia Solar por Assinatura', emissor: linhaEmissor },
+      cabecalho: { assinatura: textos.assinatura, emissor: linhaEmissor },
       cliente: {
         nome: ou(campos.cliente, 'Nome do cliente'),
         documento: mascararDocumento(campos.documento),
@@ -264,9 +416,15 @@ export function comporFolhas(
           { rotulo: 'Emissão', valor: ou(campos.data_emissao) },
           { rotulo: 'Classificação', valor: ou(campos.classificacao) },
           { rotulo: 'Fatura nº', valor: numero },
+          /* OS CAMPOS DO TENANT ENTRAM DEPOIS DOS OITO, e nao no meio: os oito
+           * primeiros sao os que a fatura da distribuidora traz, e a ordem deles
+           * e a que o cliente reconhece da conta antiga. O que o tenant
+           * acrescentou vem em seguida, na ordem que ele escolheu. */
+          ...(extras.campos_personalizados ?? []),
         ],
       },
       cartoes,
+      cartoes_motivo,
       total: {
         rotulo: 'Valor total a pagar',
         detalhe: 'Consumo G3 Solar + tarifas Equatorial',
@@ -274,11 +432,7 @@ export function comporFolhas(
         vencimento: venc,
         nota: 'Pagável em qualquer banco',
       },
-      aviso: {
-        titulo: 'Não pague a conta da Equatorial',
-        corpo: 'Sua conta é unificada — o valor da distribuidora já está incluído neste boleto. '
-             + 'Pagar a conta da Equatorial gera duplicidade.',
-      },
+      aviso: { titulo: textos.aviso_titulo, corpo: textos.aviso_corpo },
       detalhamento,
       rodape: { emissor: linhaEmissor, paginacao: `Fatura ${numero} · página 1 de 2` },
     },
@@ -297,23 +451,25 @@ export function comporFolhas(
           valor: emReais(acumulada),
           nota: extras.desde ? `com a G3 Solar desde ${extras.desde}` : 'Primeira fatura com a G3 Solar',
         },
-        consumo: { rotulo: 'Consumo do mês', valor: `${conta.consumo_do_mes_kwh} kWh` },
+        consumo: { rotulo: 'Consumo do mês', valor: `${decimalBr(paraDecimal(conta.consumo_do_mes_kwh), 0)} kWh` },
         co2: {
           rotulo: 'CO₂ evitado',
-          valor: `${conta.co2_kg} kg`,
-          nota: 'Fator médio da margem de operação do SIN · MCTI/SIRENE',
+          valor: `${decimalBr(paraDecimal(conta.co2_kg), 1)} kg`,
+          nota: textos.nota_do_fator,
         },
       },
-      pagamento: comporPagamento(boleto, emissor, venc, conta.total_centavos, conferencia, cod),
+      pagamento: comporPagamento(boleto, emissor, venc, conta, textos, conferencia, conf, cod),
       rodape: {
         telefone: extras.contato?.telefone?.trim() || '',
         emissor: linhaEmissor,
         endereco: extras.contato?.endereco?.trim() || null,
         email: extras.contato?.email?.trim() || null,
+        site: extras.contato?.site?.trim() || null,
         informacoes: [
           `Bandeira tarifária vigente no mês de referência: ${ou(campos.bandeira_tarifaria, 'Verde')}`
             + `${conta.bandeira_centavos ? ` (${emReais(conta.bandeira_centavos)})` : ' (sem adicional)'}.`,
-          'Após o vencimento incidem multa de 2% e juros de 1% ao mês.',
+          `Após o vencimento incidem multa de ${decimalBr(paraDecimal(textos.multa_percentual), 0)}% `
+            + `e juros de ${decimalBr(paraDecimal(textos.juros_mes_percentual), 0)}% ao mês.`,
           ...(linhaEmissor
             ? [`Atenção ao golpe do boleto: confira sempre se o beneficiário é ${linhaEmissor}.`]
             : []),
@@ -321,6 +477,19 @@ export function comporFolhas(
       },
     },
   };
+}
+
+/**
+ * `DD/MM/AAAA` -> `AAAA-MM-DD`, e `null` quando nao e uma data reconhecivel.
+ *
+ * O extrator devolve a data no formato do papel; `conferirBoleto` compara com o
+ * que os 44 digitos do codigo de barras carregam, que e ISO. Sem esta conversao
+ * a comparacao de vencimento nunca aconteceria - e "nao da para conferir" sairia
+ * como "conferiu e bateu", que e o pior dos dois.
+ */
+function isoDaData(br: string): string | null {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(br ?? '').trim());
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
 }
 
 /**
@@ -337,7 +506,7 @@ function tarifaDoNaoCompensado(c: CamposDaFaturaUnificada, conta: ContaDaFatura)
   // centavos / kWh -> reais por kWh, em seis casas. Inteiro dividido por inteiro.
   const num = BigInt(conta.nao_compensado_centavos) * 10n ** BigInt(6 + kwh.escala);
   const den = kwh.valor * 100n;
-  return decimalParaTexto({ valor: (num + den / 2n) / den, escala: 6 }, 6);
+  return decimalBr({ valor: (num + den / 2n) / den, escala: 6 }, 6);
 }
 
 function periodoDeLeitura(c: CamposDaFaturaUnificada): string {
@@ -373,8 +542,10 @@ function comporPagamento(
   b: DadosDoBoleto,
   emissor: EmissorDaFatura,
   vencimento: string,
-  total: Centavos,
-  conferencia: ReturnType<typeof conferirLinhaDigitavel>,
+  conta: ContaDaFatura,
+  textos: TextosDoModelo,
+  conferencia: ConferenciaDoBoleto,
+  conf: ReturnType<typeof conferirLinhaDigitavel>,
   codigo: string | null,
 ): FolhaUnificada['folha2']['pagamento'] {
   const pix = String(b.pix_copia_e_cola ?? '').replace(/\s+/g, '');
@@ -393,11 +564,11 @@ function comporPagamento(
     try { barras = { svg: barrasDoCodigo(codigo).svg }; }
     catch (e) { barrasMotivo = e instanceof Error ? e.message : String(e); }
   } else {
-    barrasMotivo = conferencia.digitos.length === 0
+    barrasMotivo = conf.digitos.length === 0
       ? 'Sem linha digitável — envie o boleto ou cole a linha.'
-      : conferencia.falhas.includes('comprimento')
-        ? `A linha tem ${conferencia.digitos.length} dígitos e precisa de 47.`
-        : `A linha não passa na verificação de ${conferencia.falhas.join(', ')}.`;
+      : conf.falhas.includes('comprimento')
+        ? `A linha tem ${conf.digitos.length} dígitos e precisa de 47.`
+        : `A linha não passa na verificação de ${conf.falhas.join(', ')}.`;
   }
 
   return {
@@ -406,16 +577,122 @@ function comporPagamento(
     campos: [
       { rotulo: 'Nosso número', valor: ou(b.nosso_numero) },
       { rotulo: 'Vencimento', valor: vencimento },
-      { rotulo: 'Valor do documento', valor: emReais(total) },
+      { rotulo: 'Valor do documento', valor: emReais(conta.total_centavos) },
     ],
     instrucoes: b.instrucoes.map((x) => String(x ?? '').trim()).filter(Boolean),
     qr, qr_motivo: qrMotivo,
     pix_texto: pix.length >= 20 ? pix : null,
     barras, barras_motivo: barrasMotivo,
-    linha_formatada: linhaDigitavelFormatada(b.linha_digitavel),
-    rodape_legal: [
-      'EMITIDO PELA COOPERATIVA CONTRATANTE SEM RESPONSABILIDADE DO BANCOOB',
-      'COOPERATIVA CONTRATANTE 5004 SICOOB UNICENTRO BR',
-    ],
+    /*
+     * A LINHA SO SAI NO PAPEL QUANDO CONFERE, e ate 14/08 ela saia sempre.
+     *
+     * `linhaDigitavelFormatada` so olha o comprimento, entao qualquer sequencia
+     * de 47 digitos era agrupada e impressa. O codigo de barras JA era suprimido
+     * quando os verificadores reprovavam - e a linha, que e o caminho de
+     * pagamento por DIGITACAO, continuava la. O caixa do banco recusa; quem
+     * descobre e o cliente, no balcao, com o papel na mao.
+     *
+     * A via do boleto sai sem numero em vez de com numero errado. E a mesma
+     * decisao ja tomada para as barras, agora aplicada aos dois.
+     */
+    linha_formatada: conf.valida ? linhaDigitavelFormatada(b.linha_digitavel) : null,
+    rodape_legal: textos.rodape_legal.map((t) => String(t ?? '').trim()).filter(Boolean),
+    conferencia,
+    alertas: alertasDoBoleto(b, conta, conferencia, emissor),
   };
 }
+
+/**
+ * AS QUATRO PERGUNTAS DA CONFERENCIA, EM FRASES PRONTAS.
+ *
+ * As tres primeiras sao as da referencia (§4.1) — vencimento, valor e
+ * beneficiario — e ate 14/08 elas viviam em `fatura-unificada.tsx`, no
+ * navegador. Duas consequencias, e nenhuma era de estilo:
+ *
+ *   - A COMPARACAO DE VALOR PASSAVA POR FLOAT. `Math.round(Number(valor.replace(
+ *     ',', '.')) * 100)` — e `String.replace` com string troca so a PRIMEIRA
+ *     ocorrencia, entao "1.234,56" virava "1.234.56" e `Number` disso e `NaN`.
+ *     O guarda `Number.isFinite` fazia o alerta simplesmente **nao sair**: quem
+ *     digitasse no formato que o proprio campo sugere perdia a conferencia, em
+ *     silencio;
+ *   - O CRM NAO AS RECEBIA. Ele consome a mesma rota e nao roda React, entao
+ *     para ele o boleto nunca era conferido contra nada.
+ *
+ * A quarta e o residuo, que a referencia nao tem: `outros_encargos` lido
+ * discordando do `total - naoCompensado - iluminacao - bandeira` significa que
+ * alguma das tres parcelas foi lida errado e o residuo absorveu a diferenca.
+ */
+function alertasDoBoleto(
+  b: DadosDoBoleto,
+  conta: ContaDaFatura,
+  conferencia: ConferenciaDoBoleto,
+  emissor: EmissorDaFatura,
+): string[] {
+  const a: string[] = [];
+
+  /* O que a ARITMETICA dos 44 digitos diz - valor e vencimento -, nas frases que
+   * `BoletoNaoConfere` tambem usa. Uma fonte so para as duas saidas. */
+  a.push(...conferencia.divergencias.map(explicarDivergencia));
+
+  /* E o que o PDF do boleto DIZ, que e outra coisa: os digitos podem estar
+   * certos e o beneficiario ser outro. */
+  const venc = b.vencimento.trim();
+  if (venc && !/^\d{2}\/\d{2}\/\d{4}$/.test(venc)) {
+    a.push(`O vencimento lido no boleto ("${venc}") não está em DD/MM/AAAA — não deu para conferi-lo.`);
+  }
+
+  const valor = b.valor.trim();
+  if (valor) {
+    let noBoleto: Centavos | null = null;
+    try { noBoleto = textoParaCentavos(valor, 'valor do boleto'); } catch { noBoleto = null; }
+    if (noBoleto === null) {
+      a.push(`O valor lido no boleto ("${valor}") não é um número reconhecível — não deu para conferi-lo.`);
+    } else if (Math.abs(noBoleto - conta.total_centavos) > 1) {
+      a.push(`Valor divergente: o boleto é de ${emReais(noBoleto)} e o cálculo desta fatura `
+           + `dá ${emReais(conta.total_centavos)}.`);
+    }
+  }
+
+  /* O BENEFICIARIO E CONFERIDO CONTRA O EMISSOR CADASTRADO, e nao contra `/g3/i`.
+   * A referencia e de UMA empresa e podia cravar o nome dela na expressao; aqui
+   * o emissor e coluna (migration 26), e comparar com a razao social gravada e o
+   * que torna a conferencia verdadeira em qualquer tenant. Sem emissor
+   * cadastrado nao ha com o que comparar, e a ausencia e dita. */
+  const lido = b.beneficiario.trim();
+  if (lido) {
+    const razao = (emissor.razao_social ?? '').trim();
+    if (!razao) {
+      a.push(`Beneficiário lido no boleto: "${lido}". Não há razão social cadastrada para comparar `
+           + '— preencha o emissor na aba Cadastro.');
+    } else if (!pareceMesmoNome(lido, razao)) {
+      a.push(`Beneficiário divergente: o boleto diz "${lido}" e o emissor cadastrado é "${razao}". `
+           + 'Confira se o boleto é o correto.');
+    }
+  }
+
+  if (conta.residuo_discorda) {
+    a.push('O "outros encargos" lido no PDF não bate com o resíduo da conta — '
+         + 'alguma das parcelas da Equatorial pode ter sido lida errado.');
+  }
+  return a;
+}
+
+/**
+ * DOIS NOMES DE EMPRESA SAO O MESMO?
+ *
+ * Nao e igualdade de string: o boleto imprime em caixa alta, sem acento, as
+ * vezes sem "LTDA" e com o nome fantasia no lugar da razao social. O criterio e
+ * a PRIMEIRA PALAVRA SIGNIFICATIVA aparecer nos dois — e ele e deliberadamente
+ * frouxo, porque o custo dos dois erros nao e o mesmo: um alerta a mais faz
+ * alguem conferir; um alerta a menos deixa passar um boleto de terceiro.
+ */
+function pareceMesmoNome(a: string, b: string): boolean {
+  const chave = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toUpperCase().replace(/[^A-Z0-9 ]/g, ' ')
+    .split(/\s+/).filter((p) => p.length > 2 && !PALAVRAS_VAZIAS.has(p));
+  const pa = chave(a), pb = chave(b);
+  if (!pa.length || !pb.length) return false;
+  return pa.some((p) => pb.includes(p));
+}
+
+const PALAVRAS_VAZIAS = new Set(['LTDA', 'EIRELI', 'ME', 'EPP', 'SA', 'DAS', 'DOS', 'COM', 'DE']);

@@ -18,7 +18,7 @@
 //      derrubar o outro tira do cliente a forma que ainda funcionava.
 
 import { comporFolhas, BOLETO_VAZIO, type DadosDoBoleto } from '../src/dominio/folha-unificada.ts';
-import { calcular, CAMPOS_VAZIOS, PARAMETROS_PADRAO,
+import { calcular, CAMPOS_VAZIOS, PARAMETROS_PADRAO, paraDecimal, decimalBr,
          type CamposDaFaturaUnificada } from '../src/dominio/fatura-unificada.ts';
 import type { EmissorDaFatura } from '../src/dominio/folha-g3.ts';
 
@@ -123,9 +123,39 @@ const folhas = comporFolhas(COMPLETA, contaCompleta, EMISSOR,
       + 'mostrando o valor a pagar, e eles nao podem discordar');
 
   chk('F2d', d.energia.linhas[0].valor_cheio !== undefined
-          && d.energia.linhas[0].tarifa_cheia === contaCompleta.tarifa_kwh,
+          && d.energia.linhas[0].tarifa_cheia === decimalBr(paraDecimal(contaCompleta.tarifa_kwh), 6),
       'a linha de energia carrega o par tachado - tarifa cheia e valor cheio - e e assim que '
       + 'a folha mostra o desconto sem precisar da palavra');
+
+  /*
+   * ============================================================================
+   * F2e  A FOLHA E BRASILEIRA, E O NUMERO DECIMAL TAMBEM.
+   *
+   * Ate 14/08 a folha imprimia a saida de `decimalParaTexto`, que usa PONTO
+   * porque e a forma de TROCA - a que viaja em JSON e vai para `numeric`. Medido
+   * numa folha composta, a mesma linha do detalhamento trazia:
+   *
+   *     Tarifa R$ 1.185396      Valor R$ 35,56
+   *
+   * Um cliente que le "1.185396" numa coluna de reais le mil cento e oitenta e
+   * cinco - e essa e justamente a coluna que prova a tarifa cheia contra a com
+   * desconto, que e o numero que ele confere na conta da distribuidora.
+   *
+   * A verificacao nao olha o valor: olha a PONTUACAO. Ela cai no dia em que
+   * alguem ligar `decimalParaTexto` de volta na folha.
+   */
+  {
+    const numericos = [
+      d.energia.linhas[0]!.tarifa, d.energia.linhas[0]!.tarifa_cheia!,
+      d.energia.linhas[0]!.kwh,
+      folhas.folha1.cartoes!.desconto.percentual,
+      folhas.folha2.indicadores.consumo.valor, folhas.folha2.indicadores.co2.valor,
+    ];
+    const comPontoDecimal = numericos.filter((t) => /\d\.\d/.test(t));
+    chk('F2f', comPontoDecimal.length === 0,
+        'nenhum numero da folha sai com PONTO decimal - a folha e brasileira e a vizinha da '
+        + `coluna e "R$ 35,56" (achados: ${comPontoDecimal.join(', ') || 'nenhum'})`);
+  }
 
   /* O RESIDUO E NOMEADO "demais encargos", e nao "outros encargos": ele e o que
    * SOBRA do total da Equatorial depois das tres parcelas conhecidas, e pode
@@ -265,8 +295,8 @@ const folhas = comporFolhas(COMPLETA, contaCompleta, EMISSOR,
           && comHistorico.folha2.indicadores.economia.nota.includes('março de 2026'),
       'com o acumulado vindo de fora, o indicador o usa e datou a serie');
 
-  chk('F7d', i.consumo.valor === `${contaCompleta.consumo_do_mes_kwh} kWh`
-          && i.co2.valor === `${contaCompleta.co2_kg} kg`,
+  chk('F7d', i.consumo.valor === `${decimalBr(paraDecimal(contaCompleta.consumo_do_mes_kwh), 0)} kWh`
+          && i.co2.valor === `${decimalBr(paraDecimal(contaCompleta.co2_kg), 1)} kg`,
       'consumo e CO2 saem com UNIDADE e vem prontos da conta - grandeza fisica nunca vira centavo');
 }
 

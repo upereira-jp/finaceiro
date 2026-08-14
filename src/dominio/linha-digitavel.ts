@@ -43,7 +43,8 @@
 // NAO e de 47 digitos de proposito, e uma recusa dura quebraria a suite inteira
 // sem que nada de producao estivesse errado.
 
-import { exigirCentavos, type Centavos } from './centavos.ts';
+import { exigirCentavos, emReais, type Centavos } from './centavos.ts';
+import { dataBr } from './layout-do-documento.ts';
 
 /** So os digitos. A linha vem impressa com pontos e espacos, e eles nao contam. */
 export const digitosDaLinha = (bruta: string): string => String(bruta ?? '').replace(/\D/g, '');
@@ -300,12 +301,17 @@ export type DivergenciaDoBoleto =
  * "nao da para conferir" nao e "conferencia falhou": nesse caso a lista sai
  * vazia. Quem quiser saber se houve conferencia olha `conferida`.
  */
+export type ConferenciaDoBoleto = {
+  conferida: boolean;
+  divergencias: DivergenciaDoBoleto[];
+};
+
 export function conferirBoleto(entrada: {
   linha_digitavel: string | null;
   codigo_barras: string | null;
   valor_total_centavos: number | null;
   vencimento_iso: string | null;
-}): { conferida: boolean; divergencias: DivergenciaDoBoleto[] } {
+}): ConferenciaDoBoleto {
   const divergencias: DivergenciaDoBoleto[] = [];
 
   if (!entrada.linha_digitavel) return { conferida: false, divergencias };
@@ -337,4 +343,35 @@ export function conferirBoleto(entrada: {
   }
 
   return { conferida: true, divergencias };
+}
+
+
+/**
+ * CADA DIVERGENCIA EM UMA FRASE QUE DIZ O NUMERO, e nao so o nome do problema.
+ *
+ * ELA MOROU EM `src/repos/documento.ts` ATE 14/08, e desceu para ca quando a aba
+ * nova precisou das mesmas frases. Duas razoes, e a segunda e a que decide:
+ *
+ *   - o repositorio e a camada que fala com o BANCO, e esta funcao nao consulta
+ *     nada: e a apresentacao de um tipo que mora aqui;
+ *   - deixa-la la obrigaria a composicao da folha unificada (`folha-unificada.ts`)
+ *     a importar de `repos/`, que e a camada de cima — ou a escrever as mesmas
+ *     quatro frases de novo, que e a duplicacao que este ciclo esta tirando.
+ *
+ * Ela e a UNICA fonte das frases: `BoletoNaoConfere` (409) e os alertas da tela
+ * saem daqui, entao os dois caminhos nunca descrevem a mesma divergencia com
+ * palavras diferentes.
+ */
+export function explicarDivergencia(d: DivergenciaDoBoleto): string {
+  switch (d.tipo) {
+    case 'linha_invalida':
+      return `A linha digitavel nao passa na verificacao de ${d.falhas.join(', ')}.`;
+    case 'codigo_de_barras_discorda':
+      return 'O codigo de barras que o banco gravou nao e o mesmo que a linha digitavel dele remonta '
+           + `(banco ${d.do_banco}, linha ${d.da_linha}).`;
+    case 'valor_discorda':
+      return `O boleto e de ${emReais(d.no_boleto)} e a fatura e de ${emReais(d.na_fatura)}.`;
+    case 'vencimento_discorda':
+      return `O boleto vence em ${dataBr(d.no_boleto)} e a fatura em ${dataBr(d.na_fatura)}.`;
+  }
 }
