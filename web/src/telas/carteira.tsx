@@ -58,7 +58,7 @@ export function TelaCarteira() {
         </div>
       )}
 
-      <div className="cartao" style={{ marginBottom: 20 }}>
+      <div className="cartao secao">
         <div style={{ ...linha, gap: 12 }}>
           <div>
             <label>Mês de referência</label>

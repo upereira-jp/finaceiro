@@ -96,7 +96,12 @@ const DESENHO: Record<NomeDeIcone, Icon> = {
   contratos: Signature,
   usinas: SolarPanel,
   donos: Handshake,
-  tarifas: Tag,
+  /* Era `tarifas`, e o nome ficou orfao quando a aba saiu em 14/08 (a tarifa
+   * virou coluna da UC, migration 30). O DESENHO continua em uso, e nao pela
+   * tarifa: e o botao "Abrir vigencia" do repasse, na tela de Usinas. Renomeado
+   * para o que ele significa - um nome de icone que aponta para uma tela que nao
+   * existe mais e o comeco de alguem procurar a tela. */
+  vigencia: Tag,
   carteira: Wallet,
   faturas: Receipt,
   cobranca: Bank,
@@ -246,5 +251,32 @@ export const Logotipo = ({ tamanho = 20 }: { tamanho?: number }) => (
         return <line key={i} x1={12 + 6.2 * x} y1={12 + 6.2 * y} x2={12 + fim * x} y2={12 + fim * y} />;
       })}
     </g>
+  </svg>
+);
+
+/**
+ * O TRIANGULO DO AVISO DA FOLHA — desenhado a mao, e nao do Phosphor.
+ *
+ * A razao de nao vir do pacote esta escrita desde 12/08 e continua valendo: o
+ * pacote e da INTERFACE, e um icone de tela dentro do papel traria peso e
+ * tamanho pensados para outro meio. A folha e desenhada em `pt`, com filete de
+ * 1,3 e um triangulo que ocupa 24pt ao lado de um titulo de 13,5pt.
+ *
+ * O QUE MUDOU EM 14/08 SAO DUAS COISAS, e as duas sao de higiene:
+ *
+ *   1. ELE ESTAVA DUPLICADO. O mesmo `<path>` aparecia em `documento.tsx` e em
+ *      `fatura-unificada.tsx`, com o `stroke` escrito a mao nos dois. Duas copias
+ *      do mesmo desenho e uma delas envelhecendo sozinha;
+ *   2. O `stroke` ERA LITERAL num `.tsx`, e o invariante `I1b` da suite de
+ *      interface so varre o `estilo.ts` — entao a lista de tintas do papel que o
+ *      `I1c` declara "fechada" tinha duas ocorrencias fora do alcance dela.
+ *      `currentColor` resolve: `.g3-aviso` ja declara `color: #14213D`, e o
+ *      desenho passa a herdar a tinta da faixa em vez de repeti-la.
+ */
+export const TrianguloDeAviso = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.3"
+       strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M12 3.6L21.4 20H2.6L12 3.6z" />
+    <path d="M12 9.6v4.6" /><path d="M12 17.1h.01" />
   </svg>
 );

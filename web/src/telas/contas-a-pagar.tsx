@@ -134,7 +134,7 @@ export function TelaContasAPagar() {
       )}
 
       {/* ------------------------------------------------ o resumo por quem recebe */}
-      <div className="cartao" style={{ marginBottom: 20 }}>
+      <div className="cartao secao">
         <h3 style={{ marginTop: 0 }}>
           <Icone nome="contas_a_pagar" tamanho={17} /> A pagar, por beneficiário
         </h3>
@@ -358,7 +358,7 @@ function FormularioDeConta(p: { acao: ReturnType<typeof useAcao>; aoCriar: () =>
 
   if (!aberto) {
     return (
-      <div style={{ marginBottom: 20 }}>
+      <div className="secao">
         <button onClick={() => setAberto(true)}>
           <Icone nome="acrescentar" tamanho={15} /> Lançar uma conta à mão
         </button>
@@ -367,7 +367,7 @@ function FormularioDeConta(p: { acao: ReturnType<typeof useAcao>; aoCriar: () =>
   }
 
   return (
-    <div className="cartao" style={{ marginBottom: 20 }}>
+    <div className="cartao secao">
       <h3 style={{ marginTop: 0 }}>Lançar conta a pagar</h3>
       {/* A frase existe porque a ausência do caminho é a regra, e ausência não
           se explica sozinha — quem procurar "lançar um repasse" precisa achar

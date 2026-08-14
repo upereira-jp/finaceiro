@@ -65,7 +65,7 @@ export function TelaClientes() {
   return (
     <Pagina titulo="Clientes"
             sub="A carteira ativa: quem tem unidade consumidora na etapa Desconto Ativo do funil Rateio. O cadastro inteiro está em «Todo o cadastro», e inclui quem o CRM fundiu.">
-      <div className="cartao" style={{ marginBottom: 20 }}>
+      <div className="cartao secao">
         <div className="campos">
           <Campo rotulo="Nome" valor={nome} ao={setNome} />
           <Campo rotulo="Documento (CPF ou CNPJ)" valor={doc} ao={setDoc} dica="Opcional" />

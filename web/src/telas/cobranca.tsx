@@ -139,7 +139,7 @@ export function TelaCobranca() {
       )}
 
       {/* ---------------------------------------- o que esta tela nao resolve */}
-      <div className="cartao" style={{ marginBottom: 20 }}>
+      <div className="cartao secao">
         <h2 style={{ marginTop: 0 }}>Antes de preencher: onde mora o segredo</h2>
         <p className="sub" style={{ marginBottom: 8 }}>
           O campo abaixo guarda uma <strong>referência</strong> — um apelido que aponta para o

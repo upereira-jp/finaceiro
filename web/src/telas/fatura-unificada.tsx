@@ -22,14 +22,16 @@
 // composicao so sai 400 ms depois da ultima tecla. Digitar um valor inteiro
 // dispara uma chamada, nao oito.
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   api, CAMPOS_DA_FATURA_VAZIOS, PARAMETROS_PADRAO, BOLETO_LIDO_VAZIO,
   type CamposDaFatura, type ParametrosDaEmissao, type BoletoLido,
-  type ComposicaoUnificada, type LinhaDetalhada,
+  type ComposicaoUnificada, type LinhaDetalhada, type CampoPersonalizado,
 } from '../api.ts';
 import { Aviso, Campo, Icone } from '../ui.tsx';
+import { TrianguloDeAviso } from '../icones.tsx';
 import { escalaDaPrevia, regraDaPagina, PX_POR_MM } from '../layout-regras.ts';
+import { emReais } from '../dinheiro.ts';
 import { useLargura } from '../medir-largura.ts';
 
 /** `setState` sem depender do namespace `React` — o transform novo nao o poe em escopo. */
@@ -66,9 +68,116 @@ function useAtraso<T extends unknown[]>(f: (...a: T) => void, ms: number) {
 
 const naMensagem = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
+/**
+ * O MESMO ARQUIVO PODE SER ENVIADO DE NOVO, e ate 14/08 nao podia.
+ *
+ * Os dois `<input type="file">` sao nao-controlados e nada tocava no `value`
+ * deles. Com o `value` intacto, escolher o MESMO arquivo nao dispara `change` no
+ * navegador — nada acontece: nem status, nem carregando, nem erro.
+ *
+ * E o caminho mais provavel e justamente o de RECUPERACAO: a leitura falhou ou
+ * veio ruim, a pessoa clica de novo no mesmo PDF, e a tela nao reage. Zerar o
+ * `value` depois de despachar custa uma linha e conserta os dois casos - o
+ * reenvio e o "Nova fatura" seguido do mesmo arquivo.
+ */
+function reenviavel(e: React.ChangeEvent<HTMLInputElement>, enviar: (f: File) => void): void {
+  const f = e.target.files?.[0];
+  e.target.value = '';
+  if (f) enviar(f);
+}
+
+/* ------------------------------------------------------------- o rascunho */
+
+/**
+ * O RASCUNHO DA FATURA EM EDICAO, no navegador.
+ *
+ * DE ONDE VEM: a referencia grava `fatura:rascunho` a cada digitacao e recarrega
+ * dele. Ate 14/08 nao haviamos portado, e um F5 apagava os 21 campos lidos, as
+ * correcoes a mao, o boleto e os parametros.
+ *
+ * O CUSTO AQUI E MAIOR QUE LA, e e o que decide: a extracao passa por
+ * `POST /faturas/ler-fatura`, que e uma chamada PAGA ao modelo de visao. Perder
+ * o rascunho e perder a chamada mais todo o trabalho de conferencia.
+ *
+ * A CHAVE LEVA O TENANT, e a da referencia nao serve nem em browser: o seletor de
+ * empresa da barra troca de tenant SEM recarregar, entao chave global faria a
+ * fatura da empresa A reaparecer dentro da empresa B.
+ *
+ * TUDO AQUI E DEFENSIVO de proposito. `localStorage` pode estar cheio, desligado
+ * (navegacao anonima com bloqueio de armazenamento) ou conter lixo de uma versao
+ * anterior do formato — e nenhuma dessas tres pode derrubar a tela de faturar.
+ * Rascunho e conveniencia; a fatura e o trabalho.
+ */
+type Rascunho = {
+  campos: CamposDaFatura;
+  parametros: ParametrosDaEmissao;
+  boleto: BoletoLido;
+  campos_personalizados: Record<string, string>;
+};
+
+const chaveDoRascunho = (tenantId: string | null) =>
+  `financeiro.fatura.rascunho.${tenantId ?? 'sem-tenant'}`;
+
+function lerRascunho(tenantId: string | null): Rascunho | null {
+  try {
+    const cru = localStorage.getItem(chaveDoRascunho(tenantId));
+    if (!cru) return null;
+    const r = JSON.parse(cru) as Partial<Rascunho>;
+    if (!r || typeof r !== 'object' || !r.campos) return null;
+    /* O ESPALHAMENTO SOBRE O VAZIO E O QUE SOBREVIVE A UM CAMPO NOVO: um
+     * rascunho gravado antes de `outros_encargos` existir voltaria sem ele, e
+     * `campos.outros_encargos.trim()` estouraria na primeira composicao. */
+    return {
+      campos: { ...CAMPOS_DA_FATURA_VAZIOS, ...r.campos,
+                historico_consumo: Array.isArray(r.campos.historico_consumo)
+                  ? r.campos.historico_consumo : [] },
+      parametros: { ...PARAMETROS_PADRAO, ...(r.parametros ?? {}) },
+      boleto: { ...BOLETO_LIDO_VAZIO, ...(r.boleto ?? {}),
+                instrucoes: Array.isArray(r.boleto?.instrucoes) ? r.boleto.instrucoes : [] },
+      campos_personalizados: (r.campos_personalizados ?? {}) as Record<string, string>,
+    };
+  } catch { return null; }
+}
+
+function gravarRascunho(tenantId: string | null, r: Rascunho): void {
+  try { localStorage.setItem(chaveDoRascunho(tenantId), JSON.stringify(r)); }
+  catch { /* armazenamento cheio ou desligado: a tela continua */ }
+}
+
+function apagarRascunho(tenantId: string | null): void {
+  try { localStorage.removeItem(chaveDoRascunho(tenantId)); }
+  catch { /* idem */ }
+}
+
+/**
+ * A LINHA DE STATUS — e ela leva ICONE, nao so cor.
+ *
+ * Ate 14/08 esta area dizia sucesso e falha com `.fu-status.ok` e
+ * `.fu-status.alerta`: 12,5px de texto colorido, nada mais. E a restricao 3 do
+ * `tema.ts` — *"cor nunca pode ser o unico sinal"* — valendo em todo o sistema
+ * menos aqui: a pilula `.marca` tem cor, icone e palavra; o `.aviso` tem cor,
+ * icone, faixa e `role`; e estas duas linhas tinham cor.
+ *
+ * Para quem nao distingue verde de ambar, "Linha valida, digitos conferidos" e
+ * "A linha nao confere" eram dois paragrafos cinzentos do mesmo tamanho.
+ */
+function Status({ tom, children }: { tom?: 'ok' | 'alerta'; children: ReactNode }) {
+  return (
+    <div className={tom ? `fu-status ${tom}` : 'fu-status'}
+         role={tom === 'alerta' ? 'status' : undefined}>
+      {/* `aviso_ok` e nao `sim`: o `sim` esta em `ICONES_QUE_SE_MOVEM` e a regra
+          `.ic-sim` anima em qualquer lugar do sistema. O do aviso so anima dentro
+          de `.aviso.ok >`, entao aqui ele fica parado — que e o certo para uma
+          linha de status que reaparece a cada tecla. */}
+      {tom && <Icone nome={tom === 'ok' ? 'aviso_ok' : 'aviso_alerta'} tamanho={14} peso="bold" />}
+      <span>{children}</span>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------- a tela */
 
-type Aba = 'leitura' | 'emissao';
+type Aba = 'leitura' | 'emissao' | 'cadastro';
 
 /**
  * `cadastro` e `emissaoExtra` sao pedacos que a ABA HOSPEDA, e nao esta tela.
@@ -76,26 +185,69 @@ type Aba = 'leitura' | 'emissao';
  * A referencia e de um tenant so e por isso tem logo, emissor e chave Pix no
  * codigo. Aqui isso e cadastro por tenant, e ele mora em `documento.tsx` com o
  * estado e as rotas que ja o salvam. Passar como `children` em vez de reimplantar
- * evita a segunda copia dos quatro cartoes - o mesmo motivo de a caixa de
- * pagamento reusar `.faixa-pgto`.
+ * evita a segunda copia dos cartoes - o mesmo motivo de a caixa de pagamento
+ * reusar `.faixa-pgto`.
+ *
+ * O CADASTRO VIROU A TERCEIRA ABA EM 14/08, e nao e so mudanca de lugar. Ele
+ * estava dobrado num `<details>` no pe da aba 1, e isso o fazia parecer rodape de
+ * uma tela de conferencia. Ele nao e: e o que a folha IMPRIME - emissor, logo,
+ * chave Pix, os textos do documento e os campos personalizados -, e "Cadastro de
+ * Fatura" e uma funcionalidade nomeada pelo dono, nao um apendice. Como aba, ele
+ * ganha endereco proprio, nao rola junto com trinta campos de conferencia, e para
+ * de competir com o trabalho do dia por espaco vertical.
  */
-export function FaturaUnificada({ logoUrl, cadastro, emissaoExtra }: {
+export function FaturaUnificada({ logoUrl, tenantId, cadastro, emissaoExtra }: {
   logoUrl: string | null;
+  /** Do `useSessao`. E a chave do rascunho — ver `RASCUNHO`. */
+  tenantId: string | null;
   cadastro?: ReactNode;
+  /** A Previa em lote (`documento.tsx`). Fica no pe da aba 1 desde 14/08 — ver a
+   *  nota no lugar onde ela e renderizada. */
   emissaoExtra?: ReactNode;
 }) {
   const [aba, setAba] = useState<Aba>('leitura');
-  const [campos, setCampos] = useState<CamposDaFatura>(CAMPOS_DA_FATURA_VAZIOS);
-  const [parametros, setParametros] = useState<ParametrosDaEmissao>(PARAMETROS_PADRAO);
-  const [boleto, setBoleto] = useState<BoletoLido>(BOLETO_LIDO_VAZIO);
+  const rascunho = lerRascunho(tenantId);
+  const [campos, setCampos] = useState<CamposDaFatura>(rascunho?.campos ?? CAMPOS_DA_FATURA_VAZIOS);
+  const [parametros, setParametros] = useState<ParametrosDaEmissao>(rascunho?.parametros ?? PARAMETROS_PADRAO);
+  const [boleto, setBoleto] = useState<BoletoLido>(rascunho?.boleto ?? BOLETO_LIDO_VAZIO);
+  const [personalizados, setPersonalizados] = useState<Record<string, string>>(
+    rascunho?.campos_personalizados ?? {});
 
   const [composicao, setComposicao] = useState<ComposicaoUnificada | null>(null);
   const [erroDaComposicao, setErroDaComposicao] = useState<string | null>(null);
 
-  const [statusFatura, setStatusFatura] = useState('Nenhum arquivo enviado.');
+  const [statusFatura, setStatusFatura] = useState(
+    rascunho ? 'Rascunho recuperado — os campos abaixo são os que estavam em edição.' : 'Nenhum arquivo enviado.');
   const [statusBoleto, setStatusBoleto] = useState('Nenhum boleto enviado.');
   const [lendoFatura, setLendoFatura] = useState(false);
   const [lendoBoleto, setLendoBoleto] = useState(false);
+  const [registrando, setRegistrando] = useState(false);
+  const [statusRegistro, setStatusRegistro] = useState<string | null>(null);
+
+  /*
+   * ==========================================================================
+   * O RASCUNHO PERSISTE, e ate 14/08 um F5 apagava a fatura inteira.
+   *
+   * Todo o estado desta aba vivia em `useState` sem hidratacao nem gravacao: os
+   * 21 campos lidos, as correcoes a mao, o boleto e os parametros sumiam num
+   * recarregamento acidental. Do lado de ca isso custa mais que na referencia,
+   * que grava `fatura:rascunho` desde sempre — aqui a extracao passa por uma
+   * chamada PAGA ao modelo de visao, entao perder o rascunho e perder dinheiro
+   * mais todo o trabalho de conferencia.
+   *
+   * A CHAVE LEVA O TENANT, e a da referencia (`fatura:rascunho`, sem tenant) nao
+   * serve nem em browser: o seletor de empresa da barra troca de tenant SEM
+   * recarregar a pagina, entao uma chave global faria a fatura da empresa A
+   * reaparecer dentro da empresa B.
+   *
+   * NAO E DADO DE NEGOCIO, e por isso nao abre migration nem cai nas regras 2, 3
+   * e 9: e rascunho de EDICAO, local, do navegador de quem esta digitando. O que
+   * vira dado de negocio e o REGISTRO (`POST /faturas/unificada/registros`), que
+   * tem tabela, policy e trilha.
+   */
+  useEffect(() => {
+    gravarRascunho(tenantId, { campos, parametros, boleto, campos_personalizados: personalizados });
+  }, [tenantId, campos, parametros, boleto, personalizados]);
 
   /* A composicao pedida ao servidor. `pedido` cresce a cada chamada e a resposta
    * so e aceita se for a do ULTIMO pedido: sem isso, uma resposta lenta de uma
@@ -103,16 +255,19 @@ export function FaturaUnificada({ logoUrl, cadastro, emissaoExtra }: {
    * atras. E o modo de falha classico de composicao remota por digitacao. */
   const pedido = useRef(0);
   const compor = useCallback(async (
-    c: CamposDaFatura, p: ParametrosDaEmissao, b: BoletoLido,
+    c: CamposDaFatura, p: ParametrosDaEmissao, b: BoletoLido, cp: Record<string, string>,
   ) => {
     const meu = ++pedido.current;
     try {
+      /*
+       * O BOLETO VIAJA INTEIRO desde 14/08, e ate aqui iam QUATRO dos sete
+       * campos. Os tres que ficavam de fora — `beneficiario`, `vencimento` e
+       * `valor` — sao justamente os que respondem as tres perguntas de
+       * conferencia da referencia, e por isso as tres comparacoes viviam neste
+       * arquivo, em float, invisiveis para o CRM que consome a mesma rota.
+       */
       const r = await api.post<ComposicaoUnificada>('/faturas/unificada/compor', {
-        campos: c, parametros: p,
-        boleto: {
-          linha_digitavel: b.linha_digitavel, pix_copia_e_cola: b.pix_copia_e_cola,
-          nosso_numero: b.nosso_numero, instrucoes: b.instrucoes,
-        },
+        campos: c, parametros: p, boleto: b, campos_personalizados: cp,
       });
       if (meu !== pedido.current) return;
       setComposicao(r); setErroDaComposicao(null);
@@ -123,8 +278,8 @@ export function FaturaUnificada({ logoUrl, cadastro, emissaoExtra }: {
   }, []);
 
   const comporComAtraso = useAtraso(compor, 400);
-  useEffect(() => { comporComAtraso(campos, parametros, boleto); },
-            [campos, parametros, boleto, comporComAtraso]);
+  useEffect(() => { comporComAtraso(campos, parametros, boleto, personalizados); },
+            [campos, parametros, boleto, personalizados, comporComAtraso]);
 
   const mudar = (k: keyof CamposDaFatura) => (v: string) =>
     setCampos((s) => ({ ...s, [k]: v }));
@@ -160,29 +315,57 @@ export function FaturaUnificada({ logoUrl, cadastro, emissaoExtra }: {
     } finally { setLendoBoleto(false); }
   }
 
+  /**
+   * REGISTRAR A FATURA — o que alimenta o "Você já economizou" do mês que vem.
+   *
+   * `upsert` pela chave (UC, competência) do lado do servidor: registrar duas
+   * vezes o mesmo mês da mesma UC não produz duas economias, produz uma correção.
+   * Sem isso, quem conferisse um número e registrasse de novo dobraria a economia
+   * acumulada impressa na folha do cliente.
+   */
+  async function registrar() {
+    setRegistrando(true);
+    setStatusRegistro(null);
+    try {
+      await api.post('/faturas/unificada/registros', {
+        campos, parametros, boleto, campos_personalizados: personalizados,
+      });
+      setStatusRegistro(`Fatura registrada para a UC ${campos.unidade_consumidora} `
+                      + `em ${campos.mes_referencia}. O desconto entra na economia acumulada.`);
+      /* Recompoe: a economia acumulada mudou, e ela sai impressa na folha 2. */
+      void compor(campos, parametros, boleto, personalizados);
+    } catch (e) {
+      setStatusRegistro(`Não foi possível registrar: ${naMensagem(e)}`);
+    } finally { setRegistrando(false); }
+  }
+
+  /**
+   * NOVA FATURA. Apaga o RASCUNHO e preserva os REGISTROS — é o que a referência
+   * faz desde `36e964e`, e o motivo é que as duas coisas têm vidas diferentes: o
+   * rascunho é o que está em edição agora; os registros são a série que produz a
+   * economia acumulada.
+   */
   function novaFatura() {
-    if (!window.confirm('Começar uma nova fatura? Os dados em edição serão apagados.')) return;
+    if (!window.confirm('Começar uma nova fatura? Os dados em edição serão apagados. '
+                      + 'As faturas já registradas ficam.')) return;
     setCampos(CAMPOS_DA_FATURA_VAZIOS);
     setBoleto(BOLETO_LIDO_VAZIO);
     setParametros(PARAMETROS_PADRAO);
+    setPersonalizados({});
     setComposicao(null);
     setStatusFatura('Nenhum arquivo enviado.');
     setStatusBoleto('Nenhum boleto enviado.');
+    setStatusRegistro(null);
+    apagarRascunho(tenantId);
     setAba('leitura');
     window.scrollTo(0, 0);
   }
 
+  const irPara = (a: Aba) => { setAba(a); window.scrollTo(0, 0); };
+
   return (
     <>
-      <div className="fu-abas naoimprime">
-        <button className={aba === 'leitura' ? 'fu-aba ativa' : 'fu-aba'}
-                onClick={() => setAba('leitura')}>1 · Leitura e cálculo</button>
-        <span className="fu-aba-traco" />
-        <button className={aba === 'emissao' ? 'fu-aba ativa' : 'fu-aba'}
-                onClick={() => { setAba('emissao'); window.scrollTo(0, 0); }}>2 · Emissão</button>
-        <span style={{ flex: 1 }} />
-        <button className="fu-aba" onClick={novaFatura}>Nova fatura</button>
-      </div>
+      <Abas atual={aba} ao={irPara} acao={{ texto: 'Nova fatura', ao: novaFatura }} />
 
       {erroDaComposicao && (
         <div className="naoimprime"><Aviso tipo="erro">
@@ -190,29 +373,101 @@ export function FaturaUnificada({ logoUrl, cadastro, emissaoExtra }: {
         </Aviso></div>
       )}
 
-      {aba === 'leitura'
-        ? (
-          <>
-            <AbaDeLeitura
-              campos={campos} mudar={mudar} setCampos={setCampos}
-              parametros={parametros} setParametros={setParametros}
-              boleto={boleto} setBoleto={setBoleto}
-              composicao={composicao}
-              statusFatura={statusFatura} statusBoleto={statusBoleto}
-              lendoFatura={lendoFatura} lendoBoleto={lendoBoleto}
-              enviarFatura={enviarFatura} enviarBoleto={enviarBoleto}
-              irParaEmissao={() => { setAba('emissao'); window.scrollTo(0, 0); }}
-            />
-            {cadastro}
-          </>
-        )
-        : (
-          <>
-            <AbaDeEmissao composicao={composicao} logoUrl={logoUrl} />
-            {emissaoExtra}
-          </>
+      <div id={`fu-painel-${aba}`} role="tabpanel" aria-labelledby={`fu-aba-${aba}`}>
+        {aba === 'leitura' && (
+          <AbaDeLeitura
+            campos={campos} mudar={mudar} setCampos={setCampos}
+            parametros={parametros} setParametros={setParametros}
+            boleto={boleto} setBoleto={setBoleto}
+            personalizados={personalizados} setPersonalizados={setPersonalizados}
+            composicao={composicao}
+            statusFatura={statusFatura} statusBoleto={statusBoleto}
+            lendoFatura={lendoFatura} lendoBoleto={lendoBoleto}
+            enviarFatura={enviarFatura} enviarBoleto={enviarBoleto}
+            registrar={registrar} registrando={registrando} statusRegistro={statusRegistro}
+            irParaEmissao={() => irPara('emissao')}
+          />
         )}
+        {aba === 'leitura' && emissaoExtra}
+        {/* A ABA 2 NAO HOSPEDA MAIS A PREVIA EM LOTE, e o motivo e um defeito
+            medido: `AbaDeEmissao` monta `<div id="documento">` com as duas folhas,
+            e a Previa monta um SEGUNDO `<div id="documento">` assim que uma fatura
+            e escolhida. O CSS de impressao e seletor de `id`, e seletor de `id`
+            casa TODOS os elementos com aquele id — imprimir a fatura unificada
+            arrastava a folha da Previa junto, na mesma pilha.
+
+            A Previa desceu para o pe da aba 1, junto do resto do trabalho de
+            conferencia: ela imprime faturas JA EMITIDAS no sistema, que e outro
+            fluxo do mesmo dia, e nunca as duas coisas ao mesmo tempo. */}
+        {aba === 'emissao' && <AbaDeEmissao composicao={composicao} logoUrl={logoUrl} />}
+        {aba === 'cadastro' && cadastro}
+      </div>
     </>
+  );
+}
+
+/* --------------------------------------------------------------- as tres abas */
+
+const ROTULO_DA_ABA: Record<Aba, string> = {
+  leitura: '1 · Leitura e cálculo',
+  emissao: '2 · Emissão',
+  cadastro: '3 · Cadastro da fatura',
+};
+const ORDEM_DAS_ABAS: readonly Aba[] = ['leitura', 'emissao', 'cadastro'];
+
+/**
+ * AS ABAS SAO UM `tablist` DE VERDADE, e nao tres botoes com uma classe.
+ *
+ * Ate 14/08 elas eram `<button className={... ? 'fu-aba ativa' : 'fu-aba'}>` — o
+ * estado morava so numa CLASSE CSS. Duas consequencias, e nenhuma aparece
+ * olhando a tela:
+ *
+ *   - leitor de tela nao anunciava "aba 2 de 3, selecionada". Anunciava tres
+ *     botoes soltos, sem dizer que sao alternativas entre si nem qual esta em uso;
+ *   - a seta do teclado nao andava entre elas. `Tab` visitava as tres uma a uma,
+ *     que e o padrao de barra de botoes, e nao o de abas.
+ *
+ * Agora o estado e `aria-selected`, e e ELE que o CSS le (`.fu-aba[aria-selected]`).
+ * Um so lugar diz qual aba esta aberta, e ele e o que a tecnologia assistiva ja
+ * entende — em vez de uma classe que so o CSS entende e um atributo que so o
+ * leitor entende, com a chance de os dois discordarem.
+ */
+function Abas({ atual, ao, acao }: {
+  atual: Aba; ao: (a: Aba) => void; acao: { texto: string; ao: () => void };
+}) {
+  /* Setas andam, Home e End vao aos extremos — o padrao WAI-ARIA de `tablist`. */
+  const teclado = (e: React.KeyboardEvent) => {
+    const i = ORDEM_DAS_ABAS.indexOf(atual);
+    const destino =
+      e.key === 'ArrowRight' ? (i + 1) % ORDEM_DAS_ABAS.length
+      : e.key === 'ArrowLeft' ? (i - 1 + ORDEM_DAS_ABAS.length) % ORDEM_DAS_ABAS.length
+      : e.key === 'Home' ? 0
+      : e.key === 'End' ? ORDEM_DAS_ABAS.length - 1
+      : -1;
+    if (destino < 0) return;
+    e.preventDefault();
+    ao(ORDEM_DAS_ABAS[destino]!);
+  };
+
+  return (
+    <div className="fu-abas naoimprime" role="tablist" aria-label="Etapas da fatura"
+         onKeyDown={teclado}>
+      {ORDEM_DAS_ABAS.map((a, i) => (
+        <Fragment key={a}>
+          {i > 0 && <span className="fu-aba-traco" aria-hidden="true" />}
+          <button type="button" role="tab" id={`fu-aba-${a}`} className="fu-aba"
+                  aria-selected={atual === a} aria-controls={`fu-painel-${a}`}
+                  /* So a aba ativa fica no caminho do Tab: dentro de um tablist
+                     quem anda entre as abas e a seta, e o Tab entra e SAI. */
+                  tabIndex={atual === a ? 0 : -1}
+                  onClick={() => ao(a)}>
+            {ROTULO_DA_ABA[a]}
+          </button>
+        </Fragment>
+      ))}
+      <span style={{ flex: 1 }} />
+      <button type="button" className="fu-aba" onClick={acao.ao}>{acao.texto}</button>
+    </div>
   );
 }
 
@@ -226,10 +481,13 @@ type PropsDeLeitura = {
   setParametros: Ajustar<ParametrosDaEmissao>;
   boleto: BoletoLido;
   setBoleto: Ajustar<BoletoLido>;
+  personalizados: Record<string, string>;
+  setPersonalizados: Ajustar<Record<string, string>>;
   composicao: ComposicaoUnificada | null;
   statusFatura: string; statusBoleto: string;
   lendoFatura: boolean; lendoBoleto: boolean;
   enviarFatura: (f: File) => void; enviarBoleto: (f: File) => void;
+  registrar: () => void; registrando: boolean; statusRegistro: string | null;
   irParaEmissao: () => void;
 };
 
@@ -237,33 +495,27 @@ function AbaDeLeitura(p: PropsDeLeitura) {
   const c = p.composicao?.conta;
 
   /*
-   * A CONFERENCIA DO BOLETO CONTRA A FATURA. Sao as mesmas tres perguntas que a
-   * referencia faz — vencimento, valor e beneficiario —, e a comparacao de VALOR
-   * usa o total que o SERVIDOR compos, nao um total recalculado aqui.
+   * ==========================================================================
+   * A CONFERENCIA DO BOLETO VEM PRONTA DO SERVIDOR desde 14/08.
+   *
+   * Ela morava aqui — as mesmas tres perguntas da referencia, vencimento, valor e
+   * beneficiario — e tinha dois defeitos, um de correcao e um de alcance:
+   *
+   *   1. A COMPARACAO DE VALOR PASSAVA POR FLOAT, e sumia em silencio.
+   *      `Math.round(Number(valor.replace(',', '.')) * 100)` — e `String.replace`
+   *      com string troca so a PRIMEIRA ocorrencia, entao "1.234,56" virava
+   *      "1.234.56" e `Number` disso e `NaN`. O guarda `Number.isFinite` fazia o
+   *      alerta **nao sair**: quem digitasse no formato que o proprio campo
+   *      sugere perdia a conferencia inteira, sem aviso nenhum;
+   *   2. O CRM NAO AS RECEBIA. Ele consome a mesma rota e nao roda React.
+   *
+   * E o servidor sabe MAIS: ele tambem compara valor e vencimento contra os 44
+   * digitos do codigo de barras (`conferirBoleto`), que e a conferencia
+   * aritmetica que so existia no fluxo antigo. Sao quatro perguntas agora, e o
+   * beneficiario e conferido contra a razao social CADASTRADA em vez de contra
+   * `/g3/i`, que era o nome de uma empresa cravado num sistema multi-tenant.
    */
-  const alertas = useMemo(() => {
-    const a: string[] = [];
-    const vb = p.boleto.vencimento.trim(), vf = p.campos.vencimento.trim();
-    if (vb && vf && vb !== vf) {
-      a.push(`Vencimento divergente: o boleto vence em ${vb}, a fatura em ${vf}.`);
-    }
-    if (p.boleto.valor.trim() && c) {
-      const doBoleto = Math.round(Number(p.boleto.valor.replace(',', '.')) * 100);
-      if (Number.isFinite(doBoleto) && Math.abs(doBoleto - c.total_centavos) > 1) {
-        a.push(`Valor divergente: o boleto é de R$ ${p.boleto.valor} e o cálculo desta fatura `
-             + `dá ${(c.total_centavos / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.`);
-      }
-    }
-    const ben = p.boleto.beneficiario.trim();
-    if (ben && !/g3/i.test(ben)) {
-      a.push(`Beneficiário lido não menciona a G3: "${ben}". Confira se o boleto é o correto.`);
-    }
-    if (c?.residuo_discorda) {
-      a.push('O "outros encargos" lido no PDF não bate com o resíduo da conta — '
-           + 'alguma das parcelas da Equatorial pode ter sido lida errado.');
-    }
-    return a;
-  }, [p.boleto, p.campos.vencimento, c]);
+  const alertas = p.composicao?.folha2.pagamento.alertas ?? [];
 
   const secoes: Array<{ titulo: string; campos: Array<[string, keyof CamposDaFatura, string?]> }> = [
     { titulo: 'Cliente', campos: [
@@ -291,8 +543,6 @@ function AbaDeLeitura(p: PropsDeLeitura) {
     ] },
   ];
 
-  const semTarifa = Boolean(p.campos.energia_compensada_kwh.trim())
-                 && !p.campos.tarifa_kwh.trim();
 
   return (
     <div className="fu-grade naoimprime">
@@ -301,9 +551,9 @@ function AbaDeLeitura(p: PropsDeLeitura) {
         <div className="cartao">
           <div className="fu-rotulo">Fatura da Equatorial Goiás</div>
           <label className="fu-solta">
-            <input type="file" accept="application/pdf,image/*" style={{ display: 'none' }}
+            <input type="file" accept="application/pdf,image/*"
                    disabled={p.lendoFatura}
-                   onChange={(e) => { const f = e.target.files?.[0]; if (f) p.enviarFatura(f); }} />
+                   onChange={(e) => reenviavel(e, p.enviarFatura)} />
             <div className="fu-solta-titulo">Enviar fatura da distribuidora</div>
             <div className="fu-solta-sub">PDF ou foto/scan — os dados são extraídos e preenchidos ao lado</div>
           </label>
@@ -314,7 +564,7 @@ function AbaDeLeitura(p: PropsDeLeitura) {
         <div className="fu-painel">
           <div className="fu-painel-rot">Boleto a gerar no banco</div>
           <div className="fu-painel-total">
-            {p.composicao?.folha1.total.valor ?? 'R$ 0,00'}
+            {p.composicao?.folha1.total.valor ?? '—'}
           </div>
           <div className="fu-painel-sub">
             Vencimento {p.campos.vencimento || '—'} · UC {p.campos.unidade_consumidora || '—'}
@@ -322,11 +572,11 @@ function AbaDeLeitura(p: PropsDeLeitura) {
           <div className="fu-painel-par">
             <div>
               <div className="fu-painel-cap">Energia G3 (com desconto)</div>
-              <div className="fu-painel-val">{brl(c?.energia_g3_centavos)}</div>
+              <div className="fu-painel-val">{emReais(c?.energia_g3_centavos ?? null)}</div>
             </div>
             <div>
               <div className="fu-painel-cap">Repasses Equatorial</div>
-              <div className="fu-painel-val">{brl(c?.total_equatorial_centavos)}</div>
+              <div className="fu-painel-val">{emReais(c?.total_equatorial_centavos ?? null)}</div>
             </div>
           </div>
         </div>
@@ -335,9 +585,9 @@ function AbaDeLeitura(p: PropsDeLeitura) {
         <div className="cartao">
           <div className="fu-rotulo">Boleto Sicoob</div>
           <label className="fu-solta">
-            <input type="file" accept="application/pdf,image/*" style={{ display: 'none' }}
+            <input type="file" accept="application/pdf,image/*"
                    disabled={p.lendoBoleto}
-                   onChange={(e) => { const f = e.target.files?.[0]; if (f) p.enviarBoleto(f); }} />
+                   onChange={(e) => reenviavel(e, p.enviarBoleto)} />
             <div className="fu-solta-titulo">Enviar boleto do banco</div>
             <div className="fu-solta-sub">PDF ou foto — linha digitável e PIX são lidos do arquivo</div>
           </label>
@@ -345,7 +595,13 @@ function AbaDeLeitura(p: PropsDeLeitura) {
 
           <div className="fu-secao">
             <div className="fu-rotulo">Conferência do boleto</div>
-            {alertas.map((a) => <div key={a} className="fu-alerta">{a}</div>)}
+            {/* `Aviso` E NAO UMA CLASSE PROPRIA. Ate 14/08 esta area desenhava a
+                divergencia com `.fu-alerta` — faixa de 3px, raio so a direita,
+                sem icone —, enquanto as treze telas do sistema desenham o mesmo
+                fato com `.aviso`: faixa de 4px, icone na cor do estado e texto
+                em `--texto`. Duas gramaticas para "atencao a isto" numa tela so
+                e o tipo de divergencia que este porte existe para tirar. */}
+            {alertas.map((a) => <Aviso key={a} tipo="alerta">{a}</Aviso>)}
             {alertas.length === 0 && <div className="fu-status">Nada a apontar.</div>}
 
             <div className="campos">
@@ -408,7 +664,7 @@ function AbaDeLeitura(p: PropsDeLeitura) {
       {/* --------------------------------------------- conferência dos dados */}
       <div className="cartao">
         <div className="fu-cabeca">
-          <h2 style={{ margin: 0 }}>Conferência dos dados</h2>
+          <h2>Conferência dos dados</h2>
           <span className="fraco">A extração preenche, você confere</span>
         </div>
 
@@ -424,11 +680,14 @@ function AbaDeLeitura(p: PropsDeLeitura) {
           </div>
         ))}
 
-        {semTarifa && (
-          <div className="fu-alerta" style={{ marginTop: 16 }}>
-            Esta fatura não tem consumo não compensado — informe a tarifa manualmente.
-            Sem ela, os três cartões e o detalhamento não saem na folha.
-          </div>
+        {/* O MOTIVO VEM DE QUEM TOMOU A DECISAO. Ate 14/08 a tela reimplantava a
+            condicao com `Boolean(kwh.trim()) && !tarifa.trim()` — e o prompt do
+            extrator manda *"se a linha CONSUMO NAO COMPENSADO nao existir,
+            retorne 0"*, entao `tarifa_kwh` chega `"0.000000"`, que e truthy. O
+            aviso NUNCA aparecia no caminho da extracao, que e o unico em que ele
+            importa. Agora quem decide se os cartoes saem e quem diz por que. */}
+        {p.composicao?.folha1.cartoes_motivo && (
+          <Aviso tipo="alerta">{p.composicao.folha1.cartoes_motivo}</Aviso>
         )}
 
         <div className="fu-secao">
@@ -458,36 +717,121 @@ function AbaDeLeitura(p: PropsDeLeitura) {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 12, marginTop: 22 }}>
+        {/* ------------------------------------- os campos que o tenant inventou
+            SO OS DE ORIGEM `variavel` aparecem aqui: os `fixo` vivem no cadastro
+            e saem iguais em toda fatura do modelo. Repeti-los nesta tela pediria
+            que alguem redigitasse, a cada fatura, um valor que o sistema ja
+            conhece — e a divergencia entre o digitado e o cadastrado sairia
+            impressa sem ninguem saber qual dos dois vale. */}
+        <CamposDoTenant valores={p.personalizados} ao={p.setPersonalizados} />
+
+        <div style={{ display: 'flex', gap: 12, marginTop: 22, flexWrap: 'wrap' }}>
           <button className="primario" onClick={p.irParaEmissao} disabled={!p.composicao}>
             <Icone nome="imprimir" tamanho={15} peso="bold" /> Ver a fatura do cliente
           </button>
+          {/*
+            REGISTRAR E UM ATO SEPARADO DE IMPRIMIR, e a separacao e a mesma do
+            ensaio/valendo do faturamento: imprimir e conferencia, registrar
+            escreve no banco e muda o que a folha do MES QUE VEM vai afirmar.
+
+            O que ele alimenta e o "Voce ja economizou" da folha 2 — que ate
+            14/08 imprimia o desconto DESTA fatura e dizia "Primeira fatura com a
+            G3 Solar", para toda fatura, sempre.
+          */}
+          <button onClick={p.registrar}
+                  disabled={p.registrando || !p.composicao
+                            || !p.campos.unidade_consumidora.trim()
+                            || !p.campos.mes_referencia.trim()}>
+            <Icone nome={p.registrando ? 'carregando' : 'confirmar'} tamanho={15} />
+            Registrar esta fatura
+          </button>
         </div>
+        {p.statusRegistro && (
+          <Aviso tipo={p.statusRegistro.startsWith('Não') ? 'erro' : 'ok'}>{p.statusRegistro}</Aviso>
+        )}
+        {p.composicao?.economia && p.composicao.economia.faturas > 0 && (
+          <p className="sub" style={{ marginTop: 10, marginBottom: 0 }}>
+            Esta UC tem <strong>{p.composicao.economia.faturas}</strong> fatura(s) registrada(s)
+            {p.composicao.economia.desde && <> desde <strong>{p.composicao.economia.desde}</strong></>}
+            {' '}— economia acumulada de <strong>{emReais(p.composicao.economia.centavos)}</strong>,
+            que é o número impresso na folha 2.
+          </p>
+        )}
       </div>
     </div>
   );
 }
 
-/** R$ a partir de centavos. SO PARA O PAINEL da aba 1, e so quando o servidor
- *  ainda nao respondeu — o que sai na folha vem dele, ja formatado. */
-function brl(centavos: number | undefined): string {
-  if (centavos === undefined) return 'R$ 0,00';
-  const neg = centavos < 0, a = Math.abs(centavos);
-  const s = String(a).padStart(3, '0');
-  const int = s.slice(0, -2).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  return `${neg ? '-' : ''}R$ ${int},${s.slice(-2)}`;
+/**
+ * OS CAMPOS PERSONALIZADOS DE ORIGEM `variavel`, digitados por fatura.
+ *
+ * Eles sao cadastrados na aba 3 e preenchidos aqui. A lista vem do servidor a
+ * cada montagem da aba: um campo criado no cadastro precisa aparecer sem
+ * recarregar a pagina, e a tela nao guarda copia do cadastro por isso mesmo.
+ *
+ * Sem nenhum campo `variavel` cadastrado, a secao inteira nao existe — e o caso
+ * normal, e uma secao vazia dizendo "nenhum campo" seria ruido permanente numa
+ * tela que ja tem trinta campos.
+ */
+function CamposDoTenant({ valores, ao }: {
+  valores: Record<string, string>; ao: Ajustar<Record<string, string>>;
+}) {
+  const [campos, setCampos] = useState<CampoPersonalizado[]>([]);
+  useEffect(() => {
+    let vivo = true;
+    api.get<CampoPersonalizado[]>('/cobranca/campos-personalizados')
+      .then((r) => { if (vivo) setCampos(r.filter((c) => c.origem === 'variavel' && c.visivel)); })
+      .catch(() => { if (vivo) setCampos([]); });
+    return () => { vivo = false; };
+  }, []);
+
+  if (campos.length === 0) return null;
+  return (
+    <div className="fu-secao">
+      <div className="fu-secao-tit">Campos desta fatura</div>
+      <div className="campos">
+        {campos.map((c) => (
+          <Campo key={c.chave} rotulo={c.rotulo} valor={valores[c.chave] ?? ''}
+                 ao={(v) => ao((s) => ({ ...s, [c.chave]: v }))} />
+        ))}
+      </div>
+      <p className="sub" style={{ marginTop: 8, marginBottom: 0 }}>
+        Saem na grade do cliente da folha 1. Campo vazio <strong>não sai</strong> — um rótulo com
+        nada embaixo é a mesma classe do travessão que este sistema recusa.
+      </p>
+    </div>
+  );
 }
+
+/*
+ * `brl` SAIU EM 14/08, e ela era a QUARTA implementacao de "centavos -> R$"
+ * do sistema (`centavos.ts` no servidor, `dinheiro.ts` no browser, e a de
+ * `layout-do-documento.ts` que ja tinha sido colapsada de manha).
+ *
+ * Medida antes de apagar: as tres rodadas lado a lado em 220.014 casos - zero
+ * divergencia entre servidor e browser, e UMA entre elas e a `brl`: com o valor
+ * ausente ela devolvia **"R$ 0,00"** e `emReais` devolve **"—"**.
+ *
+ * A troca de comportamento e o ponto, nao o efeito colateral: o painel mostra o
+ * valor A GERAR NO BANCO, e "R$ 0,00" enquanto a composicao nao voltou parece
+ * RESULTADO. E a mesma regra que este projeto ja segue no papel - ausencia e
+ * nomeada, nunca desenhada com zero.
+ */
 
 function StatusDaLinha({ digitos, motivo, desenhou }: {
   digitos: string; motivo: string | null; desenhou: boolean;
 }) {
   if (desenhou) {
-    return <div className="fu-status ok">Linha válida · dígitos verificadores conferidos · código de barras gerado.</div>;
+    return <Status tom="ok">Linha válida · dígitos verificadores conferidos · código de barras gerado.</Status>;
   }
   if (digitos.length === 0) {
-    return <div className="fu-status">Cole a linha digitável de 47 dígitos gerada no banco.</div>;
+    return <Status>Cole a linha digitável de 47 dígitos gerada no banco.</Status>;
   }
-  return <div className="fu-status alerta">{motivo ?? 'A linha não confere.'} O campo é editável: corrija a partir do boleto.</div>;
+  return (
+    <Status tom="alerta">
+      {motivo ?? 'A linha não confere.'} O campo é editável: corrija a partir do boleto.
+    </Status>
+  );
 }
 
 /* ============================================================ aba 2: emissão */
@@ -592,11 +936,7 @@ function AbaDeEmissao({ composicao, logoUrl }: {
             </div>
 
             <div className="g3-aviso">
-              <svg viewBox="0 0 24 24" fill="none" stroke="#14213D" strokeWidth="1.3"
-                   strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M12 3.6L21.4 20H2.6L12 3.6z" />
-                <path d="M12 9.6v4.6" /><path d="M12 17.1h.01" />
-              </svg>
+              <TrianguloDeAviso />
               <div>
                 <div className="g3-aviso-tit">{folha1.aviso.titulo}</div>
                 <div className="g3-aviso-corpo">{folha1.aviso.corpo}</div>
@@ -678,6 +1018,7 @@ function AbaDeEmissao({ composicao, logoUrl }: {
                 {folha2.rodape.emissor && <div style={{ marginTop: '6pt' }}>{folha2.rodape.emissor}</div>}
                 {folha2.rodape.endereco && <div>{folha2.rodape.endereco}</div>}
                 {folha2.rodape.email && <div>{folha2.rodape.email}</div>}
+                {folha2.rodape.site && <div>{folha2.rodape.site}</div>}
               </div>
               <div>
                 <div className="g3-rot" style={{ marginBottom: '3pt' }}>Informações importantes</div>

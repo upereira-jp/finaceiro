@@ -120,7 +120,7 @@ export function TelaUsinas() {
           <Campo rotulo="Vigência a partir de" valor={inicio} ao={setInicio} tipo="date" />
           <div style={{ alignSelf: 'end' }}>
             <button className="primario" onClick={abrirVigencia} disabled={acao.ocupado || !sel}>
-              <Icone nome="tarifas" tamanho={15} peso="bold" /> Abrir vigência
+              <Icone nome="vigencia" tamanho={15} peso="bold" /> Abrir vigência
             </button>
           </div>
         </div>

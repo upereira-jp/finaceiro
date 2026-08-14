@@ -105,25 +105,58 @@ chk('I1b', literais(foraDoDocumento).length === 0,
 // EM 12/08 AS QUATRO VIRARAM SEIS, e esta linha existe para essa entrada doer. As
 // duas novas chegaram com a faixa de pagamento do modelo G3 — o primeiro pedaco
 // daquele desenho a entrar, e o unico que nao depende do leitor da Equatorial
-// (`PLANO-documento-modelo-g3-2026-08-12.md` §6):
+// (`PLANO-documento-modelo-g3-2026-08-12.md` §6): `#E8843C` e `#8F939D`.
 //
-//   #E8843C  o Orange. No papel ele tem UM uso: o valor a pagar. E o unico numero
-//            colorido da faixa, e e por ele que a pessoa acha quanto deve. A
-//            alternativa era `var(--acento)`, e ela reprova pela regra deste
-//            proprio bloco: o token e Orange no tema claro e GOLD no escuro, entao
-//            a mesma fatura sairia de duas cores conforme quem mandou imprimir;
-//   #8F939D  o Gray, nos rotulos caixa-alta. Ele e o unico valor da paleta da G3
-//            que a INTERFACE nao pode usar — 2,75:1 sobre o creme, e `tema.ts`
-//            derivou o `--fraco` por causa disso. No papel o par e outro: cinza
-//            sobre BRANCO, 4,02:1, que passa AA. Reusar `--fraco` aqui traria de
-//            volta o problema do paragrafo acima, e ainda por cima para consertar
-//            um contraste que neste fundo nao esta quebrado. Registrado na
-//            `Q-DOCG3-07`.
-const ESPERADAS = ['#fff', '#14213D', '#E4DFD4', '#F6F2EA', '#E8843C', '#8F939D'];
+// ============================================================================
+// EM 14/08 AS SEIS CONTINUARAM SEIS, E DUAS TROCARAM DE VALOR — POR MEDICAO.
+//
+// A entrada de 12/08 justificava as duas afirmando numeros. Os dois numeros
+// estavam errados, e a mesma calculadora WCAG de `web/tests/tema.ts` os derruba:
+//
+//   `#8F939D` sobre branco   dizia 4,02:1   MEDIDO 3,08:1   reprova (AA pede 4,5)
+//   `#E8843C` sobre branco   nao foi medido MEDIDO 2,69:1   reprova, e ele era
+//                                                           TEXTO (o valor a pagar)
+//
+// A justificativa de 12/08 para o `#8F939D` era literalmente *"no papel o par e
+// outro: cinza sobre BRANCO, 4,02:1, que passa AA"*. O par de fato e outro; o
+// numero e que nao era. E o `#E8843C` como TEXTO nunca teve numero nenhum: a nota
+// argumentava por que ele nao podia ser `var(--acento)` e nao perguntava se ele
+// podia ser tinta.
+//
+// AS DUAS QUE ENTRARAM NAO SAO CORES NOVAS — sao os dois tokens que o `tema.ts`
+// JA tinha derivado, em 28/07 e em 06/08, dos mesmos dois valores da G3 e pelo
+// mesmo criterio (escalar os tres canais, que e o que preserva a matiz, ate o
+// fator mais alto que ainda passa 4,5:1):
+//
+//   #66686F  o `--fraco` do tema claro, derivado do Gray `#8F939D`.
+//            5,10:1 no branco e 4,57:1 no creme — os DOIS fundos do papel
+//   #995728  o `--acento-forte` do tema claro, derivado do Orange `#E8843C`.
+//            5,60:1 no branco e 5,02:1 no creme
+//
+// E O `#E8843C` FICOU, com o papel reduzido: SUPERFICIE cheia, nunca tinta. A
+// faixa do aviso, o cartao do desconto e a barra do mes atual. Sobre ele pousa o
+// Navy, 5,93:1 — que e o mesmo par do botao primario da interface.
+//
+// A REGRA NAO MUDOU: sao LITERAIS, nao `var()`. Coincidirem com dois tokens do
+// tema claro e consequencia de virem do mesmo lugar pelo mesmo criterio, e nao
+// uma ligacao — o `.g3` nao pode variar com o tema de quem imprime.
+//
+// A T7 de `web/tests/tema.ts` mede cada um destes pares. Esta lista diz QUAIS
+// tintas existem; a T7 diz se elas passam.
+const ESPERADAS = ['#fff', '#14213D', '#E4DFD4', '#66686F', '#F6F2EA', '#E8843C', '#995728'];
 const achadas = [...new Set(literais(dentroDoDocumento))];
 chk('I1c', JSON.stringify(achadas) === JSON.stringify(ESPERADAS),
     `no documento impresso, exatamente ${ESPERADAS.join(' ')} — Navy sobre branco, `
     + `independente do tema da tela (achadas: ${achadas.join(' ') || 'nenhuma'})`);
+
+// E O `#8F939D` NAO PODE VOLTAR. Ele e um valor da paleta entregue pela G3, entao
+// a tentacao de reusa-lo "porque e a cor da marca" e permanente — foi assim que
+// ele chegou aqui. Ele reprova AA nos TRES fundos do papel (3,08:1 no branco,
+// 2,75:1 no creme, 2,31:1 na linha). A lista fechada acima ja o barraria; esta
+// linha existe para o erro ter NOME quando alguem tentar.
+chk('I1d', !ESTILO.includes('#8F939D'),
+    'o Gray #8F939D nao aparece em lugar nenhum do estilo — reprova AA nos tres fundos do papel, '
+    + 'e o derivado #66686F e quem ocupa o lugar dele');
 
 // ------------------------------------------------------- I2 o movimento, fechado
 
@@ -160,12 +193,15 @@ chk('I3d', /\*,\s*\*::before,\s*\*::after/.test(bloqueio),
 
 // ------------------------------------------------------- I4 a barra de navegacao
 
-/* TREZE desde 03/08/2026 - "Contas a pagar" entrou com a Q-PAGAMENTO-01, e e a
- * primeira tela da vertente da EMPRESA (PRD 4.4). O numero e literal de
- * proposito: uma tela a mais e decisao de produto, e uma contagem que se
- * atualiza sozinha (`TELAS.length === TELAS.length`) nao acusaria uma tela
- * acrescentada por engano num merge. */
-chk('I4', TELAS.length === 13, `sao 13 telas (contadas: ${TELAS.length})`);
+/* DOZE desde 14/08/2026 - "Tarifas" SAIU, por decisao do dono ("ela ja nao
+ * possui finalidade e apenas gera redundancia"). A tarifa passou a ser coluna da
+ * UC (migration 30), porque a granularidade real e por cliente e nao por
+ * distribuidora - medido: 35 UCs a 1,130000, 4 a 1,16 e 2 a 1,180000.
+ *
+ * O numero e literal de proposito: uma tela a mais e decisao de produto, e uma
+ * contagem que se atualiza sozinha (`TELAS.length === TELAS.length`) nao
+ * acusaria uma tela acrescentada por engano num merge. */
+chk('I4', TELAS.length === 12, `sao 12 telas (contadas: ${TELAS.length})`);
 chk('I4b', new Set(TELAS.map((t) => t.rota)).size === TELAS.length,
     'nenhuma rota repetida — rota repetida faz a segunda tela ser inalcancavel');
 chk('I4c', new Set(TELAS.map((t) => t.titulo)).size === TELAS.length,
@@ -273,6 +309,71 @@ chk('I6f', /\.inline input\s*,\s*\.inline select\s*\{[^}]*border-color: transpar
 chk('I6g', /--sombra-1|--sombra-2|--sombra-3/.test(REGRAS)
         && !/box-shadow:\s*0 \d/.test(REGRAS.replace(/box-shadow: 0 0 0 3px var\(--acento-suave\)/g, '')),
     'toda sombra sai da escala de tres degraus — a unica excecao e o anel de foco, que e cor e nao profundidade');
+
+// ------------------------------------------- I7 os estados dos elementos clicaveis
+//
+// POR QUE ESTA SECAO EXISTE, e ela nasce de um defeito medido em 14/08.
+//
+// A aba da tela de fatura unificada escrevia `.fu-aba:hover { color: var(--texto) }`
+// — e essa regra NUNCA VALEU UM DIA. O seletor generico `button:hover:not(:disabled)`
+// tem especificidade (0,2,1) e `.fu-aba:hover` tem (0,2,0): quem ganhava era o
+// botao. Na pratica a aba pegava o laranja de link, a sombra do segundo degrau e o
+// `translateY(-1px)` — passar o mouse por uma ABA a fazia FLUTUAR.
+//
+// O modo de falha e o pior tipo: o CSS estava escrito, a intencao estava escrita
+// no comentario, e nada na tela obedecia. Nenhuma revisao de codigo pega isso —
+// so quem abre a tela e olha, ou uma verificacao que compare especificidade.
+//
+// O QUE ESTA SECAO PRENDE, e ela e sobre a CLASSE do defeito e nao sobre esta aba:
+// todo elemento que se pinta por cima do botao generico tem de vencer o seletor
+// generico. A regra pratica e simples e verificavel: quem sobrescreve o hover do
+// botao escreve `:hover:not(:disabled)`, igual ao generico, e assim ganha pela
+// classe a mais.
+
+/** As declaracoes de uma regra, pelo seletor exato. `''` quando a regra nao existe. */
+function regraDe(seletor: string): string {
+  const i = REGRAS.indexOf(`\n  ${seletor} {`);
+  if (i < 0) return '';
+  const j = REGRAS.indexOf('}', i);
+  return j < 0 ? '' : REGRAS.slice(i, j);
+}
+
+/** Todo seletor de hover que pinta um `button` do sistema por cima do generico. */
+const HOVERS_DE_BOTAO = ['.fu-aba', 'button.primario', 'button.discreto', '.interruptor'];
+for (const base of HOVERS_DE_BOTAO) {
+  chk('I7', regraDe(`${base}:hover:not(:disabled)`) !== '',
+      `${base} sobrescreve o hover com ":hover:not(:disabled)" — mesma forma do seletor generico, `
+      + 'e por isso ganha dele. Sem o ":not(:disabled)" a regra existe e nao vale');
+}
+
+// E A ABA NAO PODE FLUTUAR. As tres propriedades que o botao generico injeta no
+// hover — sombra do segundo degrau, subida de 1px e a tinta de acento — precisam
+// ser desfeitas explicitamente, porque `.fu-aba` e um `<button>` de verdade (e
+// tem de ser: e o que da teclado e foco de graca).
+{
+  const h = regraDe('.fu-aba:hover:not(:disabled)');
+  chk('I7b', /box-shadow:\s*none/.test(h) && /transform:\s*none/.test(h),
+      'o hover da aba desfaz a sombra e a subida do botao generico — aba nao flutua');
+  chk('I7c', /background:\s*var\(--fundo-hover\)/.test(h),
+      'e sinaliza com FUNDO, como a barra de navegacao e a linha de tabela — o sistema inteiro '
+      + 'diz "clicavel" por superficie, e so esta area dizia por cor de texto');
+}
+
+// O ANEL DE FOCO E SEMPRE `--foco`. Ele e o unico token medido contra 3:1 em toda
+// superficie (T2 da suite do tema); qualquer outra cor num `outline` e um anel
+// que ninguem mediu. `.fu-solta` desenhava o dela com `--acento`, que da 2,41:1
+// sobre o cartao e reprova a WCAG 1.4.11.
+{
+  const outlines = [...REGRAS.matchAll(/outline:\s*[^;]*var\(--([a-z-]+)\)/g)].map((m) => m[1]);
+  chk('I7d', outlines.length > 0 && outlines.every((t) => t === 'foco'),
+      `todo "outline" do sistema usa var(--foco) — achados: ${[...new Set(outlines)].join(', ') || 'nenhum'}`);
+}
+
+// E TODO ELEMENTO FOCAVEL POR TECLADO TEM ANEL. `summary` nao e `a`, nao e
+// `button` e nao e `.interruptor` — a regra geral de foco nao o alcancava, e
+// quem navega por Tab chegava nele sem sinal nenhum na tela.
+chk('I7e', /summary:focus-visible\s*\{[^}]*outline:/.test(REGRAS),
+    'o <summary> do cadastro tem anel de foco proprio — a regra geral so alcanca a/button/th/.interruptor');
 
 console.log();
 if (falhas > 0) { console.log(`--- interface: ${falhas} FALHA(S)`); process.exit(1); }

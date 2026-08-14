@@ -32,13 +32,22 @@ export function useCaminho(): string {
 }
 
 /** Âncora que navega sem recarregar — e continua âncora: botão do meio,
- *  ctrl+clique e "copiar endereço" funcionam porque o href é real. */
+ *  ctrl+clique e "copiar endereço" funcionam porque o href é real.
+ *
+ *  `atual` EMITE `aria-current="page"`, e ele entrou em 14/08 por um buraco
+ *  medido: a tela ativa da barra era sinalizada por TRÊS coisas visuais — cor do
+ *  texto, filete inferior e lastro de fundo — mais a troca de peso do ícone. As
+ *  quatro dependem de ver. Para quem usa leitor de tela, as treze telas eram
+ *  treze links idênticos, e "onde estou" não existia. É exatamente a restrição 3
+ *  do `tema.ts` ("cor nunca é o único sinal") aplicada ao lugar onde ela ainda
+ *  não tinha chegado. */
 export function Ligacao(p: {
   para: string; className?: string; style?: CSSProperties; children: ReactNode;
-  rotulo?: string;
+  rotulo?: string; atual?: boolean;
 }) {
   return (
     <a href={p.para} className={p.className} style={p.style} aria-label={p.rotulo}
+       aria-current={p.atual ? 'page' : undefined}
        onClick={(e) => {
          if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
          e.preventDefault();

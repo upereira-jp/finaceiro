@@ -38,7 +38,7 @@ export function TelaRelatorios() {
   return (
     <Pagina titulo="Relatórios"
             sub="Repasse, comissão e uso da usina — como o banco os calcula. Sem competência, a série inteira.">
-      <div className="cartao" style={{ marginBottom: 20 }}>
+      <div className="cartao secao">
         <div style={{ ...linha, gap: 12 }}>
           <div>
             <label>Mês de referência (vazio = todos)</label>

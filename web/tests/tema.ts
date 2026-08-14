@@ -251,6 +251,88 @@ chk('T5d', TIPOGRAFIA.familia.includes('ui-sans-serif') && TIPOGRAFIA.familia.in
 chk('T5e', FONTE_CSS.includes('/fontes/') && !/https?:\/\//.test(FONTE_CSS),
     'servida pela nossa origem, de /fontes/ — nenhuma URL externa no @font-face');
 
+// -------------------------------------------- T7 as tintas do PAPEL, medidas
+//
+// POR QUE ELAS NAO ESTAVAM AQUI, e por que passaram a estar.
+//
+// Esta suite media a `Paleta` — os tokens dos dois temas. O documento IMPRESSO
+// nao usa token nenhum, de proposito: ele e literal, porque a mesma fatura nao
+// pode sair de duas cores conforme o tema de quem mandou imprimir. Consequencia
+// nao intencional: as tintas do papel ficaram FORA de toda medicao, e o unico
+// teste que as tocava (`I1c` de `interface.ts`) confere QUAIS existem, nunca se
+// passam.
+//
+// O CUSTO DISSO APARECEU EM 14/08, medido. Duas das seis reprovavam AA na fatura
+// que vai ao cliente, e as duas estavam justificadas por escrito com numeros que
+// ninguem tinha recalculado:
+//
+//   `#8F939D` sobre branco   o comentario dizia 4,02:1   e sao 3,08:1
+//   `#E8843C` como TEXTO     nunca foi medido            e sao 2,69:1
+//
+// O papel tem TRES fundos e nao um — branco, o creme dos blocos secundarios, e o
+// Navy das barras cheias —, e a justificativa antiga so olhava o primeiro. Um
+// rotulo cinza sobre o bloco creme do cliente estava a 2,75:1.
+//
+// AA E O CRITERIO AQUI TAMBEM, e nao um piso mais frouxo "porque e papel". O
+// argumento e o contrario: a tela tem zoom, tem tema e tem monitor bom; o papel
+// e o que sai numa impressora domestica com toner economico, e nao tem nenhum
+// dos tres.
+
+/** As tintas e as superficies do `.g3`. Escritas aqui a mao, e nao lidas do CSS,
+ *  pelo mesmo motivo da calculadora: quem confere nao compartilha fonte com quem
+ *  e conferido. `interface.ts` (I1c) e que garante que a lista do CSS e esta. */
+const PAPEL = {
+  fundos: { branco: '#FFFFFF', creme: '#F6F2EA', navy: '#14213D', laranja: '#E8843C' },
+  /** tinta -> os fundos em que ela de fato pousa no `estilo.ts`. */
+  tintas: {
+    /** Navy: texto corrido, rotulo de tabela, telefone do rodape. */
+    '#14213D': ['branco', 'creme', 'laranja'],
+    /** O cinza dos rotulos caixa-alta — o `--fraco` derivado, nao o Gray puro. */
+    '#66686F': ['branco', 'creme'],
+    /** O laranja QUANDO E TEXTO — o `--acento-forte` derivado. */
+    '#995728': ['branco', 'creme'],
+    /** Branco: so sobre as barras cheias. */
+    '#FFFFFF': ['navy'],
+    /** A linha da paleta, como TINTA, so sobre o cartao navy. */
+    '#E4DFD4': ['navy'],
+  } as Record<string, string[]>,
+};
+
+for (const [tinta, fundos] of Object.entries(PAPEL.tintas)) {
+  for (const nome of fundos) {
+    const fundo = PAPEL.fundos[nome as keyof typeof PAPEL.fundos];
+    const r = contraste(tinta, fundo);
+    chk('T7', r >= 4.5, `papel: ${tinta} sobre ${nome} (${fundo}) = ${r.toFixed(2)}:1 (AA pede 4.5)`);
+  }
+}
+
+// O GRAY PURO DA G3 NAO PODE VOLTAR AO PAPEL, e a verificacao afirma o numero que
+// o derruba em vez de so proibir o valor: se um dia alguem trouxer o `#8F939D` de
+// volta "porque e a cor da marca", a linha que cai diz por que ele saiu.
+// (so os dois fundos CLAROS: e neles que os rotulos caixa-alta pousam. Sobre o
+//  Navy o Gray puro passaria — e sobre o Navy o papel usa branco e `#E4DFD4`.)
+for (const nome of ['branco', 'creme'] as const) {
+  const fundo = PAPEL.fundos[nome];
+  chk('T7b', contraste('#8F939D', fundo) < 4.5,
+      `papel: o Gray puro #8F939D sobre ${nome} da ${contraste('#8F939D', fundo).toFixed(2)}:1 — `
+      + 'e por isso que o derivado #66686F ocupa o lugar dele');
+}
+
+// E O ORANGE CONTINUA VALENDO COMO SUPERFICIE. Ele saiu de tinta e ficou de
+// fundo — a faixa do aviso, o cartao do desconto, a barra do mes atual. O par que
+// importa e o Navy por cima dele, que e o mesmo do botao primario da interface.
+chk('T7c', contraste('#14213D', '#E8843C') >= 4.5,
+    `papel: Navy sobre o Orange = ${contraste('#14213D', '#E8843C').toFixed(2)}:1 — `
+    + 'o Orange fica como SUPERFICIE, e o que pousa nele e o Navy');
+
+// AS TINTAS DO PAPEL SAO OS DERIVADOS DO TEMA CLARO, e isso e afirmacao e nao
+// coincidencia: as duas vieram do mesmo par da G3 pelo mesmo criterio de busca.
+// Se um dia o tema mudar o degrau dele, esta linha cai e obriga a decidir se o
+// papel acompanha — em vez de os dois divergirem em silencio.
+chk('T7d', CLARO.fraco === '#66686F' && CLARO.acentoForte === '#995728',
+    'as duas tintas derivadas do papel sao exatamente --fraco e --acento-forte do tema claro '
+    + `(hoje ${CLARO.fraco} e ${CLARO.acentoForte}) — mesma origem, mesmo criterio`);
+
 console.log();
 if (falhas > 0) { console.log(`--- tema: ${falhas} FALHA(S)`); process.exit(1); }
 console.log(`--- tema (contraste e tokens): ${total} verificacoes, 0 falhas`);

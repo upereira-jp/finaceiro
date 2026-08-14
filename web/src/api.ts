@@ -179,6 +179,10 @@ export type UnidadeConsumidora = {
   id: string; cliente_id: string; numero_uc: string; distribuidora: string;
   usina_id: string | null; percentual_rateio: string | null;
   data_vencimento: string | null;
+  /** R$/kWh DESTA UC, seis casas (migration 30). Substituiu a aba Tarifas em
+   *  14/08: a granularidade real e por cliente, medida em 41 UCs. NULO faz a
+   *  composicao do lote LEVANTAR (R26) em vez de faturar por zero. */
+  tarifa_reais_por_kwh: string | null;
   /** NOSSO cadastro: `ativa | suspensa | cancelada`. Nao diz nada sobre o CRM. */
   status: string;
   /** Espelho do CRM (migration 24). Ver `web/src/unidades-regras.ts` - "ativo"
@@ -206,11 +210,6 @@ export type Contrato = {
 };
 
 export type Originador = { id: string; nome: string; tipo: string; ativo: boolean };
-
-export type Tarifa = {
-  id: string; distribuidora: string; tarifa_reais_por_kwh: string;
-  vigencia_inicio: string; vigencia_fim: string | null;
-};
 
 export type RegraRepasse = {
   id: string; usina_id: string; percentual: string;
@@ -295,6 +294,17 @@ export type IdentidadeDeCobranca = {
   razao_social: string | null;
   /** 14 digitos, sem mascara. A tela formata; o banco guarda cru. */
   cnpj: string | null;
+  /* O CONTATO IMPRESSO NO RODAPE DA FOLHA 2 (migration 28). O tipo
+   * `ContatoDoEmissor` existia no dominio desde 14/08 e NINGUEM o preenchia -
+   * nem havia colunas. O rodape da folha do cliente saia com a linha do emissor
+   * e mais nada. */
+  telefone: string | null;
+  endereco: string | null;
+  email: string | null;
+  site: string | null;
+  /** O modelo que esta valendo. `null` = o tenant ainda nao criou nenhum, e a
+   *  folha cai nos textos padrao do dominio. */
+  modelo_padrao_id: string | null;
   atualizado_em: string;
 };
 
@@ -411,6 +421,11 @@ export type FolhaUnificada = {
       com_g3: { rotulo: string; valor: string };
       nota: string;
     } | null;
+    /** Por que os tres cartoes e o detalhamento nao sairam. Vem do SERVIDOR e
+     *  aparece so na TELA - ate 14/08 a tela reimplantava a condicao com
+     *  `.trim()` e ela nunca era verdadeira, porque o extrator devolve
+     *  "0.000000" quando a linha nao existe, e isso e truthy. */
+    cartoes_motivo: string | null;
     total: { rotulo: string; detalhe: string; valor: string; vencimento: string; nota: string };
     aviso: { titulo: string; corpo: string };
     detalhamento: {
@@ -436,16 +451,98 @@ export type FolhaUnificada = {
       pix_texto: string | null;
       barras: { svg: string } | null; barras_motivo: string | null;
       linha_formatada: string | null; rodape_legal: string[];
+      /** A conferencia ARITMETICA do boleto: valor e vencimento saem dos 44
+       *  digitos do codigo de barras e sao comparados com a conta. Vai no
+       *  payload, NUNCA no papel - o CRM consome a mesma rota. */
+      conferencia: { conferida: boolean; divergencias: Array<{ tipo: string }> };
+      /** As quatro perguntas de conferencia em frases prontas, compostas no
+       *  servidor. Ate 14/08 as tres primeiras viviam no React, em float. */
+      alertas: string[];
     };
     rodape: {
       telefone: string; emissor: string | null; endereco: string | null;
-      email: string | null; informacoes: string[];
+      email: string | null; site: string | null; informacoes: string[];
     };
   };
 };
 
 /** O retorno de `POST /faturas/unificada/compor`. */
-export type ComposicaoUnificada = FolhaUnificada & { conta: ContaDaFatura };
+export type ComposicaoUnificada = FolhaUnificada & {
+  conta: ContaDaFatura;
+  /** A economia acumulada desta UC ate esta competencia. `null` quando nao ha UC
+   *  ou competencia legivel - e nesse caso a folha diz "Primeira fatura". */
+  economia: { centavos: number; desde: string | null; faturas: number } | null;
+  /** O modelo VIGENTE, para a tela mostrar de onde saem os parametros padrao. */
+  modelo: ModeloDeFatura | null;
+};
+
+/**
+ * O MODELO DE FATURA — o template (migration 28).
+ *
+ * Guarda COMO a folha le: assinatura do topo, texto do aviso laranja, parametros
+ * padrao de emissao, multa, juros e o rodape legal do banco. Ate 14/08 os cinco
+ * eram literais no dominio, e dois deles nomeavam uma cooperativa especifica com
+ * o codigo dela — o mesmo defeito que a migration 26 tirou do emissor.
+ */
+export type ModeloDeFatura = {
+  id: string;
+  nome: string;
+  descricao: string | null;
+  assinatura: string;
+  aviso_titulo: string;
+  aviso_corpo: string;
+  percentual_desconto_padrao: string;
+  fator_emissao_padrao: string;
+  multa_percentual: string;
+  juros_mes_percentual: string;
+  rodape_legal: string[];
+  nota_do_fator: string;
+  ativo: boolean;
+  /** So vem em `GET /cobranca/modelos`. */
+  padrao?: boolean;
+};
+
+/**
+ * UM CAMPO QUE O TENANT INVENTOU, ao lado dos 16 do enum `campo_de_fatura`.
+ *
+ * Aqueles nomeiam colunas da fatura e por isso sao fechados; estes nomeiam dados
+ * que nao existem em coluna nenhuma nossa — "Contrato n", "Vendedor", "Placa da
+ * usina".
+ *
+ * `origem`: `fixo` sai igual em toda fatura do modelo; `variavel` e digitado a
+ * cada fatura, na aba de leitura.
+ */
+export type CampoPersonalizado = {
+  id: string;
+  chave: string;
+  rotulo: string;
+  origem: 'fixo' | 'variavel';
+  valor: string | null;
+  ordem: number;
+  visivel: boolean;
+};
+
+/**
+ * A FATURA UNIFICADA REGISTRADA, por UC e competencia (migration 29).
+ *
+ * E a `fatura:{uc}:{AAAA-MM}` da referencia com `tenant_id`, policy e trilha. A
+ * soma dos `desconto_centavos` da serie e o "Voce ja economizou" da folha 2 —
+ * que ate 14/08 imprimia o desconto desta fatura e dizia "Primeira fatura", para
+ * toda fatura.
+ */
+export type RegistroDeFatura = {
+  id: string;
+  numero_uc: string;
+  competencia: string;
+  cliente_nome: string | null;
+  vencimento: string | null;
+  compensada_kwh: string;
+  tarifa_kwh: string;
+  desconto_centavos: number;
+  total_centavos: number;
+  criado_em: string;
+  atualizado_em: string;
+};
 
 /**
  * A FOLHA 1 DO MODELO G3, composta pelo SERVIDOR.
@@ -488,6 +585,8 @@ export type DocumentoDaFatura = {
   pagamento:
     | {
         tipo: 'boleto'; linha_digitavel: string | null; codigo_barras: string | null;
+        /** As linhas legais do banco, do MODELO. Vazio faz a faixa sumir. */
+        rodape_legal: string[];
         /** A mesma linha em grupos, como o banco a imprime. `null` se nao tem 47. */
         linha_digitavel_br: string | null;
         /** Quem recebe, por extenso (migration 26). `null` — nunca "—" — enquanto

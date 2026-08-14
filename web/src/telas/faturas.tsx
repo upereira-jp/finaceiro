@@ -115,7 +115,7 @@ export function TelaFaturas() {
   return (
     <Pagina titulo="Faturas"
             sub="O mês de referência inteiro, linha por linha. Emitir fecha o valor; o boleto vem depois; a baixa é o único gatilho do split.">
-      <div className="cartao" style={{ marginBottom: 20 }}>
+      <div className="cartao secao">
         <div style={{ ...linha, gap: 12 }}>
           <div>
             <label>Mês de referência</label>

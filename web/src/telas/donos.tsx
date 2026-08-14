@@ -60,7 +60,7 @@ export function TelaDonos() {
         </Aviso>
       )}
 
-      <div className="cartao" style={{ marginBottom: 20 }}>
+      <div className="cartao secao">
         <div className="campos">
           <Campo rotulo="Nome" valor={f.nome} ao={p('nome')} />
           <Campo rotulo="Natureza" valor={f.natureza} ao={p('natureza')}

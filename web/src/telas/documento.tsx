@@ -22,8 +22,10 @@ import {
   api, buscarBinario,
   type IdentidadeDeCobranca, type ChavePix, type CampoDoDocumento, type DocumentoDaFatura, type Fatura,
   type QrDoDocumento, type QrDeConferencia, type UnidadeConsumidora,
+  type ModeloDeFatura, type CampoPersonalizado,
 } from '../api.ts';
 import { emLotes, useAcao, useDados } from '../dados.ts';
+import { useSessao } from '../sessao.tsx';
 import {
   Pagina, Aviso, Campo, Tabela, linha, rotulo, Icone, Interruptor, BotaoDeIcone, CampoData, Escolha, AjudaDoMes } from '../ui.tsx';
 import { competenciaISO, paraCentavos, emReais } from '../dinheiro.ts';
@@ -35,6 +37,7 @@ import {
 import { escalaDaPrevia, regraDaPagina, ladoDoQr, PX_POR_MM } from '../layout-regras.ts';
 import { useLargura } from '../medir-largura.ts';
 import { FaturaUnificada } from './fatura-unificada.tsx';
+import { TrianguloDeAviso } from '../icones.tsx';
 
 /** Os 16 do enum `campo_de_fatura` (migration 19). A tela nao inventa nome de
  *  campo: o banco recusaria, e o erro sairia do lado errado. */
@@ -61,6 +64,10 @@ const TETO_DA_LOGO = 512 * 1024;
 
 export function TelaDocumento() {
   const acao = useAcao();
+  /* O TENANT E A CHAVE DO RASCUNHO. O seletor da barra troca de empresa SEM
+   * recarregar a pagina, entao um rascunho sem tenant faria a fatura de uma
+   * empresa reaparecer dentro de outra. */
+  const { tenantId } = useSessao();
   const ident = useDados<IdentidadeDeCobranca | null>(() => api.get('/cobranca/identidade'));
   const cfg = useDados<CampoDoDocumento[]>(() => api.get('/cobranca/campos'));
 
@@ -123,21 +130,41 @@ export function TelaDocumento() {
    * NAO vazio como o formulario da chave Pix: ali o campo vazio evita sobrescrever
    * a chave atual sem querer; aqui e o contrario, o valor e um so por tenant e
    * quem abre a tela esta editando o que existe. */
-  const [razaoSocial, setRazaoSocial] = useState('');
-  const [cnpj, setCnpj] = useState('');
+  const [emissor, setEmissor] = useState({
+    razao_social: '', cnpj: '', telefone: '', endereco: '', email: '', site: '',
+  });
   useEffect(() => {
     if (!ident.dado) return;
-    setRazaoSocial(ident.dado.razao_social ?? '');
-    setCnpj(ident.dado.cnpj ?? '');
-  }, [ident.dado?.razao_social, ident.dado?.cnpj]);
+    setEmissor({
+      razao_social: ident.dado.razao_social ?? '', cnpj: ident.dado.cnpj ?? '',
+      telefone: ident.dado.telefone ?? '', endereco: ident.dado.endereco ?? '',
+      email: ident.dado.email ?? '', site: ident.dado.site ?? '',
+    });
+  }, [ident.dado?.razao_social, ident.dado?.cnpj, ident.dado?.telefone,
+      ident.dado?.endereco, ident.dado?.email, ident.dado?.site]);
 
+  /*
+   * O QUE VIAJA E SO O QUE ESTE FORMULARIO EDITA — e ate 14/08 viajava a linha
+   * inteira, com um defeito medido no meio.
+   *
+   * `salvarIdentidade` era um upsert do registro inteiro e `texto(undefined)`
+   * devolvia `null`. Como o seletor de chave Pix chama a MESMA rota mandando um
+   * campo so, **escolher a chave padrao apagava razao social e CNPJ**, em
+   * silencio — e a folha voltava a sair sem a linha do emissor e sem o aviso
+   * contra o golpe do boleto, que era o bloqueio numero 1 da retomada.
+   *
+   * O conserto de verdade esta no repositorio (campo ausente != campo nulo). Aqui
+   * a mudanca e a consequencia: este formulario para de mandar `chave_pix_padrao_id`
+   * "para nao apagar", porque nao ha mais o que apagar.
+   */
   const salvarEmissor = async () => {
     const ok = await acao.executar(() => api.post('/cobranca/identidade', {
-      // A chave padrao viaja junto porque o POST e um UPSERT da linha inteira:
-      // omiti-la apagaria a escolha de destino ao salvar o nome de quem recebe.
-      chave_pix_padrao_id: ident.dado?.chave_pix_padrao_id ?? null,
-      razao_social: razaoSocial.trim() || null,
-      cnpj: cnpj.trim() || null,
+      razao_social: emissor.razao_social.trim() || null,
+      cnpj: emissor.cnpj.trim() || null,
+      telefone: emissor.telefone.trim() || null,
+      endereco: emissor.endereco.trim() || null,
+      email: emissor.email.trim() || null,
+      site: emissor.site.trim() || null,
     }));
     if (ok) { acao.anunciar('Emissor salvo.'); ident.recarregar(); }
   };
@@ -214,11 +241,12 @@ export function TelaDocumento() {
           configuracao que ele consome. */}
       <FaturaUnificada
         logoUrl={logoUrl}
+        tenantId={tenantId ?? null}
         emissaoExtra={<Previa logoUrl={logoUrl} />}
         cadastro={<Cadastro>
 
       {/* -------------------------------------------------------- quem emite */}
-      <div className="cartao" style={{ marginBottom: 20 }}>
+      <div className="cartao secao">
         <h2 style={{ marginTop: 0 }}><Icone nome="cobranca" tamanho={17} /> Quem emite a fatura</h2>
         <p className="sub">
           Sai no <strong>cabeçalho</strong> e no <strong>rodapé</strong> da folha, e no campo
@@ -228,23 +256,48 @@ export function TelaDocumento() {
           exatamente o comportamento que o aviso quer impedir.
         </p>
         <div className="campos">
-          <Campo rotulo="Razão social" valor={razaoSocial} ao={setRazaoSocial}
+          <Campo rotulo="Razão social" valor={emissor.razao_social}
+                 ao={(v) => setEmissor({ ...emissor, razao_social: v })}
                  dica="Consórcio G3 Gestão de Energia Solar" />
-          <Campo rotulo="CNPJ" valor={cnpj} ao={setCnpj} dica="Com ou sem máscara" />
-          <div style={{ alignSelf: 'end' }}>
-            <button className="primario" onClick={() => void salvarEmissor()} disabled={acao.ocupado}>
-              <Icone nome="confirmar" tamanho={15} peso="bold" /> Salvar emissor
-            </button>
-          </div>
+          <Campo rotulo="CNPJ" valor={emissor.cnpj} ao={(v) => setEmissor({ ...emissor, cnpj: v })}
+                 dica="Com ou sem máscara" />
         </div>
-        <p className="sub" style={{ marginBottom: 0 }}>
+
+        {/* ------------------------------------------------- o contato do rodapé
+            AS QUATRO COLUNAS NASCERAM EM 14/08 (migration 28), e a razão está
+            medida: `ContatoDoEmissor` existia no domínio desde a manhã do mesmo
+            dia, com teste, e NENHUM chamador de produção o preenchia — a rota de
+            composição chamava `comporFolhas` com quatro argumentos e o quinto
+            caía no default. O rodapé da folha 2 saía com a linha do emissor e
+            mais nada, e não havia de onde tirar o resto. */}
+        <h3 style={{ marginTop: 18 }}>Contato impresso no rodapé da folha 2</h3>
+        <div className="campos">
+          <Campo rotulo="Telefone" valor={emissor.telefone}
+                 ao={(v) => setEmissor({ ...emissor, telefone: v })} dica="62 3190-2020" />
+          <Campo rotulo="E-mail" valor={emissor.email}
+                 ao={(v) => setEmissor({ ...emissor, email: v })} dica="sac@empresa.com.br" />
+          <Campo rotulo="Site" valor={emissor.site}
+                 ao={(v) => setEmissor({ ...emissor, site: v })} dica="www.empresa.com.br" />
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <Campo rotulo="Endereço" valor={emissor.endereco}
+                 ao={(v) => setEmissor({ ...emissor, endereco: v })}
+                 dica="Rua T-55, nº 930, Sala 910, Setor Bueno, Goiânia/GO" />
+        </div>
+        <div style={{ ...linha, marginTop: 14 }}>
+          <button className="primario" onClick={() => void salvarEmissor()} disabled={acao.ocupado}>
+            <Icone nome="confirmar" tamanho={15} peso="bold" /> Salvar emissor
+          </button>
+        </div>
+        <p className="sub" style={{ marginTop: 12, marginBottom: 0 }}>
           O CNPJ é conferido pelo <strong>dígito verificador</strong>, e não só pelo formato: este
-          número sai impresso ao lado do aviso que manda o cliente conferir antes de pagar.
+          número sai impresso ao lado do aviso que manda o cliente conferir antes de pagar. Campo
+          vazio <strong>some</strong> da folha — nunca vira travessão.
         </p>
       </div>
 
       {/* ------------------------------------------------------------- a logo */}
-      <div className="cartao" style={{ marginBottom: 20 }}>
+      <div className="cartao secao">
         <h2 style={{ marginTop: 0 }}><Icone nome="enviar" tamanho={17} /> Logo</h2>
         <p className="sub">
           <strong>PNG ou JPEG, até 512 KB.</strong> SVG é recusado de propósito: é documento com
@@ -272,7 +325,7 @@ export function TelaDocumento() {
       </div>
 
       {/* ------------------------------------------------ o Pix do recebedor */}
-      <div className="cartao" style={{ marginBottom: 20 }}>
+      <div className="cartao secao">
         <h2 style={{ marginTop: 0 }}><Icone nome="pix" tamanho={17} /> Recebimento por Pix</h2>
         <p className="sub">
           Enquanto o certificado A1 não existir, a faixa de pagamento é um <strong>QR Pix
@@ -321,7 +374,7 @@ export function TelaDocumento() {
       </div>
 
       {/* -------------------------------------------------------- os campos */}
-      <div className="cartao" style={{ marginBottom: 20 }}>
+      <div className="cartao secao">
         <div style={{ ...linha }}>
           <h2 style={{ margin: 0 }}><Icone nome="documento" tamanho={17} /> Campos do documento</h2>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
@@ -386,6 +439,10 @@ export function TelaDocumento() {
 
       {/* O teste de campo do QR fica junto do cadastro do Pix, que e o que ele
           confere — e nao mais antes da Previa: a Previa saiu para a aba 2. */}
+      {/* --------------------------------- o MODELO e os campos personalizados */}
+      <ModeloDaFatura />
+      <CamposPersonalizados />
+
       <ConferirQr temIdentidade={!!ident.dado} />
 
         </Cadastro>}
@@ -406,16 +463,315 @@ export function TelaDocumento() {
  */
 function Cadastro({ children }: { children: ReactNode }) {
   return (
-    <details className="cartao naoimprime fu-cadastro" style={{ marginTop: 20 }}>
-      <summary>
-        <Icone nome="engrenagem" tamanho={16} /> Cadastro da fatura — emissor, logo, Pix e campos
-      </summary>
-      <p className="sub" style={{ marginTop: 10 }}>
-        Configuração por tenant. O que está aqui é o que a folha imprime no cabeçalho, no rodapé e
-        na faixa de pagamento — mexe-se uma vez, não a cada fatura.
+    <div className="naoimprime">
+      <p className="sub">
+        Configuração por tenant. O que está aqui é o que a folha <strong>imprime</strong> — no
+        cabeçalho, no rodapé, na faixa de pagamento e na grade do cliente. Mexe-se uma vez, não a
+        cada fatura.
       </p>
       {children}
-    </details>
+    </div>
+  );
+}
+
+/**
+ * ============================================================================
+ * O MODELO DE FATURA — o TEMPLATE (migration 28).
+ *
+ * O QUE ELE RESOLVE, e o defeito era o mesmo que a migration 26 já tinha
+ * corrigido uma vez. Cinco textos que saem impressos na fatura de QUALQUER
+ * tenant estavam escritos no código do domínio:
+ *
+ *   "Energia Solar por Assinatura"                          a assinatura do topo
+ *   "Não pague a conta da Equatorial" + o corpo             a faixa laranja
+ *   "…multa de 2% e juros de 1% ao mês"                     o rodapé da folha 2
+ *   "EMITIDO PELA COOPERATIVA CONTRATANTE…"                 o pé da caixa de pagamento
+ *   "COOPERATIVA CONTRATANTE 5004 SICOOB UNICENTRO BR"      idem
+ *
+ * As duas últimas carregam o CÓDIGO 5004 e o nome de uma cooperativa específica.
+ * É exatamente o que a migration 26 tirou do emissor, com estas palavras:
+ * *"escrever o CNPJ da G3 no fonte poria o CNPJ dela na fatura de outro tenant"*.
+ * Aqui poria o banco de outro tenant, sob a assinatura de um banco que nunca viu
+ * o documento.
+ *
+ * O RODAPÉ LEGAL NASCE VAZIO, e vazio faz a faixa SUMIR. Copiar as duas linhas
+ * do Sicoob para dentro do banco transformaria um literal errado num dado errado
+ * — que é pior, porque o literal ao menos dava para achar por grep.
+ */
+function ModeloDaFatura() {
+  const acao = useAcao();
+  const modelos = useDados<ModeloDeFatura[]>(() => api.get('/cobranca/modelos'));
+  const [m, setM] = useState<ModeloDeFatura | null>(null);
+
+  useEffect(() => {
+    if (!modelos.dado) return;
+    setM(modelos.dado.find((x) => x.padrao) ?? modelos.dado[0] ?? null);
+  }, [modelos.dado]);
+
+  const mudar = (k: keyof ModeloDeFatura) => (v: string) =>
+    setM((s) => (s ? { ...s, [k]: v } : s));
+
+  const salvar = async () => {
+    if (!m) return;
+    const ok = await acao.executar(() => api.put(`/cobranca/modelos/${m.id}`, {
+      nome: m.nome, descricao: m.descricao, assinatura: m.assinatura,
+      aviso_titulo: m.aviso_titulo, aviso_corpo: m.aviso_corpo,
+      percentual_desconto_padrao: m.percentual_desconto_padrao,
+      fator_emissao_padrao: m.fator_emissao_padrao,
+      multa_percentual: m.multa_percentual, juros_mes_percentual: m.juros_mes_percentual,
+      rodape_legal: m.rodape_legal, nota_do_fator: m.nota_do_fator,
+    }));
+    if (ok) { acao.anunciar('Modelo salvo.'); modelos.recarregar(); }
+  };
+
+  const criar = async () => {
+    const nome = window.prompt('Nome do modelo novo (é por ele que se escolhe):');
+    if (!nome?.trim()) return;
+    const ok = await acao.executar(() => api.post('/cobranca/modelos', { nome: nome.trim() }));
+    if (ok) { acao.anunciar('Modelo criado.'); modelos.recarregar(); }
+  };
+
+  const escolherPadrao = async (id: string) => {
+    const ok = await acao.executar(() => api.post(`/cobranca/modelos/${id}/padrao`, {}));
+    if (ok) { acao.anunciar('Modelo padrão definido.'); modelos.recarregar(); }
+  };
+
+  return (
+    <div className="cartao secao">
+      <div style={{ ...linha }}>
+        <h2 style={{ margin: 0 }}><Icone nome="documento" tamanho={17} /> Modelo da fatura</h2>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+          <button onClick={() => void criar()} disabled={acao.ocupado}>
+            <Icone nome="acrescentar" tamanho={15} /> Novo modelo
+          </button>
+          <button className="primario" onClick={() => void salvar()} disabled={acao.ocupado || !m}>
+            <Icone nome={acao.ocupado ? 'carregando' : 'confirmar'} tamanho={15} peso="bold" /> Salvar modelo
+          </button>
+        </div>
+      </div>
+      <p className="sub">
+        O modelo é <strong>como a folha lê</strong>: a assinatura do topo, o texto do aviso laranja,
+        os parâmetros padrão de emissão e o rodapé legal do banco. Quem <strong>emite</strong> é o
+        cartão acima, e é um por empresa; de modelo há vários, porque a mesma empresa fatura de mais
+        de um jeito.
+      </p>
+
+      {modelos.erro && <Aviso tipo="erro">Falha ao ler os modelos: {modelos.erro}</Aviso>}
+      {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
+      {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
+
+      {(modelos.dado ?? []).length > 1 && (
+        <div style={{ marginBottom: 16 }}>
+          <Campo rotulo="Modelo em uso" valor={m?.id ?? ''}
+                 ao={(v) => {
+                   const escolhido = (modelos.dado ?? []).find((x) => x.id === v);
+                   if (escolhido) setM(escolhido);
+                 }}
+                 opcoes={(modelos.dado ?? []).map((x) => ({
+                   valor: x.id, texto: `${x.nome}${x.padrao ? ' — padrão' : ''}`,
+                 }))} />
+          {m && !m.padrao && (
+            <button style={{ marginTop: 8 }} onClick={() => void escolherPadrao(m.id)}
+                    disabled={acao.ocupado}>
+              <Icone nome="confirmar" tamanho={15} /> Usar este como padrão
+            </button>
+          )}
+        </div>
+      )}
+
+      {!m ? <p className="sub">Carregando…</p> : (
+        <>
+          <div className="campos">
+            <Campo rotulo="Nome do modelo" valor={m.nome} ao={mudar('nome')} />
+            <Campo rotulo="Assinatura do topo" valor={m.assinatura} ao={mudar('assinatura')}
+                   dica="Energia Solar por Assinatura" />
+          </div>
+
+          <h3 style={{ marginTop: 18 }}>Aviso em destaque</h3>
+          <div className="campos">
+            <Campo rotulo="Título" valor={m.aviso_titulo} ao={mudar('aviso_titulo')} />
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <label>Corpo</label>
+            <textarea className="fu-area" rows={2} value={m.aviso_corpo}
+                      aria-label="Corpo do aviso em destaque"
+                      onChange={(e) => mudar('aviso_corpo')(e.target.value)} />
+          </div>
+          <p className="sub" style={{ marginTop: 8 }}>
+            É a única faixa da folha que precisa ser lida <strong>antes</strong> do valor, e o texto
+            é específico da distribuidora — <em>"Não pague a conta da Equatorial"</em> não serve a
+            quem fatura contra outra concessionária.
+          </p>
+
+          <h3 style={{ marginTop: 18 }}>Padrões de emissão</h3>
+          <div className="campos">
+            <Campo rotulo="Desconto padrão (%)" valor={m.percentual_desconto_padrao}
+                   ao={mudar('percentual_desconto_padrao')} dica="20" />
+            <Campo rotulo="Fator CO₂ (kg/kWh)" valor={m.fator_emissao_padrao}
+                   ao={mudar('fator_emissao_padrao')} dica="0,029" />
+            <Campo rotulo="Multa após vencer (%)" valor={m.multa_percentual}
+                   ao={mudar('multa_percentual')} dica="2" />
+            <Campo rotulo="Juros ao mês (%)" valor={m.juros_mes_percentual}
+                   ao={mudar('juros_mes_percentual')} dica="1" />
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <Campo rotulo="Fonte do fator de CO₂ (nota impressa)" valor={m.nota_do_fator}
+                   ao={mudar('nota_do_fator')} />
+          </div>
+          <p className="sub" style={{ marginTop: 8 }}>
+            O desconto tem teto de <strong>50%</strong>, e o número tem origem: é o máximo do
+            controle da referência. Acima de 100% a energia com desconto fica negativa e a folha
+            imprimiria um <em>"valor total a pagar"</em> negativo com os três cartões normais em
+            cima dele — medido em 14/08.
+          </p>
+
+          <h3 style={{ marginTop: 18 }}>Rodapé legal do banco</h3>
+          <textarea className="fu-area" rows={3} value={m.rodape_legal.join('\n')}
+                    aria-label="Rodapé legal do banco, uma linha por linha impressa"
+                    placeholder={'EMITIDO PELA COOPERATIVA CONTRATANTE SEM RESPONSABILIDADE DO BANCOOB\n'
+                               + 'COOPERATIVA CONTRATANTE 5004 SICOOB UNICENTRO BR'}
+                    onChange={(e) => setM({ ...m, rodape_legal: e.target.value.split('\n') })} />
+          <p className="sub" style={{ marginTop: 8, marginBottom: 0 }}>
+            Uma linha por linha impressa no pé da caixa de pagamento. <strong>Vazio faz a faixa
+            sumir</strong>, e é o padrão de propósito: texto de banco só é verdade quando há
+            convênio, e afirmá-lo sem convênio põe a assinatura de um banco num documento que ele
+            nunca viu. O texto acinzentado é o do Sicoob, para quem tiver o convênio.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * ============================================================================
+ * OS CAMPOS PERSONALIZADOS — o que o TENANT inventa.
+ *
+ * `campo_do_documento` configura os 16 campos do enum `campo_de_fatura`: ordem,
+ * rótulo e visibilidade. O que ele NÃO permite é o tenant inventar um campo, e
+ * não permite por construção — o enum é fechado e um valor novo nele é uma
+ * migration.
+ *
+ * Isso está certo para os 16: eles nomeiam colunas da `fatura`, e um nome que a
+ * tela inventasse seria recusado pelo banco, com o erro saindo do lado errado. E
+ * está errado para o resto: "Contrato nº", "Vendedor", "Placa da usina" são dados
+ * do tenant que não existem em coluna nenhuma nossa e nunca vão existir.
+ *
+ * A CHAVE É UM SLUG E NÃO O RÓTULO, e a distinção é o que faz o campo sobreviver
+ * a uma renomeação: o rótulo muda ("Vendedor" vira "Consultor responsável") e o
+ * valor de uma fatura já registrada continua tendo de achar o campo dele.
+ */
+function CamposPersonalizados() {
+  const acao = useAcao();
+  const lista = useDados<CampoPersonalizado[]>(() => api.get('/cobranca/campos-personalizados'));
+  const [campos, setCampos] = useState<CampoPersonalizado[] | null>(null);
+
+  useEffect(() => { if (lista.dado) setCampos(lista.dado); }, [lista.dado]);
+
+  const mudar = (i: number, mudanca: Partial<CampoPersonalizado>) =>
+    setCampos((s) => (s ? s.map((c, j) => (j === i ? { ...c, ...mudanca } : c)) : s));
+
+  const salvar = async () => {
+    if (!campos) return;
+    const ok = await acao.executar(() => api.put('/cobranca/campos-personalizados', {
+      campos: campos.map((c, i) => ({
+        chave: c.chave, rotulo: c.rotulo, origem: c.origem,
+        valor: c.origem === 'fixo' ? c.valor : null,
+        ordem: i, visivel: c.visivel,
+      })),
+    }));
+    if (ok) { acao.anunciar('Campos personalizados salvos.'); lista.recarregar(); }
+  };
+
+  const acrescentar = () => setCampos([...(campos ?? []), {
+    id: `novo-${(campos ?? []).length}`, chave: '', rotulo: '',
+    origem: 'fixo', valor: '', ordem: (campos ?? []).length, visivel: true,
+  }]);
+
+  return (
+    <div className="cartao secao">
+      <div style={{ ...linha }}>
+        <h2 style={{ margin: 0 }}><Icone nome="acrescentar" tamanho={17} /> Campos personalizados</h2>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+          <button onClick={acrescentar} disabled={acao.ocupado}>
+            <Icone nome="acrescentar" tamanho={15} /> Acrescentar campo
+          </button>
+          <button className="primario" onClick={() => void salvar()} disabled={acao.ocupado || !campos}>
+            <Icone nome={acao.ocupado ? 'carregando' : 'confirmar'} tamanho={15} peso="bold" /> Salvar campos
+          </button>
+        </div>
+      </div>
+      <p className="sub">
+        Saem na <strong>grade do cliente</strong> da folha 1, depois dos oito campos que vêm da
+        fatura da distribuidora. <strong>Fixo</strong> sai igual em toda fatura;
+        <strong> variável</strong> é digitado a cada uma, na aba <em>1 · Leitura e cálculo</em>.
+        Campo sem valor <strong>não sai</strong> — um rótulo com nada embaixo é a mesma classe do
+        travessão que este sistema recusa.
+      </p>
+
+      {lista.erro && <Aviso tipo="erro">Falha ao ler os campos: {lista.erro}</Aviso>}
+      {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
+      {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
+
+      <Tabela cabecalho={<>
+                <th style={{ width: 150 }}>Chave</th>
+                <th>Rótulo impresso</th>
+                <th style={{ width: 130 }}>Origem</th>
+                <th>Valor fixo</th>
+                <th style={{ width: 80 }}>Mostrar</th>
+                <th style={{ width: 44 }} />
+              </>}
+              vazio="Nenhum campo personalizado. O botão acima acrescenta o primeiro.">
+        {(campos ?? []).map((c, i) => (
+          <tr key={c.id}>
+            <td>
+              <div className="inline">
+                <input value={c.chave} aria-label={`Chave do campo ${i + 1}`}
+                       placeholder="contrato_n" style={{ fontFamily: 'var(--fonte-mono)', fontSize: 12 }}
+                       onChange={(e) => mudar(i, { chave: e.target.value })} />
+              </div>
+            </td>
+            <td>
+              <div className="inline">
+                <input value={c.rotulo} aria-label={`Rótulo do campo ${i + 1}`}
+                       placeholder="Contrato nº"
+                       onChange={(e) => mudar(i, { rotulo: e.target.value })} />
+              </div>
+            </td>
+            <td>
+              <div className="inline">
+                <Escolha valor={c.origem} rotuloAcessivel={`Origem do campo ${i + 1}`}
+                         ao={(v) => mudar(i, { origem: v as 'fixo' | 'variavel' })}
+                         opcoes={[{ valor: 'fixo', texto: 'Fixo' },
+                                  { valor: 'variavel', texto: 'Por fatura' }]} />
+              </div>
+            </td>
+            <td>
+              <div className="inline">
+                <input value={c.origem === 'fixo' ? c.valor ?? '' : ''}
+                       aria-label={`Valor fixo do campo ${i + 1}`}
+                       disabled={c.origem !== 'fixo'}
+                       placeholder={c.origem === 'fixo' ? 'O que sai impresso' : 'digitado por fatura'}
+                       onChange={(e) => mudar(i, { valor: e.target.value })} />
+              </div>
+            </td>
+            <td>
+              <Interruptor ligado={c.visivel} rotulo="" rotuloAcessivel={`Mostrar ${c.rotulo || c.chave}`}
+                           ao={(v) => mudar(i, { visivel: v })} />
+            </td>
+            <td>
+              <BotaoDeIcone icone="remover" rotulo={`Remover ${c.rotulo || c.chave}`}
+                            ao={() => setCampos((s) => (s ?? []).filter((_, j) => j !== i))} />
+            </td>
+          </tr>
+        ))}
+      </Tabela>
+      <p className="sub" style={{ marginTop: 12, marginBottom: 0 }}>
+        A <strong>chave</strong> é minúscula, sem acento e sem espaço, começando por letra. Ela não
+        é o rótulo: o rótulo muda e a chave é o que liga o valor de uma fatura já registrada ao campo
+        que o imprime.
+      </p>
+    </div>
   );
 }
 
@@ -530,7 +886,7 @@ function Previa({ logoUrl }: { logoUrl: string | null }) {
 
   return (
     <>
-      <div className="cartao naoimprime" style={{ marginBottom: 20 }}>
+      <div className="cartao naoimprime secao">
         <h2 style={{ marginTop: 0 }}><Icone nome="imprimir" tamanho={17} /> Prévia</h2>
         <div style={{ ...linha, gap: 12 }}>
           <div>
@@ -641,7 +997,7 @@ function Lote({ faturas, rotuloDaFatura, logoUrl, mes }: {
 
   return (
     <>
-      <div className="cartao naoimprime" style={{ marginBottom: 20 }}>
+      <div className="cartao naoimprime secao">
         <h3 style={{ marginTop: 0 }}><Icone nome="faturas" tamanho={16} /> O lote de {mes}</h3>
 
         {selecao.fora.length > 0 && (
@@ -862,14 +1218,11 @@ function FolhaModeloG3({ doc, logoUrl }: { doc: DocumentoDaFatura; logoUrl: stri
             </div>
 
             <div className="g3-aviso">
-              {/* O triangulo desenhado a mao e nao vindo do pacote de icones: o
-                  pacote e da INTERFACE, e um icone de tela dentro do papel traria
-                  peso e tamanho pensados para outro meio. */}
-              <svg viewBox="0 0 24 24" fill="none" stroke="#14213D" strokeWidth="1.3"
-                   strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M12 3.6L21.4 20H2.6L12 3.6z" />
-                <path d="M12 9.6v4.6" /><path d="M12 17.1h.01" />
-              </svg>
+              {/* Desenhado a mao e nao vindo do pacote de icones — a razao esta
+                  em `TrianguloDeAviso`, junto do desenho. Ele saiu daqui em 14/08
+                  porque estava DUPLICADO em duas telas, com a tinta escrita a mao
+                  nas duas. */}
+              <TrianguloDeAviso />
               <div>
                 <div className="g3-aviso-tit">{f.aviso.titulo}</div>
                 <div className="g3-aviso-corpo">{f.aviso.corpo}</div>
@@ -1097,9 +1450,19 @@ function FaixaDePagamento({ doc }: { doc: DocumentoDaFatura }) {
 
       {boleto
         ? (
-          <div className="faixa-pgto-rodape">
-            <div>EMITIDO PELA COOPERATIVA CONTRATANTE SEM RESPONSABILIDADE DO BANCOOB</div>
-          </div>
+          /* O RODAPE LEGAL VEM DO MODELO desde 14/08 (migration 28). Ele era esta
+             string cravada aqui — "EMITIDO PELA COOPERATIVA CONTRATANTE SEM
+             RESPONSABILIDADE DO BANCOOB" —, o que punha o texto de um banco
+             especifico na fatura de qualquer tenant, e do lado errado da
+             fronteira: esta tela nao decide o que a folha diz.
+
+             LISTA VAZIA FAZ A FAIXA SUMIR, e e o padrao. Texto de banco so e
+             verdade quando ha convenio. */
+          pagamento.rodape_legal.length > 0 && (
+            <div className="faixa-pgto-rodape">
+              {pagamento.rodape_legal.map((t) => <div key={t}>{t}</div>)}
+            </div>
+          )
         )
         : (
           /* O QUE CONTINUA VERDADE DEPOIS DE O DESENHO EXISTIR: o Pix estatico nao

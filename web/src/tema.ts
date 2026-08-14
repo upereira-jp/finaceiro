@@ -193,6 +193,24 @@ export type Paleta = {
    * Então são três tokens e não um: a faixa, a tinta que pousa nela, e a tinta
    * APAGADA da navegação inativa. Sem o terceiro, "onde estou" e "para onde posso
    * ir" ficariam com o mesmo peso dentro de uma faixa escura.
+   *
+   * ============================================================================
+   * O PAPEL DELES ALARGOU EM 14/08, e a mudança é de NOME e não de valor: estes
+   * três deixaram de ser "a barra" e passaram a ser **a superfície dominante e a
+   * tinta que pousa nela**, onde quer que ela apareça. Quem os pediu foi o painel
+   * cheio da aba Documento (`.fu-painel`, o valor a gerar no banco), que até aqui
+   * usava `background: var(--texto); color: var(--fundo)`.
+   *
+   * Aquilo funcionava no claro por coincidência — `--texto` É o Navy — e no
+   * escuro INVERTIA: `--texto` é o Creme, então o painel virava um bloco claro
+   * dentro de uma tela escura. Pior, o par não era medido por teste nenhum: a
+   * T1 mede tinta sobre SUPERFÍCIE, e `--texto` não é uma superfície.
+   *
+   * A alternativa era um segundo conjunto `--destaque/-texto/-fraco` com
+   * exatamente os mesmos valores destes três. Seria a redundância que este
+   * projeto vem tirando: dois nomes para uma cor é o começo de alguém editar um
+   * e ler o outro. Estes já são a superfície dominante, já estão medidos (T6,
+   * T6b) e já sobrevivem aos dois temas — então são eles.
    */
   topo: string;
   topoTexto: string;
@@ -429,6 +447,27 @@ export const TIPOGRAFIA = {
    *  tracking neutro para tamanho grande, e em 15px fica larga. -0.011em é o
    *  valor que o próprio projeto da fonte recomenda para tamanho de interface. */
   tracking: '-0.011em',
+  /**
+   * [14/08] O RÓTULO EM CAIXA ALTA, e ele é token porque **eram cinco**.
+   *
+   * O mesmo papel — nome de seção, cabeçalho de coluna, legenda de cartão —
+   * estava escrito com cinco combinações diferentes de peso e tracking, medidas
+   * na auditoria de 14/08:
+   *
+   *   `thead th`             11px · 650 · .07em     (todo cabeçalho de tabela)
+   *   `.kpi .nome`           11px · 650 · .07em
+   *   `.menu-painel .titulo` 11px · 650 · .06em
+   *   `.fu-rotulo`           11px · 600 · .10em
+   *   `.fu-painel-rot`       11px · 600 · .12em
+   *
+   * Nenhum dos cinco saía de lugar nenhum — não havia valor em `RITMO` nem aqui,
+   * então cada regra nova escolhia de novo. `.07em` com peso 650 é o que já
+   * cobria dois dos cinco e é o de mais uso (o cabeçalho de tabela aparece em
+   * todas as telas de lista), então é ele que vira o token.
+   */
+  rotuloTamanho: '11px',
+  rotuloPeso: '650',
+  rotuloTracking: '.07em',
 };
 
 export const RITMO = {
@@ -438,6 +477,18 @@ export const RITMO = {
   raioPequeno: '6px',
   raioPilula: '999px',
   gap: '12px',
+  /**
+   * [14/08] O ESPAÇO ENTRE SEÇÕES — entre dois cartões empilhados.
+   *
+   * Ele existia como o literal `20` em `style={{ marginBottom: 20 }}` em **dez
+   * telas**, e a aba Documento empilhava com `var(--gap)` (12px). Os dois valores
+   * conviviam na MESMA página: os cartões do cadastro a 20 e a grade de
+   * conferência a 12.
+   *
+   * 20 ganhou por ser o que dez telas já faziam. E virou token para o próximo
+   * cartão não escolher um terceiro número — é a mesma razão de `--gap` existir.
+   */
+  gapSecao: '20px',
   larguraMaxima: '1160px',
 };
 
@@ -489,10 +540,13 @@ export const VARIAVEIS_CSS = `
   :root {${variaveis(CLARO)}
     --raio: ${RITMO.raio}; --raio-cartao: ${RITMO.raioCartao};
     --raio-pequeno: ${RITMO.raioPequeno}; --raio-pilula: ${RITMO.raioPilula};
-    --gap: ${RITMO.gap};
+    --gap: ${RITMO.gap}; --gap-secao: ${RITMO.gapSecao};
     --largura: ${RITMO.larguraMaxima};
     --sombra-1: ${SOMBRAS.um}; --sombra-2: ${SOMBRAS.dois}; --sombra-3: ${SOMBRAS.tres};
     --fonte-mono: ${TIPOGRAFIA.familiaMono};
+    --rotulo-tamanho: ${TIPOGRAFIA.rotuloTamanho};
+    --rotulo-peso: ${TIPOGRAFIA.rotuloPeso};
+    --rotulo-tracking: ${TIPOGRAFIA.rotuloTracking};
     color-scheme: light;
   }
   :root[data-tema="escuro"] {${variaveis(ESCURO)}

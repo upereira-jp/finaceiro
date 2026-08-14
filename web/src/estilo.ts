@@ -53,8 +53,21 @@ export const ESTILO = `
   ::selection { background: var(--acento-suave); }
   /* --acento-forte, e nao --acento: link e TEXTO, e o laranja da marca como texto
      reprova a restricao 1 do tema em qualquer superficie clara - 2.35:1 no branco
-     com o laranja de 28/07, 2.41:1 no creme com o Orange de 06/08. */
-  a { color: var(--acento-forte); }
+     com o laranja de 28/07, 2.41:1 no creme com o Orange de 06/08.
+
+     O SUBLINHADO ENTROU EM 14/08, E ELE E O SEGUNDO SINAL. A WCAG 1.4.1 exige
+     3:1 entre o link e o TEXTO AO REDOR quando a cor e a unica distincao. Medido:
+     no claro o link contra o texto da 2,85:1 e no escuro da 1,80:1 - as duas
+     reprovam, e a segunda e praticamente invisivel. Um link dentro de frase
+     ("Defina o rateio em Unidades") passava a ser uma palavra de tom levemente
+     diferente. O sublinhado resolve os dois temas de uma vez e nao depende de
+     cor nenhuma. */
+  a {
+    color: var(--acento-forte);
+    text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px;
+    transition: color .14s ease, text-decoration-thickness .14s ease;
+  }
+  a:hover { color: var(--texto); text-decoration-thickness: 2px; }
   code, pre, .mono { font-family: var(--fonte-mono); font-size: .92em; }
   /* Numero em qualquer lugar sai tabular. Fora da tabela tambem: valor que muda
      de largura enquanto atualiza e valor que a pessoa le duas vezes. */
@@ -88,6 +101,13 @@ export const ESTILO = `
      translucido, e nao um token novo, porque ele funciona sobre AS DUAS variantes
      de navy - a do tema claro e a do escuro - sem virar duas cores para manter. */
   .barra .fraco, .barra .sub, .barra label { color: var(--topo-fraco); }
+  /* A SETA DO SELETOR DE EMPRESA ESCAPAVA DA REGRA ACIMA, e ela era o unico
+     desenho do sistema ainda pintado com tinta de superficie CLARA dentro da
+     faixa escura. ".campo-caixa .adorno" puxa "--fraco" e nao tem a classe
+     ".fraco", entao o seletor de cima nao a alcancava. Medido em 14/08: 2,20:1
+     contra o veu do topo no tema claro - a WCAG 1.4.11 pede 3 para componente
+     nao-textual. Com "--topo-fraco": 4,52:1 no claro e 5,04:1 no escuro. */
+  .barra .campo-caixa .adorno, .barra .campo-caixa .adorno-esquerda { color: var(--topo-fraco); }
   .barra .campo-caixa select, .barra button {
     background: var(--topo-veu); color: var(--topo-texto);
     border-color: var(--topo-veu-forte);
@@ -154,10 +174,7 @@ export const ESTILO = `
     border-radius: var(--raio-cartao); box-shadow: var(--sombra-3);
     animation: descer-suave .14s ease-out;
   }
-  .menu-painel .titulo {
-    padding: 7px 10px 5px; font-size: 11px; font-weight: 650; color: var(--fraco);
-    text-transform: uppercase; letter-spacing: .06em;
-  }
+  .menu-painel .titulo { padding: 7px 10px 5px; color: var(--fraco); }
   .menu-painel hr { border: 0; border-top: 1px solid var(--borda-suave); margin: 5px 4px; }
   .menu-painel button, .menu-painel .item {
     display: flex; align-items: center; gap: 9px; width: 100%;
@@ -194,6 +211,12 @@ export const ESTILO = `
     border: 1px solid var(--borda); border-radius: var(--raio-cartao); padding: 16px;
     background: var(--fundo2); box-shadow: var(--sombra-1);
   }
+  /* O RITMO ENTRE SECOES SAI DE UM TOKEN desde 14/08. Ele era o literal
+     "style={{ marginBottom: 20 }}" escrito a mao DEZESSETE vezes em dez telas, e
+     a aba Documento empilhava com "var(--gap)" (12px) - os dois valores na MESMA
+     pagina. Uma classe, um token, e o proximo cartao para de escolher um terceiro
+     numero. */
+  .secao { margin-bottom: var(--gap-secao); }
   .rolagem {
     overflow-x: auto; border: 1px solid var(--borda); border-radius: var(--raio-cartao);
     background: var(--fundo2); box-shadow: var(--sombra-1);
@@ -207,9 +230,15 @@ export const ESTILO = `
      e ate 29/07 estava sem uso. */
   table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   th, td { text-align: left; vertical-align: top; }
+  /* O ROTULO CAIXA-ALTA SAI DE UM TOKEN SO desde 14/08. Eram cinco combinacoes de
+     peso e tracking para o mesmo papel - ver a nota de "rotuloTamanho" no
+     "tema.ts". Esta e a definicao; as outras quatro regras a herdam. */
+  .rot-alta, thead th, .kpi .nome, .menu-painel .titulo, .fu-rotulo, .fu-painel-rot {
+    font-size: var(--rotulo-tamanho); font-weight: var(--rotulo-peso);
+    text-transform: uppercase; letter-spacing: var(--rotulo-tracking);
+  }
   thead th {
     padding: 10px 14px; background: var(--fundo-recuo); color: var(--fraco);
-    font-weight: 650; font-size: 11px; text-transform: uppercase; letter-spacing: .07em;
     border-bottom: 1px solid var(--borda); white-space: nowrap;
   }
   tbody td { padding: 13px 14px; border-bottom: 1px solid var(--borda-suave); }
@@ -225,9 +254,15 @@ export const ESTILO = `
     display: inline-flex; align-items: center; gap: 3px;
   }
   th .ordenar:hover { color: var(--texto); background: none; transform: none; border-color: transparent; }
-  th .ordenar .ic { opacity: .4; }
+  /* A SETA DE ORDENACAO ERA "opacity: .4", e ela e o UNICO sinal de que a coluna
+     e ordenavel. Medido em 14/08: o "--fraco" a 40% sobre o "--fundo-recuo" do
+     cabecalho da 1,68:1 no claro e 2,04:1 no escuro - a WCAG 1.4.11 pede 3. E o
+     estado de repouso e o de onze das doze colunas de qualquer tabela.
+     Opacidade sobre superficie produz uma cor que nenhum teste conhece; o token
+     puro ja esta medido em T1 (4,52:1 sobre o recuo). */
+  th .ordenar .ic { color: var(--fraco); }
   th[aria-sort] .ordenar { color: var(--acento-forte); }
-  th[aria-sort] .ordenar .ic { opacity: 1; }
+  th[aria-sort] .ordenar .ic { color: var(--acento-forte); }
 
   /* ---------------------------------------------------------- formulario */
   .campos { display: grid; gap: var(--gap); grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
@@ -237,12 +272,30 @@ export const ESTILO = `
     background: var(--fundo2); color: var(--texto); font: inherit; font-size: 13.5px;
     transition: border-color .14s ease, box-shadow .14s ease, background-color .14s ease;
   }
-  input::placeholder { color: var(--fraco); opacity: .75; }
-  input:hover:not(:disabled), select:hover:not(:disabled) { border-color: var(--fraco); }
+  /* SEM "opacity". O "--fraco" sozinho da 5,56:1 no claro e 5,10:1 no escuro e
+     passa; com o alfa de 0,75 ele caia para 3,28:1 e 3,54:1, e placeholder e
+     TEXTO - nao tem a isencao que controle inativo tem. O que separa a dica do
+     valor digitado continua existindo: o valor e "--texto", e a distancia entre
+     os dois e a mesma de sempre. */
+  input::placeholder, textarea::placeholder { color: var(--fraco); }
+  /* "textarea" ENTROU NAS TRES LISTAS em 14/08. Ela estava na regra base e na de
+     foco e faltava no hover e no desabilitado - e as tres caixas da aba Documento
+     (instrucoes, linha digitavel, PIX copia-e-cola) sao textareas. */
+  input:hover:not(:disabled), select:hover:not(:disabled), textarea:hover:not(:disabled) {
+    border-color: var(--fraco);
+  }
   input:focus, select:focus, textarea:focus {
     outline: none; border-color: var(--foco); box-shadow: 0 0 0 3px var(--acento-suave);
   }
-  input:disabled, select:disabled { opacity: .55; cursor: default; }
+  /* DESABILITADO E TOKEN, E NAO OPACIDADE. "opacity: .55" sobre o cartao dava
+     3,70:1; e no botao primario, onde o alfa cai sobre o proprio acento, dava
+     2,83:1 no claro e 1,85:1 no escuro - um rotulo que nao se le. A SC 1.4.3
+     isenta controle inativo, entao isto nao era reprovacao formal; era um estado
+     que o resto do sistema desenha com token e este desenhava com transparencia.
+     "--fraco" sobre "--fundo-recuo" ja esta medido em T1. */
+  input:disabled, select:disabled, textarea:disabled {
+    background: var(--fundo-recuo); color: var(--fraco); cursor: default;
+  }
   input[type="file"] { padding: 6px 8px; font-size: 13px; }
   /* O BOTAO DO SELETOR DE ARQUIVO era a ultima peca nativa da tela: "Choose File /
      No file chosen", com desenho e IDIOMA do sistema operacional - aparecia em
@@ -316,10 +369,16 @@ export const ESTILO = `
     font: inherit; font-size: 13.5px; color: var(--texto);
   }
   .interruptor:hover:not(:disabled) { background: none; border-color: transparent; transform: none; color: var(--texto); }
+  /* O CONTORNO DO TRILHO E "--fraco", E NAO "--borda". Medido em 14/08: a
+     "--borda" sobre o cartao da 1,50:1 no claro e 1,23:1 no escuro - e o trilho
+     E o limite de um controle de formulario, que a WCAG 1.4.11 pede a 3:1. No
+     tema claro NENHUM dos dois estados chegava la (ligado dava 2,69:1). Dois
+     interruptores deste sistema decidem "sandbox" e "ativo" do conector de
+     cobranca, que e onde um clique errado emite cobranca de verdade. */
   .interruptor .trilho {
     width: 38px; height: 22px; flex: none; padding: 3px;
-    border-radius: var(--raio-pilula); background: var(--borda);
-    border: 1px solid var(--borda); display: flex; align-items: center;
+    border-radius: var(--raio-pilula); background: var(--fundo-recuo);
+    border: 1px solid var(--fraco); display: flex; align-items: center;
     transition: background-color .2s ease, border-color .2s ease;
   }
   .interruptor .pino {
@@ -327,7 +386,10 @@ export const ESTILO = `
     background: var(--fundo2); box-shadow: var(--sombra-1);
     transition: transform .2s cubic-bezier(.4, 0, .2, 1);
   }
-  .interruptor[aria-checked="true"] .trilho { background: var(--acento); border-color: var(--acento); }
+  /* Ligado: o preenchimento continua sendo o acento - e o sinal da marca -, e
+     quem carrega os 3:1 do CONTORNO e o "--acento-forte", que e o token que
+     existe para o laranja em superficie clara (5,60:1 claro, 6,88:1 escuro). */
+  .interruptor[aria-checked="true"] .trilho { background: var(--acento); border-color: var(--acento-forte); }
   .interruptor[aria-checked="true"] .pino { transform: translateX(16px); }
   .interruptor:disabled { opacity: .55; cursor: default; }
 
@@ -375,7 +437,18 @@ export const ESTILO = `
     background: var(--acento-texto); opacity: 0;
   }
   button.primario:active:not(:disabled)::before { animation: ondular .45s ease-out; }
-  button:disabled { opacity: .5; cursor: default; box-shadow: none; }
+  /* DESABILITADO E TOKEN, pelo mesmo motivo dos campos acima. "opacity: .5" no
+     botao PRIMARIO fazia o alfa cair sobre o proprio acento: 2,83:1 no claro e
+     **1,85:1** no escuro, medido em 14/08. Um botao desabilitado tem de parecer
+     desabilitado E continuar legivel - quem le "Compor os 28 documentos" apagado
+     precisa saber o que esta apagado para descobrir o que destrava. O "!important"
+     nao entra: a regra vem depois da do primario e tem a classe a mais. */
+  button:disabled, button.primario:disabled {
+    background: var(--fundo-recuo); color: var(--fraco); border-color: var(--borda);
+    cursor: default; box-shadow: none; opacity: 1; transform: none;
+  }
+  /* E os dois enfeites do primario nao acontecem quando ele esta desabilitado. */
+  button.primario:disabled::after, button.primario:disabled::before { display: none; }
   button.discreto { border-color: transparent; background: none; box-shadow: none; color: var(--fraco); }
   button.discreto:hover:not(:disabled) { background: var(--fundo-hover); color: var(--texto); border-color: transparent; }
 
@@ -423,7 +496,8 @@ export const ESTILO = `
   .marca.ok { background: var(--ok-fundo); color: var(--ok); }
   .marca.pendente { background: var(--erro-fundo); color: var(--erro); }
   .marca.nao_medido { background: var(--alerta-fundo); color: var(--alerta); }
-  .marca:hover .ic { transform: scale(1.18); }
+  /* SEM HOVER. A pilula e ROTULO, nao controle - "Marca" renderiza um "<span>".
+     Ver a nota do ".kpi" acima: movimento sob o mouse e promessa de clique. */
 
   /* ------------------------------------------------------ busca e filtros
      A AREA DE FILTRO E UMA SUPERFICIE, nao um punhado de campos soltos: cartao
@@ -455,16 +529,18 @@ export const ESTILO = `
     background: var(--fundo2); padding: 14px 16px; box-shadow: var(--sombra-2);
     transition: box-shadow .18s ease, transform .18s ease;
   }
-  .kpi:hover { box-shadow: var(--sombra-3); transform: translateY(-2px); }
+  /* O HOVER DO CARTAO SAIU EM 14/08, e o motivo e que ele MENTIA. "Kpi" renderiza
+     um "<div>" sem "onClick", sem "href", sem "tabIndex" e sem "role" - nao ha o
+     que clicar. Um cartao que levanta 2px e assume "--sombra-3" (o degrau que o
+     "tema.ts" reserva ao que FLUTUA sobre tudo: menu suspenso, popover) promete
+     interacao que nao existe, e gasta a profundidade mais alta da escala num
+     elemento estatico. O dia em que o KPI virar um filtro clicavel, o hover
+     volta junto com "role", "tabIndex" e ":focus-visible". */
   .kpi .marca-dagua {
     position: absolute; right: 10px; bottom: 6px; color: var(--acento);
     opacity: .11; pointer-events: none;
   }
-  .kpi:hover .marca-dagua { opacity: .16; }
-  .kpi .nome {
-    font-size: 11px; color: var(--fraco); text-transform: uppercase;
-    letter-spacing: .07em; font-weight: 650; margin-bottom: 3px;
-  }
+  .kpi .nome { color: var(--fraco); margin-bottom: 3px; }
   .kpi .valor { font-size: 23px; font-weight: 680; letter-spacing: -0.02em; position: relative; }
   .kpi .valor.sim-nao { display: flex; align-items: center; gap: 8px; font-size: 20px; }
 
@@ -535,67 +611,141 @@ export const ESTILO = `
     display: flex; align-items: center; gap: 4px;
     border-bottom: 1px solid var(--borda); margin-bottom: var(--gap); padding-bottom: 0;
   }
+  /* ============================================================================
+     A ESPECIFICIDADE DAS ABAS, e ela foi DEFEITO MEDIDO em 14/08.
+     A primeira versao escrevia ".fu-aba:hover { color: var(--texto) }" e essa
+     regra NUNCA VALEU: "button:hover:not(:disabled)" la em cima e (0,2,1) e
+     ".fu-aba:hover" e (0,2,0). Quem ganhava era o botao generico - a aba pegava
+     o laranja de link, a sombra do segundo degrau e o "translateY(-1px)" que
+     LEVANTA o botao. Uma aba que flutua ao passar o mouse nao e uma aba.
+     Consertado com ":not(:disabled)" nos dois lados: (0,3,0) vence (0,2,1).
+     O invariante I7 de "web/tests/interface.ts" prende isto. */
   .fu-aba {
     background: none; border: none; border-bottom: 2px solid transparent;
-    padding: 9px 14px; margin-bottom: -1px; border-radius: 0;
+    padding: 9px 14px; margin-bottom: -1px; border-radius: var(--raio-pequeno) var(--raio-pequeno) 0 0;
     font-size: 13.5px; font-weight: 500; color: var(--fraco); cursor: pointer;
+    box-shadow: none;
+    transition: color .16s ease, background-color .16s ease, border-color .16s ease;
   }
-  .fu-aba:hover { color: var(--texto); }
-  .fu-aba.ativa { color: var(--texto); border-bottom-color: var(--acento); font-weight: 600; }
+  /* O MESMO HOVER DA BARRA DE NAVEGACAO: tinta cheia mais lastro de superficie.
+     O sistema inteiro sinaliza "clicavel" com FUNDO; mudar so a cor do texto
+     deixava esta area falando outra lingua que o resto das treze telas. */
+  .fu-aba:hover:not(:disabled) {
+    color: var(--texto); background: var(--fundo-hover);
+    border-color: transparent; border-bottom-color: var(--borda);
+    box-shadow: none; transform: none;
+  }
+  .fu-aba:active:not(:disabled) { transform: none; box-shadow: none; }
+  .fu-aba[aria-selected="true"] {
+    color: var(--texto); border-bottom-color: var(--acento); font-weight: 600;
+    background: var(--acento-suave);
+  }
+  .fu-aba[aria-selected="true"]:hover:not(:disabled) {
+    background: var(--acento-suave); border-bottom-color: var(--acento);
+  }
   .fu-aba-traco { width: 18px; height: 1px; background: var(--borda); }
 
   /* A COLUNA DA ESQUERDA E MAIS ESTREITA: nela ficam os dois envios e o painel de
      conferencia; a direita e a que se le campo a campo. Abaixo de 1100px as duas
      empilham - a esquerda primeiro, que e por onde o trabalho comeca. */
-  .fu-grade { display: grid; grid-template-columns: 0.85fr 1.15fr; gap: var(--gap); align-items: start; }
-  .fu-coluna { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
+  .fu-grade { display: grid; grid-template-columns: 0.85fr 1.15fr; gap: var(--gap-secao); align-items: start; }
+  .fu-coluna { display: flex; flex-direction: column; gap: var(--gap-secao); min-width: 0; }
   @media (max-width: 1100px) { .fu-grade { grid-template-columns: 1fr; } }
 
-  .fu-rotulo {
-    font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
-    color: var(--fraco); font-weight: 600; margin-bottom: 8px;
-  }
+  .fu-rotulo { color: var(--fraco); margin-bottom: 8px; }
   /* A AREA DE ENVIO E UM <label> e nao um <div> com "onClick": o input de arquivo
      fica escondido dentro dela, e assim o teclado chega ao controle - clicar na
      area e clicar no input, sem uma linha de JavaScript no meio. */
+  /* A BORDA E 2px E "--fraco", e as duas coisas foram medidas em 14/08. A
+     "--borda" sobre o cartao da 1,50:1 no claro e 1,23:1 no escuro, e este
+     tracejado E o contorno do controle - 1.4.11 pede 3:1. "--fraco" da 5,56:1 e
+     5,10:1. E o "1.5px" era a unica espessura fracionaria do arquivo inteiro (as
+     outras sao 1, 2, 3 e 4), entao nao saia de lugar nenhum. */
   .fu-solta {
-    display: block; border: 1.5px dashed var(--borda); border-radius: var(--raio-cartao);
+    display: block; border: 2px dashed var(--fraco); border-radius: var(--raio-cartao);
     padding: 22px 16px; text-align: center; cursor: pointer;
     transition: border-color .15s ease, background .15s ease;
   }
+  /*
+   * O INPUT DE ARQUIVO E INVISIVEL E FOCAVEL, e ate 14/08 ele era so invisivel.
+   *
+   * Ele estava com "display: none" num "style" inline, e o comentario acima
+   * afirmava que "assim o teclado chega ao controle". Nao chegava: elemento com
+   * "display: none" sai da ordem de tabulacao E da arvore de acessibilidade, e o
+   * "<label>" tambem nao e focavel. As duas areas de envio da aba - o PDF da
+   * Equatorial e o boleto do Sicoob - eram inalcancaveis sem mouse, e a regra
+   * ":focus-within" logo abaixo, escrita para elas, nunca disparou uma vez.
+   *
+   * A tecnica e a padrao: sai do fluxo, ocupa 1px e fica transparente. O
+   * elemento continua no DOM, continua focavel e continua sendo o que o label
+   * aciona.
+   */
+  .fu-solta input[type="file"] {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+  }
   .fu-solta:hover { border-color: var(--acento); background: var(--acento-suave); }
-  .fu-solta:focus-within { border-color: var(--acento); outline: 2px solid var(--acento); outline-offset: 2px; }
-  .fu-solta-titulo { font-size: 14px; font-weight: 600; }
+  /* O ANEL DE FOCO E "--foco" E NAO "--acento", e a diferenca e medida: o Orange
+     sobre o cartao branco da 2,41:1 e a WCAG 1.4.11 pede 3 para elemento
+     nao-textual. "--foco" existe exatamente para isso e da 3,43:1. Era a unica
+     regra do sistema que desenhava foco com outra cor - o resto usa "--foco"
+     desde 29/07, e a T2 da suite do tema mede esse token contra toda superficie. */
+  .fu-solta:focus-within { border-color: var(--acento); outline: 2px solid var(--foco); outline-offset: 2px; }
+  /* AS ESCALAS DE TITULO SAO AS DO SISTEMA. Eram tres novas nesta aba - 13px/600,
+     14px/600 e 15px/600 -, e nenhuma usava o peso 650 do "h2"/"h3". Agora as duas
+     de secao sao exatamente "h3" (14px/650). */
+  .fu-solta-titulo, .fu-secao-tit { font-size: 14px; font-weight: 650; }
   .fu-solta-sub { font-size: 12.5px; color: var(--fraco); margin-top: 4px; line-height: 1.4; }
-  .fu-status { font-size: 12.5px; color: var(--fraco); margin-top: 10px; line-height: 1.45; }
+  /* O STATUS LEVA ICONE, e nao so cor. E a restricao 3 do tema - "cor nunca e o
+     unico sinal" -, que ate 14/08 valia so para a pilula ".marca" e para o
+     ".aviso": estas duas classes diziam sucesso e falha com 12,5px de texto
+     colorido e nada mais. Daltonico lia as duas iguais. */
+  .fu-status { display: flex; align-items: flex-start; gap: 6px;
+               font-size: 12.5px; color: var(--fraco); margin-top: 10px; line-height: 1.45; }
+  .fu-status > .ic { margin-top: 2px; }
   .fu-status.ok { color: var(--ok); }
   .fu-status.alerta { color: var(--alerta); }
 
   /* O PAINEL DO VALOR A GERAR. E o unico bloco desta tela com fundo cheio, e o
      motivo e de uso: quem opera abre a aba, sobe o PDF e precisa deste numero para
-     digitar no internet banking. Ele nao pode estar no meio de trinta campos. */
+     digitar no internet banking. Ele nao pode estar no meio de trinta campos.
+
+     ELE USA "--topo", E NAO "--texto" COMO FUNDO. A primeira versao escrevia
+     "background: var(--texto); color: var(--fundo)" - e isso so funcionava no
+     tema CLARO por coincidencia, porque ali "--texto" e o Navy. No escuro
+     "--texto" e o Creme: o painel virava um bloco claro dentro de uma tela
+     escura, com a tinta navy por cima. E o par nao era medido por teste nenhum,
+     porque a T1 mede tinta sobre SUPERFICIE e "--texto" nao e superficie.
+
+     "--topo" e a superficie dominante da marca nos DOIS temas (Navy no claro, o
+     navy afundado no escuro), ja carrega a tinta que pousa nela ("--topo-texto")
+     e a tinta apagada ("--topo-fraco"), e as tres estao medidas em T6/T6b. Ver a
+     nota alargada no "tema.ts". */
   .fu-painel {
-    background: var(--texto); color: var(--fundo);
+    background: var(--topo); color: var(--topo-texto);
     border-radius: var(--raio-cartao); padding: 16px 18px;
+    box-shadow: var(--sombra-2);
   }
-  .fu-painel-rot { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; opacity: .7; }
+  /* OPACIDADE SAIU, TOKEN ENTROU. "opacity: .7" sobre uma superficie escura
+     produz uma cor que nenhum teste conhece - e o contraste dela muda junto com
+     o fundo, sem ninguem medir. "--topo-fraco" e o token que ja existe para
+     "tinta apagada sobre a faixa dominante", com 4,54:1 medido em T6b. */
+  .fu-painel-rot { color: var(--topo-fraco); }
   .fu-painel-total { font-size: 30px; font-weight: 700; line-height: 1.05; margin-top: 4px; }
-  .fu-painel-sub { font-size: 12.5px; opacity: .75; margin-top: 4px; }
+  .fu-painel-sub { font-size: 12.5px; color: var(--topo-fraco); margin-top: 4px; }
   .fu-painel-par {
     display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
-    margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--borda);
+    margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--topo-veu-forte);
   }
-  .fu-painel-cap { font-size: 11px; opacity: .7; }
+  .fu-painel-cap { font-size: 11px; color: var(--topo-fraco); }
   .fu-painel-val { font-size: 15px; font-weight: 600; margin-top: 2px; }
 
   .fu-cabeca { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
-  .fu-secao { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--borda); }
-  .fu-secao-tit { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
-  .fu-alerta {
-    border-left: 3px solid var(--alerta); background: var(--alerta-fundo);
-    padding: 9px 12px; margin-bottom: 8px; font-size: 13px; line-height: 1.45;
-    border-radius: 0 var(--raio) var(--raio) 0;
-  }
+  /* A margem do titulo mora aqui e nao num "style" do JSX: margem de titulo
+     escrita na tela e o comeco de doze valores diferentes. */
+  .fu-cabeca h2 { margin: 0; }
+  .fu-secao { margin-top: var(--gap-secao); padding-top: 16px; border-top: 1px solid var(--borda); }
+  .fu-secao-tit { margin-bottom: 10px; }
   /* "input, select, textarea" la em cima ja da fundo, borda, tinta e anel de foco.
      Aqui so entra o que e proprio da area: ela cresce na vertical, e a variante
      monoespacada quebra em qualquer ponto - linha digitavel e copia-e-cola sao
@@ -614,15 +764,36 @@ export const ESTILO = `
   }
   .fu-hist-un { font-size: 11px; color: var(--fraco); flex: none; }
 
-  .fu-barra { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: var(--gap); }
+  /* A BARRA DE ACAO E UMA SUPERFICIE, como a ".ferramentas" das outras telas.
+     As duas hospedam a mesma coisa - contexto a esquerda, acao a direita - e
+     estavam desenhadas diferente: uma como cartao com borda e sombra, esta como
+     dois elementos soltos no fundo da pagina. Duas barras de acao com desenhos
+     diferentes na mesma tela e o que o pedido do dono chama de falta de
+     padronizacao. */
+  .fu-barra {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    margin-bottom: var(--gap-secao); padding: 10px 12px;
+    background: var(--fundo2); border: 1px solid var(--borda);
+    border-radius: var(--raio-cartao); box-shadow: var(--sombra-1);
+  }
 
   /* O CADASTRO DOBRADO. O "summary" continua "display: list-item" - e o que
      desenha o triangulo nativo de abrir/fechar, e ele some com "display: flex".
      O icone e que muda: ".ic" e "display: block" no arquivo inteiro (e certo, ele
      vive dentro de flex), e dentro de um list-item isso o joga para a linha de
      baixo. Aqui ele volta a ser inline. */
-  .fu-cadastro > summary { cursor: pointer; font-weight: 600; font-size: 15px; }
+  .fu-cadastro > summary {
+    cursor: pointer; font-weight: 600; font-size: 15px;
+    padding: 4px 6px; margin: -4px -6px; border-radius: var(--raio-pequeno);
+    transition: background-color .14s ease, color .14s ease;
+  }
   .fu-cadastro > summary .ic { display: inline-block; vertical-align: -3px; }
+  /* O SUMMARY E FOCAVEL POR TECLADO E NAO TINHA ANEL NENHUM. A regra geral de
+     foco la em cima alcanca "a", "button", "th .ordenar" e ".interruptor" - e o
+     "summary" nao e nenhum dos quatro. Quem navega por Tab chegava nele sem
+     nenhum sinal na tela de que havia chegado. */
+  .fu-cadastro > summary:hover { background: var(--fundo-hover); }
+  .fu-cadastro > summary:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px; }
 
   @media (prefers-reduced-motion: reduce) {
     /* WCAG 2.3.3. Nao e cortesia: ha gente para quem movimento na tela e
@@ -674,11 +845,13 @@ export const ESTILO = `
      nao muda com o zoom do navegador. A folha e escalada pelo "transform" do
      palco, entao o que se ve na tela e proporcao exata do que sai.
 
-     NENHUMA COR NOVA. As cinco usadas aqui - #14213D, #F6F2EA, #E8843C, #8F939D,
-     #E4DFD4 - e o #fff sao exatamente as seis que "web/tests/interface.ts" ja
-     conhece. O "#8F939D" nos rotulos e a decisao da "Q-DOCG3-07", tomada em
-     14/08: vale como TINTA em papel (4,02:1 contra branco) e nao vale no cromo de
-     tela, onde a interface continua com o "--fraco" derivado. */
+     AS TINTAS DO PAPEL ESTAO NOMEADAS UMA A UMA em "web/tests/interface.ts"
+     (I1c) e MEDIDAS uma a uma em "web/tests/tema.ts" (T7). A lista mudou em
+     14/08 por MEDICAO, e a correcao esta descrita na faixa de pagamento la
+     embaixo: o Gray puro da G3 que estava aqui dava 3,08:1 contra o branco e
+     2,75:1 contra o creme - e nao os "4,02:1" que este comentario afirmava. Ele
+     saiu, e entrou o "#66686F", que e o valor que a INTERFACE ja usava como
+     "--fraco" e que passa nos dois fundos do papel (5,56:1 e 4,98:1). */
   .g3 {
     width: 210mm; min-height: 297mm; padding: 13mm 15mm;
     background: #fff; color: #14213D;
@@ -692,16 +865,16 @@ export const ESTILO = `
   .g3-topo img { height: 30pt; width: auto; display: block; }
   .g3-assinatura {
     font-size: 9pt; font-weight: 500; letter-spacing: .26em;
-    text-transform: uppercase; color: #8F939D; white-space: nowrap;
+    text-transform: uppercase; color: #66686F; white-space: nowrap;
   }
-  .g3-emissor { text-align: right; font-size: 8.5pt; line-height: 1.5; color: #8F939D; max-width: 92mm; }
+  .g3-emissor { text-align: right; font-size: 8.5pt; line-height: 1.5; color: #66686F; max-width: 92mm; }
   .g3-cliente { background: #F6F2EA; padding: 10pt 14pt; margin-top: 9pt; }
   .g3-cliente-topo {
     display: grid; grid-template-columns: 1.6fr 1fr; gap: 10pt 18pt;
     padding-bottom: 9pt; border-bottom: 1px solid #E4DFD4;
   }
   .g3-rot {
-    font-size: 7.5pt; letter-spacing: .14em; text-transform: uppercase; color: #8F939D;
+    font-size: 7.5pt; letter-spacing: .14em; text-transform: uppercase; color: #66686F;
   }
   .g3-nome { font-size: 15pt; font-weight: 600; line-height: 1.2; }
   .g3-doc { font-size: 10pt; margin-top: 2pt; }
@@ -734,7 +907,7 @@ export const ESTILO = `
      faltam entrarem, sem nada precisar ser recalculado. */
   .g3-rodape {
     margin-top: auto; padding-top: 12pt;
-    font-size: 7.5pt; color: #8F939D;
+    font-size: 7.5pt; color: #66686F;
     display: flex; justify-content: space-between; gap: 12pt;
   }
   /* A TABELA DE VALORES. Grade de tres colunas em vez de <table>: o valor alinha
@@ -760,7 +933,7 @@ export const ESTILO = `
   .g3-tabela-val { text-align: right; font-weight: 600; white-space: nowrap; }
   /* AUSENTE FICA CINZA E NAO SOME: o travessao e informacao — diz que o campo
      existe e o dado nao chegou. Some-lo faria a linha parecer nunca ter existido. */
-  .g3-tabela-val.ausente { color: #8F939D; font-weight: 400; }
+  .g3-tabela-val.ausente { color: #66686F; font-weight: 400; }
 
   /* ------------------------------- OS TRES CARTOES (14/08/2026, aba unificada)
      A COMPARACAO E ENERGIA CONTRA ENERGIA, e o desenho tem de dizer isso sem
@@ -776,13 +949,13 @@ export const ESTILO = `
   .g3-cartao.sem .g3-cartao-val { opacity: .55; text-decoration: line-through; text-decoration-thickness: 1pt; }
   .g3-cartao.desconto { background: #E8843C; border-color: #E8843C; }
   .g3-cartao.com { background: #14213D; border-color: #14213D; color: #fff; }
-  .g3-cartao-rot { font-size: 7.5pt; letter-spacing: .12em; text-transform: uppercase; color: #8F939D; }
+  .g3-cartao-rot { font-size: 7.5pt; letter-spacing: .12em; text-transform: uppercase; color: #66686F; }
   .g3-cartao.desconto .g3-cartao-rot { color: #14213D; }
   .g3-cartao.com .g3-cartao-rot { color: #E4DFD4; }
   .g3-cartao-linha { display: flex; align-items: baseline; justify-content: space-between; gap: 5pt; }
   .g3-cartao-pct { font-size: 9pt; font-weight: 700; color: #14213D; white-space: nowrap; }
   .g3-cartao-val { font-size: 17pt; font-weight: 700; margin-top: 3pt; line-height: 1.05; }
-  .g3-cartao-nota { font-size: 7.5pt; color: #8F939D; margin-top: 3pt; line-height: 1.35; }
+  .g3-cartao-nota { font-size: 7.5pt; color: #66686F; margin-top: 3pt; line-height: 1.35; }
 
   /* -------------------------------------------------- o detalhamento da fatura
      QUATRO COLUNAS EM GRADE, pelo mesmo motivo de ".g3-tabela": a descricao cresce
@@ -800,7 +973,7 @@ export const ESTILO = `
   }
   .g3-det-cab {
     font-size: 7pt; letter-spacing: .12em; text-transform: uppercase;
-    color: #8F939D; padding: 3pt 0;
+    color: #66686F; padding: 3pt 0;
   }
   .g3-det-secao {
     font-size: 8.5pt; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
@@ -817,10 +990,10 @@ export const ESTILO = `
      e pintaria de cinza um texto que vive sobre a barra navy. */
   .g3-det .dir, .g3-hist .dir { text-align: right; }
   .g3-det .forte { font-weight: 600; }
-  .g3-det .fraca, .g3-hist-tit .fraca { color: #8F939D; font-weight: 400; }
+  .g3-det .fraca, .g3-hist-tit .fraca { color: #66686F; font-weight: 400; }
   /* O CHEIO TACHADO ACIMA DO COM DESCONTO. Aqui o risco cabe - e 7,5pt, e o
      proposito e mostrar a diferenca entre os dois, nao ser lido de longe. */
-  .g3-det .tachado { font-size: 7.5pt; color: #8F939D; text-decoration: line-through; }
+  .g3-det .tachado { font-size: 7.5pt; color: #66686F; text-decoration: line-through; }
 
   /* ----------------------------------------------------- a FOLHA 2 (14/08/2026)
      A segunda folha nao repete o cabecalho inteiro: ela se identifica em uma linha
@@ -844,18 +1017,30 @@ export const ESTILO = `
   }
   .g3-hist-col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
   .g3-hist-num {
-    font-size: 6pt; text-align: center; color: #8F939D; padding-bottom: 1.5pt;
+    font-size: 6pt; text-align: center; color: #66686F; padding-bottom: 1.5pt;
     font-variant-numeric: tabular-nums;
   }
   /* "min-height" para que um mes de consumo quase zero continue sendo uma barra e
-     nao um vao - a coluna precisa existir para o rotulo do mes ter dono. */
-  .g3-hist-barra { background: #E4DFD4; min-height: 1.5pt; }
+     nao um vao - a coluna precisa existir para o rotulo do mes ter dono.
+
+     A BARRA GANHOU CONTORNO EM 14/08, e o motivo e medido: o preenchimento
+     "#E4DFD4" da **1,33:1** contra o branco do papel e o "#E8843C" da 2,69:1 - e
+     a barra E O DADO, o que a WCAG 1.4.11 pede a 3:1 para objeto grafico
+     necessario a compreensao. A revisao de tintas do mesmo dia consertou os
+     TEXTOS do papel e nao tinha tocado nestas duas superficies.
+
+     O conserto e contorno e nao troca de preenchimento, e a razao e a
+     impressora: um filete Navy de 0,4pt sobrevive a impressao em PRETO E BRANCO,
+     que e o pior caso real da folha do cliente, e ao toner economico, que e o
+     segundo. Trocar o cinza por um mais escuro resolveria o contraste e apagaria
+     a distincao entre a barra do mes atual e as demais. */
+  .g3-hist-barra { background: #E4DFD4; min-height: 1.5pt; border: 0.4pt solid #14213D; }
   .g3-hist-barra.atual { background: #E8843C; }
   .g3-hist-meses {
     display: flex; gap: 2pt; margin-top: 2.5pt;
     border-top: 1px solid #E4DFD4; padding-top: 2.5pt;
   }
-  .g3-hist-meses > div { flex: 1; font-size: 6pt; text-align: center; color: #8F939D; }
+  .g3-hist-meses > div { flex: 1; font-size: 6pt; text-align: center; color: #66686F; }
 
   /* Os tres indicadores. O da economia ocupa duas colunas: e o numero pelo qual o
      cliente abre a segunda folha. */
@@ -863,8 +1048,8 @@ export const ESTILO = `
   .g3-ind { border: 1px solid #E4DFD4; padding: 8pt 10pt; }
   .g3-ind.destaque { background: #F6F2EA; border-color: #E4DFD4; }
   .g3-ind-val { font-size: 13pt; font-weight: 700; margin-top: 2pt; }
-  .g3-ind-val.grande { font-size: 21pt; color: #E8843C; line-height: 1.05; }
-  .g3-ind-nota { font-size: 7pt; color: #8F939D; margin-top: 2pt; line-height: 1.3; }
+  .g3-ind-val.grande { font-size: 21pt; color: #995728; line-height: 1.05; }
+  .g3-ind-nota { font-size: 7pt; color: #66686F; margin-top: 2pt; line-height: 1.3; }
 
   /* As duas pecas que a faixa de 12/08 nao tinha, porque naquele caminho o boleto
      vinha sem instrucoes e o codigo de barras ainda era a "Q-DOCG3-06" em aberto. */
@@ -880,7 +1065,7 @@ export const ESTILO = `
   .g3-rodape-2 {
     margin-top: auto; padding-top: 10pt; border-top: 1px solid #E4DFD4;
     display: grid; grid-template-columns: 1fr 1.2fr; gap: 12pt;
-    font-size: 7pt; color: #8F939D; line-height: 1.45;
+    font-size: 7pt; color: #66686F; line-height: 1.45;
   }
   .g3-tel-num { font-size: 13pt; font-weight: 700; color: #14213D; }
 
@@ -900,18 +1085,48 @@ export const ESTILO = `
      beneficiario, nosso numero, vencimento, valor, QR e linha digitavel ja existem.
      Ver "PLANO-documento-modelo-g3-2026-08-12.md" §6.
 
-     AS DUAS CORES NOVAS DA EXCECAO NOMEADA, e elas doem de proposito (I1c):
+     ============================================================================
+     AS TINTAS DO PAPEL, E AS DUAS QUE MUDARAM EM 14/08 POR MEDICAO
 
-       #E8843C  o Orange da marca, e no papel ele tem UM uso so: o valor a pagar.
-                No modelo G3 e o unico numero colorido da faixa, e e o que a pessoa
-                procura primeiro. Puxar --acento faria a mesma fatura sair laranja
-                no tema claro e DOURADA no escuro - o defeito que este bloco inteiro
-                existe para impedir;
-       #8F939D  o Gray da marca, nos rotulos caixa-alta. Em TELA ele reprova AA
-                (2,75:1 sobre o creme, medido em "tema.ts") e por isso a interface
-                usa o "--fraco" derivado. Aqui e tinta em PAPEL, contra branco:
-                4,02:1, e o par que a interface reprovava nao e este. A distincao
-                esta registrada na "Q-DOCG3-07".
+     Este bloco carregava dois numeros errados, escritos aqui e repetidos na
+     "Q-DOCG3-07" e no I1c da suite de interface. Eles foram REMEDIDOS com a
+     mesma calculadora WCAG que a suite do tema usa, e as duas afirmacoes
+     caem:
+
+       "o Gray puro contra branco: 4,02:1"   ->  medido: 3,08:1   REPROVA (AA pede 4,5)
+       "#E8843C so no valor a pagar"     ->  medido: 2,69:1 no branco, 2,41:1 no
+                                             creme. Nos DOIS usos - a faixa de
+                                             pagamento (13pt) e o "voce ja
+                                             economizou" (21pt) - REPROVA
+
+     Isto nao era detalhe de estilo: as duas tintas imprimem na fatura QUE VAI AO
+     CLIENTE, e a segunda pinta justamente o numero que o cliente procura. Um
+     rotulo cinza a 3:1 em impressora domestica, com toner economico, e um rotulo
+     que nao se le.
+
+     AS QUATRO TINTAS DE HOJE, e a lista continua fechada e continua doendo:
+
+       #14213D  Navy. Texto e barras cheias. 15,97:1 no branco, 14,31:1 no creme
+       #66686F  o cinza dos rotulos caixa-alta. E O MESMO VALOR do "--fraco" da
+                interface, e nao um cinza novo: ele ja tinha sido derivado do
+                Gray puro da G3 em 28/07 por este mesmo motivo, e ja estava
+                medido. 5,10:1 no branco e 4,57:1 no creme - passa nos dois
+                fundos que o papel tem
+       #995728  o laranja QUANDO ELE E TEXTO. Tambem nao e cor nova: e o
+                "--acento-forte" do tema claro, o degrau do Orange achado por
+                busca em 06/08 exatamente para o laranja pousar em superficie
+                clara. 5,60:1 no branco e 5,02:1 no creme
+       #E8843C  o Orange, e agora ele tem UM papel so no papel: SUPERFICIE
+                cheia - a faixa do aviso, o cartao do desconto e a barra do mes
+                atual no grafico. Sobre ele pousa o Navy, 5,93:1. Como TEXTO ele
+                saiu
+
+     E A REGRA QUE GOVERNA O BLOCO NAO MUDOU: sao LITERAIS e nao "var(--...)". O
+     documento e IMPRESSO, e puxar token de tema faria a mesma fatura sair de
+     duas cores conforme o tema de quem mandou imprimir. Que os valores COINCIDAM
+     com dois tokens do tema claro e consequencia de os dois terem sido derivados
+     do mesmo lugar pelo mesmo criterio - nao e uma ligacao, e nao ha "var()"
+     aqui.
 
      A CAIXA NAO PODE QUEBRAR NO MEIO: "break-inside: avoid" vale para o dia em que
      o documento tiver mais de uma folha. Hoje ele tem uma, e a regra nao custa. */
@@ -936,10 +1151,10 @@ export const ESTILO = `
   }
   .faixa-pgto-campos > :first-child { margin-right: auto; }
   .faixa-pgto-rot {
-    text-transform: uppercase; letter-spacing: .12em; font-size: 6.5pt; color: #8F939D;
+    text-transform: uppercase; letter-spacing: .12em; font-size: 6.5pt; color: #66686F;
   }
   .faixa-pgto-val { font-size: 10pt; font-weight: 600; }
-  .faixa-pgto-total { font-size: 13pt; font-weight: 700; color: #E8843C; }
+  .faixa-pgto-total { font-size: 13pt; font-weight: 700; color: #995728; }
   /* As duas formas de pagar, lado a lado. "1fr" cada, e a divisoria e a borda da
      segunda - nao um filete separado, que somaria largura e desalinharia o par. */
   .faixa-pgto-vias { display: grid; gap: 0; flex: 1; min-height: 0; }
@@ -962,10 +1177,10 @@ export const ESTILO = `
     font-family: var(--fonte-mono); font-size: 8.5pt; font-weight: 600;
     letter-spacing: .02em; text-align: center;
   }
-  .faixa-pgto-nota { font-size: 7pt; color: #8F939D; }
+  .faixa-pgto-nota { font-size: 7pt; color: #66686F; }
   .faixa-pgto-rodape {
     padding: 1.5mm 3mm; border-top: 1px solid #E4DFD4;
-    font-size: 6pt; letter-spacing: .04em; color: #8F939D; line-height: 1.35;
+    font-size: 6pt; letter-spacing: .04em; color: #66686F; line-height: 1.35;
   }
 
   @media print {

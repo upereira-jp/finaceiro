@@ -51,7 +51,17 @@ export const TELAS: readonly Tela[] = [
   { rota: '/contratos',  titulo: 'Contratos',  icone: 'contratos',  grupo: 'cadastro' },
   { rota: '/usinas',     titulo: 'Usinas',     icone: 'usinas',     grupo: 'cadastro' },
   { rota: '/donos',      titulo: 'Donos',      icone: 'donos',      grupo: 'cadastro' },
-  { rota: '/tarifas',    titulo: 'Tarifas',    icone: 'tarifas',    grupo: 'cadastro' },
+  /*
+   * A ABA TARIFAS SAIU EM 14/08/2026, por decisao do dono: *"remova
+   * definitivamente a aba Tarifas, pois ela ja nao possui finalidade e apenas
+   * gera redundancia."*
+   *
+   * O QUE A SUBSTITUI, e a medicao que decidiu: a tarifa e R$/kWh de CADA UC e
+   * se preenche na aba Unidades (migration 30). A aba servia uma tabela com UMA
+   * linha - Equatorial, R$ 1,130000 - contra os R$ 1,185396 medidos na fatura
+   * real, e ninguem percebeu porque zero faturas foram emitidas. A granularidade
+   * real e por cliente: 35 UCs a 1,130000, 4 a 1,16 e 2 a 1,180000.
+   */
   { rota: '/carteira',   titulo: 'Carteira',   icone: 'carteira',   grupo: 'dinheiro' },
   { rota: '/faturas',    titulo: 'Faturas',    icone: 'faturas',    grupo: 'dinheiro' },
   { rota: '/cobranca',   titulo: 'Cobrança',   icone: 'cobranca',   grupo: 'dinheiro' },

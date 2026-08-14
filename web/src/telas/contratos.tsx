@@ -36,8 +36,8 @@
 // `rascunhar`, porque a R20-b congela o tier no fechamento.
 
 import { useState } from 'react';
-import { api, ErroDaApi, type Contrato, type UnidadeConsumidora, type Originador, type Cliente } from '../api.ts';
-import { emLotes, useAcao, useDados } from '../dados.ts';
+import { api, type Contrato, type UnidadeConsumidora, type Originador, type Cliente } from '../api.ts';
+import { useAcao, useDados } from '../dados.ts';
 import {
   Pagina, Aviso, Tabela, Campo, ThOrd, Marca, Icone, useOrdenacao, ordenar, rotulo,
 } from '../ui.tsx';
@@ -67,28 +67,33 @@ export function TelaContratos() {
   };
   const trava = motivoDaTrava(estado);
 
-  // Um contrato vigente por UC (R14). A lista mostra so as que estao livres:
-  // oferecer a UC ocupada faria o erro sair como 409 depois de preencher tudo.
-  //
-  // SO O 404 VIRA `null`. Um `catch` que engole tudo transformaria falha de rede,
-  // 401 de token vencido e 500 em "esta UC nao tem contrato" - a armadilha que o
-  // cabecalho do `dados.ts` descreve, com contrato como exemplo literal. O preco
-  // seria pago aqui: a tabela mostraria "Nenhum contrato" com contratos no banco,
-  // e a UC ja contratada voltaria para a lista de livres. Qualquer outro erro
-  // sobe, e o `useDados` o poe na tela - o <Aviso> de `vigentes.erro` ja existia
-  // esperando por ele, e nunca recebia nada.
-  const vigentes = useDados<Record<string, Contrato | null>>(async () => {
-    const todas = await api.get<UnidadeConsumidora[]>('/unidades-consumidoras?limite=500');
-    const pares = await emLotes(todas, async (u) => {
-      try {
-        return [u.id, await api.get<Contrato>(`/unidades-consumidoras/${u.id}/contrato-vigente`)] as const;
-      } catch (e: unknown) {
-        if (e instanceof ErroDaApi && e.status === 404) return [u.id, null] as const;
-        throw e;
-      }
-    });
-    return Object.fromEntries(pares);
-  });
+  /*
+   * Um contrato vigente por UC (R14). A lista mostra so as que estao livres:
+   * oferecer a UC ocupada faria o erro sair como 409 depois de preencher tudo.
+   *
+   * ==========================================================================
+   * UMA REQUISICAO, E NAO UMA POR UC — trocado em 14/08.
+   *
+   * Isto era: lista as UCs (1 requisicao) e depois **uma requisicao HTTP por
+   * UC** para descobrir o contrato vigente de cada uma, seis em paralelo. Com as
+   * 41 UCs de hoje sao 42 requisicoes; no teto atual de `?limite=500` sao 501, e
+   * cada uma abre transacao, resolve login e consulta.
+   *
+   * `GET /contratos-vigentes` devolve o mapa `{uc_id: contrato}` numa consulta
+   * so, servida pelo indice unico cheio `contrato_vigente_unico_por_uc` sobre a
+   * coluna gerada `uc_vigente` — que e a mesma definicao de "vigente" que o
+   * banco usa para impedir dois contratos na mesma UC.
+   *
+   * E O `catch` DE 404 SAIU JUNTO, com o comentario que o justificava: nao ha
+   * mais 404 para engolir, porque nao ha mais uma requisicao por UC. O cuidado
+   * que ele descrevia continua valendo em outros lugares e esta escrito no
+   * cabecalho de `dados.ts`, que e onde ele pertence.
+   *
+   * `ucs.dado` NAO E REBUSCADO: a lista ja esta em maos logo acima, e pedi-la de
+   * novo era a segunda requisicao que este trecho fazia sem precisar.
+   */
+  const vigentes = useDados<Record<string, Contrato | null>>(
+    () => api.get<Record<string, Contrato | null>>('/contratos-vigentes'));
 
   // Enquanto `vigentes` nao respondeu - ou falhou -, NAO ha lista de livres.
   // `!vigentes.dado?.[u.id]` daria `true` para todas nesses dois estados, e a
@@ -136,7 +141,7 @@ export function TelaContratos() {
   return (
     <Pagina titulo="Contratos"
             sub="Vincula cliente, unidade consumidora, usina e originador. É entidade local: o conector não a espelha, e sem ela nenhuma fatura nasce.">
-      <div className="cartao" style={{ marginBottom: 20 }}>
+      <div className="cartao secao">
         <div className="campos">
           <Campo rotulo="Unidade consumidora" valor={ucId} ao={setUcId}
                  opcoes={livres.map((u) => ({

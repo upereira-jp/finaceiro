@@ -22,7 +22,7 @@
 // irregulares em tela media. Agora: identidade e sessao em cima, navegacao
 // embaixo, com rolagem horizontal quando nao couber.
 
-import type { ReactElement } from 'react';
+import { lazy, Suspense, type ReactElement } from 'react';
 import { useSessao } from './sessao.tsx';
 import {
   Aviso, Logotipo, Icone, Menu, ItensDeTema, Escolha, Carregando, ESTILO,
@@ -30,19 +30,43 @@ import {
 import { useCaminho, Ligacao } from './rota.tsx';
 import { TELAS, telaDoCaminho, inicioDoGrupoDinheiro } from './navegacao.ts';
 import { Login } from './telas/login.tsx';
-import { TelaProntidao } from './telas/prontidao.tsx';
-import { TelaClientes } from './telas/clientes.tsx';
-import { TelaUnidades } from './telas/unidades.tsx';
-import { TelaContratos } from './telas/contratos.tsx';
-import { TelaDonos } from './telas/donos.tsx';
-import { TelaUsinas } from './telas/usinas.tsx';
-import { TelaTarifas } from './telas/tarifas.tsx';
-import { TelaCarteira } from './telas/carteira.tsx';
-import { TelaFaturas } from './telas/faturas.tsx';
-import { TelaCobranca } from './telas/cobranca.tsx';
-import { TelaRelatorios } from './telas/relatorios.tsx';
-import { TelaDocumento } from './telas/documento.tsx';
-import { TelaContasAPagar } from './telas/contas-a-pagar.tsx';
+/*
+ * ============================================================================
+ * AS DOZE TELAS CHEGAM SOB DEMANDA desde 14/08/2026.
+ *
+ * O QUE ISSO CONSERTA, e foi medido: `web/dist` tinha um pedaco unico de 227 KB
+ * mais 161 KB de icones, e a **tela de login** — que e a primeira coisa que
+ * qualquer pessoa carrega, todo dia — baixava as doze telas, o codificador de
+ * QR, o desenhista de codigo de barras e o CSS inteiro antes de mostrar dois
+ * campos e um botao.
+ *
+ * O CORTE E POR ROTA e nao por biblioteca, porque e a rota que decide o que a
+ * pessoa vai usar: quem abre Clientes nao carrega o desenho da fatura, e as duas
+ * telas mais pesadas do sistema — Documento e a fatura unificada, 2.088 das
+ * 4.461 linhas de `telas/` — so chegam para quem abre a aba Documento.
+ *
+ * O QUE FICA NO PEDACO DE ENTRADA: o login, o chrome (`ui.tsx`, `rota.tsx`,
+ * `sessao.tsx`, `estilo.ts`) e `navegacao.ts`. A barra de navegacao precisa dos
+ * nomes e dos icones das doze ANTES de qualquer uma carregar — ela e o que
+ * mostra para onde ir.
+ *
+ * `Suspense` COM O MESMO `Carregando` DO RESTO, e nao um spinner proprio: a
+ * troca de tela ja tinha um estado de carga (o `useDados` de cada tela), e um
+ * segundo desenho para a mesma espera faria a pessoa ver duas coisas diferentes
+ * significando o mesmo.
+ */
+const TelaProntidao = lazy(() => import('./telas/prontidao.tsx').then((m) => ({ default: m.TelaProntidao })));
+const TelaClientes = lazy(() => import('./telas/clientes.tsx').then((m) => ({ default: m.TelaClientes })));
+const TelaUnidades = lazy(() => import('./telas/unidades.tsx').then((m) => ({ default: m.TelaUnidades })));
+const TelaContratos = lazy(() => import('./telas/contratos.tsx').then((m) => ({ default: m.TelaContratos })));
+const TelaDonos = lazy(() => import('./telas/donos.tsx').then((m) => ({ default: m.TelaDonos })));
+const TelaUsinas = lazy(() => import('./telas/usinas.tsx').then((m) => ({ default: m.TelaUsinas })));
+const TelaCarteira = lazy(() => import('./telas/carteira.tsx').then((m) => ({ default: m.TelaCarteira })));
+const TelaFaturas = lazy(() => import('./telas/faturas.tsx').then((m) => ({ default: m.TelaFaturas })));
+const TelaCobranca = lazy(() => import('./telas/cobranca.tsx').then((m) => ({ default: m.TelaCobranca })));
+const TelaRelatorios = lazy(() => import('./telas/relatorios.tsx').then((m) => ({ default: m.TelaRelatorios })));
+const TelaDocumento = lazy(() => import('./telas/documento.tsx').then((m) => ({ default: m.TelaDocumento })));
+const TelaContasAPagar = lazy(() => import('./telas/contas-a-pagar.tsx').then((m) => ({ default: m.TelaContasAPagar })));
 
 /**
  * Rota -> componente. `Record` sobre as rotas de `navegacao.ts`, então uma tela
@@ -56,7 +80,6 @@ const RENDER: Record<string, () => ReactElement> = {
   '/contratos': () => <TelaContratos />,
   '/usinas': () => <TelaUsinas />,
   '/donos': () => <TelaDonos />,
-  '/tarifas': () => <TelaTarifas />,
   '/carteira': () => <TelaCarteira />,
   '/faturas': () => <TelaFaturas />,
   '/cobranca': () => <TelaCobranca />,
@@ -152,7 +175,8 @@ export function App() {
           {TELAS.flatMap((t, i) => {
             const ativo = t.rota === tela.rota;
             const link = (
-              <Ligacao key={t.rota} para={t.rota} className={ativo ? 'ativo' : undefined}>
+              <Ligacao key={t.rota} para={t.rota} atual={ativo}
+                       className={ativo ? 'ativo' : undefined}>
                 <Icone nome={t.icone} tamanho={17} peso={ativo ? 'fill' : 'regular'} />
                 {t.titulo}
               </Ligacao>
@@ -172,7 +196,11 @@ export function App() {
             Escolha a empresa na barra acima. Nenhuma tela carrega sem isso — e o servidor recusaria
             de qualquer forma: com mais de um vínculo, ele não escolhe por você.
           </Aviso>
-        ) : RENDER[tela.rota]!()}
+        ) : (
+          <Suspense fallback={<Carregando texto="Abrindo a tela…" />}>
+            {RENDER[tela.rota]!()}
+          </Suspense>
+        )}
       </main>
     </>
   );

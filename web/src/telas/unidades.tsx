@@ -29,6 +29,7 @@ export function TelaUnidades() {
   const acao = useAcao();
   const [edicao, setEdicao] = useState<Record<string, string>>({});
   const [rateio, setRateio] = useState<Record<string, string>>({});
+  const [tarifa, setTarifa] = useState<Record<string, string>>({});
 
   const [busca, setBusca] = useState('');
   const [situacao, setSituacao] = useState('');
@@ -44,6 +45,7 @@ export function TelaUnidades() {
       (contem(u.numero_uc, busca) || contem(u.distribuidora, busca)) &&
       (!situacao || situacaoDaUc(u) === situacao) &&
       (pendencia !== 'sem_vencimento' || !u.data_vencimento) &&
+      (pendencia !== 'sem_tarifa' || !u.tarifa_reais_por_kwh) &&
       (pendencia !== 'sem_usina' || !u.usina_id)),
     ordem,
     {
@@ -52,6 +54,7 @@ export function TelaUnidades() {
       usina: (u) => nomeUsina(u.usina_id),
       rateio: (u) => (u.percentual_rateio == null ? null : parseFloat(u.percentual_rateio)),
       vencimento: (u) => u.data_vencimento,
+      tarifa: (u) => (u.tarifa_reais_por_kwh == null ? null : parseFloat(u.tarifa_reais_por_kwh)),
       situacao: (u) => situacaoDaUc(u),
     },
   );
@@ -61,6 +64,29 @@ export function TelaUnidades() {
     if (!v) return;
     const ok = await acao.executar(() => api.patch(`/unidades-consumidoras/${uc.id}`, { data_vencimento: v }));
     if (ok) { acao.anunciar(`Vencimento da ${uc.numero_uc} gravado.`); ucs.recarregar(); }
+  }
+
+  /*
+   * A TARIFA DA UC (migration 30). Ela chegou aqui em 14/08, quando a aba
+   * Tarifas saiu - decisao do dono: *"o campo tarifa nao deve ser selecionado
+   * dentro do sistema financeiro, deve ser puxado do card do CRM"*, e depois
+   * *"remova definitivamente a aba Tarifas"*.
+   *
+   * O QUE A MEDICAO MOSTROU, e e o que justifica o campo estar NESTA linha: a
+   * granularidade real e por CLIENTE. Das 41 UCs de producao, 35 a R$ 1,130000,
+   * 4 a R$ 1,16 e 2 a R$ 1,180000 - uma tarifa por distribuidora obrigaria as 41
+   * a compartilharem um numero que 6 delas contradizem.
+   *
+   * VAI COMO STRING, como o rateio: R$/kWh e `numeric(12,6)` do outro lado, e
+   * truncar 1,187650 em centavos cobra R$ 2,90 a mais numa UC num mes (R22).
+   */
+  async function salvarTarifa(uc: UnidadeConsumidora) {
+    const v = tarifa[uc.id];
+    if (v === undefined) return;
+    const ok = await acao.executar(() => api.patch(`/unidades-consumidoras/${uc.id}`, {
+      tarifa_reais_por_kwh: v.trim() ? decimalTexto(v, 6) : null,
+    }));
+    if (ok) { acao.anunciar(`Tarifa da ${uc.numero_uc} gravada.`); ucs.recarregar(); }
   }
 
   async function salvarRateio(uc: UnidadeConsumidora) {
@@ -83,6 +109,9 @@ export function TelaUnidades() {
    * vencimentos, e doze deles eram para UC que nao ia faturar de qualquer jeito.
    */
   const semVencimento = todas.filter((u) => !u.data_vencimento && ehFaturavel(u)).length;
+  /* O MESMO CRITERIO DO VENCIMENTO, e pelo mesmo motivo: sem tarifa a composicao
+   * LEVANTA (R26), e contar as 41 mandaria preencher doze que nao faturam. */
+  const semTarifa = todas.filter((u) => !u.tarifa_reais_por_kwh && ehFaturavel(u)).length;
   const contagem = contarSituacoes(todas);
 
   return (
@@ -92,6 +121,14 @@ export function TelaUnidades() {
         <Aviso tipo="erro">
           {semVencimento} unidade(s) ativa(s) sem dia de vencimento. Sem ele a fatura não nasce
           (<code>sem_vencimento</code>) — é a <code>Q-SPEC001-02</code>.
+        </Aviso>
+      )}
+      {semTarifa > 0 && (
+        <Aviso tipo="erro">
+          {semTarifa} unidade(s) faturável(is) sem <strong>tarifa</strong> (R$/kWh). Sem ela a
+          composição do lote <strong>levanta</strong> em vez de faturar por zero (R26) — e é aqui
+          que ela se preenche desde 14/08, quando a aba Tarifas saiu: a tarifa é de cada UC, não
+          da distribuidora.
         </Aviso>
       )}
       {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
@@ -116,6 +153,7 @@ export function TelaUnidades() {
         <Filtro valor={pendencia} ao={setPendencia} rotulo="Filtrar por pendência"
                 opcoes={[{ valor: '', texto: 'Todas as pendências' },
                          { valor: 'sem_vencimento', texto: 'Sem vencimento' },
+                         { valor: 'sem_tarifa', texto: 'Sem tarifa' },
                          { valor: 'sem_usina', texto: 'Sem usina' }]} />
         {(busca || situacao || pendencia) && (
           <button type="button" onClick={() => { setBusca(''); setSituacao(''); setPendencia(''); }}>
@@ -129,6 +167,7 @@ export function TelaUnidades() {
                 <ThOrd chave="distribuidora" ordem={ordem} ao={alternar}>Distribuidora</ThOrd>
                 <ThOrd chave="usina" ordem={ordem} ao={alternar}>Usina</ThOrd>
                 <ThOrd chave="rateio" ordem={ordem} ao={alternar} num>Rateio %</ThOrd>
+                <ThOrd chave="tarifa" ordem={ordem} ao={alternar} num>Tarifa R$/kWh</ThOrd>
                 <ThOrd chave="vencimento" ordem={ordem} ao={alternar}>Vencimento</ThOrd>
                 <ThOrd chave="situacao" ordem={ordem} ao={alternar}>Situação</ThOrd>
               </>}
@@ -159,6 +198,16 @@ export function TelaUnidades() {
                               desabilitado={acao.ocupado || !u.usina_id} />
               </div>
             </td>
+            <td className="num" style={{ minWidth: 150 }}>
+              <div className="inline" style={{ justifyContent: 'flex-end' }}>
+                <input value={tarifa[u.id] ?? u.tarifa_reais_por_kwh ?? ''}
+                       aria-label={`Tarifa da ${u.numero_uc} em R$ por kWh`}
+                       onChange={(e) => setTarifa({ ...tarifa, [u.id]: e.target.value })}
+                       placeholder="1,185396" style={{ width: 92, textAlign: 'right' }} />
+                <BotaoDeIcone icone="confirmar" rotulo={`Gravar a tarifa da ${u.numero_uc}`}
+                              ao={() => void salvarTarifa(u)} desabilitado={acao.ocupado} />
+              </div>
+            </td>
             <td style={{ minWidth: 180 }}>
               <div className="inline">
                 <CampoData valor={edicao[u.id] ?? u.data_vencimento?.slice(0, 10) ?? ''}
@@ -179,6 +228,13 @@ export function TelaUnidades() {
       <p className="sub" style={{ marginTop: 12 }}>
         O dia do vencimento é o que conta: a fatura de uma competência vence no <strong>mês seguinte</strong>,
         no mesmo dia. Dia 29 a 31 em mês curto cai no último dia, sem transbordar.
+      </p>
+      <p className="sub">
+        A <strong>tarifa</strong> é R$/kWh <strong>desta</strong> UC, com até seis casas — a aba
+        Tarifas saiu em 14/08 porque servia um número só para todas, e a medição do CRM mostrou que
+        ele varia por cliente. Truncar 1,185396 em centavos cobraria R$&nbsp;2,90 a mais numa UC,
+        num mês, sempre a mais (R22). O conector a preenche a partir do card quando ele traz consumo
+        em kWh e em reais, e <strong>nunca apaga</strong> um valor já digitado aqui.
       </p>
     </Pagina>
   );
