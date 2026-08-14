@@ -27,6 +27,7 @@ import * as liquidacao from '../repos/liquidacao.ts';
 import * as split from '../repos/split.ts';
 import * as contaPagar from '../repos/conta_pagar.ts';
 import * as documento from '../repos/documento.ts';
+import * as leitor from '../concessionaria/leitor-visao.ts';
 import { prontidao } from '../repos/prontidao.ts';
 
 export type Requisicao = {
@@ -81,6 +82,35 @@ function dataOuNull(v: unknown, campo: string): Date | null {
 }
 
 /** Unidade de trabalho transacional. Uma transacao por requisicao. */
+/**
+ * O ARQUIVO QUE O CLIENTE MANDOU, validado antes de sair para a API paga.
+ *
+ * O TETO DE 32 MB E DA API da Anthropic. Conferir AQUI e o que transforma "o
+ * upload falhou" num erro que diz o tamanho - e evita pagar a subida de um
+ * arquivo que ja se sabe que sera recusado. Uma fatura em PDF tem centenas de KB;
+ * quem manda 40 MB mandou outra coisa.
+ */
+function arquivoDoCorpo(corpo: any): { conteudo: Uint8Array; tipo: string } {
+  const b64 = corpo?.conteudo_base64;
+  const tipo = corpo?.tipo;
+  if (typeof b64 !== 'string' || !b64.trim()) {
+    throw new TypeError('conteudo_base64 e obrigatorio (o arquivo em base64, sem prefixo data:)');
+  }
+  if (typeof tipo !== 'string' || !tipo.trim()) {
+    throw new TypeError('tipo e obrigatorio (application/pdf, image/png, image/jpeg, image/webp ou image/gif)');
+  }
+  const bytes = Buffer.from(b64.replace(/^data:[^;]+;base64,/, ''), 'base64');
+  if (bytes.length === 0) throw new TypeError('conteudo_base64 nao decodificou para bytes');
+  const TETO = 32 * 1024 * 1024;
+  if (bytes.length > TETO) {
+    throw Object.assign(new TypeError(
+      `O arquivo tem ${Math.round(bytes.length / 1024 / 1024)} MB e o teto da leitura e 32 MB. `
+      + 'Uma fatura em PDF tem centenas de KB - confira se o arquivo e o certo.'
+    ), { status: 413 });
+  }
+  return { conteudo: bytes, tipo: tipo.trim() };
+}
+
 const emTenant = (app: App, req: Requisicao, f: (tx: ClientTx, v: VinculoDaSessao) => Promise<Resultado>) =>
   app.withTenant(req.sessao, req.tenantProposto, f);
 
@@ -813,6 +843,37 @@ export const ROTAS: Rota[] = [
       const campos = req.corpo?.campos;
       if (!Array.isArray(campos)) throw new TypeError('campos deve ser uma LISTA (vazia volta ao padrao)');
       return ok({ definidos: await documento.definirCampos(campos) });
+    }),
+  },
+  /*
+   * A LEITURA POR MODELO DE VISAO (14/08/2026) - as duas rotas que substituem o
+   * `/api/ler-fatura` da referencia.
+   *
+   * TRES DIFERENCAS EM RELACAO A ELE, e as tres sao de seguranca:
+   *
+   *   1. AUTENTICADA. O `/api/ler-fatura` da Vercel e proxy aberto - quem tem a
+   *      URL gasta na conta de quem hospeda (`Q-REF-SEGREDO-01`, medido no ar).
+   *      Aqui passa por sessao e por `exigir('ler')`, como toda rota do sistema;
+   *   2. CORPO FECHADO. La o corpo do cliente vai INTEIRO para a API - modelo,
+   *      `max_tokens`, mensagens, tudo. Aqui o cliente manda ARQUIVO, e quem monta
+   *      a requisicao e o adaptador. Nao ha como pedir outro modelo por aqui;
+   *   3. NAO DEVOLVE METADADO DA CHAVE. Nem prefixo, nem tamanho, nem nada.
+   *
+   * O TETO DE 32 MB E DA API e esta escrito aqui porque a mensagem importa: um
+   * PDF de fatura tem centenas de KB, e quem sobe 40 MB subiu a coisa errada.
+   */
+  {
+    metodo: 'POST', padrao: '/faturas/ler-fatura',
+    handler: (req, app) => emTenant(app, req, async () => {
+      const d = arquivoDoCorpo(req.corpo);
+      return ok(await leitor.lerFaturaDaEquatorial(d));
+    }),
+  },
+  {
+    metodo: 'POST', padrao: '/faturas/ler-boleto',
+    handler: (req, app) => emTenant(app, req, async () => {
+      const d = arquivoDoCorpo(req.corpo);
+      return ok(await leitor.lerBoletoSicoob(d));
     }),
   },
   {
