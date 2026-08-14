@@ -340,72 +340,6 @@ export type QrDoDocumento = {
   nivel: string;
   modulos: number;
 };
-
-// ------------------------------------------------ o layout por posicao (mig. 23)
-
-export type Papel = 'a4' | 'a5' | 'carta' | 'oficio';
-export type Orientacao = 'retrato' | 'paisagem';
-export type TipoDeBloco = 'tabela_de_campos' | 'campo' | 'texto' | 'logo' | 'pagamento' | 'linha';
-export type Alinhamento = 'esquerda' | 'centro' | 'direita';
-export type Peso = 'normal' | 'forte';
-
-export type Folha = {
-  papel: Papel;
-  orientacao: Orientacao;
-  margem_topo_mm: number;
-  margem_direita_mm: number;
-  margem_baixo_mm: number;
-  margem_esquerda_mm: number;
-};
-
-export type Bloco = {
-  id: string;
-  tipo: TipoDeBloco;
-  campo: string | null;
-  texto: string | null;
-  x_mm: number; y_mm: number; largura_mm: number; altura_mm: number;
-  alinhamento: Alinhamento;
-  tamanho_pt: number;
-  peso: Peso;
-  borda: boolean;
-  fundo: boolean;
-  z: number;
-};
-
-export type ProblemaDeLayout =
-  | { tipo: 'fora_da_pagina'; blocoId: string; detalhe: string }
-  | { tipo: 'sobreposicao'; blocoId: string; comBlocoId: string; detalhe: string }
-  | { tipo: 'sem_conteudo'; blocoId: string; detalhe: string };
-
-export type BlocoComposto = Omit<Bloco, 'campo' | 'texto'> & {
-  linhas?: LinhaDoDocumento[];
-  rotulo?: string;
-  valor?: string;
-  tipoDeValor?: string;
-  ausente?: boolean;
-  texto?: string;
-};
-
-export type DocumentoPosicionado = {
-  folha: Folha;
-  medidas: { largura_mm: number; altura_mm: number };
-  area: { x_mm: number; y_mm: number; largura_mm: number; altura_mm: number };
-  blocos: BlocoComposto[];
-  problemas: ProblemaDeLayout[];
-};
-
-/**
- * O que `GET /cobranca/layout` devolve. `papeis` vem do SERVIDOR de proposito:
- * duplicar as medidas de A4 e A5 aqui criaria duas verdades sobre o tamanho do
- * papel, e o sintoma seria a previa desenhando uma folha e a impressao saindo
- * noutra. Ver `web/src/layout-regras.ts`.
- */
-export type LayoutDoDocumento = {
-  folha: Folha;
-  blocos: Bloco[];
-  papeis: Record<Papel, { largura_mm: number; altura_mm: number; rotulo: string; css: string }>;
-};
-
 /**
  * A FOLHA 1 DO MODELO G3, composta pelo SERVIDOR.
  *
@@ -438,8 +372,6 @@ export type DocumentoDaFatura = {
   vencimento: string;
   valor_total_centavos: number | null;
   linhas: LinhaDoDocumento[];
-  /** O mesmo documento em forma de PAPEL - folha, area e blocos posicionados. */
-  layout: DocumentoPosicionado;
   /** E em forma de MODELO G3 FIXO, que e o destino decidido em 12/08. As duas
    *  convivem ate a folha G3 ter as sete faixas - ver `folha.faixas_ausentes`. */
   folha: FolhaG3;

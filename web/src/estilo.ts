@@ -553,42 +553,12 @@ export const ESTILO = `
   .documento table td { padding: 7px 4px; border-bottom: 1px solid #E4DFD4; }
   .documento thead th { background: none; }
 
-  /* ------------------------------------------------ a FOLHA (migration 23)
-     A GEOMETRIA DA TELA E A DO PAPEL, E ISSO E O CONSERTO.
-
-     Antes, a previa era "max-width: 800px; padding: 32px" e o papel era
-     "width: 100%" com "@page { margin: 16mm }" - DUAS geometrias diferentes,
-     entao a previa nao respondia "e assim que vai sair?". Ela conferia
-     conteudo, nao forma.
-
-     Agora a folha tem a largura e a altura EXATAS do papel escolhido, em mm, e
-     a tela so a ESCALA ("transform", com a escala vinda de "escalaDaPrevia").
-     Escalar nao muda proporcao nenhuma: o que se ve e o que sai.
-
-     "--folha-w", "--folha-h" e "--escala" sao escritas pelo componente, porque
-     dependem do papel que o tenant gravou. A regra "@page" correspondente e
-     injetada em "<style>" por "regraDaPagina" - "size" nao aceita variavel. */
-  .folha {
-    position: relative;
-    width: var(--folha-w); height: var(--folha-h);
-    background: #fff; color: #14213D;
-    box-shadow: var(--sombra-2); border: 1px solid var(--borda);
-    overflow: hidden;
-  }
+  /* O PALCO DA ESCALA. Sobrou da geometria do editor e continua servindo a folha
+     G3: a folha tem a medida EXATA do papel em mm e a tela so a escala, entao o
+     que se ve e proporcao do que sai. ".folha" e ".bloco*" sairam em 14/08 com a
+     composicao posicionada - eram posicionamento absoluto em milimetro, e o
+     modelo fixo compoe em fluxo. */
   .folha-palco { transform: scale(var(--escala, 1)); transform-origin: top left; }
-  /* A area util, desenhada como guia. Some na impressao - e guia, nao conteudo. */
-  .folha .margem-guia {
-    position: absolute; border: 1px dashed var(--borda); pointer-events: none;
-  }
-  .bloco { position: absolute; overflow: hidden; box-sizing: border-box; }
-  .bloco table { width: 100%; border-collapse: collapse; }
-  .bloco table td { padding: 4px 2px; border-bottom: 1px solid #E4DFD4; }
-  .bloco-borda { border: 1px solid #14213D; }
-  /* O CREME DA MARCA, e nao um cinza: e o bloco "secundario" da paleta de 06/08
-     ("Cream - fundo geral da pagina e de blocos secundarios, tarjas de corte"),
-     aplicado ao unico lugar do papel que tem esse papel. Continua sendo UMA cor
-     e nao "quase igual" a outra - a lista deste bloco e fechada de proposito. */
-  .bloco-fundo { background: #F6F2EA; }
 
   /* --------------------------------------- a FOLHA 1 DO MODELO G3 (14/08/2026)
      O DESTINO DA Q-DOCFATURA-01, e agora ele e o que a tela mostra por padrao.
@@ -802,10 +772,7 @@ export const ESTILO = `
       border: none; border-radius: 0; padding: 0; max-width: none; box-shadow: none;
     }
     /* A folha imprime em tamanho REAL: a escala e da tela, nunca do papel. */
-    #documento .folha {
-      width: var(--folha-w); height: var(--folha-h);
-      border: none; box-shadow: none;
-    }
+    #documento .g3 { border: none; box-shadow: none; }
     /* ------------------------------------------------ o LOTE (06/08/2026)
        "#documento" DEIXOU DE SER A FOLHA E PASSOU A SER O RECIPIENTE, e o
        seletor acima mudou junto: era "#documento.folha" (a mesma caixa), e
@@ -824,7 +791,7 @@ export const ESTILO = `
        envelope de um documento inteiro - o aviso de layout e a folha -, e e
        nesse nivel que as paginas sao irmas. */
     #documento .folha-item + .folha-item { break-before: page; page-break-before: always; }
-    #documento .folha { break-inside: avoid; page-break-inside: avoid; }
+    #documento .g3 { break-inside: avoid; page-break-inside: avoid; }
     /* O RECORTE DA TELA NAO PODE VIAJAR PARA O PAPEL. Na previa, a folha vive
        dentro de uma caixa de altura ESCALADA com "overflow: hidden" - e isso
        so existe para a pagina nao ficar com um vao branco embaixo do zoom.
@@ -833,11 +800,11 @@ export const ESTILO = `
        "position: absolute" da regra acima e escapava do pai que a cortava. */
     #documento .folha-recorte { height: auto !important; overflow: visible !important; }
     .folha-palco { transform: none !important; }
-    .folha .margem-guia { display: none !important; }
-    /* SEM "@page" AQUI. O papel e do tenant e a regra e injetada em runtime por
-       "regraDaPagina" - "size" nao aceita "var()". Deixar um "@page" fixo neste
-       arquivo faria ele competir com o injetado, e quem venceria dependeria da
-       ordem de insercao das folhas de estilo. */
+    /* SEM "@page" AQUI. A regra e injetada em runtime por "regraDaPagina" -
+       "size" nao aceita "var()". Deixar um "@page" fixo neste arquivo faria ele
+       competir com o injetado, e quem venceria dependeria da ordem de insercao
+       das folhas de estilo. Desde 14/08 o papel e sempre A4 retrato (o modelo G3
+       e desenhado em milimetro de A4), mas a injecao continua pelo mesmo motivo. */
   }
   /* FIM-DOCUMENTO-IMPRESSO */
 

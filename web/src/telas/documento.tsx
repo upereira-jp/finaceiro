@@ -21,7 +21,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   api, buscarBinario,
   type IdentidadeDeCobranca, type ChavePix, type CampoDoDocumento, type DocumentoDaFatura, type Fatura,
-  type QrDoDocumento, type QrDeConferencia, type BlocoComposto, type UnidadeConsumidora,
+  type QrDoDocumento, type QrDeConferencia, type UnidadeConsumidora,
 } from '../api.ts';
 import { emLotes, useAcao, useDados } from '../dados.ts';
 import {
@@ -34,7 +34,6 @@ import {
 } from '../lote-de-documentos.ts';
 import { escalaDaPrevia, regraDaPagina, ladoDoQr, PX_POR_MM } from '../layout-regras.ts';
 import { useLargura } from '../medir-largura.ts';
-import { EditorDeLayout, estiloDoBloco } from './layout-editor.tsx';
 
 /** Os 16 do enum `campo_de_fatura` (migration 19). A tela nao inventa nome de
  *  campo: o banco recusaria, e o erro sairia do lado errado. */
@@ -368,12 +367,6 @@ export function TelaDocumento() {
         )}
       </div>
 
-      {/* -------------------------------------------- a folha e as posicoes
-          DEPOIS dos campos de proposito: o bloco `tabela_de_campos` pinta a
-          lista de cima, entao a ordem na tela e a ordem da dependencia -
-          escolher o que aparece, e so entao onde. */}
-      <EditorDeLayout />
-
       {/* ANTES da Previa de proposito: a Previa exige fatura, e enquanto nao houver
           uma este painel e o unico caminho para o teste de campo do QR. Poe-lo
           embaixo esconderia a saida atras de um "Nenhuma fatura em ...". */}
@@ -475,10 +468,6 @@ function Previa({ logoUrl }: { logoUrl: string | null }) {
   const [mes, setMes] = useState(() => new Date().toISOString().slice(0, 7));
   const [faturaId, setFaturaId] = useState('');
   const [emLote, setEmLote] = useState(false);
-  /* PADRAO `g3` desde 14/08: o modelo fixo e o destino decidido, e um destino que
-   * nasce escondido atras de um interruptor desligado nao e destino. O editor de
-   * blocos continua alcancavel enquanto a folha G3 nao tem as sete faixas. */
-  const [modelo, setModelo] = useState<ModeloDoDocumento>('g3');
 
   const faturas = useDados<Fatura[]>(() => api.get(`/faturamento/${competenciaISO(mes)}`), [mes]);
   /*
@@ -510,10 +499,6 @@ function Previa({ logoUrl }: { logoUrl: string | null }) {
           <div style={{ alignSelf: 'end' }}>
             <Interruptor ligado={emLote} ao={setEmLote}
                          rotulo={`Imprimir o mês inteiro${faturas.dado ? ` (${faturas.dado.length} fatura(s))` : ''}`} />
-          </div>
-          <div style={{ alignSelf: 'end' }}>
-            <Interruptor ligado={modelo === 'blocos'} ao={(v) => setModelo(v ? 'blocos' : 'g3')}
-                         rotulo="Usar o layout configurável em vez do modelo G3" />
           </div>
         </div>
 
@@ -549,8 +534,8 @@ function Previa({ logoUrl }: { logoUrl: string | null }) {
       </div>
 
       {emLote
-        ? <Lote faturas={faturas.dado ?? []} rotuloDaFatura={rotuloDaFatura} logoUrl={logoUrl} mes={mes} modelo={modelo} />
-        : doc.dado && <Documento doc={doc.dado} logoUrl={logoUrl} modelo={modelo} />}
+        ? <Lote faturas={faturas.dado ?? []} rotuloDaFatura={rotuloDaFatura} logoUrl={logoUrl} mes={mes} />
+        : doc.dado && <Documento doc={doc.dado} logoUrl={logoUrl} />}
     </>
   );
 }
@@ -577,12 +562,11 @@ function Previa({ logoUrl }: { logoUrl: string | null }) {
  *     status imprime (`documento.paraFatura` compoe qualquer uma), entao
  *     descartar em silencio seria a tela inventando regra — regra 10.
  */
-function Lote({ faturas, rotuloDaFatura, logoUrl, mes, modelo }: {
+function Lote({ faturas, rotuloDaFatura, logoUrl, mes }: {
   faturas: readonly Fatura[];
   rotuloDaFatura: (f: Fatura) => string;
   logoUrl: string | null;
   mes: string;
-  modelo: ModeloDoDocumento;
 }) {
   const [incluidos, setIncluidos] = useState<StatusFatura[]>([...STATUS_PADRAO_DO_LOTE]);
   const [composicao, setComposicao] = useState<ResultadoDaComposicao<DocumentoDaFatura> | null>(null);
@@ -681,7 +665,7 @@ function Lote({ faturas, rotuloDaFatura, logoUrl, mes, modelo }: {
       </div>
 
       {composicao && composicao.compostos.length > 0 && (
-        <Documentos docs={composicao.compostos} logoUrl={logoUrl} modelo={modelo} />
+        <Documentos docs={composicao.compostos} logoUrl={logoUrl} />
       )}
     </>
   );
@@ -708,21 +692,8 @@ function Lote({ faturas, rotuloDaFatura, logoUrl, mes, modelo }: {
  * que o desenho da folha divergir entre "uma" e "o mes inteiro" e o dia em que a
  * previa deixa de provar o que sai da impressora.
  */
-/**
- * QUAL DOS DOIS DOCUMENTOS. `g3` e o destino decidido pela `Q-DOCFATURA-01` em
- * 12/08 e e o PADRAO desde 14/08; `blocos` e a composicao posicionada da
- * migration 23, que continua viva porque a folha G3 ainda nao tem duas das sete
- * faixas — retira-la hoje deixaria o sistema sem documento nenhum.
- *
- * A escolha e da TELA e nao do tenant, de proposito: nao e configuracao, e uma
- * travessia. Gravar isso no banco daria a ela cara de permanencia.
- */
-export type ModeloDoDocumento = 'g3' | 'blocos';
-
-function Documento({ doc, logoUrl, modelo = 'g3' }: {
-  doc: DocumentoDaFatura; logoUrl: string | null; modelo?: ModeloDoDocumento;
-}) {
-  return <Documentos docs={[doc]} logoUrl={logoUrl} modelo={modelo} />;
+function Documento({ doc, logoUrl }: { doc: DocumentoDaFatura; logoUrl: string | null }) {
+  return <Documentos docs={[doc]} logoUrl={logoUrl} />;
 }
 
 /**
@@ -739,15 +710,11 @@ function Documento({ doc, logoUrl, modelo = 'g3' }: {
  * nao mudariam a impressao, mas fariam parecer que o papel pode variar dentro
  * de um lote - e ele nao pode.
  */
-function Documentos({ docs, logoUrl, modelo = 'g3' }: {
-  docs: readonly DocumentoDaFatura[]; logoUrl: string | null; modelo?: ModeloDoDocumento;
+function Documentos({ docs, logoUrl }: {
+  docs: readonly DocumentoDaFatura[]; logoUrl: string | null;
 }) {
   const primeiro = docs[0];
   if (!primeiro) return null;
-  /* O MODELO G3 E A4 SEMPRE, e nao o papel gravado pelo tenant: ele e desenhado
-   * em milimetro de A4, e imprimi-lo em A5 nao o encolheria — cortaria. */
-  const papelCss = modelo === 'g3' ? 'A4' : (PAPEL_CSS[primeiro.layout.folha.papel] ?? 'A4');
-  const orientacao = modelo === 'g3' ? 'retrato' : primeiro.layout.folha.orientacao;
 
   return (
     <>
@@ -755,65 +722,15 @@ function Documentos({ docs, logoUrl, modelo = 'g3' }: {
           morar no `estilo.ts` com o resto - e sem ela o navegador usaria o papel
           padrao do SISTEMA de quem imprime, que foi o defeito que a migration 23
           nomeou: a mesma fatura saindo com geometria diferente em duas maquinas. */}
-      <style>{regraDaPagina(papelCss, orientacao)}</style>
+      {/* A4 RETRATO, SEMPRE. O modelo G3 e desenhado em milimetro de A4 e nao le
+          mais o papel do tenant: um modelo fixo que aceitasse papel variavel nao
+          seria fixo, e imprimi-lo em A5 nao o encolheria — cortaria. */}
+      <style>{regraDaPagina('A4', 'retrato')}</style>
 
       <div id="documento">
-        {docs.map((d) => (modelo === 'g3'
-          ? <FolhaModeloG3 key={d.fatura_id} doc={d} logoUrl={logoUrl} />
-          : <Folha key={d.fatura_id} doc={d} logoUrl={logoUrl} />))}
+        {docs.map((d) => <FolhaModeloG3 key={d.fatura_id} doc={d} logoUrl={logoUrl} />)}
       </div>
     </>
-  );
-}
-
-/** Uma folha e o que vem junto dela na tela. `folha-item` e o nivel em que duas
- *  paginas sao IRMAS no DOM, e por isso e nele que o corte de pagina do
- *  `estilo.ts` casa — dentro, cada folha tem o seu proprio palco de escala. */
-function Folha({ doc, logoUrl }: { doc: DocumentoDaFatura; logoUrl: string | null }) {
-  const { medidas, area, blocos, problemas } = doc.layout;
-  // `ResizeObserver`, nao efeito com `clientWidth` - ver `medir-largura.ts`.
-  const [palco, larguraPx] = useLargura<HTMLDivElement>();
-  const escala = escalaDaPrevia(larguraPx, medidas.largura_mm);
-
-  return (
-    <div className="folha-item">
-      {problemas.length > 0 && (
-        // `naoimprime` num <div> em volta, e nao no Aviso: o componente nao
-        // aceita `className`, e alargar a assinatura dele para um caso so
-        // deixaria a proxima pessoa achar que Aviso e generico.
-        <div className="naoimprime">
-          <Aviso tipo="alerta">
-            O layout tem {problemas.length} ponto(s) a olhar: {problemas.map((p) => p.detalhe).join(' · ')}
-          </Aviso>
-        </div>
-      )}
-
-      {/* `folha-recorte` existe para o zoom da tela nao deixar um vao branco
-          embaixo - e o `estilo.ts` o DESFAZ na impressao, senao ele cortaria a
-          folha em tamanho real. Antes isso nao aparecia porque a folha era o
-          `position: absolute` e escapava do pai. */}
-      <div ref={palco} className="folha-recorte"
-           style={{ height: medidas.altura_mm * PX_POR_MM * escala + 2, overflow: 'hidden' }}>
-        <div className="folha-palco" style={{ ['--escala' as any]: escala }}>
-          <div className="folha" style={{
-            ['--folha-w' as any]: `${medidas.largura_mm}mm`,
-            ['--folha-h' as any]: `${medidas.altura_mm}mm`,
-          }}>
-            <div className="margem-guia naoimprime" style={{
-              left: `${area.x_mm}mm`, top: `${area.y_mm}mm`,
-              width: `${area.largura_mm}mm`, height: `${area.altura_mm}mm`,
-            }} />
-            {blocos.map((b) => (
-              <div key={b.id}
-                   className={`bloco${b.borda ? ' bloco-borda' : ''}${b.fundo ? ' bloco-fundo' : ''}`}
-                   style={{ ...estiloDoBloco(b), padding: '1mm' }}>
-                <ConteudoDoBloco b={b} doc={doc} logoUrl={logoUrl} />
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -946,59 +863,6 @@ function FolhaModeloG3({ doc, logoUrl }: { doc: DocumentoDaFatura; logoUrl: stri
       </div>
     </div>
   );
-}
-
-/** O `size` do `@page` por papel. Espelha `PAPEIS[].css` do servidor - e a razao
- *  de nao duplicar as MEDIDAS esta em `web/src/layout-regras.ts`; aqui o que se
- *  duplica e o nome CSS, que e uma palavra do proprio CSS e nao um dado nosso. */
-const PAPEL_CSS: Record<string, string> = {
-  a4: 'A4', a5: 'A5', carta: 'Letter', oficio: '216mm 330mm',
-};
-
-/** O que cada tipo de bloco pinta. A geometria ja veio de fora. */
-function ConteudoDoBloco(
-  { b, doc, logoUrl }: { b: BlocoComposto; doc: DocumentoDaFatura; logoUrl: string | null },
-) {
-  if (b.tipo === 'linha') {
-    return <div style={{ width: '100%', borderTop: '1px solid currentColor', opacity: .35 }} />;
-  }
-  if (b.tipo === 'logo') {
-    return logoUrl
-      ? <img src={logoUrl} alt="" style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />
-      : null;
-  }
-  if (b.tipo === 'texto') return <span style={{ whiteSpace: 'pre-wrap' }}>{b.texto}</span>;
-
-  if (b.tipo === 'campo') {
-    // O valor vem PRONTO do servidor. "—" e ausencia de dado, nunca zero.
-    return (
-      <span style={{ width: '100%' }}>
-        {b.rotulo ? <span className="fraco" style={{ marginRight: 6 }}>{b.rotulo}</span> : null}
-        {b.ausente ? <span className="fraco">{b.valor}</span> : b.valor}
-      </span>
-    );
-  }
-  if (b.tipo === 'tabela_de_campos') {
-    return (
-      <table>
-        <tbody>
-          {(b.linhas ?? []).map((l) => (
-            <tr key={l.campo}>
-              <td style={{ width: '55%' }}>{l.rotulo}</td>
-              <td className="num">
-                {l.ausente ? <span className="fraco">{l.valor}</span> : l.valor}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    );
-  }
-  // A FAIXA RECEBE O DOCUMENTO INTEIRO, e nao so `doc.pagamento`: o modelo G3 poe
-  // vencimento e valor DENTRO da caixa de pagamento, ao lado do nosso numero, e os
-  // dois moram no topo do documento - nao na faixa.
-  if (b.tipo === 'pagamento') return <FaixaDePagamento doc={doc} />;
-  return null;
 }
 
 /**

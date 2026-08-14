@@ -70,32 +70,6 @@ model auditoria {
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model bloco_do_documento {
-  id            String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenant_id     String               @db.Uuid
-  tipo          tipo_de_bloco
-  campo         campo_de_fatura?
-  texto         String?
-  x_mm          Decimal              @db.Decimal(6, 1)
-  y_mm          Decimal              @db.Decimal(6, 1)
-  largura_mm    Decimal              @db.Decimal(6, 1)
-  altura_mm     Decimal              @db.Decimal(6, 1)
-  alinhamento   alinhamento_do_bloco @default(esquerda)
-  tamanho_pt    Int                  @default(10) @db.SmallInt
-  peso          peso_do_bloco        @default(normal)
-  borda         Boolean              @default(false)
-  fundo         Boolean              @default(false)
-  z             Int                  @default(0) @db.SmallInt
-  atualizado_em DateTime             @default(now()) @db.Timestamptz(6)
-  criado_em     DateTime             @default(now()) @db.Timestamptz(6)
-  tenant        tenant               @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-
-  @@unique([tenant_id, id], map: "bloco_do_documento_id_tenant")
-  @@index([tenant_id, z, id], map: "bloco_do_documento_por_tenant")
-}
-
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model boleto {
@@ -486,24 +460,6 @@ model identidade_de_cobranca {
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model layout_do_documento {
-  id                 String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenant_id          String                  @unique(map: "layout_do_documento_tenant_unico") @db.Uuid
-  papel              papel_do_documento      @default(a4)
-  orientacao         orientacao_do_documento @default(retrato)
-  margem_topo_mm     Decimal                 @default(16) @db.Decimal(6, 1)
-  margem_direita_mm  Decimal                 @default(16) @db.Decimal(6, 1)
-  margem_baixo_mm    Decimal                 @default(16) @db.Decimal(6, 1)
-  margem_esquerda_mm Decimal                 @default(16) @db.Decimal(6, 1)
-  atualizado_em      DateTime                @default(now()) @db.Timestamptz(6)
-  criado_em          DateTime                @default(now()) @db.Timestamptz(6)
-  tenant             tenant                  @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-
-  @@unique([tenant_id, id], map: "layout_do_documento_id_tenant")
-}
-
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model liquidacao {
   id                       String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenant_id                String            @db.Uuid
@@ -716,7 +672,6 @@ model tenant {
   atualizado_em          DateTime                @default(now()) @db.Timestamptz(6)
   acesso_plataforma_log  acesso_plataforma_log[]
   agenda_execucao        agenda_execucao[]
-  bloco_do_documento     bloco_do_documento[]
   boleto                 boleto[]
   campo_do_documento     campo_do_documento[]
   categoria              categoria[]
@@ -732,7 +687,6 @@ model tenant {
   dono_usina             dono_usina[]
   fatura                 fatura[]
   identidade_de_cobranca identidade_de_cobranca?
-  layout_do_documento    layout_do_documento?
   liquidacao             liquidacao[]
   logo_de_cobranca       logo_de_cobranca?
   originador             originador[]
@@ -859,12 +813,6 @@ enum agenda_tarefa {
   consulta_ativa
 }
 
-enum alinhamento_do_bloco {
-  esquerda
-  centro
-  direita
-}
-
 enum campo_de_fatura {
   competencia
   vencimento
@@ -926,11 +874,6 @@ enum natureza_pessoa {
   pj
 }
 
-enum orientacao_do_documento {
-  retrato
-  paisagem
-}
-
 enum origem_geracao {
   crm
   local
@@ -950,23 +893,11 @@ enum originador_tipo {
   parceiro_captador_senior
 }
 
-enum papel_do_documento {
-  a4
-  a5
-  carta
-  oficio
-}
-
 enum papel_tenant {
   admin
   financeiro
   cobranca
   leitura
-}
-
-enum peso_do_bloco {
-  normal
-  forte
 }
 
 enum provedor_cobranca {
@@ -1048,15 +979,6 @@ enum tipo_chave_pix {
 enum tipo_conta_bancaria {
   corrente
   poupanca
-}
-
-enum tipo_de_bloco {
-  tabela_de_campos
-  campo
-  texto
-  logo
-  pagamento
-  linha
 }
 
 enum tipo_split_item {

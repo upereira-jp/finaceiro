@@ -161,10 +161,14 @@ const { ESTILO } = await import('../src/estilo.ts');
  */
 const impressao = ESTILO.slice(ESTILO.indexOf('@media print')).replace(/\/\*[\s\S]*?\*\//g, '');
 
-// D12 — o seletor que o lote inteiro depende. `#documento.folha` (a MESMA caixa)
+// D12 — o seletor que o lote inteiro depende. `#documento.g3` (a MESMA caixa)
 // imprimiria a primeira folha e mais nada: `id` e unico por documento.
-chk('D12', /#documento\s+\.folha\s*\{/.test(impressao) && !/#documento\.folha/.test(impressao),
-    'o tamanho real e aplicado a `#documento .folha` (descendente) e nao a `#documento.folha`');
+//
+// A CLASSE MUDOU DE `.folha` PARA `.g3` em 14/08, com a saida da composicao
+// posicionada — o invariante nao mudou nem um pouco: e DESCENDENTE, nunca
+// composto. Foi este teste que pegou a troca incompleta.
+chk('D12', /#documento\s+\.g3\s*\{/.test(impressao) && !/#documento\.g3/.test(impressao),
+    'o tamanho real e aplicado a `#documento .g3` (descendente) e nao a `#documento.g3`');
 
 // D13 — uma folha por pagina, nas duas formas.
 chk('D13', /#documento\s+\.folha-item\s*\+\s*\.folha-item\s*\{[^}]*break-before:\s*page/.test(impressao)

@@ -27,7 +27,6 @@ import * as liquidacao from '../repos/liquidacao.ts';
 import * as split from '../repos/split.ts';
 import * as contaPagar from '../repos/conta_pagar.ts';
 import * as documento from '../repos/documento.ts';
-import { PAPEIS, FOLHA_PADRAO } from '../dominio/layout-visual.ts';
 import { prontidao } from '../repos/prontidao.ts';
 
 export type Requisicao = {
@@ -814,33 +813,6 @@ export const ROTAS: Rota[] = [
       const campos = req.corpo?.campos;
       if (!Array.isArray(campos)) throw new TypeError('campos deve ser uma LISTA (vazia volta ao padrao)');
       return ok({ definidos: await documento.definirCampos(campos) });
-    }),
-  },
-  {
-    metodo: 'GET', padrao: '/cobranca/layout',
-    handler: (req, app) => emTenant(app, req, async () => ok({
-      folha: await documento.layout(),
-      blocos: await documento.blocos(),
-      // As medidas dos papeis vao JUNTO, e nao numa rota propria: o editor
-      // precisa delas para desenhar a folha, e uma segunda chamada so criaria a
-      // janela em que a tela tem os blocos e ainda nao sabe o tamanho do papel.
-      papeis: PAPEIS,
-    })),
-  },
-  {
-    /*
-     * A FOLHA E OS BLOCOS NUMA ESCRITA SO, e isso e a razao de nao haver rota
-     * por bloco. Trocar de A4 para A5 e reposicionar seriam dois estados no
-     * banco, e o do meio - blocos de A4 numa folha A5 - e exatamente o que a
-     * conferencia recusa. Em duas etapas, ou se e recusado no meio, ou se grava
-     * o invalido. Lista vazia volta ao layout PADRAO, como em `/cobranca/campos`.
-     */
-    metodo: 'PUT', padrao: '/cobranca/layout',
-    handler: (req, app) => emTenant(app, req, async () => {
-      const blocos = req.corpo?.blocos;
-      if (!Array.isArray(blocos)) throw new TypeError('blocos deve ser uma LISTA (vazia volta ao padrao)');
-      const folha = { ...FOLHA_PADRAO, ...(req.corpo?.folha ?? {}) };
-      return ok(await documento.salvarLayout(folha, blocos));
     }),
   },
   {

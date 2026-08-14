@@ -378,7 +378,7 @@ O documento de cobrança tem hoje **duas superfícies de configuração**, e ela
 3. abrir o portão: `fatura-concessionaria.ts` ligado à fatura, com a quebra em quatro parcelas e **sem resíduo** — depende de `Q-DOCG3-11`
 4. ✅ **construído em 14/08** — composição fixa no servidor, em centavos, ao lado da posicionada (§15)
 5. ✅ **construído em 14/08** — a folha 1 em `documento.tsx`, e ela é o padrão da tela. A folha 2 espera o passo 3
-6. **só então** retirar a superfície B inteira (§13.1) e a migration de remoção da 23
+6. ✅ **construído em 14/08** — retirada a superfície B inteira (§13.1) e a migration 27 de remoção (§16)
 
 ---
 
@@ -484,3 +484,42 @@ Um erro de um dígito no valor tem **~1 chance em 5** de não ser pego pelos ver
 `pagamento.conferencia` no payload de `GET /faturas/:id/documento`. **Não vai para o papel** — o CRM consome a mesma rota e precisa saber tanto quanto a nossa tela, mas dizer ao cliente que o boleto dele pode estar corrompido não ajuda o cliente.
 
 **Ela conta e nomeia; não recusa nada.** É o precedente do projeto, e havia motivo concreto: `src/sicoob/falso.ts` produz linha fora do padrão de propósito, e recusa dura quebraria a suíte sem que nada de produção estivesse errado. **O que fazer quando diverge é decisão de dono e não minha — `Q-DOCG3-13`.**
+
+
+---
+
+## 16. A superfície B saiu — 14/08, fim do dia
+
+`1.914 linhas` removidas, `50` acrescentadas. Três arquivos apagados inteiros — `src/dominio/layout-visual.ts`, `web/src/telas/layout-editor.tsx`, `tests/layout-visual.ts` —, duas rotas, dois modelos do Prisma, cinco enums e as duas tabelas da migration 23.
+
+### 16.1 O que autorizou
+
+O custo chegou a **zero**, e isso foi medido, não estimado. O layout posicionado tinha **cinco** tipos de bloco: `logo`, `texto`, `linha`, `pagamento` e `tabela_de_campos`. A folha G3 cobria quatro; a tabela de valores entrou na mesma tarde e fechou o quinto. Não existe documento que só o editor soubesse desenhar.
+
+Até esse ponto a resposta era o contrário, e está escrita em três documentos: o editor era o **único** documento que existia. Não era teimosia, era ordem.
+
+### 16.2 A medição que fecha o argumento
+
+Contra produção, pela `DIRECT_URL`, antes de escrever a migration:
+
+| Tabela | Linhas |
+|---|--:|
+| `layout_do_documento` | **0** |
+| `bloco_do_documento` | **0** |
+| `campo_do_documento` | **15** |
+
+**As duas superfícies pareciam gêmeas e não eram.** A de conteúdo foi usada; a de posição nunca recebeu um registro em onze dias. É a confirmação mais direta de que a que fica é a certa — e `campo_do_documento` fica inteira, porque responde outra pergunta: *quais* campos, com que rótulo e em que ordem. O modelo G3 substituiu a **posição**, não o **conteúdo**.
+
+### 16.3 O que ficou, e por quê
+
+De `web/src/layout-regras.ts` sobraram quatro de doze exportações — `escalaDaPrevia`, `PX_POR_MM`, `regraDaPagina`, `ladoDoQr`. Não eram do editor: são do **papel**, e continuam servindo a folha G3. As oito que saíram (`naGrade`, `arrastar`, `redimensionar`, `blocoNovo`, `areaDaFolha`, `medidasComOrientacao`, `PASSO_MM`, `MINIMO_MM`) não tinham consumidor fora do editor e do teste dele — medido antes de remover.
+
+De `web/tests/layout.ts` sobraram três seções de dez: W7 (escala), W8 (`@page`) e W10 (o lado do QR).
+
+### 16.4 O que um teste pegou, e a revisão de código não pegaria
+
+`D12` afirma que o tamanho real é aplicado a `#documento .folha` **descendente** e nunca a `#documento.folha` composto — o seletor de que o lote inteiro depende. A classe virou `.g3` e o teste caiu na hora. **O invariante não mudou; o nome mudou**, e sem essa verificação a troca incompleta teria ido para produção imprimindo a primeira folha do lote e mais nada.
+
+### 16.5 O guarda de arranque acompanhou
+
+`[financeiro] client gerado cobre as 35 tabelas de public` — eram 37. A guarda compara o catálogo com os modelos do client e recusa subir se divergirem; ela seguiu a remoção sem ninguém atualizar número nenhum, que é o que se espera de uma conferência que lê o catálogo em vez de uma constante.
