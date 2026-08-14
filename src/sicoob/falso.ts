@@ -14,12 +14,25 @@
 //   2. Recusa registrar duas vezes a mesma referencia. O boleto e 1:1 com a
 //      fatura no banco; um adaptador mais permissivo que o banco esconde, no
 //      teste, o erro que aparece em producao.
+//   3. DESDE 14/08: devolve linha digitavel e codigo de barras ESTRUTURALMENTE
+//      REAIS - 47 e 44 digitos, com os quatro verificadores fechando e com o
+//      valor e o vencimento do proprio pedido dentro deles.
+//
+// O ITEM 3 NAO E CAPRICHO, e a historia dele diz por que. Ate 14/08 este
+// adaptador devolvia um formato posicional inventado (`1-3.0000059669`), com o
+// comentario honesto de que "o falso nao finge ser o Febraban". Era inofensivo
+// enquanto ninguem conferia a linha. No dia em que a conferencia passou a
+// RECUSAR a emissao do documento (`Q-DOCG3-13`), virou o contrario do que um
+// falso deve ser: a suite so passaria com uma EXCECAO para dado de teste dentro
+// da regra de recusa - e excecao em regra de recusa e o buraco por onde a regra
+// vaza. Um falso tem de exercer o mesmo caminho que producao, nao um desvio.
 
 import {
   type PortaDeCobranca, type PedidoDeBoleto, type BoletoRegistrado,
   type SituacaoDoBoleto, type CredencialRef,
 } from './porta.ts';
 import type { Centavos } from '../dominio/centavos.ts';
+import { montarLinhaDigitavel } from '../dominio/linha-digitavel.ts';
 
 export type RegistroFalso = {
   nossoNumero: string;
@@ -67,13 +80,22 @@ export class CobrancaFalsa implements PortaDeCobranca {
       vencimento: p.vencimento, situacao: 'em_aberto', liquidacao: null,
     });
 
+    /* O campo livre de 25 digitos e onde cada banco poe o que quiser - para a
+     * Sicoob, carteira, cliente e nosso numero. Aqui vai a sequencia do proprio
+     * falso: nao precisa acertar o leiaute interno da Sicoob, precisa ser
+     * DETERMINISTA e produzir linha que passa nas quatro verificacoes. O valor e
+     * o vencimento sao os DO PEDIDO, e e isso que faz a conferencia do documento
+     * ter o que comparar: um falso que sorteasse valor testaria a si mesmo. */
+    const { linha, codigo_barras } = montarLinhaDigitavel({
+      vencimento_iso: p.vencimento.toISOString().slice(0, 10),
+      valor_centavos: p.valorCentavos,
+      campoLivre: String(this.sequencia).padStart(25, '7'),
+    });
+
     return {
       nossoNumero,
-      // Formato posicional, nao o calculo real do codigo de barras: o adaptador
-      // falso nao finge ser o Febraban. O que importa aqui e que o campo chega
-      // preenchido e cabe na coluna.
-      linhaDigitavel: `${nossoNumero}.${String(p.valorCentavos).padStart(10, '0')}`,
-      codigoBarras: `756${String(p.valorCentavos).padStart(10, '0')}${nossoNumero}`,
+      linhaDigitavel: linha,
+      codigoBarras: codigo_barras,
       pixCopiaECola: `00020126${nossoNumero}5204000053039865802BR`,
       pixTxid: nossoNumero.replace(/-/g, ''),
       sicoobNumeroContrato: 'contrato-falso',

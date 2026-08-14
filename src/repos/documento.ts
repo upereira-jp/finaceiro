@@ -20,8 +20,16 @@
 
 import { dbt } from '../db/tipado.ts';
 import { tenantCorrente, exigir } from '../db/contexto.ts';
+import { emReais } from '../dominio/centavos.ts';
+import { conferirBoleto, linhaDigitavelFormatada } from '../dominio/linha-digitavel.ts';
+import { folha1, linhaDoEmissor, type FolhaG3, type EmissorDaFatura } from '../dominio/folha-g3.ts';
+import { validarCNPJ, normalizar } from '../dominio/documento.ts';
+
+/** O retorno de `conferirBoleto`, nomeado porque viaja no payload e o CRM
+ *  consome esta rota - um tipo anonimo aqui obrigaria o outro lado a redeclarar. */
+export type ConferenciaDoBoleto = ReturnType<typeof conferirBoleto>;
 import {
-  linhasDoDocumento, emReais, dataBr,
+  linhasDoDocumento, dataBr,
   type ConfiguracaoDeCampo, type CampoDeFatura,
   type DadosDaFatura, type LinhaDoDocumento,
 } from '../dominio/layout-do-documento.ts';
@@ -54,6 +62,58 @@ export class IdentidadeNaoCadastrada extends Error {
       'a trilha da regra 9.'
     );
     this.name = 'IdentidadeNaoCadastrada';
+  }
+}
+
+/**
+ * O DOCUMENTO NAO SAI PORQUE O BOLETO NAO CONFERE. Decisao do dono em 14/08,
+ * `Q-DOCG3-13`: das tres saidas possiveis - so registrar, marcar a fatura, ou
+ * recusar a emissao -, a escolhida foi RECUSAR.
+ *
+ * O QUE ISSO COMPRA, e o que custa. Compra: nao existe caminho que imprima um
+ * boleto cuja linha digitavel o banco recusaria no caixa, nem um cujo valor
+ * discorde da fatura que o acompanha na mesma folha. Custa: uma divergencia
+ * bloqueia a impressao daquela fatura ate alguem resolver - e nao ha como
+ * "imprimir assim mesmo", de proposito.
+ *
+ * MEDIDO ANTES DE DECIDIR: producao tem **zero** boleto registrado hoje, entao a
+ * recusa nao torna nenhum documento existente inimprimivel. Era de graca agora e
+ * cara depois, e e por isso que entrou agora.
+ *
+ * 409 e nao 422: o pedido esta correto e o estado e que esta em conflito. Quem
+ * chama nao tem o que corrigir na requisicao.
+ *
+ * NO LOTE ISSO NAO DERRUBA A PILHA: `separarCompostos` ja parte o resultado
+ * entre o que compos e o que nao compos, e a fatura que recusa cai no segundo
+ * grupo com o motivo - as outras imprimem.
+ */
+export class BoletoNaoConfere extends Error {
+  readonly status = 409;
+  readonly divergencias: ConferenciaDoBoleto['divergencias'];
+  constructor(faturaId: string, divergencias: ConferenciaDoBoleto['divergencias']) {
+    super(
+      `O boleto da fatura ${faturaId} nao confere com ela, e o documento nao foi composto: `
+      + divergencias.map(explicarDivergencia).join(' ')
+      + ' Enquanto isso nao for resolvido no banco, imprimir seria entregar ao cliente '
+      + 'um boleto que discorda da fatura impressa ao lado dele.'
+    );
+    this.name = 'BoletoNaoConfere';
+    this.divergencias = divergencias;
+  }
+}
+
+/** Cada divergencia em uma frase que diz o NUMERO, e nao so o nome do problema. */
+function explicarDivergencia(d: ConferenciaDoBoleto['divergencias'][number]): string {
+  switch (d.tipo) {
+    case 'linha_invalida':
+      return `A linha digitavel nao passa na verificacao de ${d.falhas.join(', ')}.`;
+    case 'codigo_de_barras_discorda':
+      return 'O codigo de barras que o banco gravou nao e o mesmo que a linha digitavel dele remonta '
+           + `(banco ${d.do_banco}, linha ${d.da_linha}).`;
+    case 'valor_discorda':
+      return `O boleto e de ${emReais(d.no_boleto)} e a fatura e de ${emReais(d.na_fatura)}.`;
+    case 'vencimento_discorda':
+      return `O boleto vence em ${dataBr(d.no_boleto)} e a fatura em ${dataBr(d.na_fatura)}.`;
   }
 }
 
@@ -189,7 +249,23 @@ export async function chavesPix() {
 
 export type NovaIdentidade = {
   chave_pix_padrao_id?: string | null;
+  /** Quem EMITE, por extenso. Sai no cabecalho, no rodape e no Beneficiario. */
+  razao_social?: string | null;
+  /** Com ou sem mascara - normaliza aqui. O DV e conferido, nao so o formato. */
+  cnpj?: string | null;
 };
+
+export class CnpjDoEmissorInvalido extends Error {
+  readonly status = 422;
+  constructor(bruto: string) {
+    super(
+      `O CNPJ "${bruto}" nao passa no digito verificador. Nada foi gravado. `
+      + 'Este numero sai IMPRESSO na fatura, ao lado do aviso que manda o cliente conferir o '
+      + 'beneficiario antes de pagar - um CNPJ errado ali e pior que nenhum.'
+    );
+    this.name = 'CnpjDoEmissorInvalido';
+  }
+}
 
 /**
  * Grava a identidade. `upsert` por tenant, como o `conector_cobranca`: um tenant,
@@ -215,7 +291,21 @@ export async function salvarIdentidade(e: NovaIdentidade) {
     if (!existe) throw new ChavePixNaoEncontrada(chave_pix_padrao_id);
   }
 
-  const dados = { chave_pix_padrao_id, atualizado_em: new Date() };
+  /* O CNPJ e conferido pelo DV e nao so pelo formato do CHECK da migration 26.
+   * A divisao e a mesma da chave Pix: o banco sabe o que e formato, a aplicacao
+   * sabe o que e digito verificador - e um CHECK com a aritmetica do DV dentro
+   * seria uma segunda implementacao dela, em SQL, envelhecendo separado. */
+  const cnpjBruto = texto(e.cnpj);
+  let cnpj: string | null = null;
+  if (cnpjBruto !== null) {
+    cnpj = normalizar(cnpjBruto);
+    if (!validarCNPJ(cnpj)) throw new CnpjDoEmissorInvalido(cnpjBruto);
+  }
+
+  const dados = {
+    chave_pix_padrao_id, razao_social: texto(e.razao_social), cnpj,
+    atualizado_em: new Date(),
+  };
   return dbt().identidade_de_cobranca.upsert({
     where: { tenant_id }, create: { tenant_id, ...dados }, update: dados,
   });
@@ -582,6 +672,23 @@ export type DocumentoDaFatura = {
    */
   layout: DocumentoPosicionado;
   /**
+   * A FOLHA 1 DO MODELO G3 - o documento em faixas nomeadas, sem coordenada.
+   *
+   * TERCEIRA forma do mesmo conteudo, e as tres tem consumidor diferente:
+   * `linhas[]` e a LISTA (e-mail, CSV, relatorio), `layout` e o PAPEL POSICIONADO
+   * (migration 23) e esta e o PAPEL FIXO. Nao e indecisao: a `Q-DOCFATURA-01`
+   * reverteu para layout fixo em 12/08, e as duas convivem enquanto o modelo G3
+   * nao esta completo - retirar a posicionada hoje deixaria o sistema sem
+   * documento, porque a folha G3 ainda nao tem cinco das sete faixas.
+   *
+   * A convivencia e TEMPORARIA e datada: sai no passo 6 do §13.4 de
+   * `REFERENCIA-fatura-unificada-2026-08-13.md`.
+   *
+   * `folha.faixas_ausentes` diz o que NAO entrou e por que. Viaja de proposito:
+   * uma folha a que faltam duas faixas, sem dizer, parece uma folha pronta.
+   */
+  folha: FolhaG3;
+  /**
    * Metadado da logo, e `data_uri` SO quando o chamador pediu `embutir_logo`.
    *
    * Por que nao vem sempre: base64 custa 33% a mais e a tela ja busca o binario
@@ -609,9 +716,10 @@ export type DocumentoDaFatura = {
    * a tela formata-los. `documento.tsx` proibe isso na primeira tela do arquivo -
    * *"dinheiro e data ja vem formatados do servidor, e a tela NAO os reformata"* -
    * e o motivo vale inteiro aqui: `emReais` existe nos DOIS lados (`web/src/
-   * dinheiro.ts` e `dominio/layout-do-documento.ts`), entao formatar na tela poria
-   * o mesmo total na tabela e na faixa por dois caminhos que podem divergir. E o
-   * CRM, que consome esta rota e nao roda React, nao teria nenhum dos dois.
+   * dinheiro.ts` no browser e `dominio/centavos.ts` aqui - eram TRES ate 14/08,
+   * ver o cabecalho de `centavos.ts`), entao formatar na tela poria o mesmo total
+   * na tabela e na faixa por dois caminhos que podem divergir. E o CRM, que
+   * consome esta rota e nao roda React, nao teria nenhum dos dois.
    *
    * NAO da para tirar isso de `linhas[]`: aquela lista obedece a configuracao de
    * campos do tenant, e quem esconder `vencimento` da tabela esconderia o
@@ -628,7 +736,30 @@ export type DocumentoDaFatura = {
          * titulo quando liga para o banco, e o modelo G3 o imprime ao lado do
          * vencimento. Nulo enquanto o boleto nao registrou. */
         nosso_numero: string | null;
+        /* QUEM RECEBE, e ele DEIXOU DE FALTAR em 14/08 com a migration 26. Ate ali
+         * `identidade_de_cobranca` nao tinha razao social nem CNPJ, e o campo era
+         * omitido de proposito: e a ele que o aviso anti-golpe da folha amarra, e
+         * "Beneficiario: —" treina o comportamento oposto ao que o aviso pede.
+         * Continua `null` — e nao travessao — enquanto o tenant nao cadastrar. */
+        beneficiario: string | null;
+        /* A LINHA EM GRUPOS, como ela vem IMPRESSA no boleto do banco:
+         * `75691.50043 01727.686907 00000.130013 1 15410000059669`. O campo cru
+         * continua ao lado porque quem copia e cola quer os digitos - e quem
+         * DIGITA no aplicativo do banco precisa dos grupos, que sao a unica coisa
+         * que torna 47 digitos conferiveis a olho. `null` quando nao sao 47:
+         * inventar agrupamento sobre linha de outro tamanho e pior que o cru. */
+        linha_digitavel_br: string | null;
         vencimento_br: string; valor_br: string;
+        /* A CONFERENCIA DO QUE O BANCO DEVOLVEU, e ela nao existia ate 14/08: a
+         * linha digitavel era impressa sem que nada perguntasse se ela esta certa.
+         * Sao quatro digitos verificadores mais tres comparacoes - a linha contra o
+         * `codigo_barras` do proprio banco, e o valor e o vencimento que o codigo
+         * de barras CARREGA contra os da fatura. Ver `dominio/linha-digitavel.ts`.
+         *
+         * NAO E PARA O PAPEL. Vai no payload porque o CRM consome esta rota e
+         * precisa saber tanto quanto a nossa tela; quem imprime ignora. Dizer ao
+         * cliente que o boleto dele pode estar corrompido nao ajuda o cliente. */
+        conferencia: ConferenciaDoBoleto;
       }
     | {
         tipo: 'pix'; brcode: string; qr: QrDoDocumento | null; qr_motivo?: string;
@@ -742,6 +873,10 @@ export async function paraFatura(faturaId: string, opcoes: OpcoesDoDocumento = {
     flag_fatura_cheia: f.flag_fatura_cheia,
   };
 
+  const emissor: EmissorDaFatura = {
+    razao_social: ident?.razao_social ?? null, cnpj: ident?.cnpj ?? null,
+  };
+
   return {
     fatura_id: f.id,
     status: f.status,
@@ -751,7 +886,22 @@ export async function paraFatura(faturaId: string, opcoes: OpcoesDoDocumento = {
     linhas: linhasDoDocumento(dados, cfg),
     // As duas formas do MESMO documento saem da mesma composicao de dados: a
     // lista e o papel nao podem divergir porque nao ha duas fontes.
+    /* UM emissor para os DOIS: a folha e a faixa imprimem o mesmo nome, e le-lo
+     * duas vezes de `ident` seria a divergencia que este arquivo evita desde 30/07. */
     layout: documentoPosicionado(dados, folha, blocosDoTenant, cfg),
+    // E a TERCEIRA forma, dos mesmos `dados`. Note o argumento: `dados`, e nao
+    // `f` - se a folha lesse a fatura crua ela poderia divergir da lista e do
+    // papel posicionado, que e a divergencia que este arquivo evita desde 30/07.
+    folha: folha1({
+      cliente_nome: dados.cliente_nome,
+      cliente_documento: dados.cliente_documento,
+      numero_uc: dados.numero_uc,
+      endereco: enderecoDaUc(uc),
+      competencia: dados.competencia,
+      vencimento: dados.vencimento,
+      valor_total_centavos: f.valor_total_centavos,
+      numero_da_fatura: `${dados.numero_uc ?? '000000'}-${dados.competencia.slice(0, 7).replace('-', '')}`,
+    }, emissor),
     logo: ident?.logo_mime && ident.logo_bytes != null && ident.logo_sha256
       ? {
           mime: ident.logo_mime, bytes: ident.logo_bytes, sha256: ident.logo_sha256,
@@ -762,7 +912,7 @@ export async function paraFatura(faturaId: string, opcoes: OpcoesDoDocumento = {
             : {}),
         }
       : null,
-    pagamento: faixaDePagamento(f, chaveDaFatura, bol),
+    pagamento: faixaDePagamento(f, chaveDaFatura, bol, emissor),
   };
 }
 
@@ -772,7 +922,47 @@ export async function paraFatura(faturaId: string, opcoes: OpcoesDoDocumento = {
  * `txid` por fatura - o dinheiro chega sem dizer de quem e -, e por isso ele e o
  * SUBSTITUTO enquanto o A1 nao existe, nunca o preferido.
  */
-function faixaDePagamento(f: any, chave: any, bol: any): DocumentoDaFatura['pagamento'] {
+/**
+ * CONFERE O BOLETO E RECUSA O DOCUMENTO SE ELE NAO BATER (`Q-DOCG3-13`).
+ *
+ * A conferencia continua viajando no payload de quem PASSA, e isso nao e
+ * redundante com a recusa: `conferida: true` com lista vazia e a diferenca entre
+ * "conferido e limpo" e "nao havia o que conferir". O CRM consome esta rota e
+ * precisa saber qual dos dois recebeu.
+ */
+/**
+ * O ENDERECO DA UC NUMA LINHA. Vazio vira `null` e nao string com virgulas
+ * soltas: `", , /"` impresso no lugar do endereco parece defeito de sistema, que
+ * e pior do que o campo ausente que ele de fato e.
+ */
+function enderecoDaUc(uc: any): string | null {
+  if (!uc) return null;
+  const rua = [uc.endereco_logradouro, uc.endereco_numero].map((x: unknown) => String(x ?? '').trim())
+    .filter(Boolean).join(', ');
+  const cidade = [uc.endereco_bairro, uc.endereco_municipio].map((x: unknown) => String(x ?? '').trim())
+    .filter(Boolean).join(' — ');
+  const uf = String(uc.endereco_uf ?? '').trim();
+  const partes = [rua, cidade ? (uf ? `${cidade}/${uf}` : cidade) : uf].filter(Boolean);
+  return partes.length ? partes.join(', ') : null;
+}
+
+function exigirBoletoQueConfere(faturaId: string, bol: any, f: any): ConferenciaDoBoleto {
+  const c = conferirBoleto({
+    linha_digitavel: bol.linha_digitavel ?? null,
+    codigo_barras: bol.codigo_barras ?? null,
+    /* O MESMO total e a MESMA data que a faixa imprime, em centavos inteiros e em
+     * ISO - nao o `valor_br` ja formatado, que seria texto voltando a virar
+     * numero para ser comparado. */
+    valor_total_centavos: f.valor_total_centavos == null ? null : Number(f.valor_total_centavos),
+    vencimento_iso: String(f.vencimento instanceof Date
+      ? f.vencimento.toISOString()
+      : f.vencimento).slice(0, 10),
+  });
+  if (c.divergencias.length > 0) throw new BoletoNaoConfere(faturaId, c.divergencias);
+  return c;
+}
+
+function faixaDePagamento(f: any, chave: any, bol: any, emissor: EmissorDaFatura): DocumentoDaFatura['pagamento'] {
   /* Formatados UMA vez, pelos mesmos formatadores que compoem `linhas[]` - e nao
    * por um par proprio. Se o documento passar a escrever data ou dinheiro de outro
    * jeito, a faixa acompanha sozinha; um segundo formatador aqui seria a divergencia
@@ -792,10 +982,18 @@ function faixaDePagamento(f: any, chave: any, bol: any): DocumentoDaFatura['paga
     return {
       tipo: 'boleto',
       linha_digitavel: bol.linha_digitavel ?? null,
+      linha_digitavel_br: linhaDigitavelFormatada(bol.linha_digitavel ?? ''),
       codigo_barras: bol.codigo_barras ?? null,
       pix_copia_e_cola: bol.pix_copia_e_cola ?? null,
       nosso_numero: bol.nosso_numero ?? null,
+      beneficiario: linhaDoEmissor(emissor),
       vencimento_br, valor_br,
+      /* A MESMA data e o MESMO total que a faixa imprime, comparados contra o que
+       * o codigo de barras diz. Nao ha segunda fonte aqui: `vencimento_iso` sai
+       * do mesmo `f.vencimento` de `vencimento_br` logo acima, e o valor sai do
+       * mesmo `f.valor_total_centavos` - em centavos inteiros, sem passar pelo
+       * `valor_br` ja formatado, que seria texto voltando a virar numero. */
+      conferencia: exigirBoletoQueConfere(f.id, bol, f),
       // O Pix DO BANCO tambem ganha desenho. Ele e melhor que o nosso estatico -
       // tem `txid` e concilia sozinho -, entao seria estranho desenhar so o pior.
       ...qrDe(bol.pix_copia_e_cola ?? null),

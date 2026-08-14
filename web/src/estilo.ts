@@ -600,6 +600,90 @@ export const ESTILO = `
      e nao "quase igual" a outra - a lista deste bloco e fechada de proposito. */
   .bloco-fundo { background: #F6F2EA; }
 
+  /* --------------------------------------- a FOLHA 1 DO MODELO G3 (14/08/2026)
+     O DESTINO DA Q-DOCFATURA-01, e agora ele e o que a tela mostra por padrao.
+     A geometria e A4 FIXO - 210x297mm -, e isso e diferente da ".folha" de cima:
+     aquela le o papel que o tenant gravou, esta NAO. Um modelo fixo que aceitasse
+     papel variavel nao seria fixo, e o desenho da referencia e desenhado em mm de
+     A4 ("REFERENCIA-fatura-unificada-2026-08-13.md" §7).
+
+     TAMANHO EM "pt" E NAO "px", como na referencia: "pt" e unidade de impressao e
+     nao muda com o zoom do navegador. A folha e escalada pelo "transform" do
+     palco, entao o que se ve na tela e proporcao exata do que sai.
+
+     NENHUMA COR NOVA. As cinco usadas aqui - #14213D, #F6F2EA, #E8843C, #8F939D,
+     #E4DFD4 - e o #fff sao exatamente as seis que "web/tests/interface.ts" ja
+     conhece. O "#8F939D" nos rotulos e a decisao da "Q-DOCG3-07", tomada em
+     14/08: vale como TINTA em papel (4,02:1 contra branco) e nao vale no cromo de
+     tela, onde a interface continua com o "--fraco" derivado. */
+  .g3 {
+    width: 210mm; min-height: 297mm; padding: 13mm 15mm;
+    background: #fff; color: #14213D;
+    display: flex; flex-direction: column;
+    box-shadow: var(--sombra-2); border: 1px solid var(--borda);
+  }
+  .g3-topo {
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 12pt;
+    padding-bottom: 10pt; border-bottom: 2px solid #14213D;
+  }
+  .g3-topo img { height: 30pt; width: auto; display: block; }
+  .g3-assinatura {
+    font-size: 9pt; font-weight: 500; letter-spacing: .26em;
+    text-transform: uppercase; color: #8F939D; white-space: nowrap;
+  }
+  .g3-emissor { text-align: right; font-size: 8.5pt; line-height: 1.5; color: #8F939D; max-width: 92mm; }
+  .g3-cliente { background: #F6F2EA; padding: 12pt 14pt; margin-top: 10pt; }
+  .g3-cliente-topo {
+    display: grid; grid-template-columns: 1.6fr 1fr; gap: 10pt 18pt;
+    padding-bottom: 9pt; border-bottom: 1px solid #E4DFD4;
+  }
+  .g3-rot {
+    font-size: 7.5pt; letter-spacing: .14em; text-transform: uppercase; color: #8F939D;
+  }
+  .g3-nome { font-size: 15pt; font-weight: 600; line-height: 1.2; }
+  .g3-doc { font-size: 10pt; margin-top: 2pt; }
+  .g3-meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10pt 18pt; padding-top: 9pt; }
+  .g3-meta-val { font-size: 10pt; font-weight: 500; margin-top: 1pt; }
+  .g3-total {
+    background: #14213D; color: #fff; margin-top: 12pt; padding: 14pt 16pt;
+    display: flex; align-items: center; justify-content: space-between; gap: 14pt;
+  }
+  .g3-total-rot { font-size: 13pt; letter-spacing: .06em; text-transform: uppercase; font-weight: 700; }
+  .g3-total-det { font-size: 11pt; margin-top: 2pt; opacity: .75; }
+  .g3-total-val { font-size: 26pt; font-weight: 700; line-height: 1; text-align: right; }
+  .g3-total-sub { font-size: 9pt; margin-top: 4pt; text-align: right; }
+  .g3-total-sub.fraca { opacity: .75; }
+  /* O AVISO E LARANJA COM TINTA NAVY, e nao o contrario: e a unica faixa da folha
+     que precisa ser lida ANTES do valor, e inverter o par a apagaria ao lado da
+     barra navy que vem logo acima. */
+  .g3-aviso {
+    background: #E8843C; color: #14213D; margin-top: 6pt; padding: 10pt 14pt;
+    display: flex; align-items: center; gap: 11pt;
+  }
+  .g3-aviso svg { width: 24pt; height: 24pt; flex: none; }
+  .g3-aviso-tit {
+    font-size: 13.5pt; font-weight: 700; letter-spacing: .05em;
+    text-transform: uppercase; line-height: 1.15;
+  }
+  .g3-aviso-corpo { font-size: 9.5pt; line-height: 1.4; margin-top: 2pt; }
+  /* "margin-top: auto" prende o rodape no pe da folha sem posicionamento
+     absoluto - e o que faz a folha crescer por dentro quando as faixas que
+     faltam entrarem, sem nada precisar ser recalculado. */
+  .g3-rodape {
+    margin-top: auto; padding-top: 12pt;
+    font-size: 7.5pt; color: #8F939D;
+    display: flex; justify-content: space-between; gap: 12pt;
+  }
+  /* O QUE FALTA, DITO NA TELA E NUNCA NO PAPEL. "naoimprime" nao basta como
+     intencao: esta caixa e conferencia de quem opera, e imprimi-la entregaria ao
+     cliente a lista das nossas pendencias. */
+  .g3-pendente {
+    border: 1px dashed var(--borda); border-radius: var(--raio-cartao);
+    padding: 12px 14px; margin-bottom: 12px; font-size: 13px; line-height: 1.5;
+  }
+  .g3-pendente b { display: block; }
+  .g3-pendente li { margin-top: 6px; }
+
   /* ------------------------------------------- a faixa de pagamento (12/08/2026)
      O DESENHO VEIO DO MODELO G3 ("g3_fatura_unificada"), e este e o primeiro
      pedaco dele a entrar - o unico que nao depende do leitor da Equatorial, porque

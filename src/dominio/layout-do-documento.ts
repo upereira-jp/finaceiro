@@ -18,6 +18,17 @@
 // sai formatado por TEXTO; kWh, percentual e tarifa chegam como STRING (numeric do
 // Postgres) e saem como string. Nao ha um `Number()` sobre grandeza fisica em
 // lugar nenhum: a tarifa tem seis casas e virar float a estragaria em silencio.
+//
+// `emReais` MORAVA AQUI E MUDOU PARA `centavos.ts` em 14/08/2026. Era a segunda
+// copia da mesma funcao no servidor, e era a copia que imprimia dinheiro no papel
+// do cliente - sem validar o que recebia. A implementacao que sobreviveu la e
+// EXATAMENTE esta, por texto e sem divisao; o que ela ganhou foi `exigirCentavos`.
+//
+// E ELA NAO E REEXPORTADA DAQUI de proposito. Reexportar nao duplica codigo, mas
+// duplica o CAMINHO - dois `import` legitimos do mesmo simbolo e o comeco de
+// alguem achar que sao dois. Quem precisa de `emReais` importa de `centavos.ts`.
+
+import { emReais } from './centavos.ts';
 
 /** Os 16 valores do enum `campo_de_fatura` da migration 19. */
 export type CampoDeFatura =
@@ -101,14 +112,6 @@ const TIPO: Record<CampoDeFatura, TipoDeValor> = Object.fromEntries(
 TIPO.flag_fatura_cheia = 'booleano';
 
 const ROTULO_PADRAO: Record<string, string> = Object.fromEntries(PADRAO.map((p) => [p.campo, p.rotulo]));
-
-/** 123456 -> "R$ 1.234,56". Por TEXTO, sem divisao (regra 1). */
-export function emReais(centavos: number): string {
-  const negativo = centavos < 0;
-  const s = String(Math.abs(Math.trunc(centavos))).padStart(3, '0');
-  const inteiro = s.slice(0, -2).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  return `${negativo ? '-' : ''}R$ ${inteiro},${s.slice(-2)}`;
-}
 
 /** "2026-07-01" -> "01/07/2026". Recorte de string: `new Date` aplicaria fuso e
  *  a competencia viraria o mes anterior nas primeiras horas do dia. */

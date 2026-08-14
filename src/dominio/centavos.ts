@@ -203,12 +203,33 @@ export function reaisParaCentavos(bruto: string): Centavos {
   return negativo ? -centavos : centavos;
 }
 
-/** R$ 1.234,56 a partir de 123456. So para mensagem de erro e log - nunca para
- *  calculo, e nunca de volta para centavos por caminho nenhum. */
+/**
+ * R$ 1.234,56 a partir de 123456. Para EXIBIR - nunca para calculo, e nunca de
+ * volta para centavos por caminho nenhum.
+ *
+ * ESTA E A UNICA `emReais` DO SERVIDOR, e ate 14/08/2026 eram duas. A outra
+ * morava em `layout-do-documento.ts` e era a que imprimia dinheiro no documento
+ * que vai ao cliente - a copia, e a copia SEM validacao: ela aceitava `number`
+ * cru onde esta exige `Centavos`.
+ *
+ * AS DUAS FORAM EXECUTADAS LADO A LADO ANTES DE COLAPSAR: 4.042 casos, incluindo
+ * toda a fronteira do inteiro seguro e 4.000 sorteados. Saida identica em todos.
+ * Nao havia divergencia a corrigir - havia uma superficie a menos para divergir
+ * amanha.
+ *
+ * A QUE SOBREVIVEU E A "POR TEXTO", e a escolha nao e de gosto. A outra fazia
+ * `Math.trunc(a / 100)`, e dividir dinheiro por 100 e passar por float: esta
+ * exata para todo inteiro seguro - foi o que a medicao mostrou -, mas exata POR
+ * MEDICAO e nao por construcao. A regra 1 diz "float e proibido, inclusive em
+ * calculo intermediario"; recortar a string nao tem calculo nenhum.
+ *
+ * A terceira copia, `web/src/dinheiro.ts`, FICA e e justificada logo acima: o
+ * browser nao importa de `src/`.
+ */
 export function emReais(c: Centavos): string {
   exigirCentavos(c, 'valor');
   const negativo = c < 0;
-  const a = Math.abs(c);
-  const inteiro = Math.trunc(a / 100).toLocaleString('pt-BR');
-  return `${negativo ? '-' : ''}R$ ${inteiro},${String(a % 100).padStart(2, '0')}`;
+  const s = String(Math.abs(c)).padStart(3, '0');
+  const inteiro = s.slice(0, -2).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `${negativo ? '-' : ''}R$ ${inteiro},${s.slice(-2)}`;
 }

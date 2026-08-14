@@ -474,6 +474,8 @@ model identidade_de_cobranca {
   atualizado_em       DateTime          @default(now()) @db.Timestamptz(6)
   criado_em           DateTime          @default(now()) @db.Timestamptz(6)
   chave_pix_padrao_id String?           @db.Uuid
+  razao_social        String?
+  cnpj                String?
   chave_pix           chave_pix?        @relation(fields: [tenant_id, chave_pix_padrao_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "identidade_chave_pix_fk")
   tenant              tenant            @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   logo_de_cobranca    logo_de_cobranca?

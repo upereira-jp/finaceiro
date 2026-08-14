@@ -289,6 +289,12 @@ export type IdentidadeDeCobranca = {
   logo_mime: string | null;
   logo_bytes: number | null;
   logo_sha256: string | null;
+  /* QUEM EMITE, por extenso (migration 26). Sai no cabecalho da folha, no rodape
+   * e no campo Beneficiario da faixa - e e a ele que o aviso anti-golpe amarra.
+   * Nulo enquanto o tenant nao cadastrou, e nulo NAO vira travessao na folha. */
+  razao_social: string | null;
+  /** 14 digitos, sem mascara. A tela formata; o banco guarda cru. */
+  cnpj: string | null;
   atualizado_em: string;
 };
 
@@ -400,6 +406,29 @@ export type LayoutDoDocumento = {
   papeis: Record<Papel, { largura_mm: number; altura_mm: number; rotulo: string; css: string }>;
 };
 
+/**
+ * A FOLHA 1 DO MODELO G3, composta pelo SERVIDOR.
+ *
+ * Espelha `src/dominio/folha-g3.ts`. A tela nao decide rotulo, nao formata
+ * dinheiro e nao mascara documento: recebe tudo pronto, pelo mesmo motivo que o
+ * resto deste arquivo - o CRM consome a mesma rota e nao roda React.
+ */
+export type FolhaG3 = {
+  cabecalho: { assinatura: string; emissor: string | null };
+  cliente: {
+    nome: string; documento: string;
+    meta: Array<{ rotulo: string; valor: string }>;
+  };
+  total: {
+    rotulo: string; detalhe: string; valor: string;
+    ausente: boolean; vencimento: string; nota: string;
+  };
+  aviso: { titulo: string; corpo: string };
+  rodape: { emissor: string | null; paginacao: string };
+  /** O que NAO entrou, com o motivo e a questao que destrava. */
+  faixas_ausentes: Array<{ faixa: string; motivo: string; questao: string }>;
+};
+
 export type DocumentoDaFatura = {
   fatura_id: string;
   status: string;
@@ -409,12 +438,20 @@ export type DocumentoDaFatura = {
   linhas: LinhaDoDocumento[];
   /** O mesmo documento em forma de PAPEL - folha, area e blocos posicionados. */
   layout: DocumentoPosicionado;
+  /** E em forma de MODELO G3 FIXO, que e o destino decidido em 12/08. As duas
+   *  convivem ate a folha G3 ter as sete faixas - ver `folha.faixas_ausentes`. */
+  folha: FolhaG3;
   /** `data_uri` so vem com `?embutir_logo=1`, que e o caminho do consumidor
    *  externo - a tela busca o binario por `GET /cobranca/logo`. */
   logo: { mime: string; bytes: number; sha256: string; data_uri?: string } | null;
   pagamento:
     | {
         tipo: 'boleto'; linha_digitavel: string | null; codigo_barras: string | null;
+        /** A mesma linha em grupos, como o banco a imprime. `null` se nao tem 47. */
+        linha_digitavel_br: string | null;
+        /** Quem recebe, por extenso (migration 26). `null` — nunca "—" — enquanto
+         *  o tenant nao cadastrar: e a ele que o aviso anti-golpe amarra. */
+        beneficiario: string | null;
         pix_copia_e_cola: string | null; qr: QrDoDocumento | null; qr_motivo?: string;
         /** O identificador do titulo no banco. Nulo enquanto nao registrou. */
         nosso_numero: string | null;

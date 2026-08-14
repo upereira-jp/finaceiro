@@ -5,6 +5,7 @@
 | **Data** | 12/08/2026 |
 | **Pedido** | *"preciso que edite a página de documento. Quero o design exatamente como está nesse github. Adapte o que for necessário para manter o padrão que está no github, não quero redundâncias"* |
 | **Fonte** | `github.com/lealvbl-stack/g3_fatura_unificada` · commit `ec1e71b` · dois arquivos (`index.html`, `api/ler-fatura.js`) |
+| **⚠️ Supersedido em parte** | **13/08/2026.** A referência andou **quatro commits** depois de `ec1e71b` e três mudanças **invertem** o que os §2 e §3 abaixo descrevem. O que a referência diz hoje está em **`REFERENCIA-fatura-unificada-2026-08-13.md`** |
 | **Status** | **Plano + a primeira peça construída.** A faixa de pagamento entrou (§6); o resto espera o portão do §1. **Nada foi apagado** |
 | **Suíte** | `EXIT=0` · **3 verificações novas** (W4o/W4p/W4q) · **0 migrations** · nada escrito em produção |
 | **Decide** | a terceira volta da `Q-DOCFATURA-01`: o layout deixa de ser configurável e passa a ser fixo |
@@ -33,6 +34,8 @@ Executadas juntas **hoje**, as duas deixariam o sistema **sem documento nenhum**
 ---
 
 ## 2. O que a fonte é, medido
+
+> **⚠️ Este §2 e o §3 medem `ec1e71b`, e a referência avançou em 13/08.** O corpo fica intacto porque é registro datado — reescrevê-lo falsificaria o que foi decidido em 12/08 e com base em quê. **O que mudou está em `REFERENCIA-fatura-unificada-2026-08-13.md` §2**, e o resumo é: os três cartões da folha 1 trocaram de significado (passaram a comparar energia contra energia), entrou leitura do boleto por IA com conferência, e entraram os quatro dígitos verificadores da linha digitável. O histórico são **13** meses, não 12.
 
 O repositório não é um projeto React legível: é **um HTML de 929 KB** com o app empacotado em `<script type="__bundler/*">` — manifesto gzipado em base64 + um template. Desempacotado, são 36 recursos: três bibliotecas (`pdf.js`, `JsBarcode v3.11.6`, `qrcode`), React 18.3.1 por UMD, **15 arquivos woff2 de Barlow** e o template com o app.
 
@@ -180,7 +183,7 @@ Duas observações que sobrevivem à reescrita:
 | `Q-DOCG3-03` | 🟡 | **Fator de emissão de CO₂.** A referência usa 0,029 kg/kWh como *default de prop*. Valor MCTI/SIRENE muda por ano e por mês — parâmetro de tenant, tabela, ou sai da folha? |
 | `Q-DOCG3-04` | 🟡 | **Série histórica.** Barras de 12 meses e economia acumulada exigem histórico por UC que não é gravado hoje |
 | `Q-DOCG3-05` | 🟢 | **Barlow entra?** Duas famílias novas auto-hospedadas. Sem a semi-condensada o desenho não é o desenho |
-| `Q-DOCG3-06` | 🟢 | **Código de barras.** Interleaved 2 of 5 próprio (como o QR) ou a faixa sai só com linha digitável e PIX |
+| `Q-DOCG3-06` | 🟢 | **Código de barras.** Interleaved 2 of 5 próprio (como o QR) ou a faixa sai só com linha digitável e PIX — **13/08: a pergunta mudou.** A referência mostrou que a parte que falta não é o codificador, e sim **conferir os quatro dígitos verificadores antes de desenhar**. Ver `REFERENCIA-fatura-unificada-2026-08-13.md` §6 |
 | `Q-DOCG3-07` | 🟡 | **O cinza dos rótulos.** `#8F939D` reprova AA em tela (2,75:1, medido). Vale na folha impressa, não vale no cromo |
 
 ---

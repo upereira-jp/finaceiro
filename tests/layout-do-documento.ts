@@ -15,8 +15,9 @@
 //   - CONFIGURACAO PERDENDO PARA O PADRAO. Um campo que o tenant ESCONDEU nao
 //     pode reaparecer no dia em que o padrao ganhar um item novo.
 
+import { emReais } from '../src/dominio/centavos.ts';
 import {
-  linhasDoDocumento, PADRAO, emReais, dataBr, competenciaBr,
+  linhasDoDocumento, PADRAO, dataBr, competenciaBr,
   type DadosDaFatura, type ConfiguracaoDeCampo,
 } from '../src/dominio/layout-do-documento.ts';
 
@@ -46,6 +47,21 @@ const fatura: DadosDaFatura = {
       'oito centavos nao vira "R$ 0,8" e zero e "R$ 0,00"');
   chk('D1d', dataBr('2026-08-10') === '10/08/2026' && competenciaBr('2026-07-01') === '07/2026',
       'data por RECORTE de string: `new Date` aplicaria fuso e a competencia viraria junho de madrugada');
+
+  /*
+   * O QUE O COLAPSO DE 14/08 GANHOU. Ate essa data este arquivo tinha `emReais`
+   * PROPRIA - copia comportamental da de `centavos.ts`, medida identica em 4.042
+   * casos, e a copia era a SEM validacao: aceitava `number` cru. Colapsadas numa
+   * so, o documento do cliente passou a recusar o que nao e centavo inteiro em vez
+   * de formatar em silencio. E a regra 1 chegando ate o papel.
+   */
+  const recusa = (v: unknown) => {
+    try { emReais(v as number); return false; } catch { return true; }
+  };
+  chk('D1e', recusa(12.5) && recusa(NaN) && recusa('82294') && recusa(Infinity),
+      'valor que NAO e centavo inteiro e recusado com nome - nao formatado por aproximacao');
+  chk('D1f', !recusa(0) && !recusa(-1) && !recusa(82294),
+      'zero, negativo e inteiro comum continuam passando - a recusa e do nao-inteiro, nao do incomum');
 }
 
 // --------------------------------------- D2 sem configuracao, vale o PADRAO
@@ -146,4 +162,4 @@ const fatura: DadosDaFatura = {
 
 console.log();
 if (falhas > 0) { console.log(`--- layout: ${falhas} FALHA(S)`); process.exit(1); }
-console.log('--- layout do documento: 22 verificacoes, 0 falhas');
+console.log('--- layout do documento: 24 verificacoes, 0 falhas');

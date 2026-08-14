@@ -39,6 +39,8 @@ import * as boletoRepo from '../src/repos/boleto.ts';
 import * as documento from '../src/repos/documento.ts';
 import { CobrancaFalsa } from '../src/sicoob/falso.ts';
 import { crcConfere } from '../src/dominio/brcode.ts';
+import { codigoDeBarrasDaLinha, montarLinhaDigitavel } from '../src/dominio/linha-digitavel.ts';
+import { dbt } from '../src/db/tipado.ts';
 
 const CONN = process.env.TEST_DATABASE_URL ?? 'postgresql://app_financeiro_login:spike@127.0.0.1:5432/fin_repos';
 const A = process.env.TEST_TENANT_A!;
@@ -594,7 +596,89 @@ const garantirTarifa = async (emT: <T>(f: () => Promise<T>) => Promise<T>) => {
       temPix
         ? `o Pix do BOLETO tambem vem desenhado (versao ${comBoleto.pagamento.qr?.versao})`
         : 'o adaptador falso nao devolveu Pix nesta fatura, e sem Pix nao ha QR a desenhar');
+
+    /*
+     * A CONFERENCIA RODOU E PASSOU, e as duas metades da frase importam. O
+     * adaptador falso passou a montar linha estruturalmente real em 14/08
+     * exatamente para exercer este caminho - se ele ainda devolvesse o formato
+     * inventado de antes, W5f falharia aqui e a unica saida seria uma excecao
+     * para dado de teste DENTRO da regra de recusa.
+     */
+    chk('W5f', comBoleto.pagamento.conferencia.conferida
+            && comBoleto.pagamento.conferencia.divergencias.length === 0,
+      'o boleto do adaptador passa nas quatro verificacoes e bate com valor e vencimento da fatura');
+
+    const daLinha = codigoDeBarrasDaLinha(comBoleto.pagamento.linha_digitavel ?? '');
+    chk('W5g', daLinha !== null && daLinha === comBoleto.pagamento.codigo_barras,
+      'o codigo de barras remontado da linha e IGUAL ao que o adaptador gravou - nada comparava os dois ate 14/08');
+
+    /* A `Q-DOCG3-08` FECHADA, medida no payload. A fixture nao cadastra razao
+     * social, entao o esperado aqui e `null` - e `null` e a resposta certa, nao a
+     * ausencia de teste: e o valor que faz a faixa OMITIR o campo em vez de
+     * imprimir "—" sob o rotulo do aviso anti-golpe. */
+    chk('W5k', comBoleto.pagamento.beneficiario === null,
+      'sem razao social cadastrada o beneficiario do boleto e `null` - e a faixa omite, nao imprime travessao');
+
+    chk('W5l', (comBoleto.pagamento.linha_digitavel_br ?? '').split(' ').length === 5
+            && (comBoleto.pagamento.linha_digitavel_br ?? '').replace(/\D/g, '')
+               === comBoleto.pagamento.linha_digitavel,
+      `a linha viaja TAMBEM em grupos, e os digitos dos dois campos sao os mesmos (${comBoleto.pagamento.linha_digitavel_br})`);
   }
+}
+
+// ============================== W5h a RECUSA, no caminho real (`Q-DOCG3-13`)
+{
+  /*
+   * O INVARIANTE DA DECISAO DE 14/08, e ele precisa de teste no caminho REAL e
+   * nao so no modulo puro (regra 8): boleto que nao confere com a fatura NAO tem
+   * documento composto. As verificacoes L8* de `tests/linha-digitavel.ts` provam
+   * que `conferirBoleto` acha a divergencia; esta prova que `paraFatura` RECUSA
+   * por causa dela - que e coisa diferente, e e a que o cliente sente.
+   *
+   * O ESTRAGO E FEITO NO BANCO, direto na coluna, e nao pela porta: a porta nao
+   * tem como registrar boleto errado de proposito, e simular isso nela testaria a
+   * simulacao. Um digito trocado na linha e exatamente o que uma resposta
+   * truncada da Sicoob produziria.
+   */
+  const antes = await emA(() => documento.paraFatura(faturaA));
+  const linhaBoa = antes.pagamento.tipo === 'boleto' ? (antes.pagamento.linha_digitavel ?? '') : '';
+  const corrompida = linhaBoa.slice(0, 3) + String((Number(linhaBoa[3]) + 1) % 10) + linhaBoa.slice(4);
+
+  await emA(() => dbt().boleto.updateMany({
+    where: { fatura_id: faturaA }, data: { linha_digitavel: corrompida },
+  }));
+
+  const recusa = await lancou(() => emA(() => documento.paraFatura(faturaA)));
+  chk('W5h', recusa?.name === 'BoletoNaoConfere' && (recusa as { status?: number }).status === 409,
+    `um digito trocado na linha e o documento NAO compoe: ${recusa?.name} (${(recusa as { status?: number })?.status})`);
+  chk('W5i', String(recusa?.message ?? '').includes('campo 1'),
+    'a mensagem NOMEIA o que falhou, e nao so diz "nao confere" - quem le tem de saber onde procurar');
+
+  // E o valor divergente, que os verificadores NAO pegam sozinhos: a linha
+  // continua valida, o que discorda e o total. E o buraco medido em L2e.
+  await emA(() => dbt().boleto.updateMany({
+    where: { fatura_id: faturaA }, data: { linha_digitavel: linhaBoa },
+  }));
+  const outraLinha = montarLinhaDigitavel({
+    vencimento_iso: String(antes.pagamento.tipo === 'boleto' ? antes.pagamento.vencimento_br : '')
+      .split('/').reverse().join('-'),
+    valor_centavos: 1, campoLivre: '9'.repeat(25),
+  });
+  await emA(() => dbt().boleto.updateMany({
+    where: { fatura_id: faturaA },
+    data: { linha_digitavel: outraLinha.linha, codigo_barras: outraLinha.codigo_barras },
+  }));
+  const porValor = await lancou(() => emA(() => documento.paraFatura(faturaA)));
+  chk('W5j', porValor?.name === 'BoletoNaoConfere'
+          && String(porValor.message).includes('R$ 0,01'),
+    'LINHA VALIDA com valor errado tambem recusa, e a mensagem diz os DOIS valores - '
+    + 'e o caso que os digitos verificadores nao pegam (1 em 5 escapa, medido em L2e)');
+
+  // Devolve o estado, para nao contaminar as verificacoes seguintes.
+  await emA(() => dbt().boleto.updateMany({
+    where: { fatura_id: faturaA },
+    data: { linha_digitavel: linhaBoa, codigo_barras: codigoDeBarrasDaLinha(linhaBoa) },
+  }));
 }
 
 // ===================================================== W6 o total nulo, medido

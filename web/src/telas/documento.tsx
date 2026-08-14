@@ -119,6 +119,29 @@ export function TelaDocumento() {
    * acrescenta destino possivel, o outro decide para onde o proximo lote vai
    * cobrar - e juntar os dois num botao so faria cadastrar mudar o destino das
    * faturas que ainda vao ser compostas, sem ninguem ter pedido. */
+  /* QUEM EMITE, por extenso (migration 26). Nasce com o que ja esta gravado e
+   * NAO vazio como o formulario da chave Pix: ali o campo vazio evita sobrescrever
+   * a chave atual sem querer; aqui e o contrario, o valor e um so por tenant e
+   * quem abre a tela esta editando o que existe. */
+  const [razaoSocial, setRazaoSocial] = useState('');
+  const [cnpj, setCnpj] = useState('');
+  useEffect(() => {
+    if (!ident.dado) return;
+    setRazaoSocial(ident.dado.razao_social ?? '');
+    setCnpj(ident.dado.cnpj ?? '');
+  }, [ident.dado?.razao_social, ident.dado?.cnpj]);
+
+  const salvarEmissor = async () => {
+    const ok = await acao.executar(() => api.post('/cobranca/identidade', {
+      // A chave padrao viaja junto porque o POST e um UPSERT da linha inteira:
+      // omiti-la apagaria a escolha de destino ao salvar o nome de quem recebe.
+      chave_pix_padrao_id: ident.dado?.chave_pix_padrao_id ?? null,
+      razao_social: razaoSocial.trim() || null,
+      cnpj: cnpj.trim() || null,
+    }));
+    if (ok) { acao.anunciar('Emissor salvo.'); ident.recarregar(); }
+  };
+
   const escolherPadrao = async (id: string) => {
     const ok = await acao.executar(() => api.post('/cobranca/identidade', {
       chave_pix_padrao_id: id || null,
@@ -177,6 +200,32 @@ export function TelaDocumento() {
       )}
       {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
       {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
+
+      {/* -------------------------------------------------------- quem emite */}
+      <div className="cartao" style={{ marginBottom: 20 }}>
+        <h2 style={{ marginTop: 0 }}><Icone nome="cobranca" tamanho={17} /> Quem emite a fatura</h2>
+        <p className="sub">
+          Sai no <strong>cabeçalho</strong> e no <strong>rodapé</strong> da folha, e no campo
+          <strong> Beneficiário</strong> da faixa de pagamento — é a este nome que o aviso contra o
+          golpe do boleto amarra (<em>"confira sempre se o beneficiário é…"</em>). Sem ele cadastrado
+          a folha sai <strong>sem a linha</strong>, e não com um travessão: um travessão ali treinaria
+          exatamente o comportamento que o aviso quer impedir.
+        </p>
+        <div className="campos">
+          <Campo rotulo="Razão social" valor={razaoSocial} ao={setRazaoSocial}
+                 dica="Consórcio G3 Gestão de Energia Solar" />
+          <Campo rotulo="CNPJ" valor={cnpj} ao={setCnpj} dica="Com ou sem máscara" />
+          <div style={{ alignSelf: 'end' }}>
+            <button className="primario" onClick={() => void salvarEmissor()} disabled={acao.ocupado}>
+              <Icone nome="confirmar" tamanho={15} peso="bold" /> Salvar emissor
+            </button>
+          </div>
+        </div>
+        <p className="sub" style={{ marginBottom: 0 }}>
+          O CNPJ é conferido pelo <strong>dígito verificador</strong>, e não só pelo formato: este
+          número sai impresso ao lado do aviso que manda o cliente conferir antes de pagar.
+        </p>
+      </div>
 
       {/* ------------------------------------------------------------- a logo */}
       <div className="cartao" style={{ marginBottom: 20 }}>
@@ -426,6 +475,10 @@ function Previa({ logoUrl }: { logoUrl: string | null }) {
   const [mes, setMes] = useState(() => new Date().toISOString().slice(0, 7));
   const [faturaId, setFaturaId] = useState('');
   const [emLote, setEmLote] = useState(false);
+  /* PADRAO `g3` desde 14/08: o modelo fixo e o destino decidido, e um destino que
+   * nasce escondido atras de um interruptor desligado nao e destino. O editor de
+   * blocos continua alcancavel enquanto a folha G3 nao tem as sete faixas. */
+  const [modelo, setModelo] = useState<ModeloDoDocumento>('g3');
 
   const faturas = useDados<Fatura[]>(() => api.get(`/faturamento/${competenciaISO(mes)}`), [mes]);
   /*
@@ -457,6 +510,10 @@ function Previa({ logoUrl }: { logoUrl: string | null }) {
           <div style={{ alignSelf: 'end' }}>
             <Interruptor ligado={emLote} ao={setEmLote}
                          rotulo={`Imprimir o mês inteiro${faturas.dado ? ` (${faturas.dado.length} fatura(s))` : ''}`} />
+          </div>
+          <div style={{ alignSelf: 'end' }}>
+            <Interruptor ligado={modelo === 'blocos'} ao={(v) => setModelo(v ? 'blocos' : 'g3')}
+                         rotulo="Usar o layout configurável em vez do modelo G3" />
           </div>
         </div>
 
@@ -492,8 +549,8 @@ function Previa({ logoUrl }: { logoUrl: string | null }) {
       </div>
 
       {emLote
-        ? <Lote faturas={faturas.dado ?? []} rotuloDaFatura={rotuloDaFatura} logoUrl={logoUrl} mes={mes} />
-        : doc.dado && <Documento doc={doc.dado} logoUrl={logoUrl} />}
+        ? <Lote faturas={faturas.dado ?? []} rotuloDaFatura={rotuloDaFatura} logoUrl={logoUrl} mes={mes} modelo={modelo} />
+        : doc.dado && <Documento doc={doc.dado} logoUrl={logoUrl} modelo={modelo} />}
     </>
   );
 }
@@ -520,11 +577,12 @@ function Previa({ logoUrl }: { logoUrl: string | null }) {
  *     status imprime (`documento.paraFatura` compoe qualquer uma), entao
  *     descartar em silencio seria a tela inventando regra — regra 10.
  */
-function Lote({ faturas, rotuloDaFatura, logoUrl, mes }: {
+function Lote({ faturas, rotuloDaFatura, logoUrl, mes, modelo }: {
   faturas: readonly Fatura[];
   rotuloDaFatura: (f: Fatura) => string;
   logoUrl: string | null;
   mes: string;
+  modelo: ModeloDoDocumento;
 }) {
   const [incluidos, setIncluidos] = useState<StatusFatura[]>([...STATUS_PADRAO_DO_LOTE]);
   const [composicao, setComposicao] = useState<ResultadoDaComposicao<DocumentoDaFatura> | null>(null);
@@ -623,7 +681,7 @@ function Lote({ faturas, rotuloDaFatura, logoUrl, mes }: {
       </div>
 
       {composicao && composicao.compostos.length > 0 && (
-        <Documentos docs={composicao.compostos} logoUrl={logoUrl} />
+        <Documentos docs={composicao.compostos} logoUrl={logoUrl} modelo={modelo} />
       )}
     </>
   );
@@ -650,8 +708,21 @@ function Lote({ faturas, rotuloDaFatura, logoUrl, mes }: {
  * que o desenho da folha divergir entre "uma" e "o mes inteiro" e o dia em que a
  * previa deixa de provar o que sai da impressora.
  */
-function Documento({ doc, logoUrl }: { doc: DocumentoDaFatura; logoUrl: string | null }) {
-  return <Documentos docs={[doc]} logoUrl={logoUrl} />;
+/**
+ * QUAL DOS DOIS DOCUMENTOS. `g3` e o destino decidido pela `Q-DOCFATURA-01` em
+ * 12/08 e e o PADRAO desde 14/08; `blocos` e a composicao posicionada da
+ * migration 23, que continua viva porque a folha G3 ainda nao tem duas das sete
+ * faixas — retira-la hoje deixaria o sistema sem documento nenhum.
+ *
+ * A escolha e da TELA e nao do tenant, de proposito: nao e configuracao, e uma
+ * travessia. Gravar isso no banco daria a ela cara de permanencia.
+ */
+export type ModeloDoDocumento = 'g3' | 'blocos';
+
+function Documento({ doc, logoUrl, modelo = 'g3' }: {
+  doc: DocumentoDaFatura; logoUrl: string | null; modelo?: ModeloDoDocumento;
+}) {
+  return <Documentos docs={[doc]} logoUrl={logoUrl} modelo={modelo} />;
 }
 
 /**
@@ -668,10 +739,15 @@ function Documento({ doc, logoUrl }: { doc: DocumentoDaFatura; logoUrl: string |
  * nao mudariam a impressao, mas fariam parecer que o papel pode variar dentro
  * de um lote - e ele nao pode.
  */
-function Documentos({ docs, logoUrl }: { docs: readonly DocumentoDaFatura[]; logoUrl: string | null }) {
+function Documentos({ docs, logoUrl, modelo = 'g3' }: {
+  docs: readonly DocumentoDaFatura[]; logoUrl: string | null; modelo?: ModeloDoDocumento;
+}) {
   const primeiro = docs[0];
   if (!primeiro) return null;
-  const papelCss = PAPEL_CSS[primeiro.layout.folha.papel] ?? 'A4';
+  /* O MODELO G3 E A4 SEMPRE, e nao o papel gravado pelo tenant: ele e desenhado
+   * em milimetro de A4, e imprimi-lo em A5 nao o encolheria — cortaria. */
+  const papelCss = modelo === 'g3' ? 'A4' : (PAPEL_CSS[primeiro.layout.folha.papel] ?? 'A4');
+  const orientacao = modelo === 'g3' ? 'retrato' : primeiro.layout.folha.orientacao;
 
   return (
     <>
@@ -679,10 +755,12 @@ function Documentos({ docs, logoUrl }: { docs: readonly DocumentoDaFatura[]; log
           morar no `estilo.ts` com o resto - e sem ela o navegador usaria o papel
           padrao do SISTEMA de quem imprime, que foi o defeito que a migration 23
           nomeou: a mesma fatura saindo com geometria diferente em duas maquinas. */}
-      <style>{regraDaPagina(papelCss, primeiro.layout.folha.orientacao)}</style>
+      <style>{regraDaPagina(papelCss, orientacao)}</style>
 
       <div id="documento">
-        {docs.map((d) => <Folha key={d.fatura_id} doc={d} logoUrl={logoUrl} />)}
+        {docs.map((d) => (modelo === 'g3'
+          ? <FolhaModeloG3 key={d.fatura_id} doc={d} logoUrl={logoUrl} />
+          : <Folha key={d.fatura_id} doc={d} logoUrl={logoUrl} />))}
       </div>
     </>
   );
@@ -732,6 +810,119 @@ function Folha({ doc, logoUrl }: { doc: DocumentoDaFatura; logoUrl: string | nul
                 <ConteudoDoBloco b={b} doc={doc} logoUrl={logoUrl} />
               </div>
             ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A FOLHA 1 DO MODELO G3 — o destino da `Q-DOCFATURA-01`, na tela.
+ *
+ * ELA NAO COMPOE NADA, e essa e a mesma regra da tela inteira: rotulo, dinheiro,
+ * data e CPF mascarado chegam prontos de `folha-g3.ts`, no servidor. O que este
+ * componente faz e pintar — e o CRM, que consome a mesma rota e nao roda React,
+ * pinta o mesmo conteudo do jeito dele.
+ *
+ * A GEOMETRIA E A4 FIXO e nao le o papel do tenant, ao contrario da `Folha` de
+ * cima. Um modelo fixo que aceitasse papel variavel nao seria fixo.
+ *
+ * O QUE FALTA APARECE NA TELA E NUNCA NO PAPEL. Duas das sete faixas nao entraram
+ * — os tres cartoes e o detalhamento dos repasses —, e a folha carrega a lista com
+ * o motivo. Imprimi-la entregaria ao cliente a nossa lista de pendencias; escondе-la
+ * faria a folha parecer pronta. Entao ela sai na tela, fora da folha.
+ */
+function FolhaModeloG3({ doc, logoUrl }: { doc: DocumentoDaFatura; logoUrl: string | null }) {
+  const f = doc.folha;
+  const [palco, larguraPx] = useLargura<HTMLDivElement>();
+  const escala = escalaDaPrevia(larguraPx, 210);
+
+  return (
+    <div className="folha-item">
+      {f.faixas_ausentes.length > 0 && (
+        <div className="g3-pendente naoimprime">
+          <b>Esta folha ainda nao esta completa — {f.faixas_ausentes.length} faixa(s) fora.</b>
+          <ul>
+            {f.faixas_ausentes.map((a) => (
+              <li key={a.faixa}><strong>{a.faixa}:</strong> {a.motivo} <em>({a.questao})</em></li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div ref={palco} className="folha-recorte"
+           style={{ height: 297 * PX_POR_MM * escala + 2, overflow: 'hidden' }}>
+        <div className="folha-palco" style={{ ['--escala' as any]: escala }}>
+          <div className="g3">
+            <div className="g3-topo">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4pt' }}>
+                {/* SEM LOGO O ESPACO FICA VAZIO, e nao com o nome escrito: o nome
+                    JA sai a direita, e imprimi-lo dos dois lados do mesmo cabecalho
+                    e a redundancia que o modelo G3 nao tem. Ausencia de logo e
+                    ausencia de logo - a marca continua dita, uma vez. */}
+                {logoUrl && <img src={logoUrl} alt="" />}
+                <div className="g3-assinatura">{f.cabecalho.assinatura}</div>
+              </div>
+              {/* AUSENTE E AUSENTE: sem razao social cadastrada a linha some, e nao
+                  vira travessao — e a ela que o aviso anti-golpe amarra. */}
+              {f.cabecalho.emissor && <div className="g3-emissor">{f.cabecalho.emissor}</div>}
+            </div>
+
+            <div className="g3-cliente">
+              <div className="g3-cliente-topo">
+                <div>
+                  <div className="g3-rot">Nome / razão social</div>
+                  <div className="g3-nome">{f.cliente.nome}</div>
+                </div>
+                <div>
+                  <div className="g3-rot">CPF / CNPJ</div>
+                  <div className="g3-doc">{f.cliente.documento}</div>
+                </div>
+              </div>
+              <div className="g3-meta">
+                {f.cliente.meta.map((m) => (
+                  <div key={m.rotulo}>
+                    <div className="g3-rot">{m.rotulo}</div>
+                    <div className="g3-meta-val">{m.valor}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="g3-total">
+              <div style={{ minWidth: 0 }}>
+                <div className="g3-total-rot">{f.total.rotulo}</div>
+                <div className="g3-total-det">{f.total.detalhe}</div>
+              </div>
+              <div style={{ flex: 'none' }}>
+                <div className="g3-total-val">{f.total.valor}</div>
+                <div className="g3-total-sub">Vencimento {f.total.vencimento}</div>
+                <div className="g3-total-sub fraca">{f.total.nota}</div>
+              </div>
+            </div>
+
+            <div className="g3-aviso">
+              {/* O triangulo desenhado a mao e nao vindo do pacote de icones: o
+                  pacote e da INTERFACE, e um icone de tela dentro do papel traria
+                  peso e tamanho pensados para outro meio. */}
+              <svg viewBox="0 0 24 24" fill="none" stroke="#14213D" strokeWidth="1.3"
+                   strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 3.6L21.4 20H2.6L12 3.6z" />
+                <path d="M12 9.6v4.6" /><path d="M12 17.1h.01" />
+              </svg>
+              <div>
+                <div className="g3-aviso-tit">{f.aviso.titulo}</div>
+                <div className="g3-aviso-corpo">{f.aviso.corpo}</div>
+              </div>
+            </div>
+
+            <FaixaDePagamento doc={doc} />
+
+            <div className="g3-rodape">
+              <span>{f.rodape.emissor ?? ''}</span>
+              <span style={{ whiteSpace: 'nowrap' }}>{f.rodape.paginacao}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -898,20 +1089,27 @@ function FaixaDePagamento({ doc }: { doc: DocumentoDaFatura }) {
           lugar dele fica com o apelido da chave, que e o que identifica o destino
           quando ha mais de uma cadastrada. */}
       <div className="faixa-pgto-campos">
-        {/* O BENEFICIARIO SO APARECE QUANDO EXISTE, e a ausencia dele no boleto nao
-            e descuido: `identidade_de_cobranca` NAO tem razao social nem CNPJ (so
-            logo e chave padrao), entao no caminho do boleto nao ha nome de quem
-            recebe em lugar nenhum do schema. O Pix tem, porque a `chave_pix` carrega
-            `recebedor_nome` - o campo 59 do BR Code.
+        {/* O BENEFICIARIO, E ELE DEIXOU DE FALTAR NO BOLETO em 14/08. Ate ali
+            `identidade_de_cobranca` nao tinha razao social nem CNPJ, entao no
+            caminho do boleto nao havia nome de quem recebe em lugar nenhum do
+            schema, e o campo era omitido. A migration 26 criou as duas colunas e
+            fechou a `Q-DOCG3-08`. O Pix ja tinha, pela `chave_pix.recebedor_nome`
+            — o campo 59 do BR Code.
 
-            IMPRIMIR "—" SOB O ROTULO SERIA PIOR QUE OMITIR: no modelo G3 este e o
-            campo do aviso anti-golpe (*"confira sempre se o beneficiario e..."*), e
-            um travessao ali ensina o cliente a aceitar fatura sem beneficiario.
-            Registrado na `Q-DOCG3-08`. */}
+            CONTINUA SO APARECENDO QUANDO EXISTE, e essa parte nao mudou: imprimir
+            "—" sob o rotulo seria pior que omitir. No modelo G3 este e o campo do
+            aviso anti-golpe (*"confira sempre se o beneficiario e..."*), e um
+            travessao ali ensina o cliente a aceitar fatura sem beneficiario. */}
         {pagamento.tipo === 'pix' && (
           <div>
             <div className="faixa-pgto-rot">Beneficiário</div>
             <div className="faixa-pgto-val">{pagamento.recebedor_nome}</div>
+          </div>
+        )}
+        {boleto && pagamento.beneficiario && (
+          <div>
+            <div className="faixa-pgto-rot">Beneficiário</div>
+            <div className="faixa-pgto-val">{pagamento.beneficiario}</div>
           </div>
         )}
         {boleto && (
@@ -959,8 +1157,12 @@ function FaixaDePagamento({ doc }: { doc: DocumentoDaFatura }) {
                 (`Q-DOCG3-06`). A linha digitavel paga em qualquer banco e por
                 digitacao, entao a fatura sai completa - o que falta e a leitura
                 otica. Um retangulo listrado no lugar seria pior que a ausencia. */}
+            {/* EM GRUPOS, e nao os 47 digitos corridos: e assim que o boleto do
+                banco imprime, e e o agrupamento que torna a linha conferivel a
+                olho. Cai no cru quando nao sao 47 - a formatacao vem do servidor
+                (`linhaDigitavelFormatada`), como todo o resto desta faixa. */}
             <div className="faixa-pgto-linha" style={{ marginTop: 'auto' }}>
-              {pagamento.linha_digitavel ?? '—'}
+              {pagamento.linha_digitavel_br ?? pagamento.linha_digitavel ?? '—'}
             </div>
             <div className="faixa-pgto-nota" style={{ textAlign: 'center', marginBottom: 'auto' }}>
               Pagável em qualquer banco até o vencimento
