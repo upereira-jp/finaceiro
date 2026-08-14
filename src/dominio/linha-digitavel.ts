@@ -365,13 +365,28 @@ export function conferirBoleto(entrada: {
 export function explicarDivergencia(d: DivergenciaDoBoleto): string {
   switch (d.tipo) {
     case 'linha_invalida':
-      return `A linha digitavel nao passa na verificacao de ${d.falhas.join(', ')}.`;
+      return `A linha digitável não passa na verificação de ${d.falhas.join(', ')}.`;
     case 'codigo_de_barras_discorda':
-      return 'O codigo de barras que o banco gravou nao e o mesmo que a linha digitavel dele remonta '
+      return 'O código de barras que o banco gravou não é o mesmo que a linha digitável dele remonta '
            + `(banco ${d.do_banco}, linha ${d.da_linha}).`;
+    /*
+     * AS DUAS FRASES ABAIXO DIZEM DE ONDE O NUMERO VEIO, e a fotografia da tela
+     * em 15/08 e que mostrou por que isso importa.
+     *
+     * A conferencia do boleto produz DUAS afirmacoes sobre valor, e elas sao
+     * fatos diferentes: esta sai dos **44 digitos do codigo de barras**, e a
+     * outra sai do **texto que o modelo de visao leu no PDF**. Na tela elas
+     * apareciam uma embaixo da outra, com numeros diferentes e a mesma voz -
+     * e o efeito era parecer que o sistema se contradizia, quando na verdade
+     * estava apontando que o boleto discorda de si mesmo.
+     *
+     * Dizer a origem transforma duas linhas confusas em duas pistas.
+     */
     case 'valor_discorda':
-      return `O boleto e de ${emReais(d.no_boleto)} e a fatura e de ${emReais(d.na_fatura)}.`;
+      return `O código de barras do boleto carrega ${emReais(d.no_boleto)} e esta fatura é de `
+           + `${emReais(d.na_fatura)}.`;
     case 'vencimento_discorda':
-      return `O boleto vence em ${dataBr(d.no_boleto)} e a fatura em ${dataBr(d.na_fatura)}.`;
+      return `O código de barras do boleto vence em ${dataBr(d.no_boleto)} e esta fatura vence em `
+           + `${dataBr(d.na_fatura)}.`;
   }
 }

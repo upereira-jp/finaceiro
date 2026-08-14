@@ -458,7 +458,7 @@ export function comporFolhas(
           nota: textos.nota_do_fator,
         },
       },
-      pagamento: comporPagamento(boleto, emissor, venc, conta, textos, conferencia, conf, cod),
+      pagamento: comporPagamento(boleto, campos, emissor, venc, conta, textos, conferencia, conf, cod),
       rodape: {
         telefone: extras.contato?.telefone?.trim() || '',
         emissor: linhaEmissor,
@@ -540,6 +540,7 @@ function motivoDoHistorico(quantos: number): string {
  */
 function comporPagamento(
   b: DadosDoBoleto,
+  campos: CamposDaFaturaUnificada,
   emissor: EmissorDaFatura,
   vencimento: string,
   conta: ContaDaFatura,
@@ -598,7 +599,7 @@ function comporPagamento(
     linha_formatada: conf.valida ? linhaDigitavelFormatada(b.linha_digitavel) : null,
     rodape_legal: textos.rodape_legal.map((t) => String(t ?? '').trim()).filter(Boolean),
     conferencia,
-    alertas: alertasDoBoleto(b, conta, conferencia, emissor),
+    alertas: alertasDoBoleto(b, campos, conta, conferencia, emissor),
   };
 }
 
@@ -624,6 +625,7 @@ function comporPagamento(
  */
 function alertasDoBoleto(
   b: DadosDoBoleto,
+  campos: CamposDaFaturaUnificada,
   conta: ContaDaFatura,
   conferencia: ConferenciaDoBoleto,
   emissor: EmissorDaFatura,
@@ -638,7 +640,14 @@ function alertasDoBoleto(
    * certos e o beneficiario ser outro. */
   const venc = b.vencimento.trim();
   if (venc && !/^\d{2}\/\d{2}\/\d{4}$/.test(venc)) {
-    a.push(`O vencimento lido no boleto ("${venc}") não está em DD/MM/AAAA — não deu para conferi-lo.`);
+    a.push(`O vencimento lido no PDF do boleto ("${venc}") não está em DD/MM/AAAA — não deu para conferi-lo.`);
+  } else if (venc && campos.vencimento.trim() && venc !== campos.vencimento.trim()) {
+    /* A TERCEIRA PERGUNTA DA REFERENCIA (§4.1), e ela e sobre o TEXTO: o codigo
+     * de barras ja e conferido pela aritmetica acima, e as duas podem discordar
+     * entre si - e nesse caso o boleto discorda de si mesmo, que e a informacao
+     * mais util das tres. */
+    a.push(`O vencimento lido no PDF do boleto é ${venc} e esta fatura vence em `
+         + `${campos.vencimento.trim()}.`);
   }
 
   const valor = b.valor.trim();
@@ -648,7 +657,9 @@ function alertasDoBoleto(
     if (noBoleto === null) {
       a.push(`O valor lido no boleto ("${valor}") não é um número reconhecível — não deu para conferi-lo.`);
     } else if (Math.abs(noBoleto - conta.total_centavos) > 1) {
-      a.push(`Valor divergente: o boleto é de ${emReais(noBoleto)} e o cálculo desta fatura `
+      /* "LIDO NO PDF" e o que separa esta frase da irma dela, que sai dos 44
+       * digitos do codigo de barras. Sao dois fatos e nao um repetido. */
+      a.push(`O valor lido no PDF do boleto é ${emReais(noBoleto)} e o cálculo desta fatura `
            + `dá ${emReais(conta.total_centavos)}.`);
     }
   }
