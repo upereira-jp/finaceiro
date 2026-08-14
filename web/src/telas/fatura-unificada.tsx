@@ -34,6 +34,10 @@ import { TrianguloDeAviso } from '../icones.tsx';
 import { escalaDaPrevia, regraDaPagina, PX_POR_MM } from '../layout-regras.ts';
 import { emReais } from '../dinheiro.ts';
 import { useLargura } from '../medir-largura.ts';
+import {
+  ROTULO_DA_ABA, ordemDasAbas, revelaAbaOculta, abaVigente,
+  FRAGMENTO_DA_ABA_OCULTA, type AbaDaFatura,
+} from '../abas-da-fatura.ts';
 
 /** `setState` sem depender do namespace `React` — o transform novo nao o poe em escopo. */
 type Ajustar<T> = (f: (anterior: T) => T) => void;
@@ -184,7 +188,7 @@ function Status({ tom, margem, children }: {
 
 /* ------------------------------------------------------------------- a tela */
 
-type Aba = 'leitura' | 'emissao' | 'cadastro';
+type Aba = AbaDaFatura;
 
 /**
  * `cadastro` e um pedaco que a ABA HOSPEDA, e nao esta tela.
@@ -210,6 +214,29 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
   cadastro?: ReactNode;
 }) {
   const [aba, setAba] = useState<Aba>('leitura');
+
+  /*
+   * A ABA DE CADASTRO SAIU DA BARRA em 14/08/2026 — *"deixe a etapa de cadastro
+   * da fatura oculta por enquanto"*. Ela continua alcancavel por
+   * `/documento#cadastro`, e o porque de nao ter sido REMOVIDA esta em
+   * `abas-da-fatura.ts`: e o unico caminho de tela para o que a folha imprime, e
+   * os cinco campos do emissor estavam VAZIOS em producao no dia.
+   *
+   * O `hashchange` existe para os dois sentidos funcionarem SEM RECARREGAR:
+   * colar o fragmento revela, apagar o fragmento esconde. Sem ele, so quem
+   * entrasse na pagina ja com o `#` veria a aba, e tirar o `#` nao a fecharia.
+   */
+  const [revelada, setRevelada] = useState(() => revelaAbaOculta(window.location.hash));
+  useEffect(() => {
+    const ouvir = () => setRevelada(revelaAbaOculta(window.location.hash));
+    window.addEventListener('hashchange', ouvir);
+    return () => window.removeEventListener('hashchange', ouvir);
+  }, []);
+
+  const ordem = ordemDasAbas(revelada);
+  /* Quem estava no cadastro e apagou o `#` cai na primeira — sem isso a barra
+   * fica com nenhuma aba marcada e nenhuma no caminho do Tab. */
+  const abaAtual = abaVigente(aba, ordem);
   const rascunho = lerRascunho(tenantId);
   const [campos, setCampos] = useState<CamposDaFatura>(rascunho?.campos ?? CAMPOS_DA_FATURA_VAZIOS);
   const [parametros, setParametros] = useState<ParametrosDaEmissao>(rascunho?.parametros ?? PARAMETROS_PADRAO);
@@ -374,7 +401,13 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
 
   return (
     <>
-      <Abas atual={aba} ao={irPara} acao={{ texto: 'Nova fatura', ao: novaFatura }} />
+      {/* O `#cadastro` REVELA, nao seleciona: quem esta nele e clica em "1 ·
+          Leitura" continua com a aba de cadastro na barra, porque o fragmento
+          continua no endereco. Sao duas perguntas diferentes — qual aba EXISTE e
+          qual esta ABERTA — e misturar as duas faria a aba sumir debaixo de quem
+          so quis olhar a etapa anterior. */}
+      <Abas atual={abaAtual} ordem={ordem} ao={irPara}
+            acao={{ texto: 'Nova fatura', ao: novaFatura }} />
 
       {erroDaComposicao && (
         <div className="naoimprime"><Aviso tipo="erro">
@@ -382,8 +415,8 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
         </Aviso></div>
       )}
 
-      <div id={`fu-painel-${aba}`} role="tabpanel" aria-labelledby={`fu-aba-${aba}`}>
-        {aba === 'leitura' && (
+      <div id={`fu-painel-${abaAtual}`} role="tabpanel" aria-labelledby={`fu-aba-${abaAtual}`}>
+        {abaAtual === 'leitura' && (
           <AbaDeLeitura
             campos={campos} mudar={mudar} setCampos={setCampos}
             parametros={parametros} setParametros={setParametros}
@@ -414,24 +447,20 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
             na arvore imprimem juntas. Hoje so existe uma — e e por isso que
             qualquer coisa que volte a montar `id="documento"` tem de vir com o
             teste `W-imprime-uma-folha-so` junto. */}
-        {aba === 'emissao' && (
+        {abaAtual === 'emissao' && (
           <AbaDeEmissao composicao={composicao} logoUrl={logoUrl}
                         irParaPainel={() => irPara('leitura')} />
         )}
-        {aba === 'cadastro' && cadastro}
+        {abaAtual === 'cadastro' && cadastro}
       </div>
     </>
   );
 }
 
-/* --------------------------------------------------------------- as tres abas */
-
-const ROTULO_DA_ABA: Record<Aba, string> = {
-  leitura: '1 · Leitura e cálculo',
-  emissao: '2 · Emissão',
-  cadastro: '3 · Cadastro da fatura',
-};
-const ORDEM_DAS_ABAS: readonly Aba[] = ['leitura', 'emissao', 'cadastro'];
+/* ------------------------------------------------------------------- as abas
+   QUAIS SAO, QUAIS APARECEM e COMO SE CHEGA NA OCULTA agora moram em
+   `abas-da-fatura.ts`, e o motivo esta escrito la: nada dentro de um `.tsx` e
+   verificavel — o runner do `web/` nao le JSX. Aqui ficou o que a barra MOSTRA. */
 
 /**
  * AS ABAS SAO UM `tablist` DE VERDADE, e nao tres botoes com uma classe.
@@ -450,27 +479,31 @@ const ORDEM_DAS_ABAS: readonly Aba[] = ['leitura', 'emissao', 'cadastro'];
  * entende — em vez de uma classe que so o CSS entende e um atributo que so o
  * leitor entende, com a chance de os dois discordarem.
  */
-function Abas({ atual, ao, acao }: {
-  atual: Aba; ao: (a: Aba) => void; acao: { texto: string; ao: () => void };
+function Abas({ atual, ordem, ao, acao }: {
+  atual: Aba; ordem: readonly Aba[];
+  ao: (a: Aba) => void; acao: { texto: string; ao: () => void };
 }) {
-  /* Setas andam, Home e End vao aos extremos — o padrao WAI-ARIA de `tablist`. */
+  /* Setas andam, Home e End vao aos extremos — o padrao WAI-ARIA de `tablist`.
+     A LISTA E A `ordem` RECEBIDA e nao mais uma constante do modulo: com a aba
+     oculta fora da barra, uma seta que andasse pela lista completa levaria a um
+     painel que a barra nao desenha. */
   const teclado = (e: React.KeyboardEvent) => {
-    const i = ORDEM_DAS_ABAS.indexOf(atual);
+    const i = ordem.indexOf(atual);
     const destino =
-      e.key === 'ArrowRight' ? (i + 1) % ORDEM_DAS_ABAS.length
-      : e.key === 'ArrowLeft' ? (i - 1 + ORDEM_DAS_ABAS.length) % ORDEM_DAS_ABAS.length
+      e.key === 'ArrowRight' ? (i + 1) % ordem.length
+      : e.key === 'ArrowLeft' ? (i - 1 + ordem.length) % ordem.length
       : e.key === 'Home' ? 0
-      : e.key === 'End' ? ORDEM_DAS_ABAS.length - 1
+      : e.key === 'End' ? ordem.length - 1
       : -1;
     if (destino < 0) return;
     e.preventDefault();
-    ao(ORDEM_DAS_ABAS[destino]!);
+    ao(ordem[destino]!);
   };
 
   return (
     <div className="fu-abas naoimprime" role="tablist" aria-label="Etapas da fatura"
          onKeyDown={teclado}>
-      {ORDEM_DAS_ABAS.map((a, i) => (
+      {ordem.map((a, i) => (
         <Fragment key={a}>
           {i > 0 && <span className="fu-aba-traco" aria-hidden="true" />}
           <button type="button" role="tab" id={`fu-aba-${a}`} className="fu-aba"

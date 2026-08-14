@@ -25,6 +25,10 @@ import {
   ICONES_QUE_SE_MOVEM, ICONE_DO_ESTADO, ICONE_DO_AVISO, ICONE_DO_STATUS_DA_FATURA,
 } from '../src/iconografia.ts';
 import { TELAS, telaDoCaminho, inicioDoGrupoDinheiro } from '../src/navegacao.ts';
+import {
+  ABAS_VISIVEIS, ABA_OCULTA, ROTULO_DA_ABA, FRAGMENTO_DA_ABA_OCULTA,
+  ordemDasAbas, revelaAbaOculta, abaVigente,
+} from '../src/abas-da-fatura.ts';
 
 let falhas = 0;
 /*
@@ -609,6 +613,51 @@ chk('I7e', /summary:focus-visible\s*\{[^}]*outline:/.test(REGRAS),
       `dentro da ilha so entram tokens --g3ref-* (mais os tres estados que a referencia nao tem) `
       + `— achados: ${intrusos.join(' · ') || 'nenhum'}`);
 }
+
+// =============== I9 a aba de cadastro esta OCULTA, e continua alcancavel
+//
+// Decisao do dono em 14/08/2026: *"deixe a etapa de cadastro da fatura oculta por
+// enquanto"*. O "por enquanto" e a metade que estas verificacoes existem para
+// proteger — esconder e uma linha, e o que se perde ao esconder mal e o unico
+// caminho de tela para razao social, CNPJ, contato do rodape, logo, chave Pix,
+// campos do documento, modelo e campos personalizados. Medido em producao no dia:
+// os cinco campos do emissor VAZIOS e nenhuma logo.
+
+chk('I9', !ABAS_VISIVEIS.includes(ABA_OCULTA),
+    'a aba de cadastro nao esta na barra por padrao — e o que o dono pediu');
+
+chk('I9b', ordemDasAbas(false).length === ABAS_VISIVEIS.length
+        && ordemDasAbas(true).length === ABAS_VISIVEIS.length + 1
+        && ordemDasAbas(true).at(-1) === ABA_OCULTA,
+    'revelada, ela entra no FIM da ordem — o rotulo dela diz "3 ·" e o numero tem de bater '
+    + `com a posicao (ordem revelada: ${ordemDasAbas(true).join(' | ')})`);
+
+// A PORTA CONTINUA ABERTA, e esta linha e a que impede "oculta" de virar
+// "inalcancavel" numa edicao distraida. Sem ela, preencher o emissor volta a
+// exigir `psql` — o erro que a migration 26 ja cometeu uma vez (§15.4).
+chk('I9c', revelaAbaOculta(FRAGMENTO_DA_ABA_OCULTA)
+        && revelaAbaOculta(FRAGMENTO_DA_ABA_OCULTA.replace(/^#/, ''))
+        && revelaAbaOculta('#CADASTRO'),
+    `"${FRAGMENTO_DA_ABA_OCULTA}" revela a aba, com ou sem o "#" e sem depender de caixa`);
+
+chk('I9d', !revelaAbaOculta('') && !revelaAbaOculta('#') && !revelaAbaOculta('#emissao')
+        && !revelaAbaOculta('#cadastro-de-outra-coisa'),
+    'e nenhum outro fragmento a revela — inclusive o vazio, que e o caso normal');
+
+// O CAMINHO QUE ISTO EXISTE PARA COBRIR: quem esta em `#cadastro` e apaga o `#`
+// da barra de endereco. `aba` continua 'cadastro' e a ordem passou a ter duas.
+// Sem o recuo, a barra desenha duas abas com NENHUMA marcada, o painel segue
+// mostrando o cadastro e — pior — nenhuma fica no caminho do Tab, porque
+// `tabIndex` e 0 so na ativa. Vira uma barra de abas inalcancavel por teclado.
+chk('I9e', abaVigente(ABA_OCULTA, ordemDasAbas(false)) === ordemDasAbas(false)[0],
+    'com a aba oculta fechada, quem estava nela cai na primeira — e nao numa barra sem selecao');
+
+chk('I9f', abaVigente(ABA_OCULTA, ordemDasAbas(true)) === ABA_OCULTA
+        && ABAS_VISIVEIS.every((a) => abaVigente(a, ordemDasAbas(false)) === a),
+    'e nenhuma aba que existe na ordem e trocada por outra');
+
+chk('I9g', ordemDasAbas(true).every((a) => (ROTULO_DA_ABA[a] ?? '').trim() !== ''),
+    'toda aba, inclusive a oculta, tem rotulo — uma aba sem nome na barra e um botao mudo');
 
 console.log();
 if (falhas > 0) { console.log(`--- interface: ${falhas} FALHA(S)`); process.exit(1); }
