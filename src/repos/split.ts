@@ -297,19 +297,25 @@ export async function daCompetencia(competencia: Date, limite = 500) {
 export async function repassesPorDono(competencia?: Date) {
   await exigir('ler');
   const r: any[] = await db().$queryRaw`
-    SELECT dono, competencia, itens::int, valor_centavos::int
+    SELECT dono, competencia, itens, valor_centavos
       FROM repasse_por_dono_usina
      WHERE (${competencia ?? null}::date IS NULL OR competencia = ${competencia ?? null}::date)
      ORDER BY competencia DESC, dono`;
-  return r;
+  /* Sem `::int` - `sum(integer)` devolve bigint, e o downcast estourava com
+   * 22003 acima de R$ 21.474.836,47 numa competencia. Ver a nota em fatura.ts. */
+  return r.map((l) => ({ ...l, itens: Number(l.itens), valor_centavos: Number(l.valor_centavos) }));
 }
 
 export async function comissoesPorOriginador(competencia?: Date) {
   await exigir('ler');
   const r: any[] = await db().$queryRaw`
-    SELECT originador, competencia, parcela_comissao::int, itens::int, valor_centavos::int
+    SELECT originador, competencia, parcela_comissao, itens, valor_centavos
       FROM comissao_por_originador
      WHERE (${competencia ?? null}::date IS NULL OR competencia = ${competencia ?? null}::date)
      ORDER BY competencia DESC, originador`;
-  return r;
+  return r.map((l) => ({
+    ...l,
+    parcela_comissao: Number(l.parcela_comissao),
+    itens: Number(l.itens), valor_centavos: Number(l.valor_centavos),
+  }));
 }

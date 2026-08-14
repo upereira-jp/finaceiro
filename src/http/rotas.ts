@@ -27,10 +27,12 @@ import * as liquidacao from '../repos/liquidacao.ts';
 import * as split from '../repos/split.ts';
 import * as contaPagar from '../repos/conta_pagar.ts';
 import * as documento from '../repos/documento.ts';
+import * as registro from '../repos/registro-unificado.ts';
 import * as leitor from '../concessionaria/leitor-visao.ts';
 import { calcular, CAMPOS_VAZIOS, PARAMETROS_PADRAO,
   type CamposDaFaturaUnificada, type ParametrosDaEmissao } from '../dominio/fatura-unificada.ts';
-import { comporFolhas, BOLETO_VAZIO, type DadosDoBoleto } from '../dominio/folha-unificada.ts';
+import { comporFolhas, BOLETO_VAZIO, TEXTOS_PADRAO,
+  type DadosDoBoleto, type TextosDoModelo } from '../dominio/folha-unificada.ts';
 import { prontidao } from '../repos/prontidao.ts';
 
 export type Requisicao = {
@@ -58,6 +60,16 @@ export type Resultado = {
    * tabela separada (`to_jsonb` de bytea custa 2,00x, medido).
    */
   tipo?: string;
+  /**
+   * VALIDADOR DE CACHE, so para o corpo cru. Quando presente, o servidor
+   * responde **304** se o `If-None-Match` bater, e manda `private, no-cache`.
+   *
+   * A logo e o unico uso hoje, e o validador dela e o `logo_sha256` que o gatilho
+   * do banco ja calcula - um ETag que E o hash do conteudo nao pode discordar do
+   * conteudo. Ate 14/08 a rota mandava `no-store` e a imagem inteira voltava a
+   * cada render da aba Documento, que a desenha em tres lugares.
+   */
+  etag?: string;
 };
 
 type Handler = (req: Requisicao, app: App) => Promise<Resultado>;
@@ -70,6 +82,14 @@ const semConteudo = (): Resultado => ({ status: 204 });
 
 /** JSON nao tem data. Converte, e recusa string que nao e data - passar
  *  "Invalid Date" adiante viraria NULL no banco sem ninguem perceber. */
+/** Um inteiro positivo de query string, com padrao. `?limite=abc` cai no padrao
+ *  em vez de virar `NaN` num `take`, que e o modo de falha que a lista inteira
+ *  do tenant produziria. */
+function numero(v: string | null, padrao: number): number {
+  const n = Number(v);
+  return Number.isInteger(n) && n > 0 ? n : padrao;
+}
+
 function data(v: unknown, campo: string): Date {
   if (typeof v !== 'string' && !(v instanceof Date)) {
     throw new TypeError(`${campo} e obrigatorio e deve ser data ISO`);
@@ -86,12 +106,35 @@ function dataOuNull(v: unknown, campo: string): Date | null {
 
 /** Unidade de trabalho transacional. Uma transacao por requisicao. */
 /**
+ * O TETO DO ARQUIVO DE LEITURA, e ele e a metade de um par que precisa fechar.
+ *
+ * ============================================================================
+ * ATE 14/08 O TETO ESCRITO AQUI ERA CODIGO MORTO. Ele dizia 32 MB - o teto da
+ * API da Anthropic -, e o servidor recusava o corpo em **1 MB**
+ * (`servidor.ts`: `o.maxCorpoBytes ?? 1_000_000`), porque `scripts/servir.ts`, o
+ * unico entrypoint de producao, nao passava o valor.
+ *
+ * Consequencia medida: base64 infla 4/3, entao o teto REAL de PDF era ~732 KB - e
+ * a recusa vinha de `lerCorpo`, no meio do stream, ANTES de o handler existir.
+ * Quem subisse uma fatura de 1 MB recebia "corpo grande demais" falando de bytes
+ * de requisicao, e a comparacao de 32 MB nunca podia ser verdadeira.
+ *
+ * Agora o numero e UM SO e os dois lados o conhecem: este arquivo confere o
+ * ARQUIVO e `scripts/servir.ts` dimensiona o CORPO a partir dele, com a folga do
+ * base64 e do envelope JSON.
+ *
+ * 8 MB e o valor, e nao os 32 da API: uma fatura da Equatorial em PDF tem
+ * centenas de KB e um scan colorido de duas paginas nao passa de 3 MB. Aceitar
+ * 32 MB seria pagar a subida de trinta e dois megabytes para descobrir, do outro
+ * lado, que o arquivo nao era o certo.
+ */
+export const TETO_DO_ARQUIVO = 8 * 1024 * 1024;
+
+/**
  * O ARQUIVO QUE O CLIENTE MANDOU, validado antes de sair para a API paga.
  *
- * O TETO DE 32 MB E DA API da Anthropic. Conferir AQUI e o que transforma "o
- * upload falhou" num erro que diz o tamanho - e evita pagar a subida de um
- * arquivo que ja se sabe que sera recusado. Uma fatura em PDF tem centenas de KB;
- * quem manda 40 MB mandou outra coisa.
+ * Conferir AQUI e o que transforma "o upload falhou" num erro que diz o tamanho
+ * - e evita pagar a subida de um arquivo que ja se sabe que sera recusado.
  */
 function arquivoDoCorpo(corpo: any): { conteudo: Uint8Array; tipo: string } {
   const b64 = corpo?.conteudo_base64;
@@ -104,18 +147,197 @@ function arquivoDoCorpo(corpo: any): { conteudo: Uint8Array; tipo: string } {
   }
   const bytes = Buffer.from(b64.replace(/^data:[^;]+;base64,/, ''), 'base64');
   if (bytes.length === 0) throw new TypeError('conteudo_base64 nao decodificou para bytes');
-  const TETO = 32 * 1024 * 1024;
-  if (bytes.length > TETO) {
+  if (bytes.length > TETO_DO_ARQUIVO) {
     throw Object.assign(new TypeError(
-      `O arquivo tem ${Math.round(bytes.length / 1024 / 1024)} MB e o teto da leitura e 32 MB. `
-      + 'Uma fatura em PDF tem centenas de KB - confira se o arquivo e o certo.'
-    ), { status: 413 });
+      `O arquivo tem ${Math.round(bytes.length / 1024 / 1024)} MB e o teto da leitura e `
+      + `${Math.round(TETO_DO_ARQUIVO / 1024 / 1024)} MB. Uma fatura em PDF tem centenas de KB `
+      + '- confira se o arquivo e o certo.'
+    ), { status: 413, name: 'ArquivoGrandeDemais' });
   }
-  return { conteudo: bytes, tipo: tipo.trim() };
+  return { conteudo: bytes, tipo: conferirAssinatura(bytes, tipo.trim()) };
+}
+
+/**
+ * OS PRIMEIROS BYTES DECIDEM O TIPO, e nao o rotulo que o cliente mandou.
+ *
+ * A LOGO JA FAZ ISSO DESDE A MIGRATION 19, num gatilho do banco, e o comentario
+ * de la explica por que: *"o tipo e reconhecido pelos BYTES do arquivo, nao pela
+ * extensao - um SVG renomeado nao passa"*. A leitura por modelo de visao nao
+ * fazia, e a SPA piorava: `mimeDo` devolve `image/jpeg` para todo arquivo sem
+ * mime que nao termine em `.pdf`.
+ *
+ * O sintoma nao e seguranca - a API de terceiro nao executa o arquivo -, e
+ * DESPERDICIO NOMEADO ERRADO: um `.docx` renomeado subia inteiro, era pago, e
+ * voltava como erro da API falando de `media_type`. Agora a recusa e aqui, com
+ * os dois valores na mensagem.
+ */
+const ASSINATURAS: ReadonlyArray<{ tipo: string; casa: (b: Uint8Array) => boolean }> = [
+  { tipo: 'application/pdf', casa: (b) => b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46 },
+  { tipo: 'image/png', casa: (b) => b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47 },
+  { tipo: 'image/jpeg', casa: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
+  { tipo: 'image/gif', casa: (b) => b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38 },
+  {
+    tipo: 'image/webp',
+    casa: (b) => b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46
+              && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50,
+  },
+];
+
+function conferirAssinatura(bytes: Uint8Array, declarado: string): string {
+  const real = ASSINATURAS.find((a) => a.casa(bytes))?.tipo;
+  if (!real) {
+    throw Object.assign(new TypeError(
+      `Os primeiros bytes do arquivo nao sao de PDF nem de imagem (declarado "${declarado}"). `
+      + 'A leitura aceita PDF, PNG, JPEG, WebP e GIF, e o tipo e reconhecido pelo CONTEUDO - '
+      + 'renomear a extensao nao passa, pelo mesmo motivo que ja vale para a logo.'
+    ), { status: 415, name: 'ArquivoNaoSuportado' });
+  }
+  /* O DECLARADO NAO MANDA, MAS DIVERGENCIA E DITA: quem sobe um PNG rotulado
+   * como PDF quase sempre subiu a coisa certa com o nome errado, e recusar seria
+   * pior que corrigir. O que nao acontece e mandar o rotulo do cliente adiante. */
+  return real;
+}
+
+/**
+ * ============================================================================
+ * O CORPO DA COMPOSICAO, CONFERIDO NA FRONTEIRA.
+ *
+ * Ate 14/08 o handler fazia `{ ...CAMPOS_VAZIOS, ...(req.corpo?.campos ?? {}) }
+ * as CamposDaFaturaUnificada` — um `as` sem checagem nenhuma. `erros.ts` traduz
+ * qualquer `TypeError` em 422 com a mensagem CRUA, entao corpo hostil produzia
+ * mensagem interna de JavaScript. Medido:
+ *
+ *     {campos:{historico_consumo:'abc'}}  -> 422 "historico.map is not a function"
+ *     {campos:{tarifa_kwh: 5}}            -> passava, e `String(5)` compunha
+ *
+ * E `historico_consumo` nao tinha TETO: uma lista de 100.000 pares passava por
+ * `serieNaMesmaEscala` e por `historicoPlausivel` antes de a folha usar treze.
+ *
+ * O molde e o de `arquivoDoCorpo`: conferir aqui, nomear o campo, e nao deixar a
+ * mensagem de erro ser um detalhe de implementacao.
+ */
+const TETO_DO_HISTORICO = 60;
+
+function camposDoCorpo(bruto: unknown): CamposDaFaturaUnificada {
+  if (bruto == null) return { ...CAMPOS_VAZIOS };
+  if (typeof bruto !== 'object' || Array.isArray(bruto)) {
+    throw new TypeError('campos deve ser um objeto com os campos lidos da fatura.');
+  }
+  const e = bruto as Record<string, unknown>;
+  const saida: Record<string, unknown> = { ...CAMPOS_VAZIOS };
+
+  for (const chave of Object.keys(CAMPOS_VAZIOS) as Array<keyof CamposDaFaturaUnificada>) {
+    if (chave === 'historico_consumo') continue;
+    const v = e[chave];
+    if (v === undefined || v === null) continue;
+    /* NUMERO E ACEITO E VIRA TEXTO. O extrator devolve string, mas um consumidor
+     * externo - o CRM - manda JSON montado a mao, e recusar `1.185396` por ser
+     * numero seria rigor sem ganho. O que NAO passa e objeto ou lista, que
+     * viraria "[object Object]" impresso na fatura. */
+    if (typeof v !== 'string' && typeof v !== 'number') {
+      throw new TypeError(`campos.${chave} deve ser texto (recebeu ${typeof v}).`);
+    }
+    saida[chave] = String(v);
+  }
+
+  const h = e.historico_consumo;
+  if (h !== undefined && h !== null) {
+    if (!Array.isArray(h)) throw new TypeError('campos.historico_consumo deve ser uma LISTA de {mes, kwh}.');
+    if (h.length > TETO_DO_HISTORICO) {
+      throw new TypeError(
+        `campos.historico_consumo tem ${h.length} meses e o teto e ${TETO_DO_HISTORICO}. `
+        + 'A folha desenha os ultimos 13; o teto e folga para quem manda a serie inteira.');
+    }
+    saida.historico_consumo = h.map((x, i) => {
+      if (x == null || typeof x !== 'object') {
+        throw new TypeError(`campos.historico_consumo[${i}] deve ser {mes, kwh}.`);
+      }
+      const p = x as Record<string, unknown>;
+      return { mes: String(p.mes ?? ''), kwh: String(p.kwh ?? '') };
+    });
+  }
+  return saida as unknown as CamposDaFaturaUnificada;
+}
+
+function boletoDoCorpo(bruto: unknown): DadosDoBoleto {
+  if (bruto == null) return { ...BOLETO_VAZIO };
+  if (typeof bruto !== 'object' || Array.isArray(bruto)) {
+    throw new TypeError('boleto deve ser um objeto.');
+  }
+  const e = bruto as Record<string, unknown>;
+  const texto = (k: keyof DadosDoBoleto) => {
+    const v = e[k];
+    if (v === undefined || v === null) return '';
+    if (typeof v !== 'string' && typeof v !== 'number') {
+      throw new TypeError(`boleto.${k} deve ser texto (recebeu ${typeof v}).`);
+    }
+    return String(v);
+  };
+  const instrucoes = e.instrucoes;
+  if (instrucoes !== undefined && instrucoes !== null && !Array.isArray(instrucoes)) {
+    throw new TypeError('boleto.instrucoes deve ser uma LISTA de linhas.');
+  }
+  return {
+    linha_digitavel: texto('linha_digitavel'),
+    pix_copia_e_cola: texto('pix_copia_e_cola'),
+    nosso_numero: texto('nosso_numero'),
+    beneficiario: texto('beneficiario'),
+    vencimento: texto('vencimento'),
+    valor: texto('valor'),
+    instrucoes: ((instrucoes ?? []) as unknown[]).slice(0, 40).map((t) => String(t ?? '')),
+  };
+}
+
+/** Os valores dos campos personalizados de origem `variavel`: chave -> texto. */
+function personalizadosDoCorpo(bruto: unknown): Record<string, string> {
+  if (bruto == null) return {};
+  if (typeof bruto !== 'object' || Array.isArray(bruto)) {
+    throw new TypeError('campos_personalizados deve ser um objeto {chave: valor}.');
+  }
+  const saida: Record<string, string> = {};
+  for (const [k, v] of Object.entries(bruto as Record<string, unknown>)) {
+    if (v === undefined || v === null) continue;
+    if (typeof v !== 'string' && typeof v !== 'number') {
+      throw new TypeError(`campos_personalizados.${k} deve ser texto.`);
+    }
+    saida[k] = String(v);
+  }
+  return saida;
 }
 
 const emTenant = (app: App, req: Requisicao, f: (tx: ClientTx, v: VinculoDaSessao) => Promise<Resultado>) =>
   app.withTenant(req.sessao, req.tenantProposto, f);
+
+/**
+ * ============================================================================
+ * A LEITURA PAGA ACONTECE **FORA** DE QUALQUER TRANSACAO — e isto e conserto
+ * de 14/08.
+ *
+ * As duas rotas do modelo de visao usavam `emTenant`, e `emTenant` abre uma
+ * transacao Postgres com `timeout: 15_000`. A chamada ao Opus com um PDF inteiro
+ * em base64 e `max_tokens: 16000` acontecia **com a transacao aberta**.
+ * Reproduzido com 18 s de trabalho nao-SQL dentro de `$transaction`: o Prisma
+ * aborta com **P2028**, o cliente recebe 500, e a chamada — que ja foi paga —
+ * tem o resultado descartado.
+ *
+ * Segurar uma conexao do pool transacional por dez, vinte segundos enquanto se
+ * espera uma API de terceiro e a definicao de transacao longa. Com oito slots,
+ * oito leituras simultaneas param o faturamento inteiro.
+ *
+ * A PERMISSAO CONTINUA SENDO CONFERIDA, e agora de verdade. O cabecalho das duas
+ * rotas afirmava desde 14/08 que elas passam por `exigir('ler')` — e nao
+ * passavam: os handlers chamavam o leitor direto, e `leitor-visao.ts` nao importa
+ * `contexto.ts`. A conferencia acontece numa transacao CURTA que fecha ANTES da
+ * chamada, o que torna o comentario verdadeiro sem trazer o problema de volta.
+ */
+const comPermissaoDeLer = async (app: App, req: Requisicao, f: () => Promise<Resultado>) => {
+  await app.withTenant(req.sessao, req.tenantProposto, async () => {
+    const { exigir } = await import('../db/contexto.ts');
+    await exigir('ler');
+    return ok(null);
+  });
+  return f();
+};
 
 /** Caminho de relatorio: pool e timeout proprios. Leitura pesada nao disputa
  *  slot com o caminho transacional - o motivo esta em src/db/pools.ts. */
@@ -378,6 +600,15 @@ export const ROTAS: Rota[] = [
     handler: (req, app) => emTenant(app, req, async () => ok(await contrato.historicoDaUC(req.params.id))),
   },
   {
+    /*
+     * OS VIGENTES DE TODAS AS UCs, numa consulta. Substitui o N+1 da tela de
+     * Contratos, que fazia uma requisicao HTTP por UC - 42 hoje, 501 no teto
+     * atual de listagem. Ver `vigentesPorUC`.
+     */
+    metodo: 'GET', padrao: '/contratos-vigentes',
+    handler: (req, app) => emRelatorio(app, req, async () => ok(await contrato.vigentesPorUC())),
+  },
+  {
     metodo: 'GET', padrao: '/unidades-consumidoras/:id/contrato-vigente',
     handler: (req, app) => emTenant(app, req, async () => {
       const c = await contrato.vigenteDaUC(req.params.id);
@@ -431,19 +662,18 @@ export const ROTAS: Rota[] = [
   },
 
   // -------------------------------------------------------- valores com data
-  // As tres tabelas versionadas. NAO ha rota de edicao, e a ausencia e o
-  // desenho: o PRD 4.6 manda "nunca editada no lugar". A unica escrita e abrir
-  // vigencia nova, que fecha a anterior na mesma transacao.
-  {
-    metodo: 'GET', padrao: '/tarifas/:distribuidora',
-    handler: (req, app) => emTenant(app, req, async () => ok(await regras.tarifasDe(req.params.distribuidora))),
-  },
-  {
-    metodo: 'POST', padrao: '/tarifas',
-    handler: (req, app) => emTenant(app, req, async () => criado(await regras.abrirVigenciaDeTarifa({
-      ...req.corpo, vigencia_inicio: data(req.corpo?.vigencia_inicio, 'vigencia_inicio'),
-    }))),
-  },
+  // As DUAS tabelas versionadas - eram tres ate 14/08. As rotas de `/tarifas`
+  // sairam com a migration 30: a tarifa deixou de ser "preco por distribuidora
+  // com vigencia" e passou a ser coluna da UC, porque a granularidade REAL e por
+  // cliente (medido: 41 de 41 UCs com tarifa propria, e ela varia). Quem a edita
+  // e a aba Unidades; quem a le na composicao e `app.tarifa_da_uc`.
+  //
+  // As duas que ficam sao REGRA e nao PRECO, e por isso continuam versionadas: a
+  // comissao de um contrato fechado em marco e a de marco, para sempre (R20-b).
+  //
+  // NAO ha rota de edicao, e a ausencia e o desenho: o PRD 4.6 manda "nunca
+  // editada no lugar". A unica escrita e abrir vigencia nova, que fecha a
+  // anterior na mesma transacao.
   {
     metodo: 'GET', padrao: '/regras-comissao/:tipo',
     handler: (req, app) => emTenant(app, req, async () => ok(await regras.comissoesDe(req.params.tipo as any))),
@@ -827,7 +1057,14 @@ export const ROTAS: Rota[] = [
       }
       // Corpo CRU com o mime que o GATILHO derivou do arquivo - nao um mime que
       // a aplicacao guardou e pode ter divergido do conteudo.
-      return { status: 200, corpo: l.conteudo as Uint8Array, tipo: id.logo_mime };
+      //
+      // O ETAG E O `logo_sha256`, que o mesmo gatilho calcula. Um validador que
+      // E o hash do conteudo nao pode discordar do conteudo - e e por isso que
+      // ele nao e inventado aqui.
+      return {
+        status: 200, corpo: l.conteudo as Uint8Array, tipo: id.logo_mime,
+        ...(id.logo_sha256 ? { etag: `"${id.logo_sha256}"` } : {}),
+      };
     }),
   },
   {
@@ -846,6 +1083,55 @@ export const ROTAS: Rota[] = [
       const campos = req.corpo?.campos;
       if (!Array.isArray(campos)) throw new TypeError('campos deve ser uma LISTA (vazia volta ao padrao)');
       return ok({ definidos: await documento.definirCampos(campos) });
+    }),
+  },
+  /*
+   * O MODELO DE FATURA (migration 28) - o TEMPLATE.
+   *
+   * Ele guarda COMO a folha le: assinatura do topo, texto do aviso laranja,
+   * parametros padrao de emissao, multa, juros e o rodape legal do banco. Ate
+   * 14/08 os cinco eram literais em `folha-unificada.ts`, e dois deles nomeavam
+   * uma cooperativa bancaria especifica com o codigo dela - o mesmo defeito que a
+   * migration 26 tirou do emissor, agora com o banco de outro tenant.
+   *
+   * A ESCOLHA DO PADRAO E ROTA SEPARADA da edicao, pelo mesmo motivo da chave
+   * Pix: editar muda o texto, escolher muda o que a proxima fatura imprime.
+   */
+  {
+    metodo: 'GET', padrao: '/cobranca/modelos',
+    handler: (req, app) => emTenant(app, req, async () => ok(await documento.modelos())),
+  },
+  {
+    metodo: 'POST', padrao: '/cobranca/modelos',
+    handler: (req, app) => emTenant(app, req, async () => criado(await documento.criarModelo(req.corpo ?? {}))),
+  },
+  {
+    metodo: 'PUT', padrao: '/cobranca/modelos/:id',
+    handler: (req, app) => emTenant(app, req, async () =>
+      ok(await documento.salvarModelo(req.params.id!, req.corpo ?? {}))),
+  },
+  {
+    metodo: 'POST', padrao: '/cobranca/modelos/:id/padrao',
+    handler: (req, app) => emTenant(app, req, async () =>
+      ok(await documento.escolherModeloPadrao(req.params.id!))),
+  },
+  /*
+   * OS CAMPOS PERSONALIZADOS. Ao lado dos 16 do enum `campo_de_fatura`, que
+   * nomeiam colunas da fatura e por isso sao fechados. Estes nomeiam dados do
+   * tenant que nao existem em coluna nenhuma nossa - "Contrato n", "Vendedor",
+   * "Placa da usina" - e por isso sao linha e nao valor de enum.
+   */
+  {
+    metodo: 'GET', padrao: '/cobranca/campos-personalizados',
+    handler: (req, app) => emTenant(app, req, async () => ok(await documento.camposPersonalizados())),
+  },
+  {
+    // A LISTA INTEIRA, sempre - mesma decisao de `/cobranca/campos`.
+    metodo: 'PUT', padrao: '/cobranca/campos-personalizados',
+    handler: (req, app) => emTenant(app, req, async () => {
+      const campos = req.corpo?.campos;
+      if (!Array.isArray(campos)) throw new TypeError('campos deve ser uma LISTA (vazia apaga todos)');
+      return ok({ definidos: await documento.definirCamposPersonalizados(campos) });
     }),
   },
   /*
@@ -886,34 +1172,136 @@ export const ROTAS: Rota[] = [
    */
   {
     metodo: 'POST', padrao: '/faturas/unificada/compor',
-    handler: (req, app) => emTenant(app, req, async () => {
-      const campos = { ...CAMPOS_VAZIOS, ...(req.corpo?.campos ?? {}) } as CamposDaFaturaUnificada;
-      const parametros = { ...PARAMETROS_PADRAO, ...(req.corpo?.parametros ?? {}) } as ParametrosDaEmissao;
-      const boleto = { ...BOLETO_VAZIO, ...(req.corpo?.boleto ?? {}) } as DadosDoBoleto;
+    handler: (req, app) => emRelatorio(app, req, async () => {
+      const campos = camposDoCorpo(req.corpo?.campos);
+      const boleto = boletoDoCorpo(req.corpo?.boleto);
+      const personalizados = personalizadosDoCorpo(req.corpo?.campos_personalizados);
 
-      const ident = await documento.identidade();
+      /*
+       * SEIS LEITURAS EM PARALELO, e nao seis idas em fila. Todas sao SELECT do
+       * mesmo tenant na mesma unidade de trabalho, e a composicao acontece a cada
+       * 400 ms de digitacao - encadea-las custaria seis viagens sequenciais por
+       * tecla parada.
+       */
+      const [ident, modelo, campos_personalizados] = await Promise.all([
+        documento.identidade(),
+        documento.modeloVigente(),
+        documento.camposPersonalizadosResolvidos(personalizados),
+      ]);
+
+      /*
+       * OS PARAMETROS PADRAO SAO DO MODELO, e nao mais constantes do codigo.
+       *
+       * Ate 14/08 a tela oferecia desconto e fator de CO2 editaveis sem lugar
+       * nenhum para GRAVAR a escolha: quem opera redigitava 20 em toda fatura, ou
+       * esquecia e faturava com o numero errado. Agora o modelo carrega os dois, e
+       * o que a tela manda so sobrepoe quando ela manda de fato.
+       */
+      const parametros = {
+        percentual_desconto: modelo?.percentual_desconto_padrao ?? PARAMETROS_PADRAO.percentual_desconto,
+        fator_emissao: modelo?.fator_emissao_padrao ?? PARAMETROS_PADRAO.fator_emissao,
+        ...(req.corpo?.parametros ?? {}),
+      } as ParametrosDaEmissao;
+
       const conta = calcular(campos, parametros);
+
+      /*
+       * A ECONOMIA ACUMULADA (migration 29). So consulta quando ha UC e
+       * competencia legiveis - sem os dois nao ha serie, e a folha cai em
+       * "Primeira fatura com a G3 Solar", que e o que a referencia faz.
+       *
+       * A competencia ilegivel NAO derruba a composicao: quem esta digitando o
+       * mes ainda nao terminou de digita-lo, e uma composicao que falha a cada
+       * tecla e uma tela que pisca erro enquanto a pessoa trabalha.
+       */
+      let economia: registro.EconomiaAcumulada | null = null;
+      if (campos.unidade_consumidora.trim() && campos.mes_referencia.trim()) {
+        try {
+          economia = await registro.economiaAcumulada(
+            campos.unidade_consumidora,
+            registro.primeiroDiaDaCompetencia(campos.mes_referencia),
+          );
+        } catch { economia = null; }
+      }
+
       const folhas = comporFolhas(
         campos, conta,
         { razao_social: ident?.razao_social ?? null, cnpj: ident?.cnpj ?? null },
         boleto,
+        {
+          contato: {
+            telefone: ident?.telefone ?? null, endereco: ident?.endereco ?? null,
+            email: ident?.email ?? null, site: ident?.site ?? null,
+          },
+          modelo: (modelo ?? TEXTOS_PADRAO) as TextosDoModelo,
+          campos_personalizados,
+          /* SO PASSA A SOMA QUANDO HA MAIS DE UMA FATURA. Com uma so, a soma E o
+           * desconto desta - e a folha ja diz isso por outro caminho, sem a nota
+           * "desde", que com uma fatura so nao informa nada. */
+          ...(economia && economia.faturas > 1
+            ? { economia_acumulada_centavos: economia.centavos, desde: economia.desde ?? undefined }
+            : {}),
+        },
       );
       /* A CONTA VIAJA JUNTO com as folhas, e nao so o que esta impresso: o painel
        * da aba 1 mostra total, energia G3 e repasses ANTES de a folha existir, e
        * ele nao pode recalcular do lado de la. */
-      return ok({ conta, ...folhas });
+      return ok({ conta, ...folhas, economia, modelo });
+    }),
+  },
+  /*
+   * O REGISTRO DA FATURA (migration 29) - a `fatura:{uc}:{AAAA-MM}` da
+   * referencia, com tenant, policy e trilha.
+   *
+   * `emTenant` e nao `emRelatorio`: aqui ESCREVE. A composicao acima e leitura e
+   * por isso mudou para o caminho de relatorio - ela roda a cada 400 ms de
+   * digitacao e nao pode disputar slot transacional com a emissao.
+   */
+  {
+    metodo: 'POST', padrao: '/faturas/unificada/registros',
+    handler: (req, app) => emTenant(app, req, async () => {
+      const campos = camposDoCorpo(req.corpo?.campos);
+      const boleto = boletoDoCorpo(req.corpo?.boleto);
+      const modelo = await documento.modeloVigente();
+      const parametros = {
+        percentual_desconto: modelo?.percentual_desconto_padrao ?? PARAMETROS_PADRAO.percentual_desconto,
+        fator_emissao: modelo?.fator_emissao_padrao ?? PARAMETROS_PADRAO.fator_emissao,
+        ...(req.corpo?.parametros ?? {}),
+      } as ParametrosDaEmissao;
+      /* A CONTA E RECALCULADA AQUI, do que chegou, e nao aceita do corpo. Aceitar
+       * os nove valores em centavos do cliente seria deixar quem chama decidir a
+       * economia que a folha do proximo mes vai imprimir. */
+      const conta = calcular(campos, parametros);
+      return criado(await registro.registrar({
+        campos, parametros, conta, boleto,
+        campos_personalizados: personalizadosDoCorpo(req.corpo?.campos_personalizados),
+      }));
+    }),
+  },
+  {
+    metodo: 'GET', padrao: '/faturas/unificada/registros',
+    handler: (req, app) => emRelatorio(app, req, async () => {
+      const uc = req.query.get('unidade_consumidora');
+      return ok(uc ? await registro.daUnidade(uc) : await registro.recentes(numero(req.query.get('limite'), 50)));
+    }),
+  },
+  {
+    metodo: 'DELETE', padrao: '/faturas/unificada/registros/:id',
+    handler: (req, app) => emTenant(app, req, async () => {
+      await registro.apagar(req.params.id!);
+      return semConteudo();
     }),
   },
   {
     metodo: 'POST', padrao: '/faturas/ler-fatura',
-    handler: (req, app) => emTenant(app, req, async () => {
+    handler: (req, app) => comPermissaoDeLer(app, req, async () => {
       const d = arquivoDoCorpo(req.corpo);
       return ok(await leitor.lerFaturaDaEquatorial(d));
     }),
   },
   {
     metodo: 'POST', padrao: '/faturas/ler-boleto',
-    handler: (req, app) => emTenant(app, req, async () => {
+    handler: (req, app) => comPermissaoDeLer(app, req, async () => {
       const d = arquivoDoCorpo(req.corpo);
       return ok(await leitor.lerBoletoSicoob(d));
     }),

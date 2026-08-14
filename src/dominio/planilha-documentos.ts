@@ -48,6 +48,7 @@
 // deste arquivo e destravar a R9, e documento que nao valida nao a destrava.
 
 import { classificar, type TipoDocumento } from './documento.ts';
+import { SEP, emLinhas, escreverCelula, lerLinha, ehUuid } from './csv.ts';
 
 export type LinhaDeDocumento = {
   /** 1-based e contando a linha do cabecalho, para bater com o que a pessoa ve
@@ -72,18 +73,10 @@ export type PlanilhaDeDocumentos = {
 };
 
 /** O separador e `;`, como nas outras duas planilhas e em `web/src/csv.ts`. */
-const SEP = ';';
 
-const semAspas = (s: string): string => {
-  const t = s.trim();
-  if (t.length >= 2 && t.startsWith('"') && t.endsWith('"')) return t.slice(1, -1).replace(/""/g, '"');
-  return t;
-};
 
 /** A forma do uuid, e so a forma - quem existe de verdade e o banco que diz. */
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export const ehUuid = (s: string): boolean => UUID.test(s.trim());
 
 /**
  * Le o conteudo de um CSV de duas colunas: id do cliente e CPF/CNPJ.
@@ -109,7 +102,7 @@ export function lerPlanilhaDeDocumentos(conteudo: string): PlanilhaDeDocumentos 
   // BOM UTF-8: o Excel o escreve, e sem tirar aqui o primeiro `cliente_id` viria
   // com um caractere invisivel na frente e nao casaria com uuid nenhum.
   const texto = conteudo.replace(/^﻿/, '');
-  const cruas = texto.split(/\r\n|\n|\r/);
+  const cruas = emLinhas(texto);
 
   const linhas: LinhaDeDocumento[] = [];
   const erros: ErroDeDocumento[] = [];
@@ -130,7 +123,7 @@ export function lerPlanilhaDeDocumentos(conteudo: string): PlanilhaDeDocumentos 
       return;
     }
 
-    const campos = crua.split(SEP).map(semAspas);
+    const campos = lerLinha(crua);
     const id = campos[0] ?? '';
     const valor = campos[1] ?? '';
 
@@ -271,8 +264,6 @@ export type LinhaDoModeloDeDocumento = {
 };
 
 /** O `;` do CSV do Excel pt-BR, e o mesmo escape do `web/src/csv.ts`. */
-const celula = (v: string): string =>
-  /[";\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 
 /**
  * O CSV do modelo, montado. PURO de proposito (regra 8): o que decide a ORDEM e
@@ -292,8 +283,8 @@ export function montarModeloDeDocumentos(linhas: LinhaDoModeloDeDocumento[]): st
   let csv = '﻿' + 'cliente_id;documento;fatura;ja_validado;nome;telefone;ucs\n';
   for (const l of ordenadas) {
     csv += [
-      celula(l.cliente_id), celula(l.documento_atual), l.fatura ? 'sim' : 'NAO',
-      l.validado ? 'sim' : 'NAO', celula(l.nome), celula(l.telefone), celula(l.ucs),
+      escreverCelula(l.cliente_id), escreverCelula(l.documento_atual), l.fatura ? 'sim' : 'NAO',
+      l.validado ? 'sim' : 'NAO', escreverCelula(l.nome), escreverCelula(l.telefone), escreverCelula(l.ucs),
     ].join(';') + '\n';
   }
   return csv;

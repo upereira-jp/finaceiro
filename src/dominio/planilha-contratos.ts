@@ -49,6 +49,7 @@
 // fora e tem teste proprio.
 
 import { reaisParaCentavos, type Centavos } from './centavos.ts';
+import { SEP, emLinhas, escreverCelula, lerLinha, ehUuid } from './csv.ts';
 
 /** As duas origens do valor de referencia, e o enum do banco tem exatamente
  *  estas duas. Nao ha default: ver `lerOrigemDoValor`. */
@@ -81,18 +82,10 @@ export type PlanilhaDeContratos = {
 };
 
 /** O separador e `;`, como nas outras tres planilhas e em `web/src/csv.ts`. */
-const SEP = ';';
 
-const semAspas = (s: string): string => {
-  const t = s.trim();
-  if (t.length >= 2 && t.startsWith('"') && t.endsWith('"')) return t.slice(1, -1).replace(/""/g, '"');
-  return t;
-};
 
 /** A forma do uuid, e so a forma - quem existe de verdade e o banco que diz. */
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export const ehUuid = (s: string): boolean => UUID.test(s.trim());
 
 /**
  * Le a celula de fechamento e devolve meia-noite UTC daquele dia.
@@ -220,7 +213,7 @@ export function lerPlanilhaDeContratos(conteudo: string): PlanilhaDeContratos {
   // BOM UTF-8: o Excel o escreve, e sem tirar aqui o primeiro `numero_uc` viria
   // com um caractere invisivel na frente e nao casaria com UC nenhuma.
   const texto = conteudo.replace(/^﻿/, '');
-  const cruas = texto.split(/\r\n|\n|\r/);
+  const cruas = emLinhas(texto);
 
   const linhas: LinhaDeContrato[] = [];
   const erros: ErroDeContrato[] = [];
@@ -241,7 +234,7 @@ export function lerPlanilhaDeContratos(conteudo: string): PlanilhaDeContratos {
       return;
     }
 
-    const campos = crua.split(SEP).map(semAspas);
+    const campos = lerLinha(crua);
     const uc = campos[0] ?? '';
     const orig = campos[1] ?? '';
     const fechamento = campos[2] ?? '';
@@ -434,8 +427,6 @@ export type LinhaDoModeloDeContrato = {
 };
 
 /** O `;` do CSV do Excel pt-BR, e o mesmo escape do `web/src/csv.ts`. */
-const celula = (v: string): string =>
-  /[";\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 
 /**
  * O CSV do modelo, montado. PURO de proposito (regra 8): o que decide a ORDEM e
@@ -464,12 +455,12 @@ export function montarModeloDeContratos(linhas: LinhaDoModeloDeContrato[]): stri
     'fatura;ja_contratada;cliente;usina;originador_crm;originador_cadastro\n';
   for (const l of ordenadas) {
     csv += [
-      celula(l.numero_uc), celula(l.originador_id), celula(l.data_fechamento),
-      celula(l.valor_referencia), celula(l.origem),
+      escreverCelula(l.numero_uc), escreverCelula(l.originador_id), escreverCelula(l.data_fechamento),
+      escreverCelula(l.valor_referencia), escreverCelula(l.origem),
       l.fatura ? 'sim' : 'NAO', l.ja_contratada ? 'sim' : 'NAO',
-      celula(l.cliente), celula(l.usina),
-      celula(l.originador_crm || '(sem credito no CRM)'),
-      celula(l.originador_cadastro || '(nao cadastrado)'),
+      escreverCelula(l.cliente), escreverCelula(l.usina),
+      escreverCelula(l.originador_crm || '(sem credito no CRM)'),
+      escreverCelula(l.originador_cadastro || '(nao cadastrado)'),
     ].join(';') + '\n';
   }
   return csv;

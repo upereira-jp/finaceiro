@@ -76,6 +76,7 @@
 //           aqui isso e literal: um pagador sem bairro nao e um pagador de
 //           bairro vazio
 
+import { SEP, emLinhas, escreverCelula, lerLinha } from './csv.ts';
 /** Os 27, e a lista e fechada de proposito - nao ha "UF de duas letras". */
 export const UFS = [
   'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG',
@@ -120,13 +121,7 @@ export type PlanilhaDeEnderecos = {
 };
 
 /** O separador e `;`, como nas outras quatro planilhas e em `web/src/csv.ts`. */
-const SEP = ';';
 
-const semAspas = (s: string): string => {
-  const t = s.trim();
-  if (t.length >= 2 && t.startsWith('"') && t.endsWith('"')) return t.slice(1, -1).replace(/""/g, '"');
-  return t;
-};
 
 /**
  * Le a celula do CEP e devolve os oito digitos.
@@ -192,7 +187,7 @@ export function lerPlanilhaDeEnderecos(conteudo: string): PlanilhaDeEnderecos {
   // BOM UTF-8: o Excel o escreve, e sem tirar aqui o primeiro `numero_uc` viria
   // com um caractere invisivel na frente e nao casaria com UC nenhuma.
   const texto = conteudo.replace(/^﻿/, '');
-  const cruas = texto.split(/\r\n|\n|\r/);
+  const cruas = emLinhas(texto);
 
   const linhas: LinhaDeEndereco[] = [];
   const erros: ErroDeEndereco[] = [];
@@ -213,7 +208,7 @@ export function lerPlanilhaDeEnderecos(conteudo: string): PlanilhaDeEnderecos {
       return;
     }
 
-    const campos = crua.split(SEP).map(semAspas);
+    const campos = lerLinha(crua);
     const uc = campos[0] ?? '';
     const logradouro = campos[1] ?? '';
     const numero = campos[2] ?? '';
@@ -356,8 +351,6 @@ export type LinhaDoModeloDeEndereco = {
 };
 
 /** O `;` do CSV do Excel pt-BR, e o mesmo escape do `web/src/csv.ts`. */
-const celula = (v: string): string =>
-  /[";\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 
 /**
  * O CSV do modelo, montado. PURO de proposito (regra 8).
@@ -378,9 +371,9 @@ export function montarModeloDeEnderecos(linhas: LinhaDoModeloDeEndereco[]): stri
     'numero_uc;logradouro;numero;complemento;bairro;municipio;uf;cep;fatura;cliente;usina\n';
   for (const l of ordenadas) {
     csv += [
-      celula(l.numero_uc), celula(l.logradouro), celula(l.numero), celula(l.complemento),
-      celula(l.bairro), celula(l.municipio), celula(l.uf), celula(l.cep),
-      l.fatura ? 'sim' : 'NAO', celula(l.cliente), celula(l.usina),
+      escreverCelula(l.numero_uc), escreverCelula(l.logradouro), escreverCelula(l.numero), escreverCelula(l.complemento),
+      escreverCelula(l.bairro), escreverCelula(l.municipio), escreverCelula(l.uf), escreverCelula(l.cep),
+      l.fatura ? 'sim' : 'NAO', escreverCelula(l.cliente), escreverCelula(l.usina),
     ].join(';') + '\n';
   }
   return csv;

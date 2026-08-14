@@ -25,10 +25,11 @@
 
 import {
   lerPlanilhaDeContratos, lerDataDeFechamento, lerOrigemDoValor, fechamentoNoFuturo,
-  montarModeloDeContratos, MODELO_DE_CONTRATOS, ehUuid,
+  montarModeloDeContratos, MODELO_DE_CONTRATOS,
   type LinhaDoModeloDeContrato,
 } from '../src/dominio/planilha-contratos.ts';
 import { ehFaturaCheia, competencia } from '../src/dominio/faturamento.ts';
+import { ehUuid } from '../src/dominio/csv.ts';
 
 let falhas = 0;
 const chk = (id: string, cond: boolean, d: string) => {

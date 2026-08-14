@@ -342,18 +342,25 @@ export async function resumo() {
   const r: any[] = await dbt().$queryRaw`
     SELECT beneficiario_tipo::text AS tipo,
            coalesce(d.nome, o.nome, c.beneficiario_nome, '(sem nome)') AS beneficiario,
-           count(*)::int                                        AS titulos,
-           sum(c.valor_centavos)::int                           AS devido_centavos,
-           sum(c.valor_pago_centavos)::int                      AS pago_centavos,
-           sum(c.valor_centavos - c.valor_pago_centavos)::int    AS saldo_centavos,
-           count(*) FILTER (WHERE c.vencimento < current_date)::int AS atrasados
+           count(*)                                        AS titulos,
+           sum(c.valor_centavos)                            AS devido_centavos,
+           sum(c.valor_pago_centavos)                       AS pago_centavos,
+           sum(c.valor_centavos - c.valor_pago_centavos)     AS saldo_centavos,
+           count(*) FILTER (WHERE c.vencimento < current_date) AS atrasados
       FROM conta_pagar c
       LEFT JOIN dono_usina d ON d.tenant_id = c.tenant_id AND d.id = c.dono_usina_id
       LEFT JOIN originador o ON o.tenant_id = c.tenant_id AND o.id = c.originador_id
      WHERE c.status IN ('aberta','parcial')
      GROUP BY c.beneficiario_tipo, coalesce(d.nome, o.nome, c.beneficiario_nome, '(sem nome)')
      ORDER BY 6 DESC`;
-  return r;
+  /* Sem `::int` nas somas - `sum(integer)` devolve bigint e o downcast estourava
+   * com 22003 acima de R$ 21.474.836,47 em aberto. Ver a nota em fatura.ts. */
+  return r.map((l) => ({
+    ...l,
+    titulos: Number(l.titulos), devido_centavos: Number(l.devido_centavos),
+    pago_centavos: Number(l.pago_centavos), saldo_centavos: Number(l.saldo_centavos),
+    atrasados: Number(l.atrasados),
+  }));
 }
 
 /**

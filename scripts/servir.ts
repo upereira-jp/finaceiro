@@ -30,6 +30,7 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { iniciar, encerrarApp, app } from '../src/app.ts';
+import { TETO_DO_ARQUIVO } from '../src/http/rotas.ts';
 import { iniciarServidor } from '../src/http/servidor.ts';
 import { autenticadorDoAmbiente } from '../src/auth/autenticador.ts';
 
@@ -52,6 +53,13 @@ async function main(): Promise<void> {
     autenticador: autenticadorDoAmbiente(),
     estaticos,
     porta: Number(process.env.PORT ?? 3000),
+    /*
+     * O CORPO CABE O ARQUIVO, e ate 14/08 nao cabia. O teto do servidor era o
+     * default de 1 MB e o teto de arquivo escrito em `rotas.ts` dizia 32 MB -
+     * dois numeros que nunca se falaram. Base64 infla 4/3 e o envelope JSON leva
+     * o resto; 64 KB de folga cobrem os 21 campos e a moldura.
+     */
+    maxCorpoBytes: Math.ceil(TETO_DO_ARQUIVO * 4 / 3) + 64 * 1024,
     // O detalhe do 500 vai para o log do processo e NUNCA para a resposta -
     // src/http/erros.ts garante o outro lado.
     log: (m, e) => console.error(m, e),

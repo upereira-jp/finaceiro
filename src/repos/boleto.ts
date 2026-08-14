@@ -299,11 +299,12 @@ export async function registrar(faturaId: string, cobranca: PortaDeCobranca): Pr
 export async function situacaoDosEmAberto(cobranca: PortaDeCobranca, limite = 200): Promise<SituacaoDoBoleto[]> {
   await exigir('ler');
   const c = await conector();
-  const abertos = await dbt().boleto.findMany({
-    where: { status: 'registrado', nosso_numero: { not: null } },
-    orderBy: [{ vencimento: 'asc' }],
-    take: Math.min(limite, 500),
-  });
+  /* A CONSULTA E `emAberto`, e nao uma copia dela. As duas viviam neste mesmo
+   * arquivo com o mesmo `where` e o mesmo `orderBy`, e ja divergiam num ponto:
+   * com `limite = 0`, `emAberto` trazia 1 linha (`Math.max(1, ...)`) e esta
+   * trazia 0. Duas copias da mesma pergunta divergem calado no dia em que
+   * "em aberto" mudar de definicao. */
+  const abertos = await emAberto(limite);
   const situacoes: SituacaoDoBoleto[] = [];
   for (const b of abertos) situacoes.push(await cobranca.consultar(c.credencial_ref, b.nosso_numero!));
   return situacoes;
@@ -361,6 +362,29 @@ export async function tamanhoDaFila(agora: Date): Promise<number> {
      WHERE b.status IN ('pendente','erro')
        AND (b.proxima_tentativa_em IS NULL OR b.proxima_tentativa_em <= ${agora})
        AND f.status IN ('emitida','vencida')`;
+  return Number(r[0]?.n ?? 0);
+}
+
+/**
+ * QUANTOS ESTAO EM ABERTO, ao todo. Irmao de `tamanhoDaFila`, e ele existe pelo
+ * mesmo motivo: a rodada tem de poder DIZER que truncou.
+ *
+ * ============================================================================
+ * A CONSULTA ATIVA MENTIA, E FOI MEDIDO. `executarFilaDeEmissao` calcula
+ * `deixados_para_tras = total - fila.length` desde sempre; `executarConsultaAtiva`
+ * nunca tocava no campo, entao ele saia **0** em toda rodada - inclusive quando
+ * havia 5.000 boletos registrados e a rodada examinou 200.
+ *
+ * "0 deixados para tras" e uma afirmacao, e ela e a mais perigosa que um relatorio
+ * de rodada pode fazer: e a diferenca entre "conferi todos" e "conferi os 200
+ * primeiros por vencimento". Com a carteira crescendo, os mesmos 200 mais antigos
+ * seriam consultados para sempre e os demais nunca - sem nenhum sinal.
+ */
+export async function tamanhoDosEmAberto(): Promise<number> {
+  await exigir('ler');
+  const r: Array<{ n: bigint }> = await db().$queryRaw`
+    SELECT count(*) AS n FROM boleto b
+     WHERE b.status = 'registrado' AND b.nosso_numero IS NOT NULL`;
   return Number(r[0]?.n ?? 0);
 }
 

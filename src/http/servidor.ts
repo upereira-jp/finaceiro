@@ -192,7 +192,7 @@ async function lerCorpo(req: IncomingMessage, max: number): Promise<any> {
  * arbitrario com seguranca, entao fechar e a resposta certa - e agora ela e
  * declarada em vez de ser um efeito colateral do socket morrendo.
  */
-function responder(res: ServerResponse, r: Resultado): void {
+function responder(req: IncomingMessage, res: ServerResponse, r: Resultado): void {
   if (r.status === 413) res.setHeader('connection', 'close');
   if (r.status === 204 || r.corpo === undefined) { res.writeHead(r.status); res.end(); return; }
 
@@ -203,7 +203,33 @@ function responder(res: ServerResponse, r: Resultado): void {
    * seguinte, que e vazamento entre empresas por caminho que a RLS nao ve.
    */
   if (r.tipo) {
-    res.writeHead(r.status, { 'content-type': r.tipo, 'cache-control': 'no-store, private' });
+    /*
+     * `private, no-cache` E NAO `no-store`, e a troca e de 14/08.
+     *
+     * O argumento do `private` continua valendo inteiro: a logo e dado de UM
+     * tenant, e um cache COMPARTILHADO que a guardasse por URL a entregaria ao
+     * tenant seguinte - vazamento entre empresas por um caminho que a RLS nao
+     * ve. `private` mantem essa garantia: so o navegador de quem pediu guarda.
+     *
+     * O que `no-store` custava era outra coisa: **512 KB no fio a cada render**.
+     * A tela busca a logo por `buscarBinario` toda vez que a identidade muda, e
+     * a aba Documento a usa em duas folhas mais o cabecalho da caixa de
+     * pagamento. `no-cache` obriga REVALIDAR - o navegador pergunta sempre e
+     * recebe um 304 vazio quando o `sha256` nao mudou.
+     *
+     * O validador e o proprio `logo_sha256` que o gatilho ja calcula: um ETag
+     * que e o hash do conteudo nao pode discordar do conteudo.
+     */
+    if (r.etag && req.headers['if-none-match'] === r.etag) {
+      res.writeHead(304, { etag: r.etag, 'cache-control': 'private, no-cache' });
+      res.end();
+      return;
+    }
+    res.writeHead(r.status, {
+      'content-type': r.tipo,
+      'cache-control': 'private, no-cache',
+      ...(r.etag ? { etag: r.etag } : {}),
+    });
     res.end(r.corpo as Uint8Array | string);
     return;
   }
@@ -230,7 +256,7 @@ export function criarServidor(o: OpcoesDoServidor): http.Server {
     const naApi = url.pathname === prefixo || url.pathname.startsWith(prefixo + '/');
     if (!naApi) {
       if (raizEstatica) return servirEstatico(raizEstatica, url.pathname, res);
-      return responder(res, { status: 404, corpo: {
+      return responder(req, res, { status: 404, corpo: {
         erro: 'RotaNaoEncontrada',
         mensagem: `${metodo} ${url.pathname} - a API responde sob ${prefixo}`,
       } });
@@ -241,12 +267,12 @@ export function criarServidor(o: OpcoesDoServidor): http.Server {
       // Publica: e o que o front precisa ANTES de ter credencial. Fica antes do
       // autenticador de proposito - pedir token para descobrir como autenticar
       // seria circular.
-      if (metodo === 'GET' && caminho === '/publico/config') return responder(res, configPublica());
+      if (metodo === 'GET' && caminho === '/publico/config') return responder(req, res, configPublica());
 
       const achou = casar(metodo, caminho);
       if (!achou) {
         const status = caminhoExisteEmOutroMetodo(caminho) ? 405 : 404;
-        return responder(res, { status, corpo: {
+        return responder(req, res, { status, corpo: {
           erro: status === 405 ? 'MetodoNaoPermitido' : 'RotaNaoEncontrada',
           mensagem: `${metodo} ${caminho}`,
         } });
@@ -268,7 +294,7 @@ export function criarServidor(o: OpcoesDoServidor): http.Server {
         corpo, sessao, tenantProposto: tenantProposto || undefined,
       };
 
-      responder(res, await achou.rota.handler(requisicao, o.app));
+      responder(req, res, await achou.rota.handler(requisicao, o.app));
     } catch (e: any) {
       if (ehInesperado(e)) {
         log(`[financeiro] ${metodo} ${caminho} falhou:`, e);
@@ -294,7 +320,7 @@ export function criarServidor(o: OpcoesDoServidor): http.Server {
          */
         log(`[financeiro] 401 em ${metodo} ${caminho}: ${e.motivo ?? '(sem motivo)'}`, undefined);
       }
-      responder(res, traduzir(e));
+      responder(req, res, traduzir(e));
     }
   });
 }

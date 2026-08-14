@@ -82,6 +82,62 @@ export class RespostaInesperadaDoModelo extends Error {
   }
 }
 
+/**
+ * A API RESPONDEU ERRO, E ELE VIRA ERRO NOSSO ANTES DE SAIR DAQUI.
+ *
+ * ============================================================================
+ * O DEFEITO MEDIDO EM 14/08, e ele deslogava quem estava trabalhando
+ *
+ * O `APIError` do SDK carrega `status` numerico e `message` com o CORPO da API
+ * dentro, e as subclasses dele NAO definem `name` - entao `e.name` e `'Error'`.
+ * O tradutor de `src/http/erros.ts` aceitava qualquer coisa com `status` na
+ * faixa de negocio e repassava os dois:
+ *
+ *     Anthropic 401 -> HTTP 401 {"erro":"Error","mensagem":"401 {...corpo...}"}
+ *
+ * Duas consequencias, e a segunda e a cara: o corpo da API vazava inteiro para o
+ * cliente, e o **401 deslogava quem opera** - a SPA trata 401 como sessao morta e
+ * manda para o login, levando junto a fatura em edicao e a chamada ja paga.
+ *
+ * O tradutor foi apertado no mesmo dia (erro nosso tem `name` proprio), e este
+ * embrulho e a outra metade: cada faixa da API vira um erro NOSSO, com nome,
+ * status escolhido por nos e mensagem escrita para quem opera.
+ */
+export class LeitorSemCredencialValida extends Error {
+  readonly status = 503;
+  constructor() {
+    super(
+      'A chave da Anthropic foi recusada pela API (401/403). A leitura por imagem esta fora ' +
+      'ate alguem trocar a ANTHROPIC_API_KEY em /etc/financeiro.env. O resto do sistema ' +
+      'funciona, e a aba continua aceitando digitacao manual dos campos.'
+    );
+    this.name = 'LeitorSemCredencialValida';
+  }
+}
+
+export class LeitorSobrecarregado extends Error {
+  readonly status = 503;
+  constructor() {
+    super(
+      'A API da Anthropic recusou por limite de taxa ou sobrecarga (429/529). Nada foi ' +
+      'extraido e a chamada nao sera cobrada como leitura util. Tente de novo em alguns ' +
+      'segundos, ou preencha os campos a mao.'
+    );
+    this.name = 'LeitorSobrecarregado';
+  }
+}
+
+export class ArquivoRecusadoPeloLeitor extends Error {
+  readonly status = 422;
+  constructor(detalhe: string) {
+    super(
+      `A API recusou o arquivo: ${detalhe}. Confira se o PDF abre e se nao esta protegido ` +
+      'por senha - PDF cifrado chega aqui como arquivo valido e e recusado la.'
+    );
+    this.name = 'ArquivoRecusadoPeloLeitor';
+  }
+}
+
 export class LeituraRecusada extends Error {
   readonly status = 422;
   constructor(categoria: string | null) {
@@ -233,15 +289,20 @@ export const SCHEMA_DO_BOLETO = {
  * `TypeError` sem nome no meio de uma leitura de fatura.
  */
 async function extrair<T>(d: DocumentoParaLer, instrucoes: string, schema: object): Promise<T> {
-  const resposta = await cliente().messages.create({
-    model: MODELO,
-    max_tokens: 16000,
-    output_config: { format: { type: 'json_schema', schema } as never },
-    messages: [{
-      role: 'user',
-      content: [blocoDoArquivo(d), { type: 'text', text: instrucoes }],
-    }],
-  } as never) as Anthropic.Message;
+  let resposta: Anthropic.Message;
+  try {
+    resposta = await cliente().messages.create({
+      model: MODELO,
+      max_tokens: 16000,
+      output_config: { format: { type: 'json_schema', schema } as never },
+      messages: [{
+        role: 'user',
+        content: [blocoDoArquivo(d), { type: 'text', text: instrucoes }],
+      }],
+    } as never) as Anthropic.Message;
+  } catch (e) {
+    throw traduzirErroDaApi(e);
+  }
 
   if (resposta.stop_reason === 'refusal') {
     throw new LeituraRecusada((resposta as { stop_details?: { category?: string } })
@@ -252,6 +313,31 @@ async function extrair<T>(d: DocumentoParaLer, instrucoes: string, schema: objec
     throw new RespostaInesperadaDoModelo('nenhum bloco de texto na resposta');
   }
   return JSON.parse(bloco.text) as T;
+}
+
+/**
+ * O ERRO DA API VIRA ERRO NOSSO. Ver a nota de `LeitorSemCredencialValida`.
+ *
+ * O QUE NAO E DA API PASSA INTACTO: `ArquivoNaoSuportado` e `SemChaveDaAnthropic`
+ * sao levantados por `blocoDoArquivo` e por `cliente()` DENTRO do mesmo `try`, e
+ * embrulha-los de novo trocaria um erro que ja diz o certo por um generico.
+ */
+function traduzirErroDaApi(e: unknown): Error {
+  if (e instanceof Error && typeof (e as { status?: unknown }).status !== 'number') return e;
+  if (e instanceof SemChaveDaAnthropic || e instanceof ArquivoNaoSuportado) return e;
+
+  const status = Number((e as { status?: unknown }).status);
+  if (status === 401 || status === 403) return new LeitorSemCredencialValida();
+  if (status === 429 || status === 529) return new LeitorSobrecarregado();
+  if (status >= 400 && status < 500) {
+    /* A MENSAGEM DA API NAO VAI INTEIRA. So o campo `message` do erro dela, sem
+     * o corpo JSON - o suficiente para quem opera agir, sem reexportar a
+     * resposta de um servico de terceiro para o navegador do cliente. */
+    const bruto = String((e as { message?: unknown }).message ?? '');
+    const so = bruto.replace(/\{[\s\S]*$/, '').trim() || `HTTP ${status}`;
+    return new ArquivoRecusadoPeloLeitor(so);
+  }
+  return new RespostaInesperadaDoModelo(`a API respondeu HTTP ${status || '(sem status)'}`);
 }
 
 /**

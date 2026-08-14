@@ -43,6 +43,34 @@ export class DocumentoNaoValidado extends Error {
  * CHEIO desde a migration r14_vigente_unico. Antes dela isto era um findFirst
  * sobre status='ativo' e a resposta dependia da ordem do heap.
  */
+/**
+ * TODOS OS CONTRATOS VIGENTES DO TENANT, DE UMA VEZ.
+ *
+ * ============================================================================
+ * ELA EXISTE PARA MATAR UM N+1 DA TELA, e o N era o cadastro inteiro.
+ *
+ * `web/src/telas/contratos.tsx` fazia: lista as UCs (uma requisicao), e depois
+ * **uma requisicao HTTP por UC** para descobrir o contrato vigente de cada uma,
+ * seis em paralelo. Com as 41 UCs de hoje sao 42 requisicoes; com o teto atual
+ * de `?limite=500` sao 501, e cada uma abre transacao, resolve login e consulta.
+ *
+ * A consulta e uma so, e ela usa a coluna GERADA `uc_vigente` - a mesma da R14,
+ * servida pelo indice unico cheio `contrato_vigente_unico_por_uc`. Nao ha lista
+ * de status escrita a mao aqui: "vigente" e o que a coluna gerada diz, e ela e a
+ * definicao que o banco ja usa para impedir dois contratos na mesma UC.
+ */
+export async function vigentesPorUC() {
+  await exigir('ler');
+  const r = await dbt().contrato.findMany({
+    where: { uc_vigente: { not: null } },
+    include: { originador: { select: { id: true, nome: true, tipo: true } } },
+  });
+  /* O MAPA E MONTADO NO SERVIDOR, e nao a lista crua: a tela quer responder
+   * "esta UC tem contrato?" por id, e devolver lista faria cada consumidor
+   * montar o proprio indice - o CRM inclusive. */
+  return Object.fromEntries(r.map((c) => [c.uc_vigente!, c]));
+}
+
 export async function vigenteDaUC(unidadeConsumidoraId: string) {
   await exigir('ler');
   return dbt().contrato.findUnique({

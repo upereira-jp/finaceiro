@@ -247,12 +247,19 @@ export async function executarConsultaAtiva(
   const c = await transacao(() => abrir('consulta_ativa', cicloId));
 
   try {
-    const { abertos, credencialRef } = await transacao(async () => {
+    const { abertos, credencialRef, total } = await transacao(async () => {
       const conector = await dbt().conector_cobranca.findFirst({ where: { ativo: true } });
       if (!conector) throw new SemConectorDeCobranca();
-      return { abertos: await boletos.emAberto(p.examinadosPorRodada), credencialRef: conector.credencial_ref };
+      return {
+        abertos: await boletos.emAberto(p.examinadosPorRodada),
+        credencialRef: conector.credencial_ref,
+        /* O UNIVERSO, para a rodada poder dizer que truncou. A fila de emissao
+         * ja fazia isso desde sempre; a consulta ativa reportava `0` sempre. */
+        total: await boletos.tamanhoDosEmAberto(),
+      };
     });
     r.examinados = abertos.length;
+    r.deixados_para_tras = Math.max(0, total - abertos.length);
 
     for (const b of abertos) {
       const nossoNumero = b.nosso_numero!;

@@ -37,6 +37,7 @@
 // E a regra que vale para as tres planilhas do projeto: **ausente nao e zero**.
 // Celula vazia e erro, nunca "dia 1".
 
+import { SEP, emLinhas, escreverCelula, lerLinha } from './csv.ts';
 /** O dia do mes, ja validado. Nao e `number` solto de proposito: o tipo
  *  nominal impede passar um indice de array onde se espera um dia. */
 export type DiaDoMes = number & { readonly __dia: unique symbol };
@@ -64,13 +65,7 @@ export type PlanilhaDeVencimentos = {
 };
 
 /** O separador e `;`, como em `planilha-tarifas.ts` e em `web/src/csv.ts`. */
-const SEP = ';';
 
-const semAspas = (s: string): string => {
-  const t = s.trim();
-  if (t.length >= 2 && t.startsWith('"') && t.endsWith('"')) return t.slice(1, -1).replace(/""/g, '"');
-  return t;
-};
 
 /**
  * Le a celula de vencimento e devolve o DIA DO MES.
@@ -125,7 +120,7 @@ export function lerPlanilhaDeVencimentos(conteudo: string): PlanilhaDeVencimento
   // BOM UTF-8: o Excel o escreve, e sem tirar aqui o primeiro `numero_uc` viria
   // com um caractere invisivel na frente e nao casaria com UC nenhuma.
   const texto = conteudo.replace(/^﻿/, '');
-  const cruas = texto.split(/\r\n|\n|\r/);
+  const cruas = emLinhas(texto);
 
   const linhas: LinhaDeVencimento[] = [];
   const erros: ErroDeVencimento[] = [];
@@ -145,7 +140,7 @@ export function lerPlanilhaDeVencimentos(conteudo: string): PlanilhaDeVencimento
       return;
     }
 
-    const campos = crua.split(SEP).map(semAspas);
+    const campos = lerLinha(crua);
     const uc = campos[0] ?? '';
     const valor = campos[1] ?? '';
 
@@ -253,8 +248,6 @@ export type LinhaDoModelo = {
 };
 
 /** O `;` do CSV do Excel pt-BR, e o mesmo escape do `web/src/csv.ts`. */
-const celula = (v: string): string =>
-  /[";\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 
 /**
  * O CSV do modelo, montado. PURO de proposito (regra 8): o que decide a ORDEM e
@@ -274,9 +267,9 @@ export function montarModeloDeVencimentos(linhas: LinhaDoModelo[]): string {
   let csv = '﻿' + 'numero_uc;dia_vencimento;fatura;cliente;usina;rateio_%;situacao_crm;status\n';
   for (const l of ordenadas) {
     csv += [
-      celula(l.numero_uc), celula(l.dia_atual), l.fatura ? 'sim' : 'NAO',
-      celula(l.cliente), celula(l.usina), celula(l.rateio),
-      celula(l.situacao_crm || '(nao espelhada)'), celula(l.status),
+      escreverCelula(l.numero_uc), escreverCelula(l.dia_atual), l.fatura ? 'sim' : 'NAO',
+      escreverCelula(l.cliente), escreverCelula(l.usina), escreverCelula(l.rateio),
+      escreverCelula(l.situacao_crm || '(nao espelhada)'), escreverCelula(l.status),
     ].join(';') + '\n';
   }
   return csv;

@@ -30,6 +30,7 @@
 // o chamador - e o script recusa o lote inteiro, como `cadastrar-originadores.ts`.
 
 import { reaisParaCentavos, type Centavos } from './centavos.ts';
+import { SEP, emLinhas, lerLinha } from './csv.ts';
 
 export type LinhaDaPlanilha = {
   /** 1-based e contando a linha do cabecalho, para bater com o que a pessoa ve
@@ -66,13 +67,7 @@ export type Planilha = {
  * produz valor errado sem erro. Vírgula como separador DE CAMPO e recusada com
  * a razao dita.
  */
-const SEP = ';';
 
-const semAspas = (s: string): string => {
-  const t = s.trim();
-  if (t.length >= 2 && t.startsWith('"') && t.endsWith('"')) return t.slice(1, -1).replace(/""/g, '"');
-  return t;
-};
 
 /**
  * Le o conteudo de um CSV de duas colunas: UC e valor em reais.
@@ -86,7 +81,7 @@ export function lerPlanilhaDeTarifas(conteudo: string): Planilha {
   // com um caractere invisivel na frente e nao casaria com nenhuma UC - erro
   // que so aparece na PRIMEIRA linha e que ninguem consegue ver no editor.
   const texto = conteudo.replace(/^﻿/, '');
-  const cruas = texto.split(/\r\n|\n|\r/);
+  const cruas = emLinhas(texto);
 
   const linhas: LinhaDaPlanilha[] = [];
   const erros: ErroDaPlanilha[] = [];
@@ -109,7 +104,7 @@ export function lerPlanilhaDeTarifas(conteudo: string): Planilha {
       return;
     }
 
-    const campos = crua.split(SEP).map(semAspas);
+    const campos = lerLinha(crua);
     const uc = campos[0] ?? '';
     const valor = campos[1] ?? '';
 

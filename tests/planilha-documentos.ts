@@ -23,10 +23,11 @@
 // `--modelo` escreve tem de passar pelo leitor que o `--ensaio` usa.
 
 import {
-  lerPlanilhaDeDocumentos, montarModeloDeDocumentos, MODELO_DE_DOCUMENTOS, ehUuid,
+  lerPlanilhaDeDocumentos, montarModeloDeDocumentos, MODELO_DE_DOCUMENTOS,
   type LinhaDoModeloDeDocumento,
 } from '../src/dominio/planilha-documentos.ts';
 import { classificar, podeAtivarContrato } from '../src/dominio/documento.ts';
+import { ehUuid } from '../src/dominio/csv.ts';
 
 let falhas = 0;
 const chk = (id: string, cond: boolean, d: string) => {
