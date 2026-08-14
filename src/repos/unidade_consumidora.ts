@@ -7,6 +7,7 @@
 // conferiria o teto. Ver repos/rateio.ts.
 
 import { dbt } from '../db/tipado.ts';
+import { paraDecimal, decimalParaTexto } from '../dominio/fatura-unificada.ts';
 import { tenantCorrente, exigir } from '../db/contexto.ts';
 import type { titularidade_uc as TitularidadeUC, status_uc as StatusUC } from '../generated/prisma/enums.ts';
 
@@ -24,6 +25,21 @@ export type NovaUC = {
   endereco_cep?: string | null;
   data_vencimento?: Date | null;
   crm_usina_cliente_id?: string | null;
+  /*
+   * R$/kWh DESTA UC, seis casas (migration 30, R22).
+   *
+   * Ate 14/08 a tarifa era da tabela `tarifa`, chave (distribuidora, vigencia) -
+   * uma por distribuidora. A medicao do CRM em 14/08 mostrou que a granularidade
+   * REAL e por cliente: das 41 UCs, 35 a 1,130000, 4 a 1,16 e 2 a 1,180000. Uma
+   * tarifa por distribuidora obrigaria as 41 a compartilharem um numero que 6
+   * delas contradizem.
+   *
+   * STRING e nao `number`: e `numeric(12,6)` do outro lado, e truncar
+   * 1,187650 em centavos cobra R$ 2,90 a mais numa UC num mes - medido na R22.
+   * NULO e legitimo e significa "ainda nao sei", e nesse caso a composicao
+   * LEVANTA (R26) em vez de faturar por zero.
+   */
+  tarifa_reais_por_kwh?: string | null;
 };
 
 export type EdicaoUC = Partial<Omit<NovaUC, 'cliente_id' | 'numero_uc' | 'crm_usina_cliente_id'>>;
@@ -32,6 +48,25 @@ const limpar = (v: string | null | undefined) => {
   const s = v?.trim();
   return s ? s : null;
 };
+
+/**
+ * A TARIFA, NORMALIZADA ANTES DO BANCO.
+ *
+ * Ela chega de tres lugares com tres pontuacoes: digitada na tela ("1,185396"),
+ * vinda do conector ("1.185396") e de importacao. `paraDecimal` ja resolve os
+ * tres - e a mesma funcao que le a fatura da distribuidora -, e o retorno em
+ * texto de seis casas e o que `numeric(12,6)` aceita sem passar por float.
+ *
+ * ZERO NAO E TARIFA e vira NULO: o CHECK `uc_tarifa_positiva` recusaria com
+ * `23514`, e o erro sairia como "violacao de restricao" em vez de dizer que o
+ * campo veio vazio. Nulo e a ausencia, e a ausencia LEVANTA na composicao (R26).
+ */
+function tarifa(v: string | null | undefined): string | null {
+  const s = String(v ?? '').trim();
+  if (!s) return null;
+  const d = decimalParaTexto(paraDecimal(s, 'tarifa_reais_por_kwh'), 6);
+  return Number(d) > 0 ? d : null;
+}
 
 export class NumeroDeUCJaExiste extends Error {
   readonly status = 409;
@@ -61,6 +96,7 @@ export async function criar(e: NovaUC) {
         endereco_cep: limpar(e.endereco_cep),
         data_vencimento: e.data_vencimento ?? null,
         crm_usina_cliente_id: e.crm_usina_cliente_id ?? null,
+        tarifa_reais_por_kwh: tarifa(e.tarifa_reais_por_kwh),
       },
     });
   } catch (err: any) {
@@ -134,6 +170,7 @@ export async function editar(id: string, e: EdicaoUC) {
   if (e.distribuidora !== undefined) dados.distribuidora = e.distribuidora.trim();
   if (e.titularidade !== undefined)  dados.titularidade = e.titularidade;
   if (e.data_vencimento !== undefined) dados.data_vencimento = e.data_vencimento ?? null;
+  if (e.tarifa_reais_por_kwh !== undefined) dados.tarifa_reais_por_kwh = tarifa(e.tarifa_reais_por_kwh);
   for (const c of ['endereco_logradouro','endereco_numero','endereco_complemento',
                    'endereco_bairro','endereco_municipio','endereco_cep'] as const) {
     if (e[c] !== undefined) dados[c] = limpar(e[c]);

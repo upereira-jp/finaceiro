@@ -71,46 +71,29 @@ const traduzir = (err: any, qual: string): never => {
   throw err;
 };
 
-// ================================================================ tarifa
-/**
- * R22: tarifa e `numeric(12,6)` em R$/kWh, NAO centavos. E preco por unidade -
- * dimensionalmente uma taxa, como percentual de rateio. Medido na R22: truncar
- * 1,187650 em centavos cobra R$ 2,90 a mais numa UC, num mes, sempre a mais.
+/*
+ * ================================================================ tarifa
+ *
+ * A TARIFA SAIU DAQUI EM 14/08/2026, com a migration 30. Ela era a terceira
+ * "tabela de valor com data" deste arquivo - `tarifa`, chave (distribuidora,
+ * vigencia) - e as duas funcoes que a serviam (`abrirVigenciaDeTarifa` e
+ * `tarifasDe`) foram apagadas junto com a tabela.
+ *
+ * O QUE MEDIU A DECISAO, e ela e do dono: a granularidade real e POR CLIENTE.
+ * Medido em 14/08 pelo join `rateio_clientes.lead_codigo -> vendas_ganhas.codigo`
+ * do CRM: 41 das 41 UCs tem tarifa propria, e ela VARIA - 35 a 1,130000, 4 a
+ * 1,16 e 2 a 1,180000. Uma tarifa por distribuidora obrigaria as 41 a
+ * compartilharem um numero que 6 delas contradizem.
+ *
+ * Hoje a tarifa e `unidade_consumidora.tarifa_reais_por_kwh`, e quem a le na
+ * composicao e `app.tarifa_da_uc(uuid)` - que mantem a R26 intacta: ausencia
+ * LEVANTA (`no_data_found`), nunca vira zero.
+ *
+ * As outras duas tabelas deste arquivo - `regra_comissao` e `regra_repasse` -
+ * continuam versionadas por vigencia, e por um motivo que a tarifa nao tinha:
+ * elas sao REGRA e nao PRECO. A comissao de um contrato fechado em marco e a de
+ * marco, para sempre (R20-b); a tarifa de uma UC e a que vale agora.
  */
-export async function abrirVigenciaDeTarifa(e: {
-  distribuidora: string; tarifa_reais_por_kwh: string; vigencia_inicio: Date;
-}) {
-  await exigir('administrar');
-  const valor = decimal(e.tarifa_reais_por_kwh, 'tarifa_reais_por_kwh', 6);
-  const inicio = iso(e.vigencia_inicio);
-
-  const aberta = await dbt().tarifa.findFirst({
-    where: { distribuidora: e.distribuidora, vigencia_fim: null },
-  });
-  if (aberta) {
-    if (iso(aberta.vigencia_inicio) >= inicio) throw new VigenciaNoPassado(inicio, iso(aberta.vigencia_inicio));
-    // FECHA antes de inserir. Ver o cabecalho.
-    await dbt().tarifa.updateMany({ where: { id: aberta.id }, data: { vigencia_fim: e.vigencia_inicio } });
-  }
-
-  try {
-    return await dbt().tarifa.create({
-      data: {
-        tenant_id: tenantCorrente(),
-        distribuidora: e.distribuidora.trim(),
-        tarifa_reais_por_kwh: valor,
-        vigencia_inicio: e.vigencia_inicio,
-      },
-    });
-  } catch (err) { return traduzir(err, 'tarifa'); }
-}
-
-export async function tarifasDe(distribuidora: string) {
-  await exigir('ler');
-  return dbt().tarifa.findMany({
-    where: { distribuidora }, orderBy: [{ vigencia_inicio: 'desc' }],
-  });
-}
 
 // ================================================================ comissao
 /**

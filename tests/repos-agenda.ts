@@ -89,14 +89,15 @@ const RAPIDA: Politica = {
   baseSegundos: 1, tetoSegundos: 4, diasDeAvisoDoCertificado: 30, examinadosPorRodada: 200,
 };
 
-const garantirTarifa = async (emT: <T>(f: () => Promise<T>) => Promise<T>) => {
-  const abertas: Array<{ n: bigint }> = await emT(() => db().$queryRawUnsafe(
-    `SELECT count(*)::bigint AS n FROM tarifa WHERE distribuidora = $1 AND vigencia_fim IS NULL`, DISTRIB));
-  if (Number(abertas[0].n) > 0) return;
-  await emT(() => regras.abrirVigenciaDeTarifa({
-    distribuidora: DISTRIB, tarifa_reais_por_kwh: '1.000000', vigencia_inicio: mes(2020, 1),
-  }));
-};
+/*
+ * A TARIFA DEIXOU DE SER FIXTURE em 14/08 (migration 30): ela e coluna da UC, e
+ * `ucRepo.criar` a carimba junto com o resto do cadastro. A funcao
+ * `garantirTarifa` que existia aqui abria vigencia na tabela `tarifa`, que saiu.
+ *
+ * O invariante que ela protegia continua valendo e continua sendo exercitado: UC
+ * sem tarifa faz `comporLote` LEVANTAR (R26) - `tests/regras.sql` mede isso
+ * diretamente contra `app.tarifa_da_uc`.
+ */
 
 /**
  * UM dono por tenant, reaproveitado. `dono_usina` tem unique de documento por
@@ -123,6 +124,10 @@ async function faturaEmitida(
   await emT(() => usinaRepo.editar(u.id, { dono_usina_id: donoId }));
   const uc = await emT(() => ucRepo.criar({
     cliente_id: clienteId, numero_uc: `AGD-UC-${sufixo}`, distribuidora: DISTRIB,
+    /* A tarifa e da UC desde a migration 30 - sem ela `comporLote` levanta (R26),
+     * que e o que `tests/regras.sql` mede de proposito e nao o que esta sob
+     * teste aqui. */
+    tarifa_reais_por_kwh: '1.000000',
     data_vencimento: new Date(Date.UTC(2026, 0, 15)),
   }));
   await emT(() => rateio.definirRateio({
@@ -154,7 +159,6 @@ async function faturaEmitida(
 let fFalha: string; let fPaga: string; let fCancelada: string; let fB: string;
 
 {
-  await garantirTarifa(emA);
   await emA(() => boleto.cadastrarConector({ credencial_ref: 'vault://sicoob/agenda', ativo: true }));
 
   fFalha = await faturaEmitida(emA, CLI, 'F1', [2028, 1]);
@@ -162,7 +166,6 @@ let fFalha: string; let fPaga: string; let fCancelada: string; let fB: string;
   fCancelada = await faturaEmitida(emA, CLI, 'C1', [2028, 3]);
 
   // O tenant B ganha conector e uma fatura emitida, para o isolamento ter alvo.
-  await garantirTarifa(emB);
   await emB(() => boleto.cadastrarConector({ credencial_ref: 'vault://sicoob/agenda-b', ativo: true }));
   const clienteB = await emB(async () => {
     const { criar, porDocumento } = await import('../src/repos/cliente.ts');

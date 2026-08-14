@@ -172,12 +172,22 @@ export async function prontidao(comp: Date | string): Promise<Prontidao> {
       (SELECT count(DISTINCT uc.usina_id) FROM uc_contratada uc WHERE uc.usina_id IS NOT NULL) AS usinas_contratadas,
       -- 4. vencimento: Q-SPEC001-02, 100% vazio no CRM
       (SELECT count(*) FROM uc_ativa uc WHERE uc.data_vencimento IS NULL)    AS sem_vencimento,
-      -- 5. tarifa vigente NA COMPETENCIA, por distribuidora de UC contratada
-      (SELECT count(DISTINCT uc.distribuidora) FROM uc_contratada uc
-        WHERE NOT EXISTS (SELECT 1 FROM tarifa t
-                           WHERE t.tenant_id = uc.tenant_id AND t.distribuidora = uc.distribuidora
-                             AND daterange(t.vigencia_inicio, t.vigencia_fim, '[)') @> ${iso}::date)) AS sem_tarifa,
-      (SELECT count(DISTINCT uc.distribuidora) FROM uc_contratada uc)        AS distribuidoras,
+      -- 5. tarifa da UC CONTRATADA (migration 30)
+      --
+      -- ERA "tarifa vigente por DISTRIBUIDORA", lendo a tabela tarifa, que saiu
+      -- em 14/08. A camada continua existindo e continua bloqueando a fatura pelo
+      -- mesmo motivo (R26: ausencia de preco levanta, nao vira zero) - o que
+      -- mudou e a UNIDADE de contagem. Era "quantas distribuidoras estao sem
+      -- preco"; e "quantas UCs estao sem preco", que e a granularidade real
+      -- medida em 14/08: 35 UCs a 1,130000, 4 a 1,16 e 2 a 1,180000.
+      --
+      -- E ela deixou de depender da COMPETENCIA: a tarifa da UC e a que vale
+      -- agora, e nao uma serie versionada. Comissao e repasse continuam
+      -- versionados porque sao REGRA - a de um contrato fechado em marco e a de
+      -- marco, para sempre (R20-b). Preco nao.
+      (SELECT count(*) FROM uc_contratada uc
+        WHERE uc.tarifa_reais_por_kwh IS NULL)                               AS sem_tarifa,
+      (SELECT count(*) FROM uc_contratada uc)                                AS ucs_contratadas,
       -- 6. dono da usina: R12, bloqueia o SPLIT e nao a fatura
       (SELECT count(*) FROM usina u
         WHERE u.status = 'ativa' AND u.dono_usina_id IS NULL)                AS sem_dono,
@@ -269,11 +279,13 @@ export async function prontidao(comp: Date | string): Promise<Prontidao> {
       explicacao: 'UC sem data de vencimento. Nao ha default: quem preenche, por UC ou por contrato, ' +
         'e questao sem dono resolvido, e escolher um dia aqui seria o improviso que a regra 10 proibe' },
 
-    { camada: 'tarifa_vigente', faltam: n(l.sem_tarifa), total: n(l.distribuidoras), derivada: true,
-      efeito: 'bloqueia_fatura', dono: 'Vinicius', questao: null,
-      explicacao: 'distribuidora de UC contratada sem tarifa vigente NA COMPETENCIA. A composicao ' +
-        'levanta no_data_found (R26): ausencia de preco e erro, nao zero. `prisma/seed/` tem o valor ' +
-        'derivado de 1,130000 R$/kWh, e rodar o seed e decisao - a tarifa precifica toda fatura' },
+    { camada: 'tarifa_da_uc', faltam: n(l.sem_tarifa), total: n(l.ucs_contratadas), derivada: true,
+      efeito: 'bloqueia_fatura', dono: 'operacao', questao: null,
+      explicacao: 'UC contratada sem tarifa (R$/kWh). A composicao do lote levanta no_data_found ' +
+        '(R26): ausencia de preco e erro, nao zero. Preenche-se na aba Unidades, coluna ' +
+        '"Tarifa R$/kWh" - a aba Tarifas saiu em 14/08 porque servia UM numero para todas as UCs, ' +
+        'e a medicao do CRM mostrou que ele varia por cliente. O conector semeia a partir do card ' +
+        'quando ele traz consumo em kWh e em reais, e nunca apaga o que foi digitado aqui' },
 
     { camada: 'dono_da_usina', faltam: n(l.sem_dono), total: n(l.usinas_ativas),
       efeito: 'bloqueia_split', dono: 'operacao', questao: 'AUD-08',

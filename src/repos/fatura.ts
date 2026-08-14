@@ -6,7 +6,7 @@
 // duas ficam do lado do SERVIDOR, no proprio INSERT:
 //
 //     consumo_kwh   = geracao_medida x percentual_rateio / 100
-//     valor_consumo = app.consumo_centavos(consumo_kwh, app.tarifa_vigente(...))
+//     valor_consumo = app.consumo_centavos(consumo_kwh, app.tarifa_da_uc(uc.id))
 //
 // Trazer os numeros para o Node, multiplicar e devolver seria passar por
 // `number` - float de 64 bits - em tres pontos de uma conta que produz o valor
@@ -42,11 +42,13 @@ export class TransicaoDeFaturaInvalida extends Error {
 
 export class SemPrecoNaCompetencia extends Error {
   readonly status = 422;
-  constructor(distribuidora: string, comp: string) {
+  constructor(_onde: string, comp: string) {
     super(
-      `Nao ha tarifa vigente de ${distribuidora} na competencia ${comp}. ` +
-      'R26: ausencia de preco levanta, nao vira zero - base de faturamento NULL soma como ' +
-      'nada e coalesce como zero, e a fatura sairia com valor errado sem erro nenhum.'
+      `Ha unidade consumidora sem tarifa cadastrada no lote da competencia ${comp}, e nenhuma ` +
+      'fatura foi criada. R26: ausencia de preco levanta, nao vira zero - base de faturamento ' +
+      'NULL soma como nada e coalesce como zero, e a fatura sairia com valor errado sem erro ' +
+      'nenhum. A tarifa e R$/kWh de cada UC e se preenche na aba Unidades (migration 30); o ' +
+      'conector a traz do CRM quando o card tem consumo em kWh e em reais.'
     );
     this.name = 'SemPrecoNaCompetencia';
   }
@@ -185,53 +187,76 @@ export async function comporLote(
    */
   const chavePadrao = await chavePixPadrao();
 
-  let criadas = 0;
-  for (const t of triadas) {
-    if (!t.faturar) continue;
-    const tarifas = opcoes.tarifas_concessionaria_centavos?.[t.unidade_consumidora_id] ?? 0;
-    exigirCentavos(tarifas, `tarifas_concessionaria_centavos[${t.unidade_consumidora_id}]`);
+  /*
+   * ============================================================================
+   * UM INSERT PARA O LOTE INTEIRO, e nao um por UC.
+   *
+   * Ate 14/08 este trecho era um laco com um `$executeRaw` por linha: com 41 UCs,
+   * 41 viagens de ida e volta ao Postgres dentro da MESMA transacao. Com o
+   * volume que este sistema pretende operar - dezenas de milhares de UCs - isso
+   * nao e lentidao, e uma transacao aberta por minutos segurando locks.
+   *
+   * O que mudou de forma: as tres colunas que variam por UC - `contrato_id`,
+   * `vencimento` e `flag_fatura_cheia`, mais as tarifas da concessionaria -
+   * viajam como ARRAYS e sao reunidas por `unnest`. O resto da consulta e
+   * identico, inclusive a parte que importa: as subconsultas de geracao e de
+   * tarifa continuam sendo avaliadas DENTRO do INSERT, no servidor. A triagem
+   * decidiu QUEM entra; nenhum valor de dinheiro passa pelo Node.
+   *
+   * A TARIFA MUDOU DE FONTE na migration 30: era `app.tarifa_vigente(
+   * distribuidora, competencia)` e passou a ser `app.tarifa_da_uc(uc.id)`. A R26
+   * nao mudou - a funcao nova LEVANTA `no_data_found` na ausencia, exatamente
+   * como a antiga, e e o `catch` abaixo que traduz.
+   */
+  const alvos = triadas.filter((t) => t.faturar);
+  for (const t of alvos) {
+    const v = opcoes.tarifas_concessionaria_centavos?.[t.unidade_consumidora_id] ?? 0;
+    exigirCentavos(v, `tarifas_concessionaria_centavos[${t.unidade_consumidora_id}]`);
+  }
 
-    /*
-     * Os cinco numeros da fatura saem daqui, e os cinco vem do SERVIDOR. A
-     * subconsulta de geracao e a de tarifa sao reavaliadas dentro do INSERT em
-     * vez de virem da triagem: a triagem decidiu QUEM entra, e um valor lido no
-     * Node e reescrito no banco e um valor que passou por float sem precisar.
-     */
+  let criadas = 0;
+  if (alvos.length > 0) {
     try {
-      await db().$executeRaw`
+      criadas = await db().$executeRaw`
         INSERT INTO fatura (
           tenant_id, contrato_id, unidade_consumidora_id, usina_id, competencia,
           geracao_kwh_competencia, percentual_rateio_aplicado, consumo_kwh, tarifa_reais_por_kwh,
           valor_consumo_centavos, valor_tarifas_concessionaria_centavos,
           flag_fatura_cheia, vencimento, status, chave_pix_id)
         SELECT ${tenant}::uuid,
-               ${t.contrato_id}::uuid,
+               a.contrato_id,
                uc.id,
                uc.usina_id,
                ${iso}::date,
                g.geracao_kwh,
                uc.percentual_rateio,
                g.geracao_kwh * uc.percentual_rateio / 100,
-               app.tarifa_vigente(uc.distribuidora, ${iso}::date),
+               app.tarifa_da_uc(uc.id),
                app.consumo_centavos(
                  g.geracao_kwh * uc.percentual_rateio / 100,
-                 app.tarifa_vigente(uc.distribuidora, ${iso}::date)),
-               ${tarifas}::integer,
-               ${t.flag_fatura_cheia}::boolean,
-               ${t.vencimento.toISOString().slice(0, 10)}::date,
+                 app.tarifa_da_uc(uc.id)),
+               a.tarifas_centavos,
+               a.flag_fatura_cheia,
+               a.vencimento,
                'rascunho',
                ${chavePadrao?.id ?? null}::uuid
-          FROM unidade_consumidora uc
+          FROM unnest(
+                 ${alvos.map((t) => t.unidade_consumidora_id)}::uuid[],
+                 ${alvos.map((t) => t.contrato_id)}::uuid[],
+                 ${alvos.map((t) => t.vencimento.toISOString().slice(0, 10))}::date[],
+                 ${alvos.map((t) => t.flag_fatura_cheia)}::boolean[],
+                 ${alvos.map((t) => opcoes.tarifas_concessionaria_centavos?.[t.unidade_consumidora_id] ?? 0)}::integer[]
+               ) AS a(uc_id, contrato_id, vencimento, flag_fatura_cheia, tarifas_centavos)
+          JOIN unidade_consumidora uc
+            ON uc.id = a.uc_id
           JOIN usina_geracao g
             ON g.tenant_id = uc.tenant_id AND g.usina_id = uc.usina_id
-           AND g.competencia = ${iso}::date
-         WHERE uc.id = ${t.unidade_consumidora_id}::uuid`;
-      criadas += 1;
+           AND g.competencia = ${iso}::date`;
     } catch (err: any) {
       // R26 chegando pelo caminho da tarifa. A mensagem crua do Postgres diz
       // "no_data_found" e nao diz que faturamento parou - esta diz.
       if (err?.meta?.code === '02000' || /sem tarifa vigente/.test(String(err?.message))) {
-        throw new SemPrecoNaCompetencia('a distribuidora da UC', iso);
+        throw new SemPrecoNaCompetencia('a unidade consumidora', iso);
       }
       throw err;
     }
@@ -459,18 +484,52 @@ export async function daUnidadeConsumidora(unidadeConsumidoraId: string, limite 
   });
 }
 
+/**
+ * O CENTAVO AGREGADO E `bigint`, E O DOWNCAST `::int` DERRUBAVA A CONSULTA.
+ *
+ * MEDIDO EM 14/08 num banco com 600.000 faturas: `sum(integer)` no Postgres
+ * devolve **bigint**, e o `::int` que estava escrito aqui estourava com
+ * **22003 numeric_value_out_of_range** a partir de R$ 21.474.836,47 numa
+ * competencia - o teto do `int4`. Nao e limite teorico: e uma empresa de porte
+ * medio faturando um mes.
+ *
+ * O modo de falha era o pior possivel para um painel: a consulta inteira morria
+ * com erro de banco, entao a tela nao mostrava "numero grande demais" - mostrava
+ * falha ao ler a carteira, e a operacao ficava sem visao do mes.
+ *
+ * `Number` E SEGURO AQUI e o limite e outro: `Number.MAX_SAFE_INTEGER` sao
+ * 9.007.199.254.740.991 centavos, ou noventa TRILHOES de reais. O que nao pode
+ * e o valor sair como `BigInt` no JSON - `emReais` do lado da tela espera
+ * numero, e o serializador do servidor transformaria em string.
+ */
+const emNumero = (v: unknown): number => (v == null ? 0 : Number(v));
+
 /** A `posicao_da_carteira` - view, e por isso $queryRaw: o generator nao tem o
- *  preview de `views` ligado. Ela declara security_invoker (invariante 13). */
-export async function posicao(comp?: Date | string) {
+ *  preview de `views` ligado. Ela declara security_invoker (invariante 13).
+ *
+ *  A JANELA PADRAO E DE 12 COMPETENCIAS quando ninguem pede uma. Sem ela a
+ *  consulta agregava a historia INTEIRA a cada carga do painel - com 600.000
+ *  faturas medidas, 12 grupos varrendo tudo. Doze meses e o ciclo natural do
+ *  negocio, e quem quiser um mes antigo pede o mes. */
+export async function posicao(comp?: Date | string, opcoes: { competencias?: number } = {}) {
   await exigir('ler');
   const iso = comp ? competenciaISO(normalizar(comp)) : null;
+  const janela = Math.max(1, Math.min(opcoes.competencias ?? 12, 120));
   const r: any[] = await db().$queryRaw`
-    SELECT competencia, faturas::int, emitidas::int, liquidadas::int, vencidas_em_aberto::int,
-           faturado_centavos::int, recebido_centavos::int, a_receber_centavos::int
+    SELECT competencia, faturas, emitidas, liquidadas, vencidas_em_aberto,
+           faturado_centavos, recebido_centavos, a_receber_centavos
       FROM posicao_da_carteira
      WHERE (${iso}::date IS NULL OR competencia = ${iso}::date)
-     ORDER BY competencia DESC`;
-  return r;
+     ORDER BY competencia DESC
+     LIMIT ${janela}`;
+  return r.map((l) => ({
+    competencia: l.competencia,
+    faturas: emNumero(l.faturas), emitidas: emNumero(l.emitidas),
+    liquidadas: emNumero(l.liquidadas), vencidas_em_aberto: emNumero(l.vencidas_em_aberto),
+    faturado_centavos: emNumero(l.faturado_centavos),
+    recebido_centavos: emNumero(l.recebido_centavos),
+    a_receber_centavos: emNumero(l.a_receber_centavos),
+  }));
 }
 
 /** RATEIO-USO-01, o lado "quanto JA FOI usada". Com a base sendo a geracao

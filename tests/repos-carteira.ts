@@ -85,9 +85,8 @@ let contratoOk: string; let orgId: string;
   }));
   orgId = org.id;
 
-  await emA(() => regras.abrirVigenciaDeTarifa({
-    distribuidora: 'Equatorial', tarifa_reais_por_kwh: '1.130000', vigencia_inicio: mes(2020, 1),
-  }));
+  /* A TARIFA E DA UC desde a migration 30 - `criarUC` abaixo a carimba com
+   * 1,130000, que e o valor que as verificacoes A2 e C2 conferem em centavos. */
   await emA(() => regras.abrirVigenciaDeComissao({
     originador_tipo: 'parceiro_captador', percentual_1a: '30.00', percentual_2a: '20.00',
     vigencia_inicio: mes(2020, 1),
@@ -100,7 +99,7 @@ let contratoOk: string; let orgId: string;
   const criarUC = async (numero: string, usina: string | null, pct: string | null, venc: Date | null,
                          situacao: string | null = null) => {
     const uc = await emA(() => ucRepo.criar({
-      cliente_id: CLI, numero_uc: numero, distribuidora: 'Equatorial', data_vencimento: venc,
+      cliente_id: CLI, numero_uc: numero, distribuidora: 'Equatorial', tarifa_reais_por_kwh: '1.130000', data_vencimento: venc,
     }));
     if (usina && pct) {
       await emA(() => rateio.definirRateio({
@@ -511,7 +510,7 @@ let liquidacaoJulho: string;
 {
   const semDocumento = await emA(() => clienteRepo.criar({ nome: 'K17 pagador sem CPF' }));
   const ucSemDoc = await emA(() => ucRepo.criar({
-    cliente_id: semDocumento.id, numero_uc: 'K17-SEM-DOC', distribuidora: 'Equatorial',
+    cliente_id: semDocumento.id, numero_uc: 'K17-SEM-DOC', distribuidora: 'Equatorial', tarifa_reais_por_kwh: '1.130000',
     data_vencimento: new Date('2026-11-10T00:00:00Z'),
   }));
   await emA(() => rateio.definirRateio({
@@ -569,8 +568,13 @@ let liquidacaoJulho: string;
    * O tenant B da fixture nao tem nada, e por isso e o sujeito certo.
    */
   const pB = await emB(() => prontidao('2026-07-01'));
+  /* `tarifa_vigente` VIROU `tarifa_da_uc` em 14/08 (migration 30): a camada
+   * continua existindo, continua sendo derivada e continua bloqueando a fatura -
+   * o que mudou e a UNIDADE de contagem, de distribuidora para UC. O nome mudou
+   * junto porque um rotulo que aponta para uma tabela que nao existe mais e o
+   * comeco de alguem procurar a tabela. */
   const derivadas = pB.camadas.filter((c) =>
-    ['geracao_da_competencia', 'tarifa_vigente', 'regra_de_comissao'].includes(c.camada));
+    ['geracao_da_competencia', 'tarifa_da_uc', 'regra_de_comissao'].includes(c.camada));
 
   chk('K18a', derivadas.length === 3 && derivadas.every((c) => c.situacao === 'nao_medido' && c.total === 0),
       'camada de universo vazio volta NAO_MEDIDO, nunca ok - zero sobre nada nao e "pronto", e a mesma licao do "zero divergencias" do conector');

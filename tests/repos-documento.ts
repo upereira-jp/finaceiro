@@ -129,20 +129,20 @@ let ucId: string; let faturaA: string; let faturaB: string; let usinaA: string;
  * E o modo de falha que o `ADR-0003` nomeia - contexto emitido em ponto unico,
  * dentro da transacao, reconstruindo a operacao no client de transacao.
  */
-const garantirTarifa = async (emT: <T>(f: () => Promise<T>) => Promise<T>) => {
-  const abertas: Array<{ n: bigint }> = await emT(() => db().$queryRawUnsafe(
-    `SELECT count(*)::bigint AS n FROM tarifa WHERE distribuidora = $1 AND vigencia_fim IS NULL`, DISTRIB));
-  if (Number(abertas[0].n) > 0) return;
-  await emT(() => regras.abrirVigenciaDeTarifa({
-    distribuidora: DISTRIB, tarifa_reais_por_kwh: '1.000000', vigencia_inicio: mes(2020, 1),
-  }));
-};
+/*
+ * A TARIFA DEIXOU DE SER FIXTURE em 14/08 (migration 30): ela e coluna da UC, e
+ * `ucRepo.criar` a carimba junto com o resto do cadastro. A funcao
+ * `garantirTarifa` que existia aqui abria vigencia na tabela `tarifa`, que saiu.
+ *
+ * O invariante que ela protegia continua valendo e continua sendo exercitado: UC
+ * sem tarifa faz `comporLote` LEVANTAR (R26) - `tests/regras.sql` mede isso
+ * diretamente contra `app.tarifa_da_uc`.
+ */
 
 {
   const u = await emA(() => usinaRepo.criar({ codigo_geradora: 'DOC-0001', distribuidora: DISTRIB }));
-  await garantirTarifa(emA);
   const uc = await emA(() => ucRepo.criar({
-    cliente_id: CLI, numero_uc: 'DOC-UC-1', distribuidora: DISTRIB,
+    cliente_id: CLI, numero_uc: 'DOC-UC-1', distribuidora: DISTRIB, tarifa_reais_por_kwh: '1.000000',
     data_vencimento: new Date(Date.UTC(2026, 0, 15)),
   }));
   ucId = uc.id;
@@ -179,7 +179,6 @@ const garantirTarifa = async (emT: <T>(f: () => Promise<T>) => Promise<T>) => {
   // `repos.sh` da ao B a mesma usina? Nao - o B tem so o vinculo do admin, entao
   // aqui se monta o minimo.
   const uB = await emB(() => usinaRepo.criar({ codigo_geradora: 'DOC-B-0001', distribuidora: DISTRIB }));
-  await garantirTarifa(emB);
   // O cliente do B nao existe na fixture; `cliente_id` do A nao atravessa (FK
   // composta, regra 2). Cria-se um cliente do B pelo caminho do repo.
   const clienteB = await emB(async () => {
@@ -187,7 +186,7 @@ const garantirTarifa = async (emT: <T>(f: () => Promise<T>) => Promise<T>) => {
     return criar({ nome: 'Cliente do B', documento_bruto: '529.982.247-25' });
   });
   const ucB = await emB(() => ucRepo.criar({
-    cliente_id: clienteB.id, numero_uc: 'DOC-B-UC-1', distribuidora: DISTRIB,
+    cliente_id: clienteB.id, numero_uc: 'DOC-B-UC-1', distribuidora: DISTRIB, tarifa_reais_por_kwh: '1.000000',
     data_vencimento: new Date(Date.UTC(2026, 0, 15)),
   }));
   await emB(() => rateio.definirRateio({

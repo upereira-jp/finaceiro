@@ -173,8 +173,6 @@ node --experimental-strip-types tests/repos-agenda.ts
 echo
 # Q-TARIFA-CONC-01. O casamento e por `numero_uc` (a distribuidora nao conhece id
 # nosso), o total e coluna GERADA, e "ausente nao e zero" precisa ser observavel.
-echo "=== tarifas da concessionaria: lancamento em lote por numero de UC"
-node --experimental-strip-types tests/repos-tarifas.ts
 echo
 # Q-PAGAMENTO-01. O PRD 5.5 manda quatro escritas na transacao do split e o
 # codigo fazia duas. Aqui: a QUITACAO. O elo com a apuracao esta em K7h-K7l.

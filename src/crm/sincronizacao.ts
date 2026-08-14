@@ -33,6 +33,7 @@
 import { dbt } from '../db/tipado.ts';
 import { tenantCorrente, exigir, dentroDeUnidadeDeTrabalho } from '../db/contexto.ts';
 import { ehSqlstate, SQLSTATE } from '../db/sqlstate.ts';
+import { paraDecimal, decimalParaTexto } from '../dominio/fatura-unificada.ts';
 import { conferirCreditoDeOriginador, type ResumoDeSituacao } from '../dominio/credito-originador.ts';
 import type {
   VendaGanha, LeadArquivado, LeadMerge, UsinaDoCrm, GeracaoMensal,
@@ -349,6 +350,65 @@ export function motivoDeRecusa(l: VendaGanha): string | null {
 
 /** R14/R15: card de Parceiros nao e venda e nao tem aliquota lida. */
 export const ehCardDeParceiro = (l: VendaGanha) => l.funil === FUNIL_PARCEIROS;
+
+/**
+ * ============================================================================
+ * A TARIFA DO CARD: `consumo_reais / consumo_kwh`, EM SEIS CASAS.
+ *
+ * DE ONDE ELA VEM, e a medicao e de 14/08/2026. O dono decidiu que a tarifa
+ * *"deve ser puxada do card do CRM, que agora tem exatamente esse campo"*. O
+ * campo existe e nao se chama assim: `financeiro.vendas_ganhas` expoe
+ * `consumo_kwh` e `consumo_reais`, e a divisao da a tarifa.
+ *
+ * Pelo join `rateio_clientes.lead_codigo -> vendas_ganhas.codigo`: **41 das 41
+ * UCs** tem card casado com os dois preenchidos - cobertura total, sem migration.
+ * E ela VARIA: 35 a 1,130000, 4 a 1,16 e 2 a 1,180000. E o numero que provou que
+ * a granularidade e por cliente e nao por distribuidora, e que tirou a aba
+ * Tarifas do sistema (migration 30).
+ *
+ * ============================================================================
+ * A RESSALVA ESTA REGISTRADA E VALE MAIS QUE O NUMERO
+ *
+ * Os tres valores sao **redondos em duas casas nos 45 cards, sem excecao**,
+ * enquanto a tarifa da Equatorial medida na fatura real tem SEIS (`1,185396`).
+ * Redondo em 45 de 45 e assinatura de **digitacao humana**, nao de medicao - e
+ * fatura-lo poe a estimativa de um vendedor na conta do cliente.
+ *
+ * E POR ISSO QUE ELA E SEMENTE E NAO VERDADE: o conector preenche a UC que esta
+ * vazia (melhor que nada, e faturavel na hora) e NUNCA sobrescreve a que a
+ * operacao digitou. Quem quiser a tarifa medida le a fatura da distribuidora em
+ * PDF na aba Documento, que traz as seis casas da coluna "Preco unit (R$) com
+ * tributos" da linha CONSUMO NAO COMPENSADO.
+ *
+ * TUDO EM INTEIRO. `consumo_referencia_centavos` e `Int` e `consumo_kwh` chega
+ * como string do driver - a divisao acontece em `BigInt`, com o arredondamento
+ * uma vez no fim. A regra 1 proibe float inclusive em intermediario, e uma
+ * tarifa e o fator que multiplica todo kWh da fatura.
+ */
+export function tarifaDoCliente(
+  consumoKwh: unknown, consumoCentavos: number | null | undefined,
+): string | null {
+  const centavos = consumoCentavos == null ? NaN : Number(consumoCentavos);
+  if (!Number.isFinite(centavos) || centavos <= 0) return null;
+  const bruto = consumoKwh == null ? '' : String(consumoKwh).trim();
+  if (!bruto) return null;
+
+  let kwh: { valor: bigint; escala: number };
+  try { kwh = paraDecimal(bruto, 'consumo_kwh'); } catch { return null; }
+  if (kwh.valor <= 0n) return null;
+
+  /* centavos / kWh -> reais por kWh, em seis casas:
+   *   (centavos * 10^(6+escala)) / (kwh * 100), arredondando meio para cima. */
+  const num = BigInt(Math.round(centavos)) * 10n ** BigInt(6 + kwh.escala);
+  const den = kwh.valor * 100n;
+  const seis = (num + den / 2n) / den;
+  if (seis <= 0n) return null;
+  const txt = decimalParaTexto({ valor: seis, escala: 6 }, 6);
+  /* O CHECK `uc_tarifa_na_ordem_de_grandeza` recusa acima de 10 com 23514, e um
+   * 23514 no meio de um `createMany` derruba o LOTE inteiro. Recusar aqui vira
+   * "sem semente", que e o estado normal de quem nao tem card. */
+  return Number(txt) > 0 && Number(txt) <= 10 ? txt : null;
+}
 
 /**
  * O que faz uma usina do CRM ser recusada ANTES de procurar o espelho.
@@ -1061,9 +1121,15 @@ async function espelharUnidades(
       const leads = [...new Set(bloco.map((a) => a.leadId))];
       const jaExistem = await db.cliente.findMany({
         where: { tenant_id: tenantId, crm_lead_id: { in: leads } },
-        select: { id: true, crm_lead_id: true },
+        /* `consumo_kwh` e `consumo_referencia_centavos` vem junto porque e deles
+         * que sai a TARIFA da UC - ver `tarifaDoCliente` abaixo. Sao duas colunas
+         * no mesmo `select`, nao uma segunda consulta. */
+        select: { id: true, crm_lead_id: true,
+                  consumo_kwh: true, consumo_referencia_centavos: true },
       });
       const clientePorLead = new Map(jaExistem.map((c) => [c.crm_lead_id!, c.id]));
+      const tarifaPorLead = new Map(
+        jaExistem.map((c) => [c.crm_lead_id!, tarifaDoCliente(c.consumo_kwh, c.consumo_referencia_centavos)]));
 
       const clientesACriar: any[] = [];
       for (const a of bloco) {
@@ -1087,7 +1153,8 @@ async function espelharUnidades(
         where: { tenant_id: tenantId, numero_uc: { in: numeros } },
         select: { id: true, numero_uc: true, cliente_id: true, usina_id: true, distribuidora: true,
                   percentual_rateio: true, data_vencimento: true, crm_usina_cliente_id: true,
-                  rateio_situacao: true, rateio_em_troca_titularidade: true },
+                  rateio_situacao: true, rateio_em_troca_titularidade: true,
+                  tarifa_reais_por_kwh: true },
       });
       const porNumero = new Map(atuais.map((u) => [u.numero_uc, u]));
 
@@ -1198,7 +1265,12 @@ async function espelharUnidades(
             });
           }
           aCriar.push({ tenant_id: tenantId, numero_uc: a.numeroUc,
-                        distribuidora: usina.distribuidora, ...espelho });
+                        distribuidora: usina.distribuidora,
+                        /* A TARIFA NASCE COM A UC quando o card a tem. Aqui nao
+                         * ha valor local para preservar - a linha esta nascendo -,
+                         * entao a semente entra e a UC ja e faturavel. */
+                        tarifa_reais_por_kwh: tarifaPorLead.get(a.leadId) ?? null,
+                        ...espelho });
           continue;
         }
 
@@ -1254,13 +1326,55 @@ async function espelharUnidades(
          * defeito que `data_vencimento` causava antes da R25, por outro
          * caminho - carimbo de leitura nao e mudanca de dado.
          */
+        /*
+         * ======================================================================
+         * A TARIFA E SEMENTE, E O CONECTOR **NUNCA APAGA** A QUE JA EXISTE.
+         *
+         * Ela entrou em 14/08 com a migration 30, quando a aba Tarifas saiu. A
+         * fonte e o card: `consumo_reais / consumo_kwh` de `vendas_ganhas`,
+         * espelhado em `cliente` pelo passo anterior deste mesmo ciclo. Medido em
+         * 14/08: 41 de 41 UCs tem card casado com os dois preenchidos.
+         *
+         * O `?? atual.tarifa` E A REGRA INTEIRA, e ela existe por um defeito
+         * JA MEDIDO neste conector, com outra coluna: o espelho gravava o NULO do
+         * CRM por cima de um valor local preenchido, em silencio. Foi o que a R25
+         * consertou para `data_vencimento` - *"preencher as 39 UCs e rodar `npm
+         * run ciclo` apagaria as 39, sem erro, sem log e sem recusa"*.
+         *
+         * Aqui a regra e um degrau mais frouxa que a R25 de proposito, e a
+         * diferenca importa: vencimento e campo LOCAL puro - o CRM nunca o
+         * escreve. Tarifa e campo de ORIGEM MISTA: o card e a melhor semente que
+         * existe quando nao ha nada, e a digitacao da operacao vence quando ha.
+         * Entao o conector PREENCHE o vazio e nao toca no preenchido.
+         *
+         * E A DIVERGENCIA VIRA SINAL, pelo mesmo motivo da R21-b: nao sobrescrever
+         * e o correto, mas calar deixaria as duas fontes divergindo sem que
+         * ninguem soubesse - e esta e a divergencia que sai impressa na fatura.
+         */
+        const tarifaDoCard = tarifaPorLead.get(a.leadId) ?? null;
+        const tarifaFinal = atual.tarifa_reais_por_kwh ?? tarifaDoCard;
+        if (tarifaDoCard && atual.tarifa_reais_por_kwh
+            && !mesmoDecimal(atual.tarifa_reais_por_kwh, tarifaDoCard)) {
+          r.divergencias.push({
+            entidade: 'unidade_consumidora', chave: a.numeroUc,
+            sinal: `tarifa da UC e ${String(atual.tarifa_reais_por_kwh)} R$/kWh e o card do CRM da `
+                 + `${tarifaDoCard} (consumo_reais / consumo_kwh). Nada foi sobrescrito: a `
+                 + 'digitacao da operacao vence a semente do card. Confira qual das duas esta certa '
+                 + '- este numero multiplica o kWh e vira o valor cobrado do cliente.',
+          });
+        }
+
         const mudou =
           atual.cliente_id !== espelho.cliente_id ||
           atual.usina_id !== espelho.usina_id ||
           !mesmoDecimal(atual.percentual_rateio, espelho.percentual_rateio) ||
           atual.crm_usina_cliente_id !== espelho.crm_usina_cliente_id ||
           atual.rateio_situacao !== espelho.rateio_situacao ||
-          atual.rateio_em_troca_titularidade !== espelho.rateio_em_troca_titularidade;
+          atual.rateio_em_troca_titularidade !== espelho.rateio_em_troca_titularidade ||
+          /* SO conta como mudanca quando a UC estava SEM tarifa e o card tem uma:
+           * a comparacao e contra `atual`, entao uma UC ja preenchida nunca entra
+           * no update por causa desta coluna (R3, segunda passada nao escreve). */
+          (!atual.tarifa_reais_por_kwh && !!tarifaDoCard);
         if (!mudou) continue;   // R3
         /*
          * NEM `distribuidora` NEM `data_vencimento` entram no update: os dois sao
@@ -1270,7 +1384,10 @@ async function espelharUnidades(
          * passada nao escreve) sem mudar uma linha.
          */
         await db.unidade_consumidora.updateMany({
-          where: { tenant_id: tenantId, id: atual.id }, data: espelho,
+          where: { tenant_id: tenantId, id: atual.id },
+          /* `tarifaFinal` e `atual ?? card`: preenche o vazio, nunca apaga o
+           * preenchido. Ver a nota acima. */
+          data: { ...espelho, tarifa_reais_por_kwh: tarifaFinal },
         });
         r.atualizados++; r.porEntidade.unidade_consumidora.atualizados++;
       }
