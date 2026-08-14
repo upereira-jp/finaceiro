@@ -282,12 +282,6 @@ export const Carregando = ({ texto = 'Carregando…' }: { texto?: string }) => (
   </div>
 );
 
-/** A faixa cinza que ocupa o lugar de um valor que ainda nao chegou. Existe para
- *  a pagina nao PULAR quando ele chega. */
-export const Esqueleto = ({ largura = 90 }: { largura?: number }) => (
-  <span className="esqueleto" aria-hidden="true" style={{ display: 'inline-block', width: largura }}>&nbsp;</span>
-);
-
 // ------------------------------------------------------- cartao de metrica
 
 /**

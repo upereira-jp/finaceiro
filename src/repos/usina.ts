@@ -89,27 +89,12 @@ export async function porId(id: string) {
   return dbt().usina.findFirst({ where: { id } });
 }
 
-/** crm_usina_id nao tem indice unico: findFirst, e o tenant sai da RLS. */
-export async function porUsinaDoCrm(crmUsinaId: string | null | undefined) {
-  await exigir('ler');
-  if (!crmUsinaId) return null;
-  return dbt().usina.findFirst({ where: { crm_usina_id: crmUsinaId } });
-}
-
 export async function listar(opcoes: { status?: StatusUsina; limite?: number } = {}) {
   await exigir('ler');
   return dbt().usina.findMany({
     where: opcoes.status === undefined ? {} : { status: opcoes.status },
     orderBy: [{ codigo_geradora: 'asc' }],
     take: Math.min(opcoes.limite ?? 100, 500),
-  });
-}
-
-export async function listarDoDono(donoUsinaId: string) {
-  await exigir('ler');
-  return dbt().usina.findMany({
-    where: { dono_usina_id: donoUsinaId },
-    orderBy: [{ codigo_geradora: 'asc' }],
   });
 }
 

@@ -917,6 +917,24 @@ function FolhaModeloG3({ doc, logoUrl }: { doc: DocumentoDaFatura; logoUrl: stri
               </div>
             </div>
 
+            {/* A TABELA DE VALORES, e ela e o que faltava para a folha G3 cobrir
+                tudo o que o layout posicionado cobre. Os outros quatro tipos de
+                bloco dele — logo, texto, linha e pagamento — ja estao nas faixas
+                acima. Obedece `campo_do_documento`: ordem, rotulo e visibilidade
+                continuam do tenant, porque CONTEUDO e POSICAO sao coisas
+                diferentes e so a segunda o modelo fixo substitui. */}
+            {f.detalhamento.linhas.length > 0 && (
+              <div className="g3-tabela">
+                <div className="g3-tabela-tit">{f.detalhamento.titulo}</div>
+                {f.detalhamento.linhas.map((l) => (
+                  <div key={l.campo} className="g3-tabela-linha">
+                    <span className="g3-tabela-rot">{l.rotulo}</span>
+                    <span className={`g3-tabela-val${l.ausente ? ' ausente' : ''}`}>{l.valor}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <FaixaDePagamento doc={doc} />
 
             <div className="g3-rodape">

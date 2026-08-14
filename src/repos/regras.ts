@@ -112,16 +112,6 @@ export async function tarifasDe(distribuidora: string) {
   });
 }
 
-/** A funcao do banco, e nao uma segunda implementacao da selecao por vigencia.
- *  Ela LEVANTA quando nao ha tarifa (R26) - ausencia de preco e erro, e o
- *  chamador ve `no_data_found` em vez de um NULL que soma como nada. */
-export async function tarifaVigente(distribuidora: string, competencia: Date): Promise<string> {
-  await exigir('ler');
-  const r: any[] = await db().$queryRaw`
-    SELECT app.tarifa_vigente(${distribuidora}, ${competencia})::text AS tarifa`;
-  return r[0].tarifa as string;
-}
-
 // ================================================================ comissao
 /**
  * PRD 5.4: a comissao e ESCALONADA pela 1a e pela 2a fatura cheia paga, e por
@@ -179,21 +169,6 @@ export async function comissoesDe(originadorTipo: OriginadorTipo) {
   });
 }
 
-/**
- * R20-b: recebe o tier CONGELADO no contrato e a data de FECHAMENTO, nunca o
- * tipo corrente do originador e nunca a data de hoje. Um captador promovido a
- * senior em junho nao faz o contrato de marco recalcular a 60%.
- */
-export async function percentualDeComissao(
-  tierNoFechamento: OriginadorTipo, parcela: 1 | 2, dataFechamento: Date,
-): Promise<string> {
-  await exigir('ler');
-  const r: any[] = await db().$queryRaw`
-    SELECT app.percentual_comissao(
-      ${tierNoFechamento}::originador_tipo, ${parcela}::smallint, ${dataFechamento})::text AS pct`;
-  return r[0].pct as string;
-}
-
 // ================================================================ repasse
 /**
  * R25: o percentual de repasse e o vigente na COMPETENCIA, nunca o corrente da
@@ -234,31 +209,4 @@ export async function repassesDa(usinaId: string) {
   return dbt().regra_repasse.findMany({
     where: { usina_id: usinaId }, orderBy: [{ vigencia_inicio: 'desc' }],
   });
-}
-
-export async function percentualDeRepasse(usinaId: string, competencia: Date): Promise<string> {
-  await exigir('ler');
-  const r: any[] = await db().$queryRaw`
-    SELECT app.percentual_repasse(${usinaId}::uuid, ${competencia})::text AS pct`;
-  return r[0].pct as string;
-}
-
-/**
- * As usinas ATIVAS sem regra de repasse vigente hoje. E a outra metade da fila
- * da R12: usina com dono cadastrado mas sem percentual vigente tambem nao
- * reparte - so que essa falha aparece com `no_data_found` no meio do split, em
- * vez de na conferencia. Esta consulta a traz para antes.
- */
-export async function usinasSemRepasseVigente(competencia: Date) {
-  await exigir('ler');
-  const r: any[] = await db().$queryRaw`
-    SELECT u.id, u.codigo_geradora
-      FROM usina u
-     WHERE u.status = 'ativa'
-       AND NOT EXISTS (
-         SELECT 1 FROM regra_repasse rr
-          WHERE rr.tenant_id = u.tenant_id AND rr.usina_id = u.id
-            AND daterange(rr.vigencia_inicio, rr.vigencia_fim, '[)') @> ${competencia}::date)
-     ORDER BY u.codigo_geradora`;
-  return r;
 }

@@ -414,11 +414,6 @@ export async function porFatura(faturaId: string) {
   return dbt().boleto.findFirst({ where: { fatura_id: faturaId } });
 }
 
-export async function porNossoNumero(nossoNumero: string) {
-  await exigir('ler');
-  return dbt().boleto.findFirst({ where: { nosso_numero: nossoNumero } });
-}
-
 /** PRD 6, ultima linha: certificado vencido para a emissao "sem erro obvio".
  *  Isto e o erro obvio, e ele nao depende de abrir o cofre. */
 export async function certificadoVenceEm(): Promise<{ dias: number | null; expira_em: Date | null }> {

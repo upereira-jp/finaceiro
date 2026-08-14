@@ -94,13 +94,6 @@ export async function porId(id: string) {
   return dbt().cliente.findFirst({ where: { id } });
 }
 
-/** Lead do CRM -> cliente local. Tambem parcial: crm_lead_id nulo nao localiza. */
-export async function porLeadDoCrm(crmLeadId: string | null | undefined) {
-  await exigir('ler');
-  if (!crmLeadId) return null;
-  return dbt().cliente.findFirst({ where: { crm_lead_id: crmLeadId } });
-}
-
 /**
  * A LISTA DE CLIENTES, e por PADRAO ela e a carteira ATIVA - nao o cadastro
  * inteiro. Decisao do dono em 04/08/2026.

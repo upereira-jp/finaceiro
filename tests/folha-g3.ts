@@ -27,7 +27,17 @@ const chk = (id: string, cond: boolean, d: string) => {
 const G3: EmissorDaFatura = { razao_social: 'Consórcio G3 Gestão de Energia Solar', cnpj: '66714022000121' };
 const SEM: EmissorDaFatura = { razao_social: null, cnpj: null };
 
+const LINHAS = [
+  { campo: 'consumo_kwh' as const, rotulo: 'Crédito injetado (kWh)', valor: '503.0',
+    tipo: 'decimal' as const, ausente: false },
+  { campo: 'valor_consumo_centavos' as const, rotulo: 'Valor do crédito', valor: 'R$ 596,25',
+    tipo: 'dinheiro' as const, ausente: false },
+  { campo: 'valor_total_centavos' as const, rotulo: 'TOTAL A PAGAR', valor: 'R$ 596,69',
+    tipo: 'dinheiro' as const, ausente: false },
+];
+
 const dados: DadosDaFolha = {
+  linhas: LINHAS,
   cliente_nome: 'Maria da Conceição', cliente_documento: '52998224725',
   numero_uc: '000406456101252', endereco: 'Rua T-55, 930 — Setor Bueno, Goiânia/GO',
   competencia: '2026-07-01', vencimento: '2026-08-17',
@@ -119,6 +129,51 @@ const dados: DadosDaFolha = {
       'o aviso da conta unificada e FIXO e nao configuravel - e a faixa que mais trabalha na folha');
 }
 
+// ------------------------------------------------- G7 a tabela de valores
+{
+  const f = folha1(dados, G3);
+  chk('G7', f.detalhamento.linhas.length === 2
+         && f.detalhamento.linhas.map((l) => l.campo).join(',') === 'consumo_kwh,valor_consumo_centavos',
+      'a folha carrega a TABELA DE VALORES - e o unico dos cinco tipos de bloco do layout '
+      + 'posicionado que ela nao cobria. Sao 2 das 3 do fixture: `valor_total_centavos` sai, '
+      + 'porque a barra navy ja o imprime em 26pt');
+
+  chk('G7b', f.detalhamento.linhas.every((l) => typeof l.valor === 'string'),
+      'as linhas chegam JA FORMATADAS - a folha nao formata dinheiro, ela pinta o que o servidor compos');
+
+  /*
+   * A FOLHA NAO IMPRIME O MESMO CAMPO DUAS VEZES, e isto foi achado MEDINDO: com
+   * os quinze campos do padrao a folha ia a 350,9 mm e saia em duas paginas. A
+   * tentacao era diminuir a fonte; o problema era que nome, CPF, UC, competencia,
+   * vencimento e total apareciam no bloco do cliente E na tabela.
+   */
+  const completa = folha1({ ...dados, linhas: [
+    ...LINHAS,
+    { campo: 'cliente_nome' as const, rotulo: 'Cliente', valor: 'Maria', tipo: 'texto' as const, ausente: false },
+    { campo: 'numero_uc' as const, rotulo: 'UC', valor: '123', tipo: 'texto' as const, ausente: false },
+    { campo: 'vencimento' as const, rotulo: 'Vencimento', valor: '17/08/2026', tipo: 'data' as const, ausente: false },
+    { campo: 'competencia' as const, rotulo: 'Competência', valor: '07/2026', tipo: 'competencia' as const, ausente: false },
+    { campo: 'cliente_documento' as const, rotulo: 'CPF', valor: '529', tipo: 'texto' as const, ausente: false },
+  ] }, G3);
+  const naTabela = completa.detalhamento.linhas.map((l) => l.campo);
+  chk('G7d', !naTabela.includes('cliente_nome') && !naTabela.includes('numero_uc')
+          && !naTabela.includes('vencimento') && !naTabela.includes('competencia')
+          && !naTabela.includes('cliente_documento') && !naTabela.includes('valor_total_centavos'),
+      'os seis campos ja impressos ACIMA nao se repetem na tabela - a folha ia a 350,9 mm e duas paginas');
+
+  chk('G7e', naTabela.includes('consumo_kwh') && naTabela.includes('valor_consumo_centavos'),
+      'o que COMPOE o total continua na tabela - o corte e do que se repete, nao do que informa');
+
+  chk('G7f', completa.cliente.nome === 'Maria da Conceição'
+          && completa.total.valor === 'R$ 596,69',
+      'e os seis continuam impressos, no lugar deles: o corte e de REPETICAO, nao de conteudo');
+
+  const vazia = folha1({ ...dados, linhas: [] }, G3);
+  chk('G7c', vazia.detalhamento.linhas.length === 0 && vazia.total.valor === 'R$ 596,69',
+      'tenant que escondeu TODOS os campos fica sem tabela e AINDA ASSIM com o total - '
+      + 'a barra do total nao obedece `campo_do_documento`, e e ela que diz quanto pagar');
+}
+
 // -------------------------------------- G6 o que NAO entrou, e esta dito
 {
   const f = folha1(dados, G3);
@@ -146,4 +201,4 @@ const dados: DadosDaFolha = {
 
 console.log();
 if (falhas > 0) { console.log(`--- folha G3: ${falhas} FALHA(S)`); process.exit(1); }
-console.log('--- folha 1 do modelo G3: 23 verificacoes, 0 falhas');
+console.log('--- folha 1 do modelo G3: 29 verificacoes, 0 falhas');

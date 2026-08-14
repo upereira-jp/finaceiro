@@ -424,6 +424,8 @@ export type FolhaG3 = {
     ausente: boolean; vencimento: string; nota: string;
   };
   aviso: { titulo: string; corpo: string };
+  /** A tabela de valores, obedecendo `campo_do_documento` do tenant. */
+  detalhamento: { titulo: string; linhas: LinhaDoDocumento[] };
   rodape: { emissor: string | null; paginacao: string };
   /** O que NAO entrou, com o motivo e a questao que destrava. */
   faixas_ausentes: Array<{ faixa: string; motivo: string; questao: string }>;

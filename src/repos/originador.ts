@@ -123,13 +123,6 @@ export async function porId(id: string) {
   return dbt().originador.findFirst({ where: { id } });
 }
 
-/** crm_partner_id nao tem indice unico: findFirst com predicado explicito. */
-export async function porParceiroDoCrm(crmPartnerId: string | null | undefined) {
-  await exigir('ler');
-  if (!crmPartnerId) return null;
-  return dbt().originador.findFirst({ where: { crm_partner_id: crmPartnerId } });
-}
-
 export async function listar(opcoes: { ativo?: boolean; tipo?: OriginadorTipo; limite?: number } = {}) {
   await exigir('ler');
   const where: Record<string, unknown> = {};

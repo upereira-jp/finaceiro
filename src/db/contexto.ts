@@ -95,18 +95,6 @@ export function tenantCorrente(): string {
   return e.tenantId;
 }
 
-export function usuarioCorrente(): string {
-  const e = als.getStore();
-  if (!e) throw new SemContextoDeTenant();
-  return e.usuarioId;
-}
-
-export function tierCorrente(): Tier {
-  const e = als.getStore();
-  if (!e) throw new SemContextoDeTenant();
-  return e.tier ?? null;
-}
-
 export function dentroDeUnidadeDeTrabalho(): boolean {
   return als.getStore() !== undefined;
 }

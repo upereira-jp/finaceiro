@@ -25,10 +25,6 @@ const n = (v: string | undefined, padrao: number) => {
 export const TETO_TRANSACIONAL = n(process.env.POOL_TRANSACIONAL, 8);
 export const TETO_RELATORIO    = n(process.env.POOL_RELATORIO, 2);
 
-/** SPEC-001 3.2: explicitos, nunca default. Os defaults do Prisma sao 5000/2000. */
-export const TX_TRANSACIONAL = { timeout: 15_000, maxWait: 5_000 } as const;
-export const TX_RELATORIO    = { timeout: 60_000, maxWait: 10_000 } as const;
-
 export function criarPools(connectionString: string) {
   return {
     transacional: new pg.Pool({ connectionString, max: TETO_TRANSACIONAL, application_name: 'financeiro/tx' }),

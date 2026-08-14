@@ -893,6 +893,10 @@ export async function paraFatura(faturaId: string, opcoes: OpcoesDoDocumento = {
     // `f` - se a folha lesse a fatura crua ela poderia divergir da lista e do
     // papel posicionado, que e a divergencia que este arquivo evita desde 30/07.
     folha: folha1({
+      // AS MESMAS linhas de `linhas[]` acima, e nao uma segunda composicao: a
+      // lista e a folha sao duas FORMAS do mesmo conteudo, e compo-las duas vezes
+      // seria o caminho por onde elas passariam a discordar.
+      linhas: linhasDoDocumento(dados, cfg),
       cliente_nome: dados.cliente_nome,
       cliente_documento: dados.cliente_documento,
       numero_uc: dados.numero_uc,

@@ -207,12 +207,3 @@ export async function porFatura(faturaId: string) {
   await exigir('ler');
   return dbt().liquidacao.findFirst({ where: { fatura_id: faturaId } });
 }
-
-export async function doPeriodo(de: Date, ate: Date, limite = 500) {
-  await exigir('ler');
-  return dbt().liquidacao.findMany({
-    where: { data_liquidacao: { gte: de, lte: ate } },
-    orderBy: [{ data_liquidacao: 'asc' }],
-    take: Math.min(limite, 2000),
-  });
-}

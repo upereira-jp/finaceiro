@@ -481,11 +481,6 @@ export const ESTILO = `
   /* O ESQUELETO das faixas de numero, enquanto o valor nao chegou. Ele existe
      para a pagina nao PULAR quando o dado chega - reservar a altura e o ponto,
      nao a animacao. */
-  .esqueleto {
-    border-radius: var(--raio-pequeno); min-height: 1em;
-    background: linear-gradient(90deg, var(--fundo-recuo), var(--fundo-hover), var(--fundo-recuo));
-    background-size: 220% 100%; color: transparent;
-  }
 
   /* ----------------------------------------------------------- movimento
      A LISTA E FECHADA e conferida por teste: 'ICONES_QUE_SE_MOVEM' em
@@ -519,10 +514,6 @@ export const ESTILO = `
     from { opacity: 0; transform: translateY(-5px); }
     to { opacity: 1; transform: translateY(0); }
   }
-  @keyframes deslizar-brilho {
-    from { background-position: 220% 0; }
-    to { background-position: -20% 0; }
-  }
 
   .ic-carregando { animation: girar .9s linear infinite; }
   .ic-engrenagem { animation: girar 3.2s linear infinite; }
@@ -530,7 +521,6 @@ export const ESTILO = `
   .aviso.ok > .ic-aviso_ok { animation: traco-do-check .42s ease-out; }
   .ic-sim { animation: traco-do-check .5s ease-out; }
   .ic-nao { animation: traco-do-check .5s ease-out; }
-  .esqueleto { animation: deslizar-brilho 1.5s ease-in-out infinite; }
 
   @media (prefers-reduced-motion: reduce) {
     /* WCAG 2.3.3. Nao e cortesia: ha gente para quem movimento na tela e
@@ -632,7 +622,7 @@ export const ESTILO = `
     text-transform: uppercase; color: #8F939D; white-space: nowrap;
   }
   .g3-emissor { text-align: right; font-size: 8.5pt; line-height: 1.5; color: #8F939D; max-width: 92mm; }
-  .g3-cliente { background: #F6F2EA; padding: 12pt 14pt; margin-top: 10pt; }
+  .g3-cliente { background: #F6F2EA; padding: 10pt 14pt; margin-top: 9pt; }
   .g3-cliente-topo {
     display: grid; grid-template-columns: 1.6fr 1fr; gap: 10pt 18pt;
     padding-bottom: 9pt; border-bottom: 1px solid #E4DFD4;
@@ -642,7 +632,7 @@ export const ESTILO = `
   }
   .g3-nome { font-size: 15pt; font-weight: 600; line-height: 1.2; }
   .g3-doc { font-size: 10pt; margin-top: 2pt; }
-  .g3-meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10pt 18pt; padding-top: 9pt; }
+  .g3-meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6pt 14pt; padding-top: 7pt; }
   .g3-meta-val { font-size: 10pt; font-weight: 500; margin-top: 1pt; }
   .g3-total {
     background: #14213D; color: #fff; margin-top: 12pt; padding: 14pt 16pt;
@@ -674,6 +664,31 @@ export const ESTILO = `
     font-size: 7.5pt; color: #8F939D;
     display: flex; justify-content: space-between; gap: 12pt;
   }
+  /* A TABELA DE VALORES. Grade de tres colunas em vez de <table>: o valor alinha
+     a direita e o rotulo nao empurra a coluna quando um tenant renomeia o campo
+     para algo longo. Regua fina por linha, e a ultima sem regua. */
+  .g3-tabela { margin-top: 11pt; }
+  .g3-tabela-tit {
+    font-size: 11pt; font-weight: 600; letter-spacing: .04em;
+    text-transform: uppercase; padding-bottom: 5pt; border-bottom: 1px solid #14213D;
+  }
+  /* A ALTURA DA LINHA E MEDIDA, e nao escolhida por gosto. Com "padding: 4pt" e
+     entrelinha padrao a linha dava 8,6 mm; quinze delas somavam 129 mm e a folha
+     ia a 350,9 mm — duas paginas. O pior caso e o tenant que mostra os quinze
+     campos do padrao, e e ele que a folha tem de caber. */
+  .g3-tabela-linha {
+    display: grid; grid-template-columns: 1fr auto; gap: 10pt;
+    padding: 1.8pt 0; border-bottom: 1px solid #E4DFD4;
+    font-size: 9.5pt; line-height: 1.3;
+  }
+  .g3-tabela-linha:last-child { border-bottom: none; }
+  .g3-tabela + .faixa-pgto { margin-top: 8pt; }
+  .g3-tabela-rot { color: #14213D; }
+  .g3-tabela-val { text-align: right; font-weight: 600; white-space: nowrap; }
+  /* AUSENTE FICA CINZA E NAO SOME: o travessao e informacao — diz que o campo
+     existe e o dado nao chegou. Some-lo faria a linha parecer nunca ter existido. */
+  .g3-tabela-val.ausente { color: #8F939D; font-weight: 400; }
+
   /* O QUE FALTA, DITO NA TELA E NUNCA NO PAPEL. "naoimprime" nao basta como
      intencao: esta caixa e conferencia de quem opera, e imprimi-la entregaria ao
      cliente a lista das nossas pendencias. */

@@ -27,10 +27,10 @@
 //                      com a G3" exigem TARIFA CHEIA e ENERGIA COMPENSADA. A
 //                      tarifa cheia nao existe deste lado (`Q-DOCG3-02`,
 //                      `Q-TARIFA-CRM-01`), e sem ela nao ha o que comparar
-//   o detalhamento     a quebra "Repasses obrigatorios Equatorial" em quatro
-//                      linhas exige a leitura da fatura da distribuidora, que
-//                      esta atras da `Q-DOCG3-11` - e a coluna que temos e UMA
-//                      soma (`valor_tarifas_concessionaria_centavos`)
+//   a quebra do        o detalhamento EXISTE e mostra o que o sistema fatura,
+//   repasse            mas a linha "Tarifas da concessionaria" e UMA soma.
+//                      Quebra-la em nao compensado, iluminacao, bandeira e
+//                      encargos exige o leitor da distribuidora (`Q-DOCG3-11`)
 //
 // DESENHAR AS DUAS COM O QUE HA SERIA PIOR QUE OMITI-LAS. Um cartao de desconto
 // calculado sobre uma tarifa inventada e um numero errado impresso no documento
@@ -46,7 +46,7 @@
 // justamente as que nao entraram.
 
 import { emReais, type Centavos } from './centavos.ts';
-import { dataBr, competenciaBr } from './layout-do-documento.ts';
+import { dataBr, competenciaBr, type LinhaDoDocumento } from './layout-do-documento.ts';
 
 /** Quem emite. Nulo em tudo enquanto o tenant nao cadastrou (migration 26). */
 export type EmissorDaFatura = {
@@ -56,6 +56,8 @@ export type EmissorDaFatura = {
 };
 
 export type DadosDaFolha = {
+  /** As linhas ja compostas e formatadas por `linhasDoDocumento`. */
+  linhas: LinhaDoDocumento[];
   cliente_nome: string | null;
   cliente_documento: string | null;
   numero_uc: string | null;
@@ -93,6 +95,20 @@ export type FolhaG3 = {
     nota: string;
   };
   aviso: FaixaDeAviso;
+  /**
+   * A TABELA DE VALORES — o que compoe o total, linha a linha.
+   *
+   * NAO E a faixa "Repasses obrigatorios Equatorial" da referencia, e a diferenca
+   * e de fonte e nao de gosto: aquela quebra o repasse em quatro parcelas vindas
+   * do leitor da distribuidora, que nao existe aqui. Esta mostra a composicao que
+   * o sistema REALMENTE fatura — credito injetado, tarifa, valor do credito,
+   * tarifas da concessionaria, juros e multa, total.
+   *
+   * E ELA OBEDECE `campo_do_documento`. Ordem, rotulo e visibilidade continuam do
+   * tenant: e por isso que a superficie de CONTEUDO fica quando a de POSICAO sair
+   * — sao coisas diferentes, e so a segunda o modelo fixo substitui.
+   */
+  detalhamento: { titulo: string; linhas: LinhaDoDocumento[] };
   rodape: { emissor: string | null; paginacao: string };
   /** O que NAO entrou nesta folha, nomeado. Ver o cabecalho deste arquivo. */
   faixas_ausentes: Array<{ faixa: string; motivo: string; questao: string }>;
@@ -183,10 +199,41 @@ export function folha1(d: DadosDaFolha, emissor: EmissorDaFatura): FolhaG3 {
       corpo: 'Sua conta é unificada — o valor da distribuidora já está incluído neste boleto. '
            + 'Pagar a conta da Equatorial gera duplicidade.',
     },
+    detalhamento: {
+      titulo: 'Detalhamento da fatura',
+      linhas: d.linhas.filter((l) => !JA_IMPRESSO_NA_FOLHA.has(l.campo)),
+    },
     rodape: { emissor: linha, paginacao: `Fatura ${d.numero_da_fatura}` },
     faixas_ausentes: FAIXAS_AUSENTES,
   };
 }
+
+/**
+ * OS CAMPOS QUE A TABELA NAO REPETE, porque a folha ja os imprimiu acima.
+ *
+ * E o achado que apareceu MEDINDO, e nao lendo: com os quinze campos do padrao a
+ * folha ia a 350,9 mm e saia em duas paginas. A tentacao era diminuir a fonte. O
+ * problema nao era tamanho — era que a mesma fatura imprimia o nome do cliente,
+ * o CPF, a UC, a competencia, o vencimento e o total DUAS VEZES na mesma folha.
+ *
+ * O layout posicionado punha tudo numa tabela so porque nao tinha outro lugar. A
+ * folha G3 tem: identificacao no bloco do cliente, o total na barra navy, e a
+ * tabela para o que COMPOE esse total. Repetir nao e redundancia de codigo, e
+ * redundancia impressa — a que o cliente ve.
+ *
+ * NAO E CONFIGURAVEL, e nao deve ser: `campo_do_documento` decide o que APARECE
+ * na fatura; isto decide ONDE. Sao perguntas diferentes, e a segunda e do
+ * desenho. Esconder `cliente_nome` pelo cadastro continua escondendo-o da folha
+ * inteira — inclusive do bloco de cima.
+ */
+const JA_IMPRESSO_NA_FOLHA = new Set<string>([
+  'cliente_nome',        // bloco do cliente
+  'cliente_documento',   // bloco do cliente, mascarado
+  'numero_uc',           // grade de metadados
+  'competencia',         // grade de metadados, como "Mes de referencia"
+  'vencimento',          // grade de metadados E barra do total
+  'valor_total_centavos', // barra do total, em 26pt
+]);
 
 /**
  * Congelado como constante e nao montado por condicao: hoje as duas faltam
@@ -203,9 +250,10 @@ const FAIXAS_AUSENTES: FolhaG3['faixas_ausentes'] = [
     questao: 'Q-DOCG3-02 · Q-TARIFA-CRM-01',
   },
   {
-    faixa: 'O detalhamento dos repasses da Equatorial',
-    motivo: 'Exige a quebra em quatro parcelas vinda do leitor da distribuidora. A coluna que existe aqui é '
-          + 'UMA soma, e derivar as parcelas dela por subtração absorveria erro de leitura em silêncio.',
+    faixa: 'A quebra dos repasses da Equatorial em quatro parcelas',
+    motivo: 'O detalhamento existe e mostra o que o sistema fatura, mas a linha "Tarifas da concessionária" é '
+          + 'UMA soma. Quebrá-la em não compensado, iluminação, bandeira e encargos exige o leitor da '
+          + 'distribuidora — derivar as parcelas por subtração absorveria erro de leitura em silêncio.',
     questao: 'Q-DOCG3-11',
   },
 ];

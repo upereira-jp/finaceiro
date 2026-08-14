@@ -87,14 +87,6 @@ export async function situacaoDeTodas(): Promise<RateioDaUsina[]> {
   return r.map((l) => ({ ...l, ucs: Number(l.ucs) }));
 }
 
-export async function ucsDaUsina(usinaId: string) {
-  await exigir('ler');
-  return dbt().unidade_consumidora.findMany({
-    where: { usina_id: usinaId, status: { not: 'cancelada' } },
-    orderBy: [{ numero_uc: 'asc' }],
-  });
-}
-
 /**
  * Vincula a UC a usina com um percentual, ou muda o percentual de um vinculo
  * existente. Confere o teto ANTES de devolver.
@@ -133,18 +125,4 @@ export async function removerDoRateio(unidadeConsumidoraId: string) {
     data: { usina_id: null, percentual_rateio: null },
   });
   if (r.count === 0) throw Object.assign(new Error('Unidade consumidora nao encontrada.'), { status: 404 });
-}
-
-/**
- * Antecipa a constraint trigger da R11 para AGORA, em vez do COMMIT.
- *
- * Use quando um lote de UCs entra numa transacao so e voce quer o erro na linha
- * que o causou. Depois de SET CONSTRAINTS ALL IMMEDIATE a trigger volta a
- * disparar por linha ate o fim da transacao - o que e exatamente o que se quer
- * durante uma carga, e exatamente o que NAO se quer se as UCs entram uma a uma
- * e o rateio so fecha no fim.
- */
-export async function conferirTetoAgora(): Promise<void> {
-  await exigir('escrever_cadastro');
-  await dbt().$queryRaw`SET CONSTRAINTS ALL IMMEDIATE`;
 }
