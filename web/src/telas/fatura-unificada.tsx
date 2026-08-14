@@ -27,6 +27,7 @@ import {
   api, CAMPOS_DA_FATURA_VAZIOS, PARAMETROS_PADRAO, BOLETO_LIDO_VAZIO,
   type CamposDaFatura, type ParametrosDaEmissao, type BoletoLido,
   type ComposicaoUnificada, type LinhaDetalhada, type CampoPersonalizado,
+  type RegistroDeFatura,
 } from '../api.ts';
 import { Aviso, Campo, Icone } from '../ui.tsx';
 import { TrianguloDeAviso } from '../icones.tsx';
@@ -161,9 +162,15 @@ function apagarRascunho(tenantId: string | null): void {
  * Para quem nao distingue verde de ambar, "Linha valida, digitos conferidos" e
  * "A linha nao confere" eram dois paragrafos cinzentos do mesmo tamanho.
  */
-function Status({ tom, children }: { tom?: 'ok' | 'alerta'; children: ReactNode }) {
+/** `margem` existe porque a referencia usa TRES distancias para a mesma linha de
+ *  status: 12px depois da area de envio da fatura, 6px colada no campo que acabou
+ *  de ser digitado, 10px no resto. Escrever a margem no JSX seria o comeco de uma
+ *  quarta. */
+function Status({ tom, margem, children }: {
+  tom?: 'ok' | 'alerta'; margem?: 'rente' | 'solto'; children: ReactNode;
+}) {
   return (
-    <div className={tom ? `fu-status ${tom}` : 'fu-status'}
+    <div className={['fu-status', tom, margem].filter(Boolean).join(' ')}
          role={tom === 'alerta' ? 'status' : undefined}>
       {/* `aviso_ok` e nao `sim`: o `sim` esta em `ICONES_QUE_SE_MOVEM` e a regra
           `.ic-sim` anima em qualquer lugar do sistema. O do aviso so anima dentro
@@ -220,6 +227,10 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
   const [lendoBoleto, setLendoBoleto] = useState(false);
   const [registrando, setRegistrando] = useState(false);
   const [statusRegistro, setStatusRegistro] = useState<string | null>(null);
+  /* SOBE A CADA ESCRITA em `fatura_unificada_registrada` — registro novo ou
+   * exclusao. E o que manda `FaturasRegistradas` reler a lista sem que esta tela
+   * guarde uma copia dela para manter em dia. */
+  const [registrosVersao, setRegistrosVersao] = useState(0);
 
   /*
    * ==========================================================================
@@ -329,6 +340,7 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
       });
       setStatusRegistro(`Fatura registrada para a UC ${campos.unidade_consumidora} `
                       + `em ${campos.mes_referencia}. O desconto entra na economia acumulada.`);
+      setRegistrosVersao((v) => v + 1);
       /* Recompoe: a economia acumulada mudou, e ela sai impressa na folha 2. */
       void compor(campos, parametros, boleto, personalizados);
     } catch (e) {
@@ -382,7 +394,15 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
             lendoFatura={lendoFatura} lendoBoleto={lendoBoleto}
             enviarFatura={enviarFatura} enviarBoleto={enviarBoleto}
             registrar={registrar} registrando={registrando} statusRegistro={statusRegistro}
+            registrosVersao={registrosVersao}
+            aoApagarRegistro={() => {
+              setRegistrosVersao((v) => v + 1);
+              /* A folha 2 imprime a economia acumulada: apagar um registro a muda,
+               * e sem recompor a tela seguiria mostrando a soma antiga. */
+              void compor(campos, parametros, boleto, personalizados);
+            }}
             irParaEmissao={() => irPara('emissao')}
+            novaFatura={novaFatura}
           />
         )}
         {/* A PREVIA EM LOTE SAIU DA TELA INTEIRA em 14/08 (tarde), e nao so desta
@@ -394,7 +414,10 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
             na arvore imprimem juntas. Hoje so existe uma — e e por isso que
             qualquer coisa que volte a montar `id="documento"` tem de vir com o
             teste `W-imprime-uma-folha-so` junto. */}
-        {aba === 'emissao' && <AbaDeEmissao composicao={composicao} logoUrl={logoUrl} />}
+        {aba === 'emissao' && (
+          <AbaDeEmissao composicao={composicao} logoUrl={logoUrl}
+                        irParaPainel={() => irPara('leitura')} />
+        )}
         {aba === 'cadastro' && cadastro}
       </div>
     </>
@@ -461,7 +484,12 @@ function Abas({ atual, ao, acao }: {
         </Fragment>
       ))}
       <span style={{ flex: 1 }} />
-      <button type="button" className="fu-aba" onClick={acao.ao}>{acao.texto}</button>
+      {/* `fu-acao` E NAO `fu-aba`, e ate 14/08 era a segunda. Ela pegava o desenho
+          de aba — inclusive o fundo laranja se alguem a marcasse — para um botao
+          que nao seleciona painel nenhum. Na referencia ela e um contorno navy
+          numa faixa propria acima da grade; aqui e o mesmo contorno, no fim da
+          mesma linha, que e a mesma posicao na tela. */}
+      <button type="button" className="fu-acao" onClick={acao.ao}>{acao.texto}</button>
     </div>
   );
 }
@@ -483,7 +511,12 @@ type PropsDeLeitura = {
   lendoFatura: boolean; lendoBoleto: boolean;
   enviarFatura: (f: File) => void; enviarBoleto: (f: File) => void;
   registrar: () => void; registrando: boolean; statusRegistro: string | null;
+  /** Sobe de 1 a cada escrita (registro novo ou exclusao). E o que faz a lista de
+   *  `FaturasRegistradas` recarregar sem que a tela guarde copia dela. */
+  registrosVersao: number;
+  aoApagarRegistro: () => void;
   irParaEmissao: () => void;
+  novaFatura: () => void;
 };
 
 function AbaDeLeitura(p: PropsDeLeitura) {
@@ -552,7 +585,7 @@ function AbaDeLeitura(p: PropsDeLeitura) {
             <div className="fu-solta-titulo">Enviar fatura da distribuidora</div>
             <div className="fu-solta-sub">PDF ou foto/scan — os dados são extraídos e preenchidos ao lado</div>
           </label>
-          <div className="fu-status">{p.statusFatura}</div>
+          <div className="fu-status solto">{p.statusFatura}</div>
         </div>
 
         {/* ------------------------------------------ o boleto a gerar */}
@@ -579,7 +612,10 @@ function AbaDeLeitura(p: PropsDeLeitura) {
         {/* --------------------------------------------------- o boleto */}
         <div className="cartao">
           <div className="fu-rotulo">Boleto Sicoob</div>
-          <label className="fu-solta">
+          {/* `curta`: na referencia esta area tem 20px de padding e titulo de 18px,
+              contra 24px e 19px na da fatura. O envio da fatura e o primeiro ato
+              da tela e e maior de proposito. */}
+          <label className="fu-solta curta">
             <input type="file" accept="application/pdf,image/*"
                    disabled={p.lendoBoleto}
                    onChange={(e) => reenviavel(e, p.enviarBoleto)} />
@@ -588,7 +624,10 @@ function AbaDeLeitura(p: PropsDeLeitura) {
           </label>
           <div className="fu-status">{p.statusBoleto}</div>
 
-          <div className="fu-secao">
+          {/* `com-regua`: esta secao se separa por uma regua EM CIMA e titulo
+              apagado; as do cartao da direita se anunciam por titulo LARANJA com
+              regua embaixo. Sao as duas formas da referencia, e eram uma so aqui. */}
+          <div className="fu-secao com-regua">
             <div className="fu-rotulo">Conferência do boleto</div>
             {/* `Aviso` E NAO UMA CLASSE PROPRIA. Ate 14/08 esta area desenhava a
                 divergencia com `.fu-alerta` — faixa de 3px, raio so a direita,
@@ -599,24 +638,35 @@ function AbaDeLeitura(p: PropsDeLeitura) {
             {alertas.map((a) => <Aviso key={a} tipo="alerta">{a}</Aviso>)}
             {alertas.length === 0 && <div className="fu-status">Nada a apontar.</div>}
 
-            <div className="campos">
+            {/* DUAS GRADES E NAO UMA: a referencia poe vencimento e valor lado a
+                lado (`1fr 1fr`) e o nosso numero sozinho na linha de baixo
+                (`1fr`). O `auto-fit minmax(190px)` daqui os punha os tres em fila
+                ou os tres empilhados, conforme a largura — nunca 2 + 1. */}
+            <div className="campos duas">
               <Campo rotulo="Vencimento no boleto" valor={p.boleto.vencimento}
                      ao={(v) => p.setBoleto((s) => ({ ...s, vencimento: v }))} dica="DD/MM/AAAA" />
               <Campo rotulo="Valor no boleto" valor={p.boleto.valor}
                      ao={(v) => p.setBoleto((s) => ({ ...s, valor: v }))} dica="0,00" />
+            </div>
+            <div className="campos uma">
               <Campo rotulo="Nosso número" valor={p.boleto.nosso_numero}
                      ao={(v) => p.setBoleto((s) => ({ ...s, nosso_numero: v }))} dica="1-3" />
             </div>
             <div className="fu-status">Beneficiário lido: {p.boleto.beneficiario || '—'}</div>
 
-            <div className="fu-rotulo" style={{ marginTop: 14 }}>Instruções do boleto</div>
+            {/* `fu-legenda` E NAO `fu-rotulo`. Na referencia estas tres nao sao
+                rotulo em caixa alta condensada: sao 13px de Barlow apagada, com
+                a margem `14px 0 3px` que a classe carrega. */}
+            <div className="fu-legenda">
+              Instruções do boleto <span className="fraco">· uma por linha</span>
+            </div>
             <textarea className="fu-area" rows={4} value={p.boleto.instrucoes.join('\n')}
-                      placeholder="Uma por linha"
+                      placeholder="A partir 18/08/2026 Juros 0,03%/dia."
                       onChange={(e) => p.setBoleto((s) => ({
                         ...s, instrucoes: e.target.value.split('\n'),
                       }))} />
 
-            <div className="fu-rotulo" style={{ marginTop: 14 }}>Linha digitável</div>
+            <div className="fu-legenda">Linha digitável</div>
             <textarea className="fu-area mono" rows={2} value={p.boleto.linha_digitavel}
                       placeholder="47 dígitos"
                       onChange={(e) => p.setBoleto((s) => ({ ...s, linha_digitavel: e.target.value }))} />
@@ -625,13 +675,16 @@ function AbaDeLeitura(p: PropsDeLeitura) {
               motivo={p.composicao?.folha2.pagamento.barras_motivo ?? null}
               desenhou={Boolean(p.composicao?.folha2.pagamento.barras)} />
 
-            <div className="fu-rotulo" style={{ marginTop: 14 }}>PIX copia e cola</div>
-            <textarea className="fu-area mono" rows={3} value={p.boleto.pix_copia_e_cola}
+            <div className="fu-legenda">PIX copia e cola</div>
+            {/* `miudo`: 12px contra os 13px da linha digitavel. E a diferenca da
+                referencia, e ela tem motivo — o payload EMV tem tres vezes mais
+                caracteres e a um ponto a mais nao cabe em tres linhas. */}
+            <textarea className="fu-area mono miudo" rows={3} value={p.boleto.pix_copia_e_cola}
                       placeholder="00020101…"
                       onChange={(e) => p.setBoleto((s) => ({
                         ...s, pix_copia_e_cola: e.target.value.replace(/\s+/g, ''),
                       }))} />
-            <div className="fu-status">
+            <div className="fu-status rente">
               {p.composicao?.folha2.pagamento.qr
                 ? `Payload EMV reconhecido · QR gerado (versão ${p.composicao.folha2.pagamento.qr.versao}).`
                 : p.composicao?.folha2.pagamento.qr_motivo
@@ -641,19 +694,27 @@ function AbaDeLeitura(p: PropsDeLeitura) {
           </div>
         </div>
 
-        {/* ------------------------------------------------- parâmetros */}
+        {/* ------------------------------------------------- parâmetros
+            OS DOIS CAMPOS TEM A BORDA FORTE E O FUNDO CREME, e sao os unicos da
+            referencia assim. Nao e enfeite: os trinta campos de cima sao dado
+            LIDO da fatura e se conferem; estes dois sao DECISAO de quem opera, e
+            saem desenhados como controle, nao como valor. */}
         <div className="cartao">
           <div className="fu-rotulo">Parâmetros</div>
-          <div className="campos">
+          <div className="campos parametros">
             <Campo rotulo="Desconto (%)" valor={p.parametros.percentual_desconto}
                    ao={(v) => p.setParametros((s) => ({ ...s, percentual_desconto: v }))} />
             <Campo rotulo="Fator CO₂ (kg/kWh)" valor={p.parametros.fator_emissao}
                    ao={(v) => p.setParametros((s) => ({ ...s, fator_emissao: v }))} />
           </div>
-          <p className="sub" style={{ marginBottom: 0 }}>
-            Fator médio da margem de operação do SIN — MCTI/SIRENE.
-          </p>
+          <p className="sub">Fator médio da margem de operação do SIN — MCTI/SIRENE.</p>
         </div>
+
+        {/* -------------------------------------- as faturas registradas nesta UC */}
+        <FaturasRegistradas
+          uc={p.campos.unidade_consumidora} versao={p.registrosVersao}
+          registrar={p.registrar} registrando={p.registrando}
+          statusRegistro={p.statusRegistro} aoApagar={p.aoApagarRegistro} />
       </div>
 
       {/* --------------------------------------------- conferência dos dados */}
@@ -720,39 +781,129 @@ function AbaDeLeitura(p: PropsDeLeitura) {
             impressa sem ninguem saber qual dos dois vale. */}
         <CamposDoTenant valores={p.personalizados} ao={p.setPersonalizados} />
 
-        <div style={{ display: 'flex', gap: 12, marginTop: 22, flexWrap: 'wrap' }}>
-          <button className="primario" onClick={p.irParaEmissao} disabled={!p.composicao}>
-            <Icone nome="imprimir" tamanho={15} peso="bold" /> Ver a fatura do cliente
-          </button>
-          {/*
-            REGISTRAR E UM ATO SEPARADO DE IMPRIMIR, e a separacao e a mesma do
-            ensaio/valendo do faturamento: imprimir e conferencia, registrar
-            escreve no banco e muda o que a folha do MES QUE VEM vai afirmar.
+        {/*
+          OS DOIS BOTOES DO PE SAO OS DA REFERENCIA, e "Registrar" nao esta mais
+          aqui — ele desceu para o cartao "Faturas registradas nesta UC", na
+          coluna da esquerda, que e onde a referencia o poe.
 
-            O que ele alimenta e o "Voce ja economizou" da folha 2 — que ate
-            14/08 imprimia o desconto DESTA fatura e dizia "Primeira fatura com a
-            G3 Solar", para toda fatura, sempre.
-          */}
-          <button onClick={p.registrar}
-                  disabled={p.registrando || !p.composicao
-                            || !p.campos.unidade_consumidora.trim()
-                            || !p.campos.mes_referencia.trim()}>
-            <Icone nome={p.registrando ? 'carregando' : 'confirmar'} tamanho={15} />
-            Registrar esta fatura
+          A MUDANCA NAO E DE LUGAR, E DE LEITURA. Registrar e imprimir eram dois
+          botoes lado a lado, do mesmo tamanho, no mesmo canto — e sao atos de
+          natureza diferente: imprimir e conferencia e nao escreve nada;
+          registrar ESCREVE no banco e muda o que a folha do MES QUE VEM vai
+          afirmar (o "Voce ja economizou" da folha 2). Junto da lista do que ja
+          foi registrado, o botao mostra o efeito antes do clique.
+        */}
+        {/* SEM ICONE NOS DOIS, e a referencia nao tem nenhum na interface inteira
+            — o unico SVG dela e a logo. O rotulo carrega o sentido sozinho aqui;
+            onde o icone e o que impede a COR de ser o unico sinal (as linhas de
+            status), ele ficou. Ver a nota 1 no cabecalho da secao em `estilo.ts`. */}
+        <div className="fu-pe">
+          <button className="primario" onClick={p.irParaEmissao} disabled={!p.composicao}>
+            Ver a fatura do cliente
           </button>
+          <button onClick={p.novaFatura}>Nova fatura</button>
         </div>
-        {p.statusRegistro && (
-          <Aviso tipo={p.statusRegistro.startsWith('Não') ? 'erro' : 'ok'}>{p.statusRegistro}</Aviso>
-        )}
-        {p.composicao?.economia && p.composicao.economia.faturas > 0 && (
-          <p className="sub" style={{ marginTop: 10, marginBottom: 0 }}>
-            Esta UC tem <strong>{p.composicao.economia.faturas}</strong> fatura(s) registrada(s)
-            {p.composicao.economia.desde && <> desde <strong>{p.composicao.economia.desde}</strong></>}
-            {' '}— economia acumulada de <strong>{emReais(p.composicao.economia.centavos)}</strong>,
-            que é o número impresso na folha 2.
-          </p>
-        )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * ============================================================================
+ * AS FATURAS JA REGISTRADAS NESTA UC — o cartao que faltava, 14/08/2026.
+ *
+ * A REFERENCIA TEM ESTE CARTAO desde `36e964e` e nos nao tinhamos NENHUMA tela
+ * que listasse registro. Ele e o quinto e ultimo da coluna da esquerda: mes,
+ * total e um "excluir" por linha, e o botao de registrar embaixo.
+ *
+ * E ELE NAO CUSTOU ROTA NOVA, o que e a medida de que a lacuna era de tela e nao
+ * de sistema: `GET /faturas/unificada/registros?unidade_consumidora=`,
+ * `POST` e `DELETE /faturas/unificada/registros/:id` existem desde a migration
+ * 29 e **as duas primeiras nao tinham um chamador de produção sequer** — o POST
+ * era chamado por um botao, o GET por ninguem, e o DELETE por ninguem.
+ *
+ * POR QUE A LISTA IMPORTA MAIS DO QUE PARECE. A soma dos `desconto_centavos`
+ * desta serie e o *"Voce ja economizou"* impresso na folha 2 do cliente. Ate
+ * hoje, o unico jeito de saber o que compunha aquele numero era consultar o
+ * banco: registrar duas vezes o mesmo mes era corrigido pelo `upsert` do
+ * servidor, mas registrar o mes ERRADO nao tinha desfazer na tela. Agora tem.
+ *
+ * A CHAVE DE RECARGA E `versao` E NAO UM `useEffect` NO `statusRegistro`: o
+ * status e texto para humano e muda por motivos que nao sao escrita (uma falha,
+ * por exemplo). Quem sobe a versao e quem escreveu.
+ */
+function FaturasRegistradas({ uc, versao, registrar, registrando, statusRegistro, aoApagar }: {
+  uc: string; versao: number;
+  registrar: () => void; registrando: boolean; statusRegistro: string | null;
+  aoApagar: () => void;
+}) {
+  const [lista, setLista] = useState<RegistroDeFatura[] | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+  const alvo = uc.trim();
+
+  useEffect(() => {
+    if (!alvo) { setLista(null); setErro(null); return; }
+    let vivo = true;
+    api.get<RegistroDeFatura[]>(
+      `/faturas/unificada/registros?unidade_consumidora=${encodeURIComponent(alvo)}`)
+      .then((r) => { if (vivo) { setLista(r); setErro(null); } })
+      .catch((e) => { if (vivo) { setLista([]); setErro(naMensagem(e)); } });
+    return () => { vivo = false; };
+  }, [alvo, versao]);
+
+  async function apagar(r: RegistroDeFatura) {
+    /* A CONFIRMACAO NOMEIA O QUE SAI. A referencia apaga a linha direto; aqui a
+     * linha e dado de negocio com trilha, e o que ela carrega — o desconto — sai
+     * da economia impressa na folha do cliente no mes que vem. */
+    if (!window.confirm(`Excluir o registro de ${r.competencia} da UC ${r.numero_uc}? `
+                      + `O desconto de ${emReais(r.desconto_centavos)} sai da economia acumulada.`)) return;
+    try {
+      await api.del(`/faturas/unificada/registros/${r.id}`);
+      aoApagar();
+    } catch (e) { setErro(naMensagem(e)); }
+  }
+
+  const acumulado = (lista ?? []).reduce((a, r) => a + r.desconto_centavos, 0);
+
+  return (
+    <div className="cartao">
+      <div className="fu-rotulo">Faturas registradas nesta UC</div>
+
+      {!alvo && <div className="fu-status">Informe a unidade consumidora para ver o histórico.</div>}
+      {alvo && lista == null && <div className="fu-status">Lendo os registros…</div>}
+      {alvo && lista?.length === 0 && !erro && (
+        <div className="fu-status">Nenhuma fatura registrada ainda.</div>
+      )}
+      {erro && <Aviso tipo="erro">{erro}</Aviso>}
+
+      {(lista ?? []).map((r) => (
+        <div key={r.id} className="fu-registro">
+          <span>{r.competencia}</span>
+          <span className="fu-registro-dir">
+            <span className="fu-registro-val">{emReais(r.total_centavos)}</span>
+            <button type="button" className="fu-texto" onClick={() => void apagar(r)}>excluir</button>
+          </span>
+        </div>
+      ))}
+
+      {/* O ICONE SO EXISTE ENQUANTO ESCREVE. Em repouso a referencia nao tem
+          nenhum, e o rotulo basta; durante a gravacao o giro e a unica coisa que
+          diz que o clique foi recebido — sem ele o botao fica so desabilitado, e
+          desabilitado tambem e o estado de "faltou a UC". */}
+      <button className="fu-largo fu-contorno" onClick={registrar}
+              disabled={registrando || !alvo}>
+        {registrando && <Icone nome="carregando" tamanho={15} />}
+        {registrando ? 'Registrando…' : 'Registrar este mês'}
+      </button>
+      {statusRegistro && (
+        <Aviso tipo={statusRegistro.startsWith('Não') ? 'erro' : 'ok'}>{statusRegistro}</Aviso>
+      )}
+      {(lista?.length ?? 0) > 1 && (
+        <p className="sub">
+          Economia acumulada de <strong>{emReais(acumulado)}</strong> em{' '}
+          <strong>{lista!.length}</strong> faturas — é o número impresso na folha 2.
+        </p>
+      )}
     </div>
   );
 }
@@ -817,13 +968,13 @@ function StatusDaLinha({ digitos, motivo, desenhou }: {
   digitos: string; motivo: string | null; desenhou: boolean;
 }) {
   if (desenhou) {
-    return <Status tom="ok">Linha válida · dígitos verificadores conferidos · código de barras gerado.</Status>;
+    return <Status tom="ok" margem="rente">Linha válida · dígitos verificadores conferidos · código de barras gerado.</Status>;
   }
   if (digitos.length === 0) {
-    return <Status>Cole a linha digitável de 47 dígitos gerada no banco.</Status>;
+    return <Status margem="rente">Cole a linha digitável de 47 dígitos gerada no banco.</Status>;
   }
   return (
-    <Status tom="alerta">
+    <Status tom="alerta" margem="rente">
       {motivo ?? 'A linha não confere.'} O campo é editável: corrija a partir do boleto.
     </Status>
   );
@@ -831,8 +982,9 @@ function StatusDaLinha({ digitos, motivo, desenhou }: {
 
 /* ============================================================ aba 2: emissão */
 
-function AbaDeEmissao({ composicao, logoUrl }: {
+function AbaDeEmissao({ composicao, logoUrl, irParaPainel }: {
   composicao: ComposicaoUnificada | null; logoUrl: string | null;
+  irParaPainel: () => void;
 }) {
   if (!composicao) {
     return (
@@ -848,11 +1000,17 @@ function AbaDeEmissao({ composicao, logoUrl }: {
 
   return (
     <>
+      {/* A BARRA TEM A LARGURA DA FOLHA e nao a da pagina, e os dois botoes sao
+          os da referencia. "Voltar ao painel" nao existia aqui: quem chegava na
+          aba 2 voltava pela aba 1 la em cima, o que e outro alvo e outra
+          distancia — e a acao natural depois de olhar a folha e voltar a
+          corrigir o que se acabou de ver. */}
       <div className="fu-barra naoimprime">
         <span className="fraco">Fatura {numero_da_fatura}</span>
-        <button className="primario" onClick={() => window.print()}>
-          <Icone nome="imprimir" tamanho={15} peso="bold" /> Imprimir fatura
-        </button>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={irParaPainel}>Voltar ao painel</button>
+          <button className="fu-imprimir" onClick={() => window.print()}>Imprimir fatura</button>
+        </div>
       </div>
 
       {/* A REGRA `@page`, INJETADA — `size` nao aceita `var()` e por isso ela nao

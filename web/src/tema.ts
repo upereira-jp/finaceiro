@@ -426,6 +426,74 @@ export const FONTE_CSS = `
   }
 `;
 
+// ------------------------------------------------------- a fonte da referencia
+//
+// BARLOW E BARLOW SEMI CONDENSED, e elas servem UMA aba: a Documento. Pedido do
+// dono em 14/08/2026 — *"a referencia exata deve ser g3-fatura-unificada.vercel.app,
+// sem tirar nem por, deve ser exatamente igual, com bordas iguais, sistema de
+// cores, tipografia"*. A Inter continua sendo a fonte do sistema; quem troca de
+// familia e o escopo `.g3ref`, e so ele.
+//
+// AS DUAS FAMILIAS TEM PAPEIS SEPARADOS na referencia, e a separacao e o que faz
+// o desenho parecer o que parece: a **Barlow** e corpo e valor; a **Barlow Semi
+// Condensed** e TODO rotulo em caixa alta, todo botao e todo numero grande. Sao
+// 61 ocorrencias de `font-family` no template contra 1 da Barlow — a condensada
+// e a fonte de superficie, nao a excecao.
+//
+// OS BYTES SAO OS DA PROPRIA REFERENCIA, desempacotados do manifesto `__bundler`
+// do commit `36e964e` — nao um download novo do Google. Conferido em 14/08 contra
+// o que o Google serve hoje (`/s/barlow/v13`, `/s/barlowsemicondensed/v16`):
+// **mesma versao 1.408, mesmos 272 glifos, mesmas larguras** em A/a/M/m/0/R/$ e
+// espaco. Os arquivos daqui sao ~30% menores porque o empacotador recomprimiu o
+// woff2; o contorno e o mesmo, e portanto a linha quebra no mesmo lugar.
+//
+// A VERSAO VIAJA NO NOME (`-v1.408`) pelo motivo ja escrito acima para a Inter:
+// `public/` nao recebe hash do Vite e o `servirEstatico` manda `immutable`.
+// A licenca (OFL 1.1, como a da Inter) esta em `LICENSE-barlow.txt`.
+//
+// SO `latin` E `latin-ext`. O `vietnamese` da referencia sao 47 KB que nenhuma
+// fatura em portugues alcanca — e `unicode-range` faz o browser baixar so o
+// subconjunto que a pagina realmente pinta, entao o corte nao muda uma letra do
+// que aparece na tela. Tirar peso que nao desenha nada nao e "tirar" nada.
+
+/** Os dois `unicode-range` sao os da folha do Google Fonts que a referencia
+ *  carrega, copiados sem alteracao — recorta-los seria mudar QUAL arquivo o
+ *  browser escolhe para um caractere, que e a unica coisa que eles decidem. */
+const FAIXAS_BARLOW = {
+  latin:
+    'U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, '
+    + 'U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, '
+    + 'U+2212, U+2215, U+FEFF, U+FFFD',
+  'latin-ext':
+    'U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, '
+    + 'U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, '
+    + 'U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF',
+} as const;
+
+/** Os quatro pesos que a referencia realmente pinta — medidos no template e no
+ *  `renderVals()`: 400, 500, 600 e 700. Nao ha 300 nem italico em lugar nenhum
+ *  dela, e por isso nenhum dos dois viajou. */
+const PESOS_BARLOW = [400, 500, 600, 700] as const;
+
+const FAMILIAS_BARLOW = [
+  { nome: 'Barlow', arquivo: 'barlow' },
+  { nome: 'Barlow Semi Condensed', arquivo: 'barlow-semi-condensed' },
+] as const;
+
+/** As dezesseis `@font-face`, geradas. Escritas a mao seriam dezesseis blocos
+ *  quase iguais, e a proxima diferenca entre dois deles seria invisivel. */
+export const FONTE_G3REF_CSS = FAMILIAS_BARLOW.flatMap((f) =>
+  PESOS_BARLOW.flatMap((peso) =>
+    (Object.keys(FAIXAS_BARLOW) as Array<keyof typeof FAIXAS_BARLOW>).map((sub) => `
+  @font-face {
+    font-family: '${f.nome}';
+    font-style: normal;
+    font-weight: ${peso};
+    font-display: swap;
+    src: url('/fontes/${f.arquivo}-${peso}-${sub}-v1.408.woff2') format('woff2');
+    unicode-range: ${FAIXAS_BARLOW[sub]};
+  }`))).join('\n');
+
 /**
  * Tipografia e ritmo.
  *
@@ -535,8 +603,113 @@ const variaveis = (p: Paleta) => `
  * atributo nenhum (primeiro paint, JS ainda carregando) vale o claro, que é o
  * padrão do sistema desde a mesma decisão.
  */
+/**
+ * ==========================================================================
+ * A PALETA DA REFERENCIA, escopada em `.g3ref` — 14/08/2026.
+ *
+ * O PEDIDO E O QUE ELE CUSTA. *"A referencia exata deve ser
+ * g3-fatura-unificada.vercel.app, sem tirar nem por, deve ser exatamente igual,
+ * com bordas iguais, sistema de cores, tipografia."* Os valores abaixo sao os
+ * medidos no template desempacotado do commit `36e964e` — nao aproximacoes, nao
+ * "o token mais parecido". Onde a referencia escreve `#E4DED2`, esta lista
+ * escreve `#E4DED2`.
+ *
+ * DUAS DELAS REVERTEM DECISAO MEDIDA DESTE REPOSITORIO, e a reversao e do dono,
+ * consultado e respondido em 14/08 ("Exato: #8F939D e #E8843C"):
+ *
+ *   `#8F939D` como tinta apagada sobre branco   mede 3,08:1   AA pede 4,5
+ *   `#E8843C` como TINTA sobre branco           mede 2,69:1   AA pede 4,5
+ *   `#fff` sobre o `#E8843C` do botao           mede 2,69:1   AA pede 4,5
+ *
+ * Em 14/08 de manha o projeto tinha trocado os dois por `#66686F` (4,52:1) e
+ * `#995728` (4,55:1), e o invariante I1d proibia o Gray de reaparecer. A troca
+ * vale AQUI DENTRO e so aqui: `--fraco` e `--acento-forte` continuam sendo o que
+ * as outras onze telas usam, e o I1d continua valendo para elas — ver a excecao
+ * nomeada em `web/tests/interface.ts`. Registrado como `Q-DOCG3-15`.
+ *
+ * O ESCURO NAO E A REFERENCIA, e nao ha como ser: ela nao tem tema escuro. A
+ * decisao do dono na mesma consulta foi *"acompanha o tema"*, entao o bloco
+ * escuro remapeia CADA token para o equivalente ja medido da casa. A GEOMETRIA
+ * nao muda com o tema — borda, espaco, raio zero e tipografia sao os mesmos nos
+ * dois; o que troca e so a tinta. Uma aba clara cravada dentro de um sistema
+ * escuro seria um retangulo branco de 1180px na cara de quem escolheu o escuro.
+ *
+ * E POR QUE TOKEN, se a decisao foi "literal exato": porque literal exato e o
+ * valor do tema CLARO, nao a ausencia de camada. Sem os tokens, cada uma das ~70
+ * regras da secao `fu-` precisaria de um par claro/escuro proprio, e o proximo
+ * `#E4DED2` escrito a mao no meio delas nao teria contraparte no escuro.
+ */
+const G3REF_CSS = `
+  .g3ref {
+    /* superficies */
+    --g3ref-papel: #fff;             /* o cartao */
+    --g3ref-fundo: #F6F2EA;          /* o creme da pagina, sob a area tracejada */
+    --g3ref-campo: #FBF9F5;          /* o fundo do input */
+    --g3ref-solta-hover: #FBF7F0;    /* a area de envio sob o mouse */
+    /* linhas — a referencia usa TRES espessuras da mesma familia, e a distancia
+       entre elas e o que separa cartao de campo de divisoria interna */
+    --g3ref-borda: #E4DED2;          /* contorno do cartao */
+    --g3ref-borda-campo: #DDD6C8;    /* contorno do input e do chip */
+    --g3ref-borda-forte: #C9C1B1;    /* o tracejado e o input de parametro */
+    --g3ref-regua: #EFEAE0;          /* divisoria dentro do cartao */
+    /* tinta */
+    --g3ref-tinta: #14213D;
+    /* A TINTA QUE POUSA SOBRE "--g3ref-tinta", e ela existe por um defeito que so
+       a foto do tema escuro entregou. Os dois botoes de contorno invertem no
+       hover — fundo vira a tinta, tinta vira o claro —, e os dois escreviam
+       "--g3ref-navy-tinta" no lugar deste token. No claro dava certo por
+       coincidencia (as duas sao o mesmo creme); no ESCURO "--g3ref-tinta" e o
+       creme e "--g3ref-navy-tinta" tambem, e o botao ficava creme sobre creme:
+       o rotulo sumia ao passar o mouse. Nenhum invariante pegaria — os dois
+       tokens existem nos dois temas, so significam coisas diferentes. */
+    --g3ref-tinta-invertida: #F6F2EA;
+    --g3ref-apagado: #8F939D;
+    --g3ref-laranja: #E8843C;
+    --g3ref-laranja-hover: #D3742F;
+    --g3ref-laranja-tinta: #fff;     /* sobre o laranja cheio */
+    --g3ref-alerta-fundo: #FBF1E4;
+    /* o painel navy */
+    --g3ref-navy: #14213D;
+    --g3ref-navy-hover: #1C2C4E;     /* o botao de imprimir sob o mouse */
+    --g3ref-navy-tinta: #F6F2EA;
+    --g3ref-navy-apagado: #B6BBC7;   /* o subtitulo do painel */
+    --g3ref-navy-legenda: #8F939D;   /* a legenda das duas colunas */
+    --g3ref-navy-regua: #2C3A56;
+    --g3ref-navy-rotulo: #F4A65A;    /* "BOLETO A GERAR NO BANCO" */
+    /* tipografia */
+    --g3ref-fonte: 'Barlow', system-ui, sans-serif;
+    --g3ref-fonte-cond: 'Barlow Semi Condensed', sans-serif;
+    --g3ref-fonte-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  :root[data-tema="escuro"] .g3ref {
+    --g3ref-papel: var(--fundo2);
+    --g3ref-fundo: var(--fundo);
+    --g3ref-campo: var(--fundo);
+    --g3ref-solta-hover: var(--fundo-hover);
+    --g3ref-borda: var(--borda);
+    --g3ref-borda-campo: var(--borda);
+    --g3ref-borda-forte: var(--fraco);
+    --g3ref-regua: var(--borda-suave);
+    --g3ref-tinta: var(--texto);
+    --g3ref-tinta-invertida: var(--fundo);
+    --g3ref-apagado: var(--fraco);
+    --g3ref-laranja: var(--acento);
+    --g3ref-laranja-hover: var(--acento-hover);
+    --g3ref-laranja-tinta: var(--acento-texto);
+    --g3ref-alerta-fundo: var(--alerta-fundo);
+    --g3ref-navy: var(--topo);
+    --g3ref-navy-hover: var(--fundo-hover);
+    --g3ref-navy-tinta: var(--topo-texto);
+    --g3ref-navy-apagado: var(--topo-fraco);
+    --g3ref-navy-legenda: var(--topo-fraco);
+    --g3ref-navy-regua: var(--topo-veu-forte);
+    --g3ref-navy-rotulo: var(--acento);
+  }
+`;
+
 export const VARIAVEIS_CSS = `
   ${FONTE_CSS}
+  ${FONTE_G3REF_CSS}
   :root {${variaveis(CLARO)}
     --raio: ${RITMO.raio}; --raio-cartao: ${RITMO.raioCartao};
     --raio-pequeno: ${RITMO.raioPequeno}; --raio-pilula: ${RITMO.raioPilula};
@@ -552,6 +725,7 @@ export const VARIAVEIS_CSS = `
   :root[data-tema="escuro"] {${variaveis(ESCURO)}
     color-scheme: dark;
   }
+  ${G3REF_CSS}
 `;
 
 // ------------------------------------------------------------------ o modo

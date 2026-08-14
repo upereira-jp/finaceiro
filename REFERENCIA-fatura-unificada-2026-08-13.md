@@ -523,3 +523,100 @@ De `web/tests/layout.ts` sobraram três seções de dez: W7 (escala), W8 (`@page
 ### 16.5 O guarda de arranque acompanhou
 
 `[financeiro] client gerado cobre as 35 tabelas de public` — eram 37. A guarda compara o catálogo com os modelos do client e recusa subir se divergirem; ela seguiu a remoção sem ninguém atualizar número nenhum, que é o que se espera de uma conferência que lê o catálogo em vez de uma constante.
+---
+
+## 17. A INTERFACE virou a referência — 14/08, fim do dia
+
+| | |
+|---|---|
+| **Pedido** | *"quero ajustar o layout da interface da aba documentos. A referência exata deve ser `https://g3-fatura-unificada.vercel.app/`, sem tirar nem por, deve ser exatamente igual, com bordas iguais, sistema de cores, tipografia"* |
+| **Suíte** | `npm test` · **`EXIT=0`** · **1.904** verificações (linha de base medida em `eb1710d`: **1.893**; as 11 novas são desta leva) · `web:build` ✅ |
+| **Migration** | **nenhuma.** Nada de schema, nada escrito em produção |
+| **Novo** | 16 `woff2` de Barlow em `web/public/fontes/` + `LICENSE-barlow.txt` |
+| **Tocado** | `web/src/tema.ts`, `web/src/estilo.ts`, `web/src/telas/documento.tsx`, `web/src/telas/fatura-unificada.tsx`, `web/tests/interface.ts` |
+
+Até 14/08 a paridade era de **folha**: as duas A4 já saíam iguais às da referência (§15, §16). A **interface** — a esteira de conferência, que é onde quem opera passa o dia — continuava sendo o desenho da casa: Inter, cantos de 12px, sombra em três degraus, a tinta apagada nos derivados AA.
+
+### 17.1 As três decisões do dono, e as três foram consultadas com o número na mão
+
+| Pergunta | Resposta | O que ela custa |
+|---|---|---|
+| A tinta apagada e o laranja-texto da referência reprovam AA (3,08:1 e 2,69:1) e este repo os tinha trocado na **manhã do mesmo dia**. Adotar? | **Exato** | `Q-DOCG3-15`, e a exceção está cercada por três invariantes |
+| A referência não tem tema escuro. A aba fica clara sempre? | **Acompanha o tema** | cada token da ilha remapeia para o equivalente medido da casa |
+| Replicar a barra navy dela (logo + abas de etapa)? | **Só o conteúdo** | o sistema já tem faixa navy no topo; duas empilhadas seriam a referência copiada e a tela piorada |
+
+### 17.2 A ilha `.g3ref`, e por que ela é uma classe só
+
+`documento.tsx` põe `<div className="g3ref">` **uma vez**, em volta da aba inteira. Dentro dela valem outra fonte, outra paleta, raio zero e sombra nenhuma; fora, nada muda. A fronteira é explícita e verificável — e se um dia a referência virar o padrão do sistema, tira-se a classe e sobem-se os tokens para o `:root`.
+
+| | casa | ilha |
+|---|---|---|
+| fonte | Inter | **Barlow** (corpo) + **Barlow Semi Condensed** (todo rótulo, botão e número grande) |
+| raio | 12 / 8 / 6px | **0** |
+| sombra | três degraus | **nenhuma** |
+| entrelinha | 1,5 | **`normal`** (~1,2 na Barlow) — a referência não declara nenhuma |
+| tinta apagada | `#66686F` | `#8F939D` |
+
+### 17.3 A tipografia veio dos bytes da própria referência
+
+Os 16 `woff2` foram **desempacotados do manifesto `__bundler` de `36e964e`** — não baixados de novo do Google. Conferido contra o que o Google serve hoje (`/s/barlow/v13`, `/s/barlowsemicondensed/v16`): **mesma versão 1.408, mesmos 272 glifos, mesmas larguras** em `A a M m 0 R $` e espaço. Os arquivos daqui são ~30% menores porque o empacotador recomprimiu o `woff2`; o contorno é o mesmo, logo a linha quebra no mesmo lugar.
+
+**O `vietnamese` não veio** — 47 KB que nenhuma fatura em português alcança, e `unicode-range` faz o browser baixar só o subconjunto que a página pinta. **As URLs do `fonts.gstatic.com` não vieram**: a fonte é servida pela nossa origem, como a Inter desde 30/07.
+
+### 17.4 A prova: 62 propriedades computadas contra os valores medidos
+
+Fotografada contra a SPA real (`web/dist` + mock com o payload de composição gerado pelos **próprios módulos** do projeto — `calcular` e `comporFolhas` —, não escrito à mão). O que o browser **calculou**, comparado ao que o template desempacotado **declara**: **62 de 62 batem**. Entre elas:
+
+| | |
+|---|---|
+| cartão da esquerda | `1px solid #E4DED2` · `padding 22px` · `border-radius 0` |
+| cartão da direita | `padding 26px` |
+| grade | `380px 1fr` · `gap 24px` · coluna esquerda `gap 18px` |
+| rótulo caixa alta | Barlow Semi Condensed · 12px · `letter-spacing .14em` · `#8F939D` |
+| área de envio | `1px dashed #C9C1B1` sobre `#F6F2EA` · `24px 18px` · título 19px/600 |
+| painel navy | `#14213D` · `padding 24px` · total **52px/700** · rótulo `#F4A65A` · régua `#2C3A56` |
+| campo | `1px solid #DDD6C8` sobre `#FBF9F5` · 15px · `8px 10px` |
+| parâmetros | a borda forte `#C9C1B1` sobre creme — os dois únicos campos assim na referência |
+| aviso | `#FBF1E4` · filete de 3px `#E8843C` · `9px 11px` · 13px/1,45 |
+| botão primário | `#E8843C` · `13px 22px` · 16px/600 caixa alta condensada |
+| botão comum | contorno `#DDD6C8`, **caixa baixa**, Barlow 14px — o de repouso dela é o mais discreto dos quatro |
+
+E a diferença que o teste **preservou** em vez de aplainar: o bloco de conferência do boleto usa `1fr 1fr`, `gap 12px` e rótulo de **13px com margem 3px** — os outros valores da referência, e o único lugar dela em que eles aparecem.
+
+### 17.5 O cartão que faltava, e ele não custou rota
+
+**"Faturas registradas nesta UC"** é o quinto cartão da coluna da esquerda na referência, e não existia aqui. Mês, total, um `excluir` por linha e o botão de registrar embaixo. As três rotas já existiam desde a migration 29 — e **`GET` e `DELETE` não tinham um chamador de produção sequer**. A lacuna era de tela, não de sistema.
+
+**Registrar desceu para dentro dele**, e a mudança não é de lugar: registrar e imprimir eram dois botões do mesmo tamanho no mesmo canto, e são atos de natureza diferente — imprimir é conferência e não escreve nada; registrar escreve no banco e muda o que a folha do **mês que vem** afirma. Junto da lista do que já foi registrado, o botão mostra o efeito antes do clique.
+
+### 17.6 O que **não** veio, e são quatro, todas nomeadas
+
+1. **O ícone do `.fu-status` e do `.aviso` fica.** A referência diz sucesso e falha com 13px de texto colorido e nada mais; quem não separa laranja de verde lê as duas iguais. É a restrição 3 do tema, e ela não é sobre borda, cor nem tipografia.
+2. **O anel de foco de botão fica.** A referência desenha foco só em `input` e `textarea`. O anel daqui usa o laranja **dela**, então não introduz cor nova.
+3. **`display: none` no input de arquivo não veio.** É como a referência esconde o input dentro do `<label>`, e tira o controle da ordem de tabulação e da árvore de acessibilidade — as duas áreas de envio ficariam inalcançáveis sem mouse. Aqui ele é invisível **e** focável.
+4. **A barra navy** — §17.1.
+
+E a medida de linha (`max-width: 82ch`) ficou nos parágrafos de ajuda: a referência não tem `max-width` porque a única prosa dela é a nota de uma linha dos parâmetros; a aba 3 tem parágrafos de cinco linhas, e 12px correndo por 1.120px é o texto que ninguém lê. **Onde a referência tem opinião vale a dela; onde ela não tem, vale a nossa.**
+
+### 17.7 O que a foto pegou, e a leitura de código não pegaria
+
+**Os dois botões de contorno ficavam creme sobre creme no tema escuro.** Eles invertem no hover — o fundo vira a tinta —, e os dois escreviam `--g3ref-navy-tinta` onde precisavam de "a tinta que pousa sobre `--g3ref-tinta`". No claro dava certo por coincidência (as duas são o mesmo creme); no escuro `--g3ref-tinta` é o creme e o rótulo **sumia ao passar o mouse**. Nenhum invariante pegaria: os dois tokens existem nos dois temas, só significam coisas diferentes. Entrou `--g3ref-tinta-invertida`; medido depois: **14,31:1 nos dois temas**.
+
+E a medição que fecha: `page.pdf({preferCSSPageSize: true})` — o mesmo caminho do diálogo de imprimir — devolve **2 páginas** para as duas folhas A4. A ilha não vazou para a impressão.
+
+### 17.8 Os invariantes novos, e um buraco que eles expuseram
+
+Nove verificações entraram em `web/tests/interface.ts` (62 → 73). Elas não medem "está igual" — isso é foto. Medem a **erosão**: a ilha é feita de escolhas que contrariam o resto do sistema, e escolha assim volta sozinha na próxima edição distraída.
+
+| | |
+|---|---|
+| `I1d` `I1e` `I1f` | o Gray não pinta nada nas **regras**; no bloco de variáveis ele só aparece dentro de `.g3ref`; e só ocupa token `--g3ref-*` |
+| `I8a` | a ilha tem bloco de tokens e ≥ 40 regras |
+| `I8b` | **todo token do claro tem contraparte no escuro** — sem ela o escuro herda o literal claro em silêncio, e um `--g3ref-papel` esquecido pinta um cartão branco dentro da tela escura |
+| `I8c` | nenhuma regra da ilha tem raio ou sombra |
+| `I8d`–`I8g` | as duas famílias, os quatro pesos, `swap` em todas, **zero URL externa**, e a pilha de sistema atrás |
+| `I8h` | dentro da ilha só entram tokens `--g3ref-*` — mais os três estados (`erro`, `ok`, `alerta`) que a referência não tem |
+
+**E a `I7d` tinha um buraco que só apareceu agora.** Ela afirmava *"todo outline do sistema usa `var(--foco)`"* com o padrão `var\(--([a-z-]+)\)`, e `[a-z-]` não casa o `3` de `--g3ref-`: um `outline: 2px solid var(--g3ref-laranja)` **simplesmente não era visto**. Não era exceção passando de propósito — era o teste não medindo o que dizia medir. Agora ele lê regra a regra, e a fronteira é explícita: fora da ilha `--foco`, dentro dela o laranja da referência (`I7f`).
+
+**E a lição de método que o mesmo dia deu duas vezes:** `border-radius:\s*(?!0\b)` parece dizer "raio diferente de zero" e não diz — `\s*` casa **vazio**, o lookahead cai sobre o espaço depois dos dois-pontos, e `border-radius: 0` era acusado como raio. Todo teste "propriedade com valor diferente de X" escrito por regex tem essa armadilha. As declarações agora são **parseadas**, não casadas.

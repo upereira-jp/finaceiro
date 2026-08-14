@@ -598,184 +598,480 @@ export const ESTILO = `
   .ic-sim { animation: traco-do-check .5s ease-out; }
   .ic-nao { animation: traco-do-check .5s ease-out; }
 
-  /* ================= A TELA DAS DUAS ABAS (14/08/2026, "fu-" de fatura unificada)
-     TUDO AQUI E CROMO DE INTERFACE E USA TOKEN, nunca as cores da folha. A folha
-     imprime e por isso tem literal de tinta, dentro da excecao nomeada la embaixo;
-     esta tela tem tema claro e escuro, e uma tinta fixa aqui sairia navy sobre navy
-     no tema escuro. O invariante I1b prende isso, e prende ate no comentario -
-     escrever a cor por extenso nesta linha derruba a verificacao, de proposito.
+  /* ======================= A ABA DOCUMENTO É A REFERÊNCIA (14/08/2026)
+     PEDIDO DO DONO, literal: *"quero ajustar o layout da interface da aba
+     documentos. A referência exata deve ser g3-fatura-unificada.vercel.app, sem
+     tirar nem por, deve ser exatamente igual, com bordas iguais, sistema de
+     cores, tipografia"*.
 
-     PREFIXO PROPRIO porque estas classes tem tempo de vida diferente das ".g3-":
-     aquelas desenham papel e ficam; estas desenham a esteira de conferencia. */
-  .fu-abas {
-    display: flex; align-items: center; gap: 4px;
-    border-bottom: 1px solid var(--borda); margin-bottom: var(--gap); padding-bottom: 0;
-  }
-  /* ============================================================================
-     A ESPECIFICIDADE DAS ABAS, e ela foi DEFEITO MEDIDO em 14/08.
-     A primeira versao escrevia ".fu-aba:hover { color: var(--texto) }" e essa
-     regra NUNCA VALEU: "button:hover:not(:disabled)" la em cima e (0,2,1) e
-     ".fu-aba:hover" e (0,2,0). Quem ganhava era o botao generico - a aba pegava
-     o laranja de link, a sombra do segundo degrau e o "translateY(-1px)" que
-     LEVANTA o botao. Uma aba que flutua ao passar o mouse nao e uma aba.
-     Consertado com ":not(:disabled)" nos dois lados: (0,3,0) vence (0,2,1).
-     O invariante I7 de "web/tests/interface.ts" prende isto. */
-  .fu-aba {
-    background: none; border: none; border-bottom: 2px solid transparent;
-    padding: 9px 14px; margin-bottom: -1px; border-radius: var(--raio-pequeno) var(--raio-pequeno) 0 0;
-    font-size: 13.5px; font-weight: 500; color: var(--fraco); cursor: pointer;
-    box-shadow: none;
-    transition: color .16s ease, background-color .16s ease, border-color .16s ease;
-  }
-  /* O MESMO HOVER DA BARRA DE NAVEGACAO: tinta cheia mais lastro de superficie.
-     O sistema inteiro sinaliza "clicavel" com FUNDO; mudar so a cor do texto
-     deixava esta area falando outra lingua que o resto das treze telas. */
-  .fu-aba:hover:not(:disabled) {
-    color: var(--texto); background: var(--fundo-hover);
-    border-color: transparent; border-bottom-color: var(--borda);
-    box-shadow: none; transform: none;
-  }
-  .fu-aba:active:not(:disabled) { transform: none; box-shadow: none; }
-  .fu-aba[aria-selected="true"] {
-    color: var(--texto); border-bottom-color: var(--acento); font-weight: 600;
-    background: var(--acento-suave);
-  }
-  .fu-aba[aria-selected="true"]:hover:not(:disabled) {
-    background: var(--acento-suave); border-bottom-color: var(--acento);
-  }
-  .fu-aba-traco { width: 18px; height: 1px; background: var(--borda); }
+     DE ONDE SAEM OS NÚMEROS. Do template desempacotado do commit "36e964e" — o
+     mesmo bundle que a Vercel serve —, não de olhar a página renderizada. O
+     repositório da referência é "index.html" com o app inteiro em base64 gzipado
+     dentro de um manifesto "__bundler"; o desempacotamento devolve 16 KB de DOM
+     com "style" inline em cada elemento, e é dele que vem cada "padding", cada
+     "1px solid" e cada "letter-spacing" abaixo. É a mesma fonte de "REFERENCIA-
+     fatura-unificada-2026-08-13.md".
 
-  /* A COLUNA DA ESQUERDA E MAIS ESTREITA: nela ficam os dois envios e o painel de
-     conferencia; a direita e a que se le campo a campo. Abaixo de 1100px as duas
-     empilham - a esquerda primeiro, que e por onde o trabalho comeca. */
-  .fu-grade { display: grid; grid-template-columns: 0.85fr 1.15fr; gap: var(--gap-secao); align-items: start; }
-  .fu-coluna { display: flex; flex-direction: column; gap: var(--gap-secao); min-width: 0; }
-  @media (max-width: 1100px) { .fu-grade { grid-template-columns: 1fr; } }
+     ============================ O QUE MUDA EM RELAÇÃO AO RESTO DO SISTEMA
+     Esta seção é uma ILHA, e ela é declarada: tudo aqui é prefixado por ".g3ref",
+     que "documento.tsx" põe uma vez, em volta da aba inteira. Nenhuma regra
+     escapa para as outras onze telas — e é por isso que as diferenças abaixo
+     podem existir sem virar duas gramáticas no mesmo sistema:
 
-  .fu-rotulo { color: var(--fraco); margin-bottom: 8px; }
-  /* A AREA DE ENVIO E UM <label> e nao um <div> com "onClick": o input de arquivo
-     fica escondido dentro dela, e assim o teclado chega ao controle - clicar na
-     area e clicar no input, sem uma linha de JavaScript no meio. */
-  /* A BORDA E 2px E "--fraco", e as duas coisas foram medidas em 14/08. A
-     "--borda" sobre o cartao da 1,50:1 no claro e 1,23:1 no escuro, e este
-     tracejado E o contorno do controle - 1.4.11 pede 3:1. "--fraco" da 5,56:1 e
-     5,10:1. E o "1.5px" era a unica espessura fracionaria do arquivo inteiro (as
-     outras sao 1, 2, 3 e 4), entao nao saia de lugar nenhum. */
-  .fu-solta {
-    display: block; border: 2px dashed var(--fraco); border-radius: var(--raio-cartao);
-    padding: 22px 16px; text-align: center; cursor: pointer;
+       raio          12/8/6px  ->  ZERO. A referência não tem um canto arredondado
+       sombra        3 degraus ->  NENHUMA. Só a folha A4 tem sombra, e ela já tinha
+       fonte         Inter     ->  Barlow + Barlow Semi Condensed (ver "tema.ts")
+       entrelinha    1.5       ->  "normal". A referência não declara nenhuma, e
+                                   "normal" na Barlow é ~1,2 — o texto fecha mais
+       tinta apagada o derivado ->  o Gray puro da referência (ver "tema.ts")
+
+     ============================ O QUE **NÃO** VEIO, e são três, todas nomeadas
+     "Sem tirar nem por" vale para desenho. Estas três não são desenho:
+
+       1. O ÍCONE DO ".fu-status" e do ".aviso" FICA. A referência diz sucesso e
+          falha com 13px de texto colorido e mais nada — quem não separa laranja
+          de verde lê as duas iguais. É a restrição 3 do tema ("cor nunca é o
+          único sinal"), e ela não é sobre borda, cor nem tipografia.
+       2. O ANEL DE FOCO DE BOTÃO FICA. A referência desenha foco só em "input" e
+          "textarea"; botão fica sem sinal nenhum para quem navega por teclado. O
+          anel daqui usa o laranja DELA, então não introduz cor nova.
+       3. A BARRA NAVY DA REFERÊNCIA NÃO ENTROU — decisão do dono na mesma
+          consulta ("Só o conteúdo"). Ela carrega logo, assinatura e as abas de
+          etapa, e o sistema já tem uma faixa navy no topo com logo e as doze
+          abas. Duas faixas navy empilhadas seriam a referência copiada e a tela
+          piorada. As abas de etapa herdaram o desenho dela; o resto, não.
+
+     O PREFIXO "fu-" CONTINUA, e não virou "g3ref-": ele nomeia o que a esteira de
+     conferência É (fatura unificada), e ".g3ref" nomeia de onde o DESENHO vem.
+     São duas perguntas diferentes e a segunda é a que pode mudar de resposta. */
+
+  /* --------------------------------------------------------------- o escopo */
+  .g3ref {
+    font-family: var(--g3ref-fonte);
+    color: var(--g3ref-tinta);
+    /* A Inter pede "-0.011em" em corpo de texto e a Barlow não pede nada — a
+       referência não declara "letter-spacing" em lugar nenhum fora dos rótulos
+       em caixa alta. Herdar o tracking da Inter apertaria a Barlow inteira. */
+    letter-spacing: normal;
+    /* 16px é o padrão do browser, e é o que a referência usa: o "body" dela não
+       declara "font-size". O sistema usa 15px. A diferença aparece só onde nem
+       ela nem nós damos tamanho explícito — que é quase lugar nenhum. */
+    font-size: 16px;
+    line-height: normal;
+  }
+
+  /* -------------------------------------------------- as abas de etapa
+     O DESENHO É O DA BARRA NAVY DA REFERÊNCIA, com uma troca obrigatória: lá as
+     abas pousam sobre o navy e a inativa é o cinza-claro dela, que sobre o creme desta
+     página daria 1,6:1 — ilegível. A inativa aqui é a tinta apagada da própria
+     referência ("--g3ref-apagado"); a ATIVA é idêntica, laranja cheio e tinta branca.
+     Mesma decisão para o traço separador: o dela é navy-sobre-navy. */
+  .g3ref .fu-abas {
+    display: flex; align-items: center; gap: 10px;
+    border-bottom: 0; padding-bottom: 0; margin-bottom: 22px;
+  }
+  /* A ESPECIFICIDADE FOI DEFEITO MEDIDO EM 14/08 e continua valendo aqui:
+     "button:hover:not(:disabled)" lá em cima é (0,2,1), e uma regra de aba com
+     (0,2,0) perde para ela — a aba pegava sombra e "translateY". Com ".g3ref"
+     na frente estas são (0,3,x) e ganham. O invariante I7 prende isto. */
+  .g3ref .fu-aba {
+    background: transparent; border: none; border-radius: 0; box-shadow: none;
+    padding: 9px 16px; margin-bottom: 0;
+    font-family: var(--g3ref-fonte-cond); font-size: 15px; font-weight: 600;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--g3ref-apagado); cursor: pointer;
+    transition: background-color .16s ease, color .16s ease;
+  }
+  .g3ref .fu-aba:hover:not(:disabled) {
+    background: transparent; color: var(--g3ref-tinta);
+    border-color: transparent; box-shadow: none; transform: none;
+  }
+  .g3ref .fu-aba:active:not(:disabled) { transform: none; box-shadow: none; }
+  .g3ref .fu-aba[aria-selected="true"] {
+    background: var(--g3ref-laranja); color: var(--g3ref-laranja-tinta);
+    border-color: transparent;
+  }
+  .g3ref .fu-aba[aria-selected="true"]:hover:not(:disabled) {
+    background: var(--g3ref-laranja-hover); color: var(--g3ref-laranja-tinta);
+  }
+  .g3ref .fu-aba-traco { width: 26px; height: 1px; background: var(--g3ref-borda-campo); }
+
+  /* "NOVA FATURA" — na referência ela mora numa faixa própria, encostada à
+     direita, logo acima da grade. Aqui ela fica no fim da mesma linha das abas,
+     que é a MESMA posição na tela; o desenho é o dela, sem tirar nem pôr. */
+  .g3ref .fu-acao {
+    background: transparent; border: 1px solid var(--g3ref-tinta); border-radius: 0;
+    color: var(--g3ref-tinta); padding: 11px 20px; box-shadow: none;
+    font-family: var(--g3ref-fonte-cond); font-size: 15px; font-weight: 600;
+    letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer;
+  }
+  .g3ref .fu-acao:hover:not(:disabled) {
+    background: var(--g3ref-tinta); color: var(--g3ref-tinta-invertida);
+    border-color: var(--g3ref-tinta); box-shadow: none; transform: none;
+  }
+
+  /* ------------------------------------------------------------- a grade
+     "380px 1fr" é literal da referência, e o 380 é o que faz a coluna da
+     esquerda caber o painel navy com "R$ 1.234,56" em 52px sem quebrar. A nossa
+     ".conteudo" tem 1120px de caixa útil contra os 1124px dela — 4px, e a coluna
+     fixa é idêntica. Abaixo de 1100px as duas empilham, a esquerda primeiro,
+     que é por onde o trabalho começa. */
+  .g3ref .fu-grade { display: grid; grid-template-columns: 380px 1fr; gap: 24px; align-items: start; }
+  .g3ref .fu-coluna { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+  @media (max-width: 1100px) { .g3ref .fu-grade { grid-template-columns: 1fr; } }
+
+  /* ----------------------------------------------------------- o cartão
+     22px na esquerda, 26px na direita — são os dois valores da referência, e a
+     diferença não é descuido dela: a coluna da direita é a que se lê campo a
+     campo e ganha 4px de respiro. Zero raio, zero sombra: o cartão se separa do
+     creme pelo branco e por uma linha de 1px, e é só. */
+  .g3ref .cartao {
+    background: var(--g3ref-papel); border: 1px solid var(--g3ref-borda);
+    border-radius: 0; box-shadow: none; padding: 22px;
+  }
+  .g3ref .fu-grade > .cartao { padding: 26px; }
+  .g3ref .secao { margin-bottom: 18px; }
+
+  /* ---------------------------------------------------- o rótulo em caixa alta
+     A referência escreve "font-family: 'Barlow Semi Condensed'" sessenta e uma
+     vezes contra UMA da Barlow: a condensada é a fonte de superfície dela, não a
+     exceção. Peso 400 porque ela não declara peso nenhum nestes rótulos — e a
+     regra ".rot-alta, thead th, …, .fu-rotulo" lá em cima é (0,1,0), então esta,
+     com ".g3ref" na frente, ganha sem "!important". */
+  .g3ref .fu-rotulo, .g3ref .fu-painel-rot {
+    font-family: var(--g3ref-fonte-cond); font-size: 12px; font-weight: 400;
+    text-transform: uppercase; letter-spacing: 0.14em;
+    color: var(--g3ref-apagado); margin-bottom: 14px;
+  }
+
+  /* A LEGENDA MIÚDA — "Instruções do boleto", "Linha digitável", "PIX copia e
+     cola". Na referência elas NÃO são rótulo em caixa alta: são 13px de Barlow
+     apagada, com margem "14px 0 3px". Eram ".fu-rotulo" aqui até hoje, e por
+     isso saíam em caixa alta condensada, que é outra coisa. */
+  .g3ref .fu-legenda {
+    font-family: var(--g3ref-fonte); font-size: 13px; font-weight: 400;
+    text-transform: none; letter-spacing: normal;
+    color: var(--g3ref-apagado); margin: 14px 0 3px;
+  }
+  .g3ref .fu-legenda .fraco { color: var(--g3ref-borda-forte); }
+
+  /* ------------------------------------------------------- a área de envio
+     "<label>" e não "<div onClick>": o input de arquivo mora dentro dela, então
+     clicar na área é clicar no input, sem uma linha de JavaScript no meio.
+
+     A BORDA VOLTOU A 1px TRACEJADO, que é a da referência. Em 14/08 ela tinha
+     virado "2px dashed var(--fraco)" por medição de contraste (1.4.11 pede 3:1
+     para contorno de controle, e a "--borda" dava 1,50:1). A borda forte da
+     referência sobre o creme dá 1,66:1 e reprova pelo mesmo critério — entra
+     junto com o resto da decisão de tinta exata do dono, e está em "Q-DOCG3-15".
+     O que segura a área continua existindo e não é a borda: são os 19px do
+     título e o anel de foco laranja. */
+  .g3ref .fu-solta {
+    display: block; border: 1px dashed var(--g3ref-borda-forte); border-radius: 0;
+    background: var(--g3ref-fundo); padding: 24px 18px; text-align: center; cursor: pointer;
     transition: border-color .15s ease, background .15s ease;
   }
+  /* A da fatura tem 24px de padding e título 19px; a do boleto, 20px e 18px. São
+     os dois valores da referência — o envio da fatura é o primeiro ato da tela e
+     é maior de propósito. */
+  .g3ref .fu-solta.curta { padding: 20px 18px; }
   /*
-   * O INPUT DE ARQUIVO E INVISIVEL E FOCAVEL, e ate 14/08 ele era so invisivel.
-   *
-   * Ele estava com "display: none" num "style" inline, e o comentario acima
-   * afirmava que "assim o teclado chega ao controle". Nao chegava: elemento com
-   * "display: none" sai da ordem de tabulacao E da arvore de acessibilidade, e o
-   * "<label>" tambem nao e focavel. As duas areas de envio da aba - o PDF da
-   * Equatorial e o boleto do Sicoob - eram inalcancaveis sem mouse, e a regra
-   * ":focus-within" logo abaixo, escrita para elas, nunca disparou uma vez.
-   *
-   * A tecnica e a padrao: sai do fluxo, ocupa 1px e fica transparente. O
-   * elemento continua no DOM, continua focavel e continua sendo o que o label
-   * aciona.
+   * O INPUT DE ARQUIVO É INVISÍVEL E FOCÁVEL, e "display: none" não serve: sai
+   * da ordem de tabulação E da árvore de acessibilidade, e o "<label>" também
+   * não é focável — as duas áreas de envio ficariam inalcançáveis sem mouse, e a
+   * regra ":focus-within" abaixo nunca dispararia. A referência usa "display:
+   * none" e tem esse defeito; ele não é desenho, e por isso não veio.
    */
-  .fu-solta input[type="file"] {
+  .g3ref .fu-solta input[type="file"] {
     position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
     overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
   }
-  .fu-solta:hover { border-color: var(--acento); background: var(--acento-suave); }
-  /* O ANEL DE FOCO E "--foco" E NAO "--acento", e a diferenca e medida: o Orange
-     sobre o cartao branco da 2,41:1 e a WCAG 1.4.11 pede 3 para elemento
-     nao-textual. "--foco" existe exatamente para isso e da 3,43:1. Era a unica
-     regra do sistema que desenhava foco com outra cor - o resto usa "--foco"
-     desde 29/07, e a T2 da suite do tema mede esse token contra toda superficie. */
-  .fu-solta:focus-within { border-color: var(--acento); outline: 2px solid var(--foco); outline-offset: 2px; }
-  /* AS ESCALAS DE TITULO SAO AS DO SISTEMA. Eram tres novas nesta aba - 13px/600,
-     14px/600 e 15px/600 -, e nenhuma usava o peso 650 do "h2"/"h3". Agora as duas
-     de secao sao exatamente "h3" (14px/650). */
-  .fu-solta-titulo, .fu-secao-tit { font-size: 14px; font-weight: 650; }
-  .fu-solta-sub { font-size: 12.5px; color: var(--fraco); margin-top: 4px; line-height: 1.4; }
-  /* O STATUS LEVA ICONE, e nao so cor. E a restricao 3 do tema - "cor nunca e o
-     unico sinal" -, que ate 14/08 valia so para a pilula ".marca" e para o
-     ".aviso": estas duas classes diziam sucesso e falha com 12,5px de texto
-     colorido e nada mais. Daltonico lia as duas iguais. */
-  .fu-status { display: flex; align-items: flex-start; gap: 6px;
-               font-size: 12.5px; color: var(--fraco); margin-top: 10px; line-height: 1.45; }
-  .fu-status > .ic { margin-top: 2px; }
-  .fu-status.ok { color: var(--ok); }
-  .fu-status.alerta { color: var(--alerta); }
+  .g3ref .fu-solta:hover { border-color: var(--g3ref-laranja); background: var(--g3ref-solta-hover); }
+  .g3ref .fu-solta:focus-within { border-color: var(--g3ref-laranja); outline: 2px solid var(--g3ref-laranja); outline-offset: 0; }
+  .g3ref .fu-solta-titulo { font-family: var(--g3ref-fonte-cond); font-size: 19px; font-weight: 600; }
+  .g3ref .fu-solta.curta .fu-solta-titulo { font-size: 18px; }
+  .g3ref .fu-solta-sub { font-size: 13px; color: var(--g3ref-apagado); margin-top: 4px; }
 
-  /* O PAINEL DO VALOR A GERAR. E o unico bloco desta tela com fundo cheio, e o
-     motivo e de uso: quem opera abre a aba, sobe o PDF e precisa deste numero para
-     digitar no internet banking. Ele nao pode estar no meio de trinta campos.
-
-     ELE USA "--topo", E NAO "--texto" COMO FUNDO. A primeira versao escrevia
-     "background: var(--texto); color: var(--fundo)" - e isso so funcionava no
-     tema CLARO por coincidencia, porque ali "--texto" e o Navy. No escuro
-     "--texto" e o Creme: o painel virava um bloco claro dentro de uma tela
-     escura, com a tinta navy por cima. E o par nao era medido por teste nenhum,
-     porque a T1 mede tinta sobre SUPERFICIE e "--texto" nao e superficie.
-
-     "--topo" e a superficie dominante da marca nos DOIS temas (Navy no claro, o
-     navy afundado no escuro), ja carrega a tinta que pousa nela ("--topo-texto")
-     e a tinta apagada ("--topo-fraco"), e as tres estao medidas em T6/T6b. Ver a
-     nota alargada no "tema.ts". */
-  .fu-painel {
-    background: var(--topo); color: var(--topo-texto);
-    border-radius: var(--raio-cartao); padding: 16px 18px;
-    box-shadow: var(--sombra-2);
+  /* ------------------------------------------------------------- o status
+     13px apagado, como na referência. O ÍCONE FICA — ver a nota 1 do cabeçalho
+     desta seção. As três margens são as dela: 12px depois do envio da fatura,
+     10px no caso geral, 6px colado no campo que acabou de ser digitado. */
+  .g3ref .fu-status {
+    display: flex; align-items: flex-start; gap: 6px;
+    font-size: 13px; color: var(--g3ref-apagado); margin-top: 10px; line-height: 1.45;
   }
-  /* OPACIDADE SAIU, TOKEN ENTROU. "opacity: .7" sobre uma superficie escura
-     produz uma cor que nenhum teste conhece - e o contraste dela muda junto com
-     o fundo, sem ninguem medir. "--topo-fraco" e o token que ja existe para
-     "tinta apagada sobre a faixa dominante", com 4,54:1 medido em T6b. */
-  .fu-painel-rot { color: var(--topo-fraco); }
-  .fu-painel-total { font-size: 30px; font-weight: 700; line-height: 1.05; margin-top: 4px; }
-  .fu-painel-sub { font-size: 12.5px; color: var(--topo-fraco); margin-top: 4px; }
-  .fu-painel-par {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
-    margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--topo-veu-forte);
+  .g3ref .fu-status > .ic { margin-top: 2px; }
+  .g3ref .fu-status.solto { margin-top: 12px; }
+  .g3ref .fu-status.rente { margin-top: 6px; }
+  .g3ref .fu-status.ok { color: var(--ok); }
+  .g3ref .fu-status.alerta { color: var(--alerta); }
+
+  /* ------------------------------------------------------ o painel navy
+     O único bloco de fundo cheio da tela, e o motivo é de uso: quem opera abre a
+     aba, sobe o PDF e precisa deste número para digitar no internet banking — ele
+     não pode estar no meio de trinta campos. 52px é o tamanho da referência, e é
+     três vezes o do valor ao lado; era 30px aqui.
+
+     OS TOKENS "--g3ref-navy-*" EXISTEM PARA O TEMA ESCURO. No claro eles são o
+     navy literal da referência; no escuro viram "--topo", que é a superfície
+     dominante da marca no escuro e já carrega tinta medida. Sem isso o painel
+     seria um retângulo navy dentro de uma tela navy. */
+  .g3ref .fu-painel {
+    background: var(--g3ref-navy); color: var(--g3ref-navy-tinta);
+    border-radius: 0; box-shadow: none; padding: 24px;
   }
-  .fu-painel-cap { font-size: 11px; color: var(--topo-fraco); }
-  .fu-painel-val { font-size: 15px; font-weight: 600; margin-top: 2px; }
-
-  .fu-cabeca { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
-  /* A margem do titulo mora aqui e nao num "style" do JSX: margem de titulo
-     escrita na tela e o comeco de doze valores diferentes. */
-  .fu-cabeca h2 { margin: 0; }
-  .fu-secao { margin-top: var(--gap-secao); padding-top: 16px; border-top: 1px solid var(--borda); }
-  .fu-secao-tit { margin-bottom: 10px; }
-  /* "input, select, textarea" la em cima ja da fundo, borda, tinta e anel de foco.
-     Aqui so entra o que e proprio da area: ela cresce na vertical, e a variante
-     monoespacada quebra em qualquer ponto - linha digitavel e copia-e-cola sao
-     cadeias sem espaco e sem "break-all" elas estouram a coluna. */
-  .fu-area { resize: vertical; }
-  .fu-area.mono { font-family: var(--fonte-mono); font-size: 12px; word-break: break-all; }
-
-  /* O HISTORICO E EDITAVEL porque e o campo que o extrator mais erra: a tabela
-     lateral da Equatorial e desenhada em cinza claro e treze linhas altas. */
-  .fu-hist-edit { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px; }
-  .fu-hist-item { display: flex; align-items: center; gap: 6px; }
-  .fu-hist-mes { font-size: 12px; color: var(--fraco); width: 58px; flex: none; }
-  .fu-hist-kwh {
-    min-width: 0; padding: 5px 8px; font-size: 12.5px;
-    text-align: right; font-variant-numeric: tabular-nums;
+  .g3ref .fu-painel-rot { color: var(--g3ref-navy-rotulo); margin-bottom: 0; }
+  .g3ref .fu-painel-total {
+    font-family: var(--g3ref-fonte-cond); font-size: 52px; font-weight: 700;
+    line-height: 1.05; margin-top: 6px;
   }
-  .fu-hist-un { font-size: 11px; color: var(--fraco); flex: none; }
+  .g3ref .fu-painel-sub { font-size: 14px; color: var(--g3ref-navy-apagado); margin-top: 4px; }
+  .g3ref .fu-painel-par {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 13px;
+    margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--g3ref-navy-regua);
+  }
+  .g3ref .fu-painel-cap { color: var(--g3ref-navy-legenda); }
+  .g3ref .fu-painel-val { font-size: 17px; font-weight: 600; }
 
-  /* A BARRA DE ACAO E UMA SUPERFICIE, como a ".ferramentas" das outras telas.
-     As duas hospedam a mesma coisa - contexto a esquerda, acao a direita - e
-     estavam desenhadas diferente: uma como cartao com borda e sombra, esta como
-     dois elementos soltos no fundo da pagina. Duas barras de acao com desenhos
-     diferentes na mesma tela e o que o pedido do dono chama de falta de
-     padronizacao. */
-  .fu-barra {
+  /* --------------------------------------------- o cabeçalho do cartão grande */
+  .g3ref .fu-cabeca {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+    margin-bottom: 6px;
+  }
+  .g3ref .fu-cabeca h2 {
+    margin: 0; font-family: var(--g3ref-fonte-cond); font-size: 22px; font-weight: 600;
+    letter-spacing: normal;
+  }
+  .g3ref .fu-cabeca .fraco { font-size: 13px; color: var(--g3ref-apagado); }
+
+  /* ------------------------------------------------------------ as seções
+     DUAS FORMAS, e a referência usa as duas em lugares diferentes. No cartão da
+     direita a seção se anuncia por um título LARANJA com régua EMBAIXO; no
+     cartão do boleto ("Conferência do boleto") ela se separa por uma régua EM
+     CIMA e o título é apagado. Eram a mesma classe aqui. */
+  .g3ref .fu-secao { margin-top: 22px; padding-top: 0; border-top: 0; }
+  .g3ref .fu-secao-tit {
+    font-family: var(--g3ref-fonte-cond); font-size: 12px; font-weight: 400;
+    text-transform: uppercase; letter-spacing: 0.14em;
+    color: var(--g3ref-laranja);
+    padding-bottom: 8px; border-bottom: 1px solid var(--g3ref-regua); margin-bottom: 0;
+  }
+  .g3ref .fu-secao.com-regua {
+    margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--g3ref-regua);
+  }
+  .g3ref .fu-secao.com-regua > .fu-rotulo { margin-bottom: 8px; }
+
+  /* -------------------------------------------------------- os formulários
+     TRÊS COLUNAS FIXAS no cartão da direita, "1fr 1fr" no par do boleto e nos
+     parâmetros, "1fr" sozinho no "Nosso número". São as quatro grades da
+     referência, e o "auto-fit minmax(190px, 1fr)" daqui produzia duas ou quatro
+     conforme a largura — nunca as três dela. */
+  .g3ref .campos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 14px; }
+  .g3ref .campos.duas { grid-template-columns: 1fr 1fr; gap: 12px; }
+  .g3ref .campos.uma { grid-template-columns: 1fr; gap: 12px; margin-top: 12px; }
+  .g3ref .campos.parametros { grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 0; }
+
+  .g3ref label {
+    display: block; font-family: var(--g3ref-fonte); font-size: 12px; font-weight: 400;
+    letter-spacing: normal; color: var(--g3ref-apagado); margin-bottom: 4px;
+  }
+  /* No bloco de conferência do boleto a referência sobe o rótulo para 13px e
+     encurta a margem para 3px — é o único lugar dela em que isso acontece. */
+  .g3ref .campos.duas label, .g3ref .campos.uma label { font-size: 13px; margin-bottom: 3px; }
+
+  .g3ref input, .g3ref select, .g3ref textarea {
+    width: 100%; border: 1px solid var(--g3ref-borda-campo); border-radius: 0;
+    background: var(--g3ref-campo); color: var(--g3ref-tinta);
+    font-family: var(--g3ref-fonte); font-size: 15px; padding: 8px 10px;
+    line-height: normal; box-shadow: none;
+    transition: border-color .14s ease, background-color .14s ease;
+  }
+  /* Os dois parâmetros são os únicos campos da referência com a borda forte e o
+     fundo creme — eles não são dado lido da fatura, são decisão de quem opera. */
+  .g3ref .campos.parametros input {
+    border-color: var(--g3ref-borda-forte); background: var(--g3ref-fundo);
+  }
+  .g3ref input::placeholder, .g3ref textarea::placeholder { color: var(--g3ref-apagado); }
+  /* A REFERÊNCIA NÃO TEM HOVER DE CAMPO. Tinha aqui (a borda escurecia), e sair
+     é "sem pôr" — o campo já se anuncia pelo fundo próprio contra o cartão. */
+  .g3ref input:hover:not(:disabled), .g3ref select:hover:not(:disabled),
+  .g3ref textarea:hover:not(:disabled) { border-color: var(--g3ref-borda-campo); }
+  .g3ref .campos.parametros input:hover:not(:disabled) { border-color: var(--g3ref-borda-forte); }
+  /* O FOCO É O DELA, exatamente: 2px sólidos do laranja, sem deslocamento.
+     Sai o anel de 3px em "box-shadow" e a troca de cor da borda. */
+  .g3ref input:focus, .g3ref select:focus, .g3ref textarea:focus {
+    outline: 2px solid var(--g3ref-laranja); outline-offset: 0;
+    border-color: var(--g3ref-borda-campo); box-shadow: none;
+  }
+  .g3ref input:disabled, .g3ref select:disabled, .g3ref textarea:disabled {
+    background: var(--g3ref-fundo); color: var(--g3ref-apagado); cursor: default;
+  }
+  .g3ref textarea, .g3ref .fu-area { padding: 10px; font-size: 13px; line-height: 1.5; resize: vertical; }
+  .g3ref .fu-area.mono {
+    font-family: var(--g3ref-fonte-mono); font-size: 13px; word-break: break-all;
+  }
+  /* O PIX é 12px na referência e a linha digitável 13px: o payload EMV tem três
+     vezes mais caracteres e ela abriu mão de um ponto para ele caber. */
+  .g3ref .fu-area.mono.miudo { font-size: 12px; }
+
+  /* ------------------------------------------------------ o histórico editável
+     É o campo que o extrator mais erra: a tabela lateral da Equatorial é
+     desenhada em cinza claro, treze linhas altas. Na referência são fichas em
+     "flex-wrap" com largura de conteúdo — 54px para o mês, 62px para o número,
+     encostados —, e não uma grade de colunas iguais. */
+  .g3ref .fu-hist-edit { display: flex; flex-wrap: wrap; gap: 10px; }
+  .g3ref .fu-hist-item {
+    display: flex; align-items: center; gap: 6px;
+    border: 1px solid var(--g3ref-borda-campo); background: var(--g3ref-campo); padding: 6px 8px;
+  }
+  .g3ref .fu-hist-mes { font-size: 12px; color: var(--g3ref-apagado); width: 54px; flex: none; }
+  .g3ref .fu-hist-kwh {
+    width: 62px; flex: none; border: none; background: transparent; padding: 0;
+    font-size: 15px; color: var(--g3ref-tinta); text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .g3ref .fu-hist-un { font-size: 12px; color: var(--g3ref-apagado); flex: none; }
+
+  /* ----------------------------------------------------- as faturas registradas
+     O CARTÃO QUE FALTAVA. A referência lista as faturas já registradas na UC com
+     mês, total e um "excluir" por linha, e é dali que sai a economia acumulada
+     impressa na folha 2. As três rotas já existiam ("GET", "POST" e "DELETE" de
+     "/faturas/unificada/registros") e nenhuma tela chamava as duas primeiras. */
+  .g3ref .fu-registro {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 0; border-bottom: 1px solid var(--g3ref-regua); font-size: 14px;
+  }
+  .g3ref .fu-registro-dir { display: flex; align-items: center; gap: 14px; }
+  .g3ref .fu-registro-val { color: var(--g3ref-apagado); }
+
+  /* ------------------------------------------------------------- os botões
+     QUATRO FORMAS NA REFERÊNCIA, e a de repouso é a mais discreta das quatro: o
+     botão comum dela é Barlow 14px, caixa BAIXA, borda de campo e tinta
+     apagada. Só o primário e os de largura cheia são condensados em caixa alta. */
+  .g3ref button {
+    border-radius: 0; box-shadow: none;
+    font-family: var(--g3ref-fonte); font-size: 14px; font-weight: 400;
+    letter-spacing: normal; text-transform: none;
+    background: none; border: 1px solid var(--g3ref-borda-campo);
+    color: var(--g3ref-apagado); padding: 13px 18px; cursor: pointer;
+  }
+  .g3ref button:hover:not(:disabled) {
+    color: var(--g3ref-tinta); border-color: var(--g3ref-tinta);
+    background: none; box-shadow: none; transform: none;
+  }
+  .g3ref button:active:not(:disabled) { transform: none; box-shadow: none; }
+  .g3ref button:focus-visible { outline: 2px solid var(--g3ref-laranja); outline-offset: 2px; }
+  .g3ref button:disabled { cursor: default; }
+
+  .g3ref button.primario {
+    background: var(--g3ref-laranja); color: var(--g3ref-laranja-tinta); border: none;
+    padding: 13px 22px;
+    font-family: var(--g3ref-fonte-cond); font-size: 16px; font-weight: 600;
+    letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .g3ref button.primario:hover:not(:disabled) {
+    background: var(--g3ref-laranja-hover); color: var(--g3ref-laranja-tinta); border: none;
+  }
+  /* Largura cheia dentro do cartão da esquerda: "Ler boleto com IA" (laranja) e
+     "Registrar este mês" (contorno navy). 15px condensado nos dois. */
+  .g3ref button.fu-largo {
+    width: 100%; padding: 12px; margin-top: 12px;
+    font-family: var(--g3ref-fonte-cond); font-size: 15px; font-weight: 600;
+    letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .g3ref button.fu-largo.primario { padding: 12px; font-size: 15px; }
+  .g3ref button.fu-contorno {
+    border: 1px solid var(--g3ref-tinta); background: var(--g3ref-papel);
+    color: var(--g3ref-tinta); padding: 11px; margin-top: 16px;
+  }
+  .g3ref button.fu-contorno:hover:not(:disabled) {
+    background: var(--g3ref-tinta); color: var(--g3ref-tinta-invertida); border-color: var(--g3ref-tinta);
+  }
+  /* O pé do cartão da direita: o primário e o "Nova fatura" discreto, 26px
+     abaixo do último campo. "flex-wrap" é nosso — os rótulos em português são
+     mais longos que os da referência e num monitor estreito eles se tocariam. */
+  .g3ref .fu-pe { display: flex; gap: 12px; margin-top: 26px; flex-wrap: wrap; }
+
+  /* O "excluir" de cada registro: sem caixa, 13px, apagado até o mouse chegar. */
+  .g3ref button.fu-texto {
+    border: none; background: none; color: var(--g3ref-apagado);
+    font-family: var(--g3ref-fonte); font-size: 13px; font-weight: 400;
+    letter-spacing: normal; text-transform: none; padding: 2px 4px;
+  }
+  .g3ref button.fu-texto:hover:not(:disabled) {
+    color: var(--g3ref-tinta); border: none; background: none;
+  }
+
+  /* ----------------------------------------------------------- o aviso
+     A CAIXA É A DELA — creme alaranjado, filete de 3px à esquerda, 9px 11px, 13px de
+     texto, entrelinha 1,45. A COR DO FILETE continua variando por estado, e a
+     razão é que a referência só tem UM estado: tudo nela é alerta laranja. Erro
+     e sucesso são nossos (composição que falhou, fatura registrada), e pintá-los
+     de laranja apagaria a diferença entre "confira" e "não deu certo". */
+  .g3ref .aviso {
+    background: var(--g3ref-alerta-fundo); border: 0;
+    border-left: 3px solid var(--g3ref-laranja); border-radius: 0;
+    padding: 9px 11px; font-size: 13px; line-height: 1.45;
+    color: var(--g3ref-tinta); margin: 0 0 8px; box-shadow: none;
+  }
+  .g3ref .aviso.erro { background: var(--erro-fundo); border-left-color: var(--erro); }
+  .g3ref .aviso.ok { background: var(--ok-fundo); border-left-color: var(--ok); }
+
+  /* ------------------------------------------------------------ a barra da aba 2
+     Na referência ela tem a LARGURA DA FOLHA (210mm) e fica solta sobre o creme —
+     sem cartão, sem borda, sem sombra —, porque o que precisa de moldura ali
+     embaixo é o papel. Era um cartão com borda e sombra aqui. */
+  .g3ref .fu-barra {
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    margin-bottom: var(--gap-secao); padding: 10px 12px;
-    background: var(--fundo2); border: 1px solid var(--borda);
-    border-radius: var(--raio-cartao); box-shadow: var(--sombra-1);
+    max-width: 210mm; margin: 22px auto 14px; padding: 0;
+    background: none; border: 0; border-radius: 0; box-shadow: none;
   }
+  .g3ref .fu-barra .fraco { font-size: 14px; color: var(--g3ref-apagado); }
+  /* "Voltar ao painel" é o único botão de contorno da referência com tinta CHEIA
+     em vez de apagada, e a razão é de peso: ao lado do navy sólido de imprimir,
+     um cinza claro sumiria. Padding 11px, contra os 13px do pé do cartão. */
+  .g3ref .fu-barra button { color: var(--g3ref-tinta); padding: 11px 18px; }
+  .g3ref button.fu-imprimir {
+    background: var(--g3ref-navy); color: var(--g3ref-navy-tinta); border: none;
+    padding: 11px 22px;
+    font-family: var(--g3ref-fonte-cond); font-size: 15px; font-weight: 600;
+    letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .g3ref button.fu-imprimir:hover:not(:disabled) {
+    background: var(--g3ref-navy-hover); color: var(--g3ref-navy-tinta); border: none;
+  }
+
+  /* ------------------------------------------- o que a aba 3 (Cadastro) herda
+     O cadastro é markup da casa — ".cartao.secao", "h2", "h3", ".sub", tabela.
+     Dentro do escopo ele passa a falar a língua da referência, e isso é
+     deliberado: uma aba com duas gramáticas seria pior que qualquer uma das duas.
+     "h2" é o título de 22px do cartão da direita; "h3", o rótulo laranja de seção. */
+  .g3ref h2 {
+    font-family: var(--g3ref-fonte-cond); font-size: 22px; font-weight: 600;
+    letter-spacing: normal; margin: 26px 0 6px; gap: 8px;
+  }
+  .g3ref h3 {
+    font-family: var(--g3ref-fonte-cond); font-size: 12px; font-weight: 400;
+    text-transform: uppercase; letter-spacing: 0.14em;
+    color: var(--g3ref-laranja); margin: 0 0 10px;
+  }
+  /* A MEDIDA DE LINHA FICA. A referencia nao tem "max-width" porque a unica prosa
+     dela e a nota de uma linha dos parametros; a aba 3 tem paragrafos de cinco
+     linhas explicando o que a folha imprime, e 12px correndo por 1120px de
+     largura e o tipo de texto que ninguem le. Onde a referencia tem opiniao —
+     tamanho, tinta, entrelinha — vale a dela; onde ela nao tem, vale a nossa. */
+  .g3ref .sub { font-size: 12px; color: var(--g3ref-apagado); margin: 10px 0 0; line-height: 1.5; max-width: 82ch; }
+  .g3ref .fraco { color: var(--g3ref-apagado); }
+  .g3ref .rolagem { border: 1px solid var(--g3ref-borda); border-radius: 0; background: var(--g3ref-papel); box-shadow: none; }
+  .g3ref table { font-size: 14px; }
+  .g3ref thead th {
+    font-family: var(--g3ref-fonte-cond); font-size: 12px; font-weight: 400;
+    text-transform: uppercase; letter-spacing: 0.14em;
+    background: none; color: var(--g3ref-apagado);
+    padding: 8px 10px; border-bottom: 1px solid var(--g3ref-regua);
+  }
+  .g3ref tbody td { padding: 8px 10px; border-bottom: 1px solid var(--g3ref-regua); }
+  .g3ref tbody tr:hover { background: var(--g3ref-fundo); }
 
   /* O CADASTRO DEIXOU DE SER UM "details" EM 14/08 e virou a terceira ABA.
      Dobrado no pe da aba 1, ele parecia rodape de uma tela de conferencia - e

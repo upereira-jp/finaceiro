@@ -216,6 +216,31 @@ export function TelaDocumento() {
     <Pagina titulo="Documento"
             sub="Sobe a fatura da Equatorial, confere os dados e emite a fatura unificada. É este documento que o cliente recebe — e a mesma rota que o CRM vai consumir.">
 
+      {/*
+        ====================================================================
+        `g3ref` — O ESCOPO DO DESENHO DA REFERENCIA, e ele e UMA classe, aqui,
+        uma vez. 14/08/2026.
+
+        O PEDIDO: *"quero ajustar o layout da interface da aba documentos. A
+        referencia exata deve ser g3-fatura-unificada.vercel.app, sem tirar nem
+        por, deve ser exatamente igual, com bordas iguais, sistema de cores,
+        tipografia"*.
+
+        POR QUE UMA CLASSE NA RAIZ E NAO CSS NOVO NAS TELAS. Dentro deste `div`
+        valem outra fonte (Barlow e Barlow Semi Condensed), outra paleta
+        (`--g3ref-*`), raio ZERO e sombra NENHUMA. Fora dele, nada muda — as
+        outras onze telas continuam sendo Inter, raio 12 e a paleta da casa. A
+        ilha e explicita e tem fronteira; se um dia ela virar o padrao, tira-se a
+        classe daqui e sobem-se os tokens para o `:root`. O bloco de CSS esta em
+        `estilo.ts`, na secao "A ABA DOCUMENTO E A REFERENCIA", e o de tokens em
+        `tema.ts`.
+
+        E ELE ENVOLVE OS AVISOS TAMBEM, de proposito: um `Aviso` com o raio e a
+        sombra da casa em cima de cartoes quadrados sem sombra e exatamente a
+        costura aparecendo.
+      */}
+      <div className="g3ref">
+
       {ident.erro && <Aviso tipo="erro">Não foi possível ler a identidade: {ident.erro}</Aviso>}
       {semIdentidade && (
         <Aviso tipo="alerta">
@@ -450,6 +475,7 @@ export function TelaDocumento() {
 
         </Cadastro>}
       />
+      </div>
     </Pagina>
   );
 }
