@@ -84,7 +84,7 @@ Nenhum é código. Os importadores já existem e rodam do Codespace contra produ
 | **Q-FATCHEIA-01** | 🔴 | o que é "fatura cheia" — decide em que mês a comissão de todo contrato começa. **Tem prazo**: `data_fechamento` é editável só no CSV, antes de importar |
 | **Q-CLIENTEDUP-01** | 🔴 | 5 das 29 UCs são clientes duplicados — custa 5 das 29 |
 | **competência** | — | 2026-06 sai com **28 de 29**; 2026-07 sairia com 9 (falta a geração da usina `0001`) |
-| **Q-DOCG3-11** | 🔴 | a decomposição do repasse (dono **+ contador**) — é a base do split |
+| **Q-DOCG3-11** | 🟡 | a decomposição do repasse — é a base do split. **14/08: o dono decidiu seguir a referência** (não compensado + iluminação + bandeira + demais). Falta o aval fiscal do contador, uma fatura de GD real para validar o mapa (a referência **não tem fio B**), e a reescrita da base — **não executada**, para não mover dinheiro sobre lógica nunca confrontada com compensação. Ver `QUESTOES.md` Q-DOCG3-11 |
 | **Q-PARCERIA-01** | 🔴 | fora do caminho crítico das 29 hoje; **volta a travar** quando o CRM ativar as 3 UCs do Edimar |
 
 ### 2.c Ações de plataforma do dono
