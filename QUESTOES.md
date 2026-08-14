@@ -150,21 +150,54 @@ Entregas da F0 conforme `PRD-v2.2` §10:
 > `consumo_reais` em centavos exige decidir o que fazer com o que passa de duas
 > casas, e a R23 proíbe `round()` em intermediário. Regra 10.
 >
-> **Decidir (dono: Vinicius), e as duas primeiras são de uma linha de código cada:**
-> **(a)** definir a regra de arredondamento de `consumo_reais` → centavos e o
-> conector passa a gravar a semente — fecha a `Q-VALOR-01` (b) pelo que ela pedia;
-> **(b)** derivar a tarifa **direto** do texto de `consumo_reais` por decimal
-> exato, sem passar por centavos — `paraDecimal` já existe e o arredondamento em
-> seis casas *"meio para cima"* já está decidido e testado dentro de
-> `tarifaDoCliente`; deixa `consumo_referencia_centavos` vazia e a (b) da
-> `Q-VALOR-01` aberta pelo mérito dela; **(c)** não semear — a operação digita as
-> 41 na aba Unidades, que é o caminho que já existe e não depende de decisão nenhuma.
+> **DECIDIDO em 14/08 pelo dono: o conector lê o campo de tarifa DIRETO, e não
+> deriva.** Nem arredondamento de centavos, nem divisão — a origem é o campo que a
+> operação digita no card.
 >
-> **A ressalva da `RETOMADA` §3.3 vale para (a) e (b) e não some com elas:** os três
-> valores do card são **redondos em duas casas nos 45 cards, sem exceção**, e a
-> tarifa medida na fatura real tem **seis** (`1,185396` contra `1,130000`). Redondo
-> em 45 de 45 é assinatura de digitação humana — por isso o card é **semente e não
-> verdade**, e por isso (c) não é o caminho pobre.
+> **E isso não é executável hoje: o campo não está no contrato.** Medido em 14/08
+> no catálogo do CRM, como `financeiro_ro` — `column_name ilike '%tarifa%'` em
+> **todos** os schemas visíveis devolve **zero colunas**, e a role só enxerga
+> `financeiro` (as 10 views), `extensions`, `net`, `information_schema` e
+> `pg_catalog`. As três views candidatas expõem:
+>
+> | view | o que tem |
+> |---|---|
+> | `vendas_ganhas` | `consumo_kwh`, `consumo_reais` — e mais nada de tarifa |
+> | `rateio_clientes` | `percentual_rateio`, `uc`, `data_vencimento` — nenhuma tarifa |
+> | `rateio_creditos` | `geracao_nominal_kwh`, `creditos_kwh_mes` — nenhuma tarifa |
+>
+> Pela regra 4 o financeiro não lê tabela base em nenhuma circunstância, então o
+> campo **não existe para nós** enquanto não estiver numa view. **Pedido: a
+> `PROMPT-dev-crm-rodada8-2026-08-14.md` já o fazia desde as 00:49 do mesmo dia, e
+> segue sem resposta.** A `PROMPT-dev-crm-rodada9-2026-08-14.md` não repete o
+> pedido — ela corrige a urgência, responde a pergunta 1 da rodada 8 e traz a
+> prova da linha abaixo.
+>
+> **A PROVA NOVA, e ela decide a favor de ler em vez de derivar.** Derivando
+> `consumo_reais / consumo_kwh` nos 45 cards: `1,130000` em **37**, `1,180000` em
+> **4**, e o grupo do `1,16` em **4 — que não são iguais entre si**:
+>
+> ```
+> 1,159997     1,160000     1,160001     1,160008
+> ```
+>
+> Quatro cards, quatro números, para a mesma tarifa. Ninguém digita `consumo_reais`
+> de modo a produzir `1,159997` por acaso quatro vezes: **alguém digitou `1,16`**, o
+> `consumo_reais` foi gravado como `consumo_kwh × 1,16` **arredondado em duas
+> casas**, e a divisão de volta devolve o arredondamento em vez do número. Ou seja
+> — **o campo digitado existe, e derivar é uma volta a mais numa conta que já perdeu
+> casas.** O erro é de 8 na sexta casa, é invisível (não é defeito, não alarma, não
+> loga) e multiplica todo kWh de toda fatura.
+>
+> Isto também **corrige a leitura da `RETOMADA` §3.3**, que dizia *"redondos em duas
+> casas nos 45 cards, sem exceção"*: 41 dos 45 são redondos, 4 não são, e são
+> justamente os 4 que provam a existência da fonte digitada.
+>
+> **Enquanto a coluna não vem, o desbloqueio é digitar as 41 na aba Unidades** — o
+> campo, o filtro de pendência e o alerta entraram nesta leva. E a `Q-VALOR-01` (b)
+> **sai do caminho crítico da tarifa** por esta decisão, mas continua aberta pelo
+> mérito dela: `consumo_reais` segue lido e descartado, e `consumo_referencia_centavos`
+> segue em 0 de 88.
 >
 > **Enquanto não houver decisão, o estado é honesto e não silencioso:** a R26
 > levanta em vez de tratar base nula como zero, que é exatamente o que a
