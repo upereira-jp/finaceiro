@@ -35,15 +35,22 @@ jobs:
             exit 1
           fi
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          # O secret e aceito de duas formas:
-          #  - CRUA (com as linhas BEGIN/END). Toleramos CRLF do Windows, cujo \r
-          #    no fim das linhas base64 quebra o OpenSSH ("error in libcrypto").
-          #  - BASE64 da chave, numa linha so. E o jeito bulletproof: sem newline
-          #    nenhum, o paste do navegador / o cofre nao tem o que mangler.
+          # O secret e aceito em 3 formas (Windows/paste costuma manglar a chave):
+          #  1) CRUA armada (contem 'PRIVATE KEY') — toleramos CRLF do Windows.
+          #  2) BASE64 do arquivo PEM inteiro — decodifica pra '-----BEGIN...'.
+          #  3) BASE64 so do CORPO do PEM — decodifica pro binario 'openssh-key-v1';
+          #     re-armamos com BEGIN/END. E o caso de quem colou so o miolo da chave.
           if printf '%s' "$VPS_SSH_KEY" | grep -q 'PRIVATE KEY'; then
             printf '%s\n' "$VPS_SSH_KEY" | tr -d '\r' > ~/.ssh/id_deploy
           else
-            printf '%s' "$VPS_SSH_KEY" | tr -d '\r\n ' | base64 -d > ~/.ssh/id_deploy
+            DEC=$(mktemp)
+            printf '%s' "$VPS_SSH_KEY" | tr -d '\r\n ' | base64 -d > "$DEC" 2>/dev/null || true
+            if head -c 14 "$DEC" | grep -q 'openssh-key-v1'; then
+              { echo "-----BEGIN OPENSSH PRIVATE KEY-----"; base64 -w70 "$DEC"; echo "-----END OPENSSH PRIVATE KEY-----"; } > ~/.ssh/id_deploy
+            else
+              cp "$DEC" ~/.ssh/id_deploy
+            fi
+            rm -f "$DEC"
           fi
           chmod 600 ~/.ssh/id_deploy
           # Falha cedo e claro se a chave nao parseia, em vez do 'libcrypto' cru.
