@@ -35,8 +35,17 @@ jobs:
             exit 1
           fi
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_deploy
+          # tr -d '\r': a chave costuma vir colada do Windows com CRLF, e o \r no
+          # fim de cada linha base64 quebra o parser do OpenSSH ("error in
+          # libcrypto"). Removemos antes de gravar — torna o secret tolerante a
+          # quem cadastrou de um PowerShell/Notepad.
+          printf '%s\n' "$VPS_SSH_KEY" | tr -d '\r' > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
+          # Falha cedo e claro se a chave nao parseia, em vez do 'libcrypto' cru.
+          if ! ssh-keygen -y -f ~/.ssh/id_deploy >/dev/null 2>&1; then
+            echo "::error::VPS_SSH_KEY nao parseia como chave privada OpenSSH (mesmo apos remover CR). Recadastre o secret com o conteudo exato do arquivo g3-deploy, incluindo as linhas BEGIN/END."
+            exit 1
+          fi
           ssh-keyscan -H 2.24.203.201 >> ~/.ssh/known_hosts 2>/dev/null || true
 
       - name: reconhecimento (somente leitura)
