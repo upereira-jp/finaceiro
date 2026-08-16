@@ -1,0 +1,85 @@
+# Reconhecimento READ-ONLY da VPS do financeiro (root@2.24.203.201).
+#
+# POR QUE EXISTE: o container onde o Claude Code roda nao tem rota para a porta
+# 22 (proxy so deixa 443), entao quem alcanca a VPS e o runner do Actions — nao
+# o assistente. E antes de escrever o deploy.yml, este job descobre o box REAL
+# (unit systemd, caminho, Node, se ha git/node_modules/web/dist/.env) para o
+# deploy nao ser improvisado num host que tambem serve o CRM ao vivo.
+# CLAUDE.md regra 10: lacuna vira reconhecimento, nao palpite do implementador.
+#
+# NAO MUTA NADA. So leitura: systemctl show, ls, df, git log. Nenhum restart,
+# nenhuma escrita, nenhum migrate. O deploy real vem em workflow separado.
+#
+# Dispatch-only: nunca roda em push/PR. Depende do secret VPS_SSH_KEY (a chave
+# privada que abre root@2.24.203.201), cadastrado em Settings > Secrets and
+# variables > Actions. A chave nunca aparece em log (Actions mascara o secret).
+name: recon-vps
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: vps-financeiro
+  cancel-in-progress: false
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    steps:
+      - name: preparar chave ssh
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          if [ -z "$VPS_SSH_KEY" ]; then
+            echo "::error::secret VPS_SSH_KEY ausente — cadastre a chave privada em Settings > Secrets and variables > Actions"
+            exit 1
+          fi
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H 2.24.203.201 >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: reconhecimento (somente leitura)
+        run: |
+          ssh -i ~/.ssh/id_deploy -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+              root@2.24.203.201 'bash -s' <<'REMOTO'
+          set +e
+          echo "===== OS / NODE / NPM ====="
+          . /etc/os-release 2>/dev/null; echo "$PRETTY_NAME"
+          echo "node: $(command -v node)  $(node --version 2>/dev/null)"
+          echo "npm:  $(command -v npm)   $(npm --version 2>/dev/null)"
+
+          echo; echo "===== UNITS systemd candidatos (financ|fatur) ====="
+          systemctl list-unit-files --no-legend --type=service 2>/dev/null | grep -iE 'financ|fatur' || echo '(nenhum unit-file por nome)'
+          systemctl list-units --type=service --all --no-legend 2>/dev/null | grep -iE 'financ|fatur' || true
+
+          echo; echo "===== DETALHE dos units candidatos ====="
+          for u in $(systemctl list-unit-files --no-legend --type=service 2>/dev/null | grep -ioE '[a-z0-9_.@-]*(financ|fatur)[a-z0-9_.@-]*\.service' | sort -u); do
+            echo "--- $u ---"
+            systemctl show -p Id,FragmentPath,WorkingDirectory,ExecStart,User,MemoryMax,OOMScoreAdjust,ActiveState,SubState "$u" 2>/dev/null
+          done
+
+          echo; echo "===== DIRS candidatos e conteudo ====="
+          for d in $(find /opt /srv /var/www /root /home -maxdepth 3 -type d \( -iname '*financ*' -o -iname '*fatur*' \) 2>/dev/null | sort -u); do
+            echo "--- $d ---"
+            ls -la "$d" 2>/dev/null | head -25
+            printf 'git:%s node_modules:%s web/dist:%s .env:%s package.json:%s\n' \
+              "$( [ -d "$d/.git" ] && echo sim || echo nao )" \
+              "$( [ -d "$d/node_modules" ] && echo sim || echo nao )" \
+              "$( [ -e "$d/web/dist/index.html" ] && echo sim || echo nao )" \
+              "$( [ -f "$d/.env" ] && echo sim || echo nao )" \
+              "$( [ -f "$d/package.json" ] && echo sim || echo nao )"
+            if [ -d "$d/.git" ]; then
+              echo "  remote: $(git -C "$d" remote get-url origin 2>/dev/null)"
+              echo "  branch: $(git -C "$d" rev-parse --abbrev-ref HEAD 2>/dev/null)"
+              git -C "$d" log --oneline -3 2>/dev/null | sed 's/^/  /'
+            fi
+          done
+
+          echo; echo "===== PORTAS a escuta (node / :3000) ====="
+          (ss -ltnp 2>/dev/null || netstat -ltnp 2>/dev/null) | grep -iE ':3000|node' || echo '(nada em :3000 por nome)'
+
+          echo; echo "===== DISCO ====="
+          df -h / 2>/dev/null | tail -1
+          echo; echo "===== FIM DO RECONHECIMENTO ====="
+          REMOTO
