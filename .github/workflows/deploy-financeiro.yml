@@ -103,10 +103,17 @@ jobs:
           systemctl is-active "$UNIT" >/dev/null || { echo "ERRO: $UNIT nao ativo apos restart"; journalctl -u "$UNIT" -n 40 --no-pager; exit 1; }
           echo "$UNIT: $(systemctl is-active "$UNIT")"
 
-          echo "===== VERIFICACAO HTTP local (:3000) ====="
-          code=$(curl -fsS -o /tmp/fin_check.html -w '%{http_code}' -m 15 http://127.0.0.1:3000/ || echo "000")
-          echo "HTTP $code"
-          [ "$code" = "200" ] || { echo "ERRO: app nao respondeu 200 em :3000"; journalctl -u "$UNIT" -n 40 --no-pager; exit 1; }
+          echo "===== VERIFICACAO HTTP local (:3000, aguarda o app subir ate 40s) ====="
+          # O app leva ~2-3s pos-restart pra conectar no banco e abrir a porta;
+          # is-active fica 'active' antes disso. Por isso poll com retry, nao 1 tiro.
+          code=000; tent=0
+          for tent in $(seq 1 40); do
+            code=$(curl -fsS -o /tmp/fin_check.html -w '%{http_code}' -m 5 http://127.0.0.1:3000/ 2>/dev/null || echo "000")
+            [ "$code" = "200" ] && break
+            sleep 1
+          done
+          echo "HTTP $code (apos $tent tentativa(s))"
+          [ "$code" = "200" ] || { echo "ERRO: app nao respondeu 200 em :3000 apos 40s"; journalctl -u "$UNIT" -n 40 --no-pager; exit 1; }
           echo "primeiros bytes servidos:"; head -c 200 /tmp/fin_check.html; echo
           rm -f /tmp/fin_check.html
 
