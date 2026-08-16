@@ -38,6 +38,7 @@ import {
   ROTULO_DA_ABA, ordemDasAbas, revelaAbaOculta, abaVigente,
   FRAGMENTO_DA_ABA_OCULTA, type AbaDaFatura,
 } from '../abas-da-fatura.ts';
+import { LOGO_G3_DATA_URI } from '../logo-g3.ts';
 
 /** `setState` sem depender do namespace `React` — o transform novo nao o poe em escopo. */
 type Ajustar<T> = (f: (anterior: T) => T) => void;
@@ -1059,7 +1060,8 @@ function AbaDeEmissao({ composicao, logoUrl, irParaPainel }: {
           <div className="g3">
             <div className="g3-topo">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4pt' }}>
-                {logoUrl && <img src={logoUrl} alt="" />}
+                <img src={logoUrl ?? LOGO_G3_DATA_URI} alt="" />
+                {/* Sem logo enviada, cai na marca da G3 (a da referência). Ver `logo-g3.ts`. */}
                 <div className="g3-assinatura">{folha1.cabecalho.assinatura}</div>
               </div>
               {folha1.cabecalho.emissor && <div className="g3-emissor">{folha1.cabecalho.emissor}</div>}
@@ -1306,7 +1308,7 @@ function CaixaDePagamento({ p, logoUrl }: {
     <div className="faixa-pgto">
       <div className="faixa-pgto-topo">
         <span>{p.titulo}</span>
-        {logoUrl && <img src={logoUrl} alt="" style={{ height: '10pt' }} />}
+        <img src={logoUrl ?? LOGO_G3_DATA_URI} alt="" style={{ height: '10pt' }} />
       </div>
 
       <div className="faixa-pgto-campos">
