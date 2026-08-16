@@ -1144,7 +1144,9 @@ function AbaDeEmissao({ composicao, logoUrl, irParaPainel }: {
         <Palco>
           <div className="g3 g3-segunda">
             <div className="g3-topo-curto">
-              {logoUrl && <img src={logoUrl} alt="" />}
+              <img src={logoUrl ?? LOGO_G3_DATA_URI} alt="" />
+              {/* Igual a folha 1: sem logo do tenant, cai na marca da G3. Antes
+                  era `logoUrl && <img>`, e a folha 2 saia sem logo no topo. */}
               <div className="g3-emissor">{folha2.cabecalho.identificacao}</div>
             </div>
 
