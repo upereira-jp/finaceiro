@@ -91,25 +91,54 @@ jobs:
             systemctl show -p Id,FragmentPath,WorkingDirectory,ExecStart,User,MemoryMax,OOMScoreAdjust,ActiveState,SubState "$u" 2>/dev/null
           done
 
-          echo; echo "===== DIRS candidatos e conteudo ====="
-          for d in $(find /opt /srv /var/www /root /home -maxdepth 3 -type d \( -iname '*financ*' -o -iname '*fatur*' \) 2>/dev/null | sort -u); do
-            echo "--- $d ---"
-            ls -la "$d" 2>/dev/null | head -25
-            printf 'git:%s node_modules:%s web/dist:%s .env:%s package.json:%s\n' \
-              "$( [ -d "$d/.git" ] && echo sim || echo nao )" \
-              "$( [ -d "$d/node_modules" ] && echo sim || echo nao )" \
-              "$( [ -e "$d/web/dist/index.html" ] && echo sim || echo nao )" \
-              "$( [ -f "$d/.env" ] && echo sim || echo nao )" \
-              "$( [ -f "$d/package.json" ] && echo sim || echo nao )"
-            if [ -d "$d/.git" ]; then
-              echo "  remote: $(git -C "$d" remote get-url origin 2>/dev/null)"
-              echo "  branch: $(git -C "$d" rev-parse --abbrev-ref HEAD 2>/dev/null)"
-              git -C "$d" log --oneline -3 2>/dev/null | sed 's/^/  /'
+          echo; echo "===== APP /opt/financeiro/app ====="
+          APP=/opt/financeiro/app
+          echo "node bundlado: $(/opt/financeiro/node/bin/node --version 2>/dev/null) em /opt/financeiro/node/bin/node"
+          ls -la "$APP" 2>/dev/null | head -40
+          printf 'git:%s node_modules:%s prisma_client:%s web:%s web/dist:%s web/package.json:%s .env:%s package.json:%s prisma_dir:%s\n' \
+            "$( [ -d "$APP/.git" ] && echo sim || echo nao )" \
+            "$( [ -d "$APP/node_modules" ] && echo sim || echo nao )" \
+            "$( [ -d "$APP/node_modules/.prisma/client" ] && echo sim || echo nao )" \
+            "$( [ -d "$APP/web" ] && echo sim || echo nao )" \
+            "$( [ -e "$APP/web/dist/index.html" ] && echo sim || echo nao )" \
+            "$( [ -f "$APP/web/package.json" ] && echo sim || echo nao )" \
+            "$( [ -f "$APP/.env" ] && echo sim || echo nao )" \
+            "$( [ -f "$APP/package.json" ] && echo sim || echo nao )" \
+            "$( [ -d "$APP/prisma" ] && echo sim || echo nao )"
+          if [ -d "$APP/.git" ]; then
+            echo "  remote: $(git -C "$APP" remote get-url origin 2>/dev/null)"
+            echo "  branch: $(git -C "$APP" rev-parse --abbrev-ref HEAD 2>/dev/null)"
+            echo "  head:   $(git -C "$APP" rev-parse --short HEAD 2>/dev/null)"
+            echo "  dirty (porcelain, ate 10):"; git -C "$APP" status --porcelain 2>/dev/null | head -10 | sed 's/^/    /'
+            git -C "$APP" log --oneline -3 2>/dev/null | sed 's/^/  /'
+          fi
+          echo "  node_modules: $(du -sh "$APP/node_modules" 2>/dev/null | cut -f1)   web/dist: $(du -sh "$APP/web/dist" 2>/dev/null | cut -f1)"
+          echo "  .env CHAVES (sem valores — regra 5):"
+          [ -f "$APP/.env" ] && grep -vE '^\s*#' "$APP/.env" 2>/dev/null | grep '=' | cut -d= -f1 | sed 's/^/    /' || echo "    (sem .env)"
+          echo "  package.json scripts:"
+          sed -n '/"scripts"/,/}/p' "$APP/package.json" 2>/dev/null | sed 's/^/    /'
+          echo "  web/package.json scripts:"
+          sed -n '/"scripts"/,/}/p' "$APP/web/package.json" 2>/dev/null | sed 's/^/    /'
+          echo "  prisma/migrations (ultimas 5):"
+          ls -1 "$APP/prisma/migrations" 2>/dev/null | tail -5 | sed 's/^/    /'
+          echo "  como servir.ts acha o estatico:"
+          grep -rnE "dist|static|sirv|express\.static|web/|__dirname" "$APP/scripts/servir.ts" 2>/dev/null | head -8 | sed 's/^/    /'
+
+          echo; echo "===== PROXY REVERSO (:80/:443) ====="
+          (ss -ltnp 2>/dev/null || netstat -ltnp 2>/dev/null) | grep -E ':80 |:443 ' | sed 's/^/  /' || true
+          command -v nginx >/dev/null && echo "  nginx: $(nginx -v 2>&1)" || echo "  (sem nginx no PATH)"
+          command -v caddy >/dev/null && echo "  caddy presente" || echo "  (sem caddy no PATH)"
+          for f in /etc/nginx/sites-enabled/* /etc/nginx/conf.d/*.conf; do
+            [ -f "$f" ] || continue
+            if grep -qE '3000|financ' "$f" 2>/dev/null; then
+              echo "  --- $f (refs :3000/financ) ---"
+              grep -nE 'server_name|proxy_pass|listen|root' "$f" 2>/dev/null | head -12 | sed 's/^/    /'
             fi
           done
+          [ -f /etc/caddy/Caddyfile ] && { echo "  --- Caddyfile (financ/3000) ---"; grep -nE 'financ|3000|reverse_proxy' /etc/caddy/Caddyfile 2>/dev/null | head -12 | sed 's/^/    /'; }
 
-          echo; echo "===== PORTAS a escuta (node / :3000) ====="
-          (ss -ltnp 2>/dev/null || netstat -ltnp 2>/dev/null) | grep -iE ':3000|node' || echo '(nada em :3000 por nome)'
+          echo; echo "===== PORTAS a escuta (todas node) ====="
+          (ss -ltnp 2>/dev/null || netstat -ltnp 2>/dev/null) | grep -iE 'node|:3000|:8787|:3001' | sed 's/^/  /' || echo '(nada)'
 
           echo; echo "===== DISCO ====="
           df -h / 2>/dev/null | tail -1
