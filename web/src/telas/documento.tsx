@@ -360,7 +360,7 @@ export function TelaDocumento() {
           estático</strong> gerado aqui. Chave Pix <strong>não é segredo</strong> — ela identifica o
           destino e sai impressa no documento; quem a tem consegue te pagar, não se autenticar como
           você. <strong>A conciliação é manual:</strong> um Pix estático não carrega identificador por
-          fatura, então o dinheiro chega sem dizer de quem é — a baixa é na aba Faturas.
+          fatura, então o dinheiro chega sem dizer de quem é — a baixa é na aba Emissão e cobrança.
         </p>
         {/* AS CHAVES CADASTRADAS, e a escolha da padrao. O apelido e o que se
             escolhe: a chave em si nao se reconhece de cor, e conferir um CNPJ

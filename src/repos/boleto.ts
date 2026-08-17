@@ -566,8 +566,9 @@ export async function tamanhoDosEmAberto(): Promise<number> {
  * esta certo.
  *
  * O QUE ISSO CUSTA, dito por extenso: boleto importado nao e conciliado
- * automaticamente. Ele e cobrado pela baixa manual da aba Faturas, que e o mesmo
- * caminho que a operacao ja usa hoje para tudo — e o unico, enquanto o A1 nao
+ * automaticamente. Ele e cobrado pela baixa manual da aba `Emissao e cobranca`
+ * (`/faturas`), que e o mesmo caminho que a operacao ja usa hoje para tudo — e
+ * o unico, enquanto o A1 nao
  * existe. Quando o A1 existir, se a conciliacao automatica dos importados passar
  * a valer a pena, a pergunta e a `Q-BOLIMP-01`: ela tem dono e nao e o
  * implementador (regra 10).
