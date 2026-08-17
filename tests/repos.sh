@@ -210,6 +210,14 @@ echo
 echo "=== endereco por planilha: o pagador do boleto, e o parcial que nao e vazio"
 node --experimental-strip-types tests/repos-enderecos.ts
 echo
+# O boleto EMITIDO NO BANCO (17/08). O que so se ve com banco: a coluna `origem`
+# da migration 32, a constraint `boleto_importado_tem_linha`, o caminho
+# funcionando SEM conector e SEM A1 - que e a razao dele existir - e o predicado
+# em SQL que tira o importado da consulta ativa. Num teste puro os quatro
+# passariam verdes quebrados.
+echo "=== boleto importado: o titulo emitido a mao no portal, transcrito para ca"
+node --experimental-strip-types tests/repos-boleto-importado.ts
+echo
 echo "=== HTTP: rotas, matriz de papeis e traducao de erro"
 node --experimental-strip-types tests/http.ts
 echo

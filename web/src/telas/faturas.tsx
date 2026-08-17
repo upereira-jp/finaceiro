@@ -27,7 +27,10 @@
 //     seja um erro de servidor. E ela pede confirmacao: reparte dinheiro.
 
 import { useState } from 'react';
-import { api, type Fatura, type Boleto, type UnidadeConsumidora } from '../api.ts';
+import {
+  api, type Fatura, type Boleto, type UnidadeConsumidora,
+  type BoletoLido, type ConferenciaDoBoletoImportado,
+} from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
   Pagina, Aviso, Tabela, Marca, rotulo, linha, useOrdenacao, ordenar, ThOrd,
@@ -35,9 +38,12 @@ import {
 import { competenciaISO, emReais, paraCentavos } from '../dinheiro.ts';
 import { paraCsv, reaisParaPlanilha, nomeDoArquivo } from '../csv.ts';
 import { baixarCsv } from '../baixar.ts';
+import { lerBase64, mimeDo, reenviavel, naMensagem } from '../arquivo.ts';
 import {
-  podeEmitirFatura, podeGerarBoleto, podeBaixarManual,
+  podeEmitirFatura, podeGerarBoleto, podeBaixarManual, podeImportarBoleto,
+  motivoDaTravaDaImportacao, podeImportarAgora, DIGITOS_DA_LINHA,
   totalEsperadoDaBaixa, tomDoStatusDaFatura, conferirTarifas,
+  type MotivoDeTravaDaImportacao,
 } from '../cobranca-regras.ts';
 import { ICONE_DO_STATUS_DA_FATURA } from '../iconografia.ts';
 
@@ -311,6 +317,16 @@ function PainelDaFatura({ f, recarregar }: { f: Fatura; recarregar: () => void }
               <Marca tom={boleto.dado.status === 'liquidado' ? 'ok' : boleto.dado.status === 'erro' ? 'pendente' : 'nao_medido'}>
                 {rotulo(boleto.dado.status)}
               </Marca>
+              {/*
+                A ORIGEM AO LADO DO STATUS, e nao escondida no detalhe: "registrado"
+                sozinho nao diz se o titulo esta na carteira de cobranca do banco
+                por conta nossa ou porque uma pessoa o emitiu no portal. Quem
+                precisa conferir um boleto no internet banking precisa saber qual
+                dos dois - e a baixa pela API nao vale para o importado.
+              */}
+              {boleto.dado.origem === 'importado' && (
+                <Marca tom="nao_medido" icone="baixar">emitido no banco</Marca>
+              )}
               <span className="fraco">nosso número {boleto.dado.nosso_numero ?? '—'}</span>
               <span className="fraco">{emReais(boleto.dado.valor_registrado_centavos)}</span>
               {boleto.dado.tentativas > 0 && <span className="fraco">{boleto.dado.tentativas} tentativa(s)</span>}
@@ -342,6 +358,11 @@ function PainelDaFatura({ f, recarregar }: { f: Fatura; recarregar: () => void }
           </button>
         )}
       </div>
+
+      {/* ------------------------------------- o boleto emitido no banco (17/08) */}
+      {podeImportarBoleto(f.status, boleto.dado?.status ?? null) && (
+        <ImportarBoleto fatura={f} aoImportar={() => { boleto.recarregar(); recarregar(); }} />
+      )}
 
       {/* -------------------------------------------------------- baixa manual */}
       {podeBaixarManual(f.status) && (
@@ -376,6 +397,204 @@ function PainelDaFatura({ f, recarregar }: { f: Fatura; recarregar: () => void }
           {valorInvalido && <Aviso tipo="erro">{valorInvalido}</Aviso>}
         </div>
       )}
+
+      {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
+      {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
+    </div>
+  );
+}
+
+// -------------------------------------------- IMPORTAR O BOLETO DO BANCO (17/08)
+//
+// POR QUE ESTE BLOCO EXISTE, e por que ele fica AQUI e não na aba Documento.
+//
+// "Gerar boleto" logo acima chama a Sicoob pela porta de cobrança, e a porta
+// depende do certificado A1 — a única pendência do projeto, e compra externa. Sem
+// ele a resposta é 503 nomeado, e a operação faz o que já fazia: emite o boleto à
+// mão no internet banking da cooperativa e manda o PDF ao cliente. Esse boleto é
+// real. O sistema é que não sabia dele — a fatura dizia "sem boleto", o documento
+// saía cobrando por Pix estático (que não concilia) e a conferência aritmética
+// nunca rodava.
+//
+// A ABA CERTA É ESTA porque é a única onde um boleto pertence a UMA fatura. A aba
+// Documento também lê boleto por imagem, e é outro ato: lá o boleto entra numa
+// FOLHA que se compõe e se imprime, sem tocar a carteira — o registro de lá é
+// `registro_de_fatura_unificada`, não `boleto`. Aqui o boleto vira estado da
+// fatura: aparece no painel, entra no documento composto e é o que a baixa cobra.
+//
+// A CONFERÊNCIA É DO SERVIDOR, e a tela nunca a refaz. Os quatro dígitos
+// verificadores, a remontagem dos 44 e a leitura do valor e do vencimento de
+// dentro deles moram em `src/dominio/`. A tela conta dígitos — só isso — e mostra
+// o que `POST /faturas/:id/boleto/conferir` respondeu.
+
+const EXPLICACAO_DA_TRAVA: Record<MotivoDeTravaDaImportacao, string> = {
+  ocupado: 'Trabalhando…',
+  sem_linha: 'Cole a linha digitável do boleto, ou envie o PDF acima.',
+  digitos_de_menos: '',   // a tela monta a frase com a contagem
+  nao_conferida: 'Conferindo com o servidor…',
+  recusada: 'O boleto não passou na conferência — o aviso acima diz por quê.',
+};
+
+function ImportarBoleto({ fatura, aoImportar }: { fatura: Fatura; aoImportar: () => void }) {
+  const acao = useAcao();
+  const [linhaDigitavel, setLinhaDigitavel] = useState('');
+  const [nossoNumero, setNossoNumero] = useState('');
+  const [pix, setPix] = useState('');
+  const [lendo, setLendo] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  const [conferencia, setConferencia] = useState<ConferenciaDoBoletoImportado | null>(null);
+  const [conferindo, setConferindo] = useState(false);
+
+  const digitos = linhaDigitavel.replace(/\D/g, '');
+  /*
+   * A CONFERÊNCIA VALE PARA A LINHA QUE A PRODUZIU, e não para a que está no
+   * campo agora. Sem esta comparação, corrigir um dígito depois de uma
+   * conferência boa deixaria o botão aceso sobre um resultado velho — que é
+   * exatamente o modo de falha que `nao_conferida` existe para fechar.
+   */
+  const conferida = conferencia && conferencia.digitos === digitos ? conferencia.aceita : null;
+  const estado = { linha: linhaDigitavel, ocupado: acao.ocupado || lendo || conferindo, conferida };
+  const motivo = motivoDaTravaDaImportacao(estado);
+
+  /** O PDF do boleto, lido pelo mesmo extrator da aba Documento. É chamada PAGA
+   *  ao modelo de visão, e por isso é opt-in: quem tem a linha à mão digita. */
+  async function enviarPdf(f: File) {
+    setLendo(true);
+    setStatus(`Lendo ${f.name}…`);
+    try {
+      const lido = await api.post<BoletoLido>('/faturas/ler-boleto', {
+        conteudo_base64: await lerBase64(f), tipo: mimeDo(f),
+      });
+      setLinhaDigitavel(lido.linha_digitavel);
+      setNossoNumero(lido.nosso_numero);
+      setPix(lido.pix_copia_e_cola);
+      setConferencia(null);
+      const n = lido.linha_digitavel.replace(/\D/g, '').length;
+      setStatus(n === DIGITOS_DA_LINHA
+        ? 'Boleto lido. Confira abaixo antes de importar.'
+        : `Boleto lido, mas a linha saiu com ${n} dígitos — corrija abaixo.`);
+    } catch (e) {
+      setStatus(`Não foi possível ler: ${naMensagem(e)} Digite a linha à mão.`);
+    } finally { setLendo(false); }
+  }
+
+  /** Pergunta ao servidor, sem gravar nada. É o caminho de relatório. */
+  async function conferir() {
+    setConferindo(true);
+    try {
+      setConferencia(await api.post<ConferenciaDoBoletoImportado>(
+        `/faturas/${fatura.id}/boleto/conferir`,
+        { linha_digitavel: linhaDigitavel, nosso_numero: nossoNumero, pix_copia_e_cola: pix },
+      ));
+    } catch (e) {
+      setStatus(`Não foi possível conferir: ${naMensagem(e)}`);
+      setConferencia(null);
+    } finally { setConferindo(false); }
+  }
+
+  async function importar() {
+    const ok = await acao.executar(() => api.post(`/faturas/${fatura.id}/boleto/importar`, {
+      linha_digitavel: linhaDigitavel, nosso_numero: nossoNumero, pix_copia_e_cola: pix,
+    }));
+    if (ok) {
+      acao.anunciar('Boleto importado. Ele é o que o documento desta fatura vai imprimir.');
+      setLinhaDigitavel(''); setNossoNumero(''); setPix('');
+      setConferencia(null); setStatus(null);
+      aoImportar();
+    }
+  }
+
+  return (
+    <div>
+      <h3><Icone nome="baixar" tamanho={16} /> Importar boleto emitido no banco</h3>
+      <p className="sub" style={{ margin: '0 0 8px' }}>
+        Para o boleto que <strong>já existe</strong> — emitido à mão no portal da cooperativa
+        enquanto o certificado A1 não chega. Nada aqui fala com a Sicoob: o título já está
+        registrado lá, e o que entra é a transcrição dele. Depois de importado ele aparece no
+        painel acima e é o que o documento desta fatura imprime, no lugar do Pix estático.
+      </p>
+
+      {/* O `input[type=file]` NU, e não um `<label>` disfarçado de botão: o
+          `estilo.ts` já desenha o `::file-selector-button` do sistema, e um
+          segundo desenho para o mesmo controle é a divergência que aparece
+          quando o tema muda e só um dos dois acompanha. */}
+      <div style={{ ...linha, gap: 12, marginBottom: 10 }}>
+        <input type="file" accept="application/pdf,image/*" disabled={lendo}
+               aria-label={`Enviar o PDF do boleto da fatura ${fatura.id.slice(0, 8)}`}
+               onChange={(e) => reenviavel(e, (f) => void enviarPdf(f))} />
+        <span className="fraco" style={{ fontSize: 13 }}>
+          {lendo
+            ? 'Lendo o arquivo…'
+            : 'Opcional — a leitura por imagem é uma chamada paga. Com a linha à mão, digite.'}
+        </span>
+      </div>
+      {status && <p className="sub" style={{ margin: '0 0 8px' }}>{status}</p>}
+
+      <div style={{ display: 'grid', gap: 8 }}>
+        <div>
+          <label htmlFor={`linha-${fatura.id}`}>Linha digitável</label>
+          <input id={`linha-${fatura.id}`} className="mono" value={linhaDigitavel}
+                 onChange={(e) => setLinhaDigitavel(e.target.value)}
+                 onBlur={() => { if (digitos.length === DIGITOS_DA_LINHA) void conferir(); }}
+                 placeholder="75691.50043 01727.686907 00000.130013 1 15410000059669" />
+          <span className="fraco" style={{ fontSize: 12 }}>
+            {digitos.length === 0
+              ? `${DIGITOS_DA_LINHA} dígitos — os pontos e espaços não contam.`
+              : `${digitos.length} de ${DIGITOS_DA_LINHA} dígitos.`}
+            {' '}O código de barras, o valor e o vencimento são <strong>derivados</strong> dela.
+          </span>
+        </div>
+        <div style={{ ...linha, gap: 12 }}>
+          <div style={{ flex: '0 0 180px' }}>
+            <label htmlFor={`nn-${fatura.id}`}>Nosso número</label>
+            <input id={`nn-${fatura.id}`} value={nossoNumero}
+                   onChange={(e) => setNossoNumero(e.target.value)} placeholder="1-3" />
+          </div>
+          <div style={{ flex: '1 1 260px' }}>
+            <label htmlFor={`pix-${fatura.id}`}>Pix copia e cola do boleto</label>
+            <input id={`pix-${fatura.id}`} className="mono" value={pix}
+                   onChange={(e) => setPix(e.target.value)}
+                   onBlur={() => { if (digitos.length === DIGITOS_DA_LINHA) void conferir(); }}
+                   placeholder="00020101021126… — opcional" />
+          </div>
+        </div>
+      </div>
+
+      {/* ---------------------------------------- o que o servidor respondeu */}
+      {conferencia && conferencia.digitos === digitos && (
+        conferencia.aceita ? (
+          <Aviso tipo="ok">
+            Confere. O boleto cobra <strong>{emReais(conferencia.valor_centavos)}</strong>
+            {conferencia.vencimento && <> e vence em{' '}
+              <strong>{conferencia.vencimento.split('-').reverse().join('/')}</strong></>}
+            {' '}— os dois lidos de dentro do código de barras, e os dois batem com esta fatura.
+          </Aviso>
+        ) : (
+          <Aviso tipo="erro">
+            {conferencia.frases.map((f, i) => <div key={i}>{f}</div>)}
+          </Aviso>
+        )
+      )}
+
+      <div style={{ marginTop: 10 }}>
+        <button className="primario" onClick={() => void importar()}
+                disabled={!podeImportarAgora(estado)}>
+          <Icone nome={acao.ocupado ? 'carregando' : 'confirmar'} tamanho={15} peso="bold" />
+          Importar boleto
+        </button>
+        {motivo && (
+          <span className="fraco" style={{ marginLeft: 10, fontSize: 13 }}>
+            {motivo === 'digitos_de_menos'
+              ? `Faltam ${DIGITOS_DA_LINHA - digitos.length} dígito(s) para a linha ficar completa.`
+              : EXPLICACAO_DA_TRAVA[motivo]}
+          </span>
+        )}
+        {motivo === 'nao_conferida' && !conferindo && (
+          <button style={{ marginLeft: 8 }} onClick={() => void conferir()}>
+            <Icone nome="buscar" tamanho={14} /> Conferir
+          </button>
+        )}
+      </div>
 
       {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
       {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}

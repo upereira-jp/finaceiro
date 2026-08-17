@@ -1,0 +1,114 @@
+# Aplica as migrations pendentes no banco do financeiro — ESTE WORKFLOW MUTA A PRODUCAO.
+#
+# ============================================================================
+# POR QUE ELE EXISTE, e por que roda no RUNNER e nao na VPS
+#
+# `prisma.config.ts` registra a pratica desde 30/07/2026, e ela e deliberada:
+# *"as migrations deste projeto sempre foram aplicadas de fora, nunca do VPS"*.
+# O `.env` do servidor tem `DATABASE_URL` (o runtime precisa) e NAO tem
+# `DIRECT_URL` — e nao tinha por que ter.
+#
+# O `deploy-financeiro.yml` diz a mesma coisa pelo outro lado: *"quando houver
+# migration pendente, ela entra num passo proprio"*. Este e o passo proprio, e
+# ele ficou SEPARADO do deploy em vez de virar mais uma etapa dele por duas
+# razoes:
+#
+#   1. a credencial NAO desce para a VPS. `DIRECT_URL` e a conexao com DDL, e a
+#      VPS e COMPARTILHADA (vizinhos /opt/intre* em :8787/:3001). Por um passo no
+#      deploy, ela teria de existir em /etc/financeiro.env ou trafegar pelo SSH;
+#      aqui ela e um secret do Actions e nao sai do runner;
+#   2. migrar e implantar falham por motivos diferentes e se desfazem de formas
+#      diferentes. Um `git pull` que deu errado se resolve com outro `git pull`;
+#      uma migration pela metade, nao.
+#
+# ============================================================================
+# A ORDEM E: MIGRAR PRIMEIRO, DEPLOY DEPOIS — e ela e segura nos dois sentidos
+#
+# O app em producao roda o codigo ANTIGO enquanto este workflow corre, e o codigo
+# antigo nao conhece a coluna `origem`. Isso nao e problema: o client do Prisma
+# monta `SELECT` com a lista EXPLICITA de colunas do schema que gerou, entao ele
+# nao le a coluna nova, e no INSERT ela cai no DEFAULT. Migration aditiva com
+# default e compativel para tras por construcao.
+#
+# O INVERSO NAO E VERDADE. Implantar primeiro poria no ar um codigo que consulta
+# `boleto.origem` num banco onde ela nao existe — e o modo de falha e 500 em toda
+# leitura de boleto, na aba Faturas, com a fatura na tela de quem opera.
+#
+# ============================================================================
+# O QUE ELE NAO FAZ: nao reinicia servico, nao toca o checkout da VPS e nao roda
+# `db pull`. Depois dele, rode o `deploy-financeiro` para o codigo novo subir.
+name: migrate-financeiro
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmar:
+        description: 'Digite "aplicar" para confirmar. Qualquer outra coisa faz o workflow so CONFERIR e parar.'
+        required: true
+        default: 'conferir'
+
+concurrency:
+  group: vps-financeiro          # nunca roda junto com o deploy nem com o recon
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    env:
+      # A conexao DIRETA do CLI. NUNCA a porta 6543 (transaction pooler): o
+      # Migrate usa prepared statements que ela nao suporta, e o modo de falha
+      # nao e erro — o comando PENDURA por minutos e desiste (prisma.config.ts).
+      DIRECT_URL: ${{ secrets.DIRECT_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: instalar dependencias
+        run: npm install --no-audit --no-fund
+
+      - name: guardas antes de discar
+        run: |
+          set -euo pipefail
+          if [ -z "${DIRECT_URL:-}" ]; then
+            echo "::error::secret DIRECT_URL ausente. E a conexao DIRETA do CLI, e ela nao e a"
+            echo "::error::mesma do runtime. Formato em .env.example; cadastre em Settings >"
+            echo "::error::Secrets and variables > Actions. Nada foi tentado."
+            exit 1
+          fi
+          # O pooler de TRANSACAO nao falha com mensagem util: ele pendura. Barato
+          # de detectar aqui, caro de diagnosticar num job que expira em 6 horas.
+          case "$DIRECT_URL" in
+            *:6543/*) echo "::error::DIRECT_URL aponta para a porta 6543 (transaction pooler)."
+                      echo "::error::O Migrate exige prepared statements e ela nao os suporta - o comando"
+                      echo "::error::PENDURA em vez de falhar. Use a 5432 (session pooler)."
+                      exit 1;;
+          esac
+          echo "DIRECT_URL presente, porta aceita."
+
+      - name: IDENTIDADE do banco alvo (regra 4 — o CRM e read-only absoluto)
+        run: node --experimental-strip-types scripts/conferir-banco-alvo.ts identidade
+
+      - name: o que esta PENDENTE (nao aplica nada)
+        # `migrate status` sai != 0 justamente quando ha pendencia, que aqui e o
+        # caso esperado. Por isso o `|| true`: quem decide e o passo seguinte.
+        run: npx prisma migrate status || true
+
+      - name: APLICAR
+        if: ${{ inputs.confirmar == 'aplicar' }}
+        run: npx prisma migrate deploy
+
+      - name: conferir o resultado NO CATALOGO
+        if: ${{ inputs.confirmar == 'aplicar' }}
+        run: node --experimental-strip-types scripts/conferir-banco-alvo.ts migration-32
+
+      - name: proximo passo
+        run: |
+          if [ "${{ inputs.confirmar }}" = "aplicar" ]; then
+            echo "Migrations aplicadas. Agora rode o workflow **deploy-financeiro** para o codigo novo subir."
+          else
+            echo "Nada foi aplicado — o campo 'confirmar' nao era \"aplicar\"."
+            echo "O passo acima mostrou o que esta pendente."
+          fi

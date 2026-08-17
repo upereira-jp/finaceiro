@@ -173,7 +173,30 @@ export type Sessao = {
   tenants: Array<{ tenantId: string; razaoSocial: string; papel: string }>;
 };
 
-export type Cliente = { id: string; nome: string; documento: string | null; ativo: boolean };
+/**
+ * O CLIENTE COMO A ABA O EDITA. Cresceu em 17/08/2026, e o motivo e a fila da
+ * primeira fatura: `documento` estava NULO em 29 de 29 linhas da carteira ativa,
+ * e o unico caminho para preenche-lo era `npm run documentos` — um script rodado
+ * de um Codespace contra producao, por quem tem o repositorio clonado.
+ *
+ * OS TRES CAMPOS DE ESTADO DO DOCUMENTO vem juntos porque significam coisas
+ * diferentes e a tela precisa das tres (SPEC-001 R7/R8/R9):
+ *
+ *   `documento`            o que esta gravado, normalizado
+ *   `documento_validado`   passou no digito E foi coletado localmente. E O UNICO
+ *                          que destrava a ativacao do contrato (R9) — semente do
+ *                          CRM entra FALSE mesmo com digito correto (R8)
+ *   `documento_origem`     de onde veio. E o que explica um documento correto que
+ *                          continua nao valendo
+ */
+export type Cliente = {
+  id: string; nome: string; documento: string | null; ativo: boolean;
+  documento_tipo?: 'cpf' | 'cnpj' | null;
+  documento_validado?: boolean;
+  documento_origem?: 'crm_semente' | 'coleta_local' | null;
+  telefone?: string | null;
+  email?: string | null;
+};
 
 export type UnidadeConsumidora = {
   id: string; cliente_id: string; numero_uc: string; distribuidora: string;
@@ -185,6 +208,18 @@ export type UnidadeConsumidora = {
   tarifa_reais_por_kwh: string | null;
   /** NOSSO cadastro: `ativa | suspensa | cancelada`. Nao diz nada sobre o CRM. */
   status: string;
+  /**
+   * O ENDERECO DO PAGADOR, e ele e da UC e nao do cliente. `PENDENCIAS.md` §2.a
+   * item 7: 0 de 29 em producao, e ate 17/08/2026 so entrava por
+   * `npm run enderecos` — script de Codespace. E o endereco que vai no boleto.
+   */
+  endereco_logradouro?: string | null;
+  endereco_numero?: string | null;
+  endereco_complemento?: string | null;
+  endereco_bairro?: string | null;
+  endereco_municipio?: string | null;
+  endereco_uf?: string | null;
+  endereco_cep?: string | null;
   /** Espelho do CRM (migration 24). Ver `web/src/unidades-regras.ts` - "ativo"
    *  significava duas coisas, e a tela mostrava a errada. */
   rateio_situacao?: string | null;
@@ -247,6 +282,38 @@ export type Boleto = {
   valor_registrado_centavos: number; vencimento: string;
   status: 'pendente' | 'registrado' | 'liquidado' | 'baixado' | 'cancelado' | 'erro';
   registrado_em: string | null; tentativas: number; ultimo_erro: string | null;
+  /**
+   * De onde a linha veio (migration 32). `api_sicoob`: registrado por nos pela
+   * porta de cobranca. `importado`: emitido a mao no portal do banco e transcrito
+   * para ca — o sistema nao falou com a Sicoob em momento nenhum.
+   *
+   * A tela PRECISA mostrar isto: "registrado" sem dizer por quem esconde
+   * justamente o que quem opera usa para saber onde conferir o titulo.
+   */
+  origem: 'api_sicoob' | 'importado';
+};
+
+/**
+ * O QUE O SERVIDOR DIZ SOBRE UMA LINHA DIGITAVEL COLADA, antes de grava-la.
+ * Espelho de `ConferenciaDaImportacao` em `src/dominio/boleto-importado.ts`.
+ *
+ * A CONTA NAO E REFEITA AQUI, e isso e deliberado: os quatro digitos
+ * verificadores, a remontagem dos 44 e a leitura do valor e do vencimento de
+ * dentro deles moram no dominio, do lado do servidor. Reimplementa-los no
+ * navegador seria a segunda implementacao da mesma aritmetica — o defeito que
+ * este projeto ja colapsou quatro vezes com "centavos -> R$".
+ */
+export type ConferenciaDoBoletoImportado = {
+  aceita: boolean;
+  recusa: { tipo: 'sem_linha' | 'linha_invalida' | 'divergencia' | 'pix_nao_confere' } | null;
+  /** Uma frase por problema, ja escritas para quem opera. Vazio quando aceita. */
+  frases: string[];
+  digitos: string;
+  codigo_barras: string | null;
+  valor_centavos: number | null;
+  vencimento: string | null;
+  nosso_numero: string | null;
+  pix_copia_e_cola: string | null;
 };
 
 export type Repasse = { dono: string; competencia: string; itens: number; valor_centavos: number };

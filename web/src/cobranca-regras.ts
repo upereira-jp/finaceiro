@@ -142,6 +142,78 @@ export function podeGerarBoleto(fatura: StatusFatura, boleto: StatusBoleto | nul
   return boleto !== 'registrado' && boleto !== 'liquidado';
 }
 
+// ------------------------------------------- o boleto EMITIDO NO BANCO (17/08)
+//
+// A aba Faturas ganhou um segundo caminho para o boleto existir, e ele nao passa
+// pela Sicoob: o titulo e emitido a mao no internet banking e TRANSCRITO para ca.
+// Ver `src/dominio/boleto-importado.ts` para o porque e para as recusas.
+//
+// O QUE ESTAS DUAS FUNCOES NAO FAZEM, e e o mesmo limite do resto do arquivo:
+// elas nao conferem a linha digitavel. Os quatro digitos verificadores, a
+// remontagem dos 44 e a leitura do valor e do vencimento sao do dominio, no
+// servidor, e a tela os pede por `POST /faturas/:id/boleto/conferir`. O que mora
+// aqui e so o que a tela precisa saber SEM ida ao servidor: se oferece o campo, e
+// se o botao pode acender.
+
+/**
+ * `src/repos/boleto.ts` → `importar()`: mesma precondicao de `registrar()` (`if
+ * (f.status !== 'emitida') throw FaturaSemBoleto`) e a lista curta de boletos
+ * substituiveis (`pendente` e `erro` — tentativa nossa que nao completou).
+ *
+ * REPARE QUE `erro` ACEITA IMPORTACAO, e e o caso mais provavel de todos: a
+ * chamada a Sicoob falhou, alguem emitiu o boleto no portal, e e esse boleto que
+ * precisa entrar. Tratar `erro` como "ja tem boleto" fecharia a porta exatamente
+ * onde ela e mais necessaria.
+ */
+export function podeImportarBoleto(fatura: StatusFatura, boleto: StatusBoleto | null): boolean {
+  if (fatura !== 'emitida') return false;
+  return boleto === null || boleto === 'pendente' || boleto === 'erro';
+}
+
+export type EstadoDaImportacao = {
+  /** O que esta no campo da linha digitavel, como a pessoa colou. */
+  linha: string;
+  /** Ja ha uma escrita ou uma leitura em voo. */
+  ocupado: boolean;
+  /** O que a ULTIMA conferencia do servidor respondeu. `null` = ainda nao houve. */
+  conferida: boolean | null;
+};
+
+export type MotivoDeTravaDaImportacao =
+  | 'ocupado'
+  | 'sem_linha'
+  | 'digitos_de_menos'
+  | 'nao_conferida'
+  | 'recusada';
+
+/** Quantos digitos uma linha digitavel de cobranca tem. Espelho de
+ *  `conferirLinhaDigitavel`, que recusa por `comprimento` antes de qualquer
+ *  aritmetica. */
+export const DIGITOS_DA_LINHA = 47;
+
+/**
+ * Por que o botao de importar esta travado, na ordem em que a pessoa resolve.
+ *
+ * `null` quando nao ha impedimento. A CONTAGEM DE DIGITOS E O UNICO JUIZO QUE A
+ * TELA FAZ SOZINHA, e ela e barata e honesta: dizer "faltam 12 dígitos" enquanto
+ * alguem digita e melhor que uma ida ao servidor por tecla. Quem decide se a
+ * linha CONFERE continua sendo o servidor - `nao_conferida` e o estado entre uma
+ * coisa e outra, e ele TRAVA: um botao aceso sobre conferencia que nao voltou
+ * convidaria a gravar sem saber.
+ */
+export function motivoDaTravaDaImportacao(e: EstadoDaImportacao): MotivoDeTravaDaImportacao | null {
+  if (e.ocupado) return 'ocupado';
+  const digitos = e.linha.replace(/\D/g, '');
+  if (digitos.length === 0) return 'sem_linha';
+  if (digitos.length !== DIGITOS_DA_LINHA) return 'digitos_de_menos';
+  if (e.conferida === null) return 'nao_conferida';
+  if (e.conferida === false) return 'recusada';
+  return null;
+}
+
+export const podeImportarAgora = (e: EstadoDaImportacao): boolean =>
+  motivoDaTravaDaImportacao(e) === null;
+
 /** `src/repos/liquidacao.ts` → `baixar()`: `if (f.status !== 'emitida' && f.status
  *  !== 'vencida') throw FaturaNaoLiquidavel`. */
 export const podeBaixarManual = (s: StatusFatura): boolean => s === 'emitida' || s === 'vencida';

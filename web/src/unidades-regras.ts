@@ -136,3 +136,89 @@ export function contarSituacoes(ucs: readonly UcParaSituacao[]) {
   for (const u of ucs) por[situacaoDaUc(u)]++;
   return { por, faturaveis: ucs.filter(ehFaturavel).length, total: ucs.length };
 }
+
+// ------------------------------------------- O ENDERECO DO PAGADOR (17/08/2026)
+//
+// POR QUE ELE ENTROU NESTA ABA. `PENDENCIAS.md` §2.a, item 7: **endereco do
+// pagador de 29 UCs, 0 de 29**, e ate 17/08 o unico caminho era
+// `npm run enderecos` — um script rodado de um Codespace contra producao. As
+// colunas sao da UC (`endereco_*`), o `PATCH /unidades-consumidoras/:id` ja as
+// aceitava, e nao havia tela.
+//
+// ============================================================================
+// ISTO CONTA E NAO DECIDE, E A REGRA 10 E O MOTIVO — nao e cerimonia.
+//
+// `src/repos/boleto.ts` -> `registrar()` recusa pagador sem CPF/CNPJ e
+// **deliberadamente NAO recusa por endereco**. O comentario de la diz por que, e
+// e a metade aberta da `Q-PAGADOR-01`: *"o que a Sicoob exige de fato de endereco
+// nao esta medido (item (c) da questao), e recusar por um campo que talvez seja
+// opcional bloquearia boleto que sairia"*.
+//
+// Entao esta funcao NAO PODE declarar quais campos sao obrigatorios — isso e a
+// decisao que a questao guarda, e ela tem dono. O que ela faz e dizer o que
+// EXISTE, para a tela poder mostrar uma lista que encolhe enquanto alguem digita.
+// Se um dia a medicao disser que basta CEP e numero, muda-se um `Record` aqui e
+// nada mais: nenhuma recusa foi construida em cima deste juizo.
+
+export type EnderecoDaUc = {
+  endereco_logradouro?: string | null;
+  endereco_numero?: string | null;
+  endereco_complemento?: string | null;
+  endereco_bairro?: string | null;
+  endereco_municipio?: string | null;
+  endereco_uf?: string | null;
+  endereco_cep?: string | null;
+};
+
+/**
+ * Os campos que compoem um endereco postal completo.
+ *
+ * `endereco_complemento` FICA DE FORA da contagem, e essa e a unica escolha
+ * substantiva desta lista: apartamento e bloco existem em alguns enderecos e nao
+ * em outros, entao conta-lo faria toda casa de rua parecer incompleta para
+ * sempre. Ele continua editavel; so nao conta como pendencia.
+ */
+export const CAMPOS_DO_ENDERECO = [
+  'endereco_logradouro', 'endereco_numero', 'endereco_bairro',
+  'endereco_municipio', 'endereco_uf', 'endereco_cep',
+] as const satisfies readonly (keyof EnderecoDaUc)[];
+
+export type SituacaoDoEndereco = 'vazio' | 'parcial' | 'completo';
+
+export const ROTULO_DO_ENDERECO: Record<SituacaoDoEndereco, string> = {
+  vazio: 'Sem endereço',
+  parcial: 'Endereço incompleto',
+  completo: 'Endereço completo',
+};
+
+export const TOM_DO_ENDERECO: Record<SituacaoDoEndereco, 'ok' | 'pendente' | 'nao_medido'> = {
+  vazio: 'pendente',
+  /* `nao_medido` e nao `pendente`: com o item (c) da `Q-PAGADOR-01` em aberto,
+   * "faltam campos" pode ser suficiente para a Sicoob. Pintar de vermelho seria
+   * a tela afirmando uma exigencia que ninguem mediu. */
+  parcial: 'nao_medido',
+  completo: 'ok',
+};
+
+/** Quantos dos seis campos estao preenchidos. Espaco em branco nao conta. */
+export function camposDoEnderecoPreenchidos(u: EnderecoDaUc): number {
+  return CAMPOS_DO_ENDERECO.filter((c) => String(u[c] ?? '').trim() !== '').length;
+}
+
+export function situacaoDoEndereco(u: EnderecoDaUc): SituacaoDoEndereco {
+  const n = camposDoEnderecoPreenchidos(u);
+  if (n === 0) return 'vazio';
+  return n === CAMPOS_DO_ENDERECO.length ? 'completo' : 'parcial';
+}
+
+/** O endereco numa linha, para a tabela. `null` quando nao ha nada — e nao uma
+ *  string de virgulas soltas, que impressa parece defeito de sistema. Mesmo
+ *  criterio de `enderecoDaUc` em `src/repos/documento.ts`. */
+export function enderecoNumaLinha(u: EnderecoDaUc): string | null {
+  const t = (c: keyof EnderecoDaUc) => String(u[c] ?? '').trim();
+  const rua = [t('endereco_logradouro'), t('endereco_numero')].filter(Boolean).join(', ');
+  const cidade = [t('endereco_bairro'), t('endereco_municipio')].filter(Boolean).join(' — ');
+  const uf = t('endereco_uf');
+  const partes = [rua, cidade ? (uf ? `${cidade}/${uf}` : cidade) : uf].filter(Boolean);
+  return partes.length ? partes.join(', ') : null;
+}

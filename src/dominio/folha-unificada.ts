@@ -32,6 +32,7 @@ import { conferirLinhaDigitavel, linhaDigitavelFormatada, conferirBoleto, explic
          codigoDeBarrasDaLinha, type ConferenciaDoBoleto } from './linha-digitavel.ts';
 import { barrasDoCodigo } from './codigo-de-barras.ts';
 import { svgDoBrCode } from './qrcode.ts';
+import { normalizarBrCode, crcConfere } from './brcode.ts';
 
 /**
  * O BOLETO LIDO, INTEIRO — e ate 14/08 ele chegava pela metade.
@@ -549,14 +550,37 @@ function comporPagamento(
   conf: ReturnType<typeof conferirLinhaDigitavel>,
   codigo: string | null,
 ): FolhaUnificada['folha2']['pagamento'] {
-  const pix = String(b.pix_copia_e_cola ?? '').replace(/\s+/g, '');
+  /*
+   * `normalizarBrCode` E NAO `replace(/\s+/g, '')` — conserto medido em 17/08.
+   *
+   * A limpeza antiga tirava TODO espaco em branco para resolver a quebra de linha
+   * de quem cola de um PDF. Só que o nome do beneficiario (campo 59) e a cidade
+   * (60) tem espaco de verdade dentro: `5908G3 SOLAR` virava `5908G3SOLAR`, um
+   * campo que declara 8 caracteres e entrega 7. Isso quebra o CRC, e o modo de
+   * falha era o pior possivel — o QR era DESENHADO do mesmo jeito, com aparencia
+   * perfeita, e o aplicativo do banco simplesmente nao o lia.
+   */
+  const pix = normalizarBrCode(b.pix_copia_e_cola);
   let qr: { svg: string; versao: number } | null = null;
   let qrMotivo: string | null = null;
   if (pix.length >= 20) {
-    try {
-      const d = svgDoBrCode(pix, { nivel: 'M', lado: 220 });
-      qr = { svg: d.svg, versao: d.versao };
-    } catch (e) { qrMotivo = e instanceof Error ? e.message : String(e); }
+    /*
+     * E O CRC PASSOU A DECIDIR SE DESENHA. Um payload que nao fecha o proprio
+     * verificador nao e um QR ruim: e um QR que nao paga. Desenha-lo e a mesma
+     * classe do travessao que este documento recusa noutros seis lugares —
+     * ausencia com cara de conteudo. Com o motivo nomeado, a fatura sai com a
+     * faixa dizendo o que houve, e o boleto ao lado continua cobravel.
+     */
+    if (!crcConfere(pix)) {
+      qrMotivo = 'O Pix copia e cola nao passa na conferencia de CRC — o texto esta incompleto '
+        + 'ou corrompido. O QR nao foi desenhado de proposito: um codigo que o aplicativo do '
+        + 'banco nao le, impresso, parece uma forma de pagamento e nao e.';
+    } else {
+      try {
+        const d = svgDoBrCode(pix, { nivel: 'M', lado: 220 });
+        qr = { svg: d.svg, versao: d.versao };
+      } catch (e) { qrMotivo = e instanceof Error ? e.message : String(e); }
+    }
   }
 
   let barras: { svg: string } | null = null;

@@ -8,17 +8,27 @@
 // O FILTRO DE PENDENCIA EXISTE POR CAUSA DESSA DIGITACAO: sao 39 UCs para
 // preencher, e "mostrar so as que faltam" e a diferenca entre conferir uma
 // lista que encolhe e cacar linha por linha numa lista que nao muda.
+//
+// E DESDE 17/08/2026 ELA FECHA TAMBEM O ENDERECO DO PAGADOR. Era o item 7 da
+// `PENDENCIAS.md` §2.a - 0 de 29 -, e o unico caminho era `npm run enderecos`,
+// rodado de um Codespace contra producao. As colunas sao da UC, o
+// `PATCH /unidades-consumidoras/:id` ja as aceitava, e o que faltava era a tela.
+// O endereco NAO trava nada hoje, e isso e deliberado: `repos/boleto.ts` recusa
+// pagador sem CPF/CNPJ e nao recusa por endereco, porque o que a Sicoob exige de
+// fato esta em aberto no item (c) da `Q-PAGADOR-01`. A tela conta e nao decide.
 
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { api, type UnidadeConsumidora, type Usina } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
-  Pagina, Aviso, Tabela, Busca, Ferramentas, Filtro, ThOrd, Marca, BotaoDeIcone, CampoData, Icone,
-  useOrdenacao, ordenar, contem, rotulo,
+  Pagina, Aviso, Tabela, Busca, Campo, Ferramentas, Filtro, ThOrd, Marca, BotaoDeIcone,
+  CampoData, Icone, useOrdenacao, ordenar, contem, rotulo,
 } from '../ui.tsx';
 import {
   situacaoDaUc, ehFaturavel, contarSituacoes,
   ROTULO_DA_SITUACAO, TOM_DA_SITUACAO, ICONE_DA_SITUACAO,
+  situacaoDoEndereco, camposDoEnderecoPreenchidos, enderecoNumaLinha,
+  CAMPOS_DO_ENDERECO, ROTULO_DO_ENDERECO, TOM_DO_ENDERECO,
   type SituacaoDaUc,
 } from '../unidades-regras.ts';
 import { decimalTexto } from '../dinheiro.ts';
@@ -34,6 +44,9 @@ export function TelaUnidades() {
   const [busca, setBusca] = useState('');
   const [situacao, setSituacao] = useState('');
   const [pendencia, setPendencia] = useState('');
+  /** Qual UC esta com o endereco aberto. Um por vez: sete campos por linha em 41
+   *  linhas seriam 287 caixas de texto desenhadas de uma vez. */
+  const [enderecoAberto, setEnderecoAberto] = useState<string | null>(null);
   const { ordem, alternar } = useOrdenacao('uc');
 
   const nomeUsina = (id: string | null) =>
@@ -46,7 +59,8 @@ export function TelaUnidades() {
       (!situacao || situacaoDaUc(u) === situacao) &&
       (pendencia !== 'sem_vencimento' || !u.data_vencimento) &&
       (pendencia !== 'sem_tarifa' || !u.tarifa_reais_por_kwh) &&
-      (pendencia !== 'sem_usina' || !u.usina_id)),
+      (pendencia !== 'sem_usina' || !u.usina_id) &&
+      (pendencia !== 'sem_endereco' || situacaoDoEndereco(u) !== 'completo')),
     ordem,
     {
       uc: (u) => u.numero_uc,
@@ -89,6 +103,25 @@ export function TelaUnidades() {
     if (ok) { acao.anunciar(`Tarifa da ${uc.numero_uc} gravada.`); ucs.recarregar(); }
   }
 
+  /**
+   * GRAVA O ENDERECO DO PAGADOR. `PATCH /unidades-consumidoras/:id`, que ja
+   * aceitava os sete campos desde sempre — `uc.editar()` os normaliza um a um e
+   * maiusculiza a UF.
+   *
+   * MANDA OS SETE JUNTOS, inclusive os vazios, e isso e deliberado: o painel
+   * mostra o endereco INTEIRO, entao apagar um campo nele tem de apagar no banco.
+   * Mandar so o que mudou faria "limpar o complemento" nao ter efeito nenhum, em
+   * silencio. Vazio vira NULO no repositorio, e nao string vazia.
+   */
+  async function salvarEndereco(uc: UnidadeConsumidora, campos: Record<string, string>) {
+    const ok = await acao.executar(() => api.patch(`/unidades-consumidoras/${uc.id}`, campos));
+    if (ok) {
+      acao.anunciar(`Endereço da ${uc.numero_uc} gravado.`);
+      setEnderecoAberto(null);
+      ucs.recarregar();
+    }
+  }
+
   async function salvarRateio(uc: UnidadeConsumidora) {
     const pct = rateio[uc.id];
     if (!pct || !uc.usina_id) return;
@@ -112,6 +145,9 @@ export function TelaUnidades() {
   /* O MESMO CRITERIO DO VENCIMENTO, e pelo mesmo motivo: sem tarifa a composicao
    * LEVANTA (R26), e contar as 41 mandaria preencher doze que nao faturam. */
   const semTarifa = todas.filter((u) => !u.tarifa_reais_por_kwh && ehFaturavel(u)).length;
+  /* MESMO CRITERIO DOS OUTROS DOIS - so as faturaveis -, e pelo mesmo motivo:
+   * contar as 41 mandaria preencher doze enderecos de UC que nao vai faturar. */
+  const semEndereco = todas.filter((u) => situacaoDoEndereco(u) !== 'completo' && ehFaturavel(u)).length;
   const contagem = contarSituacoes(todas);
 
   return (
@@ -129,6 +165,20 @@ export function TelaUnidades() {
           composição do lote <strong>levanta</strong> em vez de faturar por zero (R26) — e é aqui
           que ela se preenche desde 14/08, quando a aba Tarifas saiu: a tarifa é de cada UC, não
           da distribuidora.
+        </Aviso>
+      )}
+      {semEndereco > 0 && (
+        /* ALERTA E NAO ERRO, e a diferenca e a regra 10. Nenhum campo de endereco
+           recusa boleto hoje: `repos/boleto.ts` para o pagador sem CPF/CNPJ e
+           deixa o endereco passar, porque o que a Sicoob exige de fato nao foi
+           medido — item (c) da `Q-PAGADOR-01`. Pintar de vermelho seria a tela
+           afirmando uma exigencia que ninguem verificou. */
+        <Aviso tipo="alerta">
+          {semEndereco} unidade(s) faturável(is) <strong>sem endereço completo do pagador</strong>.
+          É o endereço que vai no boleto, e ele se preenche aqui desde 17/08 — antes disso só por{' '}
+          <code>npm run enderecos</code>. <strong>Ele não bloqueia a emissão</strong>: quanto de
+          endereço a Sicoob realmente exige é o item (c) da <code>Q-PAGADOR-01</code>, que está
+          aberto e tem dono — por isso a contagem avisa em vez de recusar.
         </Aviso>
       )}
       {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
@@ -154,7 +204,8 @@ export function TelaUnidades() {
                 opcoes={[{ valor: '', texto: 'Todas as pendências' },
                          { valor: 'sem_vencimento', texto: 'Sem vencimento' },
                          { valor: 'sem_tarifa', texto: 'Sem tarifa' },
-                         { valor: 'sem_usina', texto: 'Sem usina' }]} />
+                         { valor: 'sem_usina', texto: 'Sem usina' },
+                         { valor: 'sem_endereco', texto: 'Sem endereço completo' }]} />
         {(busca || situacao || pendencia) && (
           <button type="button" onClick={() => { setBusca(''); setSituacao(''); setPendencia(''); }}>
             <Icone nome="limpar" tamanho={15} /> Limpar filtros
@@ -170,12 +221,14 @@ export function TelaUnidades() {
                 <ThOrd chave="tarifa" ordem={ordem} ao={alternar} num>Tarifa R$/kWh</ThOrd>
                 <ThOrd chave="vencimento" ordem={ordem} ao={alternar}>Vencimento</ThOrd>
                 <ThOrd chave="situacao" ordem={ordem} ao={alternar}>Situação</ThOrd>
+                <th>Endereço do pagador</th>
               </>}
               vazio={todas.length
                 ? 'Nenhuma unidade corresponde à busca ou aos filtros.'
                 : 'Nenhuma unidade consumidora espelhada.'}>
         {visiveis.map((u) => (
-          <tr key={u.id}>
+          <Fragment key={u.id}>
+          <tr>
             <td><strong>{u.numero_uc}</strong></td>
             <td className="fraco">{u.distribuidora}</td>
             <td className="fraco">{nomeUsina(u.usina_id) ?? <span style={{ color: 'var(--erro)' }}>Sem usina</span>}</td>
@@ -222,7 +275,35 @@ export function TelaUnidades() {
                 {ROTULO_DA_SITUACAO[situacaoDaUc(u)]}
               </Marca>
             </td>
+            {/* O ENDERECO E BOTAO E NAO CAMPO, e a razao e a mesma do comentario
+                dos dois inputs acima: sao SETE campos, e desenha-los na linha em
+                41 linhas seriam 287 caixas de texto de uma vez. O botao diz o
+                estado e abre o painel de quem precisa mexer. */}
+            <td style={{ minWidth: 210 }}>
+              <button onClick={() => setEnderecoAberto(enderecoAberto === u.id ? null : u.id)}
+                      aria-expanded={enderecoAberto === u.id}
+                      title={enderecoNumaLinha(u) ?? 'Nenhum campo de endereço preenchido'}>
+                <Icone nome={enderecoAberto === u.id ? 'limpar' : 'unidades'} tamanho={14} />
+                <Marca tom={TOM_DO_ENDERECO[situacaoDoEndereco(u)]}>
+                  {situacaoDoEndereco(u) === 'parcial'
+                    ? `${camposDoEnderecoPreenchidos(u)} de ${CAMPOS_DO_ENDERECO.length}`
+                    : ROTULO_DO_ENDERECO[situacaoDoEndereco(u)]}
+                </Marca>
+              </button>
+            </td>
           </tr>
+          {enderecoAberto === u.id && (
+            <tr>
+              {/* `--fundo-recuo` e a terceira superficie da paleta, a mesma que o
+                  painel da aba Faturas usa: sem ela o painel aberto se confunde
+                  com a linha seguinte da tabela. */}
+              <td colSpan={8} style={{ background: 'var(--fundo-recuo)' }}>
+                <EnderecoDoPagador uc={u} ocupado={acao.ocupado}
+                                   aoGravar={(campos) => void salvarEndereco(u, campos)} />
+              </td>
+            </tr>
+          )}
+          </Fragment>
         ))}
       </Tabela>
       <p className="sub" style={{ marginTop: 12 }}>
@@ -237,5 +318,72 @@ export function TelaUnidades() {
         em kWh e em reais, e <strong>nunca apaga</strong> um valor já digitado aqui.
       </p>
     </Pagina>
+  );
+}
+
+/**
+ * O ENDEREÇO DO PAGADOR, no painel recuado.
+ *
+ * É o endereço que vai no boleto — `repos/boleto.ts` monta o `pagador.endereco`
+ * exatamente com estas sete colunas. Era o item 7 da `PENDENCIAS.md` §2.a, **0 de
+ * 29**, e o único caminho era `npm run enderecos` de um Codespace.
+ *
+ * ELE NÃO TRAVA A EMISSÃO, e a tela diz isso em vez de fingir rigor: a guarda do
+ * repositório recusa pagador sem CPF/CNPJ e **deixa o endereço passar**, porque o
+ * que a Sicoob exige de fato não foi medido — item (c) da `Q-PAGADOR-01`, que tem
+ * dono e não é o implementador (regra 10). Recusar por um campo que talvez seja
+ * opcional bloquearia boleto que sairia.
+ *
+ * OS SETE SOBEM JUNTOS, inclusive os vazios. Ver `salvarEndereco`: o painel mostra
+ * o endereço inteiro, então apagar um campo aqui tem de apagar no banco. Mandar
+ * só o que mudou faria "limpar o complemento" não ter efeito, em silêncio.
+ */
+function EnderecoDoPagador({ uc, ocupado, aoGravar }: {
+  uc: UnidadeConsumidora;
+  ocupado: boolean;
+  aoGravar: (campos: Record<string, string>) => void;
+}) {
+  const [logradouro, setLogradouro] = useState(uc.endereco_logradouro ?? '');
+  const [numero, setNumero] = useState(uc.endereco_numero ?? '');
+  const [complemento, setComplemento] = useState(uc.endereco_complemento ?? '');
+  const [bairro, setBairro] = useState(uc.endereco_bairro ?? '');
+  const [municipio, setMunicipio] = useState(uc.endereco_municipio ?? '');
+  const [uf, setUf] = useState(uc.endereco_uf ?? '');
+  const [cep, setCep] = useState(uc.endereco_cep ?? '');
+
+  const gravar = () => aoGravar({
+    endereco_logradouro: logradouro, endereco_numero: numero,
+    endereco_complemento: complemento, endereco_bairro: bairro,
+    endereco_municipio: municipio, endereco_uf: uf, endereco_cep: cep,
+  });
+
+  return (
+    <div style={{ padding: '12px 4px', display: 'grid', gap: 10 }}>
+      <div className="campos">
+        <Campo rotulo="Logradouro" valor={logradouro} ao={setLogradouro} dica="Rua, avenida, quadra" />
+        <Campo rotulo="Número" valor={numero} ao={setNumero} dica="S/N quando não há" />
+        <Campo rotulo="Complemento" valor={complemento} ao={setComplemento} dica="Opcional — não conta como pendência" />
+      </div>
+      <div className="campos">
+        <Campo rotulo="Bairro" valor={bairro} ao={setBairro} />
+        <Campo rotulo="Município" valor={municipio} ao={setMunicipio} />
+        {/* A UF sobe como veio e o SERVIDOR maiusculiza (`uc.editar`), em vez de
+            a tela fazer isso enquanto se digita: normalizar sob o cursor é o tipo
+            de esperteza que atrapalha quem apaga uma letra para corrigir. */}
+        <Campo rotulo="UF" valor={uf} ao={setUf} dica="Duas letras" />
+        <Campo rotulo="CEP" valor={cep} ao={setCep} dica="00000-000" />
+        <div style={{ alignSelf: 'end' }}>
+          <button className="primario" disabled={ocupado} onClick={gravar}>
+            <Icone nome="confirmar" tamanho={15} peso="bold" /> Gravar endereço
+          </button>
+        </div>
+      </div>
+      <span className="fraco" style={{ fontSize: 13 }}>
+        É o endereço do <strong>pagador no boleto</strong>, e é da unidade consumidora — não do
+        cliente, que pode ter várias. Ele <strong>não impede a emissão</strong>: o que a Sicoob
+        exige de endereço ainda não foi medido (<code>Q-PAGADOR-01</code>, item c). Para a
+        carteira inteira de uma vez, <code>npm run enderecos</code> continua existindo.
+      </span>
+    </div>
   );
 }

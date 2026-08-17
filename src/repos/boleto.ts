@@ -15,6 +15,11 @@ import { dbt } from '../db/tipado.ts';
 import { db, tenantCorrente, exigir } from '../db/contexto.ts';
 import { emReais } from '../dominio/centavos.ts';
 import { proximaTentativaEm } from '../dominio/agenda.ts';
+import { digitosDaLinha } from '../dominio/linha-digitavel.ts';
+import {
+  conferirImportacao, explicarRecusa,
+  type ConferenciaDaImportacao, type TranscricaoDoBoleto,
+} from '../dominio/boleto-importado.ts';
 import { CobrancaNaoConfigurada, type PortaDeCobranca, type SituacaoDoBoleto } from '../sicoob/porta.ts';
 
 export class CobrancaNaoHabilitada extends Error {
@@ -53,8 +58,9 @@ export class PagadorSemDocumento extends Error {
   constructor(nome: string | null, numeroUc: string) {
     super(
       `A UC ${numeroUc} nao tem CPF/CNPJ do cliente${nome ? ` (${nome})` : ''}, e boleto sem ` +
-      'identificacao do pagador o banco recusa. O dado entra por `npm run documentos` — ' +
-      'preenchido, peca o boleto de novo. Nada foi enviado a Sicoob e nenhum boleto foi criado.'
+      'identificacao do pagador o banco recusa. O dado entra pela aba Clientes, no proprio ' +
+      'sistema, ou em lote por `npm run documentos` — preenchido, peca o boleto de novo. ' +
+      'Nada foi enviado a Sicoob e nenhum boleto foi criado.'
     );
     this.name = 'PagadorSemDocumento';
   }
@@ -287,6 +293,164 @@ export async function registrar(faturaId: string, cobranca: PortaDeCobranca): Pr
   }
 }
 
+// ------------------------------------------------- o boleto emitido no banco
+//
+// A METADE QUE GRAVA do caminho descrito em `src/dominio/boleto-importado.ts`.
+// A conferencia inteira mora la, e e pura; aqui ficam as tres perguntas que
+// dependem do banco - a fatura pode receber boleto, ja ha linha, e o que fazer
+// com ela.
+//
+// O QUE ESTE CAMINHO NAO FAZ, E OS QUATRO SAO DELIBERADOS:
+//
+//   - NAO chama `conector()`. E o ponto inteiro: ele existe para funcionar sem
+//     conector e sem certificado A1, que e a unica pendencia do projeto. Exigir
+//     conector aqui recriaria a trava que este caminho contorna;
+//   - NAO exige CPF/CNPJ do pagador, ao contrario de `registrar()`. La a guarda
+//     existe porque o BANCO recusaria; aqui o banco JA aceitou - o boleto esta
+//     impresso. Repetir a guarda seria recusar um fato consumado;
+//   - NAO grava `payload_envio` nem `payload_retorno`. Nada subiu e nada voltou,
+//     e um payload sintetico ali seria a unica linha do sistema em que esses dois
+//     campos nao significam "o que trocamos com a Sicoob";
+//   - NAO liquida. Continua valendo o cabecalho deste arquivo: baixa e de
+//     `liquidacao.ts`, e ela e o unico gatilho do split.
+
+/** A fatura ja tem boleto, e ele nao e este. `409`, e a lista de estados que
+ *  podem ser sobrescritos e curta de proposito - ver `importar()`. */
+export class BoletoJaExiste extends Error {
+  readonly status = 409;
+  constructor(status: string, origem: string) {
+    super(
+      `Esta fatura ja tem um boleto em "${status}" (origem ${origem}), e importar por cima ` +
+      'apagaria o que ele registrou. So boleto `pendente` ou `erro` — tentativa nossa que ' +
+      'nao completou — pode ser substituido pelo que foi emitido a mao. Para trocar um boleto ' +
+      'registrado, de baixa nele no banco primeiro.'
+    );
+    this.name = 'BoletoJaExiste';
+  }
+}
+
+/**
+ * A transcricao nao passa na conferencia. `422` - o dado que chegou e que esta
+ * errado, e nada foi gravado.
+ *
+ * A frase vem do dominio, inteira: as mesmas palavras que a tela mostra antes de
+ * a pessoa apertar o botao. Duas redacoes para a mesma recusa fariam quem opera
+ * achar que sao dois problemas.
+ */
+export class ImportacaoRecusada extends Error {
+  readonly status = 422;
+  readonly conferencia: ConferenciaDaImportacao;
+  constructor(c: ConferenciaDaImportacao) {
+    super(
+      (c.recusa ? explicarRecusa(c.recusa) : 'A transcricao do boleto nao confere.') +
+      ' Nada foi gravado.'
+    );
+    this.name = 'ImportacaoRecusada';
+    this.conferencia = c;
+  }
+}
+
+/** A fatura como a conferencia a enxerga. Uma consulta, dois usos - `conferir()`
+ *  e `importar()` -, e nunca duas leituras que possam divergir no meio. */
+async function faturaParaBoleto(faturaId: string) {
+  const f = await dbt().fatura.findFirst({ where: { id: faturaId } });
+  if (!f) throw Object.assign(new Error('Fatura nao encontrada.'), { status: 404 });
+  if (f.status !== 'emitida') throw new FaturaSemBoleto(f.status);
+  return f;
+}
+
+const iso = (d: Date): string => d.toISOString().slice(0, 10);
+
+/**
+ * CONFERE SEM GRAVAR. E a mesma funcao do dominio, contra a fatura de verdade.
+ *
+ * Existe porque a tela nao pode responder isto sozinha: os quatro digitos
+ * verificadores e a leitura dos 44 digitos vivem em `dominio/linha-digitavel.ts`,
+ * do lado do servidor, e reimplementa-los no navegador seria a segunda
+ * implementacao da mesma aritmetica - o defeito que este projeto ja colapsou
+ * quatro vezes com "centavos -> R$".
+ *
+ * `exigir('ler')`: nao escreve nada.
+ */
+export async function conferirParaImportar(
+  faturaId: string, t: TranscricaoDoBoleto,
+): Promise<ConferenciaDaImportacao> {
+  await exigir('ler');
+  const f = await faturaParaBoleto(faturaId);
+  return conferirImportacao(t, {
+    valor_total_centavos: f.valor_total_centavos == null ? null : Number(f.valor_total_centavos),
+    vencimento_iso: iso(f.vencimento),
+  });
+}
+
+/**
+ * Importa para a fatura o boleto que ja foi emitido no portal do banco.
+ *
+ * IDEMPOTENTE PELA LINHA, e nao pelo pedido. Importar duas vezes a MESMA linha
+ * devolve a mesma coisa sem escrever de novo - a pessoa que nao viu o resultado e
+ * clicou outra vez nao produz um segundo fato. Linha DIFERENTE por cima de um
+ * registrado e outra historia, e ela para em `BoletoJaExiste`.
+ */
+export async function importar(faturaId: string, t: TranscricaoDoBoleto) {
+  await exigir('escrever_carteira');
+  const f = await faturaParaBoleto(faturaId);
+
+  const c = conferirImportacao(t, {
+    valor_total_centavos: f.valor_total_centavos == null ? null : Number(f.valor_total_centavos),
+    vencimento_iso: iso(f.vencimento),
+  });
+  /* A RECUSA VEM ANTES DE QUALQUER ESCRITA, e ao contrario de `registrar()` ela
+   * LEVANTA. La o `throw` era proibido porque a fila de retentativa precisa da
+   * memoria da falha; aqui nao ha fila e nao ha tentativa: ha um texto que nao
+   * confere, e retentar sozinho o mesmo texto daria o mesmo resultado para
+   * sempre. */
+  if (!c.aceita) throw new ImportacaoRecusada(c);
+
+  const existente = await dbt().boleto.findFirst({ where: { fatura_id: faturaId } });
+  if (existente && existente.status !== 'pendente' && existente.status !== 'erro') {
+    const mesmaLinha = digitosDaLinha(existente.linha_digitavel ?? '') === c.digitos;
+    if (mesmaLinha && existente.origem === 'importado') return existente;
+    throw new BoletoJaExiste(existente.status, existente.origem);
+  }
+
+  const dados = {
+    nosso_numero: c.nosso_numero,
+    linha_digitavel: c.digitos,
+    /* REMONTADO da linha, nunca digitado - `codigoDeBarrasDaLinha`. Os dois tem
+     * de ser a MESMA informacao em duas formas, e a unica maneira de garantir
+     * isso e derivar um do outro em vez de aceitar os dois. */
+    codigo_barras: c.codigo_barras,
+    pix_copia_e_cola: c.pix_copia_e_cola,
+    /* SEM `pix_txid`. O txid identifica uma cobranca Pix registrada na API, e
+     * este payload foi COPIADO de um papel: inventar um txid faria a conciliacao
+     * procurar no banco por uma cobranca que ela nao criou. */
+    valor_registrado_centavos: c.valor_centavos!,
+    /* O VENCIMENTO DO PROPRIO BOLETO, lido do fator dentro dos 44 digitos. O
+     * `?? f.vencimento` cobre o fator 0000, que a especificacao define como "sem
+     * vencimento" e que a conferencia NAO trata como divergencia - e a coluna e
+     * NOT NULL. Nesse caso a data da fatura e a melhor verdade disponivel, e ela
+     * e a mesma que o documento imprime. */
+    vencimento: c.vencimento ? new Date(`${c.vencimento}T00:00:00.000Z`) : f.vencimento,
+    status: 'registrado' as const,
+    origem: 'importado' as const,
+    registrado_em: new Date(),
+    /* O ERRO DA TENTATIVA ANTERIOR SAI, e `tentativas` FICA. O erro descrevia o
+     * estado de agora e deixou de ser verdade; a contagem descreve o que
+     * aconteceu e continua sendo. Apagar as duas coisas junto seria reescrever a
+     * historia da fatura para que ela pareca ter dado certo de primeira. */
+    ultimo_erro: null,
+    /* SAI DA FILA. `ultima_tentativa_em` NAO e carimbado: nenhuma tentativa
+     * aconteceu, e carimba-lo aqui faria a agenda contar um intervalo a partir de
+     * um evento que nao existiu. Nulo em `proxima_tentativa_em` satisfaz
+     * `boleto_agendamento_coerente` nos dois casos - com e sem tentativa previa. */
+    proxima_tentativa_em: null,
+  };
+
+  return existente
+    ? dbt().boleto.update({ where: { id: existente.id }, data: dados })
+    : dbt().boleto.create({ data: { tenant_id: tenantCorrente(), fatura_id: faturaId, ...dados } });
+}
+
 /**
  * PRD 6: "consulta ativa diaria dos boletos em aberto para capturar liquidacoes
  * cujo webhook falhou". Devolve o que o banco diz; NAO baixa.
@@ -384,16 +548,34 @@ export async function tamanhoDosEmAberto(): Promise<number> {
   await exigir('ler');
   const r: Array<{ n: bigint }> = await db().$queryRaw`
     SELECT count(*) AS n FROM boleto b
-     WHERE b.status = 'registrado' AND b.nosso_numero IS NOT NULL`;
+     WHERE b.status = 'registrado' AND b.nosso_numero IS NOT NULL
+       AND b.origem = 'api_sicoob'`;
   return Number(r[0]?.n ?? 0);
 }
 
-/** Os `registrado` com nosso numero, que e o universo da consulta ativa. Devolve
- *  a linha inteira porque o motor precisa do `fatura_id` para baixar. */
+/**
+ * Os `registrado` com nosso numero, que e o universo da consulta ativa. Devolve
+ * a linha inteira porque o motor precisa do `fatura_id` para baixar.
+ *
+ * O IMPORTADO FICA DE FORA, e a exclusao e o motivo de a coluna `origem` existir
+ * (migration 32). O `nosso_numero` de um boleto importado foi TRANSCRITO do
+ * rotulo impresso no papel, e o rotulo impresso nao e necessariamente o
+ * identificador que a API de Cobranca v3 aceita em consulta. Perguntar por ele
+ * nao devolve "este titulo nao e nosso": devolve erro, e o motor traduz erro em
+ * `registrarDivergencia` — uma divergencia gravada, na tela, contra um boleto que
+ * esta certo.
+ *
+ * O QUE ISSO CUSTA, dito por extenso: boleto importado nao e conciliado
+ * automaticamente. Ele e cobrado pela baixa manual da aba Faturas, que e o mesmo
+ * caminho que a operacao ja usa hoje para tudo — e o unico, enquanto o A1 nao
+ * existe. Quando o A1 existir, se a conciliacao automatica dos importados passar
+ * a valer a pena, a pergunta e a `Q-BOLIMP-01`: ela tem dono e nao e o
+ * implementador (regra 10).
+ */
 export async function emAberto(limite: number) {
   await exigir('ler');
   return dbt().boleto.findMany({
-    where: { status: 'registrado', nosso_numero: { not: null } },
+    where: { status: 'registrado', nosso_numero: { not: null }, origem: 'api_sicoob' },
     orderBy: [{ vencimento: 'asc' }],
     take: Math.max(1, Math.min(limite, 500)),
   });
@@ -425,6 +607,20 @@ export async function baixarNoBanco(faturaId: string, motivo: string, cobranca: 
   const c = await conector();
   const b = await dbt().boleto.findFirst({ where: { fatura_id: faturaId } });
   if (!b?.nosso_numero) throw Object.assign(new Error('Boleto nao registrado.'), { status: 404 });
+  /* PELA MESMA RAZAO DE `emAberto`: o `nosso_numero` do importado foi transcrito
+   * do papel, e mandar a Sicoob baixar por ele ou nao acha titulo nenhum ou acha
+   * o ERRADO. Baixar titulo emitido a mao e no portal onde ele foi emitido. */
+  if (b.origem === 'importado') {
+    throw Object.assign(
+      new Error(
+        'Este boleto foi IMPORTADO — emitido a mao no portal do banco, e nao registrado por ' +
+        'nos pela porta de cobranca. Baixa-lo por aqui mandaria a Sicoob procurar por um ' +
+        '"nosso numero" que foi transcrito de um PDF. Baixe no proprio portal, e registre o ' +
+        'desfecho nesta fatura pela baixa manual.'
+      ),
+      { status: 409, name: 'BoletoImportadoNaoSeBaixaPelaApi' },
+    );
+  }
 
   await cobranca.baixar(c.credencial_ref, b.nosso_numero, motivo);
   return dbt().boleto.update({

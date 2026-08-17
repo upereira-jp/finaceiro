@@ -180,3 +180,70 @@ export function crcConfere(brcode: string): boolean {
   if (!corpo.endsWith('6304')) return false;
   return crc16(corpo) === brcode.slice(-4).toUpperCase();
 }
+
+/**
+ * O BR Code COLADO DE FORA, normalizado - e este e um conserto medido, nao uma
+ * conveniencia.
+ *
+ * ============================================================================
+ * O DEFEITO, ACHADO EM 17/08/2026 PELO TESTE `B7b` DA IMPORTACAO DE BOLETO
+ *
+ * Tres lugares deste sistema faziam a MESMA coisa com um payload Pix vindo de
+ * fora: `.replace(/\s+/g, '')` — `concessionaria/leitor-visao.ts`,
+ * `dominio/folha-unificada.ts` e a primeira versao de `boleto-importado.ts`. A
+ * intencao era limpar a quebra de linha de quem copia de um PDF, e ela e
+ * legitima. O efeito, nao:
+ *
+ *     5908G3 SOLAR      ->    5908G3SOLAR
+ *     ^^  ^^                  o campo diz 08 caracteres e passou a ter 7
+ *
+ * **O nome do beneficiario (campo 59) e a cidade (60) tem espaco de verdade
+ * dentro**, e quase todo nome de empresa tem. Tirar esses espacos quebra o
+ * comprimento declarado do campo E o CRC, que cobre o payload inteiro. O
+ * resultado nao e erro: e um QR impresso na fatura que o aplicativo do banco NAO
+ * LE. Medido com `pixEstatico({recebedorNome: 'G3 SOLAR'})`, que produz um codigo
+ * integro e virava um codigo invalido ao passar pela limpeza.
+ *
+ * ============================================================================
+ * A REGRA: O CRC DECIDE, E NAO UM PALPITE SOBRE ESPACO
+ *
+ * Nao ha como distinguir por inspecao o espaco que pertence ao nome do espaco que
+ * a colagem inseriu. Entao nao se tenta: candidata-se, e QUEM DECIDE E O CRC - os
+ * quatro digitos do fim sao exatamente a pergunta "este texto esta inteiro?". A
+ * escada vai da hipotese mais conservadora para a mais agressiva:
+ *
+ *   1. como veio, so aparado       o payload correto, colado inteiro
+ *   2. sem quebra de linha e TAB   `\n` e `\t` NUNCA sao parte de um BR Code, e o
+ *                                  espaco do nome do beneficiario sobrevive
+ *   3. sem a quebra E o branco     a mesma coisa, quando a colagem indentou a
+ *      GRUDADO nela                linha seguinte
+ *   4. a quebra vira UM espaco     o caso inverso: o payload ja tinha um espaco
+ *                                  ali e o PDF quebrou EM CIMA dele
+ *   5. sem espaco nenhum           o legado - payload sem espaco legitimo que
+ *                                  recebeu espacos na colagem
+ *
+ * A ORDEM IMPORTA, e os degraus do meio sao o que faltava na primeira versao
+ * deste conserto: um payload com nome composto E quebra de linha nao passa no 1
+ * (tem `\n`) nem no 5 (perde o espaco do nome). Sem eles, o caso mais frequente
+ * da operacao — copiar do PDF do boleto — continuaria sendo recusado.
+ *
+ * NAO HA RISCO DE ACEITAR LIXO NO CAMINHO. Os cinco candidatos sao transformacoes
+ * deterministicas do MESMO texto, e o CRC de 16 bits e calculado sobre cada um: o
+ * que fecha e o payload que o banco emitiu, nao uma variante plausivel dele.
+ *
+ * Quando NENHUM dos cinco fecha, devolve o texto so aparado. Devolver uma das
+ * variantes seria entregar adiante um sexto texto, que nao e nem o que veio nem
+ * um payload valido - e quem chama confere o CRC de qualquer forma.
+ */
+export function normalizarBrCode(bruto: string | null | undefined): string {
+  const aparado = String(bruto ?? '').trim();
+  if (!aparado) return '';
+  const candidatos = [
+    aparado,
+    aparado.replace(/[\r\n\t]+/g, ''),
+    aparado.replace(/\s*[\r\n\t]+\s*/g, ''),
+    aparado.replace(/\s*[\r\n\t]+\s*/g, ' '),
+    aparado.replace(/\s+/g, ''),
+  ];
+  return candidatos.find(crcConfere) ?? aparado;
+}

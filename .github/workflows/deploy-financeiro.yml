@@ -14,10 +14,23 @@
 # O runner do Actions faz o SSH (a porta 22 nao e alcancavel do container do
 # assistente; e o mecanismo do ADR-0004 cond. 5). Depende do secret VPS_SSH_KEY.
 #
-# Deploy ATUAL (16/08): so a logo. ecdddcb..origin/main = 3 commits, SEM migration
-# e SEM mudanca de dependencia. Por isso NAO ha prisma migrate deploy aqui: quando
-# houver migration pendente, ela entra num passo proprio, com DATABASE_URL vindo
-# do ambiente do systemd — fora do escopo deste deploy.
+# NAO HA `prisma migrate deploy` AQUI, e desde 17/08/2026 isso deixou de ser
+# "fora do escopo" e passou a ser uma DIVISAO com endereco: o passo proprio existe
+# e e o workflow `migrate-financeiro.yml`.
+#
+# Ele roda no RUNNER e nao neste box, de proposito: `DIRECT_URL` e a conexao com
+# DDL, esta VPS e COMPARTILHADA com os vizinhos /opt/intre*, e a pratica do
+# projeto - registrada em `prisma.config.ts` desde 30/07 - e que as migrations
+# "sempre foram aplicadas de fora, nunca do VPS". O `.env` daqui tem
+# `DATABASE_URL` e nao tem `DIRECT_URL`, e continua sem precisar ter.
+#
+# A ORDEM IMPORTA E E: **migrate-financeiro primeiro, este depois.** Migration
+# aditiva com DEFAULT e compativel para tras - o client antigo monta `SELECT` com
+# lista explicita de colunas e nao le a coluna nova. O inverso nao vale: subir
+# codigo que consulta uma coluna que nao existe e 500 em toda leitura, com a
+# fatura na tela de quem opera.
+#
+# HA MIGRATION PENDENTE HOJE (17/08): a 32, `boleto_importado`.
 name: deploy-financeiro
 
 on:

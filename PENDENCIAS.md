@@ -6,9 +6,9 @@
 | **O que é** | O **índice único** das pendências. Consolida e substitui os dois trackers datados que existiam soltos |
 | **Substitui e apaga** | `PENDENCIAS-2026-08-05.md` e `PROXIMOS-PASSOS-2026-08-09.md` — vencidos, e agora removidos do repo |
 | **NÃO substitui** | `QUESTOES.md` (registro datado, dono por entrada — regra 10) · `RETOMADA-2026-08-15.md` (onde tudo parou) · os `RESUMO-SESSAO-*` (memória datada). Estes continuam sendo a fonte; aqui é o **apontador** |
-| **Data** | 14/08/2026 |
-| **Estado da suíte** | `npm test` **`EXIT=0`**, **~1.911** verificações |
-| **Produção** | `financeiro.blackhaus.io` · `origin/main` em `ecdddcb` · **31 migrations = 31** · Pix estático no ar |
+| **Data** | 14/08/2026 · rev. 17/08/2026 |
+| **Estado da suíte** | `npm test` **`EXIT=0`**, **2.056** verificações (eram ~1.911 em 14/08), com PostgreSQL real |
+| **Produção** | `financeiro.blackhaus.io` · `origin/main` em `ecdddcb` · **31 migrations no ar**; a **32** (boleto importado) está no repositório e **ainda não foi aplicada** — ver §5 · Pix estático no ar |
 
 > ## A única pendência do repositório é o certificado A1.
 >
@@ -32,7 +32,26 @@
 
 **Enquanto ele não existe, nada para.** A `PortaDeCobranca` é injetada e o padrão é
 `COBRANCA_NAO_CONFIGURADA`, que **recusa com 503 nomeado** em vez de fingir. A fatura
-compõe, emite, imprime e **cobra por Pix estático** — o que não existe é boleto registrado.
+compõe, emite, imprime e **cobra por Pix estático** — o que não existe é boleto registrado
+*por nós, pela API*.
+
+> **17/08/2026 — e desde hoje a fatura também cobra por BOLETO, sem o A1.**
+>
+> O boleto emitido à mão no portal da cooperativa **entra no sistema**: aba
+> Faturas → *Importar boleto emitido no banco*. Ele não é uma segunda emissão —
+> o título já existe no banco, e o que entra é a transcrição conferida dele
+> (`origem = 'importado'`, migration 32). O sistema **não fala com a Sicoob em
+> nenhum ponto desse caminho**.
+>
+> O que isso conserta são três silêncios que estavam medidos e sem dono: a aba
+> dizia *"esta fatura não tem boleto"* para uma fatura que tinha; o documento
+> composto caía no ramo do **Pix estático — que não concilia** — existindo um
+> boleto com nosso número; e a conferência aritmética dos 44 dígitos nunca rodava
+> contra esse título.
+>
+> **O A1 continua sendo a pendência, e o que ele destrava não mudou:** emissão
+> automática, fila de retentativa, consulta ativa e baixa pela API. O importado
+> fica **fora da consulta ativa** de propósito — `Q-BOLIMP-01`, com a razão medida.
 
 ### 1.1 Por que é o único código que falta
 
@@ -67,15 +86,32 @@ fonte com dono e data é o `QUESTOES.md`.
 
 Nenhum é código. Os importadores já existem e rodam do Codespace contra produção.
 
+> **17/08/2026 — os itens 1 e 7 deixaram de exigir Codespace.** Eles continuavam
+> na fila por um motivo que não era de decisão nem de insumo: **não havia tela**.
+> O dado só entrava por um script rodado de um Codespace, contra produção, por
+> quem tem o repositório clonado e o `.env` na mão — e quem opera não tem nada
+> disso. As colunas, as rotas (`PATCH /clientes/:id`, `PATCH /unidades-consumidoras/:id`)
+> e os importadores em lote já existiam desde sempre. **Os importadores continuam
+> sendo o caminho certo para 29 linhas de uma vez** — eles conferem colisão de
+> documento antes de escrever qualquer coisa (`Q-CLIENTEDUP-01`), o que a
+> digitação linha a linha não faz.
+
 | # | Pendência | Estado hoje | Como entra | Dono |
 |:--:|---|---|---|---|
-| 1 | **CPF/CNPJ de 24 pessoas** (29 linhas de cliente) | **0 de 29** | `npm run documentos` | operação |
-| 2 | **Dia de vencimento de 29 UCs** | **0 de 29** | `npm run vencimentos` | operação |
+| 1 | **CPF/CNPJ de 24 pessoas** (29 linhas de cliente) | **0 de 29** | **aba Clientes**, linha a linha (17/08) · ou `npm run documentos` em lote | operação |
+| 2 | **Dia de vencimento de 29 UCs** | **0 de 29** | **aba Unidades**, linha a linha · ou `npm run vencimentos` em lote | operação |
 | 3 | **CPF/CNPJ de 2 originadores** + natureza | 0 | `npm run originadores` | operação |
 | 4 | **Digitar os 29 contratos** | 0 | `npm run contratos` (depende de 1 e 3) | operação |
 | 5 | **Emissor** — razão social, CNPJ, contato | vazio em produção | aba Documento `/documento#cadastro` | dono |
 | 6 | **Tarifa das 41 UCs** (`tarifa_reais_por_kwh`) | **NULL nas 41** | aba Unidades (o conector não semeia — a coluna não está no contrato do CRM, `Q-VALOR-01(b)`) | dono/operação |
-| 7 | **Endereço do pagador de 29 UCs** | **0 de 29** | `npm run enderecos` — **só o boleto depende** | operação |
+| 7 | **Endereço do pagador de 29 UCs** | **0 de 29** | **aba Unidades**, painel «Endereço do pagador» (17/08) · ou `npm run enderecos` em lote — **só o boleto depende** | operação |
+
+**A aba Clientes distingue o que a coluna sozinha esconde**, e é a R8: documento
+vindo do CRM entra com `documento_validado = false` **mesmo passando no dígito
+verificador**, porque lá o campo é livre e dígito certo não prova que o documento
+é daquela pessoa. Um CPF preenchido na tela não significa contrato ativável —
+quem destrava a R9 é a coluna *Vale para o contrato*. **Reenviar o mesmo número
+pela aba é o ato que o valida**, porque troca a origem para `coleta_local`.
 
 ### 2.b Decisões do dono / contador — movem dinheiro, não têm volta
 
@@ -101,6 +137,19 @@ Nenhum é código. Os importadores já existem e rodam do Codespace contra produ
 
 Não estão mais abertas; a leitura por extenso é a `RETOMADA-2026-08-15`.
 
+- **Importar boleto emitido no banco** (17/08, migration 32) — a aba Faturas passou a
+  aceitar o título emitido à mão no portal: linha digitável conferida nos quatro dígitos
+  verificadores, código de barras **remontado** dela, valor e vencimento lidos de dentro
+  dos 44 dígitos e comparados com a fatura antes de gravar. Upload do PDF reaproveita o
+  extrator por visão que já existia. Não fala com a Sicoob e não depende do A1.
+- **O CPF/CNPJ do cliente e o endereço do pagador entram pela tela** (17/08) — eram os
+  itens 1 e 7 da §2.a, e ficavam presos a um script de Codespace. A aba Clientes mostra a
+  R8 (semente do CRM não vale) e a aba Unidades ganhou o painel do endereço.
+- **O Pix copia e cola parou de ser corrompido na limpeza** (17/08) — três lugares
+  faziam `replace(/\s+/g, '')` num payload que tem espaço legítimo dentro do nome do
+  beneficiário (`5908G3 SOLAR` → `5908G3SOLAR`): quebrava o comprimento do campo e o CRC,
+  e o QR era **desenhado assim mesmo**. Agora quem decide o que é espaço sobrando é o
+  próprio CRC, e payload que não fecha não vira QR impresso.
 - **Cadastro de Fatura** — emissor, logotipo, chave Pix, campos personalizados, modelos (migrations 28–31).
 - **Aba Documento = a referência, e passou dela** — conferência aritmética do boleto, teto de desconto, escala do decimal.
 - **Aba Tarifas removida**, tarifa migrada para a UC (a coluna certa, medido em 41 de 41).
@@ -126,3 +175,54 @@ dono**: girar a chave (item 2.c.2).
 - **Não apagados, e por quê:** `QUESTOES.md` é o registro com dono por entrada
   (regra 10) e continua sendo a fonte das decisões da §2.b/§2.c; as retomadas e os
   resumos são a linha do tempo.
+
+---
+
+## 5. A migration 32 está pendente em produção, e como aplicá-la
+
+**Ela não foi aplicada, e não foi por esquecimento:** aplicá-la exige a
+`DIRECT_URL` — a conexão direta com DDL —, e ela não existe em lugar nenhum a que
+o assistente tenha acesso. O `.env` do servidor tem `DATABASE_URL` e **não tem**
+`DIRECT_URL`, por decisão registrada em `prisma.config.ts` desde 30/07: *"as
+migrations deste projeto sempre foram aplicadas de fora, nunca do VPS"*.
+
+### O caminho, com um secret
+
+1. cadastre `DIRECT_URL` em **Settings → Secrets and variables → Actions**
+   (formato em `.env.example`; **session pooler na 5432**, nunca a 6543 — o
+   Migrate exige prepared statements que o pooler de transação não suporta, e o
+   modo de falha dele não é erro: ele *pendura*);
+2. rode **`migrate-financeiro`** com o campo `confirmar` em `conferir` — ele
+   confere a identidade do banco, imprime o que está pendente e **não escreve nada**;
+3. rode de novo com `confirmar = aplicar`;
+4. rode **`deploy-financeiro`**.
+
+**A ordem é essa.** Migration aditiva com `DEFAULT` é compatível para trás — o
+client antigo monta `SELECT` com lista explícita de colunas e não lê a coluna
+nova. O inverso não vale: subir o código antes seria 500 em toda leitura de
+boleto, com a fatura na tela de quem opera.
+
+### Sem Actions, direto de onde já há credencial
+
+```
+DIRECT_URL="..." npx prisma migrate status                                   # confere
+DIRECT_URL="..." node --experimental-strip-types scripts/conferir-banco-alvo.ts identidade
+DIRECT_URL="..." npx prisma migrate deploy                                   # aplica
+DIRECT_URL="..." node --experimental-strip-types scripts/conferir-banco-alvo.ts migration-32
+```
+
+### O que foi ensaiado antes de propor isto
+
+Contra PostgreSQL real, neste container:
+
+| Ensaio | Resultado |
+|---|---|
+| as 32 do zero, pelo `prisma migrate deploy` | aplicadas, `migrate status` limpo |
+| banco **em 31**, a 32 pendente, aplicada pelo CLI | o ensaio acima na ordem exata da produção |
+| a 32 sobre um banco em 31 **com linha de `boleto` dentro** | **~6 ms**; a linha que já existia ficou `origem = 'api_sicoob'` |
+| `conferir-banco-alvo.ts identidade` contra um banco **que não é o nosso** | **recusa**, nomeando a regra 4 |
+
+**A guarda de identidade é a regra 4 em forma executável.** `migrate deploy`
+contra o banco errado não recusa — ele **cria**. A identidade conferida não é o
+nome na URL: é a migration de fundação `20260725120000_fundacao_schema` estar
+registrada como aplicada no alvo. Nenhum outro banco tem essa linha.

@@ -39,26 +39,18 @@ import {
   FRAGMENTO_DA_ABA_OCULTA, type AbaDaFatura,
 } from '../abas-da-fatura.ts';
 import { LOGO_G3_DATA_URI } from '../logo-g3.ts';
+import { lerBase64, mimeDo, reenviavel, naMensagem } from '../arquivo.ts';
 
 /** `setState` sem depender do namespace `React` — o transform novo nao o poe em escopo. */
 type Ajustar<T> = (f: (anterior: T) => T) => void;
 
 /* ------------------------------------------------------------------ ajudas */
 
-/** O arquivo em base64, sem o prefixo `data:`. A rota o remove de novo, e os dois
- *  fazem certo — mandar o prefixo custaria uma ida ao servidor para descobrir. */
-function lerBase64(f: File): Promise<string> {
-  return new Promise((ok, erro) => {
-    const r = new FileReader();
-    r.onload = () => ok(String(r.result).split(',')[1] ?? '');
-    r.onerror = () => erro(new Error('não foi possível ler o arquivo'));
-    r.readAsDataURL(f);
-  });
-}
-
-/** O mime do arquivo, com o fallback pelo nome — o navegador as vezes nao o da. */
-const mimeDo = (f: File): string =>
-  f.type || (/\.pdf$/i.test(f.name) ? 'application/pdf' : 'image/jpeg');
+/* `lerBase64`, `mimeDo`, `reenviavel` e `naMensagem` MORAVAM AQUI ate 17/08/2026.
+ * Sairam para `web/src/arquivo.ts` quando a aba Faturas passou a subir o PDF do
+ * boleto emitido no banco: a segunda tela a precisar delas seria a segunda copia,
+ * e `reenviavel` e justamente o tipo de detalhe que se copia com o defeito junto.
+ * Nada mudou de comportamento - so de endereco. */
 
 /** Espera `ms` depois da ULTIMA chamada. E o que torna a composicao no servidor
  *  barata o bastante para acontecer a cada tecla. */
@@ -70,26 +62,6 @@ function useAtraso<T extends unknown[]>(f: (...a: T) => void, ms: number) {
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => ref.current(...a), ms);
   }, [ms]);
-}
-
-const naMensagem = (e: unknown) => (e instanceof Error ? e.message : String(e));
-
-/**
- * O MESMO ARQUIVO PODE SER ENVIADO DE NOVO, e ate 14/08 nao podia.
- *
- * Os dois `<input type="file">` sao nao-controlados e nada tocava no `value`
- * deles. Com o `value` intacto, escolher o MESMO arquivo nao dispara `change` no
- * navegador — nada acontece: nem status, nem carregando, nem erro.
- *
- * E o caminho mais provavel e justamente o de RECUPERACAO: a leitura falhou ou
- * veio ruim, a pessoa clica de novo no mesmo PDF, e a tela nao reage. Zerar o
- * `value` depois de despachar custa uma linha e conserta os dois casos - o
- * reenvio e o "Nova fatura" seguido do mesmo arquivo.
- */
-function reenviavel(e: React.ChangeEvent<HTMLInputElement>, enviar: (f: File) => void): void {
-  const f = e.target.files?.[0];
-  e.target.value = '';
-  if (f) enviar(f);
 }
 
 /* ------------------------------------------------------------- o rascunho */
