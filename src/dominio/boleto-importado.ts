@@ -16,8 +16,8 @@
 // e o sistema nao sabe que ele existe. Consequencias medidas na leitura do
 // codigo, e as tres sao silenciosas:
 //
-//   - `GET /faturas/:id/boleto` devolve 404, e a aba Faturas diz "esta fatura nao
-//     tem boleto" para uma fatura que TEM;
+//   - `GET /faturas/:id/boleto` devolve 404, e a aba `Emissao e cobranca` diz
+//     "esta fatura nao tem boleto" para uma fatura que TEM;
 //   - `documento.paraFatura` cai no ramo do Pix estatico (`faixaDePagamento`), e
 //     o documento sai cobrando por um meio que NAO concilia - o dinheiro chega
 //     sem dizer de quem e - enquanto existe um boleto com nosso numero;

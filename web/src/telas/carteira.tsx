@@ -46,7 +46,7 @@ export function TelaCarteira() {
 
   return (
     <Pagina titulo="Faturamento"
-            sub="Onde a fatura do mês nasce. O ensaio roda a triagem e não escreve nada; compor grava as faturas em rascunho. Emitir e cobrar são a aba Faturas.">
+            sub="Onde a fatura do mês nasce. O ensaio roda a triagem e não escreve nada; compor grava as faturas em rascunho. Emitir e cobrar são a aba Emissão e cobrança.">
       {atual && (
         <div className="kpis">
           <Kpi nome={<>Faturado · {String(atual.competencia).slice(0, 7)}</>} icone="faturado"

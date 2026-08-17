@@ -7,8 +7,8 @@
 | **Substitui e apaga** | `PENDENCIAS-2026-08-05.md` e `PROXIMOS-PASSOS-2026-08-09.md` — vencidos, e agora removidos do repo |
 | **NÃO substitui** | `QUESTOES.md` (registro datado, dono por entrada — regra 10) · `RETOMADA-2026-08-15.md` (onde tudo parou) · os `RESUMO-SESSAO-*` (memória datada). Estes continuam sendo a fonte; aqui é o **apontador** |
 | **Data** | 14/08/2026 · rev. 17/08/2026 |
-| **Estado da suíte** | `npm test` **`EXIT=0`**, **2.056** verificações (eram ~1.911 em 14/08), com PostgreSQL real |
-| **Produção** | `financeiro.blackhaus.io` · `origin/main` em **`f67b108`** · **32 migrations no ar** (a 32 aplicada em 17/08 10:23 UTC) · Pix estático **e boleto importado** no ar |
+| **Estado da suíte** | `npm test` **`EXIT=0`**, **2.057** verificações (eram ~1.911 em 14/08), com PostgreSQL real |
+| **Produção** | `financeiro.blackhaus.io` · `origin/main` em **`6f8aa46`** (deploy de 17/08 10:59 UTC) · **32 migrations no ar** (a 32 aplicada em 17/08 10:23 UTC) · Pix estático **e boleto importado** no ar · rótulos da barra revistos no mesmo deploy |
 
 > ## A única pendência do repositório é o certificado A1.
 >
@@ -38,7 +38,7 @@ compõe, emite, imprime e **cobra por Pix estático** — o que não existe é b
 > **17/08/2026 — e desde hoje a fatura também cobra por BOLETO, sem o A1.**
 >
 > O boleto emitido à mão no portal da cooperativa **entra no sistema**: aba
-> Faturas → *Importar boleto emitido no banco*. Ele não é uma segunda emissão —
+> **Emissão e cobrança** → *Importar boleto emitido no banco*. Ele não é uma segunda emissão —
 > o título já existe no banco, e o que entra é a transcrição conferida dele
 > (`origem = 'importado'`, migration 32). O sistema **não fala com a Sicoob em
 > nenhum ponto desse caminho**.
@@ -137,7 +137,7 @@ pela aba é o ato que o valida**, porque troca a origem para `coleta_local`.
 
 Não estão mais abertas; a leitura por extenso é a `RETOMADA-2026-08-15`.
 
-- **Importar boleto emitido no banco** (17/08, migration 32) — a aba Faturas passou a
+- **Importar boleto emitido no banco** (17/08, migration 32) — a aba **Emissão e cobrança** passou a
   aceitar o título emitido à mão no portal: linha digitável conferida nos quatro dígitos
   verificadores, código de barras **remontado** dela, valor e vencimento lidos de dentro
   dos 44 dígitos e comparados com a fatura antes de gravar. Upload do PDF reaproveita o
@@ -152,13 +152,26 @@ Não estão mais abertas; a leitura por extenso é a `RETOMADA-2026-08-15`.
   próprio CRC, e payload que não fecha não vira QR impresso.
 - **Os rótulos da barra passam a descrever a tela** (17/08) — cinco mudaram, e três
   diziam outra coisa que a tela faz: `Carteira` → **Faturamento** (é onde a fatura do mês
-  nasce), `Cobrança` → **Conector Sicoob** (cobrar é em Faturas; ali é a credencial do
+  nasce), `Cobrança` → **Conector Sicoob** (cobrar é na aba ao lado; ali é a credencial do
   banco), `Documento` → **Fatura unificada** (não dizia qual, com dois candidatos na
   mesma barra). Mais `Unidades` → **Unidades consumidoras** e `Donos` → **Donos de
   usina**, que eram dívida de vocabulário (regra 7 — os termos inteiros já estavam no
   `GLOSSARIO` e já eram o título da página). **As rotas não mudaram**, nem os nomes de
   domínio. A revisão achou de quebra uma mensagem anterior que mandava cadastrar a
   identidade *"na aba Cobrança"* — o formulário vive em `/documento#cadastro`.
+- **E um sexto rótulo, que corrige o quinto** (17/08, fim do dia) — `Faturas` →
+  **Emissão e cobrança**, por medição do dono: *"o nome faturas e fatura unificada está
+  causando confusão"*. Rebatizar `Documento` de **Fatura unificada** tinha deixado duas
+  abas vizinhas começando pela mesma palavra — a correção da manhã criou a confusão da
+  tarde. Quem cedeu foi `Faturas`, porque **não nomeia nada**: era o plural da entidade,
+  e a entidade aparece em todas as telas do grupo, enquanto `Fatura unificada` é nome de
+  funcionalidade e está em quatro arquivos e numa tabela (mudá-lo criaria sinônimo —
+  regra 7). O rótulo novo são os três botões da tela: emitir, boleto, baixa. **A rota
+  `/faturas` não mudou.** E a lição virou teste em vez de comentário (regra 8): o `I4c`
+  já proibia título repetido e passou verde nas duas rodadas, porque `Faturas` e
+  `Fatura unificada` são strings diferentes — o **`I4k`** passou a proibir duas abas com
+  o mesmo **substantivo-cabeça**, que é o que a pessoa lê primeiro. `Faturamento`
+  convive, porque nomeia outra coisa: o processo, não o documento.
 - **Cadastro de Fatura** — emissor, logotipo, chave Pix, campos personalizados, modelos (migrations 28–31).
 - **Aba Documento = a referência, e passou dela** — conferência aritmética do boleto, teto de desconto, escala do decimal.
 - **Aba Tarifas removida**, tarifa migrada para a UC (a coluna certa, medido em 41 de 41).

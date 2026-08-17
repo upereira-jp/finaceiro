@@ -119,8 +119,8 @@ export function TelaFaturas() {
   const tarifas = conferirTarifas(lista, (id) => numeroDaUc.get(id));
 
   return (
-    <Pagina titulo="Faturas"
-            sub="O mês de referência inteiro, linha por linha. Emitir fecha o valor; o boleto vem depois; a baixa é o único gatilho do split.">
+    <Pagina titulo="Emissão e cobrança"
+            sub="O mês de referência inteiro, linha por linha. Emitir fecha o valor; o boleto vem depois; a baixa é o único gatilho do split. A folha que o cliente recebe se monta na aba Fatura unificada.">
       <div className="cartao secao">
         <div style={{ ...linha, gap: 12 }}>
           <div>

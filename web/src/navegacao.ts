@@ -17,7 +17,11 @@
 // só: **o rótulo descreve a tela, não a intenção de quem a escreveu.** Cinco
 // mudaram — `Unidades consumidoras`, `Donos de usina`, `Faturamento`,
 // `Conector Sicoob` e `Fatura unificada` —, cada um com o motivo na própria
-// linha. Três coisas NÃO mudaram junto, e as três de propósito:
+// linha. No mesmo dia entrou um SEXTO, e ele corrige o quinto: `Faturas` virou
+// `Emissão e cobrança` porque o rótulo novo da vizinha a deixou começando pela
+// mesma palavra. O motivo está na linha de `/faturas`.
+//
+// Três coisas NÃO mudaram junto, e as três de propósito:
 //
 //   as ROTAS          `/carteira`, `/cobranca` e `/documento` continuam iguais.
 //                     `/documento#cadastro` está citado na `PENDENCIAS` e é o
@@ -97,9 +101,34 @@ export const TELAS: readonly Tela[] = [
    * **Faturamento** gera o lote -> **Faturas** emite, cobra e da baixa.
    */
   { rota: '/carteira',   titulo: 'Faturamento', icone: 'carteira',  grupo: 'dinheiro' },
-  { rota: '/faturas',    titulo: 'Faturas',     icone: 'faturas',   grupo: 'dinheiro' },
   /*
-   * "COBRANCA" DIZIA O CONTRARIO DO QUE A TELA FAZ. Cobrar acontece em Faturas;
+   * "FATURAS" E "FATURA UNIFICADA" LADO A LADO NAO SE DISTINGUIAM, e o dono
+   * disse isso duas vezes: primeiro *"qual a diferenca entre a aba Faturas e a
+   * aba Documento?"* — que motivou o rotulo `Fatura unificada` em 17/08 —, e
+   * depois *"o nome faturas e fatura unificada esta causando confusao"*. A
+   * segunda frase mede a primeira correcao: trocar `Documento` por
+   * `Fatura unificada` deixou as DUAS comecando pela mesma palavra, e vizinhas.
+   *
+   * QUAL DOS DOIS CEDE, e por que este. `Fatura unificada` e nome de
+   * funcionalidade dado pelo dono e esta em quatro arquivos e numa tabela
+   * (`fatura-unificada.tsx`, `dominio/fatura-unificada.ts`, `abas-da-fatura.ts`,
+   * `registro_de_fatura_unificada`) — mudar o rotulo dele criaria sinonimo, que
+   * e divida de leitura (regra 7). `Faturas` nao nomeia nada: era so o plural da
+   * entidade, e a entidade aparece em TODAS as telas do grupo.
+   *
+   * `Emissao e cobranca` sao os ATOS da tela, e sao os tres botoes que ela tem:
+   * emitir a fatura, pedir ou importar o boleto, dar baixa. E o par com a
+   * vizinha da esquerda continua legivel na ordem do trabalho:
+   * **Faturamento** gera o lote -> **Emissao e cobranca** emite, cobra e baixa.
+   *
+   * NAO VIROU "Cobranca" SOZINHO de proposito: a rota `/cobranca` e OUTRA tela
+   * (Conector Sicoob). Um rotulo `Cobranca` apontando para `/faturas` poria as
+   * duas em desacordo para quem le o codigo.
+   */
+  { rota: '/faturas',    titulo: 'Emissão e cobrança', icone: 'faturas', grupo: 'dinheiro' },
+  /*
+   * "COBRANCA" DIZIA O CONTRARIO DO QUE A TELA FAZ. Cobrar acontece na aba ao
+   * lado — `Emissao e cobranca`, a antiga `Faturas`;
    * aqui se cadastra a CREDENCIAL do banco - agencia, conta, convenio, validade
    * do A1 e a `credencial_ref`. Quem abrisse "Cobranca" para cobrar um cliente
    * encontrava um formulario de credencial, que e o oposto do que procurava.

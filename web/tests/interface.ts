@@ -289,6 +289,49 @@ chk('I4j', telaDoCaminho('/prontidao').rota === TELAS[0]!.rota,
     'a rota antiga /prontidao cai na tela de Pendencias — caminho desconhecido resolve para a '
     + 'primeira, e a primeira e ela');
 
+/*
+ * DOIS ROTULOS COM O MESMO SUBSTANTIVO-CABECA — e por que `I4c` nao bastava.
+ *
+ * O `I4c` ja proibia titulo REPETIDO, e ele passou verde nas duas vezes em que a
+ * barra confundiu o dono de fato:
+ *
+ *   17/08, manha  `Faturas` e `Documento` -> *"qual a diferenca entre a aba
+ *                 Faturas e a aba Documento?"*. A correcao rebatizou a segunda
+ *                 de `Fatura unificada`;
+ *   17/08, tarde  `Faturas` e `Fatura unificada` -> *"o nome faturas e fatura
+ *                 unificada esta causando confusao"*. A correcao rebatizou a
+ *                 PRIMEIRA de `Emissao e cobranca`.
+ *
+ * A segunda foi CRIADA pela primeira, e e isso que este teste existe para nao
+ * deixar acontecer uma terceira vez: duas telas distintas passaram a se
+ * apresentar pelo mesmo substantivo. Igualdade exata nao pega — "Faturas" e
+ * "Fatura unificada" sao strings diferentes.
+ *
+ * A CABECA E A PRIMEIRA PALAVRA, sem acento, minuscula e sem o plural. E uma
+ * aproximacao grosseira do portugues e nao tenta ser mais que isso: e a palavra
+ * que a pessoa le primeiro e pela qual ela chama a aba em voz alta.
+ *
+ * O QUE ELE NAO PROIBE, de proposito: `Faturamento` convive com
+ * `Fatura unificada`, porque "faturamento" e outro substantivo — o PROCESSO de
+ * gerar o lote, e nao o documento. Prefixo comum nao e o defeito; cabeca comum e.
+ */
+const cabecaDo = (titulo: string): string =>
+  titulo.trim().split(/\s+/)[0]!
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/s$/, '');
+
+const porCabeca = new Map<string, string[]>();
+for (const t of TELAS) {
+  const c = cabecaDo(t.titulo);
+  porCabeca.set(c, [...(porCabeca.get(c) ?? []), t.titulo]);
+}
+const colididos = [...porCabeca.values()].filter((ts) => ts.length > 1);
+
+chk('I4k', colididos.length === 0,
+    'nenhum par de abas se apresenta pelo mesmo substantivo-cabeca'
+    + (colididos.length ? ` — colidem: ${colididos.map((ts) => ts.join(' / ')).join('; ')}` : ''));
+
 // ----------------------------------------- I5 cor nunca e o unico sinal (rest. 3)
 
 const TONS = ['ok', 'pendente', 'nao_medido'] as const;
