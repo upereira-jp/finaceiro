@@ -24,6 +24,7 @@ import {
   estadoDoCertificado, DIAS_DE_AVISO_DO_CERTIFICADO,
   podeEmitirFatura, podeGerarBoleto, podeBaixarManual,
   totalEsperadoDaBaixa, tomDoStatusDaFatura, conferirTarifas,
+  podeImportarBoleto, motivoDaTravaDaImportacao, podeImportarAgora, DIGITOS_DA_LINHA,
   type EstadoDoConector, type StatusFatura, type FaturaConferivel,
 } from '../src/cobranca-regras.ts';
 
@@ -225,6 +226,71 @@ const chk = (id: string, cond: boolean, d: string) => {
       'competencia sem rascunho nao gera aviso - 0 de 0 nao e pendencia');
 }
 
+// ------------------------------- B11 o boleto EMITIDO NO BANCO, e quando ele entra
+//
+// O caminho novo de 17/08: enquanto o certificado A1 nao existe, o titulo e
+// emitido a mao no portal da cooperativa e transcrito para ca. Estas verificacoes
+// prendem as duas perguntas que a TELA responde sozinha - se oferece o campo, e
+// se o botao acende. Quem confere a linha e o servidor.
+{
+  chk('B11', podeImportarBoleto('emitida', null) === true,
+      'fatura emitida sem boleto nenhum: e o caso comum, e ele aceita importacao');
+  chk('B11b', podeImportarBoleto('emitida', 'erro') === true,
+      'boleto em ERRO aceita: a chamada a Sicoob falhou e alguem emitiu no portal - '
+      + 'e exatamente para isto que o caminho existe');
+  chk('B11c', podeImportarBoleto('emitida', 'pendente') === true,
+      'pendente tambem: a linha nasceu antes da chamada e a chamada nunca terminou');
+  chk('B11d', podeImportarBoleto('emitida', 'registrado') === false
+       && podeImportarBoleto('emitida', 'liquidado') === false,
+      'ja registrado ou ja liquidado NAO aceita - importar por cima apagaria o que existe');
+  chk('B11e', podeImportarBoleto('emitida', 'baixado') === false
+       && podeImportarBoleto('emitida', 'cancelado') === false,
+      'baixado e cancelado tambem nao: a linha guarda o desfecho do titulo no banco');
+
+  for (const s of ['rascunho', 'paga', 'vencida', 'cancelada', 'negociada'] as const) {
+    chk('B11f', podeImportarBoleto(s, null) === false,
+        `fatura em "${s}" nao recebe boleto importado - mesma precondicao de registrar()`);
+  }
+
+  // O espelho do servidor tem de valer nos DOIS sentidos: o que a tela oferece
+  // para importar e o que ela oferece para gerar sao mutuamente exclusivos em
+  // "registrado", e ambos exigem "emitida".
+  chk('B11g', podeGerarBoleto('emitida', 'erro') === true && podeImportarBoleto('emitida', 'erro') === true,
+      'com boleto em erro os DOIS caminhos ficam abertos: tentar de novo, ou trazer o do portal');
+}
+
+// ------------------------------------------- B12 a trava do botao de importar
+{
+  const LINHA = '75691.50043 01727.686907 00000.130013 1 15410000059669';
+  const base = { linha: LINHA, ocupado: false, conferida: true };
+
+  chk('B12', DIGITOS_DA_LINHA === 47, 'a linha de cobranca tem 47 digitos');
+  chk('B12b', motivoDaTravaDaImportacao(base) === null && podeImportarAgora(base),
+      'linha conferida pelo servidor e nada em voo: o botao acende');
+
+  chk('B12c', motivoDaTravaDaImportacao({ ...base, ocupado: true }) === 'ocupado',
+      'com escrita em voo o motivo e `ocupado`, e ele vem ANTES de qualquer juizo sobre o texto');
+  chk('B12d', motivoDaTravaDaImportacao({ ...base, linha: '   ' }) === 'sem_linha',
+      'campo vazio e `sem_linha`, e nao "linha invalida" - ausencia nao e defeito');
+  chk('B12e', motivoDaTravaDaImportacao({ ...base, linha: '7569150043' }) === 'digitos_de_menos',
+      'linha truncada trava sem ida ao servidor: contar digito e barato e honesto');
+
+  // O ESTADO DO MEIO, e ele e o que impede o clique cego: a linha esta completa,
+  // a conferencia foi pedida e ainda nao voltou.
+  chk('B12f', motivoDaTravaDaImportacao({ ...base, conferida: null }) === 'nao_conferida',
+      'linha completa e conferencia que nao voltou TRAVA - gravar sem saber e o que se evita');
+  chk('B12g', motivoDaTravaDaImportacao({ ...base, conferida: false }) === 'recusada',
+      'conferencia que voltou recusando trava, e o motivo e proprio');
+
+  // A ordem importa: com tudo errado ao mesmo tempo, a pessoa resolve um por vez.
+  chk('B12h', motivoDaTravaDaImportacao({ linha: '', ocupado: true, conferida: false }) === 'ocupado',
+      'um motivo por vez, na ordem em que se resolve - a lista de reclamacoes que ninguem le');
+
+  // A pontuacao impressa nao conta como digito, e nao pode inflar a contagem.
+  chk('B12i', motivoDaTravaDaImportacao({ ...base, linha: LINHA.replace(/\D/g, '') }) === null,
+      'os 47 digitos crus e a linha impressa com ponto e espaco valem o mesmo');
+}
+
 console.log();
 if (falhas > 0) { console.log(`--- cobranca: ${falhas} FALHA(S)`); process.exit(1); }
-console.log('--- cobranca (regras da tela): 33 verificacoes, 0 falhas');
+console.log('--- cobranca (regras da tela): 54 verificacoes, 0 falhas');

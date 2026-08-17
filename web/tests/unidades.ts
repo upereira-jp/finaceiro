@@ -18,7 +18,9 @@
 import {
   situacaoDaUc, ehFaturavel, contarSituacoes,
   ROTULO_DA_SITUACAO, TOM_DA_SITUACAO, ICONE_DA_SITUACAO,
-  type UcParaSituacao, type SituacaoDaUc,
+  situacaoDoEndereco, camposDoEnderecoPreenchidos, enderecoNumaLinha,
+  CAMPOS_DO_ENDERECO, ROTULO_DO_ENDERECO, TOM_DO_ENDERECO,
+  type UcParaSituacao, type SituacaoDaUc, type SituacaoDoEndereco,
 } from '../src/unidades-regras.ts';
 
 let falhas = 0;
@@ -157,6 +159,68 @@ console.log('== a situacao de uma UC: duas fontes, um rotulo ==\n');
   chk('U8c', c.por.em_troca_titularidade === 7 && c.por.aguardando_ativacao === 5,
       `as doze nao ativadas aparecem separadas por MOTIVO `
       + `(${c.por.em_troca_titularidade} em troca, ${c.por.aguardando_ativacao} aguardando)`);
+}
+
+// ------------------------------------- E1 o endereco do pagador (17/08/2026)
+//
+// `PENDENCIAS.md` §2.a item 7: 0 de 29, e o unico caminho era `npm run enderecos`
+// de um Codespace. A aba passou a editar, e estas verificacoes prendem o que a
+// contagem PODE afirmar - que e menos do que parece, porque o item (c) da
+// `Q-PAGADOR-01` ainda nao mediu o que a Sicoob exige de endereco.
+{
+  const completo = {
+    endereco_logradouro: 'Rua Sao Paulo', endereco_numero: '128',
+    endereco_bairro: 'Setor Central', endereco_municipio: 'Rio Verde',
+    endereco_uf: 'GO', endereco_cep: '75901-000',
+  };
+
+  chk('E1', CAMPOS_DO_ENDERECO.length === 6,
+      'sao SEIS campos contados - logradouro, numero, bairro, municipio, UF e CEP');
+  chk('E1b', !(CAMPOS_DO_ENDERECO as readonly string[]).includes('endereco_complemento'),
+      'o COMPLEMENTO fica de fora: apartamento nao existe em toda casa, e conta-lo '
+      + 'faria toda casa de rua parecer incompleta para sempre');
+
+  chk('E1c', situacaoDoEndereco({}) === 'vazio' && camposDoEnderecoPreenchidos({}) === 0,
+      'UC sem endereco nenhum: `vazio`, zero campos');
+  chk('E1d', situacaoDoEndereco(completo) === 'completo'
+        && camposDoEnderecoPreenchidos(completo) === 6,
+      'os seis preenchidos: `completo`');
+  chk('E1e', situacaoDoEndereco({ ...completo, endereco_cep: '' }) === 'parcial',
+      'um campo faltando ja e `parcial` - a contagem nao arredonda para completo');
+  chk('E1f', situacaoDoEndereco({ ...completo, endereco_uf: '   ' }) === 'parcial',
+      'espaco em branco NAO conta como preenchido');
+
+  /* O complemento sozinho nao tira do `vazio`: ele nao esta na lista contada, e
+   * "tem endereco" nao pode ser verdade porque alguem escreveu "fundos". */
+  chk('E1g', situacaoDoEndereco({ endereco_complemento: 'fundos' }) === 'vazio',
+      'so complemento continua `vazio` - ele nao entra na contagem');
+
+  /* A REGRA 10 NA COR. Nenhum campo de endereco recusa boleto hoje
+   * (`repos/boleto.ts` recusa por CPF/CNPJ e NAO por endereco), entao `parcial`
+   * nao pode ser pintado como erro: seria a tela afirmando uma exigencia que
+   * ninguem mediu. */
+  chk('E1h', TOM_DO_ENDERECO.parcial === 'nao_medido' && TOM_DO_ENDERECO.vazio === 'pendente',
+      'incompleto e `nao_medido` e nao `pendente` - o item (c) da Q-PAGADOR-01 esta aberto');
+
+  const estados: SituacaoDoEndereco[] = ['vazio', 'parcial', 'completo'];
+  chk('E1i', estados.every((s) => ROTULO_DO_ENDERECO[s].length > 0 && TOM_DO_ENDERECO[s] !== undefined),
+      'os tres estados tem rotulo e tom');
+}
+
+// ------------------------------------------- E2 o endereco numa linha so
+{
+  chk('E2', enderecoNumaLinha({}) === null,
+      'sem nada, devolve NULO - e nao ", , /", que impresso parece defeito de sistema');
+  chk('E2b', enderecoNumaLinha({
+        endereco_logradouro: 'Rua Sao Paulo', endereco_numero: '128',
+        endereco_bairro: 'Centro', endereco_municipio: 'Rio Verde', endereco_uf: 'GO',
+      }) === 'Rua Sao Paulo, 128, Centro — Rio Verde/GO',
+      'completo sai na ordem de um endereco brasileiro');
+  chk('E2c', enderecoNumaLinha({ endereco_municipio: 'Rio Verde', endereco_uf: 'GO' })
+        === 'Rio Verde/GO',
+      'so cidade e UF sai sem virgula sobrando na frente');
+  chk('E2d', enderecoNumaLinha({ endereco_uf: 'GO' }) === 'GO',
+      'so a UF tambem nao inventa separador');
 }
 
 console.log(`\n${falhas === 0 ? 'TODAS PASSARAM' : `${falhas} FALHA(S)`}`);

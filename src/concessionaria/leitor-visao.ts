@@ -39,6 +39,7 @@
 //      aparece como erro, aparece como valor.
 
 import Anthropic from '@anthropic-ai/sdk';
+import { normalizarBrCode } from '../dominio/brcode.ts';
 import {
   CAMPOS_VAZIOS, paraDecimal, decimalParaTexto,
   type CamposDaFaturaUnificada,
@@ -407,7 +408,12 @@ export async function lerBoletoSicoob(d: DocumentoParaLer): Promise<BoletoLido> 
   const r = await extrair<Record<string, unknown>>(d, INSTRUCOES_DO_BOLETO, SCHEMA_DO_BOLETO);
   return {
     linha_digitavel: String(r.linha_digitavel ?? ''),
-    pix_copia_e_cola: String(r.pix_copia_e_cola ?? '').replace(/\s+/g, ''),
+    /* `normalizarBrCode` E NAO `replace(/\s+/g, '')`, e a troca conserta um
+     * defeito medido em 17/08: o nome do beneficiario (campo 59) tem espaco de
+     * verdade dentro, e tira-lo quebrava o comprimento declarado do campo e o
+     * CRC - um QR impresso que o aplicativo do banco nao le, sem erro nenhum no
+     * caminho. Agora quem decide se o espaco sobrava e o proprio CRC. */
+    pix_copia_e_cola: normalizarBrCode(r.pix_copia_e_cola as string),
     beneficiario: String(r.beneficiario ?? ''),
     vencimento: String(r.vencimento ?? ''),
     valor: numeroParaTexto(r.valor, 2),

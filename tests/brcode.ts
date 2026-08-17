@@ -16,7 +16,7 @@
 // e a variante errada seria no celular de quem ia pagar.
 
 import {
-  crc16, campo, valorParaBrCode, apenasAscii, pixEstatico, crcConfere, BrCodeInvalido,
+  crc16, campo, valorParaBrCode, apenasAscii, pixEstatico, crcConfere, normalizarBrCode, BrCodeInvalido,
 } from '../src/dominio/brcode.ts';
 
 let falhas = 0;
@@ -207,6 +207,47 @@ const chk = (id: string, cond: boolean, d: string) => {
       'texto que nao e BR Code nao confere, e nao levanta');
 }
 
+// ------------------------------ P10 o payload COLADO DE FORA, e o defeito de 17/08
+//
+// Tres lugares do sistema limpavam BR Code vindo de fora com
+// `.replace(/\s+/g, '')`. O nome do beneficiario (campo 59) e a cidade (60) tem
+// espaco de verdade dentro: `5910G3 SOLAR` virava `5910G3SOLAR`, um campo que
+// declara 10 caracteres e entrega 9. O CRC quebrava junto, e ninguem via - o QR
+// era desenhado assim mesmo e so o aplicativo do banco recusava, na mao do
+// cliente. `normalizarBrCode` poe o CRC para decidir em vez do palpite.
+{
+  const comEspaco = pixEstatico({
+    chave: 'a@g3.com', recebedorNome: 'G3 SOLAR ENERGIA', recebedorCidade: 'RIO VERDE',
+    valorCentavos: 59669,
+  });
+  chk('P10', crcConfere(comEspaco) && comEspaco.includes('G3 SOLAR ENERGIA'),
+      'PRE-CONDICAO: um beneficiario de nome composto produz payload integro COM espaco dentro');
+  chk('P10b', crcConfere(comEspaco.replace(/\s+/g, '')) === false,
+      'e a limpeza antiga o QUEBRAVA - e este e o defeito, medido');
+
+  chk('P10c', normalizarBrCode(comEspaco) === comEspaco,
+      'o payload que ja confere volta INTACTO: nada a normalizar');
+  chk('P10d', normalizarBrCode(`  ${comEspaco}\n`) === comEspaco,
+      'espaco das pontas sai - e o que sobra do "selecionar tudo"');
+  chk('P10e', normalizarBrCode(`${comEspaco.slice(0, 40)}\n${comEspaco.slice(40)}`) === comEspaco,
+      'quebra de linha no meio e desfeita, e o espaco do nome sobrevive');
+  chk('P10f', normalizarBrCode(`${comEspaco.slice(0, 40)}\n    ${comEspaco.slice(40)}`) === comEspaco,
+      'quebra COM indentacao tambem - e o formato de quem copia de um PDF de duas colunas');
+
+  const semEspaco = pixEstatico({
+    chave: 'a@g3.com', recebedorNome: 'G3SOLAR', recebedorCidade: 'GOIANIA', valorCentavos: 1,
+  });
+  const sujo = semEspaco.split('').join(' ');
+  chk('P10g', normalizarBrCode(sujo) === semEspaco,
+      'e o caso legado ainda funciona: payload sem espaco legitimo, sujo de espacos, e recuperado');
+
+  const roto = `${comEspaco.slice(0, -4)}0000`;
+  chk('P10h', normalizarBrCode(roto) === roto,
+      'o que nao fecha em NENHUM candidato volta como veio - nao se inventa um sexto texto');
+  chk('P10i', normalizarBrCode('') === '' && normalizarBrCode(null) === '',
+      'vazio e nulo viram string vazia, e nao passam pelo CRC');
+}
+
 console.log();
 if (falhas > 0) { console.log(`--- brcode: ${falhas} FALHA(S)`); process.exit(1); }
-console.log('--- brcode (Pix estatico): 33 verificacoes, 0 falhas');
+console.log('--- brcode (Pix estatico): 44 verificacoes, 0 falhas');

@@ -33,6 +33,7 @@ import { calcular, CAMPOS_VAZIOS, PARAMETROS_PADRAO,
   type CamposDaFaturaUnificada, type ParametrosDaEmissao } from '../dominio/fatura-unificada.ts';
 import { comporFolhas, BOLETO_VAZIO, TEXTOS_PADRAO,
   type DadosDoBoleto, type TextosDoModelo } from '../dominio/folha-unificada.ts';
+import type { TranscricaoDoBoleto } from '../dominio/boleto-importado.ts';
 import { prontidao } from '../repos/prontidao.ts';
 
 export type Requisicao = {
@@ -285,6 +286,37 @@ function boletoDoCorpo(bruto: unknown): DadosDoBoleto {
     vencimento: texto('vencimento'),
     valor: texto('valor'),
     instrucoes: ((instrucoes ?? []) as unknown[]).slice(0, 40).map((t) => String(t ?? '')),
+  };
+}
+
+/**
+ * A TRANSCRICAO DE UM BOLETO EMITIDO NO BANCO. Tres campos, e nao os sete de
+ * `boletoDoCorpo`.
+ *
+ * A diferenca nao e economia de digitacao, e ela decide o que vai para a coluna:
+ * `beneficiario`, `vencimento` e `valor` do outro tipo sao TEXTO LIDO dos rotulos
+ * impressos, e servem para a folha imprimir e para a pessoa conferir. Aqui o
+ * vencimento e o valor saem dos 44 digitos do codigo de barras - e o que o banco
+ * cobra -, entao aceita-los do corpo seria deixar quem chama contradizer a linha
+ * digitavel que ele mesmo mandou.
+ */
+function transcricaoDoCorpo(bruto: unknown): TranscricaoDoBoleto {
+  if (bruto == null || typeof bruto !== 'object' || Array.isArray(bruto)) {
+    throw new TypeError('o corpo deve ser um objeto com pelo menos `linha_digitavel`.');
+  }
+  const e = bruto as Record<string, unknown>;
+  const texto = (k: string): string => {
+    const v = e[k];
+    if (v === undefined || v === null) return '';
+    if (typeof v !== 'string' && typeof v !== 'number') {
+      throw new TypeError(`${k} deve ser texto (recebeu ${typeof v}).`);
+    }
+    return String(v);
+  };
+  return {
+    linha_digitavel: texto('linha_digitavel'),
+    nosso_numero: texto('nosso_numero'),
+    pix_copia_e_cola: texto('pix_copia_e_cola'),
   };
 }
 
@@ -816,6 +848,37 @@ export const ROTAS: Rota[] = [
       const b = await boleto.porFatura(req.params.id);
       return b ? ok(b) : { status: 404, corpo: { erro: 'NaoEncontrado', mensagem: 'Fatura sem boleto.' } };
     }),
+  },
+  /*
+   * AS DUAS ROTAS DO BOLETO EMITIDO NO BANCO (17/08/2026).
+   *
+   * O QUE ELAS RESOLVEM esta medido em `src/dominio/boleto-importado.ts`: o
+   * unico caminho para um boleto existir passava pela `PortaDeCobranca`, que
+   * depende do certificado A1 - a unica pendencia do projeto, e compra externa.
+   * Enquanto ele nao chega, a operacao emite o boleto a mao no portal da
+   * cooperativa e o sistema nao sabe que ele existe: a fatura diz "sem boleto", o
+   * documento sai cobrando por Pix estatico (que nao concilia) e a conferencia
+   * aritmetica nunca roda.
+   *
+   * NENHUMA DAS DUAS FALA COM A SICOOB. Nao ha porta injetada aqui, e nao ha
+   * `app.cobranca` no handler - de proposito: um handler que nao recebe a porta
+   * nao tem como chama-la. E o mesmo desenho que faz `POST /faturas/:id/boleto`
+   * receber a porta e este par nao.
+   *
+   * A CONFERENCIA E ROTA SEPARADA DA IMPORTACAO pela mesma razao que a escolha da
+   * chave Pix e separada da edicao dela: conferir mostra, importar decide. A tela
+   * confere a cada linha colada - e leitura, e roda no caminho de relatorio -, e
+   * so escreve quando alguem aperta o botao.
+   */
+  {
+    metodo: 'POST', padrao: '/faturas/:id/boleto/conferir',
+    handler: (req, app) => emRelatorio(app, req, async () =>
+      ok(await boleto.conferirParaImportar(req.params.id, transcricaoDoCorpo(req.corpo)))),
+  },
+  {
+    metodo: 'POST', padrao: '/faturas/:id/boleto/importar',
+    handler: (req, app) => emTenant(app, req, async () =>
+      criado(await boleto.importar(req.params.id, transcricaoDoCorpo(req.corpo)))),
   },
   {
     metodo: 'POST', padrao: '/faturas/:id/boleto/baixar',

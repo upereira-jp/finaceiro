@@ -95,6 +95,7 @@ model boleto {
   criado_em                 DateTime      @default(now()) @db.Timestamptz(6)
   ultima_tentativa_em       DateTime?     @db.Timestamptz(6)
   proxima_tentativa_em      DateTime?     @db.Timestamptz(6)
+  origem                    origem_boleto @default(api_sicoob)
   fatura                    fatura        @relation(fields: [tenant_id, fatura_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "boleto_fatura_fk")
   tenant                    tenant        @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
@@ -975,6 +976,12 @@ enum forma_de_pagamento {
 enum natureza_pessoa {
   pf
   pj
+}
+
+/// This enum is commented in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+enum origem_boleto {
+  api_sicoob
+  importado
 }
 
 enum origem_geracao {

@@ -21,6 +21,7 @@ import { comporFolhas, BOLETO_VAZIO, type DadosDoBoleto } from '../src/dominio/f
 import { calcular, CAMPOS_VAZIOS, PARAMETROS_PADRAO, paraDecimal, decimalBr,
          type CamposDaFaturaUnificada } from '../src/dominio/fatura-unificada.ts';
 import type { EmissorDaFatura } from '../src/dominio/folha-g3.ts';
+import { crc16, crcConfere } from '../src/dominio/brcode.ts';
 
 let falhas = 0;
 const chk = (id: string, cond: boolean, d: string) => {
@@ -74,8 +75,30 @@ function centavosDoTexto(s: string): number {
 
 /** Uma linha digitavel real e valida - a mesma de `tests/linha-digitavel.ts`. */
 const LINHA_BOA = '75691.50043 01727.686907 00000.130013 1 15410000059669';
-const PIX_BOM =
+/*
+ * O `PIX_BOM` PASSOU A SER BOM DE VERDADE EM 17/08/2026, e a correcao vale
+ * registro porque o defeito que ela expoe era de PRODUCAO, nao de teste.
+ *
+ * Ate aqui a constante terminava em `6304` — os literais do campo do CRC — e
+ * **nao tinha os quatro digitos do CRC depois deles**. Era um payload truncado
+ * chamado "BOM", e nenhuma verificacao percebia, porque a folha desenhava o QR
+ * sem conferir integridade nenhuma: `svgDoBrCode` codifica o texto que receber.
+ *
+ * O que estava escondido atras disso e maior. `comporPagamento` limpava o payload
+ * com `.replace(/\s+/g, '')`, e o nome do beneficiario tem espaco de verdade
+ * dentro: `5910G3 SOLAR` virava `5910G3SOLAR` — um campo que declara 10
+ * caracteres e entrega 9. Todo boleto real passava por essa limpeza, e o
+ * resultado era um QR impresso, bonito, que o aplicativo do banco nao le. O
+ * fixture truncado tornava o defeito invisivel: sem CRC valido para quebrar, nao
+ * havia o que medir.
+ *
+ * Agora o CRC e CALCULADO aqui, sobre o mesmo texto — a constante nao pode
+ * envelhecer errada de novo — e a F5g confere que ele fecha antes de qualquer
+ * outra coisa.
+ */
+const PIX_SEM_CRC =
   '00020126360014BR.GOV.BCB.PIX0114123456780001955204000053039865802BR5910G3 SOLAR6006GOIANIA62070503***6304';
+const PIX_BOM = `${PIX_SEM_CRC}${crc16(PIX_SEM_CRC)}`;
 
 const boletoCom = (p: Partial<DadosDoBoleto>): DadosDoBoleto => ({ ...BOLETO_VAZIO, ...p });
 
@@ -250,6 +273,36 @@ const folhas = comporFolhas(COMPLETA, contaCompleta, EMISSOR,
     boletoCom({ linha_digitavel: '7569150043' }));
   chk('F5f', (curta.folha2.pagamento.barras_motivo ?? '').includes('10 dígitos'),
       'linha incompleta diz QUANTOS digitos vieram - e o defeito mais comum de copiar do PDF');
+
+  /* ------------------------------------------------------------------------
+   * O PIX QUE NAO FECHA O PROPRIO VERIFICADOR - as tres verificacoes que o
+   * defeito de 17/08 obrigou a existir. Ver a nota do `PIX_BOM` la em cima.
+   */
+  chk('F5g', crcConfere(PIX_BOM),
+      'PRE-CONDICAO: o payload de referencia deste arquivo e integro de verdade');
+
+  const nomeComposto = comporFolhas(COMPLETA, contaCompleta, EMISSOR,
+    boletoCom({ linha_digitavel: LINHA_BOA, pix_copia_e_cola: PIX_BOM }));
+  chk('F5h', nomeComposto.folha2.pagamento.qr !== null
+       && nomeComposto.folha2.pagamento.pix_texto === PIX_BOM,
+      'o espaco DENTRO do nome do beneficiario sobrevive a limpeza - era ele que quebrava o CRC');
+
+  /* Copiado de um PDF: o payload veio inteiro, com quebra de linha no meio. Isso
+   * NAO e corrupcao, e a folha nao pode trata-lo como se fosse. */
+  const colado = `${PIX_BOM.slice(0, 45)}\n   ${PIX_BOM.slice(45)}`;
+  const doPdf = comporFolhas(COMPLETA, contaCompleta, EMISSOR,
+    boletoCom({ linha_digitavel: LINHA_BOA, pix_copia_e_cola: colado }));
+  chk('F5i', doPdf.folha2.pagamento.qr !== null && doPdf.folha2.pagamento.pix_texto === PIX_BOM,
+      'quebra de linha de quem copiou do PDF e desfeita, e o QR sai');
+
+  const pixRuim = `${PIX_BOM.slice(0, -4)}0000`;
+  const comPixRuim = comporFolhas(COMPLETA, contaCompleta, EMISSOR,
+    boletoCom({ linha_digitavel: LINHA_BOA, pix_copia_e_cola: pixRuim }));
+  chk('F5j', comPixRuim.folha2.pagamento.qr === null
+       && (comPixRuim.folha2.pagamento.qr_motivo ?? '').includes('CRC'),
+      'CRC que nao fecha NAO vira QR desenhado - um codigo que o banco nao le parece pagamento e nao e');
+  chk('F5k', comPixRuim.folha2.pagamento.barras !== null,
+      'e o boleto ao lado continua desenhado: o Pix quebrado nao derruba o caminho que funciona');
 }
 
 // ---------------------------------------- F6 identificacao, mascara e rodape

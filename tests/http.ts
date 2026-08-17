@@ -384,6 +384,41 @@ let clienteCriado = '';
   await new Promise<void>((r) => comAuthQueRecusa.close(() => r()));
 }
 
+// ---------- H28 as duas rotas do boleto importado caem em lados diferentes da matriz
+//
+// O par existe porque conferir e importar PARECEM a mesma coisa e nao sao:
+// `conferirParaImportar` e `exigir('ler')` e roda no caminho de relatorio;
+// `importar` e `exigir('escrever_carteira')` e escreve. Se as duas tivessem caido
+// no mesmo lado, quem so le poderia gravar boleto - ou quem cobra nao poderia
+// conferir antes de gravar.
+//
+// A FATURA NAO EXISTE de proposito. E isso que torna a verificacao precisa: o
+// papel e conferido ANTES da busca, entao `leitura` recebe 403 no que escreve e
+// 404 no que le. Se a ordem se invertesse um dia, os dois virariam 404 e a
+// verificacao ficaria vermelha - que e o que se quer dela.
+{
+  const inexistente = '44440000-0000-4000-8000-00000000dead';
+  const linha = { linha_digitavel: '75691.50043 01727.686907 00000.130013 1 15410000059669' };
+
+  const escrita = await comoLeitura('POST', `/faturas/${inexistente}/boleto/importar`, { corpo: linha });
+  chk('H28', escrita.status === 403 && escrita.corpo.erro === 'PapelInsuficiente',
+      `importar boleto e ESCRITA de carteira: o papel leitura para em 403 (veio ${escrita.status})`);
+
+  const leitura = await comoLeitura('POST', `/faturas/${inexistente}/boleto/conferir`, { corpo: linha });
+  chk('H28b', leitura.status === 404,
+      `conferir e LEITURA: o mesmo papel passa pela matriz e para na fatura que nao existe (veio ${leitura.status})`);
+
+  const admin = await comoAdmin('POST', `/faturas/${inexistente}/boleto/importar`, { corpo: linha });
+  chk('H28c', admin.status === 404,
+      `e o admin passa pela matriz e para no mesmo 404 (veio ${admin.status})`);
+
+  /* O corpo sem `linha_digitavel` e entrada invalida, e nao um erro interno: o
+   * `transcricaoDoCorpo` recusa objeto que nao e objeto antes de qualquer coisa. */
+  const semCorpo = await comoAdmin('POST', `/faturas/${inexistente}/boleto/importar`, { corpo: 'nao sou objeto' });
+  chk('H28d', semCorpo.status === 400 || semCorpo.status === 422,
+      `corpo que nao e objeto vira 400/422 nomeado, nunca 500 (veio ${semCorpo.status})`);
+}
+
 console.log(`\n${falhas === 0 ? 'TODAS PASSARAM' : `${falhas} FALHA(S)`}`);
 await new Promise<void>((r) => servidor.close(() => r()));
 await app.encerrar();
