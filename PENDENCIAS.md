@@ -7,8 +7,8 @@
 | **Substitui e apaga** | `PENDENCIAS-2026-08-05.md` e `PROXIMOS-PASSOS-2026-08-09.md` — vencidos, e agora removidos do repo |
 | **NÃO substitui** | `QUESTOES.md` (registro datado, dono por entrada — regra 10) · `RETOMADA-2026-08-15.md` (onde tudo parou) · os `RESUMO-SESSAO-*` (memória datada). Estes continuam sendo a fonte; aqui é o **apontador** |
 | **Data** | 14/08/2026 · rev. 17/08/2026 |
-| **Estado da suíte** | `npm test` **`EXIT=0`**, **2.052** verificações (eram ~1.911 em 14/08) |
-| **Produção** | `financeiro.blackhaus.io` · `origin/main` em `ecdddcb` · **31 migrations no ar**; a **32** (boleto importado) está no repositório e ainda **não foi aplicada** · Pix estático no ar |
+| **Estado da suíte** | `npm test` **`EXIT=0`**, **2.056** verificações (eram ~1.911 em 14/08), com PostgreSQL real |
+| **Produção** | `financeiro.blackhaus.io` · `origin/main` em `ecdddcb` · **31 migrations no ar**; a **32** (boleto importado) está no repositório e **ainda não foi aplicada** — ver §5 · Pix estático no ar |
 
 > ## A única pendência do repositório é o certificado A1.
 >
@@ -175,3 +175,54 @@ dono**: girar a chave (item 2.c.2).
 - **Não apagados, e por quê:** `QUESTOES.md` é o registro com dono por entrada
   (regra 10) e continua sendo a fonte das decisões da §2.b/§2.c; as retomadas e os
   resumos são a linha do tempo.
+
+---
+
+## 5. A migration 32 está pendente em produção, e como aplicá-la
+
+**Ela não foi aplicada, e não foi por esquecimento:** aplicá-la exige a
+`DIRECT_URL` — a conexão direta com DDL —, e ela não existe em lugar nenhum a que
+o assistente tenha acesso. O `.env` do servidor tem `DATABASE_URL` e **não tem**
+`DIRECT_URL`, por decisão registrada em `prisma.config.ts` desde 30/07: *"as
+migrations deste projeto sempre foram aplicadas de fora, nunca do VPS"*.
+
+### O caminho, com um secret
+
+1. cadastre `DIRECT_URL` em **Settings → Secrets and variables → Actions**
+   (formato em `.env.example`; **session pooler na 5432**, nunca a 6543 — o
+   Migrate exige prepared statements que o pooler de transação não suporta, e o
+   modo de falha dele não é erro: ele *pendura*);
+2. rode **`migrate-financeiro`** com o campo `confirmar` em `conferir` — ele
+   confere a identidade do banco, imprime o que está pendente e **não escreve nada**;
+3. rode de novo com `confirmar = aplicar`;
+4. rode **`deploy-financeiro`**.
+
+**A ordem é essa.** Migration aditiva com `DEFAULT` é compatível para trás — o
+client antigo monta `SELECT` com lista explícita de colunas e não lê a coluna
+nova. O inverso não vale: subir o código antes seria 500 em toda leitura de
+boleto, com a fatura na tela de quem opera.
+
+### Sem Actions, direto de onde já há credencial
+
+```
+DIRECT_URL="..." npx prisma migrate status                                   # confere
+DIRECT_URL="..." node --experimental-strip-types scripts/conferir-banco-alvo.ts identidade
+DIRECT_URL="..." npx prisma migrate deploy                                   # aplica
+DIRECT_URL="..." node --experimental-strip-types scripts/conferir-banco-alvo.ts migration-32
+```
+
+### O que foi ensaiado antes de propor isto
+
+Contra PostgreSQL real, neste container:
+
+| Ensaio | Resultado |
+|---|---|
+| as 32 do zero, pelo `prisma migrate deploy` | aplicadas, `migrate status` limpo |
+| banco **em 31**, a 32 pendente, aplicada pelo CLI | o ensaio acima na ordem exata da produção |
+| a 32 sobre um banco em 31 **com linha de `boleto` dentro** | **~6 ms**; a linha que já existia ficou `origem = 'api_sicoob'` |
+| `conferir-banco-alvo.ts identidade` contra um banco **que não é o nosso** | **recusa**, nomeando a regra 4 |
+
+**A guarda de identidade é a regra 4 em forma executável.** `migrate deploy`
+contra o banco errado não recusa — ele **cria**. A identidade conferida não é o
+nome na URL: é a migration de fundação `20260725120000_fundacao_schema` estar
+registrada como aplicada no alvo. Nenhum outro banco tem essa linha.

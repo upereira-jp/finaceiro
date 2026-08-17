@@ -60,8 +60,10 @@ const mes = (ano: number, m: number) => new Date(Date.UTC(ano, m - 1, 1));
 // plantar a linha a mao provaria menos do que parece.
 let faturaId: string;
 let faturaDois: string;
+let faturaTres: string;
 let valorTotal: number;
 let valorDois: number;
+let valorTres: number;
 let vencimentoIso: string;
 
 {
@@ -96,6 +98,9 @@ let vencimentoIso: string;
   };
   const uc1 = await criarUC('BOLIMP-UC-1', '50.0000');
   const uc2 = await criarUC('BOLIMP-UC-2', '25.0000');
+  /* A terceira e do Y8: o boleto SEM "Nosso Numero", que a tela marca como
+   * opcional e que nenhuma verificacao cobria ate 17/08. */
+  const uc3 = await criarUC('BOLIMP-UC-3', '10.0000');
 
   await emA(() => usinaRepo.registrarGeracao({
     usina_id: usina.id, competencia: mes(2027, 3), geracao_kwh: '10000.0000', origem: 'local',
@@ -106,8 +111,10 @@ let vencimentoIso: string;
   const fs = await emA(() => fatura.daCompetencia('2027-03-01'));
   const f1 = fs.find((x: any) => x.unidade_consumidora_id === uc1)!;
   const f2 = fs.find((x: any) => x.unidade_consumidora_id === uc2)!;
+  const f3 = fs.find((x: any) => x.unidade_consumidora_id === uc3)!;
   faturaId = f1.id; valorTotal = Number(f1.valor_total_centavos);
   faturaDois = f2.id; valorDois = Number(f2.valor_total_centavos);
+  faturaTres = f3.id; valorTres = Number(f3.valor_total_centavos);
   vencimentoIso = f1.vencimento.toISOString().slice(0, 10);
 }
 
@@ -265,6 +272,39 @@ const linhaDaFatura = (valor = valorTotal, iso = vencimentoIso) =>
   const fila = await emA(() => boleto.filaDeEmissao(new Date(Date.now() + 86_400_000), 100));
   chk('Y7e', !fila.some((x: any) => x.fatura_id === faturaDois),
       'e a fatura sai da FILA DE EMISSAO - sem isso a agenda retentaria para sempre um boleto que ja existe');
+}
+
+// ------------------- Y8 SEM "Nosso Numero", que e opcional na tela e nao tinha teste
+{
+  /*
+   * ESTA VERIFICACAO NASCEU DE UM SUSTO, e ele vale registro. Ao aplicar a
+   * migration 32 sobre um banco ja em 31, um INSERT de fixture bateu na
+   * `boleto_registro_coerente` — `status IN ('registrado','liquidado','baixado')
+   * <= (registrado_em IS NOT NULL)`. A constraint e de 28/07 e nao tem nada a ver
+   * com a importacao, mas a pergunta que ela levantou era legitima: **o caminho
+   * novo grava `status = 'registrado'`, e o que mais o banco exige junto?**
+   *
+   * `registrado_em` o `importar()` ja carimba. `nosso_numero` NAO e exigido por
+   * constraint nenhuma — e ainda bem, porque a tela o marca como opcional e o
+   * dominio o aceita nulo. So que nenhuma verificacao cobria esse caminho: as
+   * duas anteriores mandavam "1-3" e "2-7". Um boleto sem o rotulo impresso
+   * legivel — que acontece — teria estourado em producao, e nao aqui.
+   */
+  const b = await emA(() => boleto.importar(faturaTres, {
+    linha_digitavel: linhaDaFatura(valorTres),
+  }));
+  chk('Y8', b.status === 'registrado' && b.origem === 'importado' && b.nosso_numero === null,
+      'boleto sem "Nosso Numero" IMPORTA: o campo e opcional na tela e nenhuma constraint o exige');
+  chk('Y8b', b.registrado_em !== null,
+      'e `registrado_em` vai carimbado — e o que a `boleto_registro_coerente` de 28/07 exige de quem grava `registrado`');
+  chk('Y8c', b.linha_digitavel !== null && b.codigo_barras !== null,
+      'a linha e o codigo de barras continuam obrigatorios: e o que a `boleto_importado_tem_linha` exige');
+
+  /* E ele fica fora da consulta ativa por DOIS motivos independentes agora — a
+   * origem e o `nosso_numero` nulo. Nenhum dos dois sozinho e acidente. */
+  const abertos = await emA(() => boleto.emAberto(500));
+  chk('Y8d', !abertos.some((x: any) => x.fatura_id === faturaTres),
+      'e ele nao entra na consulta ativa - nem pela origem, nem pelo `nosso_numero` nulo');
 }
 
 // ---------------------- Y6 a constraint do banco, e ela nao depende do repositorio
