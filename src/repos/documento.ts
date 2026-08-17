@@ -58,9 +58,9 @@ export class IdentidadeNaoCadastrada extends Error {
   readonly status = 412;
   constructor() {
     super(
-      'Este tenant nao tem identidade de cobranca. Cadastre-a na aba Cobranca antes de ' +
-      'enviar a logo: o binario pendura na identidade por FK composta, e e ela que carrega ' +
-      'a trilha da regra 9.'
+      'Este tenant nao tem identidade de cobranca. Cadastre-a em Fatura unificada > ' +
+      '"3 - Cadastro da fatura" (/documento#cadastro) antes de enviar a logo: o binario ' +
+      'pendura na identidade por FK composta, e e ela que carrega a trilha da regra 9.'
     );
     this.name = 'IdentidadeNaoCadastrada';
   }
@@ -390,7 +390,8 @@ export async function qrDeConferencia(valorCentavos: number) {
     throw Object.assign(
       new Error(
         'Nao ha identidade de cobranca cadastrada neste tenant. O QR sai da chave Pix, do nome e '
-        + 'da cidade do recebedor - sem eles nao ha o que desenhar. Cadastre na aba Documento.'
+        + 'da cidade do recebedor - sem eles nao ha o que desenhar. Cadastre em Fatura unificada > '
+        + '"3 - Cadastro da fatura" (/documento#cadastro).'
       ), { status: 412 },
     );
   }

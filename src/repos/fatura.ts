@@ -47,7 +47,8 @@ export class SemPrecoNaCompetencia extends Error {
       `Ha unidade consumidora sem tarifa cadastrada no lote da competencia ${comp}, e nenhuma ` +
       'fatura foi criada. R26: ausencia de preco levanta, nao vira zero - base de faturamento ' +
       'NULL soma como nada e coalesce como zero, e a fatura sairia com valor errado sem erro ' +
-      'nenhum. A tarifa e R$/kWh de cada UC e se preenche na aba Unidades (migration 30); o ' +
+      'nenhum. A tarifa e R$/kWh de cada UC e se preenche na aba Unidades consumidoras ' +
+      '(migration 30); o ' +
       'conector a traz do CRM quando o card tem consumo em kWh e em reais.'
     );
     this.name = 'SemPrecoNaCompetencia';

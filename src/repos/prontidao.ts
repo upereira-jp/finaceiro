@@ -282,7 +282,7 @@ export async function prontidao(comp: Date | string): Promise<Prontidao> {
     { camada: 'tarifa_da_uc', faltam: n(l.sem_tarifa), total: n(l.ucs_contratadas), derivada: true,
       efeito: 'bloqueia_fatura', dono: 'operacao', questao: null,
       explicacao: 'UC contratada sem tarifa (R$/kWh). A composicao do lote levanta no_data_found ' +
-        '(R26): ausencia de preco e erro, nao zero. Preenche-se na aba Unidades, coluna ' +
+        '(R26): ausencia de preco e erro, nao zero. Preenche-se na aba Unidades consumidoras, coluna ' +
         '"Tarifa R$/kWh" - a aba Tarifas saiu em 14/08 porque servia UM numero para todas as UCs, ' +
         'e a medicao do CRM mostrou que ele varia por cliente. O conector semeia a partir do card ' +
         'quando ele traz consumo em kWh e em reais, e nunca apaga o que foi digitado aqui' },
