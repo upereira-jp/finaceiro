@@ -99,12 +99,12 @@ Nenhum é código. Os importadores já existem e rodam do Codespace contra produ
 | # | Pendência | Estado hoje | Como entra | Dono |
 |:--:|---|---|---|---|
 | 1 | **CPF/CNPJ de 24 pessoas** (29 linhas de cliente) | **0 de 29** | **aba Clientes**, linha a linha (17/08) · ou `npm run documentos` em lote | operação |
-| 2 | **Dia de vencimento de 29 UCs** | **0 de 29** | **aba Unidades**, linha a linha · ou `npm run vencimentos` em lote | operação |
+| 2 | **Dia de vencimento de 29 UCs** | **0 de 29** | **aba Unidades consumidoras**, linha a linha · ou `npm run vencimentos` em lote | operação |
 | 3 | **CPF/CNPJ de 2 originadores** + natureza | 0 | `npm run originadores` | operação |
 | 4 | **Digitar os 29 contratos** | 0 | `npm run contratos` (depende de 1 e 3) | operação |
-| 5 | **Emissor** — razão social, CNPJ, contato | vazio em produção | aba Documento `/documento#cadastro` | dono |
-| 6 | **Tarifa das 41 UCs** (`tarifa_reais_por_kwh`) | **NULL nas 41** | aba Unidades (o conector não semeia — a coluna não está no contrato do CRM, `Q-VALOR-01(b)`) | dono/operação |
-| 7 | **Endereço do pagador de 29 UCs** | **0 de 29** | **aba Unidades**, painel «Endereço do pagador» (17/08) · ou `npm run enderecos` em lote — **só o boleto depende** | operação |
+| 5 | **Emissor** — razão social, CNPJ, contato | vazio em produção | **Fatura unificada** → «3 · Cadastro da fatura» (`/documento#cadastro`) | dono |
+| 6 | **Tarifa das 41 UCs** (`tarifa_reais_por_kwh`) | **NULL nas 41** | aba **Unidades consumidoras** (o conector não semeia — a coluna não está no contrato do CRM, `Q-VALOR-01(b)`) | dono/operação |
+| 7 | **Endereço do pagador de 29 UCs** | **0 de 29** | **aba Unidades consumidoras**, painel «Endereço do pagador» (17/08) · ou `npm run enderecos` em lote — **só o boleto depende** | operação |
 
 **A aba Clientes distingue o que a coluna sozinha esconde**, e é a R8: documento
 vindo do CRM entra com `documento_validado = false` **mesmo passando no dígito
@@ -144,12 +144,21 @@ Não estão mais abertas; a leitura por extenso é a `RETOMADA-2026-08-15`.
   extrator por visão que já existia. Não fala com a Sicoob e não depende do A1.
 - **O CPF/CNPJ do cliente e o endereço do pagador entram pela tela** (17/08) — eram os
   itens 1 e 7 da §2.a, e ficavam presos a um script de Codespace. A aba Clientes mostra a
-  R8 (semente do CRM não vale) e a aba Unidades ganhou o painel do endereço.
+  R8 (semente do CRM não vale) e a aba Unidades consumidoras ganhou o painel do endereço.
 - **O Pix copia e cola parou de ser corrompido na limpeza** (17/08) — três lugares
   faziam `replace(/\s+/g, '')` num payload que tem espaço legítimo dentro do nome do
   beneficiário (`5908G3 SOLAR` → `5908G3SOLAR`): quebrava o comprimento do campo e o CRC,
   e o QR era **desenhado assim mesmo**. Agora quem decide o que é espaço sobrando é o
   próprio CRC, e payload que não fecha não vira QR impresso.
+- **Os rótulos da barra passam a descrever a tela** (17/08) — cinco mudaram, e três
+  diziam outra coisa que a tela faz: `Carteira` → **Faturamento** (é onde a fatura do mês
+  nasce), `Cobrança` → **Conector Sicoob** (cobrar é em Faturas; ali é a credencial do
+  banco), `Documento` → **Fatura unificada** (não dizia qual, com dois candidatos na
+  mesma barra). Mais `Unidades` → **Unidades consumidoras** e `Donos` → **Donos de
+  usina**, que eram dívida de vocabulário (regra 7 — os termos inteiros já estavam no
+  `GLOSSARIO` e já eram o título da página). **As rotas não mudaram**, nem os nomes de
+  domínio. A revisão achou de quebra uma mensagem anterior que mandava cadastrar a
+  identidade *"na aba Cobrança"* — o formulário vive em `/documento#cadastro`.
 - **Cadastro de Fatura** — emissor, logotipo, chave Pix, campos personalizados, modelos (migrations 28–31).
 - **Aba Documento = a referência, e passou dela** — conferência aritmética do boleto, teto de desconto, escala do decimal.
 - **Aba Tarifas removida**, tarifa migrada para a UC (a coluna certa, medido em 41 de 41).
