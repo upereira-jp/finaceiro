@@ -95,8 +95,8 @@ export function TelaCobranca() {
   };
 
   return (
-    <Pagina titulo="Cobrança"
-            sub="Onde o conector da Sicoob é cadastrado — pela referência da credencial, nunca pelo segredo.">
+    <Pagina titulo="Conector Sicoob"
+            sub="A credencial do banco — pela referência, nunca pelo segredo. Cobrar um cliente é na aba Faturas; aqui só se cadastra por onde o boleto sairia.">
 
       {/* ------------------------------------------------ o estado de hoje */}
       {cert.erro && (

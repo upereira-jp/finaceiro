@@ -213,8 +213,8 @@ export function TelaDocumento() {
   const semIdentidade = !ident.carregando && !ident.erro && ident.dado == null;
 
   return (
-    <Pagina titulo="Documento"
-            sub="Sobe a fatura da Equatorial, confere os dados e emite a fatura unificada. É este documento que o cliente recebe — e a mesma rota que o CRM vai consumir.">
+    <Pagina titulo="Fatura unificada"
+            sub="Sobe a fatura da Equatorial, confere os dados e emite a folha que o cliente recebe. Não cria fatura nem cobra — isso é Faturamento e Faturas. É a mesma rota que o CRM vai consumir.">
 
       {/*
         ====================================================================

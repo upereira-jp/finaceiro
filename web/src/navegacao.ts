@@ -13,6 +13,22 @@
 // linha aqui e um caso lá, e o `tsc` recusa se esquecer o segundo (`Record`
 // exaustivo em `app.tsx`) — não é disciplina de quem escreve, é o compilador.
 //
+// OS RÓTULOS FORAM REVISTOS EM 17/08/2026, a pedido do dono, e o critério foi um
+// só: **o rótulo descreve a tela, não a intenção de quem a escreveu.** Cinco
+// mudaram — `Unidades consumidoras`, `Donos de usina`, `Faturamento`,
+// `Conector Sicoob` e `Fatura unificada` —, cada um com o motivo na própria
+// linha. Três coisas NÃO mudaram junto, e as três de propósito:
+//
+//   as ROTAS          `/carteira`, `/cobranca` e `/documento` continuam iguais.
+//                     `/documento#cadastro` está citado na `PENDENCIAS` e é o
+//                     único caminho de tela para o emissor;
+//   os NOMES DE       `carteira.tsx`, `cobranca.tsx`, `documento.tsx`, os
+//   DOMÍNIO           repositórios e as tabelas. Rótulo é o que a pessoa lê;
+//                     domínio é o que o sistema é. Foi assim que "Prontidão"
+//                     virou "Pendências" em 30/07 sem mover uma linha de
+//                     `repos/prontidao.ts`;
+//   "Pendências"      decisão registrada do dono, e não se desfaz sozinha.
+//
 // A ORDEM NÃO É ALFABÉTICA NEM DE IMPORTÂNCIA, e isso é deliberado: quem abre o
 // sistema hoje precisa fechar quatro camadas de cadastro para a primeira fatura
 // existir, e a barra é a ordem em que o trabalho destrava o próximo passo.
@@ -45,12 +61,18 @@ export const TELAS: readonly Tela[] = [
    * não um item de lista. `/prontidao` continua funcionando por acidente feliz do
    * `telaDoCaminho`: caminho desconhecido cai na primeira tela, que é esta.
    */
-  { rota: '/pendencias', titulo: 'Pendências', icone: 'prontidao',  grupo: 'cadastro' },
-  { rota: '/clientes',   titulo: 'Clientes',   icone: 'clientes',   grupo: 'cadastro' },
-  { rota: '/unidades',   titulo: 'Unidades',   icone: 'unidades',   grupo: 'cadastro' },
-  { rota: '/contratos',  titulo: 'Contratos',  icone: 'contratos',  grupo: 'cadastro' },
-  { rota: '/usinas',     titulo: 'Usinas',     icone: 'usinas',     grupo: 'cadastro' },
-  { rota: '/donos',      titulo: 'Donos',      icone: 'donos',      grupo: 'cadastro' },
+  { rota: '/pendencias', titulo: 'Pendências', icone: 'prontidao', grupo: 'cadastro' },
+  { rota: '/clientes',   titulo: 'Clientes',   icone: 'clientes',  grupo: 'cadastro' },
+  /* "Unidades" sozinho, ao lado de "Usinas", troca o PONTO DE CONSUMO pelo
+   * GERADOR - as duas primeiras letras coincidem e as duas telas sao vizinhas na
+   * barra. O termo do `GLOSSARIO` e "UC / unidade consumidora", e o titulo da
+   * pagina ja dizia o nome inteiro: o rotulo e que estava abreviado. */
+  { rota: '/unidades',   titulo: 'Unidades consumidoras', icone: 'unidades', grupo: 'cadastro' },
+  { rota: '/contratos',  titulo: 'Contratos',  icone: 'contratos', grupo: 'cadastro' },
+  { rota: '/usinas',     titulo: 'Usinas',     icone: 'usinas',    grupo: 'cadastro' },
+  /* "Donos" nao diz de QUE. E o cadastro de quem recebe o repasse - o maior
+   * fluxo de dinheiro do sistema -, e "dono de usina" e o termo do `GLOSSARIO`. */
+  { rota: '/donos',      titulo: 'Donos de usina', icone: 'donos', grupo: 'cadastro' },
   /*
    * A ABA TARIFAS SAIU EM 14/08/2026, por decisao do dono: *"remova
    * definitivamente a aba Tarifas, pois ela ja nao possui finalidade e apenas
@@ -62,10 +84,46 @@ export const TELAS: readonly Tela[] = [
    * real, e ninguem percebeu porque zero faturas foram emitidas. A granularidade
    * real e por cliente: 35 UCs a 1,130000, 4 a 1,16 e 2 a 1,180000.
    */
-  { rota: '/carteira',   titulo: 'Carteira',   icone: 'carteira',   grupo: 'dinheiro' },
-  { rota: '/faturas',    titulo: 'Faturas',    icone: 'faturas',    grupo: 'dinheiro' },
-  { rota: '/cobranca',   titulo: 'Cobrança',   icone: 'cobranca',   grupo: 'dinheiro' },
-  { rota: '/documento',  titulo: 'Documento',  icone: 'documento',  grupo: 'dinheiro' },
+  /*
+   * "CARTEIRA" ERA JARGAO BANCARIO PARA O ATO DE GERAR, e escondia o unico
+   * lugar onde a fatura do mes NASCE: ensaiar a triagem e compor os rascunhos.
+   * Quem procurasse "onde eu faturo o mes" nao tinha por que abrir "Carteira".
+   *
+   * `Faturamento` nao e palavra nova: e a que o sistema ja usa em
+   * `src/dominio/faturamento.ts` e nas rotas `/faturamento/:competencia/compor`
+   * e `/emitir`. O rotulo passou a dizer o que o servidor sempre chamou (regra 7).
+   *
+   * E O PAR COM "Faturas" E A ORDEM DO TRABALHO, nao uma repeticao:
+   * **Faturamento** gera o lote -> **Faturas** emite, cobra e da baixa.
+   */
+  { rota: '/carteira',   titulo: 'Faturamento', icone: 'carteira',  grupo: 'dinheiro' },
+  { rota: '/faturas',    titulo: 'Faturas',     icone: 'faturas',   grupo: 'dinheiro' },
+  /*
+   * "COBRANCA" DIZIA O CONTRARIO DO QUE A TELA FAZ. Cobrar acontece em Faturas;
+   * aqui se cadastra a CREDENCIAL do banco - agencia, conta, convenio, validade
+   * do A1 e a `credencial_ref`. Quem abrisse "Cobranca" para cobrar um cliente
+   * encontrava um formulario de credencial, que e o oposto do que procurava.
+   *
+   * O nome do banco entra no rotulo pela mesma razao que o campo `provedor` nao
+   * e escolha na tela: enquanto for um, ela nao finge que ha opcao.
+   */
+  { rota: '/cobranca',   titulo: 'Conector Sicoob', icone: 'cobranca', grupo: 'dinheiro' },
+  /*
+   * "DOCUMENTO" NAO DIZIA QUAL, e havia dois candidatos na mesma barra: a fatura
+   * que o sistema calcula (Faturas) e a folha que o cliente recebe. A pergunta
+   * "qual a diferenca entre a aba Faturas e a aba Documento?" foi feita, e uma
+   * barra que precisa de explicacao ja respondeu.
+   *
+   * `Fatura unificada` e como o projeto INTEIRO ja a chama - `fatura-unificada.tsx`,
+   * `dominio/fatura-unificada.ts`, a tabela `registro_de_fatura_unificada` e o
+   * `REFERENCIA-fatura-unificada-2026-08-13.md`. So a barra dizia outra coisa, e
+   * sinonimo e divida de leitura (regra 7).
+   *
+   * A ROTA NAO MUDA. `/documento#cadastro` esta citado na `PENDENCIAS` §2.a item
+   * 5 e e o unico caminho de tela para o emissor; trocar o endereco quebraria o
+   * apontador sem ganhar nada.
+   */
+  { rota: '/documento',  titulo: 'Fatura unificada', icone: 'documento', grupo: 'dinheiro' },
   /* A ULTIMA DO GRUPO DINHEIRO, e a posicao e a mesma decisao de ordem que o
    * cabecalho descreve: a vertente do CLIENTE (compor, emitir, cobrar,
    * documentar) vem antes da vertente da EMPRESA, porque e o dinheiro que
