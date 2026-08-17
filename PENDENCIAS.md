@@ -8,7 +8,7 @@
 | **NÃO substitui** | `QUESTOES.md` (registro datado, dono por entrada — regra 10) · `RETOMADA-2026-08-15.md` (onde tudo parou) · os `RESUMO-SESSAO-*` (memória datada). Estes continuam sendo a fonte; aqui é o **apontador** |
 | **Data** | 14/08/2026 · rev. 17/08/2026 |
 | **Estado da suíte** | `npm test` **`EXIT=0`**, **2.056** verificações (eram ~1.911 em 14/08), com PostgreSQL real |
-| **Produção** | `financeiro.blackhaus.io` · `origin/main` em **`f67b108`** · **32 migrations no ar** (a 32 aplicada em 17/08 10:23 UTC) · Pix estático **e boleto importado** no ar |
+| **Produção** | `financeiro.blackhaus.io` · `origin/main` em **`6f8aa46`** (deploy de 17/08 10:59 UTC) · **32 migrations no ar** (a 32 aplicada em 17/08 10:23 UTC) · Pix estático **e boleto importado** no ar · rótulos da barra revistos no mesmo deploy |
 
 > ## A única pendência do repositório é o certificado A1.
 >
