@@ -13,6 +13,7 @@ import {
   useOrdenacao, ordenar, contem, rotulo,
 } from '../ui.tsx';
 import { decimalTexto } from '../dinheiro.ts';
+import { FILTROS_DA_TELA, filtroDaConsulta } from '../destino-da-camada.ts';
 
 export function TelaUsinas() {
   const usinas = useDados<Usina[]>(() => api.get('/usinas'));
@@ -24,7 +25,14 @@ export function TelaUsinas() {
 
   const [busca, setBusca] = useState('');
   const [situacao, setSituacao] = useState('');
-  const [comDono, setComDono] = useState('');
+  /* `/usinas?pendencia=sem_dono` chega da camada `dono_da_usina` da prontidao e
+   * abre a lista ja recortada nas que travam o repasse. O vocabulario do
+   * ENDERECO e o das camadas (`sem_dono`); o do filtro e o desta tela
+   * (`com`/`sem`), e a traducao fica aqui — trocar os valores do `<select>` para
+   * casar com o link mudaria a tela por causa de quem aponta para ela. Lido so
+   * na montagem, como na aba Unidades. */
+  const [comDono, setComDono] = useState(
+    () => (filtroDaConsulta(location.search, FILTROS_DA_TELA['/usinas']) === 'sem_dono' ? 'sem' : ''));
   const { ordem, alternar } = useOrdenacao('codigo');
 
   const repasses = useDados<RegraRepasse[]>(

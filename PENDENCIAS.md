@@ -6,7 +6,7 @@
 | **O que é** | O **índice único** das pendências. Consolida e substitui os dois trackers datados que existiam soltos |
 | **Substitui e apaga** | `PENDENCIAS-2026-08-05.md` e `PROXIMOS-PASSOS-2026-08-09.md` — vencidos, e agora removidos do repo |
 | **NÃO substitui** | `QUESTOES.md` (registro datado, dono por entrada — regra 10) · `RETOMADA-2026-08-15.md` (onde tudo parou) · os `RESUMO-SESSAO-*` (memória datada). Estes continuam sendo a fonte; aqui é o **apontador** |
-| **Data** | 14/08/2026 · rev. 17/08/2026 |
+| **Data** | 14/08/2026 · rev. 17/08/2026 · rev. 19/08/2026 |
 | **Estado da suíte** | `npm test` **`EXIT=0`**, **2.057** verificações (eram ~1.911 em 14/08), com PostgreSQL real |
 | **Produção** | `financeiro.blackhaus.io` · `origin/main` em **`6f8aa46`** (deploy de 17/08 10:59 UTC) · **32 migrations no ar** (a 32 aplicada em 17/08 10:23 UTC) · Pix estático **e boleto importado** no ar · rótulos da barra revistos no mesmo deploy |
 
@@ -137,6 +137,21 @@ pela aba é o ato que o valida**, porque troca a origem para `coleta_local`.
 
 Não estão mais abertas; a leitura por extenso é a `RETOMADA-2026-08-15`.
 
+- **Cada camada da tela de Pendências diz ONDE se resolve** (19/08) — a tela dizia com
+  precisão *o que* falta e *de quem* é, e deixava o **caminho** implícito: quem opera
+  tinha de saber de cabeça que a tarifa é coluna da aba Unidades desde 14/08 (antes era a
+  aba Tarifas, que saiu), que o CPF/CNPJ só ganhou tela em 17/08, e que geração **não tem
+  tela** porque é espelhada do CRM. Agora cada linha carrega o link, e ele abre a aba **já
+  filtrada na pendência** — `?pendencia=sem_tarifa`, `sem_vencimento`, `sem_usina`,
+  `sem_dono`, `nao_validado`. O filtro do documento é um **agregado novo** (`nao_validado`)
+  e não um dos quatro estados: a camada conta `NOT documento_validado`, que são três deles,
+  e um link para `sem_documento` mostraria lista menor do que a que a prontidão acusa.
+  **Duas camadas dizem «não há tela», e é verdade**: geração é espelho do CRM (regra 4) e
+  regra de comissão é decisão com dono (`Q-COMIS-TERC-01`) — nas duas o caminho real vai
+  escrito ao lado, porque recusa é ponteiro e não beco. O mapa é `.ts` puro
+  (`web/src/destino-da-camada.ts`) com suíte própria — **65 verificações** entre
+  `web/tests/destino.ts` e `tests/prontidao-destino.ts`, esta última lendo os **dois**
+  fontes para que camada renomeada no servidor não deixe um destino órfão em silêncio.
 - **Importar boleto emitido no banco** (17/08, migration 32) — a aba **Emissão e cobrança** passou a
   aceitar o título emitido à mão no portal: linha digitável conferida nos quatro dígitos
   verificadores, código de barras **remontado** dela, valor e vencimento lidos de dentro

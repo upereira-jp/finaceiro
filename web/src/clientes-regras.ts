@@ -94,6 +94,36 @@ export const TOM_DA_SITUACAO_DO_DOCUMENTO:
 export const destravaContrato = (c: ClienteConferivel): boolean =>
   situacaoDoDocumento(c) === 'validado';
 
+/**
+ * O VOCABULARIO DO FILTRO DA ABA — os quatro estados MAIS um agregado.
+ *
+ * `nao_validado` NAO E UM QUINTO ESTADO: e o conjunto dos tres que a R9 recusa,
+ * e ele entrou em 19/08/2026 junto com o link da tela de Pendencias.
+ *
+ * O MOTIVO E QUE O LINK NAO PODE MENTIR. A camada `documento_do_cliente` da
+ * prontidao conta `NOT documento_validado` — os TRES —, e um link que caisse em
+ * `sem_documento` mostraria uma lista MENOR do que a que a prontidao acusa:
+ * quem conferisse veria a lista zerar com a camada ainda pendente, e concluiria
+ * que uma das duas telas esta errada. Medido em producao em 04/08:
+ * `documento_validado` false em 45 de 45, e a semente do CRM e justamente o
+ * estado que "sem documento" nao alcanca.
+ *
+ * ELE VEM PRIMEIRO na ordem porque e o recorte do trabalho: os outros quatro
+ * respondem "por que este nao vale", e este responde "quais nao valem".
+ */
+export type FiltroDeDocumento = 'nao_validado' | SituacaoDoDocumento;
+
+export const ROTULO_DO_FILTRO_DE_DOCUMENTO: Record<FiltroDeDocumento, string> = {
+  nao_validado: 'Ainda não vale para o contrato',
+  ...ROTULO_DA_SITUACAO_DO_DOCUMENTO,
+};
+
+/** O filtro aplicado a um cliente. Filtro vazio nao filtra — a lista inteira e
+ *  o padrao, e nao um recorte silencioso. */
+export const casaComFiltroDeDocumento = (c: ClienteConferivel, filtro: string): boolean =>
+  !filtro
+  || (filtro === 'nao_validado' ? !destravaContrato(c) : situacaoDoDocumento(c) === filtro);
+
 export type ContagemDeDocumentos = {
   total: number;
   sem_documento: number;

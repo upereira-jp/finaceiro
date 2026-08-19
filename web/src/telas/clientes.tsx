@@ -35,9 +35,11 @@ import {
 import {
   situacaoDoDocumento, contarDocumentos, formatarDocumento, tipoPeloComprimento,
   motivoDaTravaDoDocumento, podeGravarDocumento,
-  ROTULO_DA_SITUACAO_DO_DOCUMENTO, TOM_DA_SITUACAO_DO_DOCUMENTO,
-  type MotivoDeTravaDoDocumento,
+  casaComFiltroDeDocumento,
+  ROTULO_DA_SITUACAO_DO_DOCUMENTO, ROTULO_DO_FILTRO_DE_DOCUMENTO, TOM_DA_SITUACAO_DO_DOCUMENTO,
+  type FiltroDeDocumento, type MotivoDeTravaDoDocumento,
 } from '../clientes-regras.ts';
+import { FILTROS_DA_TELA, filtroDaConsulta } from '../destino-da-camada.ts';
 
 /** As duas situações de cliente, para o filtro e para a pílula. */
 const SITUACOES = [
@@ -85,7 +87,12 @@ export function TelaClientes() {
    * da aba Unidades: sao 29 clientes para preencher, e "mostrar so os que
    * faltam" e a diferenca entre conferir uma lista que encolhe e cacar linha por
    * linha numa lista que nao muda. */
-  const [pendencia, setPendencia] = useState('');
+  /* E ELE PODE VIR NO ENDERECO desde 19/08: a camada `documento_do_cliente` da
+   * tela de Pendencias aponta para `/clientes?pendencia=nao_validado`, que e o
+   * recorte EXATO que ela conta — os tres estados que a R9 recusa, e nao so o
+   * campo vazio. Lido so na montagem; depois quem manda e o `<select>`. */
+  const [pendencia, setPendencia] = useState(
+    () => filtroDaConsulta(location.search, FILTROS_DA_TELA['/clientes']));
   const { ordem, alternar } = useOrdenacao('nome');
 
   /** O que está sendo digitado, por cliente. Fora do `map` para sobreviver ao
@@ -101,7 +108,7 @@ export function TelaClientes() {
     todos.filter((c) =>
       (contem(c.nome, busca) || contem(c.documento, busca)) &&
       (!situacao || (situacao === 'ativo') === c.ativo) &&
-      (!pendencia || situacaoDoDocumento(c) === pendencia)),
+      casaComFiltroDeDocumento(c, pendencia)),
     ordem,
     {
       nome: (c) => c.nome,
@@ -209,9 +216,8 @@ export function TelaClientes() {
             as dela do `Record`. */}
         <Filtro valor={pendencia} ao={setPendencia} rotulo="Filtrar por documento"
                 opcoes={[{ valor: '', texto: 'Todos os documentos' },
-                         ...(Object.keys(ROTULO_DA_SITUACAO_DO_DOCUMENTO) as
-                              Array<keyof typeof ROTULO_DA_SITUACAO_DO_DOCUMENTO>)
-                           .map((k) => ({ valor: k, texto: ROTULO_DA_SITUACAO_DO_DOCUMENTO[k] }))]} />
+                         ...(Object.keys(ROTULO_DO_FILTRO_DE_DOCUMENTO) as FiltroDeDocumento[])
+                           .map((k) => ({ valor: k, texto: ROTULO_DO_FILTRO_DE_DOCUMENTO[k] }))]} />
         {/* O ESCOPO E O RECORTE DO SERVIDOR, e nao mais um filtro de tela: trocar
             aqui muda a CONSULTA. Fica ao lado dos outros para quem opera nao ter
             de saber a diferenca - e o rotulo diz o que cada um traz. */}
