@@ -32,6 +32,7 @@ import {
   type SituacaoDaUc,
 } from '../unidades-regras.ts';
 import { decimalTexto } from '../dinheiro.ts';
+import { FILTROS_DA_TELA, filtroDaConsulta } from '../destino-da-camada.ts';
 
 export function TelaUnidades() {
   const ucs = useDados<UnidadeConsumidora[]>(() => api.get('/unidades-consumidoras?limite=500'));
@@ -43,7 +44,20 @@ export function TelaUnidades() {
 
   const [busca, setBusca] = useState('');
   const [situacao, setSituacao] = useState('');
-  const [pendencia, setPendencia] = useState('');
+  /*
+   * A PENDENCIA PODE VIR NO ENDERECO, e e por ela que a tela de Pendencias
+   * aponta: `/unidades?pendencia=sem_tarifa` abre esta lista ja mostrando SO as
+   * que faltam. Sao tres camadas da prontidao que terminam aqui - tarifa,
+   * vencimento e rateio -, e chegar numa lista de 41 linhas sem recorte e o que
+   * o link existe para evitar.
+   *
+   * LIDO SO NA MONTAGEM (inicializador do `useState`), de proposito: depois
+   * disso quem manda e o `<select>`, e reagir ao endereco faria o filtro voltar
+   * sozinho ao do link toda vez que a pessoa mudasse de ideia. Valor
+   * desconhecido cai para "todas" — ver `filtroDaConsulta`.
+   */
+  const [pendencia, setPendencia] = useState(
+    () => filtroDaConsulta(location.search, FILTROS_DA_TELA['/unidades']));
   /** Qual UC esta com o endereco aberto. Um por vez: sete campos por linha em 41
    *  linhas seriam 287 caixas de texto desenhadas de uma vez. */
   const [enderecoAberto, setEnderecoAberto] = useState<string | null>(null);
