@@ -147,15 +147,12 @@ Nenhum é código. Os importadores já existem e rodam do Codespace contra produ
 > Mesma pessoa, imóveis diferentes. É o caso **normal** do negócio. E a outra
 > metade da regra já é respeitada: **0 UCs repetidas** no CRM, 127 distintas.
 >
-> **⏳ Falta aplicar a `migration 33` (`20260820190000_documento_pode_repetir`)**,
+> **✅ `migration 33` APLICADA em 20/08/2026** (`prisma migrate deploy`, com a DIRECT_URL de dono). `cliente_documento_unico` removido, `uc_numero_unico` mantido. O ciclo seguinte destravou sozinho — a guarda do conector consulta o catálogo — e criou os **5 clientes** que estavam bloqueados, com **0 divergências**. Documentos que agora repetem legitimamente: `51294590000143` (2 UCs), `00506706117`, `03571069110`, `03284734139`, `03275983105`.
 > que remove `cliente_documento_unico` e mantém `uc_numero_unico`. Ela está
 > escrita e versionada, mas **não pôde ser aplicada deste host**: a role de
 > runtime `app_financeiro_login` não tem DDL (a tabela é do `postgres`), e o
 > `DIRECT_URL` não está em `/etc/financeiro.env`. **Precisa rodar do Codespace.**
 >
-> Depois de aplicada, **não é preciso mexer em código nem fazer deploy**: o
-> conector consulta o catálogo (`indiceDeDocumentoExiste`) e a guarda se desliga
-> sozinha no ciclo seguinte, semeando os 5 documentos que faltam.
 >
 > **Item 6 — tarifa.** O CRM expôs `tarifa_reais_por_kwh` em
 > `financeiro.rateio_clientes` e `vendas_ganhas`: é o campo **digitado** no card
