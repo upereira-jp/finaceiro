@@ -214,16 +214,54 @@ const usos = navegacoes();
   const emCliente = porModelo.get('cliente')?.has(chaveCompartilhada) === true;
   const emOriginador = porModelo.get('originador')?.has(chaveCompartilhada) === true;
 
-  chk('R5a', emCliente && !emOriginador,
-      `"${chaveCompartilhada}" e parcial em \`cliente\` e CHEIA em \`originador\` - e por isso o `
-      + 'criterio e o PAR (modelo, chave). Procurar o nome da chave acusaria `originador` e '
-      + '`dono_usina`, que estao certos, e teste que acusa errado treina o time a ignora-lo');
+  /*
+   * 20/08/2026 — A MIGRATION 33 TIROU O SUJEITO DESTA VERIFICACAO, e o correto e
+   * registrar isso e nao consertar o teste para passar.
+   *
+   * Ate aqui, `tenant_id_documento` era PARCIAL em `cliente` e CHEIA em
+   * `originador`/`dono_usina`, e esse par provava que o criterio do R4 e o
+   * (modelo, chave) e nao o nome. A migration 33 removeu
+   * `cliente_documento_unico` — o dono estabeleceu que o documento PODE se
+   * repetir, porque a mesma pessoa responde por varias UCs — e com ela sumiu a
+   * unica colisao de nome do schema.
+   *
+   * Entao o R5a inverteu: ele agora afirma o estado que a migration criou. Se
+   * alguem devolver `cliente.tenant_id_documento` sem pensar, esta linha cai e
+   * obriga a decidir de novo (a regra do dono ou a constraint, nao as duas).
+   */
+  /* `porModelo` so tem chaves PARCIAIS - `emOriginador` sempre foi false, e era
+   * exatamente isso que o teste original afirmava com `!emOriginador`. O que
+   * mudou e o primeiro termo: `cliente` deixou de ter a chave parcial. */
+  chk('R5a', !emCliente && !emOriginador,
+      `"${chaveCompartilhada}" nao e chave PARCIAL em modelo nenhum: saiu de \`cliente\` na `
+      + 'migration 33 (documento pode repetir, UC nao) e em `originador`/`dono_usina` sempre '
+      + 'foi CHEIA. Se voltar a ser parcial em `cliente`, esta linha cai - e a decisao do dono '
+      + 'de 20/08 precisa ser revisitada');
 
   const usamOriginador = usos.filter((u) =>
     (u.modelo === 'originador' || u.modelo === 'dono_usina') && u.chave === chaveCompartilhada);
   chk('R5b', usamOriginador.length === 2,
       `e os dois usos legitimos existem de fato (${usamOriginador.map((u) => u.arquivo.replace('/src/repos/', '')).join(', ')}) `
       + '- se um dia sumirem, esta linha cai e alguem confere se o R4 continua tendo o que discriminar');
+
+  /*
+   * E O R4 FICOU SEM VERIFICACAO NEGATIVA, o que precisa doer e nao passar em
+   * silencio. Enquanto nenhum nome de chave for parcial num modelo e cheio em
+   * outro, o R4 nao tem como ser exercitado contra um falso positivo. Esta linha
+   * MEDE isso: no dia em que a colisao voltar a existir, ela avisa para
+   * restaurar a demonstracao — em vez de o R4 seguir sendo uma afirmacao sobre
+   * nada, que e exatamente o desfecho que o R1a chama de o pior possivel.
+   */
+  const nomesParciais = new Set([...porModelo.values()].flatMap((s) => [...s]));
+  const cheiasQueColidem = [...nomesParciais].filter((nome) =>
+    usos.some((u) => u.chave === nome && !porModelo.get(u.modelo)?.has(nome)));
+  chk('R5c', cheiasQueColidem.length === 0,
+      cheiasQueColidem.length === 0
+        ? 'nenhum nome de chave e parcial num modelo e cheio em outro hoje — o R4 esta sem '
+          + 'verificacao negativa desde a migration 33, e isto e o registro de que alguem '
+          + 'precisa restaurar uma quando a colisao reaparecer'
+        : `colisao de nome VOLTOU (${cheiasQueColidem.join(', ')}): restaure a verificacao `
+          + 'negativa do R5a com este par, que o R4 volta a ter o que discriminar');
 }
 
 console.log(`\n${falhas === 0 ? 'regra 11 (codigo): todas as verificacoes passaram'

@@ -126,11 +126,36 @@ Nenhum é código. Os importadores já existem e rodam do Codespace contra produ
 > *conferir e confirmar 26 já preenchidos* — que é um trabalho diferente e muito
 > menor, mas ainda é trabalho de alguém.
 >
-> **4 colisões de documento viraram divergência, não 23505** — leads `G3-0307`,
-> `G3-0295`, `G3-0401` e `G3-0279` trazem documentos que já pertencem a outro
-> cliente. É a `Q-CLIENTEDUP-01` aparecendo com nome e sobrenome. O conector não
-> escolhe qual dos dois é o dono; sem essa guarda, cada uma teria derrubado o
-> lote inteiro pelo índice `cliente_documento_unico`.
+> **4 colisões de documento viraram divergência, não 23505** — sem a guarda,
+> cada uma teria derrubado o lote inteiro pelo índice `cliente_documento_unico`.
+>
+> ### 🔴 E ELAS NÃO ERAM DUPLICATAS — a `Q-CLIENTEDUP-01` estava errada
+>
+> **Regra do dono, 20/08:** *"os documentos podem se repetir, pois nas
+> negociações mais de uma pessoa pode ser responsável por uma UC, entretanto,
+> não podem existir mais de uma UC."*
+>
+> Medido no CRM, os quatro casos recusados:
+>
+> | Pessoa | Documento | UCs distintas |
+> |---|---|--:|
+> | Carlos Gabriel Santos Alves | 1 CPF | **3** |
+> | Thiago Gonçalves Taquary | 1 CPF | 2 |
+> | Renata Lucy N. D. Teles Leão | 1 CPF | 2 |
+> | Renata Ferreira Estevam | 1 CPF | 2 |
+>
+> Mesma pessoa, imóveis diferentes. É o caso **normal** do negócio. E a outra
+> metade da regra já é respeitada: **0 UCs repetidas** no CRM, 127 distintas.
+>
+> **⏳ Falta aplicar a `migration 33` (`20260820190000_documento_pode_repetir`)**,
+> que remove `cliente_documento_unico` e mantém `uc_numero_unico`. Ela está
+> escrita e versionada, mas **não pôde ser aplicada deste host**: a role de
+> runtime `app_financeiro_login` não tem DDL (a tabela é do `postgres`), e o
+> `DIRECT_URL` não está em `/etc/financeiro.env`. **Precisa rodar do Codespace.**
+>
+> Depois de aplicada, **não é preciso mexer em código nem fazer deploy**: o
+> conector consulta o catálogo (`indiceDeDocumentoExiste`) e a guarda se desliga
+> sozinha no ciclo seguinte, semeando os 5 documentos que faltam.
 >
 > **Item 6 — tarifa.** O CRM expôs `tarifa_reais_por_kwh` em
 > `financeiro.rateio_clientes` e `vendas_ganhas`: é o campo **digitado** no card

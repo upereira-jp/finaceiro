@@ -206,7 +206,9 @@ model cliente {
   unidade_consumidora         unidade_consumidora[]
 
   @@unique([tenant_id, crm_lead_id], map: "cliente_crm_lead_unico", where: raw("(crm_lead_id IS NOT NULL)"))
-  @@unique([tenant_id, documento], map: "cliente_documento_unico", where: raw("(documento IS NOT NULL)"))
+  // `cliente_documento_unico` SAIU na migration 33 (20/08/2026): a mesma pessoa
+  // pode responder por varias UCs, e cada UC vira um cliente espelhado do seu
+  // card no CRM. Quem continua unico e `unidade_consumidora.numero_uc`.
   @@unique([tenant_id, id], map: "cliente_id_tenant")
 }
 

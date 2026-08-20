@@ -439,6 +439,34 @@ export function tarifaDoCliente(
  * comprimento dos dois lados, e derivar de novo custa nada e fecha a porta para
  * um `documento_tipo` que discorde do proprio `documento`.
  */
+/**
+ * O indice `cliente_documento_unico` ainda existe neste banco?
+ *
+ * Existe para ser respondido em RUNTIME, e nao por constante, porque a resposta
+ * muda no dia em que a migration 33 rodar — e ela roda de um Codespace, num
+ * momento que este codigo nao controla. Sem esta pergunta, alguem teria de
+ * lembrar de voltar aqui e apagar a guarda depois; com ela, a guarda se desliga
+ * sozinha e o ciclo seguinte semeia todos os documentos.
+ *
+ * Cacheado por processo: o catalogo nao muda no meio de um ciclo, e um ciclo tem
+ * dez lotes.
+ */
+let _travaConhecida: boolean | null = null;
+export async function indiceDeDocumentoExiste(): Promise<boolean> {
+  if (_travaConhecida !== null) return _travaConhecida;
+  try {
+    const linhas: any[] = await dbt().$queryRaw`
+      SELECT 1 FROM pg_indexes
+       WHERE schemaname = 'public' AND indexname = 'cliente_documento_unico'`;
+    _travaConhecida = linhas.length > 0;
+  } catch {
+    /* Sem resposta do catalogo, assume que a trava existe: errar para o lado de
+     * contar em vez de escrever nunca derruba lote. */
+    _travaConhecida = true;
+  }
+  return _travaConhecida;
+}
+
 export function sementeDeDocumento(
   bruto: string | null | undefined, _tipoDoCrm?: string | null,
 ): { documento: string; documento_tipo: 'cpf' | 'cnpj' } | null {
@@ -943,7 +971,11 @@ async function espelharLote(
     bloco.map((l) => sementeDeDocumento(l.documento, l.documento_tipo)?.documento)
          .filter((d): d is string => !!d),
   )];
-  const docsNoTenant = candidatos.length === 0 ? new Set<string>() : new Set(
+  /* O indice ainda existe? A migration 33 o remove; enquanto ela nao rodar, o
+   * documento repetido tem de ser contado em vez de escrito. Uma consulta de
+   * catalogo por lote, e ela e o que faz a transicao acontecer sozinha. */
+  const travaDeDocumento = candidatos.length === 0 ? false : await indiceDeDocumentoExiste();
+  const docsNoTenant = !travaDeDocumento ? new Set<string>() : new Set(
     (await db.cliente.findMany({
       where: { tenant_id: tenantId, documento: { in: candidatos } },
       select: { documento: true },
@@ -997,12 +1029,26 @@ async function espelharLote(
     const doc = sementeDeDocumento(l.documento, l.documento_tipo);
     let semente: Record<string, unknown> = {};
     if (doc && !atual?.documento) {
-      if (docsNoTenant.has(doc.documento) || docsDoLote.has(doc.documento)) {
+      /* O DOCUMENTO REPETIDO SO E PROBLEMA ENQUANTO O INDICE EXISTIR.
+       *
+       * A regra do dono (20/08/2026) e que ele PODE se repetir: a mesma pessoa
+       * responde por varias UCs, e cada UC vira um cliente. A migration 33 tira
+       * `cliente_documento_unico`. Enquanto ela nao for aplicada, gravar o
+       * segundo levanta 23505 e derruba o LOTE inteiro - entao o conector conta
+       * em vez de escrever, e diz o que falta.
+       *
+       * A CONSULTA AO CATALOGO E O QUE FAZ ISTO SE RESOLVER SOZINHO: no dia em
+       * que a migration rodar, `travaDeDocumento` vira false e a semente passa a
+       * entrar para todos, sem segundo deploy e sem ninguem lembrar de voltar
+       * aqui. */
+      if (travaDeDocumento && (docsNoTenant.has(doc.documento) || docsDoLote.has(doc.documento))) {
         r.divergencias.push({
           entidade: 'cliente', chave: texto(l.codigo) ?? l.lead_id,
-          sinal: `o CRM traz o documento ${doc.documento} para este lead, mas ele ja pertence `
-               + 'a outro cliente neste tenant. Nada foi gravado: o conector nao escolhe qual '
-               + 'dos dois e o dono (Q-CLIENTEDUP-01). Confira os cadastros no CRM.',
+          sinal: `o documento ${doc.documento} ja esta em outro cliente, e o indice `
+               + '`cliente_documento_unico` ainda existe neste banco. NAO e duplicata: a mesma '
+               + 'pessoa pode responder por varias UCs. Aplique a migration 33 '
+               + '(20260820190000_documento_pode_repetir) e rode o ciclo de novo - a semente '
+               + 'entra sozinha, sem mudanca de codigo.',
         });
       } else {
         docsDoLote.add(doc.documento);
