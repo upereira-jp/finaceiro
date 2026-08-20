@@ -84,7 +84,8 @@ const SQL: Record<ViewDoCrm, string> = {
     SELECT codigo, lead_id, nome, telefone, email, funil, etapa, ganho_em,
            valor_venda, valor_posicao, parceria_tipo, comissionamento,
            partner_id, parceiro_nome, vendedor_origem, responsavel_atual,
-           consumo_kwh, consumo_reais, created_at, comissionamento_n_opcoes, crm_tenant_id
+           consumo_kwh, consumo_reais, created_at, comissionamento_n_opcoes, crm_tenant_id,
+           documento, documento_tipo, tarifa_reais_por_kwh
       FROM financeiro.vendas_ganhas`,
   usinas: `
     SELECT usina_id, codigo_geradora, apelido, localizacao, potencia_kwp,
@@ -94,7 +95,9 @@ const SQL: Record<ViewDoCrm, string> = {
   rateio_clientes: `
     SELECT contrato_id, codigo_geradora, usina, lead_codigo, cliente, telefone,
            percentual_rateio, uc, troca_titularidade, numero_protocolo,
-           data_cadastro, data_vencimento, observacoes, created_at, crm_tenant_id
+           data_cadastro, data_vencimento, observacoes, created_at, crm_tenant_id,
+           documento, documento_tipo,
+           tarifa_reais_por_kwh, tarifa_derivada_reais_por_kwh
       FROM financeiro.rateio_clientes`,
   rateio_creditos: `
     SELECT contrato_id, usina_id, lead_id, percentual_rateio,
@@ -227,6 +230,18 @@ export type VendaGanha = {
   vendedor_origem: string | null; responsavel_atual: string | null;
   consumo_kwh: string | null; consumo_reais: string | null;
   created_at: Date; comissionamento_n_opcoes: string;
+  /* CPF ou CNPJ do cliente, sem mascara e em maiuscula, do campo `documento` do
+   * card. O CRM PRESERVA LETRAS: o CNPJ alfanumerico da Receita vale desde
+   * 31/07/2026 e as 12 primeiras posicoes aceitam A-Z. `documento_tipo` e
+   * derivado do comprimento (11/14) do lado de la, igual ao nosso `detectarTipo`.
+   * E SEMENTE, nao validacao - R8: entra com `documento_validado = false` mesmo
+   * passando no digito, porque la o campo e livre. (CRM, 20/08/2026.) */
+  documento: string | null; documento_tipo: string | null;
+  /* A tarifa DIGITADA no card (`leads.consumo_fator`), nao a derivada. Ate 20/08
+   * so existia a divisao `consumo_reais / consumo_kwh`, que devolve o RESIDUO do
+   * arredondamento - 1,159997 para uma tarifa que a operacao digitou como 1,16.
+   * Ver a nota de `tarifaDoCliente` em sincronizacao.ts. */
+  tarifa_reais_por_kwh: string | null;
 };
 
 export type UsinaDoCrm = {
@@ -246,6 +261,25 @@ export type RateioCliente = {
   troca_titularidade: string | null; numero_protocolo: string | null;
   data_cadastro: Date | null; data_vencimento: Date | null;
   observacoes: string | null; created_at: Date;
+  /* Mesmo documento de `VendaGanha`, aqui na granularidade da UC. */
+  documento: string | null; documento_tipo: string | null;
+  /* AS DUAS TARIFAS, e a segunda e o ponto (CRM, 20/08/2026).
+   *
+   * `tarifa_reais_por_kwh` e o campo DIGITADO no card (`leads.consumo_fator`).
+   * `tarifa_derivada_reais_por_kwh` e a mesma tarifa reconstruida do dinheiro
+   * (`consumo_reais / consumo_kwh`) - o que este conector calculava sozinho ate
+   * hoje, em `tarifaDoCliente`.
+   *
+   * Elas existem separadas porque o par PODE FICAR DEFASADO: trocar o fator
+   * depois de `consumo_reais` gravado deixa o card com uma tarifa que nao
+   * produziu aquele valor, e isso nao gera erro, log nem sintoma. Medicao do dev
+   * do CRM em 20/08: divergem em 10 de 198 cards do tenant (5,1%) e em **0 das
+   * 41 UCs do rateio**.
+   *
+   * O CRM nao publicou booleano nem tolerancia de proposito - limiar e decisao de
+   * negocio disfarcada de configuracao. Quem compara e este lado. */
+  tarifa_reais_por_kwh: string | null;
+  tarifa_derivada_reais_por_kwh: string | null;
 };
 
 export type RateioCredito = {

@@ -35,6 +35,11 @@ import { tenantCorrente, exigir, dentroDeUnidadeDeTrabalho } from '../db/context
 import { ehSqlstate, SQLSTATE } from '../db/sqlstate.ts';
 import { paraDecimal, decimalParaTexto } from '../dominio/fatura-unificada.ts';
 import { conferirCreditoDeOriginador, type ResumoDeSituacao } from '../dominio/credito-originador.ts';
+/* A semente do documento reusa o MESMO normalizador e o MESMO detector de tipo
+ * da R7/R8 - se a fronteira tivesse regra propria, um documento aceito aqui
+ * poderia ser recusado na aba Clientes, e a divergencia so apareceria quando um
+ * contrato nao ativasse. */
+import { normalizar, detectarTipo } from '../dominio/documento.ts';
 import type {
   VendaGanha, LeadArquivado, LeadMerge, UsinaDoCrm, GeracaoMensal,
   RateioCliente, RateioCredito, VendaCreditada, RateioSituacao, ResultadoDeLeitura,
@@ -408,6 +413,79 @@ export function tarifaDoCliente(
    * 23514 no meio de um `createMany` derruba o LOTE inteiro. Recusar aqui vira
    * "sem semente", que e o estado normal de quem nao tem card. */
   return Number(txt) > 0 && Number(txt) <= 10 ? txt : null;
+}
+
+/**
+ * ============================================================================
+ * O DOCUMENTO DO CRM VIRA SEMENTE — ou nao vira nada.
+ *
+ * O CRM passou a expor `documento` em 20/08/2026. Ele chega ja normalizado de la
+ * (sem mascara, maiusculo, letras preservadas), mas normalizado nao e o mesmo
+ * que valido: la o campo e LIVRE e grava o que a operacao digitar, inclusive
+ * numero pela metade. Por isso o formato e reconferido aqui, com o nosso proprio
+ * `normalizar`/`detectarTipo` - a fronteira nao confia na fronteira.
+ *
+ * O QUE ESTA FUNCAO NAO FAZ: nao valida digito verificador. E de proposito, e e
+ * a R9 - documento invalido NAO bloqueia cadastro, bloqueia ativacao de
+ * contrato. Recusar aqui esconderia do operador que existe um numero para
+ * conferir; o que a aba Clientes mostra como `digito_nao_confere` e util
+ * justamente por estar gravado.
+ *
+ * O que ela recusa e o que nao tem FORMA de documento: comprimento que nao e 11
+ * nem 14. Isso nao e "invalido", e "nao e um documento" - e gravar viraria lixo
+ * que ninguem consegue conferir, alem de ocupar o indice unico a toa.
+ *
+ * `documento_tipo` vem do CRM mas e RECALCULADO aqui: e derivado do
+ * comprimento dos dois lados, e derivar de novo custa nada e fecha a porta para
+ * um `documento_tipo` que discorde do proprio `documento`.
+ */
+export function sementeDeDocumento(
+  bruto: string | null | undefined, _tipoDoCrm?: string | null,
+): { documento: string; documento_tipo: 'cpf' | 'cnpj' } | null {
+  const doc = normalizar(bruto);
+  if (!doc) return null;
+  const tipo = detectarTipo(doc);
+  if (!tipo) return null;   // sem forma de documento: nao grava
+  return { documento: doc, documento_tipo: tipo };
+}
+
+/**
+ * ============================================================================
+ * QUAL DAS DUAS TARIFAS VIRA SEMENTE — o campo digitado vence a divisao.
+ *
+ * ATE 20/08/2026 SO EXISTIA A DIVISAO. `tarifaDoCliente` reconstroi a tarifa a
+ * partir do dinheiro (`consumo_referencia_centavos / consumo_kwh`), porque era o
+ * unico caminho: o CRM nao expunha o campo. A rodada 9 mostrou o custo disso com
+ * quatro cards da mesma tarifa dando `1,159997 · 1,160000 · 1,160001 · 1,160008`
+ * — o residuo de dividir de volta um valor que ja foi arredondado em duas casas.
+ *
+ * O CRM PASSOU A EXPOR `tarifa_reais_por_kwh` (o `consumo_fator` do card, que e
+ * o numero que a operacao escolhe). Sendo o campo digitado, ele nao tem residuo:
+ * volta `1,160000` redondo. Por isso ele vem primeiro.
+ *
+ * A DIVISAO NAO FOI APAGADA, e a razao e medida: o campo digitado e a divisao
+ * PODEM DIVERGIR. O dev do CRM mediu em 20/08 que elas divergem em 10 de 198
+ * cards (5,1%) do tenant — cards onde alguem trocou o fator depois de o valor ja
+ * ter sido gravado. Nas 41 UCs do rateio divergem em ZERO hoje, mas "hoje" nao e
+ * invariante. Entao a divisao continua como segunda fonte e como CONFERENCIA.
+ *
+ * A ORDEM NAO E PREFERENCIA, E PROCEDENCIA: digitado > derivado > nada. O
+ * derivado so aparece quando o card nao tem o campo preenchido — o que, hoje,
+ * nao acontece em nenhuma das 41 (cobertura 100%, semeada por trigger no CRM).
+ */
+export function tarifaDaSemente(
+  digitada: string | null | undefined, derivada: string | null | undefined,
+): string | null {
+  const d = digitada == null ? '' : String(digitada).trim();
+  if (d) {
+    /* Mesmo teto de `tarifaDoCliente`: o CHECK `uc_tarifa_na_ordem_de_grandeza`
+     * recusa acima de 10 com 23514, e um 23514 derruba o `createMany` do LOTE.
+     * Recusar aqui vira "sem semente digitada" e cai na derivada. */
+    const n = Number(d);
+    if (Number.isFinite(n) && n > 0 && n <= 10) return d;
+  }
+  const v = derivada == null ? '' : String(derivada).trim();
+  return v || null;
 }
 
 /**
@@ -816,9 +894,16 @@ async function processar(
  *
  * R5 - campo espelho o conector vence, campo local o usuario vence. A separacao
  * e por COLUNA e esta na SPEC-001 §3.3: aqui so entram colunas de espelho.
- * `documento` fica de fora de proposito - o CRM e semente, e sobrescrever
- * documento validado localmente com o do CRM seria o conector vencendo campo
- * local.
+ * `documento` fica de fora do ESPELHO de proposito - o CRM e semente, e
+ * sobrescrever documento validado localmente com o do CRM seria o conector
+ * vencendo campo local.
+ *
+ * 20/08/2026 - "FORA DO ESPELHO" NUNCA QUIS DIZER "NAO PREENCHER O VAZIO".
+ * O CRM passou a expor `documento`, e a partir daqui o conector o grava quando,
+ * e SO quando, `cliente.documento` esta nulo. Nao e uma excecao a R5: um campo
+ * vazio nao tem valor local para ser vencido. O que entra e `crm_semente` com
+ * `documento_validado = false`, mesmo com o digito fechando (R8) - continua sem
+ * ativar contrato nenhum sozinho. Ver a nota extensa dentro do laco.
  *
  * POR QUE EM BLOCO, e nao um cliente por vez (Q-LOTE-01). A versao anterior
  * gastava 5 viagens por cliente - `findFirst`, `create`, `findFirst` de novo
@@ -838,9 +923,36 @@ async function espelharLote(
   const atuais = await db.cliente.findMany({
     where: { tenant_id: tenantId, crm_lead_id: { in: leadIds } },
     select: { id: true, crm_lead_id: true, nome: true, telefone: true, email: true,
-              origem: true, consumo_kwh: true, ativo: true },
+              origem: true, consumo_kwh: true, ativo: true,
+              /* `documento` entra na LEITURA mas nunca no espelho - ver a nota da
+               * semente abaixo. Sem le-lo nao ha como saber se esta vazio. */
+              documento: true },
   });
   const porLead = new Map(atuais.map((c) => [c.crm_lead_id!, c]));
+
+  /*
+   * TERCEIRA LEITURA DO LOTE, e ela e por INCLUSAO e nao varredura (Q-LOTE-01).
+   *
+   * Precisamos saber quais dos documentos que ESTE lote quer semear ja pertencem
+   * a alguem, por causa do indice unico `cliente_documento_unico`. A consulta
+   * pede `documento IN (candidatos)` - limitada pelo tamanho do lote e servida
+   * pelo proprio indice - e nao `documento IS NOT NULL`, que varreria a tabela
+   * inteira a cada lote e faria o custo do ciclo crescer com a carteira.
+   */
+  const candidatos = [...new Set(
+    bloco.map((l) => sementeDeDocumento(l.documento, l.documento_tipo)?.documento)
+         .filter((d): d is string => !!d),
+  )];
+  const docsNoTenant = candidatos.length === 0 ? new Set<string>() : new Set(
+    (await db.cliente.findMany({
+      where: { tenant_id: tenantId, documento: { in: candidatos } },
+      select: { documento: true },
+    })).map((c) => c.documento!),
+  );
+  /* Documentos ja usados DENTRO deste lote: dois leads do CRM podem trazer o
+   * mesmo numero (cards espelho, ou os duplicados da Q-CLIENTEDUP-01), e o
+   * segundo `create` levantaria 23505 derrubando o lote inteiro. */
+  const docsDoLote = new Set<string>();
 
   const aCriar: any[] = [];
   const aAtualizar: { id: string; espelho: Record<string, unknown> }[] = [];
@@ -856,9 +968,56 @@ async function espelharLote(
     };
 
     const atual = porLead.get(l.lead_id);
+
+    /*
+     * ======================================================================
+     * A SEMENTE DO DOCUMENTO — preenche o vazio, NUNCA sobrescreve.
+     *
+     * `documento` continua FORA do espelho (R5), e a nota do topo desta funcao
+     * segue valendo: sobrescrever documento validado localmente com o do CRM
+     * seria o conector vencendo campo local. O que mudou em 20/08/2026 e que o
+     * CRM passou a EXPOR o documento, e "nao sobrescrever" nunca quis dizer
+     * "nao preencher o que esta vazio".
+     *
+     * R8 CONTINUA INTEIRA: o que entra e `crm_semente` com
+     * `documento_validado = false`, MESMO quando o digito fecha. La o campo e
+     * livre, e digito certo nao prova que o documento e daquela pessoa. Quem
+     * valida e a aba Clientes, reenviando o numero - o que troca a origem para
+     * `coleta_local`. O ganho aqui e sair de "digitar 29 do zero" para
+     * "conferir 29 ja preenchidos", e nao um contrato ativavel de graca.
+     *
+     * O INDICE UNICO E O QUE OBRIGA A CONTAR EM VEZ DE ESCREVER. Existe
+     * `cliente_documento_unico (tenant_id, documento)`: se dois leads do CRM
+     * trouxerem o mesmo numero - cards espelho, ou os duplicados que a
+     * `Q-CLIENTEDUP-01` ja nomeia -, o segundo `create` levanta 23505 e um 23505
+     * no meio de um `createMany` DERRUBA O LOTE INTEIRO. Mesmo modo de falha que
+     * a `UC-DUP-01` ja tratou. Entao a colisao vira divergencia contada, e o
+     * conector nao escolhe qual dos dois leva o documento.
+     */
+    const doc = sementeDeDocumento(l.documento, l.documento_tipo);
+    let semente: Record<string, unknown> = {};
+    if (doc && !atual?.documento) {
+      if (docsNoTenant.has(doc.documento) || docsDoLote.has(doc.documento)) {
+        r.divergencias.push({
+          entidade: 'cliente', chave: texto(l.codigo) ?? l.lead_id,
+          sinal: `o CRM traz o documento ${doc.documento} para este lead, mas ele ja pertence `
+               + 'a outro cliente neste tenant. Nada foi gravado: o conector nao escolhe qual '
+               + 'dos dois e o dono (Q-CLIENTEDUP-01). Confira os cadastros no CRM.',
+        });
+      } else {
+        docsDoLote.add(doc.documento);
+        semente = {
+          documento: doc.documento,
+          documento_tipo: doc.documento_tipo,
+          documento_origem: 'crm_semente',
+          documento_validado: false,   // R8, e vale ate para digito que fecha
+        };
+      }
+    }
+
     if (!atual) {
       const id = crypto.randomUUID();
-      aCriar.push({ id, tenant_id: tenantId, crm_lead_id: l.lead_id, ...espelho });
+      aCriar.push({ id, tenant_id: tenantId, crm_lead_id: l.lead_id, ...espelho, ...semente });
       clientesDoLote.push(id);
       continue;
     }
@@ -872,7 +1031,14 @@ async function espelharLote(
       !mesmoDecimal(atual.consumo_kwh, espelho.consumo_kwh) ||
       atual.ativo !== true;   // reaparecer no CRM reativa (§4.3, ultima linha)
 
-    if (mudou) aAtualizar.push({ id: atual.id, espelho });
+    /* R3 SEGUE VALIDA COM A SEMENTE, e de graca: `semente` so tem conteudo
+     * quando `!atual.documento`. Depois da primeira gravacao o cliente TEM
+     * documento, a condicao fica falsa e a segunda passada nao escreve nada. Nao
+     * e preciso comparar campo a campo aqui - a ausencia e a propria guarda. */
+    const temSemente = Object.keys(semente).length > 0;
+    if (mudou || temSemente) {
+      aAtualizar.push({ id: atual.id, espelho: { ...espelho, ...semente } });
+    }
     // senao: R3, zero escritas, inclusive timestamp
   }
 
@@ -1059,6 +1225,9 @@ async function espelharUnidades(
     leadId: string; numeroUc: string; nome: string | null; telefone: string | null;
     percentual: string | null; vencimento: Date | null; codigoGeradora: string | null;
     contratoId: string;
+    /* A tarifa DIGITADA no card, que o CRM passou a expor em 20/08/2026. Vem
+     * antes da divisao de `tarifaDoCliente` - ver `tarifaDaSemente`. */
+    tarifaDigitada: string | null;
   };
   const alvos: Alvo[] = [];
   const vistosUc = new Set<string>();
@@ -1097,6 +1266,7 @@ async function espelharUnidades(
       nome: texto(rc.cliente), telefone: texto(rc.telefone),
       percentual: rc.percentual_rateio, vencimento: rc.data_vencimento,
       codigoGeradora: texto(rc.codigo_geradora), contratoId: rc.contrato_id,
+      tarifaDigitada: texto(rc.tarifa_reais_por_kwh),
     });
     // Lead de rateio conta como visto: sem isto a reconciliacao da §4.3 o trataria
     // como ausente do CRM e o mandaria para a fila de revisao humana no mesmo ciclo
@@ -1268,8 +1438,10 @@ async function espelharUnidades(
                         distribuidora: usina.distribuidora,
                         /* A TARIFA NASCE COM A UC quando o card a tem. Aqui nao
                          * ha valor local para preservar - a linha esta nascendo -,
-                         * entao a semente entra e a UC ja e faturavel. */
-                        tarifa_reais_por_kwh: tarifaPorLead.get(a.leadId) ?? null,
+                         * entao a semente entra e a UC ja e faturavel.
+                         * Digitada vence derivada — ver `tarifaDaSemente`. */
+                        tarifa_reais_por_kwh:
+                          tarifaDaSemente(a.tarifaDigitada, tarifaPorLead.get(a.leadId)),
                         ...espelho });
           continue;
         }
@@ -1351,16 +1523,43 @@ async function espelharUnidades(
          * e o correto, mas calar deixaria as duas fontes divergindo sem que
          * ninguem soubesse - e esta e a divergencia que sai impressa na fatura.
          */
-        const tarifaDoCard = tarifaPorLead.get(a.leadId) ?? null;
+        const tarifaDerivada = tarifaPorLead.get(a.leadId) ?? null;
+        const tarifaDoCard = tarifaDaSemente(a.tarifaDigitada, tarifaDerivada);
         const tarifaFinal = atual.tarifa_reais_por_kwh ?? tarifaDoCard;
+        /* De onde saiu o numero, para o sinal nao mentir sobre a fonte: desde
+         * 20/08 ele pode vir do campo digitado no card, e nao mais so da divisao. */
+        const fonteDaTarifa = a.tarifaDigitada && tarifaDoCard === texto(a.tarifaDigitada)
+          ? 'o campo de tarifa do card' : 'consumo_reais / consumo_kwh';
         if (tarifaDoCard && atual.tarifa_reais_por_kwh
             && !mesmoDecimal(atual.tarifa_reais_por_kwh, tarifaDoCard)) {
           r.divergencias.push({
             entidade: 'unidade_consumidora', chave: a.numeroUc,
             sinal: `tarifa da UC e ${String(atual.tarifa_reais_por_kwh)} R$/kWh e o card do CRM da `
-                 + `${tarifaDoCard} (consumo_reais / consumo_kwh). Nada foi sobrescrito: a `
+                 + `${tarifaDoCard} (${fonteDaTarifa}). Nada foi sobrescrito: a `
                  + 'digitacao da operacao vence a semente do card. Confira qual das duas esta certa '
                  + '- este numero multiplica o kWh e vira o valor cobrado do cliente.',
+          });
+        }
+        /*
+         * A SEGUNDA DIVERGENCIA, E ELA E NOVA EM 20/08: as duas fontes do CRM
+         * discordando ENTRE SI. O card tem um fator digitado E um valor em reais,
+         * e `consumo_reais / consumo_kwh` deveria devolver o mesmo numero. Quando
+         * nao devolve, alguem trocou o fator depois de o valor ter sido gravado
+         * (ou o contrario) e o card carrega uma tarifa que nao produziu o proprio
+         * valor dele. Medido pelo dev do CRM: 10 de 198 cards do tenant, 0 das 41
+         * UCs do rateio.
+         *
+         * Nao recusa e nao escolhe: conta. E o precedente da `prontidao` e do
+         * `conferirTarifas` - conferencia conta, nao decide.
+         */
+        if (a.tarifaDigitada && tarifaDerivada
+            && !mesmoDecimal(a.tarifaDigitada, tarifaDerivada)) {
+          r.divergencias.push({
+            entidade: 'unidade_consumidora', chave: a.numeroUc,
+            sinal: `no card do CRM a tarifa digitada e ${a.tarifaDigitada} R$/kWh, mas `
+                 + `consumo_reais / consumo_kwh da ${tarifaDerivada}. As duas vem do MESMO `
+                 + 'card e deveriam bater: o fator provavelmente foi trocado depois de o valor '
+                 + 'ter sido gravado. Usamos a digitada. Confira no CRM qual das duas vale.',
           });
         }
 

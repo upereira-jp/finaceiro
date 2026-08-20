@@ -98,13 +98,51 @@ Nenhum é código. Os importadores já existem e rodam do Codespace contra produ
 
 | # | Pendência | Estado hoje | Como entra | Dono |
 |:--:|---|---|---|---|
-| 1 | **CPF/CNPJ de 24 pessoas** (29 linhas de cliente) | **0 de 29** | **aba Clientes**, linha a linha (17/08) · ou `npm run documentos` em lote | operação |
+| 1 | **CPF/CNPJ de 24 pessoas** (29 linhas de cliente) | **0 de 29** — mas **o conector passou a semear** (20/08), ver ⬇️ | **aba Clientes**, linha a linha (17/08) · ou `npm run documentos` em lote · ou esperar o próximo `npm run ciclo` | operação |
 | 2 | **Dia de vencimento de 29 UCs** | **0 de 29** | **aba Unidades consumidoras**, linha a linha · ou `npm run vencimentos` em lote | operação |
 | 3 | **CPF/CNPJ de 2 originadores** + natureza | 0 | `npm run originadores` | operação |
 | 4 | **Digitar os 29 contratos** | 0 | `npm run contratos` (depende de 1 e 3) | operação |
 | 5 | **Emissor** — razão social, CNPJ, contato | vazio em produção | **Fatura unificada** → «3 · Cadastro da fatura» (`/documento#cadastro`) | dono |
-| 6 | **Tarifa das 41 UCs** (`tarifa_reais_por_kwh`) | **NULL nas 41** | aba **Unidades consumidoras** (o conector não semeia — a coluna não está no contrato do CRM, `Q-VALOR-01(b)`) | dono/operação |
+| 6 | **Tarifa das 41 UCs** (`tarifa_reais_por_kwh`) | **NULL nas 41** — **o conector semeia no próximo ciclo**, cobertura medida **41 de 41** ⬇️ | aba **Unidades consumidoras**, ou esperar o próximo `npm run ciclo` (`Q-VALOR-01(b)` **pode fechar**) | dono/operação |
 | 7 | **Endereço do pagador de 29 UCs** | **0 de 29** | **aba Unidades consumidoras**, painel «Endereço do pagador» (17/08) · ou `npm run enderecos` em lote — **só o boleto depende** | operação |
+
+> ### ⬇️ 20/08/2026 — o CRM passou a expor documento e tarifa, e o conector passou a semear os dois
+>
+> **Ainda não rodou.** Os dois itens continuam nos números acima até o próximo
+> `npm run ciclo`; o que mudou é que deixaram de depender de digitação.
+>
+> **Item 6 — tarifa.** O CRM expôs `tarifa_reais_por_kwh` em
+> `financeiro.rateio_clientes` e `vendas_ganhas`: é o campo **digitado** no card
+> (`leads.consumo_fator`), não a divisão. **Cobertura medida: 41 de 41 UCs e 495
+> de 495 leads** — um trigger do lado de lá semeia no nascimento do lead, então
+> ninguém precisa digitar 41 tarifas. Pela tabela de decisão da rodada 9 §4, é o
+> cenário "esperamos a coluna e semeamos as 41 de uma vez".
+>
+> `tarifaDoCliente` (a divisão) **não saiu**: virou segunda fonte e conferência,
+> atrás de `tarifaDaSemente`. O motivo é que as duas podem discordar — os quatro
+> cards do `1,159997` da rodada 9 têm o fator digitado em **`1,1300`**, não
+> `1,16`. Medido pelo dev do CRM: divergem em 10 de 198 cards do tenant e em **0
+> das 41 UCs**. Divergência agora vira sinal contado, não silêncio.
+>
+> **Item 1 — documento.** `espelharLote` passou a gravar `documento` quando, e só
+> quando, `cliente.documento` está nulo — com `crm_semente` e
+> `documento_validado = false`, **mesmo com o dígito fechando** (R8 intacta). Não
+> é exceção à R5: campo vazio não tem valor local a ser vencido.
+>
+> **O que isso NÃO faz:** não ativa contrato. Continua sendo semente, e quem
+> valida é a aba Clientes reenviando o número (o que troca a origem para
+> `coleta_local`). O ganho é sair de *digitar 29 do zero* para *conferir 29 já
+> preenchidos*. Do lado do CRM havia **105 documentos preenchidos** em 20/08,
+> 34 deles extraídos automaticamente dos anexos naquele dia.
+>
+> **Colisão de documento vira divergência contada, não 23505.** O índice
+> `cliente_documento_unico` derrubaria o `createMany` inteiro se dois leads
+> trouxessem o mesmo número — que é o cenário da `Q-CLIENTEDUP-01`. O conector
+> não escolhe qual dos dois é o dono.
+>
+> Testes: `tests/crm-semente.ts`, 17 verificações puras (sem banco), em
+> `test:dominio`. Avisos técnicos do dev do CRM em
+> `AVISO-dev-crm-documento-2026-08-20.md` e `AVISO-dev-crm-tarifa-2026-08-20.md`.
 
 **A aba Clientes distingue o que a coluna sozinha esconde**, e é a R8: documento
 vindo do CRM entra com `documento_validado = false` **mesmo passando no dígito

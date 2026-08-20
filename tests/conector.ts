@@ -87,6 +87,10 @@ const venda = (o: Partial<VendaGanha> & { lead_id: string }): VendaGanha => ({
   vendedor_origem: null, responsavel_atual: null,
   consumo_kwh: '850.0000', consumo_reais: null,
   created_at: new Date('2026-05-01T12:00:00Z'), comissionamento_n_opcoes: '1',
+  /* Nulos por padrao de proposito: o default da fixture tem de ser o caso
+   * COMUM, e o comum e o card sem documento e sem tarifa digitada. Fixture que
+   * nasce feliz esconde o ramo que interessa. */
+  documento: null, documento_tipo: null, tarifa_reais_por_kwh: null,
   ...o,
 });
 
@@ -148,7 +152,9 @@ const rateioCliCrm = (o: Partial<RateioCliente> & { contrato_id: string }): Rate
   lead_codigo: 'G3-0001', cliente: 'Cliente do rateio', telefone: null,
   percentual_rateio: '5.5000', uc: '000000000000001', troca_titularidade: null,
   numero_protocolo: null, data_cadastro: null, data_vencimento: null,
-  observacoes: null, created_at: new Date('2026-07-14'), ...o,
+  observacoes: null, created_at: new Date('2026-07-14'),
+  documento: null, documento_tipo: null,
+  tarifa_reais_por_kwh: null, tarifa_derivada_reais_por_kwh: null, ...o,
 });
 const rateioCreCrm = (o: Partial<RateioCredito> & { contrato_id: string; lead_id: string }): RateioCredito => ({
   crm_tenant_id: CRM_TENANT, usina_id: 'dddd1111-0000-4000-8000-00000000aa01',
