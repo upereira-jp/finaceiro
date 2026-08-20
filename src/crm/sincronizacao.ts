@@ -467,6 +467,34 @@ export async function indiceDeDocumentoExiste(): Promise<boolean> {
   return _travaConhecida;
 }
 
+/**
+ * O documento que ja esta no cliente pode ser TROCADO pelo que o CRM traz agora?
+ *
+ * So quando as tres coisas valem juntas: existe valor gravado, ele veio deste
+ * conector (`crm_semente`) e ninguem o confirmou aqui (`documento_validado`
+ * false), e o CRM passou a dizer outro numero.
+ *
+ * A DISTINCAO E A ORIGEM, NAO A PRESENCA — e e ela que mantem a R5 inteira.
+ * `coleta_local` ou validado significa que uma pessoa deste lado decidiu; o
+ * conector nao encosta, nunca. `crm_semente` nao validado nao e decisao de
+ * ninguem daqui: e o espelho de um campo do CRM, e espelho acompanha a fonte.
+ *
+ * Nasceu de um caso real (20/08/2026): dois clientes PJ tinham o CPF do socio no
+ * lugar do CNPJ da empresa - resquicio de quando o CRM nao tinha campo de CNPJ.
+ * Corrigidos la, o ciclo rodou e nada mudou aqui, porque "preenche o vazio"
+ * nunca reconsidera o que ja esta preenchido. O dado errado ficaria para sempre.
+ */
+export function corrigeSementeAnterior(
+  atual: { documento?: string | null; documento_origem?: string | null;
+           documento_validado?: boolean | null } | null | undefined,
+  documentoNovo: string | null | undefined,
+): boolean {
+  if (!atual?.documento || !documentoNovo) return false;
+  if (atual.documento_origem !== 'crm_semente') return false;   // coleta_local vence
+  if (atual.documento_validado === true) return false;          // confirmado vence
+  return atual.documento !== documentoNovo;                     // R3: igual nao escreve
+}
+
 export function sementeDeDocumento(
   bruto: string | null | undefined, _tipoDoCrm?: string | null,
 ): { documento: string; documento_tipo: 'cpf' | 'cnpj' } | null {
@@ -953,8 +981,9 @@ async function espelharLote(
     select: { id: true, crm_lead_id: true, nome: true, telefone: true, email: true,
               origem: true, consumo_kwh: true, ativo: true,
               /* `documento` entra na LEITURA mas nunca no espelho - ver a nota da
-               * semente abaixo. Sem le-lo nao ha como saber se esta vazio. */
-              documento: true },
+               * semente abaixo. Sem le-lo nao ha como saber se esta vazio, e sem
+               * a origem/validado nao ha como saber se alguem ja o confirmou. */
+              documento: true, documento_origem: true, documento_validado: true },
   });
   const porLead = new Map(atuais.map((c) => [c.crm_lead_id!, c]));
 
@@ -1028,7 +1057,28 @@ async function espelharLote(
      */
     const doc = sementeDeDocumento(l.documento, l.documento_tipo);
     let semente: Record<string, unknown> = {};
-    if (doc && !atual?.documento) {
+    /*
+     * UMA SEMENTE PODE SER CORRIGIDA POR OUTRA SEMENTE, e isto NAO afrouxa a R5.
+     *
+     * Medido em 20/08: dois clientes PJ (`Cachoeira das Lajes Camping Ltda` e
+     * `Unus Agencia de Marketing Ltda`) tinham o CPF do socio no lugar do CNPJ
+     * da empresa - resquicio de quando o CRM nao tinha campo para CNPJ. O dono
+     * corrigiu os dois no CRM, o ciclo rodou, e NADA mudou aqui: a regra
+     * "preenche o vazio" nunca reconsidera um campo ja preenchido, nem quando o
+     * valor preenchido veio deste mesmo conector e esta errado.
+     *
+     * A distincao que resolve isso e a ORIGEM, nao a presenca:
+     *   - `coleta_local` ou `documento_validado` -> alguem CONFIRMOU aqui. O
+     *     conector nao encosta, em nenhuma hipotese. R5 e R8 inteiras;
+     *   - `crm_semente` e nao validado -> o valor e o espelho do CRM, e nao a
+     *     decisao de ninguem deste lado. Se o CRM mudou, o espelho acompanha -
+     *     nao ha valor local sendo vencido, porque nao ha valor local.
+     *
+     * R3 continua de graca: depois da correcao os dois valores batem, e a
+     * passada seguinte nao escreve.
+     */
+    const sementeCorrigivel = corrigeSementeAnterior(atual, doc?.documento);
+    if (doc && (!atual?.documento || sementeCorrigivel)) {
       /* O DOCUMENTO REPETIDO SO E PROBLEMA ENQUANTO O INDICE EXISTIR.
        *
        * A regra do dono (20/08/2026) e que ele PODE se repetir: a mesma pessoa
@@ -1058,6 +1108,19 @@ async function espelharLote(
           documento_origem: 'crm_semente',
           documento_validado: false,   // R8, e vale ate para digito que fecha
         };
+        /* Correcao de semente e VISIVEL, e nao um valor trocando em silencio.
+         * Um documento que muda debaixo de quem ja o conferiu com o olho merece
+         * uma linha - mesmo sendo, por construcao, um campo que ainda nao valia
+         * para contrato nenhum. */
+        if (sementeCorrigivel) {
+          r.divergencias.push({
+            entidade: 'cliente', chave: texto(l.codigo) ?? l.lead_id,
+            sinal: `documento corrigido a partir do CRM: ${atual!.documento} -> ${doc.documento}`
+                 + ' (a semente anterior nao tinha sido confirmada aqui, entao o espelho'
+                 + ' acompanhou a correcao). Se voce ja tinha conferido o valor antigo,'
+                 + ' confira este.',
+          });
+        }
       }
     }
 

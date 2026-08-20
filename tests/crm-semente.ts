@@ -9,7 +9,9 @@
  *
  * Rodar: node --experimental-strip-types tests/crm-semente.ts
  */
-import { sementeDeDocumento, tarifaDaSemente } from '../src/crm/sincronizacao.ts';
+import {
+  sementeDeDocumento, tarifaDaSemente, corrigeSementeAnterior,
+} from '../src/crm/sincronizacao.ts';
 
 let falhas = 0;
 const chk = (id: string, cond: boolean, d: string) => {
@@ -94,6 +96,43 @@ chk('S2g', tarifaDaSemente('0', '1.130000') === '1.130000' && tarifaDaSemente('-
 chk('S2h', typeof tarifaDaSemente('1.160000', null) === 'string'
         && tarifaDaSemente('1.160000', null) === '1.160000',
     'a tarifa atravessa como TEXTO, com as seis casas preservadas (regra 1)');
+
+// ===========================================================================
+// S3 - uma semente pode ser corrigida por outra semente (R5 intacta)
+// ===========================================================================
+
+const semente = (doc: string | null, origem: string | null, validado = false) =>
+  ({ documento: doc, documento_origem: origem, documento_validado: validado });
+
+/* O CASO REAL DE 20/08: PJ com o CPF do socio no lugar do CNPJ da empresa,
+ * corrigido no CRM. Sem esta regra o dado errado ficaria para sempre, porque
+ * "preenche o vazio" nunca reconsidera o que ja esta preenchido. */
+chk('S3a', corrigeSementeAnterior(semente('01186761130', 'crm_semente'), '08675136000103'),
+    'semente do CRM nao confirmada e TROCADA quando o CRM passa a dizer outro numero');
+
+/* R5 - quem decidiu deste lado vence, e vence sempre. */
+chk('S3b', !corrigeSementeAnterior(semente('01186761130', 'coleta_local'), '08675136000103'),
+    'R5: documento de origem `coleta_local` NUNCA e sobrescrito pelo conector');
+chk('S3c', !corrigeSementeAnterior(semente('01186761130', 'crm_semente', true), '08675136000103'),
+    'R8/R9: documento ja VALIDADO nunca e sobrescrito, mesmo sendo semente do CRM');
+
+/* R3 - segunda passada nao escreve. */
+chk('S3d', !corrigeSementeAnterior(semente('08675136000103', 'crm_semente'), '08675136000103'),
+    'R3: valor igual nao conta como correcao (a segunda passada nao escreve)');
+
+/* Campo vazio nao e correcao, e o caminho de preenchimento e outro. */
+chk('S3e', !corrigeSementeAnterior(semente(null, null), '08675136000103')
+        && !corrigeSementeAnterior(null, '08675136000103'),
+    'cliente sem documento nao entra por aqui - quem preenche vazio e a semente comum');
+
+/* Sem numero novo nao ha o que corrigir: um CRM que esvaziou o campo NAO apaga
+ * o que ja esta gravado. Apagar por espelho e o defeito que a R25 consertou. */
+chk('S3f', !corrigeSementeAnterior(semente('01186761130', 'crm_semente'), null),
+    'CRM sem documento NAO apaga o que ja esta gravado (o defeito que a R25 consertou)');
+
+/* Origem desconhecida (dado antigo, migracao) cai no lado seguro: nao mexe. */
+chk('S3g', !corrigeSementeAnterior(semente('01186761130', null), '08675136000103'),
+    'origem nula/desconhecida e tratada como local: o conector nao encosta');
 
 console.log(`\n${falhas === 0 ? 'TODAS PASSARAM' : `${falhas} FALHA(S)`}`);
 process.exit(falhas === 0 ? 0 : 1);
