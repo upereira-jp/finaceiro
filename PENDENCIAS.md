@@ -98,18 +98,39 @@ Nenhum é código. Os importadores já existem e rodam do Codespace contra produ
 
 | # | Pendência | Estado hoje | Como entra | Dono |
 |:--:|---|---|---|---|
-| 1 | **CPF/CNPJ de 24 pessoas** (29 linhas de cliente) | **0 de 29** — mas **o conector passou a semear** (20/08), ver ⬇️ | **aba Clientes**, linha a linha (17/08) · ou `npm run documentos` em lote · ou esperar o próximo `npm run ciclo` | operação |
+| 1 | **CPF/CNPJ de 24 pessoas** (29 linhas de cliente) | **26 clientes semeados** pelo ciclo de 20/08 (eram 0) — **0 validados**, e a camada conta `NOT documento_validado`, então ela **não se move** até alguém reenviar ⬇️ | **aba Clientes**: reenviar o número já preenchido (troca a origem para `coleta_local` e valida) | operação |
 | 2 | **Dia de vencimento de 29 UCs** | **0 de 29** | **aba Unidades consumidoras**, linha a linha · ou `npm run vencimentos` em lote | operação |
 | 3 | **CPF/CNPJ de 2 originadores** + natureza | 0 | `npm run originadores` | operação |
 | 4 | **Digitar os 29 contratos** | 0 | `npm run contratos` (depende de 1 e 3) | operação |
 | 5 | **Emissor** — razão social, CNPJ, contato | vazio em produção | **Fatura unificada** → «3 · Cadastro da fatura» (`/documento#cadastro`) | dono |
-| 6 | **Tarifa das 41 UCs** (`tarifa_reais_por_kwh`) | **NULL nas 41** — **o conector semeia no próximo ciclo**, cobertura medida **41 de 41** ⬇️ | aba **Unidades consumidoras**, ou esperar o próximo `npm run ciclo` (`Q-VALOR-01(b)` **pode fechar**) | dono/operação |
+| ~~6~~ | ~~**Tarifa das 41 UCs**~~ | ✅ **RESOLVIDO em 20/08 — 41 de 41**, semeadas pelo ciclo (34 × `1,13` · 5 × `1,16` · 2 × `1,18`) | — nada a digitar. `Q-VALOR-01(b)` **fechada** | — |
 | 7 | **Endereço do pagador de 29 UCs** | **0 de 29** | **aba Unidades consumidoras**, painel «Endereço do pagador» (17/08) · ou `npm run enderecos` em lote — **só o boleto depende** | operação |
 
-> ### ⬇️ 20/08/2026 — o CRM passou a expor documento e tarifa, e o conector passou a semear os dois
+> ### ⬇️ 20/08/2026 — o ciclo RODOU, e os dois itens mudaram de forma diferente
 >
-> **Ainda não rodou.** Os dois itens continuam nos números acima até o próximo
-> `npm run ciclo`; o que mudou é que deixaram de depender de digitação.
+> `npm run ciclo -- --valendo` executado: **112 lidos, 4 criados, 63 atualizados,
+> 0 recusados, 4 divergências**. Ensaio antes, com o mesmo resultado.
+>
+> | | antes | depois |
+> |---|--:|--:|
+> | UCs ativas **com tarifa** | 0 de 41 | **41 de 41** ✅ |
+> | Clientes **com documento** | 0 | **26** (todos `crm_semente`) |
+> | Clientes com documento **validado** | 0 | **0** — e é o esperado (R8) |
+>
+> **O item 6 fechou. O item 1 não, e a distinção é a R8 em ação.** A camada
+> `documento_do_cliente` conta `NOT documento_validado`, que são os TRÊS estados
+> que não valem — então ela continua marcando **29 de 29** mesmo com 26 clientes
+> preenchidos. Isso não é defeito: semente do CRM não vale por decreto, e o que
+> valida é **reenviar o número pela aba Clientes**, o que troca a origem para
+> `coleta_local`. O trabalho saiu de *descobrir e digitar 29 documentos* para
+> *conferir e confirmar 26 já preenchidos* — que é um trabalho diferente e muito
+> menor, mas ainda é trabalho de alguém.
+>
+> **4 colisões de documento viraram divergência, não 23505** — leads `G3-0307`,
+> `G3-0295`, `G3-0401` e `G3-0279` trazem documentos que já pertencem a outro
+> cliente. É a `Q-CLIENTEDUP-01` aparecendo com nome e sobrenome. O conector não
+> escolhe qual dos dois é o dono; sem essa guarda, cada uma teria derrubado o
+> lote inteiro pelo índice `cliente_documento_unico`.
 >
 > **Item 6 — tarifa.** O CRM expôs `tarifa_reais_por_kwh` em
 > `financeiro.rateio_clientes` e `vendas_ganhas`: é o campo **digitado** no card
