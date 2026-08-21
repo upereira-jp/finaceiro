@@ -113,9 +113,12 @@ chk('A2c', buscar('jabuticaba quantica').length === 0,
     + 'mostrar num vazio e a tela, que sabe a aba aberta');
 
 {
-  const r = buscar('nao consigo cobrar');
-  chk('A2d', r.length > 1 && r[0]!.pontos > r[1]!.pontos,
-      'o resultado vem ORDENADO por pontuacao, e nao pela ordem da lista');
+  // "contrato" de proposito, e nao "nao consigo cobrar": aquela e uma frase
+  // exata de UM topico e desde o corte da palavra solta devolve um resultado so
+  // — que e o comportamento certo, e nao serve para medir ordenacao.
+  const r = buscar('contrato');
+  chk('A2d', r.length > 1 && r[0]!.pontos > r[1]!.pontos && r[0]!.topico.id === 'contrato',
+      `o resultado vem ORDENADO por pontuacao, e nao pela ordem da lista (${r.map((x) => x.topico.id).join(' > ')})`);
 }
 
 // ================================================ A3 o glossario responde "o que quer dizer"
@@ -129,6 +132,35 @@ chk('A3c', buscarTermos('split').some((t) => t.termo.includes('Repasse')),
 chk('A3d', buscarTermos('competencia').some((t) => t.termo.includes('Mês de referência')),
     '"competencia" leva a "mes de referencia" — a palavra do sistema acha a palavra de gente');
 chk('A3e', buscarTermos('').length === 0, 'busca vazia nao devolve o glossario inteiro');
+
+// A3f/A3g — O CASAMENTO PARCIAL NAO VALE NO GLOSSARIO, e os dois casos abaixo
+// foram MEDIDOS contra producao antes de virarem regra.
+chk('A3f', buscarTermos('o cliente pagou').length === 0,
+    '"o cliente pagou" nao devolve verbete nenhum: com casamento parcial ele trazia rateio E '
+    + 'originador, so porque os dois citam "cliente". Definir uma palavra e certo ou errado, e '
+    + 'tres definicoes irrelevantes embaixo da resposta certa fazem a pessoa duvidar dela');
+chk('A3g', buscarTermos('conta de luz').length === 1,
+    'e "conta de luz" devolve UM verbete — a unidade consumidora — e nao uma lista');
+
+// ============================ A2h a palavra solta nao e resposta
+//
+// MEDIDO contra producao: "conta de luz" casava com "Como configuro a emissao de
+// boleto?" pela palavra "conta", que naquele topico quer dizer conta BANCARIA. O
+// resultado errado e pior que resultado nenhum — ele chega sob o titulo "Isto
+// responde" e a pessoa vai atras.
+{
+  const r = buscar('conta de luz');
+  chk('A2h', r.every((x) => x.topico.id !== 'banco'),
+      '"conta de luz" NAO cai no topico do boleto por causa da palavra "conta" — uma palavra solta '
+      + 'de uma pergunta de tres nao e evidencia suficiente');
+
+  chk('A2i', buscar('tarifa')[0]?.topico.id === 'tarifa',
+      'e a busca de UMA palavra escapa da regra: quem digita "tarifa" deu tudo o que tinha, e '
+      + 'exigir duas palavras casadas recusaria a busca mais comum de todas');
+
+  chk('A2j', buscar('trocar de empresa')[0]?.topico.id === 'trocar-empresa',
+      'duas palavras casadas bastam mesmo sem frase exata — "trocar" e "empresa" nos termos');
+}
 
 // ================================================== A4 contexto e assuntos comuns
 

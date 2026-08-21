@@ -423,26 +423,44 @@ export function buscar(consulta: string, base: readonly Topico[] = TOPICOS): Ach
   const achados: Achado[] = [];
   for (const topico of base) {
     let pontos = 0;
+    let frase = false;
 
     for (const t of topico.termos) {
       const n = normalizar(t);
       // Frase inteira: a busca dentro do termo OU o termo dentro da busca. O
       // segundo sentido é o que faz «nao consigo cobrar hoje» achar «nao
       // consigo cobrar».
-      if (n.includes(alvo) || alvo.includes(n)) { pontos += PESO.frase; break; }
+      if (n.includes(alvo) || alvo.includes(n)) { pontos += PESO.frase; frase = true; break; }
     }
 
     const nosTermos = new Set(topico.termos.flatMap((t) => palavras(t)));
     const naPergunta = new Set(palavras(topico.pergunta));
     const noCorpo = new Set([topico.resposta, ...topico.passos].flatMap((t) => palavras(t)));
 
+    let casadas = 0;
     for (const p of ps) {
+      const bateu = nosTermos.has(p) || naPergunta.has(p);
       if (nosTermos.has(p)) pontos += PESO.termo;
       if (naPergunta.has(p)) pontos += PESO.pergunta;
       if (noCorpo.has(p)) pontos += PESO.corpo;
+      if (bateu) casadas++;
     }
 
-    if (pontos > 0) achados.push({ topico, pontos });
+    /*
+     * UMA PALAVRA SOLTA DE UMA PERGUNTA LONGA NÃO É RESPOSTA — e este corte foi
+     * medido, não suposto: «conta de luz» casava com «Como configuro a emissão
+     * de boleto?» pela palavra «conta», que ali quer dizer conta BANCÁRIA.
+     *
+     * O resultado errado é pior que resultado nenhum, porque chega sob o título
+     * «Isto responde» e a pessoa vai atrás. Sem ele, a busca cai no glossário —
+     * que responde «conta de luz» corretamente — ou nos assuntos comuns.
+     *
+     * Busca de UMA palavra escapa da regra: quem digita «tarifa» deu tudo o que
+     * tinha, e exigir duas casadas de uma só recusaria a busca mais comum de
+     * todas.
+     */
+    const forte = frase || casadas >= 2 || ps.length <= 1;
+    if (pontos > 0 && forte) achados.push({ topico, pontos });
   }
 
   return achados.sort((a, b) => b.pontos - a.pontos || a.topico.id.localeCompare(b.topico.id));
@@ -458,8 +476,17 @@ export function buscarTermos(consulta: string): TermoDoGlossario[] {
 
   return GLOSSARIO.filter((g) => {
     if (g.busca.some((b) => { const n = normalizar(b); return n.includes(alvo) || alvo.includes(n); })) return true;
+    /*
+     * TODAS as palavras da pergunta, e não alguma — e a diferença foi medida
+     * contra producao: com `some`, «o cliente pagou» devolvia os verbetes de
+     * rateio E de originador, porque os dois citam «cliente». Três definições
+     * irrelevantes embaixo da resposta certa fazem a pessoa duvidar dela.
+     *
+     * Definir uma palavra é uma resposta CERTA ou ERRADA — não há meio termo que
+     * ajude —, então o casamento parcial não vale.
+     */
     const chaves = new Set([...g.busca.flatMap((b) => palavras(b)), ...palavras(g.termo)]);
-    return ps.some((p) => chaves.has(p));
+    return ps.length > 0 && ps.every((p) => chaves.has(p));
   });
 }
 
