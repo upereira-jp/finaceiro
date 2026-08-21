@@ -266,9 +266,12 @@ export const GLOSSARIO: readonly TermoDoGlossario[] = [
   {
     termo: 'Ensaio',
     texto: 'A simulação do faturamento: mostra quem entraria no mês e quem ficaria de fora, com o '
-      + 'motivo de cada recusa, e não grava nada. Rodar quantas vezes quiser não cobra ninguém.',
+      + 'motivo de cada recusa, e não grava nada. Na aba Faturamento é o botão «Simular, sem '
+      + 'cobrar ninguém» — clicar quantas vezes quiser não cobra ninguém.',
+    /* «ensaio» continua na busca embora tenha saído do botão: quem ouviu a
+     * palavra numa conversa vai digitá-la, e é para isso que o verbete serve. */
     busca: ['ensaio', 'simular', 'simulacao', 'teste', 'ensaiar', 'sem gravar', 'sem valer'],
-    caminhos: [{ rota: '/carteira', rotulo: 'Rodar o ensaio', tipo: 'resolver' }],
+    caminhos: [{ rota: '/carteira', rotulo: 'Abrir Faturamento', tipo: 'resolver' }],
   },
   {
     termo: 'Baixa',

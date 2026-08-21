@@ -576,8 +576,8 @@ export const TOPICOS: readonly Topico[] = [
     passos: [
       'Confira antes a aba Pendências: o que estiver faltando lá vira recusa aqui.',
       'Abra a aba Faturamento e escolha o mês.',
-      'Rode o ensaio e leia os motivos de quem ficou de fora.',
-      'Confirme para gerar. Depois, a emissão e a cobrança acontecem na aba Emissão e cobrança.',
+      'Clique em «Simular, sem cobrar ninguém» e leia os motivos de quem ficou de fora.',
+      'Clique em «Gerar as cobranças». Depois, a emissão e a cobrança acontecem na aba Emissão e cobrança.',
     ],
     caminhos: [
       ir('/carteira', 'Abrir Faturamento'),
@@ -598,8 +598,8 @@ export const TOPICOS: readonly Topico[] = [
       + 'o motivo de cada recusa, e não grava nada. Rodar de novo não faz mal.',
     passos: [
       'Abra a aba Faturamento e escolha o mês.',
-      'Rode o ensaio quantas vezes quiser — nada é gravado e ninguém é cobrado.',
-      'Só o passo seguinte grava as faturas, e ele é um botão separado.',
+      'Clique em «Simular, sem cobrar ninguém» quantas vezes quiser — nada é gravado e ninguém é cobrado.',
+      'Só o botão ao lado, «Gerar as cobranças», grava as faturas.',
     ],
     caminhos: [ir('/carteira', 'Abrir Faturamento')],
     camada: null,
@@ -613,12 +613,12 @@ export const TOPICOS: readonly Topico[] = [
     resposta: 'O ensaio diz o motivo de cada recusa, linha por linha. Quase sempre é um cadastro '
       + 'faltando — e o mesmo motivo aparece contado na aba Pendências.',
     passos: [
-      'Abra a aba Faturamento e rode o ensaio do mês.',
+      'Abra a aba Faturamento e clique em «Simular, sem cobrar ninguém».',
       'Leia o motivo escrito na linha de quem ficou de fora.',
       'Abra a aba Pendências: o botão de cada linha leva à tela onde aquilo se preenche.',
       'Resolva e rode o ensaio de novo.',
     ],
-    caminhos: [ir('/carteira', 'Rodar o ensaio'), ir('/pendencias', 'Ver o que falta')],
+    caminhos: [ir('/carteira', 'Abrir Faturamento'), ir('/pendencias', 'Ver o que falta')],
     camada: null,
     telas: ['/carteira'],
     termos: ['ficou de fora', 'recusado', 'nao entrou', 'faltou cliente no lote', 'motivo da recusa',
@@ -705,7 +705,7 @@ export const TOPICOS: readonly Topico[] = [
     passos: [
       'Abra a aba Emissão e cobrança.',
       'Encontre a fatura do cliente.',
-      'Registre o pagamento na linha dela.',
+      'Clique em «Registrar pagamento» na linha dela.',
       'O que a empresa passa a dever aparece sozinho na aba Contas a pagar.',
     ],
     caminhos: [ir('/faturas', 'Abrir Emissão e cobrança'), ver('/contas-a-pagar', 'Depois: o que a empresa deve')],

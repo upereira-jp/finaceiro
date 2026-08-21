@@ -394,7 +394,12 @@ function PainelDaFatura({ f, recarregar }: { f: Fatura; recarregar: () => void }
             <div style={{ alignSelf: 'end' }}>
               <button className="primario" onClick={() => void baixar()}
                       disabled={acao.ocupado || valorInvalido !== null}>
-                <Icone nome="confirmar" tamanho={15} peso="bold" /> Baixar {emReais(totalEsperado)}
+                {/* "Registrar pagamento" e nao "Baixar": na mesma tela ha
+                    "Exportar CSV", e "baixar" ali quer dizer TRANSFERIR ARQUIVO.
+                    O mesmo verbo para dois atos opostos — um recebe dinheiro, o
+                    outro salva um arquivo — na mesma barra de acoes. E o nome
+                    que a aba Contas a pagar ja usava para o ato equivalente. */}
+                <Icone nome="confirmar" tamanho={15} peso="bold" /> Registrar pagamento de {emReais(totalEsperado)}
               </button>
             </div>
           </div>

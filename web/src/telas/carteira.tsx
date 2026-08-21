@@ -65,11 +65,29 @@ export function TelaCarteira() {
             <CampoData mes valor={mes} ao={setMes} rotuloAcessivel="Mês de referência" style={{ width: 'auto' }} /><AjudaDoMes />
           </div>
           <div style={{ alignSelf: 'end', display: 'flex', gap: 8 }}>
+            {/*
+              OS DOIS ROTULOS MUDARAM EM 21/08/2026, e sao os dois passos que
+              fazem a fatura do mes existir — o lugar do sistema onde um nome
+              obscuro custa mais caro.
+
+              "Ensaio" era um SUBSTANTIVO, e substantivo nao diz o que o clique
+              faz. Pior: a duvida que ele levanta é justamente a que impede
+              alguem de clicar — «isto vai cobrar os clientes?». O rotulo novo
+              responde antes de ser perguntado, e a resposta é nao.
+
+              "Compor valendo" era vocabulario de dominio ("compor" é o nome do
+              ato em `dominio/faturamento.ts`) somado a um adverbio que so faz
+              sentido para quem conhece o par ensaio/valendo. O que a pessoa quer
+              fazer ali é GERAR AS COBRANCAS do mes, e é isso que o botao diz.
+
+              As rotas, o dominio e o `rodar('compor')` NAO mudaram: rotulo é o
+              que a pessoa le, dominio é o que o sistema é.
+            */}
             <button onClick={rodar('ensaio')} disabled={acao.ocupado}>
-              <Icone nome="recarregar" tamanho={15} /> Ensaio
+              <Icone nome="recarregar" tamanho={15} /> Simular, sem cobrar ninguém
             </button>
             <button className="primario" onClick={rodar('compor')} disabled={acao.ocupado}>
-              <Icone nome="carteira" tamanho={15} peso="bold" /> Compor valendo
+              <Icone nome="carteira" tamanho={15} peso="bold" /> Gerar as cobranças
             </button>
           </div>
         </div>
