@@ -74,7 +74,7 @@ export function TelaFaturas() {
 
   const emitir = (f: Fatura) => async () => {
     const ok = await acao.executar(() => api.post(`/faturas/${f.id}/emitir`));
-    if (ok) { acao.anunciar(`Fatura da UC ${numeroDaUc.get(f.unidade_consumidora_id) ?? ''} emitida.`); recarregar(); }
+    if (ok) { acao.anunciar(`Cobrança da unidade ${numeroDaUc.get(f.unidade_consumidora_id) ?? ''} emitida.`); recarregar(); }
   };
 
   const emitirLote = async () => {
@@ -98,12 +98,12 @@ export function TelaFaturas() {
 
   const exportar = () => {
     const csv = paraCsv<Fatura>([
-      { titulo: 'UC', de: (f) => numeroDaUc.get(f.unidade_consumidora_id) ?? f.unidade_consumidora_id },
+      { titulo: 'Unidade', de: (f) => numeroDaUc.get(f.unidade_consumidora_id) ?? f.unidade_consumidora_id },
       { titulo: 'Mes de referencia', de: (f) => String(f.competencia).slice(0, 7) },
       { titulo: 'Status', de: (f) => f.status },
       { titulo: 'Vencimento', de: (f) => String(f.vencimento).slice(0, 10) },
       { titulo: 'Geração kWh', de: (f) => f.geracao_kwh_competencia ?? '' },
-      { titulo: '% rateio', de: (f) => f.percentual_rateio_aplicado ?? '' },
+      { titulo: '% da fatia do cliente', de: (f) => f.percentual_rateio_aplicado ?? '' },
       { titulo: 'Consumo kWh', de: (f) => f.consumo_kwh ?? '' },
       { titulo: 'Tarifa R$/kWh', de: (f) => f.tarifa_reais_por_kwh ?? '' },
       { titulo: 'Consumo R$', de: (f) => reaisParaPlanilha(f.valor_consumo_centavos) },
@@ -142,7 +142,7 @@ export function TelaFaturas() {
         {/*
           A TARIFA DA CONCESSIONARIA QUE NAO FOI LANCADA — `Q-TARIFA-CONC-01`.
 
-          Isto conta, e nao decide: uma competência pode legitimamente não levar
+          Isto conta, e nao decide: um mês pode legitimamente não levar
           tarifa da distribuidora, e essa pergunta tem dono e não é esta tela. O
           que não pode continuar é a ausência ser INVISÍVEL — `valor_total_centavos`
           é coluna gerada, a parcela ausente vale zero, e a fatura sai menor sem
@@ -159,7 +159,7 @@ export function TelaFaturas() {
             <span className="fraco" style={{ fontSize: 12 }}>
               UC: {tarifas.ucsSemTarifa.slice(0, 12).join(', ')}
               {tarifas.ucsSemTarifa.length > 12 ? `, +${tarifas.ucsSemTarifa.length - 12}` : ''}
-              {' · '}Se esta competência realmente não leva tarifa da distribuidora, emitir está
+              {' · '}Se este mês realmente não leva tarifa da distribuidora, emitir está
               certo — é a pergunta (a) da <code>Q-TARIFA-CONC-01</code>.
             </span>
           </Aviso>
@@ -185,7 +185,7 @@ export function TelaFaturas() {
       )}
 
       <Tabela cabecalho={<>
-                <ThOrd chave="uc" ordem={ordem} ao={alternar}>UC</ThOrd>
+                <ThOrd chave="uc" ordem={ordem} ao={alternar}>Unidade</ThOrd>
                 <ThOrd chave="status" ordem={ordem} ao={alternar}>Status</ThOrd>
                 <ThOrd chave="vencimento" ordem={ordem} ao={alternar}>Vencimento</ThOrd>
                 <ThOrd chave="consumo" ordem={ordem} ao={alternar} num>Consumo kWh</ThOrd>
@@ -284,10 +284,9 @@ function PainelDaFatura({ f, recarregar }: { f: Fatura; recarregar: () => void }
 
   const baixar = async () => {
     if (!confirm(
-      `Dar baixa manual de ${emReais(totalEsperado)} nesta fatura?\n\n` +
-      'A baixa é o evento de caixa: ela REPARTE o dinheiro na mesma transação — ' +
-      'comissão do originador e repasse ao dono da usina. Não há caminho de estorno ' +
-      'implementado (Q-ESTORNO-01).')) return;
+      `Registrar o pagamento de ${emReais(totalEsperado)} nesta cobrança?\n\n` +
+      'Ao registrar, o dinheiro é dividido na mesma hora: a comissão de quem trouxe o ' +
+      'cliente e a parte do dono da usina. NÃO existe como desfazer isso pelo sistema.')) return;
     const ok = await acao.executar(() => api.post(`/faturas/${f.id}/baixa-manual`, {
       valor_liquidado_centavos: totalEsperado,
       juros_centavos: jurosCent,
@@ -295,7 +294,7 @@ function PainelDaFatura({ f, recarregar }: { f: Fatura; recarregar: () => void }
       observacao: observacao.trim() || null,
       data_liquidacao: new Date().toISOString().slice(0, 10),
     }));
-    if (ok) { acao.anunciar('Baixa registrada e split executado.'); boleto.recarregar(); recarregar(); }
+    if (ok) { acao.anunciar('Pagamento registrado e o dinheiro foi dividido.'); boleto.recarregar(); recarregar(); }
   };
 
   return (

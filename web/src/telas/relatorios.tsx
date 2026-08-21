@@ -37,7 +37,7 @@ export function TelaRelatorios() {
 
   return (
     <Pagina titulo="Relatórios"
-            sub="Repasse, comissão e uso da usina — como o banco os calcula. Sem competência, a série inteira.">
+            sub="Quanto a G3 deve a cada dono de usina, quanto sai de comissão e quanto da usina foi usado. Sem escolher o mês, mostra o histórico inteiro.">
       <div className="cartao secao">
         <div style={{ ...linha, gap: 12 }}>
           <div>
@@ -46,14 +46,14 @@ export function TelaRelatorios() {
           </div>
           {mes && (
             <button style={{ alignSelf: 'end' }} onClick={() => setMes('')}>
-              <Icone nome="limpar" tamanho={15} /> Todas as competências
+              <Icone nome="limpar" tamanho={15} /> Todos os meses
             </button>
           )}
         </div>
       </div>
 
       <Bloco titulo="Repasse por dono de usina"
-             nota="O que a G3 deve a quem é dono da usina, por competência. Sai da view `repasse_por_dono_usina`."
+             nota="O que a G3 deve a quem é dono da usina, mês a mês."
              carga={repasses}
              vazio="Nenhum repasse ainda — o split só roda quando uma fatura é liquidada (PRD 5.2)."
              csv={{ assunto: 'repasses', mes, colunas: [
@@ -94,10 +94,10 @@ export function TelaRelatorios() {
                </tr>
              )} />
 
-      <Bloco titulo="Uso da usina por competência"
+      <Bloco titulo="Uso da usina, mês a mês"
              nota="Geração lançada contra consumo faturado. `saldo_kwh` negativo significa que a composição foi contornada por outro caminho — é a RATEIO-USO-01 ficando olhável."
              carga={uso}
-             vazio="Nenhuma competência com geração e faturamento para cruzar."
+             vazio="Nenhum mês tem, ao mesmo tempo, energia gerada e cobrança emitida para comparar."
              csv={{ assunto: 'uso-das-usinas', mes, colunas: [
                { titulo: 'Geradora', de: (u: UsoDaUsina) => u.codigo_geradora },
                { titulo: 'Mes de referencia', de: (u: UsoDaUsina) => String(u.competencia).slice(0, 7) },

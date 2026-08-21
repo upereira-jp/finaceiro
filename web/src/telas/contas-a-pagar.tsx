@@ -105,12 +105,12 @@ export function TelaContasAPagar() {
     { titulo: 'Pago R$', de: (c) => reaisParaPlanilha(c.valor_pago_centavos) },
     { titulo: 'Saldo R$', de: (c) => reaisParaPlanilha(saldoCentavos(c)) },
     { titulo: 'Situacao', de: (c) => ROTULO_DO_STATUS[c.status] },
-    { titulo: 'Origem', de: (c) => (c.origem_split_item_id ? 'split' : 'manual') },
+    { titulo: 'Origem', de: (c) => (c.origem_split_item_id ? 'automática' : 'manual') },
   ];
 
   return (
     <Pagina titulo="Contas a pagar"
-            sub="O que a empresa deve — repasse ao dono da usina, comissão do originador, concessionária e despesa avulsa. O repasse e a comissão nascem do split, na baixa da fatura.">
+            sub="O que a empresa deve — a parte do dono da usina, a comissão de quem trouxe o cliente, a concessionária e despesas avulsas. A parte do dono e a comissão nascem sozinhas quando um cliente paga.">
 
       {/*
         * A CONFERÊNCIA ENTRE APURAÇÃO E QUITAÇÃO, e ela vem ANTES da lista de
@@ -120,9 +120,9 @@ export function TelaContasAPagar() {
         */}
       {(semProvisao.dado?.length ?? 0) > 0 && (
         <Aviso tipo="erro">
-          {semProvisao.dado!.length} item(ns) de split sem conta a pagar. Isso é valor apurado que
-          não virou título — normalmente split executado antes de 03/08/2026, quando a provisão
-          passou a rodar na mesma transação. Some:{' '}
+          {semProvisao.dado!.length} valor(es) já apurado(s) que não viraram conta a pagar. É
+          dinheiro que alguém tem a receber e que ninguém vai pagar sem ajuste — normalmente de
+          pagamentos registrados antes de 03/08/2026. Somam:{' '}
           <strong>{emReais(semProvisao.dado!.reduce((a, i) => a + i.valor_centavos, 0))}</strong>.
         </Aviso>
       )}
@@ -142,8 +142,8 @@ export function TelaContasAPagar() {
           <Aviso tipo="erro">Não foi possível ler o resumo: {resumo.erro}</Aviso>
         ) : (resumo.dado?.length ?? 0) === 0 ? (
           <p className="nota">
-            Nada a pagar. As contas de repasse e comissão nascem do split, e o split só roda quando
-            uma fatura é liquidada (PRD §5.2) — com nenhuma fatura paga, este vazio é o estado certo.
+            Nada a pagar. A parte do dono da usina e a comissão só nascem quando um cliente paga —
+            com nenhuma cobrança paga ainda, este vazio é o esperado, e não um erro.
           </p>
         ) : (
           <Tabela cabecalho={<><th>Beneficiário</th><th>Tipo</th><th className="num">Títulos</th>

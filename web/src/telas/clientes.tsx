@@ -166,7 +166,7 @@ export function TelaClientes() {
 
   return (
     <Pagina titulo="Clientes"
-            sub="A carteira ativa: quem tem unidade consumidora na etapa Desconto Ativo do funil Rateio. O CPF/CNPJ se digita aqui — sem ele validado o contrato não ativa (R9) e o boleto não sai.">
+            sub="Os clientes que o sistema cobra. É aqui que se confirma o CPF ou o CNPJ — e enquanto ele não estiver confirmado, o contrato daquele cliente não ativa e a cobrança dele não sai.">
 
       {/* ------------------------------------------------ o que ainda falta */}
       {contagem.sem_documento > 0 && (
@@ -222,9 +222,9 @@ export function TelaClientes() {
             aqui muda a CONSULTA. Fica ao lado dos outros para quem opera nao ter
             de saber a diferenca - e o rotulo diz o que cada um traz. */}
         <Filtro valor={escopo} ao={(v) => setEscopo(v as 'carteira_ativa' | 'todos')}
-                rotulo="Escopo da lista"
-                opcoes={[{ valor: 'carteira_ativa', texto: 'Carteira ativa' },
-                         { valor: 'todos', texto: 'Todo o cadastro' }]} />
+                rotulo="Quais clientes mostrar"
+                opcoes={[{ valor: 'carteira_ativa', texto: 'Só quem é cobrado' },
+                         { valor: 'todos', texto: 'Todos os cadastrados' }]} />
         {(busca || situacao || pendencia) && (
           <button type="button" onClick={() => { setBusca(''); setSituacao(''); setPendencia(''); }}>
             <Icone nome="limpar" tamanho={15} /> Limpar filtros

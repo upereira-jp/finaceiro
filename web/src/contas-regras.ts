@@ -156,7 +156,7 @@ export const ROTULO_DA_FORMA: Record<FormaDePagamento, string> = {
 
 export const ROTULO_DO_BENEFICIARIO: Record<ContaAPagar['beneficiario_tipo'], string> = {
   dono_usina: 'Dono de usina',
-  originador: 'Originador',
+  originador: 'Quem trouxe o cliente',
   concessionaria: 'Concessionária',
   outro: 'Outro',
 };

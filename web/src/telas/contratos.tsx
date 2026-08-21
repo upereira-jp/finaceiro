@@ -140,7 +140,7 @@ export function TelaContratos() {
 
   return (
     <Pagina titulo="Contratos"
-            sub="Vincula cliente, unidade consumidora, usina e originador. É entidade local: o conector não a espelha, e sem ela nenhuma fatura nasce.">
+            sub="Liga o cliente, a unidade, a usina e quem trouxe o cliente. É a peça que faz a cobrança existir: sem contrato ativo, aquela unidade fica fora do mês inteiro.">
       <div className="cartao secao">
         <div className="campos">
           <Campo rotulo="Unidade consumidora" valor={ucId} ao={setUcId}
@@ -148,15 +148,15 @@ export function TelaContratos() {
                    valor: u.id,
                    texto: `${u.numero_uc}${u.usina_id ? '' : ' (sem usina!)'}`,
                  }))} />
-          <Campo rotulo="Originador (comissão) — obrigatório" valor={origId} ao={setOrigId}
+          <Campo rotulo="Quem trouxe o cliente (obrigatório)" valor={origId} ao={setOrigId}
                  opcoes={(origs.dado ?? []).map((o) => ({ valor: o.id, texto: `${o.nome} · ${o.tipo}` }))} />
           <Campo rotulo="Data de fechamento" valor={fechamento} ao={setFechamento} tipo="date" />
           <Campo rotulo="Valor de referência (R$)" valor={valor} ao={setValor} dica="Ex. 789,00" />
         </div>
         <p className="sub" style={{ marginTop: 12, marginBottom: 8 }}>
-          O tipo do originador <strong>congela</strong> no fechamento (R20-b): promover um parceiro depois
-          não reprecifica este contrato. E a data de fechamento decide qual competência é a primeira
-          <strong> fatura cheia</strong>.
+          Quem trouxe o cliente <strong>não muda depois</strong>: se essa pessoa for promovida mais
+          tarde, este contrato continua valendo o combinado de hoje. E a data de fechamento decide
+          qual é o primeiro mês cobrado por inteiro.
           {valor && <> Valor: <strong>{(() => { try { return emReais(paraCentavos(valor)); } catch { return 'inválido'; } })()}</strong>.</>}
         </p>
         <button className="primario" onClick={criar} disabled={!podeCriarContrato(estado)}>
@@ -164,7 +164,7 @@ export function TelaContratos() {
         </button>
         {trava === 'uc_sem_usina' && (
           <Aviso tipo="erro">
-            Esta UC não tem usina vinculada. Defina o rateio em <Ligacao para="/unidades">Unidades</Ligacao> antes.
+            Esta unidade ainda não tem usina. Escolha a usina e a fatia do cliente em <Ligacao para="/unidades">Unidades consumidoras</Ligacao> antes de criar o contrato.
           </Aviso>
         )}
         {/* A lista vazia e o estado de PRODUCAO hoje: zero originadores. Sem esta
@@ -172,18 +172,18 @@ export function TelaContratos() {
             por que - que e o defeito da tela de Contratos de novo, em outra
             casa. O erro de leitura tem aviso proprio e vem antes: lista vazia
             por falha nao e lista vazia por ausencia. */}
-        {origs.erro && <Aviso tipo="erro">Falha ao ler os originadores: {origs.erro}</Aviso>}
+        {origs.erro && <Aviso tipo="erro">Não consegui carregar a lista de quem trouxe os clientes: {origs.erro}</Aviso>}
         {!origs.erro && !origs.carregando && (origs.dado ?? []).length === 0 && (
           <Aviso tipo="erro">
-            Nenhum originador cadastrado — e o contrato não pode ser criado sem um.
-            O tipo congela aqui (R20-b) e não há edição depois. Cadastre pelo caminho da
-            aplicação (<code>npm run originadores</code>) antes de digitar os contratos.
+            Ninguém cadastrado ainda como quem traz clientes — e o contrato não pode ser criado
+            sem isso. A escolha não muda depois, então ela precisa estar certa da primeira vez.
+            Peça ao responsável técnico para cadastrar antes de digitar os contratos.
           </Aviso>
         )}
         {trava === 'sem_originador' && (origs.dado ?? []).length > 0 && (
           <Aviso tipo="alerta">
-            Escolha o originador. Ele não é editável depois: <code>split.ts</code> só monta a
-            comissão quando ele existe, e sem ele a repartição fecha sem pagar — sem erro e sem log.
+            Escolha quem trouxe o cliente. Isso não pode ser corrigido depois, e sem essa
+            informação a comissão simplesmente não é paga quando o dinheiro entrar — sem aviso.
           </Aviso>
         )}
         {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
@@ -192,7 +192,7 @@ export function TelaContratos() {
 
       {vigentes.erro && <Aviso tipo="erro">{vigentes.erro}</Aviso>}
       <Tabela cabecalho={<>
-                <ThOrd chave="uc" ordem={ordem} ao={alternar}>UC</ThOrd>
+                <ThOrd chave="uc" ordem={ordem} ao={alternar}>Unidade</ThOrd>
                 <ThOrd chave="fechamento" ordem={ordem} ao={alternar}>Fechamento</ThOrd>
                 <ThOrd chave="situacao" ordem={ordem} ao={alternar}>Situação</ThOrd>
                 <ThOrd chave="cheias" ordem={ordem} ao={alternar} num>Cheias pagas</ThOrd>

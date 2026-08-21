@@ -92,7 +92,7 @@ export function TelaCarteira() {
             em vez de virar 40 faturas erradas.
           */}
           {resumo.detalhe.length > 0 && (
-            <Tabela cabecalho={<><th>UC</th><th>Motivo</th><th>O que significa</th></>}>
+            <Tabela cabecalho={<><th>Unidade</th><th>Motivo</th><th>O que significa</th></>}>
               {resumo.detalhe.slice(0, 60).map((d, i) => (
                 <tr key={i}>
                   <td><strong>{d.numero_uc}</strong></td>

@@ -205,7 +205,7 @@ export function TelaUnidades() {
       <Ferramentas contagem={todas.length
         ? `${visiveis.length} de ${todas.length} · ${contagem.faturaveis} faturáveis`
         : undefined}>
-        <Busca valor={busca} ao={setBusca} dica="Buscar por UC ou distribuidora…" />
+        <Busca valor={busca} ao={setBusca} dica="Buscar pelo número da unidade ou pela distribuidora…" />
         {/* As opcoes saem do vocabulario FECHADO de `unidades-regras`, e nao de
             uma lista escrita aqui: uma situacao nova sem opcao de filtro ficaria
             invisivel, e `inativa` - que estava nesta lista - nem existe no enum
@@ -228,10 +228,10 @@ export function TelaUnidades() {
       </Ferramentas>
 
       <Tabela cabecalho={<>
-                <ThOrd chave="uc" ordem={ordem} ao={alternar}>UC</ThOrd>
+                <ThOrd chave="uc" ordem={ordem} ao={alternar}>Unidade</ThOrd>
                 <ThOrd chave="distribuidora" ordem={ordem} ao={alternar}>Distribuidora</ThOrd>
                 <ThOrd chave="usina" ordem={ordem} ao={alternar}>Usina</ThOrd>
-                <ThOrd chave="rateio" ordem={ordem} ao={alternar} num>Rateio %</ThOrd>
+                <ThOrd chave="rateio" ordem={ordem} ao={alternar} num>Fatia do cliente %</ThOrd>
                 <ThOrd chave="tarifa" ordem={ordem} ao={alternar} num>Tarifa R$/kWh</ThOrd>
                 <ThOrd chave="vencimento" ordem={ordem} ao={alternar}>Vencimento</ThOrd>
                 <ThOrd chave="situacao" ordem={ordem} ao={alternar}>Situação</ThOrd>
@@ -260,7 +260,7 @@ export function TelaUnidades() {
                        aria-label={`Rateio da ${u.numero_uc}`}
                        onChange={(e) => setRateio({ ...rateio, [u.id]: e.target.value })}
                        placeholder="Ex. 12,5" style={{ width: 82, textAlign: 'right' }} />
-                <BotaoDeIcone icone="confirmar" rotulo={`Gravar o rateio da ${u.numero_uc}`}
+                <BotaoDeIcone icone="confirmar" rotulo={`Gravar a fatia da unidade ${u.numero_uc}`}
                               ao={() => void salvarRateio(u)}
                               desabilitado={acao.ocupado || !u.usina_id} />
               </div>
@@ -321,15 +321,17 @@ export function TelaUnidades() {
         ))}
       </Tabela>
       <p className="sub" style={{ marginTop: 12 }}>
-        O dia do vencimento é o que conta: a fatura de uma competência vence no <strong>mês seguinte</strong>,
-        no mesmo dia. Dia 29 a 31 em mês curto cai no último dia, sem transbordar.
+        O que vale é o <strong>dia</strong>: a cobrança de um mês vence no <strong>mês seguinte</strong>,
+        nesse mesmo dia. Dia 29, 30 ou 31 em mês curto cai no último dia do mês, sem passar para o
+        seguinte.
       </p>
       <p className="sub">
-        A <strong>tarifa</strong> é R$/kWh <strong>desta</strong> UC, com até seis casas — a aba
-        Tarifas saiu em 14/08 porque servia um número só para todas, e a medição do CRM mostrou que
-        ele varia por cliente. Truncar 1,185396 em centavos cobraria R$&nbsp;2,90 a mais numa UC,
-        num mês, sempre a mais (R22). O conector a preenche a partir do card quando ele traz consumo
-        em kWh e em reais, e <strong>nunca apaga</strong> um valor já digitado aqui.
+        A <strong>tarifa</strong> é o preço do kWh <strong>desta</strong> unidade, com até seis casas
+        depois da vírgula. O preço varia de cliente para cliente, por isso ele é preenchido linha a
+        linha e não uma vez para todos — e as casas extras não são exagero: arredondar em centavos
+        cobraria alguns reais a mais por mês, sempre a mais. O sistema preenche sozinho quando o
+        cadastro do cliente traz o consumo em kWh e em reais, e <strong>nunca apaga</strong> um valor
+        digitado aqui.
       </p>
     </Pagina>
   );

@@ -133,7 +133,7 @@ export function TelaUsinas() {
           </div>
         </div>
         <p className="sub" style={{ marginTop: 12, marginBottom: 0 }}>
-          O percentual aplicado é o vigente <strong>na competência da fatura</strong>, não o corrente da usina (R25).
+          Vale o percentual que estava valendo <strong>no mês daquela cobrança</strong>, e não o percentual de hoje — renegociar agora não muda o que já foi cobrado.
           Não há “editar”: abrir uma vigência nova fecha a anterior na mesma transação.
         </p>
       </div>
