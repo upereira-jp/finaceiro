@@ -193,6 +193,101 @@ export const ESTILO = `
   .menu-painel .quem strong { display: block; font-size: 13.5px; }
   .menu-painel .quem span { font-size: 12px; color: var(--fraco); }
 
+  /* ------------------------------------------------------ central de ajuda
+     Painel que abre POR CIMA e nao uma tela: quem trava no meio de um cadastro
+     nao pode perder o lugar (e o filtro) para ler como preencher.
+
+     O VEU USA --topo, que e o navy da barra, e nao --topo-veu: aquele e um veu
+     BRANCO, feito para clarear sobre o navy. Aqui e o contrario - escurecer a
+     pagina - e o navy e a unica cor escura que vale nos dois temas. A mistura e
+     feita com color-mix e nao com uma cor de canal alfa escrita a mao, porque
+     cor literal fora do documento impresso e recusada pela suite (I1b).
+
+     DUAS ARMADILHAS DESTE BLOCO, as duas pagas na primeira escrita:
+       - CRASE fecha a string. O CSS inteiro vive num template literal;
+       - escrever o NOME da funcao de cor com canal alfa, mesmo dentro de um
+         comentario, e achado pela I1b - ela varre o CSS como texto, e nao
+         distingue comentario de regra. E acertado que nao distinga. */
+  .ajuda-fundo {
+    position: fixed; inset: 0; z-index: 40;
+    background: color-mix(in srgb, var(--topo) 55%, transparent);
+    animation: surgir .14s ease-out;
+  }
+  .ajuda-painel {
+    position: fixed; top: 0; right: 0; bottom: 0; z-index: 41;
+    width: min(460px, 100vw);
+    display: flex; flex-direction: column;
+    background: var(--fundo); border-left: 1px solid var(--borda);
+    box-shadow: var(--sombra-3);
+    animation: entrar-da-direita .18s ease-out;
+  }
+  .ajuda-topo {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; padding: 14px 16px;
+    border-bottom: 1px solid var(--borda); background: var(--fundo2);
+  }
+  .ajuda-corpo { overflow-y: auto; padding: 14px 16px 40px; }
+  .ajuda-secao { margin-top: 20px; }
+  .ajuda-secao h3 {
+    font-size: 12px; font-weight: 650; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--fraco); margin: 0 0 9px;
+  }
+  .ajuda-nota { font-size: 12.5px; line-height: 1.55; margin: 0 0 10px; }
+
+  /* O ESTADO AO VIVO. Uma linha por pendencia real do mes, com o numero dentro
+     da frase - "11 de 29 pendentes" - e o botao que leva ao lugar de resolver. */
+  .ajuda-passos { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+  .ajuda-passos li {
+    display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+    padding: 10px 12px; border: 1px solid var(--borda);
+    border-radius: var(--raio-pequeno); background: var(--fundo2);
+  }
+  .ajuda-frase { font-size: 13px; line-height: 1.45; flex: 1 1 200px; }
+  .ajuda-efeito {
+    font-size: 11px; padding: 2px 8px; border-radius: var(--raio-pilula);
+    background: var(--alerta-fundo); color: var(--alerta); white-space: nowrap;
+  }
+  .ajuda-ir {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 5px 10px; font-size: 12.5px; font-weight: 600;
+    border: 1px solid var(--borda); border-radius: var(--raio-pequeno);
+    background: var(--fundo); color: var(--acento-forte); cursor: pointer;
+  }
+  .ajuda-ir:hover { background: var(--acento-suave); border-color: var(--acento); }
+  /* A seta do botao aponta para a DIREITA: o desenho reusado e o "descer" do
+     resto do sistema, girado - um icone proprio so para isto seria mais um nome
+     na uniao fechada para dizer a mesma coisa. */
+  .ajuda-ir .ic { transform: rotate(-90deg); }
+
+  .ajuda-tudo-certo {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; color: var(--ok); margin: 0;
+  }
+
+  /* UM ASSUNTO. Fechado por padrao para a lista ser varrivel - quem reconhece a
+     propria pergunta abre uma, e nao le quatro. */
+  .ajuda-topico { border-bottom: 1px solid var(--borda-suave); }
+  .ajuda-topico:last-child { border-bottom: 0; }
+  .ajuda-pergunta {
+    display: flex; align-items: flex-start; gap: 8px; width: 100%;
+    padding: 10px 2px; border: 0; background: none; box-shadow: none;
+    color: var(--texto); font: inherit; font-size: 13.5px; font-weight: 600;
+    text-align: left; cursor: pointer;
+  }
+  .ajuda-pergunta:hover { color: var(--acento-forte); transform: none; }
+  .ajuda-pergunta .ic { margin-top: 3px; flex: none; }
+  .ajuda-resposta { padding: 0 2px 14px 22px; font-size: 13px; line-height: 1.6; }
+  .ajuda-resposta p { margin: 0 0 10px; color: var(--fraco); }
+  .ajuda-resposta ol { margin: 0 0 12px; padding-left: 18px; display: grid; gap: 6px; }
+
+  .ajuda-termo { padding: 9px 0; border-bottom: 1px solid var(--borda-suave); }
+  .ajuda-termo:last-child { border-bottom: 0; }
+  .ajuda-termo strong { display: block; font-size: 13.5px; }
+  .ajuda-termo p { margin: 4px 0 0; font-size: 13px; line-height: 1.6; color: var(--fraco); }
+
+  @keyframes entrar-da-direita { from { transform: translateX(16px); opacity: 0; } }
+  @keyframes surgir { from { opacity: 0; } }
+
   /* --------------------------------------------------- conteudo e tipografia
      O titulo ganhou peso e corpo (24 -> 27px, 650 -> 700) e a descricao encolheu
      e ficou mais discreta: era o pedido de hierarquia de 30/07. */

@@ -27,11 +27,12 @@ import { useState } from 'react';
 import { api, type Camada, type Prontidao } from '../api.ts';
 import { useDados } from '../dados.ts';
 import {
-  Pagina, Aviso, Tabela, Marca, rotulo, Kpi, KpiSimNao, Carregando, CampoData, AjudaDoMes, Icone,
+  Pagina, Aviso, Tabela, Marca, Kpi, KpiSimNao, Carregando, CampoData, AjudaDoMes, Icone,
 } from '../ui.tsx';
 import { Ligacao } from '../rota.tsx';
 import { competenciaISO } from '../dinheiro.ts';
 import { DESTINO_DA_CAMADA, enderecoDoDestino, telaDoDestino } from '../destino-da-camada.ts';
+import { VERBETE_DA_CAMADA, EFEITO, SITUACAO } from '../vocabulario.ts';
 
 const mesAtual = () => new Date().toISOString().slice(0, 7);
 
@@ -41,8 +42,14 @@ export function TelaProntidao() {
     () => api.get(`/faturamento/${competenciaISO(mes)}/prontidao`), [mes]);
 
   return (
-    <Pagina titulo="Prontidão para faturar"
-            sub="O que falta para este mês poder ser cobrado. Uma linha por camada, cada uma com dono e com o caminho de quem preenche. Esta tela conta — não decide nada.">
+    /*
+      O TÍTULO ERA "Prontidão para faturar" e a aba se chama "Pendências" desde
+      30/07 — quem clicava em uma palavra chegava na outra. "Prontidão" é o nome
+      do CÁLCULO no servidor (`repos/prontidao.ts`), e ele fica lá: aqui vale o
+      nome que a barra já usa.
+    */
+    <Pagina titulo="Pendências"
+            sub="O que ainda falta para este mês poder ser cobrado. Cada linha diz o que é, quantos faltam e onde se resolve. Esta tela só confere — ela não muda nada sozinha.">
       <div className="ferramentas">
         <label style={{ margin: 0 }}>Mês de referência</label>
         <CampoData mes valor={mes} ao={setMes} rotuloAcessivel="Mês de referência" style={{ width: 'auto' }} /><AjudaDoMes />
@@ -73,34 +80,104 @@ export function TelaProntidao() {
                  </>} />
           </div>
 
-          <Tabela cabecalho={<><th>Camada</th><th>Estado</th><th className="num">Falta</th><th>Efeito</th><th>Dono</th><th>Onde resolver</th></>}>
+          {/*
+            A COLUNA "DONO" SAIU DA TABELA em 21/08/2026, com o jargão, e as duas
+            pelo mesmo motivo: a partir de 22/08 entram usuários novos e não há
+            divisão de suporte. "Vinicius + operacao" e "Q-PAGADOR-01" são
+            rastreio interno — para quem abre o sistema pela primeira vez, é
+            ruído ocupando duas colunas na largura útil.
+
+            NADA FOI JOGADO FORA. O `dono`, a `questao` e o `explicacao` do
+            servidor continuam chegando e aparecem em "detalhe técnico", atrás de
+            um clique, por decisão do dono no mesmo dia. Quem precisa dos códigos
+            continua a um clique deles; quem não sabe o que são não tropeça.
+          */}
+          <Tabela cabecalho={<><th>O que falta</th><th>Situação</th><th className="num">Quantos</th><th>Efeito</th><th>Onde resolver</th></>}>
             {dado.camadas.map((c) => (
               <tr key={c.camada}>
-                <td>
-                  <strong>{rotulo(c.camada)}</strong>
-                  <div className="fraco" style={{ fontSize: 13, marginTop: 4, maxWidth: 620 }}>{c.explicacao}</div>
-                </td>
-                <td><Marca tom={c.situacao}>{rotulo(c.situacao)}</Marca></td>
+                <td><OQueFalta camada={c} /></td>
+                <td><Marca tom={c.situacao}>{SITUACAO[c.situacao]?.curto ?? c.situacao}</Marca></td>
                 <td className="num">
                   {c.situacao === 'nao_medido' ? '—' : `${c.faltam} de ${c.total}`}
                 </td>
-                <td className="fraco">{c.efeito === 'bloqueia_fatura' ? 'Fatura' : 'Split'}</td>
-                <td className="fraco">{c.dono}{c.questao && <div style={{ fontSize: 12 }}>{c.questao}</div>}</td>
+                <td className="fraco" style={{ fontSize: 13 }}>{EFEITO[c.efeito]?.curto ?? c.efeito}</td>
                 <td><OndeResolver camada={c.camada} situacao={c.situacao} /></td>
               </tr>
             ))}
           </Tabela>
 
-          <h2>Como ler</h2>
+          <h2>Como ler esta tela</h2>
           <ul className="fraco" style={{ fontSize: 14, lineHeight: 1.7, paddingLeft: 18 }}>
-            <li><strong>Fatura</strong> impede a cobrança existir. <strong>Split</strong> deixa faturar e trava a repartição quando o dinheiro entrar.</li>
-            <li><strong>Não medido</strong> não é <strong>OK</strong>: o universo daquela camada depende de contrato, e não há contrato. Zero sobre nada não é “pronto”.</li>
-            <li>A ordem é a do trabalho: fechar a de cima é o que torna a de baixo mensurável.</li>
-            <li><strong>Onde resolver</strong> abre a aba já filtrada na pendência — “Sem tarifa”, “Sem vencimento”, “Ainda não vale para o contrato”. Onde diz <strong>não há tela</strong>, não há mesmo: o caminho está escrito ao lado.</li>
+            <li><strong>Impede cobrar</strong> significa que a cobrança deste mês não sai enquanto isso faltar. <strong>Impede dividir o dinheiro</strong> deixa cobrar normalmente — o que trava é o repasse ao dono da usina e a comissão, quando o dinheiro entrar.</li>
+            <li><strong>Ainda não dá para conferir</strong> não é o mesmo que <strong>pronto</strong>. Essa conferência depende de algo de uma linha acima, que ainda está vazio — então não há o que medir.</li>
+            <li>A ordem das linhas é a ordem do trabalho: fechar a de cima costuma destravar as de baixo.</li>
+            <li><strong>Onde resolver</strong> abre a aba já filtrada, mostrando só o que falta. Onde diz <strong>não há tela</strong>, não há mesmo — o caminho está escrito ao lado.</li>
           </ul>
         </>
       )}
     </Pagina>
+  );
+}
+
+/**
+ * O QUE FALTA, em duas camadas de leitura.
+ *
+ * NA SUPERFÍCIE, português de quem opera: o nome curto, a frase do que falta e a
+ * CONSEQUÊNCIA — que é o que responde «posso deixar para depois?». Nenhuma
+ * sigla, nenhum nome de coluna, nenhum código de questão.
+ *
+ * ATRÁS DE UM CLIQUE, tudo o que estava na superfície até 21/08: a explicação de
+ * engenharia que o servidor manda, o dono, o código da questão e o comando que
+ * resolve a carteira inteira. A decisão do dono foi «esconder, não remover» — e
+ * a diferença importa: quem acompanha o projeto continua com os ponteiros, e
+ * quem chega amanhã não precisa saber que existem.
+ *
+ * O TEXTO DO SERVIDOR NÃO É REESCRITO AQUI. `c.explicacao` chega como veio, e é
+ * essa a razão de ele caber no detalhe técnico em vez de virar a frase principal:
+ * ele é preciso para quem lê código e a frase principal precisa ser outra coisa.
+ */
+function OQueFalta({ camada: c }: { camada: Camada }) {
+  const [tecnico, setTecnico] = useState(false);
+  const v = VERBETE_DA_CAMADA[c.camada];
+  const d = DESTINO_DA_CAMADA[c.camada];
+
+  return (
+    <div style={{ maxWidth: 620 }}>
+      {/* Sem verbete, cai no nome cru: feio e honesto. Some seria pior — a
+          suíte `ajuda.ts` (A5) impede que chegue aqui. */}
+      <strong>{v?.titulo ?? c.camada}</strong>
+
+      {v && (
+        <div className="fraco" style={{ fontSize: 13, marginTop: 4, lineHeight: 1.55 }}>
+          {v.simples}{' '}
+          {/* A consequência só aparece em quem ainda não está fechado: numa
+              linha resolvida ela seria um aviso sobre um problema que não há. */}
+          {c.situacao !== 'ok' && <span>{v.consequencia}</span>}
+        </div>
+      )}
+
+      <button type="button" className="ajuda-pergunta" aria-expanded={tecnico}
+              style={{ fontSize: 12, fontWeight: 500, padding: '6px 0' }}
+              onClick={() => setTecnico((x) => !x)}>
+        <Icone nome={tecnico ? 'subir' : 'descer'} tamanho={11} peso="bold" />
+        {tecnico ? 'ocultar detalhe técnico' : 'ver detalhe técnico'}
+      </button>
+
+      {tecnico && (
+        <div className="fraco" style={{ fontSize: 12, lineHeight: 1.55, paddingLeft: 19, paddingBottom: 8 }}>
+          <p style={{ margin: '0 0 6px' }}>{c.explicacao}</p>
+          {d?.nota && <p style={{ margin: '0 0 6px' }}>{d.nota}</p>}
+          {d?.caminho && (
+            <p style={{ margin: '0 0 6px' }}>
+              Para a carteira inteira de uma vez: <code>{d.caminho}</code>
+            </p>
+          )}
+          <p style={{ margin: 0 }}>
+            Responsável: {c.dono}{c.questao && <> · questão {c.questao}</>} · chave <code>{c.camada}</code>
+          </p>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -137,8 +214,18 @@ function OndeResolver({ camada, situacao }: Pick<Camada, 'camada' | 'situacao'>)
   const endereco = enderecoDoDestino(d);
   const tela = telaDoDestino(d);
 
+  /*
+   * A NOTA E O COMANDO SAÍRAM DAQUI em 21/08 e foram para o «detalhe técnico» da
+   * primeira coluna. A razão é que esta coluna passou a ter UM trabalho — dizer
+   * para onde ir — e ela o fazia embaixo de sessenta palavras de ressalva, com
+   * `npm run documentos` no meio. Quem chega amanhã não roda comando nenhum.
+   *
+   * Nada se perdeu de lugar nenhum: os dois continuam na tela, a um clique, e
+   * agora ao lado do resto do texto de engenharia em vez de espalhados por duas
+   * colunas.
+   */
   return (
-    <div style={{ maxWidth: 340 }}>
+    <div style={{ maxWidth: 260 }}>
       {endereco && tela ? (
         <Ligacao para={endereco}
                  rotulo={`${d.rotulo} — abre a aba ${tela.titulo}`}
@@ -146,17 +233,15 @@ function OndeResolver({ camada, situacao }: Pick<Camada, 'camada' | 'situacao'>)
           <Icone nome={tela.icone} tamanho={16} /> {d.rotulo}
         </Ligacao>
       ) : (
-        <strong>{d.rotulo}</strong>
+        <>
+          <strong>{d.rotulo}</strong>
+          {d.caminho && (
+            <div className="fraco" style={{ fontSize: 12, marginTop: 4 }}>
+              O caminho é <code>{d.caminho}</code>
+            </div>
+          )}
+        </>
       )}
-
-      {d.caminho && (
-        <div className="fraco" style={{ fontSize: 12, marginTop: 4 }}>
-          {endereco ? 'ou, para a carteira inteira de uma vez, ' : 'O caminho é '}
-          <code>{d.caminho}</code>
-        </div>
-      )}
-
-      <div className="fraco" style={{ fontSize: 12, marginTop: 6, lineHeight: 1.55 }}>{d.nota}</div>
     </div>
   );
 }

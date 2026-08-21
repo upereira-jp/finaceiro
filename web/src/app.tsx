@@ -22,7 +22,7 @@
 // irregulares em tela media. Agora: identidade e sessao em cima, navegacao
 // embaixo, com rolagem horizontal quando nao couber.
 
-import { lazy, Suspense, type ReactElement } from 'react';
+import { lazy, Suspense, useState, type ReactElement } from 'react';
 import { useSessao } from './sessao.tsx';
 import {
   Aviso, Logotipo, Icone, Menu, ItensDeTema, Escolha, Carregando, ESTILO,
@@ -68,6 +68,14 @@ const TelaRelatorios = lazy(() => import('./telas/relatorios.tsx').then((m) => (
 const TelaDocumento = lazy(() => import('./telas/documento.tsx').then((m) => ({ default: m.TelaDocumento })));
 const TelaContasAPagar = lazy(() => import('./telas/contas-a-pagar.tsx').then((m) => ({ default: m.TelaContasAPagar })));
 
+/*
+ * A AJUDA TAMBEM CHEGA SOB DEMANDA, e pela mesma razao das telas: ela carrega a
+ * base de topicos e o vocabulario inteiro, e a maioria das sessoes nunca a abre.
+ * O que fica no pedaco de entrada e so o BOTAO — que precisa existir em toda
+ * tela, porque quem trava nao sabe que travou antes de travar.
+ */
+const PainelDeAjuda = lazy(() => import('./ajuda-painel.tsx').then((m) => ({ default: m.PainelDeAjuda })));
+
 /**
  * Rota -> componente. `Record` sobre as rotas de `navegacao.ts`, então uma tela
  * nova sem render aqui **não compila** — é o mesmo mecanismo que garante que todo
@@ -91,6 +99,7 @@ const RENDER: Record<string, () => ReactElement> = {
 export function App() {
   const s = useSessao();
   const caminho = useCaminho();
+  const [ajudaAberta, setAjudaAberta] = useState(false);
 
   if (s.carregando) {
     return <><style>{ESTILO}</style><div className="conteudo"><Carregando /></div></>;
@@ -150,6 +159,20 @@ export function App() {
               </span>
             )}
 
+            {/*
+              A AJUDA FICA NA BARRA E NAO NA NAVEGACAO, e a distincao e a mesma
+              que separa os dois grupos de telas: aquela lista e a ORDEM DO
+              TRABALHO — o que fechar primeiro para a fatura existir —, e ajuda
+              nao e uma etapa do trabalho. Aqui ela esta em toda tela, ao lado da
+              conta, e nao empurra uma decima terceira aba para dentro de uma
+              ordem que foi escolhida linha a linha.
+            */}
+            <button type="button" className="so-icone" onClick={() => setAjudaAberta(true)}
+                    title="Ajuda" aria-label="Abrir a central de ajuda"
+                    aria-haspopup="dialog" aria-expanded={ajudaAberta}>
+              <Icone nome="ajuda" tamanho={18} />
+            </button>
+
             <Menu rotulo="Conta e aparência"
                   gatilho={<><Icone nome="usuario" tamanho={18} />
                              <span className="so-largo">{s.sessao?.nome}</span></>}>
@@ -202,6 +225,14 @@ export function App() {
           </Suspense>
         )}
       </main>
+
+      {/* Sem `fallback` visivel: o painel chega em milissegundos e um spinner
+          piscando por cima da pagina seria mais ruido do que espera. */}
+      {ajudaAberta && (
+        <Suspense fallback={null}>
+          <PainelDeAjuda rota={tela.rota} aoFechar={() => setAjudaAberta(false)} />
+        </Suspense>
+      )}
     </>
   );
 }

@@ -40,6 +40,11 @@ export type NomeDeIcone =
   | 'ordem_crescente' | 'ordem_decrescente' | 'ordem_nenhuma'
   // a barra do topo
   | 'empresa' | 'usuario' | 'sair' | 'tema_claro' | 'tema_escuro' | 'tema_sistema' | 'abrir_menu'
+  /* A ajuda tem desenho PRÓPRIO e não reusa o ponto de interrogação: aquele já é
+   * o `nao_medido` da tabela de Pendências, e o mesmo desenho significando
+   * "estado desta linha" num lugar e "peça ajuda" noutro é a cor sendo o único
+   * sinal outra vez, só que com forma. */
+  | 'ajuda'
   // cobrança e documento
   | 'boleto' | 'pix' | 'certificado'
   // movimento: as duas que existem para ANIMAR, não para informar
