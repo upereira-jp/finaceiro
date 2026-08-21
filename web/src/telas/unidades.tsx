@@ -22,7 +22,7 @@ import { api, type UnidadeConsumidora, type Usina } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
   Pagina, Aviso, Tabela, Busca, Campo, Ferramentas, Filtro, ThOrd, Marca, BotaoDeIcone,
-  CampoData, Icone, useOrdenacao, ordenar, contem, rotulo,
+  CampoData, Icone, useOrdenacao, ordenar, contem, rotulo, DetalheTecnico,
 } from '../ui.tsx';
 import {
   situacaoDaUc, ehFaturavel, contarSituacoes,
@@ -167,18 +167,41 @@ export function TelaUnidades() {
   return (
     <Pagina titulo="Unidades consumidoras"
             sub="Espelhadas do CRM. O dia de vencimento é local e obrigatório para faturar — o servidor recusa em vez de escolher um dia.">
+      {/*
+        OS TRES AVISOS FORAM REESCRITOS EM 21/08/2026 na mesma forma: primeiro o
+        QUE falta, depois o que isso IMPEDE, depois o que FAZER — e o código de
+        questão, o nome da recusa e o comando em lote atrás do «detalhe técnico».
+        Antes, os três terminavam num identificador interno, que é onde a leitura
+        para para quem não conhece o projeto.
+      */}
       {semVencimento > 0 && (
         <Aviso tipo="erro">
-          {semVencimento} unidade(s) ativa(s) sem dia de vencimento. Sem ele a fatura não nasce
-          (<code>sem_vencimento</code>) — é a <code>Q-SPEC001-02</code>.
+          <strong>{semVencimento} unidade(s) sem dia de vencimento.</strong> Sem ele a cobrança
+          dessas unidades não é gerada — o sistema prefere recusar a escolher uma data por você.{' '}
+          <strong>Preencha o dia do mês</strong> na coluna Vencimento: a cobrança de um mês vence
+          no mês seguinte, nesse mesmo dia.
+          <DetalheTecnico>
+            <p style={{ margin: 0 }}>
+              A composição recusa com <code>sem_vencimento</code>. Quem preenche — por unidade ou
+              por contrato — é a <code>Q-SPEC001-02</code>; não há valor padrão e não vai haver
+              (regra 10).
+            </p>
+          </DetalheTecnico>
         </Aviso>
       )}
       {semTarifa > 0 && (
         <Aviso tipo="erro">
-          {semTarifa} unidade(s) faturável(is) sem <strong>tarifa</strong> (R$/kWh). Sem ela a
-          composição do lote <strong>levanta</strong> em vez de faturar por zero (R26) — e é aqui
-          que ela se preenche desde 14/08, quando a aba Tarifas saiu: a tarifa é de cada UC, não
-          da distribuidora.
+          <strong>{semTarifa} unidade(s) sem o preço do kWh.</strong> É por esse preço que a
+          energia gerada vira valor em reais — sem ele a cobrança do mês não pode ser calculada.{' '}
+          <strong>Preencha na coluna «Tarifa R$/kWh»</strong>, na linha da unidade. O preço é de
+          cada unidade e não da distribuidora: ele muda de cliente para cliente.
+          <DetalheTecnico>
+            <p style={{ margin: 0 }}>
+              A composição do lote <strong>levanta</strong> em vez de faturar por zero (R26). A aba
+              Tarifas saiu em 14/08 porque servia um número só para todas, e a medição mostrou que
+              ele varia por cliente: 35 a 1,130000 · 4 a 1,16 · 2 a 1,180000.
+            </p>
+          </DetalheTecnico>
         </Aviso>
       )}
       {semEndereco > 0 && (
@@ -188,11 +211,16 @@ export function TelaUnidades() {
            medido — item (c) da `Q-PAGADOR-01`. Pintar de vermelho seria a tela
            afirmando uma exigencia que ninguem verificou. */
         <Aviso tipo="alerta">
-          {semEndereco} unidade(s) faturável(is) <strong>sem endereço completo do pagador</strong>.
-          É o endereço que vai no boleto, e ele se preenche aqui desde 17/08 — antes disso só por{' '}
-          <code>npm run enderecos</code>. <strong>Ele não bloqueia a emissão</strong>: quanto de
-          endereço a Sicoob realmente exige é o item (c) da <code>Q-PAGADOR-01</code>, que está
-          aberto e tem dono — por isso a contagem avisa em vez de recusar.
+          <strong>{semEndereco} unidade(s) sem o endereço completo.</strong> É o endereço que sai
+          impresso no boleto. <strong>Isto não impede cobrar</strong> — por isso é aviso e não
+          erro. Preencha abrindo a linha da unidade.
+          <DetalheTecnico>
+            <p style={{ margin: 0 }}>
+              Quanto de endereço a Sicoob realmente exige é o item (c) da <code>Q-PAGADOR-01</code>,
+              aberto e com dono — por isso a contagem avisa em vez de recusar. Ganhou tela em
+              17/08; antes disso só por <code>npm run enderecos</code>.
+            </p>
+          </DetalheTecnico>
         </Aviso>
       )}
       {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
@@ -395,10 +423,15 @@ function EnderecoDoPagador({ uc, ocupado, aoGravar }: {
         </div>
       </div>
       <span className="fraco" style={{ fontSize: 13 }}>
-        É o endereço do <strong>pagador no boleto</strong>, e é da unidade consumidora — não do
-        cliente, que pode ter várias. Ele <strong>não impede a emissão</strong>: o que a Sicoob
-        exige de endereço ainda não foi medido (<code>Q-PAGADOR-01</code>, item c). Para a
-        carteira inteira de uma vez, <code>npm run enderecos</code> continua existindo.
+        É o endereço que sai impresso no boleto, e é <strong>da unidade</strong> — não do cliente,
+        que pode ter várias. Ele <strong>não impede a emissão</strong>.
+        <DetalheTecnico>
+          <p style={{ margin: 0 }}>
+            O que a Sicoob exige de endereço ainda não foi medido (<code>Q-PAGADOR-01</code>, item
+            c). Para a carteira inteira de uma vez, <code>npm run enderecos</code> continua
+            existindo.
+          </p>
+        </DetalheTecnico>
       </span>
     </div>
   );

@@ -30,7 +30,7 @@ import { api, type Cliente } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
   Pagina, Aviso, Tabela, Campo, Busca, Ferramentas, Filtro, ThOrd, Marca, Icone, BotaoDeIcone,
-  useOrdenacao, ordenar, contem,
+  useOrdenacao, ordenar, contem, DetalheTecnico,
 } from '../ui.tsx';
 import {
   situacaoDoDocumento, contarDocumentos, formatarDocumento, tipoPeloComprimento,
@@ -169,23 +169,51 @@ export function TelaClientes() {
             sub="Os clientes que o sistema cobra. É aqui que se confirma o CPF ou o CNPJ — e enquanto ele não estiver confirmado, o contrato daquele cliente não ativa e a cobrança dele não sai.">
 
       {/* ------------------------------------------------ o que ainda falta */}
+      {/*
+        AS DUAS FRASES FORAM REESCRITAS EM 21/08/2026, e o defeito era de ORDEM
+        antes de ser de vocabulário: a única linha acionável do primeiro aviso —
+        «digite na coluna Documento» — vinha DEPOIS de três identificadores
+        internos e antes de um comando de terminal. Quem chega amanhã lê aquilo
+        de cima para baixo e desiste no meio.
+
+        Agora a superfície responde as três perguntas de quem opera, nesta
+        ordem: o que falta, o que isso impede, e o que fazer agora. Os códigos
+        não foram jogados fora — estão no `DetalheTecnico`, a um clique, pela
+        mesma decisão de «esconder, não remover» que a tela de Pendências já
+        seguia.
+      */}
       {contagem.sem_documento > 0 && (
         <Aviso tipo="erro">
-          <strong>{contagem.sem_documento} de {contagem.total} sem CPF/CNPJ.</strong> Sem ele o
-          contrato não pode ir para <code>ativo</code> (R9), a triagem recusa por{' '}
-          <code>sem_contrato_vigente</code> e o boleto para em{' '}
-          <code>PagadorSemDocumento</code> antes de falar com o banco. Digite na coluna Documento —
-          ou, para a carteira inteira de uma vez, use <code>npm run documentos</code>, que confere
-          colisão de documento repetido antes de escrever qualquer linha.
+          <strong>{contagem.sem_documento} de {contagem.total} sem CPF/CNPJ.</strong> Sem esse
+          número o contrato do cliente não pode ser ativado — e sem contrato ativo a cobrança
+          dele não sai. <strong>Preencha na coluna Documento</strong>, na linha do cliente.
+          <DetalheTecnico>
+            <p style={{ margin: '0 0 6px' }}>
+              Sem documento o contrato não vai para <code>ativo</code> (R9), a triagem recusa por{' '}
+              <code>sem_contrato_vigente</code> e o boleto para em <code>PagadorSemDocumento</code>{' '}
+              antes de falar com o banco.
+            </p>
+            <p style={{ margin: 0 }}>
+              Para a carteira inteira de uma vez: <code>npm run documentos</code>, que confere
+              colisão de documento repetido (Q-CLIENTEDUP-01) antes de escrever qualquer linha —
+              a digitação linha a linha não faz isso.
+            </p>
+          </DetalheTecnico>
         </Aviso>
       )}
       {contagem.nao_validados > 0 && (
         <Aviso tipo="alerta">
           <strong>{contagem.nao_validados} com documento preenchido que ainda não vale.</strong>{' '}
-          Documento vindo do CRM entra como <em>semente</em> e não conta, mesmo com o dígito
-          correto — lá o campo é livre, e dígito certo não prova que o documento é daquela pessoa
-          (R8). <strong>Reenviar o mesmo número por aqui é o ato que o valida</strong>: basta
-          conferir e gravar.
+          Documento que veio do CRM entra como sugestão e não conta, mesmo estando certo.{' '}
+          <strong>Abra o cliente, confira o número e grave de novo</strong> — pode ser o mesmo
+          número: é o ato de gravar aqui que o faz valer.
+          <DetalheTecnico>
+            <p style={{ margin: 0 }}>
+              No CRM o campo é livre, e dígito certo não prova que o documento é daquela pessoa
+              (R8): a semente entra com <code>documento_validado = false</code> e só a gravação
+              por esta tela a promove.
+            </p>
+          </DetalheTecnico>
         </Aviso>
       )}
 
@@ -232,6 +260,12 @@ export function TelaClientes() {
         )}
       </Ferramentas>
 
+      {/* O VAZIO DA TABELA NÃO MANDA MAIS RODAR COMANDO. Ele dizia «rode
+          `npm run ciclo -- --valendo`» — instrução para quem tem o repositório
+          clonado e o `.env` na mão, que não é quem abre esta tela. E desde 21/08
+          nem é mais verdade como próximo passo: o ciclo roda sozinho a cada 15
+          minutos (`financeiro-ciclo.timer`), então ESPERAR é a ação correta, e o
+          que sobra para a pessoa é saber a quem avisar se não chegar. */}
       <Tabela cabecalho={<>
                 <ThOrd chave="nome" ordem={ordem} ao={alternar}>Nome</ThOrd>
                 <ThOrd chave="documento" ordem={ordem} ao={alternar}>Documento</ThOrd>
@@ -241,7 +275,8 @@ export function TelaClientes() {
               </>}
               vazio={todos.length
                 ? 'Nenhum cliente corresponde à busca ou aos filtros.'
-                : <>Nenhum cliente — rode <code>npm run ciclo -- --valendo</code> para espelhar do CRM.</>}>
+                : <>Nenhum cliente ainda. Eles chegam do CRM sozinhos, várias vezes por hora — se
+                   o CRM já tem clientes e nenhum apareceu aqui, avise quem cuida da integração.</>}>
         {visiveis.map((c) => (
           <LinhaDeCliente
             key={c.id} c={c}

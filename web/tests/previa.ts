@@ -40,6 +40,7 @@ const pagina = (corpo: string): string =>
 writeFileSync(SAIDA + '/p-parado.html', pagina(m.parado!));
 writeFileSync(SAIDA + '/p-busca.html', pagina(m.buscando!));
 writeFileSync(SAIDA + '/p-vazio.html', pagina(m.vazio!));
+writeFileSync(SAIDA + '/p-avisos.html', pagina(m.avisos!));
 rmSync(out, { force: true });
 
-console.log('previas escritas em', SAIDA, '— p-parado.html, p-busca.html, p-vazio.html');
+console.log('previas escritas em', SAIDA, '— p-parado.html, p-busca.html, p-vazio.html, p-avisos.html');

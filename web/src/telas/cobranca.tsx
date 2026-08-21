@@ -21,7 +21,7 @@
 import { useState } from 'react';
 import { api, ErroDaApi } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
-import { Pagina, Aviso, Campo, Marca, linha, Interruptor, Icone } from '../ui.tsx';
+import { Pagina, Aviso, Campo, Marca, linha, Interruptor, Icone, DetalheTecnico } from '../ui.tsx';
 import { dataOuNull } from '../dinheiro.ts';
 import {
   motivoDaTravaDoConector, podeSalvarConector, sinalDeSegredo,
@@ -142,18 +142,28 @@ export function TelaCobranca() {
       <div className="cartao secao">
         <h2 style={{ marginTop: 0 }}>Antes de preencher: onde mora o segredo</h2>
         <p className="sub" style={{ marginBottom: 8 }}>
-          O campo abaixo guarda uma <strong>referência</strong> — um apelido que aponta para o
-          cofre onde o certificado e o <code>client_secret</code> ficam cifrados. Ele{' '}
-          <strong>não</strong> guarda o segredo: a regra 5 do <code>CLAUDE.md</code> proíbe segredo
-          por tenant em coluna e em variável de ambiente, e o contraexemplo está no banco ao lado.
+          O campo abaixo guarda um <strong>apelido</strong> que aponta para o cofre onde a senha e o
+          certificado do banco ficam guardados. Ele <strong>não</strong> guarda a senha em si —
+          nunca cole aqui certificado, senha ou token.
         </p>
         <p className="sub" style={{ marginBottom: 0 }}>
-          <strong>E o cofre ainda não existe.</strong> O <code>ADR-0005</code> — onde mora o segredo
-          do tenant — está em <em>proposta</em>, e é pré-requisito do adaptador real da Sicoob junto
-          com o certificado A1 (<code>Q-SICOOB-01</code>). Até os dois existirem, cadastrar aqui
-          registra <em>a intenção e os dados não-secretos</em>: agência, conta, convênio e validade.
-          Nenhum boleto sai disto.
+          <strong>E o cofre ainda não existe.</strong> Até ele e o certificado do banco existirem,
+          cadastrar aqui registra <em>a intenção e os dados que não são secretos</em>: agência,
+          conta, convênio e validade. <strong>Nenhum boleto sai disto ainda</strong> — enquanto
+          isso, dá para cobrar por Pix e importar na aba Emissão e cobrança um boleto emitido no
+          site do banco.
         </p>
+        <DetalheTecnico>
+          <p style={{ margin: '0 0 6px' }}>
+            A regra 5 do <code>CLAUDE.md</code> proíbe segredo por tenant em coluna e em variável de
+            ambiente — o contraexemplo está no banco ao lado.
+          </p>
+          <p style={{ margin: 0 }}>
+            O <code>ADR-0005</code> (onde mora o segredo do tenant) está em <em>proposta</em>, e é
+            pré-requisito do adaptador real da Sicoob junto com o certificado A1
+            (<code>Q-SICOOB-01</code>).
+          </p>
+        </DetalheTecnico>
       </div>
 
       {/* -------------------------------------------------------- o formulario */}
@@ -168,11 +178,17 @@ export function TelaCobranca() {
 
         {sinal && (
           <Aviso tipo="erro">
-            <strong>Isto parece ser o segredo, e não uma referência</strong> — foi reconhecido
-            como <em>{sinal}</em>. Não cole aqui certificado, <code>client_secret</code> nem token:
-            a coluna é <code>text</code> e o valor ficaria em claro no banco, o que é violação da
-            regra 5 e se conserta com <strong>rotação de credencial</strong>, não com um
-            {' '}<code>UPDATE</code>. Guarde o segredo no cofre e ponha aqui só o apelido dele.
+            <strong>Isto parece ser o segredo, e não o apelido dele</strong> — foi reconhecido
+            como <em>{sinal}</em>. Não cole aqui certificado, senha nem token: o valor ficaria
+            legível no banco de dados. <strong>Guarde o segredo no cofre e ponha aqui só o apelido
+            dele.</strong>
+            <DetalheTecnico>
+              <p style={{ margin: 0 }}>
+                A coluna é <code>text</code> e o valor ficaria em claro — violação da regra 5, que
+                se conserta com <strong>rotação de credencial</strong> e não com um{' '}
+                <code>UPDATE</code>.
+              </p>
+            </DetalheTecnico>
           </Aviso>
         )}
 
@@ -224,39 +240,53 @@ export function TelaCobranca() {
       {/* --------------------------------- o que falta para o boleto sair mesmo */}
       <h2><Icone nome="certificado" tamanho={17} /> O que falta para um boleto ser pagável</h2>
       <p className="sub">
-        Nada disto é código nosso faltando — está medido e tem dono nomeado no <code>QUESTOES.md</code>.
+        Nada disto é código nosso faltando: os quatro estão medidos e cada um tem responsável.
       </p>
       <div className="rolagem">
         <table>
           <thead><tr><th>Item</th><th>O que é</th><th style={{ width: 90 }}>Estado</th></tr></thead>
           <tbody>
             <tr>
-              <td><code>Q-SICOOB-01</code></td>
-              <td>Certificado A1 e credencial de sandbox. Sem eles o adaptador padrão recusa
-                  com <strong>503 nomeado</strong> em vez de fingir que emitiu.</td>
+              <td><strong>Certificado do banco</strong></td>
+              <td>O certificado e a credencial de teste da Sicoob. Sem eles o sistema recusa
+                  emitir, com o motivo escrito, em vez de fingir que emitiu.</td>
               <td><Marca tom="pendente">falta</Marca></td>
             </tr>
             <tr>
-              <td><code>ADR-0005</code></td>
-              <td>Onde o segredo do tenant mora. A <code>credencial_ref</code> deste formulário
-                  aponta para um cofre que ainda não existe.</td>
+              <td><strong>Cofre da senha</strong></td>
+              <td>Onde a senha do banco fica guardada. O apelido deste formulário aponta para um
+                  cofre que ainda não existe.</td>
               <td><Marca tom="pendente">proposta</Marca></td>
             </tr>
             <tr>
-              <td><code>Q-WEBHOOK-01</code></td>
-              <td>Como a Sicoob se autentica para avisar que o cliente pagou — hoje toda rota
-                  exige Bearer do Supabase, que um banco não emite.</td>
+              <td><strong>Aviso de pagamento</strong></td>
+              <td>Como o banco avisa o sistema de que o cliente pagou. Hoje toda entrada exige um
+                  crachá que um banco não emite.</td>
               <td><Marca tom="pendente">falta</Marca></td>
             </tr>
             <tr>
-              <td><code>Q-AGENDA-01</code></td>
-              <td>Não existe processo periódico: nem fila de emissão com retry, nem a consulta
-                  ativa diária que captura o pagamento cujo webhook falhou.</td>
+              <td><strong>Rotina diária</strong></td>
+              <td>Nada roda sozinho ainda: nem a fila que tenta emitir de novo, nem a conferência
+                  diária que pega o pagamento cujo aviso do banco falhou.</td>
               <td><Marca tom="pendente">falta</Marca></td>
             </tr>
           </tbody>
         </table>
       </div>
+      {/* OS CODIGOS DESCERAM PARA CA em 21/08/2026. A primeira coluna era
+          `Q-SICOOB-01`, `ADR-0005`, `Q-WEBHOOK-01`, `Q-AGENDA-01` — rastreio
+          interno ocupando a coluna que deveria dizer O QUE falta. Quem acompanha
+          o projeto continua com os ponteiros, a um clique. */}
+      <DetalheTecnico>
+        <p style={{ margin: 0 }}>
+          Na ordem da tabela: <code>Q-SICOOB-01</code> (certificado A1 e credencial de sandbox;
+          sem eles o adaptador padrão recusa com <strong>503 nomeado</strong>) ·{' '}
+          <code>ADR-0005</code> (onde mora o segredo do tenant, em proposta) ·{' '}
+          <code>Q-WEBHOOK-01</code> (como a Sicoob se autentica no retorno; hoje toda rota exige
+          Bearer do Supabase) · <code>Q-AGENDA-01</code> (sem fila de emissão com retry e sem
+          consulta ativa diária). Todos com dono no <code>QUESTOES.md</code>.
+        </p>
+      </DetalheTecnico>
     </Pagina>
   );
 }

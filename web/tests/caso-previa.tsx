@@ -24,6 +24,7 @@
 
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CorpoDaAjuda } from '../src/ajuda-corpo.tsx';
+import { Aviso, DetalheTecnico } from '../src/ui.tsx';
 import { passosDoEstado, type CamadaLida } from '../src/ajuda.ts';
 
 const c = (p: Partial<CamadaLida>): CamadaLida =>
@@ -53,3 +54,40 @@ export const buscando = renderToStaticMarkup(
 export const vazio = renderToStaticMarkup(
   <CorpoDaAjuda rota="/faturas" passos={[]} carregando={false} falhou={false}
                 aoFechar={() => {}} ir={() => {}} consultaInicial="onde ficam as usinas" />);
+
+/**
+ * OS AVISOS DAS TELAS, do jeito que ficaram em 21/08/2026.
+ *
+ * Existe porque a varredura de vocabulario move o jargao para dentro do
+ * `<DetalheTecnico>`, e isso e uma mudanca de TEXTO que produz uma mudanca de
+ * DESENHO: passa a haver um botao dentro do corpo de um `<Aviso>`, que ate entao
+ * so tinha paragrafo. A suite le string; so a foto mostra se o botao cabe.
+ *
+ * Os tres tipos juntos de proposito: o vermelho e o que mais aparece na primeira
+ * semana, e e nele que o contraste do botao pode sumir.
+ */
+export const avisos = renderToStaticMarkup(
+  <div className="conteudo">
+    <h1>Como os avisos ficaram</h1>
+    <Aviso tipo="erro">
+      <strong>11 de 29 sem CPF/CNPJ.</strong> Sem esse número o contrato do cliente não pode ser
+      ativado — e sem contrato ativo a cobrança dele não sai.{' '}
+      <strong>Preencha na coluna Documento</strong>, na linha do cliente.
+      <DetalheTecnico>
+        <p style={{ margin: 0 }}>
+          Sem documento o contrato não vai para <code>ativo</code> (R9), a triagem recusa por{' '}
+          <code>sem_contrato_vigente</code> e o boleto para em <code>PagadorSemDocumento</code>.
+        </p>
+      </DetalheTecnico>
+    </Aviso>
+    <Aviso tipo="alerta">
+      <strong>7 unidade(s) sem o endereço completo.</strong> É o endereço que sai impresso no
+      boleto. <strong>Isto não impede cobrar</strong> — por isso é aviso e não erro.
+      <DetalheTecnico>
+        <p style={{ margin: 0 }}>
+          O que a Sicoob exige de endereço ainda não foi medido (<code>Q-PAGADOR-01</code>, item c).
+        </p>
+      </DetalheTecnico>
+    </Aviso>
+    <Aviso tipo="ok">Endereço da 3001234 gravado.</Aviso>
+  </div>);

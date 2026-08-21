@@ -873,7 +873,7 @@ function FaturasRegistradas({ uc, versao, registrar, registrando, statusRegistro
 
   return (
     <div className="cartao">
-      <div className="fu-rotulo">Faturas registradas nesta UC</div>
+      <div className="fu-rotulo">Faturas registradas nesta unidade</div>
 
       {!alvo && <div className="fu-status">Informe a unidade consumidora para ver o histórico.</div>}
       {alvo && lista == null && <div className="fu-status">Lendo os registros…</div>}

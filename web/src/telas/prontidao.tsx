@@ -28,6 +28,7 @@ import { api, type Camada, type Prontidao } from '../api.ts';
 import { useDados } from '../dados.ts';
 import {
   Pagina, Aviso, Tabela, Marca, Kpi, KpiSimNao, Carregando, CampoData, AjudaDoMes, Icone,
+  DetalheTecnico,
 } from '../ui.tsx';
 import { Ligacao } from '../rota.tsx';
 import { competenciaISO } from '../dinheiro.ts';
@@ -56,10 +57,12 @@ export function TelaProntidao() {
       </div>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
-      {/* "as camadas" e nao "as dez camadas": eram dez ate 04/08/2026, quando a
-          R9 virou camada, e o texto ficou para tras — o cartao ja diz o total
-          contando a lista que o servidor devolveu. */}
-      {carregando && <Carregando texto="Contando as camadas…" />}
+      {/* "Conferindo o mês" e nao "Contando as camadas", desde 21/08/2026.
+          "Camada" e o nome da estrutura interna do relatorio — a propria suite da
+          ajuda o proibe no texto exibido (V4) —, e esta frase era a PRIMEIRA
+          coisa que um usuario novo lia no sistema, na primeira tela da barra.
+          E a mesma palavra que o painel de ajuda ja usava para a mesma espera. */}
+      {carregando && <Carregando texto="Conferindo o mês…" />}
 
       {dado && (
         <>
@@ -73,7 +76,11 @@ export function TelaProntidao() {
             <KpiSimNao nome="Pode faturar" sim={dado.pode_faturar} icone="pode_faturar" />
             <KpiSimNao nome="Pode repartir" sim={dado.pode_repartir} icone="pode_repartir" />
             <Kpi nome="Unidades ativas" icone="unidades" valor={dado.ucs_ativas} />
-            <Kpi nome="Camadas pendentes" icone="prontidao"
+            {/* "O que ainda falta" e nao "Camadas pendentes": o cartao mostra
+                "3 de 11", e o numero so quer dizer alguma coisa se o nome disser
+                de QUE ele e contagem. "Camada" nomeia a estrutura interna do
+                relatorio e nao existe para quem opera. */}
+            <Kpi nome="O que ainda falta" icone="prontidao"
                  valor={<>
                    {dado.camadas.filter((c) => c.situacao === 'pendente').length}
                    <span className="fraco" style={{ fontSize: 14, fontWeight: 500 }}> de {dado.camadas.length}</span>
@@ -137,7 +144,6 @@ export function TelaProntidao() {
  * ele é preciso para quem lê código e a frase principal precisa ser outra coisa.
  */
 function OQueFalta({ camada: c }: { camada: Camada }) {
-  const [tecnico, setTecnico] = useState(false);
   const v = VERBETE_DA_CAMADA[c.camada];
   const d = DESTINO_DA_CAMADA[c.camada];
 
@@ -156,27 +162,22 @@ function OQueFalta({ camada: c }: { camada: Camada }) {
         </div>
       )}
 
-      <button type="button" className="ajuda-pergunta" aria-expanded={tecnico}
-              style={{ fontSize: 12, fontWeight: 500, padding: '6px 0' }}
-              onClick={() => setTecnico((x) => !x)}>
-        <Icone nome={tecnico ? 'subir' : 'descer'} tamanho={11} peso="bold" />
-        {tecnico ? 'ocultar detalhe técnico' : 'ver detalhe técnico'}
-      </button>
-
-      {tecnico && (
-        <div className="fraco" style={{ fontSize: 12, lineHeight: 1.55, paddingLeft: 19, paddingBottom: 8 }}>
-          <p style={{ margin: '0 0 6px' }}>{c.explicacao}</p>
-          {d?.nota && <p style={{ margin: '0 0 6px' }}>{d.nota}</p>}
-          {d?.caminho && (
-            <p style={{ margin: '0 0 6px' }}>
-              Para a carteira inteira de uma vez: <code>{d.caminho}</code>
-            </p>
-          )}
-          <p style={{ margin: 0 }}>
-            Responsável: {c.dono}{c.questao && <> · questão {c.questao}</>} · chave <code>{c.camada}</code>
+      {/* O TOGGLE SAIU DAQUI EM 21/08/2026 e virou `DetalheTecnico` no `ui.tsx`.
+          Não foi arrumação: a varredura do dia seguinte achou 23 trechos de
+          jargão em 7 telas que NÃO tinham este esconderijo, e um padrão que cada
+          tela precisa reimplementar é um padrão que a maioria não implementa. */}
+      <DetalheTecnico>
+        <p style={{ margin: '0 0 6px' }}>{c.explicacao}</p>
+        {d?.nota && <p style={{ margin: '0 0 6px' }}>{d.nota}</p>}
+        {d?.caminho && (
+          <p style={{ margin: '0 0 6px' }}>
+            Para a carteira inteira de uma vez: <code>{d.caminho}</code>
           </p>
-        </div>
-      )}
+        )}
+        <p style={{ margin: 0 }}>
+          Responsável: {c.dono}{c.questao && <> · questão {c.questao}</>} · chave <code>{c.camada}</code>
+        </p>
+      </DetalheTecnico>
     </div>
   );
 }

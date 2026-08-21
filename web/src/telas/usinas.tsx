@@ -69,7 +69,7 @@ export function TelaUsinas() {
 
   return (
     <Pagina titulo="Usinas"
-            sub="Espelhadas do CRM. O dono e o percentual de repasse são locais — e os dois travam o split se faltarem.">
+            sub="Espelhadas do CRM. O dono e o percentual de repasse são preenchidos aqui — e sem eles dá para cobrar o cliente, mas não dá para repartir o dinheiro que entrar.">
       {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
       {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
       {usinas.erro && <Aviso tipo="erro">{usinas.erro}</Aviso>}

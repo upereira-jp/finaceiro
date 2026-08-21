@@ -34,7 +34,7 @@ import {
 import { useAcao, useDados } from '../dados.ts';
 import {
   Pagina, Aviso, Tabela, Marca, rotulo, linha, useOrdenacao, ordenar, ThOrd,
-  Icone, CampoData, Carregando, AjudaDoMes } from '../ui.tsx';
+  Icone, CampoData, Carregando, AjudaDoMes, DetalheTecnico } from '../ui.tsx';
 import { competenciaISO, emReais, paraCentavos } from '../dinheiro.ts';
 import { paraCsv, reaisParaPlanilha, nomeDoArquivo } from '../csv.ts';
 import { baixarCsv } from '../baixar.ts';
@@ -120,7 +120,7 @@ export function TelaFaturas() {
 
   return (
     <Pagina titulo="Emissão e cobrança"
-            sub="O mês de referência inteiro, linha por linha. Emitir fecha o valor; o boleto vem depois; a baixa é o único gatilho do split. A folha que o cliente recebe se monta na aba Fatura unificada.">
+            sub="O mês de referência inteiro, linha por linha. Emitir fecha o valor, o boleto vem depois, e dar baixa é o que dispara a divisão do dinheiro. A folha que o cliente recebe se monta na aba Fatura unificada.">
       <div className="cartao secao">
         <div style={{ ...linha, gap: 12 }}>
           <div>
@@ -150,18 +150,23 @@ export function TelaFaturas() {
         */}
         {tarifas.semTarifa > 0 && (
           <Aviso tipo="alerta">
-            <strong>{tarifas.semTarifa} de {tarifas.rascunhos} rascunho(s) sem tarifa da
-            concessionária</strong> — sairiam cobrando <strong>só o crédito injetado</strong>.
-            A ordem é <strong>compor → <code>npm run tarifas</code> → emitir</strong>: lançar as
-            tarifas só é possível em rascunho, e depois de emitida a correção é cancelar e
-            recompor, com motivo na trilha.
+            <strong>{tarifas.semTarifa} de {tarifas.rascunhos} rascunho(s) sem a tarifa da
+            distribuidora.</strong> Assim eles sairiam cobrando <strong>só o crédito
+            injetado</strong>. <strong>Lance as tarifas antes de emitir</strong>: depois de
+            emitida, corrigir exige cancelar e refazer, com o motivo registrado.
             <br />
             <span className="fraco" style={{ fontSize: 12 }}>
-              UC: {tarifas.ucsSemTarifa.slice(0, 12).join(', ')}
+              Unidades: {tarifas.ucsSemTarifa.slice(0, 12).join(', ')}
               {tarifas.ucsSemTarifa.length > 12 ? `, +${tarifas.ucsSemTarifa.length - 12}` : ''}
-              {' · '}Se este mês realmente não leva tarifa da distribuidora, emitir está
-              certo — é a pergunta (a) da <code>Q-TARIFA-CONC-01</code>.
+              {' · '}Se este mês realmente não leva tarifa da distribuidora, emitir está certo.
             </span>
+            <DetalheTecnico>
+              <p style={{ margin: 0 }}>
+                A ordem é <strong>compor → <code>npm run tarifas</code> → emitir</strong>: lançar
+                tarifa só é possível em rascunho. Se o mês não leva tarifa da distribuidora, é a
+                pergunta (a) da <code>Q-TARIFA-CONC-01</code>.
+              </p>
+            </DetalheTecnico>
           </Aviso>
         )}
       </div>

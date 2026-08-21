@@ -54,6 +54,56 @@ export const Aviso = ({ tipo, children }: { tipo: 'erro' | 'ok' | 'alerta'; chil
   </div>
 );
 
+/**
+ * O DETALHE TÉCNICO — o que o dev precisa, atrás de um clique.
+ *
+ * ==========================================================================
+ * POR QUE ISTO É UM COMPONENTE E NÃO UMA CONVENÇÃO A SER LEMBRADA
+ *
+ * A decisão do dono em 21/08/2026 foi **«esconder, não remover»**: os códigos de
+ * questão, os nomes de coluna, os comandos em lote e a explicação de engenharia
+ * continuam chegando e continuam alcançáveis — só deixam de ser a primeira coisa
+ * que alguém lê. A tela de Pendências passou a fazer isso no mesmo dia, e fazia
+ * sozinha, com o toggle escrito à mão dentro dela.
+ *
+ * Uma varredura no dia seguinte mostrou que o RESTO do sistema não tinha feito o
+ * mesmo: 23 trechos de jargão em 7 das 12 telas, quase todos dentro de `<Aviso>`.
+ * O pior deles em Clientes, onde a única frase acionável — «Digite na coluna
+ * Documento» — aparecia depois de três identificadores internos e antes de um
+ * comando de terminal. Quem chega amanhã lê aquilo e não sabe o que fazer.
+ *
+ * Como convenção, cada tela reimplementaria o padrão — ou não o implementaria,
+ * que foi exatamente o que aconteceu. Como componente, ele é uma coisa só: a
+ * suíte `web/tests/vocabulario-das-telas.ts` RECORTA este bloco antes de procurar
+ * jargão, então guardar o código aqui dentro é a forma suportada de mantê-lo, e
+ * deixá-lo do lado de fora falha o teste.
+ *
+ * A REGRA DE USO, em uma linha: se a frase só faz sentido para quem leu o código,
+ * ela mora aqui dentro.
+ */
+export function DetalheTecnico({ children }: { children: ReactNode }) {
+  const [aberto, setAberto] = useState(false);
+  return (
+    <>
+      {/* Reusa a classe do painel de ajuda de propósito: é o mesmo gesto — «há
+          mais, e você decide se quer» — e dois desenhos para um gesto só fariam
+          a pessoa aprender duas vezes. */}
+      <button type="button" className="ajuda-pergunta" aria-expanded={aberto}
+              style={{ fontSize: 12, fontWeight: 500, padding: '6px 0' }}
+              onClick={() => setAberto((x) => !x)}>
+        <Icone nome={aberto ? 'subir' : 'descer'} tamanho={11} peso="bold" />
+        {aberto ? 'ocultar detalhe técnico' : 'ver detalhe técnico'}
+      </button>
+      {aberto && (
+        <div className="fraco detalhe-tecnico"
+             style={{ fontSize: 12, lineHeight: 1.55, paddingLeft: 19, paddingBottom: 8 }}>
+          {children}
+        </div>
+      )}
+    </>
+  );
+}
+
 // -------------------------------------------------------------- formulario
 
 /** Abre o seletor de data do navegador. `showPicker()` e a unica forma de abrir
