@@ -41,6 +41,37 @@ quanto ela recebe:
 
 `vendedor_g3` · `terceirizado` · `parceiro_indicador` · `parceiro_captador` · `parceiro_captador_senior`
 
+### ✅ 21/08/2026 — quem são e de que tipo, decidido
+
+Medido no CRM pelo eixo canônico (o crédito congelado no ganho), restringindo às
+**29 unidades que o financeiro fatura**: são **dois nomes**, não uma lista aberta.
+
+| Originador | UCs faturáveis | Tipo | 1ª fatura | 2ª fatura |
+|---|--:|---|--:|--:|
+| **Renata** | 26 | `vendedor_g3` | 25% | 25% |
+| **Out Sales** | 3 | `vendedor_g3` | 25% | 25% |
+
+**O tipo foi decidido pelo dono em 21/08:** *"Renata e Out Sales são tipo
+próprio"* — ou seja, equipe da casa, e não terceirizado nem parceiro. As dez
+regras de comissão já estão cadastradas e vigentes; nenhuma precisa ser criada.
+
+Kallina Tandara tem 4 créditos e **nenhum** com rateio ativado — fica fora por
+ora, e entra quando (e se) alguma daquelas UCs for ativada.
+
+### O que sobrou, e é **demanda de sequência** (decisão do dono, 21/08)
+
+Não bloqueia a leitura da conta nem a geração de cobrança; bloqueia só o contrato.
+
+1. **O CPF de Renata** e a natureza (`pf`).
+2. **O documento de "Out Sales"** — e aqui há uma pergunta antes do número:
+   *Out Sales é uma equipe, e equipe não tem CPF.* Ou existe um CNPJ por trás
+   (natureza `pj`), ou existe uma pessoa que responde por esses 3 contratos.
+   **Sem resolver isso, os 3 contratos do Out Sales não nascem** — os 26 da
+   Renata nascem.
+3. **Fica em aberto no fiscal, e não no cadastro:** Renata concentra 26 das 29 e
+   é sócia. *Comissão a sócia é despesa dedutível ou distribuição de lucro?* é
+   pergunta ao contador, já registrada, ainda sem resposta.
+
 ---
 
 ## 1. Confirmar o CPF/CNPJ dos clientes — faltam 11 de 29
