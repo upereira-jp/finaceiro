@@ -7,8 +7,8 @@
 | **Substitui e apaga** | `PENDENCIAS-2026-08-05.md` e `PROXIMOS-PASSOS-2026-08-09.md` — vencidos, e agora removidos do repo |
 | **NÃO substitui** | `QUESTOES.md` (registro datado, dono por entrada — regra 10) · `RETOMADA-2026-08-15.md` (onde tudo parou) · os `RESUMO-SESSAO-*` (memória datada). Estes continuam sendo a fonte; aqui é o **apontador** |
 | **Data** | 14/08/2026 · rev. 17/08/2026 · rev. 19/08/2026 · rev. **21/08/2026** |
-| **Estado da suíte** | `npm test` **`EXIT=0`**, **2.057** verificações (eram ~1.911 em 14/08), com PostgreSQL real |
-| **Produção** | `financeiro.blackhaus.io` · `origin/main` em **`6f8aa46`** (deploy de 17/08 10:59 UTC) · **32 migrations no ar** (a 32 aplicada em 17/08 10:23 UTC) · Pix estático **e boleto importado** no ar · rótulos da barra revistos no mesmo deploy |
+| **Estado da suíte** | Sem banco: `typecheck` + `documento` + `brcode` + `dominio` + `web` → **`EXIT=0`, 2.067 verificações**. `test:repos` e `test:isolamento` **não rodam nesta VPS** (exigem PostgreSQL local) — o que elas cobririam da junção está no `npm run ensaio-juncao`, 12 de 12 contra produção com rollback |
+| **Produção** | `financeiro.blackhaus.io` · **34 migrations no ar** (a 33 em 20/08, a **34 em 21/08**) · Pix estático e boleto importado no ar · central de ajuda em toda tela · **a conta unificada lida já vira cobrança** (migration 34) · o conector roda sozinho a cada 15 min pelo `financeiro-ciclo.timer` |
 
 > ## A única pendência do repositório é o certificado A1.
 >
@@ -38,11 +38,19 @@
 > motor de repartição não mudou uma linha** — ele já tinha a forma exata da conta
 > unificada, e isso foi medido antes de escrever.
 >
-> **Isto acrescenta uma pendência de aplicação à §1:** a migration 34 está escrita,
-> versionada e **não aplicada**. Enquanto não estiver no banco, a guarda de catálogo
-> recusa nomeando e o botão nem aparece — a tela não oferece um ato que este banco
-> ainda não sabe executar. A sequência é a da §5: `migrate-financeiro` e depois
-> `deploy-financeiro`.
+> **✅ A migration 34 foi APLICADA em 21/08/2026**, com a `DIRECT_URL` de dono, depois
+> da guarda de identidade (`conferir-banco-alvo identidade`) confirmar o banco. Conferida
+> **no catálogo** e não na mensagem do comando: a coluna, a FK composta
+> `(tenant_id, fatura_id) → fatura(tenant_id, id)` e o índice **cheio** estão os três
+> presentes, e `migrate status` diz *"Database schema is up to date"*. Deploy feito na
+> sequência — build do frontend e `systemctl restart`, com backup do bundle antes.
+>
+> **E a junção foi provada ponta a ponta**, o que não era possível com o dado de
+> produção: há zero contratos, e `fatura.contrato_id` é `NOT NULL`. O
+> `npm run ensaio-juncao` cria originador, contrato e conta lida como **fixture**,
+> fatura de verdade contra o schema real, confere as doze coisas que importam e
+> termina em **ROLLBACK** — a última verificação conta as quatro tabelas depois da
+> transação e falha se qualquer uma tiver linha. **12 de 12, e produção intacta.**
 
 ---
 

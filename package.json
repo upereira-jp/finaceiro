@@ -35,7 +35,8 @@
     "documentos": "node --experimental-strip-types --env-file=.env scripts/importar-documentos.ts",
     "contratos": "node --experimental-strip-types --env-file=.env scripts/importar-contratos.ts",
     "enderecos": "node --experimental-strip-types --env-file=.env scripts/importar-enderecos.ts",
-    "identidade": "node --experimental-strip-types --env-file=.env scripts/cadastrar-identidade.ts"
+    "identidade": "node --experimental-strip-types --env-file=.env scripts/cadastrar-identidade.ts",
+    "ensaio-juncao": "node --experimental-strip-types --env-file=.env scripts/ensaio-da-juncao.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",

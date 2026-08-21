@@ -79,7 +79,7 @@ Semáforo: 🟢 funciona e está provado · 🟡 existe e está bloqueado por in
 | 3 | Contrato e quem trouxe o cliente | 🔴 | **0 originadores** → **0 contratos** possíveis |
 | 4 | Usina, rateio e geração | 🟡 | rateio ✅ · **0 de 4** usinas com dono · **2 de 4** sem geração nenhuma |
 | 5 | **Receber a conta da distribuidora** | 🔴 | a leitura está **desligada em produção** |
-| 6 | Compor a fatura | 🟡 | **decidida e construída** — falta aplicar a migration 34 |
+| 6 | Compor a fatura | 🟢 | **decidida, construída, aplicada e provada** em 21/08 |
 | 7 | Emitir e entregar o documento | 🟡 | emissor **em branco**: sem razão social, sem CNPJ, sem logo |
 | 8 | Cobrar | 🟡 | Pix ✅ · boleto só importado à mão · falta o certificado A1 |
 | 9 | Receber e dar baixa | 🟡 | pronto, nunca exercitado — 0 liquidações |
@@ -386,9 +386,17 @@ pergunta de negócio legítima, e antes não tinha onde ser feita.
 repasse (`Q-DOCG3-11`) espera o aval do contador. Enquanto não vier, a repartição
 trata essa parte como repasse puro — que é o que o `PRD` §5.1 manda.
 
-**O que falta para isso rodar:** aplicar a migration 34. Enquanto ela não estiver
-no banco, a guarda de catálogo recusa nomeando e **o botão nem aparece** — a tela
-não oferece um ato que este banco ainda não sabe executar.
+**Aplicada e no ar em 21/08.** A migration passou pela guarda de identidade antes
+de discar, foi conferida **no catálogo** — coluna, FK composta e índice, os três
+presentes — e o deploy saiu na sequência.
+
+**E foi provada ponta a ponta**, o que o dado de produção não permitia: há zero
+contratos, e a fatura exige um. O `npm run ensaio-juncao` monta originador,
+contrato e conta lida como fixture, fatura contra o schema real, confere doze
+coisas e termina em **rollback** — a última verificação conta as tabelas depois da
+transação e falha se sobrar linha. **12 de 12, produção intacta.** O que ele
+provou e a suíte pura não podia: o `INSERT ... SELECT`, os três `JOIN`, os
+`CHECK` da tabela, a coluna gerada do total e a recusa do segundo clique.
 
 ### Onda 4 · Cobrar de verdade
 
