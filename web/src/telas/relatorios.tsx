@@ -55,7 +55,7 @@ export function TelaRelatorios() {
       <Bloco titulo="Repasse por dono de usina"
              nota="O que a G3 deve a quem é dono da usina, mês a mês."
              carga={repasses}
-             vazio="Nenhum repasse ainda — o split só roda quando uma fatura é liquidada (PRD 5.2)."
+             vazio="Nenhum repasse ainda — a divisão do dinheiro só acontece quando uma cobrança é paga."
              csv={{ assunto: 'repasses', mes, colunas: [
                { titulo: 'Dono', de: (r: Repasse) => r.dono },
                { titulo: 'Mes de referencia', de: (r: Repasse) => String(r.competencia).slice(0, 7) },
@@ -75,7 +75,7 @@ export function TelaRelatorios() {
       <Bloco titulo="Comissão por originador"
              nota="A parcela importa: o PRD §5.4 escalona a comissão na 1ª e na 2ª fatura cheia, e zero da 3ª em diante."
              carga={comissoes}
-             vazio="Nenhuma comissão ainda. Se houver liquidação e isto continuar vazio, o caminho a olhar é o contrato sem originador — a prontidão acusa (camada `originador_do_contrato`)."
+             vazio="Nenhuma comissão ainda. Se já houve pagamento e isto continua vazio, olhe se o contrato tem quem trouxe o cliente — a aba Pendências acusa."
              csv={{ assunto: 'comissoes', mes, colunas: [
                { titulo: 'Originador', de: (c: Comissao) => c.originador },
                { titulo: 'Mes de referencia', de: (c: Comissao) => String(c.competencia).slice(0, 7) },

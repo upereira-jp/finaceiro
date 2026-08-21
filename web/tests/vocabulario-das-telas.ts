@@ -109,6 +109,23 @@ const semIcones = (src: string): string =>
 const PROPS = [
   'titulo', 'sub', 'rotulo', 'rotuloTexto', 'rotuloAcessivel', 'dica', 'texto',
   'nome', 'placeholder', 'title', 'label', 'aria-label', 'primeira', 'confirmLabel',
+  /*
+   * `vazio` ENTROU EM 21/08/2026, e a ausencia dele tinha custo medido.
+   *
+   * E o texto que a tabela mostra quando NAO ha linha - ou seja, exatamente o
+   * que quem abre o sistema pela primeira vez le, porque no comeco toda tabela
+   * esta vazia. Ele nao estava na lista, e a varredura passava verde por cima de
+   * tres frases que a propria lista de proibidos condena:
+   *
+   *   usinas      "Sem regra de repasse - o split levanta."
+   *   relatorios  "...o split so roda quando uma fatura e liquidada (PRD 5.2)."
+   *   relatorios  "...a prontidao acusa (camada `originador_do_contrato`)."
+   *
+   * Duas com "split", uma com "prontidao", uma com "camada" e uma com nome de
+   * coluna. A licao e a de sempre neste projeto: a regra vale onde ela E MEDIDA,
+   * e uma propriedade fora da lista e uma regra que nao existe ali.
+   */
+  'vazio',
 ];
 
 /** (linha, texto) de tudo o que a tela EXIBE — as propriedades de rotulo e o

@@ -13,6 +13,7 @@ import {
   useOrdenacao, ordenar, contem, rotulo,
 } from '../ui.tsx';
 import { decimalTexto } from '../dinheiro.ts';
+import { divisaoEmPalavras, parteDaG3, parteDaG3ComComissao, comVirgula } from '../repasse-regras.ts';
 import { FILTROS_DA_TELA, filtroDaConsulta } from '../destino-da-camada.ts';
 
 export function TelaUsinas() {
@@ -124,7 +125,7 @@ export function TelaUsinas() {
         <div className="campos">
           <Campo rotulo="Usina" valor={sel} ao={setSel}
                  opcoes={todas.map((u) => ({ valor: u.id, texto: u.codigo_geradora }))} />
-          <Campo rotulo="Percentual" valor={pct} ao={setPct} dica="Ex. 70,00" />
+          <Campo rotulo="Percentual do dono" valor={pct} ao={setPct} dica="Ex. 70,00" />
           <Campo rotulo="Vigência a partir de" valor={inicio} ao={setInicio} tipo="date" />
           <div style={{ alignSelf: 'end' }}>
             <button className="primario" onClick={abrirVigencia} disabled={acao.ocupado || !sel}>
@@ -132,6 +133,24 @@ export function TelaUsinas() {
             </button>
           </div>
         </div>
+        {/* A OUTRA METADE DA FRASE. Quem digita 70 escreveu duas coisas — o que
+            vai para o dono e o que fica na casa —, e a tela só mostrava uma. O
+            número é derivado e nunca viaja para o servidor: guardar os dois seria
+            guardar a mesma informação duas vezes, e duas cópias divergem. */}
+        {divisaoEmPalavras(pct) && (
+          <p className="sub" style={{ marginTop: 12, marginBottom: 0 }}>
+            <strong>{divisaoEmPalavras(pct)}</strong> — fora o que vai para a Equatorial,
+            que é repassado inteiro e não entra nesta divisão.
+          </p>
+        )}
+        {parteDaG3ComComissao(pct, '25') && (
+          <p className="sub" style={{ marginTop: 8, marginBottom: 0 }}>
+            Nas <strong>duas primeiras cobranças cheias</strong> de cada contrato sobra{' '}
+            <strong>{comVirgula(parteDaG3ComComissao(pct, '25')!)}%</strong> para a casa, porque a
+            comissão de quem trouxe o cliente sai da mesma parte. É assim de propósito: o custo de
+            trazer o cliente aparece no começo, sem ser diluído.
+          </p>
+        )}
         <p className="sub" style={{ marginTop: 12, marginBottom: 0 }}>
           Vale o percentual que estava valendo <strong>no mês daquela cobrança</strong>, e não o percentual de hoje — renegociar agora não muda o que já foi cobrado.
           Não há “editar”: abrir uma vigência nova fecha a anterior na mesma transação.
@@ -139,11 +158,13 @@ export function TelaUsinas() {
       </div>
 
       {sel && (
-        <Tabela cabecalho={<><th>Percentual</th><th>Início</th><th>Fim</th></>}
-                vazio="Sem regra de repasse — o split levanta.">
+        <Tabela cabecalho={<><th>Do dono</th><th>Fica na casa</th><th>Início</th><th>Fim</th></>}
+                vazio="Nenhum percentual definido — sem ele o dinheiro entra e não tem como ser dividido.">
           {(repasses.dado ?? []).map((r) => (
             <tr key={r.id}>
-              <td className="num">{r.percentual}%</td>
+              <td className="num">{comVirgula(String(r.percentual))}%</td>
+              {/* Derivado na leitura tambem, e nao gravado: a coluna e uma so. */}
+              <td className="num fraco">{comVirgula(parteDaG3(String(r.percentual)) ?? '—')}%</td>
               <td className="fraco">{String(r.vigencia_inicio).slice(0, 10)}</td>
               <td className="fraco">{r.vigencia_fim ? String(r.vigencia_fim).slice(0, 10) : 'Em aberto'}</td>
             </tr>
