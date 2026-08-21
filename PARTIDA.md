@@ -10,6 +10,11 @@ a ordem em que preenchê-los, porque fechar um destrava o próximo.
 > dentro da **Ajuda** (o botão salva-vidas no alto da tela). Este arquivo existe
 > para quem precisa planejar antes de abrir o sistema.
 
+> **O processo inteiro, e não só a fila:** `PLANO-ciclo-do-cliente-2026-08-21.md`
+> mapeia as **12 fases** do cliente — de receber a conta da distribuidora até repartir
+> o dinheiro —, com o que foi medido em cada uma. Os seis cadastros abaixo são a
+> **onda 1** dele, e valem igual seja qual for a decisão da `Q-CICLO-01`.
+
 ---
 
 ## 0. O bloqueio que trava todos os outros

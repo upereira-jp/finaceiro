@@ -6,7 +6,7 @@
 | **O que é** | O **índice único** das pendências. Consolida e substitui os dois trackers datados que existiam soltos |
 | **Substitui e apaga** | `PENDENCIAS-2026-08-05.md` e `PROXIMOS-PASSOS-2026-08-09.md` — vencidos, e agora removidos do repo |
 | **NÃO substitui** | `QUESTOES.md` (registro datado, dono por entrada — regra 10) · `RETOMADA-2026-08-15.md` (onde tudo parou) · os `RESUMO-SESSAO-*` (memória datada). Estes continuam sendo a fonte; aqui é o **apontador** |
-| **Data** | 14/08/2026 · rev. 17/08/2026 · rev. 19/08/2026 |
+| **Data** | 14/08/2026 · rev. 17/08/2026 · rev. 19/08/2026 · rev. **21/08/2026** |
 | **Estado da suíte** | `npm test` **`EXIT=0`**, **2.057** verificações (eram ~1.911 em 14/08), com PostgreSQL real |
 | **Produção** | `financeiro.blackhaus.io` · `origin/main` em **`6f8aa46`** (deploy de 17/08 10:59 UTC) · **32 migrations no ar** (a 32 aplicada em 17/08 10:23 UTC) · Pix estático **e boleto importado** no ar · rótulos da barra revistos no mesmo deploy |
 
@@ -16,6 +16,20 @@
 > exatamente o que o A1 destrava.** Tudo o mais que era código a escrever foi escrito.
 > O restante desta lista **não é pendência de código** — é insumo da operação e
 > decisão com dono nomeado, e pela **regra 10** não é do implementador fechar.
+
+> ### 21/08/2026 — a frase acima continua verdadeira, e agora há uma decisão do mesmo tamanho ao lado dela
+>
+> A verificação ponta a ponta do **ciclo do cliente** — as 12 fases, do recebimento da
+> conta da distribuidora ao repasse — foi feita contra produção e está em
+> **`PLANO-ciclo-do-cliente-2026-08-21.md`**. Ela confirma o parágrafo acima
+> (**nenhuma das 12 fases está quebrada por defeito de código**) e acha uma bifurcação
+> que nunca foi decidida: **existem dois caminhos de fatura e eles não se encontram**.
+> O documento que o cliente recebe — o de 7 faixas — é o único dos dois que **não
+> consegue pagar o dono da usina**, porque não vira `fatura`, não vira liquidação e não
+> vira repartição.
+>
+> É decisão, não código, então pela regra 10 vale a mesma frase: não é do implementador
+> fechar. Registrada como **`Q-CICLO-01` 🔴** e mais quatro no `QUESTOES.md` §5.
 
 ---
 
