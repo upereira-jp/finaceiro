@@ -183,6 +183,20 @@ export type TermoDoGlossario = {
   /** A explicação, sem depender de outro termo do próprio glossário. */
   texto: string;
   busca: string[];
+  /**
+   * ONDE ISSO APARECE NA TELA — ao menos um, sempre.
+   *
+   * Acrescentado em 21/08/2026, com o pedido de que a central *«sempre devolva o
+   * possível link de rota»*. Antes, quem buscasse «rateio» recebia a definição e
+   * parava ali: entendia a palavra e continuava sem saber onde mexer nela. Uma
+   * definição sem endereço é meio caminho, e meio caminho num sistema sem
+   * suporte é a pessoa perguntando a próxima coisa a ninguém.
+   *
+   * O tipo é o mesmo `Caminho` de `ajuda.ts`, mas escrito aqui como literal para
+   * este módulo não importar aquele — a dependência corre no sentido contrário,
+   * e invertê-la faria um ciclo.
+   */
+  caminhos: ReadonlyArray<{ rota: string; rotulo: string; tipo: 'resolver' | 'ver' }>;
 };
 
 export const GLOSSARIO: readonly TermoDoGlossario[] = [
@@ -192,18 +206,21 @@ export const GLOSSARIO: readonly TermoDoGlossario[] = [
       + 'vem impresso na conta de energia. Um mesmo cliente pode ter mais de uma.',
     busca: ['uc', 'unidade', 'unidade consumidora', 'ponto de luz', 'conta de luz', 'energia',
             'numero da conta', 'instalacao', 'imovel', 'casa', 'loja'],
+    caminhos: [{ rota: '/unidades', rotulo: 'Ver as unidades', tipo: 'ver' }],
   },
   {
     termo: 'Mês de referência',
     texto: 'O mês a que a cobrança se refere. A conta de agosto cobra a energia de agosto, mesmo '
       + 'que ela seja paga em setembro. No sistema aparece como «competência» em alguns lugares.',
     busca: ['mes', 'mes de referencia', 'competencia', 'periodo', 'qual mes', 'mes errado'],
+    caminhos: [{ rota: '/pendencias', rotulo: 'Escolher o mês em Pendências', tipo: 'ver' }],
   },
   {
     termo: 'Fatia do cliente (rateio)',
     texto: 'A parte da energia de uma usina que é daquele cliente, em percentual. É o que permite '
       + 'calcular o desconto dele no fim do mês.',
     busca: ['rateio', 'fatia', 'percentual', 'porcentagem', 'divisao da usina', 'quanto e do cliente'],
+    caminhos: [{ rota: '/unidades?pendencia=sem_usina', rotulo: 'Preencher a fatia', tipo: 'resolver' }],
   },
   {
     termo: 'Repasse ao dono da usina',
@@ -211,24 +228,31 @@ export const GLOSSARIO: readonly TermoDoGlossario[] = [
       + 'para quem trouxe o cliente e o resto fica com a G3. Essa divisão é o repasse.',
     busca: ['repasse', 'split', 'divisao', 'dividir o dinheiro', 'quanto o dono recebe',
             'pagar o dono', 'reparticao', 'repartir'],
+    caminhos: [
+      { rota: '/usinas', rotulo: 'Definir o percentual do dono', tipo: 'resolver' },
+      { rota: '/contas-a-pagar', rotulo: 'Ver o que já é devido', tipo: 'ver' },
+    ],
   },
   {
     termo: 'Quem trouxe o cliente (originador)',
     texto: 'A pessoa ou parceiro que indicou aquele cliente e recebe comissão por isso. Fica '
       + 'gravado no contrato e não muda depois que o contrato é criado.',
     busca: ['originador', 'quem trouxe', 'indicacao', 'indicou', 'comissao', 'parceiro', 'vendedor'],
+    caminhos: [{ rota: '/contratos', rotulo: 'Ver nos contratos', tipo: 'ver' }],
   },
   {
     termo: 'Preço do kWh (tarifa)',
     texto: 'Quanto custa cada kWh de energia daquela unidade. Varia de cliente para cliente, e é '
       + 'por ele que a energia gerada vira valor em reais na cobrança.',
     busca: ['tarifa', 'preco do kwh', 'kwh', 'valor da energia', 'preco da energia', 'quanto custa'],
+    caminhos: [{ rota: '/unidades?pendencia=sem_tarifa', rotulo: 'Preencher o preço do kWh', tipo: 'resolver' }],
   },
   {
     termo: 'Contrato ativo',
     texto: 'O contrato precisa estar ativo para a unidade ser cobrada. Ele só ativa depois que o '
       + 'CPF ou CNPJ do cliente estiver confirmado aqui no sistema.',
     busca: ['contrato', 'contrato ativo', 'ativar contrato', 'rascunho', 'nao ativa'],
+    caminhos: [{ rota: '/contratos', rotulo: 'Abrir Contratos', tipo: 'resolver' }],
   },
   {
     termo: 'Documento confirmado',
@@ -237,5 +261,40 @@ export const GLOSSARIO: readonly TermoDoGlossario[] = [
       + 'É esse ato que libera o contrato.',
     busca: ['documento', 'cpf', 'cnpj', 'confirmar documento', 'validar', 'nao vale',
             'documento do crm', 'sugestao'],
+    caminhos: [{ rota: '/clientes?pendencia=nao_validado', rotulo: 'Confirmar o documento', tipo: 'resolver' }],
+  },
+  {
+    termo: 'Ensaio',
+    texto: 'A simulação do faturamento: mostra quem entraria no mês e quem ficaria de fora, com o '
+      + 'motivo de cada recusa, e não grava nada. Rodar quantas vezes quiser não cobra ninguém.',
+    busca: ['ensaio', 'simular', 'simulacao', 'teste', 'ensaiar', 'sem gravar', 'sem valer'],
+    caminhos: [{ rota: '/carteira', rotulo: 'Rodar o ensaio', tipo: 'resolver' }],
+  },
+  {
+    termo: 'Baixa',
+    texto: 'Registrar que o cliente pagou aquela fatura. É o ato que dispara a divisão do dinheiro: '
+      + 'a parte do dono da usina e a comissão de quem indicou só nascem depois dele.',
+    /* «pagou» e «recebido» ficam DE FORA, e não por descuido: o assunto «O
+     * cliente pagou. Como dou baixa?» já responde a essas duas com passos, e um
+     * verbete que casa a mesma frase apareceria embaixo dele definindo o que a
+     * resposta acabou de explicar. O glossário define a PALAVRA que alguém não
+     * conhece; quem escreve «pagou» não está pedindo definição. */
+    busca: ['baixa', 'dar baixa', 'baixar fatura', 'quitado', 'liquidar', 'baixa da fatura'],
+    caminhos: [{ rota: '/faturas', rotulo: 'Dar baixa numa fatura', tipo: 'resolver' }],
+  },
+  {
+    termo: 'Fatura unificada',
+    texto: 'A folha que o cliente recebe, juntando a conta da distribuidora com a cobrança da G3 num '
+      + 'papel só. Ela não cria a cobrança nem recebe dinheiro — só apresenta.',
+    busca: ['fatura unificada', 'folha', 'papel do cliente', 'documento do cliente', 'unificada',
+            'conta junta'],
+    caminhos: [{ rota: '/documento', rotulo: 'Abrir Fatura unificada', tipo: 'resolver' }],
+  },
+  {
+    termo: 'Empresa selecionada',
+    texto: 'O sistema mostra os dados de uma empresa por vez, e o nome dela fica no alto à direita. '
+      + 'Número que parece errado costuma ser a empresa errada escolhida ali.',
+    busca: ['empresa', 'trocar empresa', 'tenant', 'qual empresa', 'empresa errada', 'razao social'],
+    caminhos: [{ rota: '/pendencias', rotulo: 'Conferir o que falta nela', tipo: 'ver' }],
   },
 ];

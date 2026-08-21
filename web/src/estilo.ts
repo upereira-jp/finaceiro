@@ -193,6 +193,82 @@ export const ESTILO = `
   .menu-painel .quem strong { display: block; font-size: 13.5px; }
   .menu-painel .quem span { font-size: 12px; color: var(--fraco); }
 
+  /* ------------------------------------------- o gatilho da central de ajuda
+     O BOTAO DESCEU DA BARRA DO TOPO PARA O CANTO INFERIOR DIREITO em 21/08/2026,
+     por pedido do dono. O motivo inteiro esta no cabecalho de ajuda-gatilho.tsx; o que
+     importa aqui e a mecanica:
+
+       z-index 30    acima do conteudo e do menu da conta, ABAIXO do veu do
+                     painel (40) e do painel (41). Aberto o painel, o botao
+                     continua no DOM — sumir com ele largaria o foco do teclado
+                     no nada — e some sob o veu, que e o comportamento normal de
+                     tudo que fica atras de um dialogo;
+       bottom 22px   o .conteudo ja reservava 80px de respiro no rodape, entao
+                     o botao nao tapa a ultima linha de nenhuma tabela;
+       primario      herda o laranja da marca, o brilho do hover e a expansao do
+                     clique do resto do sistema. Ver o cabecalho do componente. */
+  .ajuda-gatilho {
+    position: fixed; right: 22px; bottom: 22px; z-index: 30;
+    width: 54px; height: 54px; padding: 0;
+    border-radius: var(--raio-pilula);
+    box-shadow: var(--sombra-3);
+  }
+  .ajuda-gatilho:hover:not(:disabled) { box-shadow: var(--sombra-forte); }
+
+  /* O BALAO DE PRIMEIRA VISITA. Um icone sozinho num canto e mudo, e quem entra
+     pela primeira vez nao tem por que saber que aquele desenho responde
+     perguntas. NAO E MODAL de proposito: nao escurece a tela, nao prende foco e
+     nao impede clicar em nada atras — um aviso que interrompe o trabalho para
+     dizer "existe ajuda" e o contrario de ajudar. */
+  .ajuda-balao {
+    position: fixed; right: 22px; bottom: 100px; z-index: 31;
+    width: min(258px, calc(100vw - 40px));
+    padding: 11px 26px 12px 13px;
+    background: var(--fundo); color: var(--texto);
+    border: 1px solid var(--borda); border-radius: var(--raio-cartao);
+    box-shadow: var(--sombra-3);
+    animation: ajuda-subir .32s ease-out both;
+    /* A ORIGEM E O CANTO DE BAIXO A DIREITA, que e onde o botao esta: e o que
+       faz o balao parecer SUBIR DELE em vez de aparecer solto no ar. */
+    transform-origin: bottom right;
+  }
+  .ajuda-balao strong { display: block; font-size: 13.5px; }
+  .ajuda-balao p { margin: 3px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--fraco); }
+  /* O "x" BEM PEQUENO, no canto superior direito — pedido ao pe da letra. Mesmo
+     pequeno ele tem 20px de alvo e nome acessivel: um alvo minusculo sem nome e
+     enfeite, nao botao de fechar. */
+  .ajuda-balao-x {
+    position: absolute; top: 3px; right: 3px;
+    width: 20px; height: 20px; padding: 0; flex: none;
+    border-radius: var(--raio-pilula); border-color: transparent;
+    background: none; box-shadow: none; color: var(--fraco);
+  }
+  .ajuda-balao-x:hover:not(:disabled) {
+    background: var(--fundo-hover); color: var(--texto);
+    border-color: transparent; transform: none; box-shadow: none;
+  }
+
+  /* AS DUAS BOLHAS DO PENSAMENTO, ligando o botao ao balao. Elas sobem em ordem,
+     da menor (junto do botao) para a maior (junto do balao) — e o atraso e o que
+     desenha o movimento de subida em vez de tres coisas piscando juntas.
+
+     ELAS SAO LARANJA E NAO BRANCAS, e isto foi MEDIDO num render de verdade: com
+     a cor do balao, duas bolinhas de 8 e 12px ficavam brancas sobre o creme da
+     pagina e dentro da sombra do proprio balao — invisiveis. A convencao do
+     quadrinho diz que a cauda e da cor do balao; aqui a cauda tinha de ser vista,
+     e a cor do BOTAO diz melhor o que ela quer dizer: isto sobe DALI. */
+  .ajuda-bolha {
+    position: fixed; z-index: 31; display: block;
+    background: var(--acento); border-radius: var(--raio-pilula);
+    animation: ajuda-subir .3s ease-out both;
+  }
+  .ajuda-bolha-1 { right: 40px; bottom: 79px; width: 8px; height: 8px; animation-delay: .05s; }
+  .ajuda-bolha-2 { right: 32px; bottom: 88px; width: 12px; height: 12px; animation-delay: .13s; }
+
+  @keyframes ajuda-subir {
+    from { opacity: 0; transform: translateY(10px) scale(.92); }
+  }
+
   /* ------------------------------------------------------ central de ajuda
      Painel que abre POR CIMA e nao uma tela: quem trava no meio de um cadastro
      nao pode perder o lugar (e o filtro) para ler como preencher.
@@ -259,6 +335,18 @@ export const ESTILO = `
      na uniao fechada para dizer a mesma coisa. */
   .ajuda-ir .ic { transform: rotate(-90deg); }
 
+  /* O CAMINHO DE "VER" E MAIS LEVE QUE O DE "RESOLVER", e a diferenca nao e
+     decoracao: um leva ao formulario onde o dado ENTRA, o outro a tela onde ele
+     so APARECE. Pintar os dois iguais mandaria alguem procurar em Usinas um
+     campo de energia gerada que nao existe la - nem em lugar nenhum, porque
+     aquele numero e espelhado do CRM. */
+  .ajuda-ir-ver { color: var(--fraco); font-weight: 550; }
+  .ajuda-ir-ver:hover { color: var(--acento-forte); }
+
+  /* Os botoes de caminho quebram linha em vez de esticarem a coluna: um rotulo
+     como "Antes: confirmar o CPF ou CNPJ" nao cabe ao lado de outro em 460px. */
+  .ajuda-caminhos { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+
   .ajuda-tudo-certo {
     display: flex; align-items: center; gap: 8px;
     font-size: 13px; color: var(--ok); margin: 0;
@@ -268,8 +356,16 @@ export const ESTILO = `
      propria pergunta abre uma, e nao le quatro. */
   .ajuda-topico { border-bottom: 1px solid var(--borda-suave); }
   .ajuda-topico:last-child { border-bottom: 0; }
+  /* O 'justify-content: flex-start' NAO E REDUNDANTE com o 'text-align: left', e a
+     falta dele foi um defeito de verdade, achado fotografando o painel em
+     21/08: a regra base de 'button' e 'justify-content: center', e um flex
+     centrado empurra a linha inteira para o meio. O 'text-align' so governa o
+     texto DENTRO da caixa; quem posiciona a caixa e o flex. O resultado eram sete
+     perguntas comecando cada uma num recuo diferente, conforme o comprimento —
+     numa lista feita para ser VARRIDA, que e o pior lugar para isso. */
   .ajuda-pergunta {
-    display: flex; align-items: flex-start; gap: 8px; width: 100%;
+    display: flex; align-items: flex-start; justify-content: flex-start;
+    gap: 8px; width: 100%;
     padding: 10px 2px; border: 0; background: none; box-shadow: none;
     color: var(--texto); font: inherit; font-size: 13.5px; font-weight: 600;
     text-align: left; cursor: pointer;
@@ -1186,7 +1282,15 @@ export const ESTILO = `
     *, *::before, *::after {
       animation-duration: .001ms !important;
       animation-iteration-count: 1 !important;
+      /* O ATRASO TAMBEM, e este furo so apareceu em 21/08 porque ate entao
+         nenhuma animacao do arquivo tinha atraso. As duas bolhas do balao de
+         ajuda tem, e o efeito de zerar a DURACAO sem zerar o ATRASO e cruel: com
+         'fill-mode: both' o elemento segura o estado inicial - opacidade zero -
+         durante todo o atraso e so entao aparece. Quem pediu menos movimento
+         recebia um elemento invisivel por 130ms, que e movimento na mesma. */
+      animation-delay: 0s !important;
       transition-duration: .001ms !important;
+      transition-delay: 0s !important;
       scroll-behavior: auto !important;
     }
   }

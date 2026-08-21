@@ -4,13 +4,13 @@
 // ============================================================================
 // POR QUE ESTE ARQUIVO SE SEPAROU DO `ajuda-painel.tsx` EM 21/08/2026
 //
-// O painel inteiro era um componente só: ele buscava a prontidão com `useDados`
-// e desenhava o resultado. Isso o tornava IMPOSSÍVEL de renderizar num teste — a
-// busca acontece dentro de um `useEffect`, e `renderToStaticMarkup` não roda
-// efeito nenhum. Qualquer render de teste pararia para sempre em «Conferindo…»,
-// e o que precisa de prova é justamente o resto: a lista de pendências com o
-// número dentro da frase, os botões que levam a algum lugar, o vazio que não é
-// um beco.
+// O painel inteiro era um componente só: ele buscava o relatório do mês com
+// `useDados` e desenhava o resultado. Isso o tornava IMPOSSÍVEL de renderizar num
+// teste — a busca acontece dentro de um `useEffect`, e `renderToStaticMarkup` não
+// roda efeito nenhum. Qualquer render de teste pararia para sempre em
+// «Conferindo…», e o que precisa de prova é justamente o resto: a lista de
+// pendências com o número dentro da frase, os botões que levam a algum lugar, o
+// vazio que não é um beco.
 //
 // A DIVISÃO NÃO É INVENÇÃO PARA O TESTE, e é a que o projeto já pratica: as
 // regras de cada tela moram em `*-regras.ts` fora do `.tsx` porque o runner do
@@ -19,15 +19,30 @@
 // propriedade. O teste passa a poder montar qualquer estado sem rede, sem
 // relógio e sem banco.
 //
-// Ganho que não era o objetivo e veio junto: o estado de falha da busca deixou
-// de ser invisível. Com o dado chegando por propriedade, «não consegui conferir
-// o mês» é um caso desenhado e testado como os outros.
+// ============================================================================
+// A REGRA DE DESENHO DESTE ARQUIVO: NENHUMA SEÇÃO TERMINA SEM UM BOTÃO
+//
+// A central passou a prometer que toda resposta acaba num clique, e a promessa
+// se cumpre ou se perde AQUI — `ajuda.ts` pode devolver caminhos impecáveis e um
+// `&&` mal colocado esconder todos. Por isso cada seção desenhada abaixo tem o
+// seu par no `caso-render.tsx`, medindo o HTML montado:
+//
+//   o assunto        desenha TODOS os `caminhos` do tópico, e não só o primeiro:
+//                    «como emito o boleto» precisa da tela da fatura E da tela do
+//                    banco, porque a resposta atravessa as duas;
+//   o verbete        ganhou botão em 21/08. Antes ele definia a palavra e parava
+//                    ali — meio caminho, que num sistema sem suporte é a pessoa
+//                    perguntando a próxima coisa a ninguém;
+//   o vazio          admite que não achou e, na mesma seção, oferece as telas que
+//                    a pergunta parecia citar e os assuntos do primeiro dia;
+//   a pendência      quando não tem tela de preenchimento, leva à tela onde
+//                    aquilo pelo menos APARECE, com o rótulo dizendo isso.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icone, Carregando, Busca } from './ui.tsx';
 import {
-  buscar, buscarTermos, topicosDaTela, topicosComuns,
-  type Topico, type PassoDoEstado,
+  responder, topicosDaTela, topicosComuns, TOPICOS,
+  type Caminho, type Topico, type PassoDoEstado,
 } from './ajuda.ts';
 import { EFEITO } from './vocabulario.ts';
 
@@ -48,17 +63,17 @@ export type CorpoDaAjuda = {
   /** Só o teste usa: monta o painel já com uma busca digitada, para o estado de
    *  resultado poder ser desenhado sem simular teclado. */
   consultaInicial?: string;
+  /** Só o teste usa: monta o painel com a lista completa de assuntos já aberta. */
+  tudoInicial?: boolean;
 };
 
 export function CorpoDaAjuda(p: CorpoDaAjuda) {
   const [consulta, setConsulta] = useState(p.consultaInicial ?? '');
+  const [tudo, setTudo] = useState(p.tudoInicial ?? false);
   const caixa = useRef<HTMLDivElement>(null);
 
-  const achados = useMemo(() => buscar(consulta), [consulta]);
-  const termos = useMemo(() => buscarTermos(consulta), [consulta]);
-
   const buscando = consulta.trim().length >= 2;
-  const semResultado = buscando && achados.length === 0 && termos.length === 0;
+  const r = useMemo(() => responder(consulta), [consulta]);
 
   const daTela = useMemo(() => topicosDaTela(p.rota), [p.rota]);
   const comuns = useMemo(() => topicosComuns(), []);
@@ -122,33 +137,62 @@ export function CorpoDaAjuda(p: CorpoDaAjuda) {
           )}
 
           {/* ------------------------------------------------------- a busca */}
-          {buscando && achados.length > 0 && (
+          {buscando && r.achados.length > 0 && (
             <section className="ajuda-secao">
-              <h3>{achados.length === 1 ? 'Isto responde' : 'Isto pode responder'}</h3>
-              {achados.slice(0, 4).map(({ topico }) => (
-                <CartaoDeTopico key={topico.id} topico={topico} ir={p.ir} aberto={achados.length === 1} />
+              <h3>{r.achados.length === 1 ? 'Isto responde' : 'Isto pode responder'}</h3>
+              {/*
+                O PRIMEIRO RESULTADO VEM ABERTO, e não só quando ele é o único —
+                mudou em 21/08 e foi o teste de renderização que cobrou.
+
+                Fechados, os assuntos escondem os `caminhos` DENTRO deles: a
+                busca acertava a resposta e o botão que resolve ficava atrás de
+                um clique que ninguém pediu. Numa central cuja promessa é
+                terminar num clique, esconder justamente o clique é o defeito
+                mais caro possível.
+
+                Os DEMAIS continuam fechados, e é o mesmo argumento de sempre: a
+                lista precisa ser varrível. Abrir o mais provável e deixar as
+                alternativas em título é o que faz ler quatro linhas em vez de
+                quatro parágrafos.
+              */}
+              {r.achados.slice(0, 4).map(({ topico }, i) => (
+                <CartaoDeTopico key={topico.id} topico={topico} ir={p.ir} aberto={i === 0} />
               ))}
             </section>
           )}
 
-          {buscando && termos.length > 0 && (
+          {buscando && r.termos.length > 0 && (
             <section className="ajuda-secao">
               <h3>O que a palavra quer dizer</h3>
-              {termos.slice(0, 3).map((t) => (
+              {r.termos.slice(0, 3).map((t) => (
                 <div key={t.termo} className="ajuda-termo">
                   <strong>{t.termo}</strong>
                   <p>{t.texto}</p>
+                  {/* O VERBETE TAMBÉM LEVA A ALGUM LUGAR. Definir a palavra e
+                      parar era responder metade: quem descobriu o que é «fatia
+                      do cliente» quer, no ato seguinte, ir onde ela se preenche. */}
+                  <Caminhos caminhos={t.caminhos} ir={p.ir} />
                 </div>
               ))}
             </section>
           )}
 
-          {semResultado && (
+          {buscando && r.palpite && (
             <section className="ajuda-secao">
-              {/* NUNCA um beco: a busca não achou, e a resposta é a lista das
-                  perguntas do primeiro dia — não uma mensagem de erro. */}
+              {/* NUNCA um beco: a busca não achou, e a resposta é uma admissão
+                  seguida de saídas — a tela que a pergunta parecia citar e as
+                  perguntas do primeiro dia. Não uma mensagem de erro. */}
               <h3>Não achei isso. Talvez seja um destes</h3>
-              {comuns.map((t) => <CartaoDeTopico key={t.id} topico={t} ir={p.ir} />)}
+              {/* A SAÍDA VEM ANTES DAS SUGESTÕES, e não depois: quem digitou o
+                  nome de uma tela quer aquela tela, e ler quatro perguntas de
+                  outro assunto primeiro é o custo de uma busca que errou. */}
+              <p className="fraco ajuda-nota">
+                {r.citou
+                  ? 'Se você estava procurando uma tela:'
+                  : 'Se nada aqui embaixo servir, comece por aqui:'}
+              </p>
+              <Caminhos caminhos={r.telas} ir={p.ir} />
+              {r.sugestoes.map((t) => <CartaoDeTopico key={t.id} topico={t} ir={p.ir} />)}
             </section>
           )}
 
@@ -167,9 +211,52 @@ export function CorpoDaAjuda(p: CorpoDaAjuda) {
                 .map((t) => <CartaoDeTopico key={t.id} topico={t} ir={p.ir} />)}
             </section>
           )}
+
+          {/*
+            TODOS OS ASSUNTOS, atrás de um clique.
+
+            Existe para quem NÃO CONSEGUE FORMULAR a pergunta — e essa pessoa
+            existe: é a mesma que, sem ajuda nenhuma, ficaria parada. Buscar exige
+            saber a palavra; varrer uma lista, não. Fica fechado porque a lista é
+            longa e quem sabe perguntar não precisa dela.
+          */}
+          {!buscando && (
+            <section className="ajuda-secao">
+              <button type="button" className="ajuda-pergunta" aria-expanded={tudo}
+                      onClick={() => setTudo((v) => !v)}>
+                <Icone nome={tudo ? 'subir' : 'descer'} tamanho={13} peso="bold" />
+                Ver todos os assuntos ({TOPICOS.length})
+              </button>
+              {tudo && TOPICOS.map((t) => <CartaoDeTopico key={t.id} topico={t} ir={p.ir} />)}
+            </section>
+          )}
         </div>
       </aside>
     </>
+  );
+}
+
+/**
+ * OS BOTÕES DE «PARA ONDE IR» — a peça que cumpre a promessa da central.
+ *
+ * O `tipo` decide o texto do ícone e o peso visual, e a distinção é honesta e não
+ * decorativa: `resolver` é onde o dado ENTRA; `ver` é onde ele só APARECE. Pintar
+ * os dois iguais mandaria alguém procurar em Usinas um campo de energia gerada
+ * que não existe lá — e não existe em lugar nenhum, porque aquele número é
+ * espelhado do CRM.
+ */
+export function Caminhos({ caminhos, ir }: { caminhos: readonly Caminho[]; ir: (d: string) => void }) {
+  if (caminhos.length === 0) return null;
+  return (
+    <div className="ajuda-caminhos">
+      {caminhos.map((c) => (
+        <button key={c.rota + c.rotulo} type="button"
+                className={c.tipo === 'ver' ? 'ajuda-ir ajuda-ir-ver' : 'ajuda-ir'}
+                onClick={() => ir(c.rota)}>
+          {c.rotulo} <Icone nome="descer" tamanho={13} peso="bold" />
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -182,26 +269,33 @@ export function CorpoDaAjuda(p: CorpoDaAjuda) {
  * viraria ruído e ninguém leria a nona.
  */
 export function LinhaDoEstado({ passo, ir }: { passo: PassoDoEstado; ir: (d: string) => void }) {
+  const resolve = passo.caminho?.tipo === 'resolver';
   return (
     <li>
       <span className="ajuda-frase">{passo.frase}</span>
       {passo.efeito === 'bloqueia_split' && (
         <span className="ajuda-efeito">{EFEITO.bloqueia_split!.curto}</span>
       )}
-      {passo.destino
-        ? <button type="button" className="ajuda-ir" onClick={() => ir(passo.destino!)}>
-            Resolver <Icone nome="descer" tamanho={13} peso="bold" />
-          </button>
-        : passo.topico && (
-            <span className="fraco" style={{ fontSize: 12 }}>{passo.topico.resposta}</span>
-          )}
+      {/* A EXPLICAÇÃO SÓ ENTRA QUANDO NÃO HÁ ONDE RESOLVER. Ela responde a
+          pergunta que a linha levanta — «por que não tem botão de arrumar?» — e
+          ao lado de um botão «Resolver» seria texto para ninguém. */}
+      {!resolve && passo.topico && (
+        <span className="fraco" style={{ fontSize: 12 }}>{passo.topico.resposta}</span>
+      )}
+      {passo.caminho && (
+        <button type="button"
+                className={resolve ? 'ajuda-ir' : 'ajuda-ir ajuda-ir-ver'}
+                onClick={() => ir(passo.caminho!.rota)}>
+          {passo.caminho.rotulo} <Icone nome="descer" tamanho={13} peso="bold" />
+        </button>
+      )}
     </li>
   );
 }
 
-/** Um assunto: a pergunta, a resposta em uma frase e os passos. Fechado por
- *  padrão porque a lista precisa ser varrível — quem reconhece a própria
- *  pergunta abre uma, e não lê quatro. */
+/** Um assunto: a pergunta, a resposta em uma frase, os passos e para onde ir.
+ *  Fechado por padrão porque a lista precisa ser varrível — quem reconhece a
+ *  própria pergunta abre uma, e não lê quatro. */
 export function CartaoDeTopico(
   { topico, ir, aberto = false }: { topico: Topico; ir: (d: string) => void; aberto?: boolean },
 ) {
@@ -219,11 +313,7 @@ export function CartaoDeTopico(
         <div className="ajuda-resposta">
           <p>{topico.resposta}</p>
           <ol>{topico.passos.map((x, i) => <li key={i}>{x}</li>)}</ol>
-          {topico.destino && (
-            <button type="button" className="ajuda-ir" onClick={() => ir(topico.destino!)}>
-              Ir para lá <Icone nome="descer" tamanho={13} peso="bold" />
-            </button>
-          )}
+          <Caminhos caminhos={topico.caminhos} ir={ir} />
         </div>
       )}
     </div>

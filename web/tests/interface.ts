@@ -234,6 +234,23 @@ chk('I3c', /transition-duration:\s*\.?0*1?m?s\s*!important/.test(bloqueio),
 chk('I3d', /\*,\s*\*::before,\s*\*::after/.test(bloqueio),
     'e alcanca `*` com os dois pseudo-elementos — o brilho e a ondulacao do botao vivem em ::after e ::before');
 
+/*
+ * I3e — E ZERA O ATRASO, e nao so a duracao.
+ *
+ * O furo so ficou visivel em 21/08/2026, quando entrou a primeira animacao COM
+ * atraso do arquivo (as duas bolhas do balao de ajuda). Zerar a duracao sem
+ * zerar o atraso e cruel de um jeito silencioso: com `animation-fill-mode: both`
+ * o elemento segura o estado inicial — que costuma ser opacidade zero — durante
+ * todo o atraso, e so entao aparece. Quem pediu MENOS movimento recebia um
+ * elemento surgindo na tela 130ms depois, que e movimento na mesma.
+ *
+ * Vale para transicao pelo mesmo motivo, e o custo de afirmar as duas e zero.
+ */
+chk('I3e', /animation-delay:\s*0s?\s*!important/.test(bloqueio)
+        && /transition-delay:\s*0s?\s*!important/.test(bloqueio),
+    'e zera o ATRASO de animacao e de transicao — sem isso, o estado inicial invisivel fica '
+    + 'segurado durante o atraso e o movimento volta pela porta dos fundos');
+
 // ------------------------------------------------------- I4 a barra de navegacao
 
 /* DOZE desde 14/08/2026 - "Tarifas" SAIU, por decisao do dono ("ela ja nao

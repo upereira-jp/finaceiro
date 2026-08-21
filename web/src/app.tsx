@@ -29,6 +29,7 @@ import {
 } from './ui.tsx';
 import { useCaminho, Ligacao } from './rota.tsx';
 import { TELAS, telaDoCaminho, inicioDoGrupoDinheiro } from './navegacao.ts';
+import { GatilhoDeAjuda } from './ajuda-gatilho.tsx';
 import { Login } from './telas/login.tsx';
 /*
  * ============================================================================
@@ -76,6 +77,36 @@ const TelaContasAPagar = lazy(() => import('./telas/contas-a-pagar.tsx').then((m
  */
 const PainelDeAjuda = lazy(() => import('./ajuda-painel.tsx').then((m) => ({ default: m.PainelDeAjuda })));
 
+/*
+ * ============================================================================
+ * O BALAO DE PRIMEIRA VISITA — a marca que o faz aparecer UMA vez.
+ *
+ * Pedido do dono em 21/08: *"sempre que o computador fizer o login pela primeira
+ * vez no sistema, deve aparecer uma mensagem indicando onde fica a central de
+ * ajuda"*. "O computador" e a leitura literal e a certa: a marca vive no
+ * navegador daquela maquina, e nao no perfil da pessoa no servidor.
+ *
+ * POR QUE NAO NO SERVIDOR: guardar isto no perfil custaria uma coluna, uma rota
+ * e uma escrita — para uma dica de interface. E ficaria PIOR: quem entra de uma
+ * maquina nova, onde o botao esta num canto que ela nunca viu, e exatamente quem
+ * precisa da dica, e o perfil diria que ela ja foi vista.
+ *
+ * O `try` NAO E PARANOIA: navegador em janela anonima com armazenamento
+ * bloqueado LANCA ao ler `localStorage`, e uma dica de ajuda derrubando a
+ * aplicacao inteira seria o contrario do proposito. Falhou a leitura, o balao
+ * aparece (o estado em memoria cuida de nao repetir dentro da sessao); falhou a
+ * escrita, nao acontece nada.
+ */
+const CHAVE_AVISO = 'financeiro.ajuda.apresentada';
+
+const avisoJaVisto = (): boolean => {
+  try { return localStorage.getItem(CHAVE_AVISO) === '1'; } catch { return false; }
+};
+
+const marcarAvisoVisto = (): void => {
+  try { localStorage.setItem(CHAVE_AVISO, '1'); } catch { /* sem armazenamento, sem marca */ }
+};
+
 /**
  * Rota -> componente. `Record` sobre as rotas de `navegacao.ts`, então uma tela
  * nova sem render aqui **não compila** — é o mesmo mecanismo que garante que todo
@@ -100,6 +131,14 @@ export function App() {
   const s = useSessao();
   const caminho = useCaminho();
   const [ajudaAberta, setAjudaAberta] = useState(false);
+  // Lido UMA vez, na montagem: reler a cada desenho faria o balao piscar de volta
+  // entre o clique e a gravacao.
+  const [avisoDaAjuda, setAvisoDaAjuda] = useState(() => !avisoJaVisto());
+
+  /** Fechar no «x» e abrir a ajuda dao o mesmo resultado: o aviso ja cumpriu o
+   *  que tinha para dizer, e insistir depois disso e o que transforma uma dica em
+   *  incomodo. */
+  const encerrarAviso = () => { setAvisoDaAjuda(false); marcarAvisoVisto(); };
 
   if (s.carregando) {
     return <><style>{ESTILO}</style><div className="conteudo"><Carregando /></div></>;
@@ -160,19 +199,14 @@ export function App() {
             )}
 
             {/*
-              A AJUDA FICA NA BARRA E NAO NA NAVEGACAO, e a distincao e a mesma
-              que separa os dois grupos de telas: aquela lista e a ORDEM DO
-              TRABALHO — o que fechar primeiro para a fatura existir —, e ajuda
-              nao e uma etapa do trabalho. Aqui ela esta em toda tela, ao lado da
-              conta, e nao empurra uma decima terceira aba para dentro de uma
-              ordem que foi escolhida linha a linha.
+              O GATILHO DA AJUDA SAIU DAQUI EM 21/08/2026 e foi para o canto
+              inferior direito, por pedido do dono. O argumento que o mantinha
+              fora da NAVEGACAO continua igual — aquela lista e a ordem do
+              trabalho, e ajuda nao e etapa do trabalho —, mas a barra de sessao
+              tambem nao era o lugar: ali ele se lia como mais um controle de
+              conta, ao lado de empresa e tema, e nao como socorro. O motivo
+              inteiro esta no cabecalho de `ajuda-gatilho.tsx`.
             */}
-            <button type="button" className="so-icone" onClick={() => setAjudaAberta(true)}
-                    title="Ajuda" aria-label="Abrir a central de ajuda"
-                    aria-haspopup="dialog" aria-expanded={ajudaAberta}>
-              <Icone nome="ajuda" tamanho={18} />
-            </button>
-
             <Menu rotulo="Conta e aparência"
                   gatilho={<><Icone nome="usuario" tamanho={18} />
                              <span className="so-largo">{s.sessao?.nome}</span></>}>
@@ -225,6 +259,23 @@ export function App() {
           </Suspense>
         )}
       </main>
+
+      {/*
+        O BOTAO DA AJUDA, no canto inferior direito, e o balao que ensina que ele
+        existe. Ele NAO e `lazy`: precisa estar em toda tela desde o primeiro
+        desenho, porque quem trava nao sabe que vai travar. O que chega sob
+        demanda e o painel — a base de assuntos e o glossario inteiro.
+
+        O BALAO SO APARECE COM EMPRESA ESCOLHIDA. Sem ela a tela ja mostra um
+        aviso pedindo para escolher, e dois avisos ao mesmo tempo fazem a pessoa
+        ler o menos importante primeiro.
+      */}
+      <GatilhoDeAjuda
+        aberta={ajudaAberta}
+        aoAbrir={() => { setAjudaAberta(true); encerrarAviso(); }}
+        aviso={avisoDaAjuda && Boolean(s.tenantId)}
+        aoFecharAviso={encerrarAviso}
+      />
 
       {/* Sem `fallback` visivel: o painel chega em milissegundos e um spinner
           piscando por cima da pagina seria mais ruido do que espera. */}

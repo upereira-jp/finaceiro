@@ -1,4 +1,4 @@
-// A CENTRAL DE AJUDA — a busca, o estado ao vivo e o vocabulario, verificados.
+// A CENTRAL DE AJUDA — a busca, o estado ao vivo, os caminhos e o vocabulario.
 // Uso: node --experimental-strip-types web/tests/ajuda.ts
 //
 // ============================================================================
@@ -6,30 +6,34 @@
 //
 // A partir de 22/08/2026 entram usuarios novos e NAO HA DIVISAO DE SUPORTE. Isso
 // muda o custo do erro: uma ajuda que nao acha o que a pessoa procura nao produz
-// um chamado — produz alguem parado. As tres formas de falhar sao silenciosas:
+// um chamado — produz alguem parado. As quatro formas de falhar sao silenciosas:
 //
 //   1. A BUSCA NAO ACHA A PALAVRA DA PESSOA. Quem trava digita "cade o boleto",
 //      "nao consigo cobrar", "conta de luz" — e nao "conector de cobranca",
-//      "prontidao", "unidade consumidora". Uma base de sinonimos so e util se
-//      alguem medir que ela casa com a palavra ERRADA, que e a que sera digitada;
+//      "relatorio de prontidao", "unidade consumidora". Uma base de sinonimos so
+//      e util se alguem medir que ela casa com a palavra ERRADA, que e a que
+//      sera digitada;
 //
-//   2. O TEXTO DA AJUDA REPETE O JARGAO QUE ELA EXISTE PARA TRADUZIR. E o modo
+//   2. A RESPOSTA CERTA TERMINA SEM UM CLIQUE. E o bloco `A10`, e ele existe
+//      por pedido do dono em 21/08: *"sempre devolver o possivel link de rota
+//      para resolucao"*. Explicar onde fica uma tela e pior do que abri-la —
+//      quem esta travado nao quer aprender a navegar, quer chegar;
+//
+//   3. O TEXTO DA AJUDA REPETE O JARGAO QUE ELA EXISTE PARA TRADUZIR. E o modo
 //      de falha mais provavel deste arquivo, porque quem escreve a ajuda e quem
-//      ja sabe o vocabulario: `V4` recusa `R9`, `Q-XXX`, `npm run`, `split`,
-//      `camada`, `prontidao` e nome de coluna em snake_case nos textos que a
-//      pessoa LE. Os `termos` de busca ficam de fora da regra de proposito —
-//      la o jargao e util, porque alguem pode digita-lo;
+//      ja sabe o vocabulario: `V4` recusa codigo de regra, codigo de questao,
+//      comando de terminal, "split", "camada" e nome de coluna nos textos que a
+//      pessoa LE. Os `termos` de busca ficam de fora da regra de proposito — la
+//      o jargao e util, porque alguem pode digita-lo;
 //
-//   3. O NUMERO AO VIVO DISCORDAR DA TELA DE PENDENCIAS. `passosDoEstado` le a
-//      mesma prontidao e reusa `destino-da-camada.ts`; se inventasse rota
+//   4. O NUMERO AO VIVO DISCORDAR DA TELA DE PENDENCIAS. `passosDoEstado` le o
+//      mesmo relatorio e reusa `destino-da-camada.ts`; se inventasse rota
 //      propria, os dois caminhos divergiriam sem nenhum parecer errado.
-//
-// A cobertura camada <-> verbete e o que impede uma camada nova aparecer para o
-// usuario com o nome da coluna do banco.
 
 import {
   normalizar, palavras, buscar, buscarTermos, topicosDaTela, topicosComuns,
-  passosDoEstado, travamCobranca, TOPICOS, type CamadaLida,
+  telasCitadas, responder, caminhosDaResposta,
+  passosDoEstado, travamCobranca, TOPICOS, PALAVRAS_DA_TELA, type CamadaLida,
 } from '../src/ajuda.ts';
 import { VERBETE_DA_CAMADA, EFEITO, SITUACAO, GLOSSARIO } from '../src/vocabulario.ts';
 import { DESTINO_DA_CAMADA, enderecoDoDestino } from '../src/destino-da-camada.ts';
@@ -42,6 +46,9 @@ const chk = (id: string, cond: boolean, d: string) => {
   if (!cond) falhas++;
   console.log(`${cond ? 'ok   ' : 'FALHA'} ${id.padEnd(6)} ${d.replace(/\s+/g, ' ')}`);
 };
+
+/** A rota de um caminho, sem o filtro. E o que se compara com a lista de telas. */
+const so = (rota: string): string => rota.split('?')[0]!;
 
 // ============================================================ A1 normalizacao
 //
@@ -73,8 +80,6 @@ const CASOS: Array<[consulta: string, id: string]> = [
   ['a fatura não sai', 'nao-consigo-cobrar'],
   ['o que falta', 'o-que-falta'],
   ['por onde começo', 'o-que-falta'],
-  ['cadê o boleto', 'banco'],
-  ['como emito boleto', 'banco'],
   ['sicoob', 'banco'],
   ['o cliente já tem cpf mas diz que falta', 'documento-cliente'],
   ['confirmar documento', 'documento-cliente'],
@@ -97,6 +102,29 @@ const CASOS: Array<[consulta: string, id: string]> = [
   ['fechar o mês', 'gerar-mes'],
   ['energia gerada', 'geracao'],
   ['ligar usina na unidade', 'rateio'],
+
+  /*
+   * OS ONZE DE 21/08, e eles medem os assuntos que a base NAO tinha: ela cobria
+   * as pendencias do relatorio e quase nada do dia a dia de quem ja faturou.
+   *
+   * "cade o boleto" e "como emito boleto" MUDARAM DE RESPOSTA de proposito. Ate
+   * hoje caiam em "Como configuro a emissao de boleto?" — a tela da CREDENCIAL —
+   * porque nao havia outro assunto de boleto na base. Havia um buraco atras
+   * disso: quem ja tinha o banco configurado e so queria o boleto de uma fatura
+   * era mandado para o formulario de credencial. Agora existe o assunto certo, e
+   * a tela do banco continua a um clique dentro dele.
+   */
+  ['cadê o boleto', 'gerar-boleto'],
+  ['como emito boleto', 'gerar-boleto'],
+  ['dá para cobrar por pix', 'cobrar-por-pix'],
+  ['o ensaio vai cobrar alguém', 'ensaio'],
+  ['o cliente ficou de fora', 'ficou-de-fora'],
+  ['quanto entrou', 'quanto-entrou'],
+  ['exportar para planilha', 'exportar'],
+  ['quando pago o dono', 'pagar-dono'],
+  ['cadastrar cliente novo', 'cadastrar-cliente'],
+  ['o valor da fatura está errado', 'valor-errado'],
+  ['importar boleto do banco', 'importar-boleto'],
 ];
 
 for (const [consulta, esperado] of CASOS) {
@@ -110,15 +138,27 @@ chk('A2b', buscar('').length === 0 && buscar('x').length === 0,
     'busca vazia ou de uma letra nao devolve nada — a tela cai nos assuntos comuns');
 chk('A2c', buscar('jabuticaba quantica').length === 0,
     'e o que nao existe devolve VAZIO em vez de um primeiro resultado qualquer: quem decide o que '
-    + 'mostrar num vazio e a tela, que sabe a aba aberta');
+    + 'mostrar num vazio e `responder`, que tem mais contexto');
 
 {
-  // "contrato" de proposito, e nao "nao consigo cobrar": aquela e uma frase
-  // exata de UM topico e desde o corte da palavra solta devolve um resultado so
-  // — que e o comportamento certo, e nao serve para medir ordenacao.
+  /*
+   * "contrato" de proposito, e nao "nao consigo cobrar": aquela e uma frase
+   * exata de UM topico e desde o corte da palavra solta devolve um resultado so
+   * — que e o comportamento certo, e nao serve para medir ordenacao.
+   *
+   * A AFIRMACAO MUDOU EM 21/08, e o motivo e uma qualidade e nao um defeito: com
+   * a base dobrada, "contrato" empata em 122 com "contrato-errado", porque as
+   * duas perguntas SAO sobre contrato. Exigir que o primeiro vencesse o segundo
+   * por pontos passou a ser exigir que a base nao tenha dois assuntos proximos —
+   * que e o contrario do que se quer. O que continua tendo de valer e o que a
+   * verificacao sempre quis dizer: a lista sai ordenada por pontuacao, o topo e
+   * o assunto certo, e a pontuacao de fato SEPARA (o topo vence o ultimo).
+   */
   const r = buscar('contrato');
-  chk('A2d', r.length > 1 && r[0]!.pontos > r[1]!.pontos && r[0]!.topico.id === 'contrato',
-      `o resultado vem ORDENADO por pontuacao, e nao pela ordem da lista (${r.map((x) => x.topico.id).join(' > ')})`);
+  const ordenada = r.every((x, i) => i === 0 || r[i - 1]!.pontos >= x.pontos);
+  chk('A2d', r.length > 1 && ordenada && r[0]!.topico.id === 'contrato'
+          && r[0]!.pontos > r[r.length - 1]!.pontos,
+      `o resultado vem ORDENADO por pontuacao, e nao pela ordem da lista (${r.map((x) => `${x.topico.id}:${x.pontos}`).join(' > ')})`);
 }
 
 // ================================================ A3 o glossario responde "o que quer dizer"
@@ -162,7 +202,21 @@ chk('A3g', buscarTermos('conta de luz').length === 1,
       'duas palavras casadas bastam mesmo sem frase exata — "trocar" e "empresa" nos termos');
 }
 
-// ================================================== A4 contexto e assuntos comuns
+// ==================== A2k a FRASE casa por PALAVRA, e nao por pedaco de texto
+//
+// A regra antiga comparava a busca com o termo por `includes` cru, e isso escala
+// mal: quanto mais assuntos a base tem, mais pares de palavras uma dentro da
+// outra ela contem. Ao dobrar a base em 21/08 apareceu o caso "baixa" casando
+// com o termo "baixar a lista" do assunto de exportar planilha — e chegando sob
+// o titulo "Isto responde", que e o modo caro de errar.
+{
+  const r = buscar('baixa');
+  chk('A2k', r[0]?.topico.id === 'cliente-pagou' && r.every((x) => x.topico.id !== 'exportar'),
+      '"baixa" leva a dar baixa numa fatura, e NAO ao assunto de exportar planilha por causa de '
+      + `"baixar" (veio ${r.map((x) => x.topico.id).join(' > ') || 'NADA'})`);
+}
+
+// ============================================ A4 contexto e assuntos comuns
 
 chk('A4', topicosDaTela('/clientes').some((t) => t.id === 'documento-cliente'),
     'abrir a ajuda na aba Clientes ja sugere o documento — a duvida daquela tela');
@@ -172,6 +226,19 @@ chk('A4c', topicosDaTela('/nao-existe').length === 0,
     'tela desconhecida nao inventa sugestao — a tela cai nos comuns');
 chk('A4d', topicosComuns().length >= 4 && topicosComuns().every((t) => t.comum === true),
     'ha assuntos comuns suficientes para preencher um vazio');
+
+/*
+ * A4e — TODA TELA TEM ASSUNTO PROPRIO, e esta e a linha que fecha a cobertura.
+ *
+ * Ate 21/08 quatro das doze abriam a ajuda sem nada sobre elas: Pendencias,
+ * Fatura unificada, Contas a pagar e Relatorios. Quem travasse ali recebia as
+ * perguntas comuns — que sao de OUTRAS telas — e concluia, com razao, que a
+ * ajuda nao sabia onde ela estava.
+ */
+for (const t of TELAS) {
+  chk('A4e', topicosDaTela(t.rota).length > 0,
+      `${t.titulo}: tem ao menos um assunto proprio — abrir a ajuda ali fala do que a pessoa esta vendo`);
+}
 
 // ===================================== A5 toda camada tem verbete, e vice-versa
 //
@@ -197,15 +264,29 @@ for (const [c, v] of Object.entries(VERBETE_DA_CAMADA)) {
 chk('A5e', Object.keys(EFEITO).length === 2 && Object.keys(SITUACAO).length === 3,
     'os dois efeitos e as tres situacoes tem traducao — nenhum estado da tela sobra em ingles de banco');
 
+/*
+ * A5f — TODA PENDENCIA DO RELATORIO TEM UM ASSUNTO QUE A EXPLICA.
+ *
+ * Sem isto, uma linha do estado ao vivo aparece com o numero e sem passos: a
+ * pessoa le "faltam 4" e nao recebe o que fazer. Era o caso do valor da comissao
+ * ate 21/08 — a unica das onze sem assunto.
+ */
+for (const c of CAMADAS) {
+  chk('A5f', TOPICOS.some((t) => t.camada === c),
+      `${c}: tem um assunto que explica o que fazer, e nao so um numero`);
+}
+
 // ========================================= A6 os topicos apontam para lugar real
 
 for (const t of TOPICOS) {
   if (t.camada !== null) {
     chk('A6', CAMADAS.includes(t.camada), `${t.id}: a camada "${t.camada}" existe`);
   }
-  if (t.destino !== null) {
-    const rota = t.destino.split('?')[0]!;
-    chk('A6b', TELAS.some((tl) => tl.rota === rota), `${t.id}: o destino ${rota} e uma tela de verdade`);
+  for (const c of t.caminhos) {
+    chk('A6b', TELAS.some((tl) => tl.rota === so(c.rota)),
+        `${t.id}: o caminho ${c.rota} e uma tela de verdade`);
+    chk('A6g', c.rotulo.trim().length > 3,
+        `${t.id}: o caminho "${c.rota}" tem rotulo que diz o ATO, e nao um botao mudo`);
   }
   for (const tela of t.telas) {
     chk('A6c', TELAS.some((tl) => tl.rota === tela), `${t.id}: a tela de contexto ${tela} existe`);
@@ -224,8 +305,10 @@ for (const t of TOPICOS) {
 // lugares diferentes para a mesma pendencia.
 for (const t of TOPICOS) {
   if (t.camada === null) continue;
-  chk('A6f', t.destino === enderecoDoDestino(DESTINO_DA_CAMADA[t.camada]!),
-      `${t.id}: o destino e O MESMO que a tela de Pendencias usa — dois mapas discordariam em silencio`);
+  const esperado = enderecoDoDestino(DESTINO_DA_CAMADA[t.camada]!);
+  if (esperado === null) continue;  // as duas sem tela: o caminho delas e `ver`, escrito a mao
+  chk('A6f', t.caminhos[0]?.rota === esperado,
+      `${t.id}: o primeiro caminho e O MESMO que a tela de Pendencias usa — dois mapas discordariam em silencio`);
 }
 
 // ============================================ A7 o estado ao vivo, em portugues
@@ -247,8 +330,9 @@ const camada = (p: Partial<CamadaLida>): CamadaLida =>
       `a frase sai pronta e em portugues (veio "${passos[0]!.frase}")`);
   chk('A7c', /ainda não dá para conferir/.test(passos[1]!.frase) && !/0 de 0/.test(passos[1]!.frase),
       '"nao medido" NAO vira "0 de 0" — seria o relatorio autorizando o que nao conferiu');
-  chk('A7d', passos[0]!.destino === enderecoDoDestino(DESTINO_DA_CAMADA.documento_do_cliente!),
-      'e cada passo carrega o MESMO endereco que a tela de Pendencias usaria');
+  chk('A7d', passos[0]!.caminho?.rota === enderecoDoDestino(DESTINO_DA_CAMADA.documento_do_cliente!)
+          && passos[0]!.caminho?.tipo === 'resolver',
+      'e cada passo carrega o MESMO endereco que a tela de Pendencias usaria, marcado como "resolver"');
   chk('A7e', passos[0]!.topico?.id === 'documento-cliente',
       'o passo acha o topico que o explica — o numero ao vivo e os passos escritos chegam juntos');
 
@@ -269,9 +353,27 @@ chk('A7h', passosDoEstado([]).length === 0 && passosDoEstado([camada({ situacao:
   // Camada que o servidor mandou e este front nao conhece: nao pode quebrar, e
   // nao pode sumir. Cai no proprio nome, que e feio e HONESTO.
   const nova = passosDoEstado([camada({ camada: 'camada_do_futuro' })]);
-  chk('A7i', nova.length === 1 && nova[0]!.titulo === 'camada_do_futuro' && nova[0]!.destino === null,
+  chk('A7i', nova.length === 1 && nova[0]!.titulo === 'camada_do_futuro' && nova[0]!.caminho === null,
       'camada desconhecida aparece com o nome cru em vez de sumir da lista — some seria a ajuda '
       + 'escondendo um bloqueio real');
+}
+
+/*
+ * A7j — AS DUAS PENDENCIAS SEM TELA DE PREENCHIMENTO TAMBEM TERMINAM NUM CLIQUE.
+ *
+ * Energia gerada e valor da comissao nao tem formulario, e nao vao ter: a
+ * primeira e espelhada do CRM (dar-lhe um campo aqui criaria um segundo dono do
+ * mesmo numero) e a segunda e decisao versionada com dono nomeado. Ate 21/08
+ * elas apareciam na lista com o numero e SEM link nenhum — verdadeiro e inutil,
+ * porque a pessoa lia "faltam 4" e nao tinha nem onde ir olhar.
+ *
+ * O caminho delas e `ver`, e a distincao e a que impede a correcao de virar
+ * mentira: leva a tela onde aquilo APARECE, com o rotulo dizendo isso.
+ */
+for (const c of ['geracao_da_competencia', 'regra_de_comissao']) {
+  const p = passosDoEstado([camada({ camada: c, faltam: 2, total: 4 })])[0]!;
+  chk('A7j', p.caminho !== null && p.caminho.tipo === 'ver' && TELAS.some((t) => t.rota === so(p.caminho!.rota)),
+      `${c}: sem tela de preencher, mas com uma tela para OLHAR — "${p.caminho?.rotulo ?? 'NENHUM'}"`);
 }
 
 // ================================= A8 o glossario define sem depender de si mesmo
@@ -279,6 +381,94 @@ chk('A7h', passosDoEstado([]).length === 0 && passosDoEstado([camada({ situacao:
 for (const g of GLOSSARIO) {
   chk('A8', g.texto.trim().length > 40 && g.busca.length >= 3,
       `${g.termo}: tem explicacao e ao menos tres jeitos de ser procurado`);
+  /* A8b — O VERBETE TAMBEM LEVA A ALGUM LUGAR. Definir a palavra e parar era
+   * responder metade: quem descobriu o que e "fatia do cliente" quer, no ato
+   * seguinte, ir onde ela se preenche. */
+  chk('A8b', g.caminhos.length > 0 && g.caminhos.every((c) => TELAS.some((t) => t.rota === so(c.rota))),
+      `${g.termo}: leva a uma tela de verdade, e nao termina na definicao`);
+}
+
+// ============================ A9 as telas citadas — a ultima defesa contra o beco
+
+chk('A9', Object.keys(PALAVRAS_DA_TELA).every((r) => TELAS.some((t) => t.rota === r))
+       && TELAS.every((t) => t.rota in PALAVRAS_DA_TELA),
+    'as doze telas tem apelido, e nenhum apelido aponta para tela que nao existe');
+
+{
+  const casos: Array<[string, string]> = [
+    ['onde ficam as usinas', '/usinas'],
+    ['quero ver os donos', '/donos'],
+    ['abrir contas a pagar', '/contas-a-pagar'],
+    ['tela de relatorios', '/relatorios'],
+    ['fatura unificada', '/documento'],
+  ];
+  for (const [consulta, rota] of casos) {
+    const t = telasCitadas(consulta);
+    chk('A9b', t[0]?.rota === rota,
+        `"${consulta}" acha a tela ${rota}${t[0]?.rota === rota ? '' : ` (veio ${t[0]?.rota ?? 'NADA'})`}`);
+  }
+  chk('A9c', telasCitadas('jabuticaba quantica').length === 0,
+      'e o que nao e nome de tela nao vira sugestao de tela — palpite ruim gasta a confianca do bom');
+  chk('A9d', telasCitadas('fatura').length <= 3,
+      'no maximo tres: uma lista de doze telas e um menu, e a pessoa ja tem um na barra');
+}
+
+// ============ A10 A PROMESSA: NENHUMA PERGUNTA TERMINA SEM UMA TELA CLICAVEL
+//
+// O pedido do dono, de 21/08: *"que esteja preparado para receber todo tipo de
+// pergunta e sempre devolver o possivel link de rota para resolucao"*.
+//
+// O banco abaixo e deliberadamente selvagem: tem pergunta bem formulada, pergunta
+// pela metade, palavra solta, jargao, giria, erro de digitacao e frase que nao
+// tem nada a ver com o sistema. Todas TEM de sair daqui com pelo menos um
+// caminho — nem que seja o assunto do primeiro dia.
+
+const SELVAGENS = [
+  'nao consigo cobrar', 'cade o boleto', 'como faturo', 'o cliente pagou',
+  'quero ver as usinas', 'cadastrar dono', 'pix', 'boleto', 'planilha',
+  'quanto entrou este mes', 'quem indicou o cliente', 'o sistema travou',
+  'apareceu erro vermelho', 'me desconectou', 'trocar empresa', 'endereco',
+  'preciso de ajuda', 'socorro', 'nao sei o que fazer', 'como comeco',
+  'jabuticaba quantica', 'asdfgh', 'xxxxx', 'o que e isso', 'como funciona',
+  'meu chefe pediu o relatorio', 'a conta de luz do cliente', 'kwh',
+  'quero cancelar', 'imprimir', 'mandar por email', 'segunda via do boleto',
+  'valor errado na fatura', 'ensaio', 'compor', 'dar baixa', 'contas a pagar',
+  'despesa', 'logotipo', 'cnpj da empresa', 'esqueci', 'nao entendi',
+  'onde clico', 'nao acho o cliente', 'sumiu tudo', 'esta lento',
+];
+
+for (const consulta of SELVAGENS) {
+  const r = responder(consulta);
+  const cs = caminhosDaResposta(r);
+  chk('A10', cs.length > 0 && cs.every((c) => TELAS.some((t) => t.rota === so(c.rota))),
+      `"${consulta}" termina em ${cs.length} caminho(s) de verdade — e nunca num beco`);
+}
+
+chk('A10b', responder('jabuticaba quantica').palpite === true,
+    'e quando e palpite a resposta ADMITE isso, para a tela poder escrever "nao achei" antes de sugerir');
+chk('A10c', responder('nao consigo cobrar').palpite === false,
+    'enquanto o acerto de verdade nao vem marcado como palpite');
+
+{
+  const r = responder('onde ficam as usinas');
+  chk('A10d', r.palpite && r.telas[0]?.rota === '/usinas',
+      'a pergunta que so procura uma TELA nao casa assunto nenhum e mesmo assim chega la — era o '
+      + 'buraco que a terceira defesa fecha');
+}
+
+{
+  const r = responder('rateio');
+  chk('A10e', caminhosDaResposta(r).length > 0 && r.termos.length + r.achados.length > 0,
+      'e quem so quer entender uma palavra recebe a definicao E o endereco dela');
+}
+
+chk('A10f', TOPICOS.every((t) => t.caminhos.length > 0),
+    'nenhum assunto da base termina sem caminho — e a invariante de onde tudo isto depende');
+
+{
+  const repetido = TOPICOS.find((t) => new Set(t.caminhos.map((c) => c.rota)).size !== t.caminhos.length);
+  chk('A10g', repetido === undefined,
+      `nenhum assunto oferece a mesma tela duas vezes${repetido ? ` — ${repetido.id}` : ''}`);
 }
 
 // ======================================== V4 O TEXTO QUE A PESSOA LE NAO TEM JARGAO
@@ -288,9 +478,10 @@ for (const g of GLOSSARIO) {
 // quem ja sabe o vocabulario — a frase tecnica sai sem doer.
 //
 // O QUE FICA DE FORA DA REGRA, e de proposito: os `termos` de busca e o `busca`
-// do glossario. La o jargao e UTIL — alguem que ouviu "split" numa reunion vai
+// do glossario. La o jargao e UTIL — alguem que ouviu "split" numa reuniao vai
 // digitar "split", e o verbete tem de aparecer. A regra vale para o que a tela
-// EXIBE.
+// EXIBE — e os ROTULOS DOS CAMINHOS entraram nessa conta em 21/08, porque um
+// botao e texto exibido como qualquer outro.
 
 const PROIBIDO: Array<[RegExp, string]> = [
   [/\bR\d{1,2}\b/, 'codigo de regra (R9, R25) — nao significa nada para quem opera'],
@@ -316,7 +507,11 @@ const EXIBIDO: Array<[onde: string, texto: string]> = [
     [[`situacao ${k}.curto`, s.curto], [`situacao ${k}.longo`, s.longo]] as Array<[string, string]>),
   ...TOPICOS.flatMap((t) =>
     [[`topico ${t.id}.pergunta`, t.pergunta], [`topico ${t.id}.resposta`, t.resposta],
-     ...t.passos.map((p, i) => [`topico ${t.id}.passo[${i}]`, p] as [string, string])] as Array<[string, string]>),
+     ...t.passos.map((p, i) => [`topico ${t.id}.passo[${i}]`, p] as [string, string]),
+     ...t.caminhos.map((c) => [`topico ${t.id}.caminho[${c.rota}]`, c.rotulo] as [string, string]),
+    ] as Array<[string, string]>),
+  ...GLOSSARIO.flatMap((g) =>
+    g.caminhos.map((c) => [`verbete ${g.termo}.caminho[${c.rota}]`, c.rotulo] as [string, string])),
 ];
 
 for (const [regra, porque] of PROIBIDO) {
@@ -336,4 +531,4 @@ for (const g of GLOSSARIO) {
 
 console.log();
 if (falhas > 0) { console.log(`--- ajuda: ${falhas} FALHA(S)`); process.exit(1); }
-console.log(`--- ajuda (busca, estado ao vivo e vocabulario): ${feitas} verificacoes, 0 falhas`);
+console.log(`--- ajuda (busca, caminhos, estado ao vivo e vocabulario): ${feitas} verificacoes, 0 falhas`);
