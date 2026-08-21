@@ -354,6 +354,39 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
    * rascunho é o que está em edição agora; os registros são a série que produz a
    * economia acumulada.
    */
+  /**
+   * A SEGUNDA VIA: recarrega na tela um mês já registrado.
+   *
+   * A folha de sete faixas só existia enquanto os campos estivessem aqui —
+   * fechar a aba perdia o documento, e reabrir exigia subir o PDF da
+   * distribuidora outra vez. O servidor devolve os campos como foram gravados,
+   * com os parâmetros congelados daquele mês, e a composição segue pelo caminho
+   * de sempre. Não há segunda montagem da folha.
+   *
+   * Sobrescreve o que está em edição, então pergunta antes — pelo mesmo motivo
+   * que `novaFatura` pergunta.
+   */
+  async function carregarSegundaVia(id: string, competencia: string, uc: string) {
+    if (!window.confirm(
+      `Abrir a 2ª via de ${competencia} da unidade ${uc}?\n\n`
+      + 'O que estiver em edição agora será substituído.')) return;
+    try {
+      const v = await api.get<{
+        campos: CamposDaFatura; parametros: ParametrosDaEmissao; boleto: BoletoLido;
+      }>(`/faturas/unificada/registros/${id}/segunda-via`);
+      setCampos({ ...CAMPOS_DA_FATURA_VAZIOS, ...v.campos });
+      setParametros(v.parametros);
+      setBoleto({ ...BOLETO_LIDO_VAZIO, ...v.boleto });
+      setPersonalizados({});
+      setStatusFatura(`2ª via de ${competencia} carregada do que foi gravado.`);
+      setStatusBoleto(v.boleto?.linha_digitavel ? 'Faixa de pagamento da 1ª via.' : 'Nenhum boleto enviado.');
+      setStatusRegistro(null);
+      setAba('emissao');
+    } catch (e) {
+      setStatusRegistro(`Não foi possível abrir a 2ª via: ${naMensagem(e)}`);
+    }
+  }
+
   function novaFatura() {
     if (!window.confirm('Começar uma nova fatura? Os dados em edição serão apagados. '
                       + 'As faturas já registradas ficam.')) return;
@@ -401,6 +434,7 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
             enviarFatura={enviarFatura} enviarBoleto={enviarBoleto}
             registrar={registrar} registrando={registrando} statusRegistro={statusRegistro}
             registrosVersao={registrosVersao}
+            segundaVia={(id, comp, uc) => void carregarSegundaVia(id, comp, uc)}
             aoApagarRegistro={() => {
               setRegistrosVersao((v) => v + 1);
               /* A folha 2 imprime a economia acumulada: apagar um registro a muda,
@@ -521,6 +555,8 @@ type PropsDeLeitura = {
    *  `FaturasRegistradas` recarregar sem que a tela guarde copia dela. */
   registrosVersao: number;
   aoApagarRegistro: () => void;
+  /** Recarrega na tela um mes ja registrado. Ver `carregarSegundaVia`. */
+  segundaVia: (id: string, competencia: string, uc: string) => void;
   irParaEmissao: () => void;
   novaFatura: () => void;
 };
@@ -720,7 +756,8 @@ function AbaDeLeitura(p: PropsDeLeitura) {
         <FaturasRegistradas
           uc={p.campos.unidade_consumidora} versao={p.registrosVersao}
           registrar={p.registrar} registrando={p.registrando}
-          statusRegistro={p.statusRegistro} aoApagar={p.aoApagarRegistro} />
+          statusRegistro={p.statusRegistro} aoApagar={p.aoApagarRegistro}
+          segundaVia={p.segundaVia} />
       </div>
 
       {/* --------------------------------------------- conferência dos dados */}
@@ -838,10 +875,11 @@ function AbaDeLeitura(p: PropsDeLeitura) {
  * status e texto para humano e muda por motivos que nao sao escrita (uma falha,
  * por exemplo). Quem sobe a versao e quem escreveu.
  */
-function FaturasRegistradas({ uc, versao, registrar, registrando, statusRegistro, aoApagar }: {
+function FaturasRegistradas({ uc, versao, registrar, registrando, statusRegistro, aoApagar, segundaVia }: {
   uc: string; versao: number;
   registrar: () => void; registrando: boolean; statusRegistro: string | null;
   aoApagar: () => void;
+  segundaVia: (id: string, competencia: string, uc: string) => void;
 }) {
   const [lista, setLista] = useState<RegistroDeFatura[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -920,6 +958,11 @@ function FaturasRegistradas({ uc, versao, registrar, registrando, statusRegistro
                 confere a série precisa ver que aquele mês já saiu. E excluir
                 deixa de ser oferecido — apagar o registro de um mês já cobrado
                 deixaria a cobrança sem a conta que a originou. */}
+            {/* A 2a VIA VALE SEMPRE, cobrada ou nao: e o documento daquele mes,
+                remontado do que foi gravado. E o unico caminho de volta para a
+                folha depois que a aba fecha. */}
+            <button type="button" className="fu-texto"
+                    onClick={() => segundaVia(r.id, r.competencia, r.numero_uc)}>2ª via</button>
             {r.fatura_id ? (
               <span className="fu-registro-val">cobrança gerada</span>
             ) : (

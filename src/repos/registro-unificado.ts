@@ -28,13 +28,16 @@
 // a segunda implementacao da conta.
 
 import { dbt } from '../db/tipado.ts';
-import { tenantCorrente, exigir } from '../db/contexto.ts';
+import { db, tenantCorrente, exigir } from '../db/contexto.ts';
 import { exigirCentavos, type Centavos } from '../dominio/centavos.ts';
 import {
-  paraDecimal, decimalParaTexto,
+  paraDecimal, decimalParaTexto, calcular,
   type CamposDaFaturaUnificada, type ContaDaFatura, type ParametrosDaEmissao,
 } from '../dominio/fatura-unificada.ts';
 import type { DadosDoBoleto } from '../dominio/folha-unificada.ts';
+import {
+  segundaViaDoRegistro, divergenciasDaSegundaVia, type LinhaGravada,
+} from '../dominio/segunda-via.ts';
 
 export class RegistroNaoEncontrado extends Error {
   readonly status = 404;
@@ -226,6 +229,92 @@ export async function apagar(id: string) {
   const existe = await dbt().registro_de_fatura_unificada.findFirst({ where: { id, tenant_id } });
   if (!existe) throw new RegistroNaoEncontrado(id);
   await dbt().registro_de_fatura_unificada.delete({ where: { id } });
+}
+
+export class SegundaViaDivergente extends Error {
+  readonly status = 409;
+  constructor(numeroUc: string, competencia: string, divergencias: string[]) {
+    super(
+      `A segunda via da unidade ${numeroUc} em ${competencia} NAO reproduz o que foi gravado: `
+      + `${divergencias.join('; ')}. Isso significa que a formula mudou depois de a fatura ser `
+      + 'emitida, e reimprimir agora daria ao cliente um papel diferente do que ele tem na mao. '
+      + 'Nada foi alterado.'
+    );
+    this.name = 'SegundaViaDivergente';
+  }
+}
+
+/**
+ * A SEGUNDA VIA: a linha gravada de volta em campos de tela.
+ *
+ * E o segundo proposito que a migration 29 declarou para esta tabela - *"a
+ * economia acumulada e a SEGUNDA VIA"* - e que nunca tinha sido construido. Ele
+ * passou a valer mais em 21/08, quando a `Q-CICLO-01` fez da folha de sete
+ * faixas o documento oficial: sem isto, o documento so existia enquanto os
+ * campos estivessem na tela, e fechar a aba o perdia.
+ *
+ * A CONTA E RECALCULADA E CONFERIDA, nao lida. O porque esta no cabecalho de
+ * `src/dominio/segunda-via.ts`: devolver os centavos gravados seria uma segunda
+ * implementacao da conta. Aqui `calcular()` roda com os parametros CONGELADOS na
+ * linha - e nao com os do modelo de hoje -, e o resultado e comparado com o que
+ * foi gravado. Divergencia levanta com nome, em vez de virar um papel
+ * silenciosamente diferente do que o cliente tem na mao.
+ *
+ * `numeric` e `date` saem como TEXTO da consulta, de proposito: o `Decimal` do
+ * Prisma perderia a escala que a tela exibe, e o `Date` perderia o dia numa
+ * conversao de fuso.
+ */
+export async function segundaVia(id: string) {
+  await exigir('ler');
+  const r: any[] = await db().$queryRaw`
+    SELECT numero_uc, competencia::text AS competencia,
+           cliente_nome, cliente_documento, endereco, classificacao,
+           data_emissao::text     AS data_emissao,
+           leitura_anterior::text AS leitura_anterior,
+           leitura_atual::text    AS leitura_atual,
+           dias_faturados,
+           vencimento::text       AS vencimento,
+           bandeira_tarifaria,
+           compensada_kwh::text      AS compensada_kwh,
+           nao_compensado_kwh::text  AS nao_compensado_kwh,
+           tarifa_kwh::text          AS tarifa_kwh,
+           percentual_desconto::text AS percentual_desconto,
+           fator_emissao::text       AS fator_emissao,
+           integral_centavos, desconto_centavos, energia_g3_centavos,
+           nao_compensado_centavos, iluminacao_publica_centavos, bandeira_centavos,
+           demais_centavos, total_equatorial_centavos, total_centavos,
+           linha_digitavel, pix_copia_e_cola, nosso_numero, instrucoes,
+           historico_consumo
+      FROM registro_de_fatura_unificada
+     WHERE id = ${id}::uuid`;
+  const l = r?.[0];
+  if (!l) throw new RegistroNaoEncontrado(id);
+
+  const n = (v: unknown) => Number(v ?? 0);
+  const linha: LinhaGravada = {
+    ...l,
+    dias_faturados: l.dias_faturados == null ? null : Number(l.dias_faturados),
+    integral_centavos: n(l.integral_centavos),
+    desconto_centavos: n(l.desconto_centavos),
+    energia_g3_centavos: n(l.energia_g3_centavos),
+    nao_compensado_centavos: n(l.nao_compensado_centavos),
+    iluminacao_publica_centavos: n(l.iluminacao_publica_centavos),
+    bandeira_centavos: n(l.bandeira_centavos),
+    demais_centavos: n(l.demais_centavos),
+    total_equatorial_centavos: n(l.total_equatorial_centavos),
+    total_centavos: n(l.total_centavos),
+    instrucoes: Array.isArray(l.instrucoes) ? l.instrucoes : [],
+  };
+
+  const { campos, parametros, boleto } = segundaViaDoRegistro(linha);
+  const conta = calcular(campos, parametros);
+
+  const divergencias = divergenciasDaSegundaVia(conta, linha);
+  if (divergencias.length > 0) {
+    throw new SegundaViaDivergente(linha.numero_uc, linha.competencia, divergencias);
+  }
+
+  return { campos, parametros, boleto, conta };
 }
 
 const MES = [

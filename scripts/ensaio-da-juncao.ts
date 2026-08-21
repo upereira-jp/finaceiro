@@ -32,6 +32,7 @@
 import { iniciar, encerrarApp } from '../src/app.ts';
 import { db } from '../src/db/contexto.ts';
 import { faturarRegistro, ensaiarRegistro } from '../src/repos/fatura-do-registro.ts';
+import * as registro from '../src/repos/registro-unificado.ts';
 
 const arg = (nome: string): string | undefined => {
   const i = process.argv.indexOf(`--${nome}`);
@@ -149,6 +150,18 @@ async function main() {
         SELECT fatura_id FROM registro_de_fatura_unificada WHERE id = ${registroId}::uuid`;
       chk('E10', volta[0].fatura_id === r.fatura_id,
           'a conta lida passou a apontar para a fatura - a ligacao dos dois lados, na mesma transacao');
+
+      // ------------------------------------------------- a segunda via
+      /* A volta: a linha gravada vira campos de tela outra vez, e a conta e
+       * RECALCULADA e conferida contra os nove centavos gravados. Se divergir,
+       * `segundaVia` levanta - entao chegar aqui ja e parte da prova. */
+      const via = await registro.segundaVia(registroId);
+      chk('E13', via.conta.total_centavos === 58269 && via.conta.energia_g3_centavos === 45519,
+          'a 2a via recalcula os MESMOS centavos da 1a - o cliente recebe o mesmo papel');
+      chk('E14', via.campos.unidade_consumidora === uc.numero_uc && via.campos.mes_referencia === '06/2026',
+          'a 2a via volta com a unidade e o mes que a tela espera');
+      chk('E15', via.parametros.percentual_desconto === '20.00',
+          'os parametros voltam CONGELADOS da linha, e nao do modelo de hoje');
 
       // ------------------------------------------- a segunda tentativa recusa
       try {

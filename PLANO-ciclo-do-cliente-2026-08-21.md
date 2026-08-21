@@ -418,6 +418,56 @@ primeira fatura e não deve entrar antes dela.
 
 ---
 
+## 4b. A fila do ciclo completo — quem faz o quê, em ordem
+
+Medida em 21/08, depois da decisão da `Q-CICLO-01` e da junção construída. **Ordem
+por dependência, não por importância** — e a coluna que mais importa é a última.
+
+### Trava o ciclo inteiro — sem isto, nada começa
+
+| # | Demanda | Por que trava | De quem |
+|:--:|---|---|---|
+| **1** | **Ligar a leitura da conta** — `ANTHROPIC_API_KEY` no `/etc/financeiro.env` + `restart` | O ciclo **começa** na conta da distribuidora. Sem a chave, as duas rotas respondem 503 e não há o que conferir, registrar ou cobrar. **Girar a chave antes** se for a mesma exposta pelo proxy aberto da referência (`Q-REF-SEGREDO-01`) | dono |
+| **2** | **Uma leitura real** contra um PDF de verdade | Que o extrator funciona no ar **não está provado** (`Q-LEITOR-01`). É subir um arquivo | dono |
+| **3** | **Preencher o emissor** — razão social, CNPJ, contato, logo, em `/documento#cadastro` | A folha sai **sem dizer quem está cobrando** — e é a esse nome que o aviso contra o golpe se amarra | dono |
+
+### Trava o contrato, e por consequência a repartição
+
+| # | Demanda | Por que trava | De quem |
+|:--:|---|---|---|
+| **4** | **Documento e natureza dos dois originadores** | O CRM **não tem nenhuma coluna de CPF/CNPJ** — medido no `information_schema` em 21/08. O número não existe em sistema nenhum. **Tipo já decidido**: `vendedor_g3` para os dois | dono |
+| **4b** | **Quem é "Out Sales"** | É equipe, e equipe não tem CPF. Ou há um CNPJ, ou há uma pessoa. **Sem isso os 3 contratos dele não nascem — os 26 da Renata nascem** | dono |
+| **5** | **Dono de cada usina e percentual de repasse** — 4 de 4 | Não impede cobrar; impede repartir. O dinheiro entra e acumula sem destino | operação |
+
+### Trava parte da carteira
+
+| # | Demanda | Quanto custa | De quem |
+|:--:|---|---|---|
+| **6** | **Geração medida das usinas `0003` e `04`** (`Q-GERACAO-USINA-01`) | **12 das 46 unidades** não faturam em mês nenhum. Medido nas duas pontas: falta no CRM, o espelho está fiel | operação + CRM |
+| **7** | **Endereço do pagador** — 0 de 46 | Só o boleto depende. Pix e a folha saem sem ele | operação |
+| **8** | **Certificado A1** | Sem ele o boleto existe (importado à mão) e o Pix cobra. O que falta é o sistema emitir sozinho | dono |
+
+### Decisões com dono nomeado — não são de implementação
+
+| # | Questão | O que decide | De quem |
+|:--:|---|---|---|
+| **9** | `Q-DOCG3-11` | A quebra da parte da distribuidora que alimenta o repasse. **É a última peça de dinheiro sem aval** | contador |
+| **10** | `Q-CONTA-ORIG-01` | Guardar ou não o PDF da conta lida | dono |
+| **11** | `Q-CONTA-LOTE-01` | Um caminho em lote para as 29 contas do mês, ou conferência uma a uma | dono + operação |
+| **12** | `Q-SEGVIA-01` | Guardar `outros_encargos`, para a 2ª via poder repetir a conferência do resíduo | dono |
+| **13** | `Item 10` (fiscal) | Comissão a sócia é despesa dedutível ou distribuição de lucro. **Vale sobre 26 das 29** | contador |
+
+### Código que resta, e é pouco
+
+| # | Demanda | Estado |
+|:--:|---|---|
+| **14** | `db pull` + `generate` depois da migration 34 | Dívida técnica. O código funciona sem isso — a junção usa SQL cru de propósito —, mas o cliente gerado ainda não conhece `fatura_id` |
+| **15** | `GET /faturas/:id/documento` ainda compõe a folha de **5 faixas** | Para uma fatura vinda de conta lida, o documento certo é a **2ª via**. Decidir se aquela rota passa a apontar para cá, ou se ela sai |
+| **16** | `src/sicoob/http.ts` | **Não escrever antes do sandbox.** É a peça que espera o A1 |
+| **17** | `Q-INADIMPLENCIA-01` — registro de tratativas | Fora do caminho da primeira fatura, de propósito |
+
+---
+
 ## 5. O que este plano não faz, e por quê
 
 **Não preenche nenhum dos seis cadastros.** Nenhum é derivável: são documentos de

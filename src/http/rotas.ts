@@ -1382,6 +1382,26 @@ export const ROTAS: Rota[] = [
     handler: (req, app) => emRelatorio(app, req, async () =>
       ok(await faturaDoRegistro.ensaiarRegistro(req.params.id!))),
   },
+  /*
+   * A SEGUNDA VIA (21/08/2026) - o segundo proposito que a migration 29 declarou
+   * para `registro_de_fatura_unificada` e que nunca tinha sido construido.
+   *
+   * Ele passou a valer mais com a `Q-CICLO-01`: a folha de sete faixas virou o
+   * documento oficial, e ate aqui ela so existia enquanto os campos estivessem na
+   * tela. Fechar a aba perdia o documento, e reabrir exigia subir o PDF da
+   * distribuidora outra vez.
+   *
+   * DEVOLVE OS CAMPOS, E NAO A FOLHA MONTADA, de proposito: a tela ja sabe compor
+   * a partir dos campos - e o que ela faz a cada 400 ms de digitacao -, entao
+   * montar aqui seria um SEGUNDO caminho de composicao, que divergiria do
+   * primeiro no dia em que um dos dois mudasse. A segunda via recarrega a tela; a
+   * folha sai por onde ja saia.
+   */
+  {
+    metodo: 'GET', padrao: '/faturas/unificada/registros/:id/segunda-via',
+    handler: (req, app) => emRelatorio(app, req, async () =>
+      ok(await registro.segundaVia(req.params.id!))),
+  },
   {
     /* `emTenant` e nao `emRelatorio`: aqui ESCREVE, e as duas escritas - criar a
      * fatura e apontar a linha para ela - acontecem na transacao deste caminho.
