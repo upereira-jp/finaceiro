@@ -108,21 +108,43 @@ Preencher continua valendo a pena; deixou de ser bloqueio.
 
 → aba **Unidades consumidoras**, filtro «Sem vencimento».
 
-## 4. Dono de cada usina — 4 de 4
+## 4. Dono de cada usina — 4 de 4  ⬅️ **agora é o único que falta para repartir**
 
 **Não há nenhum dono cadastrado**, e as 4 usinas estão sem vínculo. Não impede
 cobrar; impede repartir o dinheiro quando ele entrar.
+
+Com o percentual fechado em 21/08 (item 5), **este é o último cadastro entre o
+dinheiro entrar e ele poder ser dividido** — as outras duas camadas que a
+repartição exige (quem trouxe o cliente e a regra de comissão dele) só passam a
+ser medidas quando existir contrato.
 
 Cadastre a pessoa em **Donos de usina** (exige chave Pix ou conta completa —
 conferido no cadastro, porque no pagamento já é tarde) e depois escolha-a na
 linha da usina, em **Usinas**.
 
-## 5. Percentual de repasse — 4 de 4
+## 5. ~~Percentual de repasse — 4 de 4~~ ✅ **FEITO em 21/08/2026**
 
-Quanto cada dono recebe. Não existe «editar»: abrir uma vigência nova fecha a
-anterior, porque renegociar hoje não muda o que já foi cobrado.
+**A regra, dita pelo dono:** *"além dos valores destinados à Equatorial, que são
+as tarifas mínimas, a divisão ocorre da seguinte maneira: 70% vai para o dono da
+usina e 30% fica na G3 para pagar as contas"* — e *"os 70% valem desde
+01/01/2026"*.
 
-→ aba **Usinas**, seção «Percentual de repasse, por vigência».
+Gravado nas **4 de 4** usinas, com ensaio antes e conferência depois: a função
+oficial que a repartição consulta devolve **70,00%** para a competência de junho.
+A camada saiu de `pendente 4/4` para **`ok 0/4`**.
+
+**Os 30% não são um campo, e isso é o desenho.** Eles são o que sobra depois de
+todos os destinos, apurado por subtração — é assim que a soma fecha no centavo.
+Guardar os dois números seria guardar a mesma informação duas vezes, e bastaria
+alguém salvar 70 e 25 para o dinheiro deixar de fechar sem erro em lugar nenhum.
+A tela **mostra** o complemento; só o primeiro viaja para o banco.
+
+**Nas duas primeiras cobranças cheias de cada contrato sobram 5%, não 30%** — a
+comissão de quem trouxe o cliente sai da mesma parte. É de propósito, e a tela diz.
+
+→ aba **Usinas**, seção «Percentual de repasse, por vigência». Renegociar é abrir
+uma vigência nova, que fecha a anterior — não há «editar», porque renegociar hoje
+não muda o que já foi cobrado.
 
 ## 6. Conexão com o banco — 1 de 1
 
