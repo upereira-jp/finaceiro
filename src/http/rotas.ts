@@ -28,6 +28,7 @@ import * as split from '../repos/split.ts';
 import * as contaPagar from '../repos/conta_pagar.ts';
 import * as documento from '../repos/documento.ts';
 import * as registro from '../repos/registro-unificado.ts';
+import * as faturaDoRegistro from '../repos/fatura-do-registro.ts';
 import * as leitor from '../concessionaria/leitor-visao.ts';
 import { calcular, CAMPOS_VAZIOS, PARAMETROS_PADRAO,
   type CamposDaFaturaUnificada, type ParametrosDaEmissao } from '../dominio/fatura-unificada.ts';
@@ -1345,7 +1346,13 @@ export const ROTAS: Rota[] = [
     metodo: 'GET', padrao: '/faturas/unificada/registros',
     handler: (req, app) => emRelatorio(app, req, async () => {
       const uc = req.query.get('unidade_consumidora');
-      return ok(uc ? await registro.daUnidade(uc) : await registro.recentes(numero(req.query.get('limite'), 50)));
+      const lista = uc
+        ? await registro.daUnidade(uc)
+        : await registro.recentes(numero(req.query.get('limite'), 50));
+      /* `fatura_id` vem por fora da leitura porque o cliente gerado do Prisma so
+       * conhece a coluna depois da migration 34 - ver `comFatura`. Sem isto a
+       * tela nao teria como distinguir a conta ja cobrada da que ainda nao foi. */
+      return ok(await faturaDoRegistro.comFatura(lista));
     }),
   },
   {
@@ -1354,6 +1361,35 @@ export const ROTAS: Rota[] = [
       await registro.apagar(req.params.id!);
       return semConteudo();
     }),
+  },
+  /*
+   * ============================================================================
+   * A JUNCAO (migration 34) - a conta lida virando fatura cobravel.
+   *
+   * `Q-CICLO-01`, decidida pelo dono em 21/08/2026: o caminho oficial e o
+   * UNIFICADO. Ate aqui as duas metades do sistema nao se encontravam, e o
+   * documento que o cliente EFETIVAMENTE recebe era o unico dos dois caminhos
+   * que nao conseguia pagar o dono da usina - sem `fatura` nao ha boleto, sem
+   * boleto nao ha liquidacao, sem liquidacao nao ha split.
+   *
+   * SAO DUAS ROTAS E NAO UMA, e o par e o mesmo do lote: ensaiar responde "esta
+   * conta viraria fatura?" sem escrever nada, e faturar escreve. O primeiro ato
+   * que cobra um cliente deve poder ser olhado antes de existir - e a mesma razao
+   * de `--ensaio` e `--valendo` serem obrigatorios nos scripts.
+   */
+  {
+    metodo: 'GET', padrao: '/faturas/unificada/registros/:id/ensaio',
+    handler: (req, app) => emRelatorio(app, req, async () =>
+      ok(await faturaDoRegistro.ensaiarRegistro(req.params.id!))),
+  },
+  {
+    /* `emTenant` e nao `emRelatorio`: aqui ESCREVE, e as duas escritas - criar a
+     * fatura e apontar a linha para ela - acontecem na transacao deste caminho.
+     * Uma fatura criada sem a linha apontando para ela faria a conta parecer nao
+     * faturada, e a segunda tentativa cobraria o cliente duas vezes. */
+    metodo: 'POST', padrao: '/faturas/unificada/registros/:id/faturar',
+    handler: (req, app) => emTenant(app, req, async () =>
+      criado(await faturaDoRegistro.faturarRegistro(req.params.id!))),
   },
   {
     metodo: 'POST', padrao: '/faturas/ler-fatura',

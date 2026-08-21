@@ -845,6 +845,10 @@ function FaturasRegistradas({ uc, versao, registrar, registrando, statusRegistro
 }) {
   const [lista, setLista] = useState<RegistroDeFatura[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  /** Qual linha está virando cobrança. Um por vez: são duas escritas na mesma
+   *  transação do servidor, e dois cliques simultâneos disputariam a trava que
+   *  impede o mesmo mês ser cobrado duas vezes. */
+  const [cobrando, setCobrando] = useState<string | null>(null);
   const alvo = uc.trim();
 
   useEffect(() => {
@@ -869,6 +873,31 @@ function FaturasRegistradas({ uc, versao, registrar, registrando, statusRegistro
     } catch (e) { setErro(naMensagem(e)); }
   }
 
+  /**
+   * A CONTA LIDA VIRA COBRANÇA — o ato que faltava, 21/08/2026.
+   *
+   * Até aqui registrar era o fim da linha: a conta ficava conferida e não havia
+   * como cobrá-la. O documento que o cliente recebe era o único dos dois
+   * caminhos que não conseguia pagar o dono da usina.
+   *
+   * O SERVIDOR RECUSA NOMEANDO, e é por isso que a tela não confere nada antes:
+   * quem sabe se falta contrato, geração ou vencimento é a triagem, e duplicar
+   * a decisão aqui daria duas respostas para a mesma pergunta. A tela mostra a
+   * frase que voltou.
+   */
+  async function cobrar(r: RegistroDeFatura) {
+    if (!window.confirm(
+      `Gerar a cobrança de ${r.competencia} para a unidade ${r.numero_uc}, `
+      + `no valor de ${emReais(r.total_centavos)}?\n\n`
+      + 'Ela nasce como rascunho — nada é enviado ao cliente agora.')) return;
+    setCobrando(r.id);
+    setErro(null);
+    try {
+      await api.post(`/faturas/unificada/registros/${r.id}/faturar`, {});
+      aoApagar();
+    } catch (e) { setErro(naMensagem(e)); } finally { setCobrando(null); }
+  }
+
   const acumulado = (lista ?? []).reduce((a, r) => a + r.desconto_centavos, 0);
 
   return (
@@ -887,7 +916,26 @@ function FaturasRegistradas({ uc, versao, registrar, registrando, statusRegistro
           <span>{r.competencia}</span>
           <span className="fu-registro-dir">
             <span className="fu-registro-val">{emReais(r.total_centavos)}</span>
-            <button type="button" className="fu-texto" onClick={() => void apagar(r)}>excluir</button>
+            {/* JÁ COBRADA NÃO OFERECE COBRAR DE NOVO, e também não some: quem
+                confere a série precisa ver que aquele mês já saiu. E excluir
+                deixa de ser oferecido — apagar o registro de um mês já cobrado
+                deixaria a cobrança sem a conta que a originou. */}
+            {r.fatura_id ? (
+              <span className="fu-registro-val">cobrança gerada</span>
+            ) : (
+              <>
+                {/* O ato só é OFERECIDO quando este banco sabe executá-lo.
+                    Oferecer sempre trocaria uma recusa nomeada por um clique
+                    que falha, e quem opera não tem como saber a diferença. */}
+                {r.cobranca_disponivel && (
+                  <button type="button" className="fu-texto"
+                          onClick={() => void cobrar(r)} disabled={cobrando !== null}>
+                    {cobrando === r.id ? 'gerando…' : 'gerar cobrança'}
+                  </button>
+                )}
+                <button type="button" className="fu-texto" onClick={() => void apagar(r)}>excluir</button>
+              </>
+            )}
           </span>
         </div>
       ))}

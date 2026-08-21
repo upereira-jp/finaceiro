@@ -11,7 +11,31 @@
 
 ---
 
-## 0. O achado que governa o resto
+## 0. O achado que governa o resto — **e a decisão já foi tomada**
+
+> ## ✅ 21/08/2026, fim do dia — o dono decidiu: **o caminho oficial é o UNIFICADO.**
+>
+> Verbatim: *"vamos com o caminho da fatura unificada"*. A `Q-CICLO-01` está
+> **resolvida e construída no mesmo dia**, e o motivo de não esperar é de custo: as
+> duas tabelas tinham **zero linhas**, e ligar duas tabelas vazias é uma coluna.
+> Depois do primeiro dinheiro seria migration com valor gravado dentro.
+>
+> **O que a construção mostrou, e não era esperado:** o motor de repartição **já
+> tinha a forma exata** da conta unificada. Ele lê da fatura duas parcelas, e a
+> conta unificada produz exatamente essas duas — o que o cliente paga à G3 pela
+> energia, e o que é repasse puro à distribuidora. **Nenhuma linha do motor mudou.**
+>
+> **O ganho de operação, medido:** a exigência de dia de vencimento — **46 de 46
+> vazias** — deixa de bloquear, porque a conta da distribuidora traz a data. Não é
+> um dia inventado pelo sistema: é o que o cliente já tem no papel.
+>
+> **O que a decisão não removeu:** contrato, usina, rateio e geração continuam
+> obrigatórios. Não para calcular o valor — a conta dá o valor — mas porque é da
+> usina que sai o repasse e do contrato que sai a regra da comissão. Mudou **de
+> onde vem o valor**, não **quem recebe**.
+>
+> O diagnóstico original fica abaixo, intacto, porque é o registro de por que a
+> decisão precisou ser tomada.
 
 > ### Existem DOIS caminhos de fatura neste sistema, e eles não se encontram.
 
@@ -51,11 +75,11 @@ Semáforo: 🟢 funciona e está provado · 🟡 existe e está bloqueado por in
 |:--:|---|:--:|---|
 | 0 | O cliente chega do CRM | 🟢 | nada — roda sozinho de 15 em 15 min |
 | 1 | Identificar o cliente (CPF/CNPJ) | 🟡 | **11 de 29** sem documento confirmado |
-| 2 | A unidade consumidora | 🟡 | **0 de 46** com dia de vencimento · **0 de 46** com endereço |
+| 2 | A unidade consumidora | 🟡 | endereço **0 de 46** · o vencimento **deixou de bloquear**: a conta traz a data |
 | 3 | Contrato e quem trouxe o cliente | 🔴 | **0 originadores** → **0 contratos** possíveis |
 | 4 | Usina, rateio e geração | 🟡 | rateio ✅ · **0 de 4** usinas com dono · **2 de 4** sem geração nenhuma |
 | 5 | **Receber a conta da distribuidora** | 🔴 | a leitura está **desligada em produção** |
-| 6 | Compor a fatura | 🔴 | **os dois caminhos** — `Q-CICLO-01` |
+| 6 | Compor a fatura | 🟡 | **decidida e construída** — falta aplicar a migration 34 |
 | 7 | Emitir e entregar o documento | 🟡 | emissor **em branco**: sem razão social, sem CNPJ, sem logo |
 | 8 | Cobrar | 🟡 | Pix ✅ · boleto só importado à mão · falta o certificado A1 |
 | 9 | Receber e dar baixa | 🟡 | pronto, nunca exercitado — 0 liquidações |
@@ -63,9 +87,9 @@ Semáforo: 🟢 funciona e está provado · 🟡 existe e está bloqueado por in
 | 11 | Pagar o dono e o originador | 🟡 | pronto; só tem linha depois da primeira liquidação |
 | 12 | Conferir (relatórios) | 🟢 | funciona; tabelas vazias porque não há dado ainda |
 
-**Nenhuma das 12 fases está quebrada por defeito de código.** Onze estão paradas por
-insumo que ninguém digitou ou por decisão que ninguém tomou. A décima segunda — a
-fase 6 — está parada por uma bifurcação de projeto.
+**Nenhuma das 12 fases está quebrada por defeito de código.** A bifurcação da fase 6
+foi decidida e construída em 21/08; o que resta em todas as outras é insumo que
+ninguém digitou — cadastro, credencial e certificado.
 
 ---
 
@@ -295,8 +319,8 @@ Cinco entradas novas, transcritas para o `QUESTOES.md` §5:
 
 | ID | Nível | A pergunta | Dono |
 |---|:--:|---|---|
-| **Q-CICLO-01** | 🔴 | **Qual dos dois caminhos de fatura é o oficial?** Enquanto os dois existirem, a fase 6 tem duas respostas e nenhuma é a do sistema | Vinicius |
-| **Q-CICLO-02** | 🔴 | Se o unificado vencer: **como ele vira `fatura`**, para poder ser cobrado, liquidado e repartido? Muda a base do split, e depende da `Q-DOCG3-11` | Vinicius + contador |
+| ~~**Q-CICLO-01**~~ | ✅ | ~~Qual dos dois caminhos de fatura é o oficial?~~ **Resolvida em 21/08: o unificado** — e construída no mesmo dia, ver a onda 3 | Vinicius |
+| **Q-CICLO-02** | 🟡 | **Duas das três respondidas e construídas.** Sobra a decomposição da parte da distribuidora que alimenta o repasse — é a `Q-DOCG3-11`, e é aval fiscal | Vinicius + contador |
 | **Q-GERACAO-USINA-01** | 🔴 | **Duas das quatro usinas nunca tiveram geração medida** (0003 e 04), e a 0001 só tem 06/2026. Medido nas duas pontas: falta no CRM, o espelho está fiel. De onde vem esse número, e quem lança? | operação + dev do CRM |
 | **Q-CONTA-ORIG-01** | 🟡 | **A conta lida não é arquivada.** Guardar o PDF original — onde, por quanto tempo, quem pode abrir? | Vinicius |
 | **Q-CONTA-LOTE-01** | 🟡 | **29 contas por mês, uma por vez.** Vale um caminho de lote, ou a conferência individual é o ponto? | Vinicius + operação |
@@ -307,11 +331,10 @@ Cinco entradas novas, transcritas para o `QUESTOES.md` §5:
 
 A ordem não é de importância — é de **dependência**. Fechar uma destrava a seguinte.
 
-### Onda 0 · A decisão que precede o código — *hoje, e é do dono*
+### ✅ Onda 0 · A decisão que precede o código — **FEITA em 21/08**
 
-Responder a **`Q-CICLO-01`**. Nada da onda 3 em diante deve ser escrito antes.
-
-Custo: uma conversa. Custo de pular: o risco de jogar fora tudo o que vier depois.
+**`Q-CICLO-01` resolvida: o caminho oficial é o unificado.** E a onda 3, que
+dependia dela, foi construída no mesmo dia — ver abaixo.
 
 ### Onda 1 · Os seis cadastros — *não é código, e não muda com a onda 0*
 
@@ -339,17 +362,33 @@ R$ 15.367,38 estimados — e a repartição pode rodar de verdade pela primeira 
    é a única coisa do leitor que não está provada.
 3. Decidir `Q-CONTA-ORIG-01` (arquivar o PDF) e `Q-CONTA-LOTE-01` (lote).
 
-### Onda 3 · A junção — *depende inteiramente da onda 0*
+### ✅ Onda 3 · A junção — **CONSTRUÍDA em 21/08**
 
-- **Se o caminho A vencer:** completar a folha de 5 faixas com os três cartões e a
-  quebra do repasse, que hoje só existem no caminho B. Requer a tarifa cheia e a
-  decomposição da conta — `Q-DOCG3-11`, que já tem decisão do dono e falta o aval
-  fiscal.
-- **Se o caminho B vencer:** dar ao registro unificado um `fatura_id`, para que
-  cobrança, liquidação e repartição passem a alcançá-lo. É migration em tabela que
-  ainda tem **0 linhas** — o momento mais barato que vai existir.
-- **Se conviverem:** dizer, por escrito, qual é a fonte da verdade do valor cobrado.
-  Duas respostas para "quanto o cliente deve" é o defeito, não a redundância.
+O caminho B venceu, e o registro unificado ganhou `fatura_id`. O que entrou:
+
+| | |
+|---|---|
+| **migration 34** | a coluna, a FK composta e o índice **cheio** — parcial sobre exatamente as colunas de uma FK é o único caso que a regra 11 proíbe pelo nome |
+| **a triagem** | `src/dominio/fatura-do-registro.ts`, pura, **42 verificações**. Nove recusas nomeadas, cada uma dizendo a saída |
+| **a gravação** | `INSERT ... SELECT` que copia os centavos **de dentro do banco** — nenhum valor de dinheiro passa pelo Node, e não há segunda implementação de nada |
+| **duas rotas** | ensaiar (não escreve) e faturar (escreve). O par é o mesmo do lote, pela mesma razão: o primeiro ato que cobra um cliente deve poder ser olhado antes de existir |
+| **o botão** | *"gerar cobrança"*, na lista de contas registradas. Um ato que só o `curl` alcança não é um ato — este projeto já pagou por esse erro uma vez |
+
+**A conferência da alocação é capacidade nova, e caiu de graça.** O caminho
+unificado põe lado a lado dois números que nunca tinham se encontrado: quanto a
+usina **alocou** para a unidade (geração × rateio) e quanto a distribuidora
+**compensou** de fato na conta. Não vira alerta — são grandezas diferentes e quase
+nunca são iguais, então um sinal seria ruído. Vira três números para quem confere:
+alocado, compensado, diferença. *"Aloquei 500 e o cliente compensou 480"* é
+pergunta de negócio legítima, e antes não tinha onde ser feita.
+
+**O que sobrou aberto:** a decomposição da parte da distribuidora que alimenta o
+repasse (`Q-DOCG3-11`) espera o aval do contador. Enquanto não vier, a repartição
+trata essa parte como repasse puro — que é o que o `PRD` §5.1 manda.
+
+**O que falta para isso rodar:** aplicar a migration 34. Enquanto ela não estiver
+no banco, a guarda de catálogo recusa nomeando e **o botão nem aparece** — a tela
+não oferece um ato que este banco ainda não sabe executar.
 
 ### Onda 4 · Cobrar de verdade
 

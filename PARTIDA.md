@@ -62,10 +62,18 @@ Depende do item 0 (originador) e do item 1 (documento confirmado) para cada clie
 
 → aba **Contratos**, formulário no topo. Ele já cria ativando.
 
-## 3. Dia de vencimento — 29 de 29
+## 3. Dia de vencimento — ~~29 de 29~~ **deixou de bloquear em 21/08**
 
-Não existe dia padrão e não vai existir: o sistema prefere recusar a cobrança a
-escolher uma data por você.
+Continua não existindo dia padrão, e continua não indo existir: o sistema prefere
+recusar a cobrança a escolher uma data por você.
+
+**O que mudou é que agora existe uma fonte que não é invenção do sistema.** Com o
+caminho da fatura unificada, o vencimento vem impresso na conta da distribuidora
+— é a data que o cliente já tem no papel, no ciclo de leitura dele. O dia
+cadastrado aqui virou a **segunda** fonte, para as unidades cuja conta não traga a
+data.
+
+Preencher continua valendo a pena; deixou de ser bloqueio.
 
 → aba **Unidades consumidoras**, filtro «Sem vencimento».
 

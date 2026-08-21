@@ -607,6 +607,20 @@ export type RegistroDeFatura = {
   tarifa_kwh: string;
   desconto_centavos: number;
   total_centavos: number;
+  /**
+   * A cobranca que esta conta virou, quando virou (migration 34).
+   *
+   * `null` tem DOIS significados que a tela precisa separar, e por isso ela nao
+   * decide sozinha: ou a conta ainda nao foi cobrada, ou a ligacao ainda nao
+   * existe neste banco. O servidor devolve `null` nos dois casos e recusa
+   * nomeando no segundo — a tela mostra a recusa em vez de adivinhar.
+   */
+  fatura_id: string | null;
+  /** Se ESTE banco já sabe transformar conta lida em cobrança. É propriedade do
+   *  banco e não da linha — vem repetida em todas. Falso enquanto a ligação não
+   *  estiver aplicada, e aí a tela não oferece o ato em vez de oferecê-lo e
+   *  falhar. */
+  cobranca_disponivel: boolean;
   criado_em: string;
   atualizado_em: string;
 };

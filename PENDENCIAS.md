@@ -30,6 +30,19 @@
 >
 > É decisão, não código, então pela regra 10 vale a mesma frase: não é do implementador
 > fechar. Registrada como **`Q-CICLO-01` 🔴** e mais quatro no `QUESTOES.md` §5.
+>
+> **✅ Fim do mesmo dia — o dono decidiu e a junção foi construída.** *"vamos com o
+> caminho da fatura unificada"*. Entrou a **migration 34** (a coluna que liga as duas
+> metades), a triagem pura com 42 verificações, o `INSERT ... SELECT` que copia os
+> centavos de dentro do banco, duas rotas e o botão *"gerar cobrança"* na tela. **O
+> motor de repartição não mudou uma linha** — ele já tinha a forma exata da conta
+> unificada, e isso foi medido antes de escrever.
+>
+> **Isto acrescenta uma pendência de aplicação à §1:** a migration 34 está escrita,
+> versionada e **não aplicada**. Enquanto não estiver no banco, a guarda de catálogo
+> recusa nomeando e o botão nem aparece — a tela não oferece um ato que este banco
+> ainda não sabe executar. A sequência é a da §5: `migrate-financeiro` e depois
+> `deploy-financeiro`.
 
 ---
 

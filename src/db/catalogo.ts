@@ -50,8 +50,44 @@ export async function indiceDeDocumentoExiste(): Promise<boolean> {
   return _travaConhecida;
 }
 
-/** So para teste: esquece a resposta cacheada. Nao usar em runtime - a resposta
- *  real muda uma vez na vida do banco, e no meio de um lote ela nao muda. */
+let _juncaoConhecida: boolean | null = null;
+
+/**
+ * A coluna `registro_de_fatura_unificada.fatura_id` ja existe neste banco?
+ *
+ * E a ligacao da migration 34 - a que a `Q-CICLO-01` destravou em 21/08/2026,
+ * quando o dono decidiu que o caminho oficial da fatura e o UNIFICADO.
+ *
+ * POR QUE PERGUNTAR EM VEZ DE SUPOR, e a licao e a mesma que este arquivo ja
+ * carrega: **migration e codigo chegam em ordens diferentes.** A ordem certa
+ * neste projeto e migrar e DEPOIS implantar (`PENDENCIAS` §5), mas quem opera nao
+ * tem como saber em que ponto da fila esta, e o modo de falha sem a pergunta e o
+ * pior possivel: um `42703` cru - "column fatura_id does not exist" - chegando a
+ * quem clicou "Faturar", sem dizer que falta uma migration.
+ *
+ * Com a pergunta, a recusa nomeia o que falta e nada acontece pela metade.
+ */
+export async function juncaoDaFaturaUnificadaExiste(): Promise<boolean> {
+  if (_juncaoConhecida !== null) return _juncaoConhecida;
+  try {
+    const linhas: any[] = await dbt().$queryRaw`
+      SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name   = 'registro_de_fatura_unificada'
+         AND column_name  = 'fatura_id'`;
+    _juncaoConhecida = linhas.length > 0;
+  } catch {
+    /* Sem resposta do catalogo, assume que NAO existe: aqui o lado seguro e
+     * recusar nomeando, em vez de tentar escrever e estourar no meio. A trava
+     * acima aponta para o outro lado pelo mesmo criterio - nao escrever. */
+    _juncaoConhecida = false;
+  }
+  return _juncaoConhecida;
+}
+
+/** So para teste: esquece as respostas cacheadas. Nao usar em runtime - a
+ *  resposta real muda uma vez na vida do banco, e no meio de um lote nao muda. */
 export function esquecerCacheDoCatalogo(): void {
   _travaConhecida = null;
+  _juncaoConhecida = null;
 }
