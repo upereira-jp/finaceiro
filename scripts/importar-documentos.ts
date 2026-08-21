@@ -40,6 +40,7 @@ import {
   type LinhaDoModeloDeDocumento,
 } from '../src/dominio/planilha-documentos.ts';
 import { db } from '../src/db/contexto.ts';
+import { indiceDeDocumentoExiste } from '../src/db/catalogo.ts';
 
 class RollbackDoEnsaio extends Error {
   readonly valor: unknown;
@@ -144,7 +145,18 @@ async function main(): Promise<void> {
     process.exit(2);
   }
 
-  const p = lerPlanilhaDeDocumentos(conteudo);
+  /*
+   * O CATALOGO ANTES DO ARQUIVO. O leitor e puro e nao pergunta ao banco, entao
+   * quem pergunta e este script - e a resposta muda o que "documento repetido"
+   * significa. Ate 20/08/2026 `cliente_documento_unico` existia e repetir era
+   * escrita impossivel; a migration 33 o dropou, e repetir passou a ser o caso
+   * NORMAL de uma pessoa com duas UCs.
+   *
+   * A chamada e barata e cacheada por processo: a segunda, la dentro de
+   * `lancarDocumentosPorCliente`, nao volta ao banco.
+   */
+  const travaAtiva = await a.withTenant(sessao, arg('tenant'), () => indiceDeDocumentoExiste());
+  const p = lerPlanilhaDeDocumentos(conteudo, { documentoPodeRepetir: !travaAtiva });
 
   /*
    * O ARQUIVO INTEIRO ANTES DE QUALQUER ESCRITA, como em
@@ -199,10 +211,29 @@ async function main(): Promise<void> {
     console.log('  plausivel, e escolher aqui seria escolher em silencio.\n');
   }
 
+  /*
+   * AS REPETICOES TAMBEM ANTES DO RESUMO, e pela razao oposta a das colisoes:
+   * elas NAO abortam nada, e e justamente por isso que precisam ser lidas. Um
+   * par que grava em silencio e o unico jeito de um CPF na linha errada entrar
+   * carimbado como `coleta_local` - que e a origem que VALIDA.
+   */
+  if (r!.repeticoes.length > 0) {
+    console.log(`== ${r!.repeticoes.length} REPETICAO(OES). O lote SEGUE - confira depois. ==\n`);
+    for (const c of r!.repeticoes) {
+      console.log(`  ${c.documento}  ${c.nome}`);
+      console.log(`  ${' '.repeat(c.documento.length)}  tambem esta em "${c.dono_atual_nome}"` +
+                  `${c.dono_atual_ativo ? '' : ' (INATIVO - vitima de merge)'}`);
+    }
+    console.log('\n  `cliente_documento_unico` nao existe mais (migration 33): o documento PODE repetir,');
+    console.log('  a UC nao. O par legitimo e uma pessoa com duas UCs; o par errado e um CPF digitado');
+    console.log('  na linha de outra pessoa. Os dois produzem este mesmo relatorio.\n');
+  }
+
   console.log('--- resultado ---');
   console.log(`  aplicados ........ ${r!.aplicados.length}`);
   console.log(`  inalterados ...... ${r!.inalterados.length}  (ja tinham este documento, ja validado)`);
   console.log(`  colisoes ......... ${r!.colisoes.length}`);
+  console.log(`  repeticoes ....... ${r!.repeticoes.length}  (gravam - o indice unico nao existe mais)`);
   console.log(`  cliente ausente .. ${r!.sem_cliente.length}`);
   console.log(`  nao cobertos ..... ${r!.nao_cobertos.length}`);
 

@@ -5,6 +5,7 @@
 import { dbt } from '../db/tipado.ts';
 import { tenantCorrente, exigir } from '../db/contexto.ts';
 import { classificar, type OrigemDocumento } from '../dominio/documento.ts';
+import { indiceDeDocumentoExiste } from '../db/catalogo.ts';
 
 export type NovoCliente = {
   nome: string;
@@ -207,6 +208,22 @@ export type ResultadoDosDocumentos = {
     cliente_id: string; nome: string; documento: string;
     dono_atual_id: string; dono_atual_nome: string; dono_atual_ativo: boolean;
   }>;
+  /**
+   * O MESMO achado das `colisoes`, quando ele nao bloqueia mais.
+   *
+   * Sem `cliente_documento_unico` (migration 33), o documento que ja pertence a
+   * outro cliente GRAVA - e a regra de negocio quer que grave: uma pessoa com
+   * duas UCs tem duas linhas de cliente e um CPF so. Continua sendo, porem, a
+   * mesma ambiguidade de sempre - par legitimo ou CPF na linha errada -, e essa
+   * leitura e humana. Entao sai no relatorio em vez de abortar o lote.
+   *
+   * As duas listas nunca estao cheias ao mesmo tempo: o catalogo responde uma
+   * coisa so, e e ele que decide para qual delas o achado vai.
+   */
+  repeticoes: Array<{
+    cliente_id: string; nome: string; documento: string;
+    dono_atual_id: string; dono_atual_nome: string; dono_atual_ativo: boolean;
+  }>;
   /** Cliente ATIVO que a planilha nao cobriu, com o que ele tem hoje. Ausente
    *  nao e zero: o lancamento nao apaga o documento de quem nao veio. */
   nao_cobertos: Array<{
@@ -267,8 +284,16 @@ export async function lancarDocumentosPorCliente(
     todos.filter((c) => c.documento !== null).map((c) => [c.documento!, c]));
 
   const r: ResultadoDosDocumentos = {
-    aplicados: [], sem_cliente: [], inalterados: [], colisoes: [], nao_cobertos: [],
+    aplicados: [], sem_cliente: [], inalterados: [], colisoes: [], repeticoes: [], nao_cobertos: [],
   };
+
+  /*
+   * A PERGUNTA AO CATALOGO ANTES DE DECIDIR, e nao uma constante: a migration 33
+   * dropou `cliente_documento_unico` em 20/08/2026 e o portao que esta funcao
+   * guardava deixou de existir. Ver `src/db/catalogo.ts` para o porque de a
+   * resposta vir de la e nao daqui.
+   */
+  const travaAtiva = await indiceDeDocumentoExiste();
 
   /*
    * PRIMEIRA PASSADA: so decide. Nada e escrito aqui, e e por isso que a colisao
@@ -290,11 +315,15 @@ export async function lancarDocumentosPorCliente(
 
     const dono = donoDoDocumento.get(documento);
     if (dono && dono.id !== cliente_id) {
-      r.colisoes.push({
+      const achado = {
         cliente_id, nome: c.nome, documento,
         dono_atual_id: dono.id, dono_atual_nome: dono.nome, dono_atual_ativo: dono.ativo,
-      });
-      continue;
+      };
+      // Com o indice no ar isto ABORTA o lote (a escrita falharia de qualquer
+      // forma). Sem ele, e so uma coisa para uma pessoa olhar depois - e a linha
+      // segue para escrita.
+      if (travaAtiva) { r.colisoes.push(achado); continue; }
+      r.repeticoes.push(achado);
     }
 
     aEscrever.push({ cliente: c, documento });

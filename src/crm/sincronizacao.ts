@@ -33,6 +33,7 @@
 import { dbt } from '../db/tipado.ts';
 import { tenantCorrente, exigir, dentroDeUnidadeDeTrabalho } from '../db/contexto.ts';
 import { ehSqlstate, SQLSTATE } from '../db/sqlstate.ts';
+import { indiceDeDocumentoExiste } from '../db/catalogo.ts';
 import { paraDecimal, decimalParaTexto } from '../dominio/fatura-unificada.ts';
 import { conferirCreditoDeOriginador, type ResumoDeSituacao } from '../dominio/credito-originador.ts';
 /* A semente do documento reusa o MESMO normalizador e o MESMO detector de tipo
@@ -439,33 +440,16 @@ export function tarifaDoCliente(
  * comprimento dos dois lados, e derivar de novo custa nada e fecha a porta para
  * um `documento_tipo` que discorde do proprio `documento`.
  */
-/**
- * O indice `cliente_documento_unico` ainda existe neste banco?
+/*
+ * `indiceDeDocumentoExiste()` NASCEU AQUI e mudou-se para `src/db/catalogo.ts`
+ * em 21/08/2026. A razao e que a pergunta nunca foi do conector: a migration 33
+ * dropou o indice para o banco inteiro, e o `importar-documentos.ts` continuou
+ * recusando linha citando um portao que ja nao existia. Uma copia por chamador
+ * seria a mesma guarda vencida em dois lugares.
  *
- * Existe para ser respondido em RUNTIME, e nao por constante, porque a resposta
- * muda no dia em que a migration 33 rodar — e ela roda de um Codespace, num
- * momento que este codigo nao controla. Sem esta pergunta, alguem teria de
- * lembrar de voltar aqui e apagar a guarda depois; com ela, a guarda se desliga
- * sozinha e o ciclo seguinte semeia todos os documentos.
- *
- * Cacheado por processo: o catalogo nao muda no meio de um ciclo, e um ciclo tem
- * dez lotes.
+ * Reexportado para nao quebrar quem ja importava daqui.
  */
-let _travaConhecida: boolean | null = null;
-export async function indiceDeDocumentoExiste(): Promise<boolean> {
-  if (_travaConhecida !== null) return _travaConhecida;
-  try {
-    const linhas: any[] = await dbt().$queryRaw`
-      SELECT 1 FROM pg_indexes
-       WHERE schemaname = 'public' AND indexname = 'cliente_documento_unico'`;
-    _travaConhecida = linhas.length > 0;
-  } catch {
-    /* Sem resposta do catalogo, assume que a trava existe: errar para o lado de
-     * contar em vez de escrever nunca derruba lote. */
-    _travaConhecida = true;
-  }
-  return _travaConhecida;
-}
+export { indiceDeDocumentoExiste };
 
 /**
  * O documento que ja esta no cliente pode ser TROCADO pelo que o CRM traz agora?

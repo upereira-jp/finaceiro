@@ -65,12 +65,41 @@ export type LinhaDeDocumento = {
 
 export type ErroDeDocumento = { linha: number; motivo: string };
 
+/**
+ * Duas linhas do arquivo com o MESMO documento, quando repetir e permitido.
+ *
+ * Nao e erro e nao e silencio: com a migration 33 no ar, o par legitimo (uma
+ * pessoa com duas UCs) e a digitacao na linha errada produzem o mesmo arquivo, e
+ * a diferenca entre os dois so uma pessoa enxerga. Entao o lote passa e o
+ * relatorio mostra o par.
+ */
+export type RepeticaoDeDocumento = {
+  linha: number;
+  /** A primeira linha em que este documento apareceu. */
+  linha_anterior: number;
+  documento: string;
+};
+
 export type PlanilhaDeDocumentos = {
   linhas: LinhaDeDocumento[];
   erros: ErroDeDocumento[];
+  /** Vazio quando `documentoPodeRepetir` e false: la a repeticao vira erro. */
+  repeticoes: RepeticaoDeDocumento[];
   vazias: number;
   cabecalho: boolean;
 };
+
+/**
+ * `documentoPodeRepetir` E A RESPOSTA DO CATALOGO, e nao uma preferencia.
+ *
+ * Este modulo e puro (regra 8) e por isso nao pode perguntar ao banco se
+ * `cliente_documento_unico` ainda existe - quem pergunta e
+ * `src/db/catalogo.ts`, e o script passa a resposta para ca.
+ *
+ * O default e `false`, que e o comportamento historico: quem esquecer de passar
+ * recusa em vez de gravar, e errar para o lado de recusar nunca corrompeu banco.
+ */
+export type OpcoesDeLeitura = { documentoPodeRepetir?: boolean };
 
 /** O separador e `;`, como nas outras duas planilhas e em `web/src/csv.ts`. */
 
@@ -98,7 +127,12 @@ export type PlanilhaDeDocumentos = {
  * Colunas adicionais sao IGNORADAS, como nas outras duas planilhas: obrigar a
  * apaga-las seria pedir uma edicao a mais no arquivo que nao pode ter erro.
  */
-export function lerPlanilhaDeDocumentos(conteudo: string): PlanilhaDeDocumentos {
+export function lerPlanilhaDeDocumentos(
+  conteudo: string,
+  opcoes: OpcoesDeLeitura = {},
+): PlanilhaDeDocumentos {
+  const podeRepetir = opcoes.documentoPodeRepetir === true;
+
   // BOM UTF-8: o Excel o escreve, e sem tirar aqui o primeiro `cliente_id` viria
   // com um caractere invisivel na frente e nao casaria com uuid nenhum.
   const texto = conteudo.replace(/^﻿/, '');
@@ -106,6 +140,7 @@ export function lerPlanilhaDeDocumentos(conteudo: string): PlanilhaDeDocumentos 
 
   const linhas: LinhaDeDocumento[] = [];
   const erros: ErroDeDocumento[] = [];
+  const repeticoes: RepeticaoDeDocumento[] = [];
   const clientesVistos = new Map<string, number>();
   const documentosVistos = new Map<string, number>();
   let vazias = 0;
@@ -200,17 +235,41 @@ export function lerPlanilhaDeDocumentos(conteudo: string): PlanilhaDeDocumentos 
      */
     const docAntes = documentosVistos.get(d.documento);
     if (docAntes !== undefined) {
-      erros.push({
-        linha: numeroDaLinha,
-        motivo: `o documento ${d.documento} ja aparece na linha ${docAntes}, em outro cliente. ` +
-                '`cliente_documento_unico` recusaria a segunda escrita - e as duas linhas podem ser a ' +
-                'mesma pessoa duplicada (Q-CLIENTEDUP-01) ou um documento digitado na linha errada',
-      });
-      return;
+      /*
+       * A MIGRATION 33 MUDOU O QUE ESTA REPETICAO SIGNIFICA, e por isso ela
+       * deixou de ser recusa quando o indice nao existe mais.
+       *
+       * Enquanto `cliente_documento_unico` estava no ar, a segunda escrita
+       * FALHAVA - recusar era so anunciar antes o que o banco faria no meio do
+       * lote. Sem o indice, ela grava; recusar passou a ser este arquivo
+       * proibindo o que a regra de negocio autoriza. O dono da regra foi
+       * explicito: "os documentos podem se repetir, pois nas negociacoes mais de
+       * uma pessoa pode ser responsavel por uma UC, entretanto, nao podem existir
+       * mais de uma UC" - e a migration 33 fez exatamente isso, dropou o indice
+       * do documento e manteve `uc_numero_unico`.
+       *
+       * O que NAO muda e a ambiguidade: o par continua podendo ser a mesma
+       * pessoa duplicada (Q-CLIENTEDUP-01) ou um CPF digitado na linha errada.
+       * Por isso ele nao some - vai para `repeticoes` e o relatorio o mostra.
+       */
+      if (!podeRepetir) {
+        erros.push({
+          linha: numeroDaLinha,
+          motivo: `o documento ${d.documento} ja aparece na linha ${docAntes}, em outro cliente. ` +
+                  '`cliente_documento_unico` recusaria a segunda escrita - e as duas linhas podem ser a ' +
+                  'mesma pessoa duplicada (Q-CLIENTEDUP-01) ou um documento digitado na linha errada',
+        });
+        return;
+      }
+      repeticoes.push({ linha: numeroDaLinha, linha_anterior: docAntes, documento: d.documento });
     }
 
     clientesVistos.set(id, numeroDaLinha);
-    documentosVistos.set(d.documento, numeroDaLinha);
+    // A PRIMEIRA ocorrencia fica, e nao a ultima: com tres linhas do mesmo
+    // documento, `linha_anterior` apontando sempre para a mesma origem le-se
+    // como um grupo; apontando para a anterior, le-se como uma corrente que a
+    // pessoa tem de remontar de tras para frente.
+    if (!documentosVistos.has(d.documento)) documentosVistos.set(d.documento, numeroDaLinha);
     linhas.push({
       linha: numeroDaLinha,
       cliente_id: id.toLowerCase(),
@@ -220,7 +279,7 @@ export function lerPlanilhaDeDocumentos(conteudo: string): PlanilhaDeDocumentos 
     });
   });
 
-  return { linhas, erros, vazias, cabecalho };
+  return { linhas, erros, repeticoes, vazias, cabecalho };
 }
 
 /** O modelo que o `--modelo` imprime quando nao ha banco a consultar. Com banco,

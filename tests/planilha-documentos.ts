@@ -230,5 +230,60 @@ const CAB = 'cliente_id;documento\n';
   }
 }
 
+// ==================================================== P7 depois da migration 33
+//
+// O MESMO ARQUIVO, E A RESPOSTA MUDA - porque quem responde e o catalogo.
+//
+// Ate 20/08/2026 `cliente_documento_unico` estava no ar e documento repetido era
+// escrita IMPOSSIVEL: a recusa do P4 so anunciava, antes, o que o banco faria no
+// meio do lote. A migration 33 dropou esse indice e manteve `uc_numero_unico`,
+// atendendo o dono da regra - "os documentos podem se repetir (...) entretanto,
+// nao podem existir mais de uma UC".
+//
+// Medido em 21/08/2026, um dia depois: com o indice ja dropado, o `--ensaio`
+// recusou 4 de 18 linhas citando o indice que nao existia mais. As 4 eram as 4
+// pessoas com duas UCs - o caso exato que a migration foi criada para permitir.
+//
+// A repeticao nao vira SILENCIO, e este e o ponto da suite: par legitimo e CPF
+// digitado na linha errada produzem o mesmo arquivo, entao o achado sai em
+// `repeticoes` para uma pessoa olhar - o que ele perde e so o poder de abortar.
+{
+  const arquivo = CAB + `${ID_1};${CPF_1}\n` + `${ID_2};529.982.247-25\n`;
+
+  const antes = lerPlanilhaDeDocumentos(arquivo);
+  chk('P7a', antes.linhas.length === 1 && antes.erros.length === 1 && antes.repeticoes.length === 0,
+      'sem opcao nenhuma o comportamento e o historico: recusa. Quem esquecer de perguntar ao catalogo '
+      + 'recusa em vez de gravar, e errar para o lado de recusar nunca corrompeu banco');
+
+  const depois = lerPlanilhaDeDocumentos(arquivo, { documentoPodeRepetir: true });
+  chk('P7b', depois.erros.length === 0 && depois.linhas.length === 2,
+      `com o indice dropado as DUAS linhas valem (l=${depois.linhas.length} e=${depois.erros.length}) `
+      + '- e a pessoa com duas UCs tem duas linhas de cliente e um CPF so');
+  chk('P7c', depois.repeticoes.length === 1 && depois.repeticoes[0]!.linha === 3
+             && depois.repeticoes[0]!.linha_anterior === 2,
+      'e o par continua nomeado, com as DUAS linhas - grava, mas nao em silencio');
+  chk('P7d', depois.repeticoes[0]!.documento === CPF_1,
+      'a repeticao e vista sobre o documento NORMALIZADO: "529.982.247-25" e "52998224725" sao o mesmo CPF, '
+      + 'e comparar texto cru nao veria o par nem para recusar nem para relatar');
+
+  // O MESMO CLIENTE duas vezes continua sendo erro, e nao tem nada com o indice:
+  // duas linhas dando documentos diferentes para uma pessoa nao e regra de banco,
+  // e arquivo ambiguo - escolher um dos dois seria escolher em silencio.
+  const mesmoCliente = lerPlanilhaDeDocumentos(
+    CAB + `${ID_1};${CPF_1}\n` + `${ID_1};${CPF_2}\n`, { documentoPodeRepetir: true });
+  chk('P7e', mesmoCliente.linhas.length === 1 && mesmoCliente.erros.length === 1,
+      'o mesmo cliente_id duas vezes segue recusado mesmo com repeticao liberada - a migration 33 '
+      + 'falou sobre documento repetido, e nao sobre arquivo ambiguo');
+
+  // Tres linhas do mesmo documento: `linha_anterior` aponta sempre para a
+  // PRIMEIRA, e nao para a de cima. Le-se como um grupo em vez de uma corrente.
+  const tres = lerPlanilhaDeDocumentos(
+    CAB + `${ID_1};${CPF_1}\n` + `${ID_2};${CPF_1}\n` + `${ID_3};${CPF_1}\n`,
+    { documentoPodeRepetir: true });
+  chk('P7f', tres.linhas.length === 3 && tres.repeticoes.length === 2
+             && tres.repeticoes.every((x) => x.linha_anterior === 2),
+      'com tres iguais as duas repeticoes apontam para a mesma origem (linha 2), e nao uma para a outra');
+}
+
 console.log(`\n${falhas === 0 ? 'TODAS PASSARAM' : `${falhas} FALHA(S)`}`);
 process.exit(falhas === 0 ? 0 : 1);

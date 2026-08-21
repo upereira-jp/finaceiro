@@ -5,12 +5,17 @@
 // do arquivo - digito, colisao dentro do arquivo, chave, cabecalho. Esta prova o
 // que so existe no banco, e sao cinco coisas:
 //
-//   1. A COLISAO CONTRA O QUE JA ESTA GRAVADO, inclusive contra cliente
-//      INATIVO - `cliente_documento_unico` nao olha a coluna `ativo`, e as 41
-//      vitimas de merge de 30/07 continuam na tabela.
-//   2. "COLIDIU ALGUMA, NAO ESCREVE NENHUMA". E a razao de o repositorio decidir
-//      em duas passadas, e sem banco nao ha como distinguir isso de "escreveu e
-//      deu certo".
+//   1. O DOCUMENTO QUE JA ESTA GRAVADO EM OUTRO CLIENTE, inclusive num INATIVO -
+//      as 41 vitimas de merge de 30/07 continuam na tabela segurando documento.
+//      Desde a migration 33 (20/08/2026) isso REPETE em vez de colidir: o indice
+//      `cliente_documento_unico` foi dropado e `uc_numero_unico` ficou, porque a
+//      regra e assimetrica - o documento pode repetir, a UC nao. O achado segue
+//      nomeado no relatorio; o que ele perdeu foi o poder de abortar o lote.
+//   2. "COLIDIU ALGUMA, NAO ESCREVE NENHUMA" - a decisao em duas passadas, que
+//      continua no codigo para o dia em que o catalogo disser que a trava voltou.
+//      Quem responde essa pergunta e `src/db/catalogo.ts`, em runtime, e nao uma
+//      constante: foi por lembrar em vez de perguntar que o importador passou um
+//      dia recusando linha em nome de um indice que ja nao existia.
 //   3. A R8 NA PRATICA: o mesmo documento ja podia estar la vindo do CRM, com
 //      `documento_validado = false`. Regravar com origem local NAO e escrita a
 //      toa - e a unica coisa que destrava a R9.
@@ -59,6 +64,11 @@ const CPF_B = '82345678968';
 const CPF_C = '93456789050';
 const CPF_D = '64567890108';
 const CNPJ  = '11222333000181';
+// Do D4, que desde a migration 33 ESCREVE. Ficam fora dos quatro de cima de
+// proposito: o D4 passou a mexer no banco, e reusar CPF dos outros blocos
+// acoplaria a ordem das suites ao resultado delas.
+const CPF_E = '10765432196';
+const CPF_F = '11530864259';
 
 /** O mapa que o script monta, pelo MESMO leitor que ele usa. Monta-lo a mao aqui
  *  testaria o repositorio contra uma leitura que nao e a de producao. */
@@ -157,44 +167,80 @@ let C1 = '', C2 = '', C3 = '', C4 = '', C5 = '', CB = '';
       `reimportar o mesmo arquivo grava ZERO (a=${r.aplicados.length} i=${r.inalterados.length}) - senao a trilha da regra 9 enche de escrita que nao mudou nada`);
 }
 
-// ---------------------------------------------------- D4 a colisao, e ela para o lote INTEIRO
+// ---------------------------------------------------- D4 o documento repetido, depois da migration 33
 //
-// A `Q-CLIENTEDUP-01` medida: 45 linhas ativas para 36 nomes distintos. O erro
-// de verdade nao e a colisao - e a colisao chegando no MEIO de um lote gravado
-// linha a linha, com metade escrita e sem o arquivo no banco para saber qual.
+// ESTE BLOCO MUDOU DE SINAL EM 21/08/2026, e a razao esta no catalogo e nao aqui.
+//
+// Ate 20/08 ele provava "colidiu alguma, nao escreve nenhuma": com
+// `cliente_documento_unico` no ar, a segunda escrita FALHAVA, e abortar o lote
+// era so anunciar antes o que o banco faria no meio dele. A migration 33 dropou
+// esse indice - mantendo `uc_numero_unico` - porque a regra do dono e
+// assimetrica: "os documentos podem se repetir (...) entretanto, nao podem
+// existir mais de uma UC". Uma pessoa com duas UCs tem duas linhas de cliente e
+// um CPF so.
+//
+// Medido no dia seguinte: o `--ensaio` do importador recusou 4 de 18 linhas
+// citando o indice que ja nao existia, e as 4 eram exatamente as 4 pessoas com
+// duas UCs. A guarda tinha virado o unico obstaculo ao caso que a migration
+// autorizou.
+//
+// O QUE NAO MUDOU e o que este bloco continua provando: o achado nao vira
+// silencio. Par legitimo e CPF digitado na linha errada produzem a mesma
+// planilha, e essa leitura e humana - entao ele sai em `repeticoes`, com o dono
+// atual nomeado. O que ele perdeu foi so o poder de abortar.
+//
+// FIXTURE PROPRIA, e isto tambem e consequencia: o D4 ESCREVE agora. Reusar C1,
+// C2 e C3 faria o D5 e o D7 lerem um banco montado por este bloco - e o D5a, que
+// exige `documento_atual === null` no C2, quebraria por acoplamento e nao por
+// defeito.
 {
-  const antesDoC2 = await docDe(C2);
+  const alvo = await emA(() => clienteRepo.criar({ nome: 'D4 alvo sem documento' }));
+  const dono = await emA(() => clienteRepo.criar({
+    nome: 'D4 dono do CPF_E', documento_bruto: CPF_E, documento_origem: 'crm_semente' }));
+
   const r = await emA(() => clienteRepo.lancarDocumentosPorCliente(mapaDe(
-    'cliente_id;documento\n'
-    + `${C2};${CPF_B}\n`      // linha boa, e vem ANTES da colisao de proposito
-    + `${C1};${CPF_C}\n`)));  // CPF_C ja e do C3
+    `cliente_id;documento\n${alvo.id};${CPF_E}\n`)));
 
-  chk('D4a', r.colisoes.length === 1 && r.colisoes[0]!.dono_atual_id === C3,
-      'o documento que ja pertence a outro cliente vira colisao NOMEADA, com o dono atual - isso o banco sabe e o arquivo nao');
-  chk('D4b', r.aplicados.length === 0,
-      'e NADA foi gravado, nem a linha boa que vinha antes: colidiu alguma, nao escreve nenhuma');
+  chk('D4a', r.repeticoes.length === 1 && r.repeticoes[0]!.dono_atual_id === dono.id,
+      'o documento que ja pertence a outro cliente vira REPETICAO nomeada, com o dono atual - '
+      + 'isso o banco sabe e o arquivo nao, e continua valendo a pena dizer');
+  chk('D4b', r.colisoes.length === 0,
+      'e nao vira colisao: sem `cliente_documento_unico` no catalogo nao ha escrita impossivel a anunciar');
+  chk('D4c', r.aplicados.length === 1,
+      'o lote SEGUE - abortar aqui seria este repositorio proibindo o que a migration 33 autorizou');
 
-  const c2 = await docDe(C2);
-  chk('D4c', c2.documento === antesDoC2.documento && c2.documento === null,
-      'a linha boa continua exatamente como estava no banco - a prova de que a decisao aconteceu ANTES da escrita');
+  const gravado = await docDe(alvo.id);
+  chk('D4d', gravado.documento === CPF_E && gravado.documento_validado === true
+        && gravado.origem === 'coleta_local',
+      'e o alvo recebeu o documento VALIDADO - a pessoa que digitou a planilha confirmou, e e esse ato que a R9 exige');
+
+  const doDono = await docDe(dono.id);
+  chk('D4e', doDono.documento === CPF_E && doDono.documento_validado === false,
+      'o dono anterior fica intacto, ainda como semente: o lote escreve na linha que veio na planilha e em nenhuma outra');
 
   /*
-   * A COLISAO CONTRA UM INATIVO. `cliente_documento_unico` e UNIQUE (tenant_id,
-   * documento) WHERE documento IS NOT NULL - nao ha `AND ativo` nele. As 41
-   * vitimas de merge de 30/07 continuam na tabela, e um CPF preso numa delas
-   * recusaria a escrita sem que nada na tela explicasse por que.
+   * A REPETICAO CONTRA UM INATIVO. Continua sendo caso proprio: as 41 vitimas de
+   * merge de 30/07 seguem na tabela segurando documento, e quem le o relatorio
+   * precisa saber que o "outro dono" e alguem desativado - senao vai procurar
+   * uma pessoa que ninguem ve na tela.
    */
-  const r2 = await emA(() => clienteRepo.lancarDocumentosPorCliente(mapaDe(
-    `cliente_id;documento\n${C1};${CPF_D}\n`)));
-  chk('D4d', r2.colisoes.length === 1 && r2.colisoes[0]!.dono_atual_id === C4
-        && r2.colisoes[0]!.dono_atual_ativo === false,
-      'documento preso num cliente INATIVO tambem colide, e o relatorio diz que o dono esta inativo - '
-      + 'o indice unico nao olha a coluna `ativo`, e sem esta linha a recusa pareceria vir do nada');
+  const morto = await emA(() => clienteRepo.criar({ nome: 'D4 inativo com CPF_F', documento_bruto: CPF_F }));
+  await emA(() => clienteRepo.desativar(morto.id));
+  const alvo2 = await emA(() => clienteRepo.criar({ nome: 'D4 alvo do CPF_F' }));
 
-  // E o cliente inativo nao recebe, nem como alvo.
+  const r2 = await emA(() => clienteRepo.lancarDocumentosPorCliente(mapaDe(
+    `cliente_id;documento\n${alvo2.id};${CPF_F}\n`)));
+  chk('D4f', r2.repeticoes.length === 1 && r2.repeticoes[0]!.dono_atual_id === morto.id
+        && r2.repeticoes[0]!.dono_atual_ativo === false,
+      'documento preso num cliente INATIVO tambem repete, e o relatorio diz que o dono esta inativo - '
+      + 'sem esta linha o aviso pareceria vir do nada');
+  chk('D4g', r2.aplicados.length === 1,
+      'e grava assim mesmo: cliente desativado nao reserva mais documento nenhum');
+
+  // E o cliente inativo nao recebe, nem como alvo. Isto nunca dependeu do indice.
   const r3 = await emA(() => clienteRepo.lancarDocumentosPorCliente(mapaDe(
-    `cliente_id;documento\n${C4};${CPF_B}\n`)));
-  chk('D4e', r3.aplicados.length === 0 && r3.sem_cliente[0]?.motivo === 'inativo',
+    `cliente_id;documento\n${morto.id};${CPF_B}\n`)));
+  chk('D4h', r3.aplicados.length === 0 && r3.sem_cliente[0]?.motivo === 'inativo',
       'e cliente inativo na planilha e recusa contada, distinta de "nao existe" - as duas pedem acoes diferentes');
 }
 
