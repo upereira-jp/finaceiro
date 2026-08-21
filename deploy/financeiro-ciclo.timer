@@ -1,0 +1,19 @@
+[Unit]
+Description=Roda o ciclo do conector com o CRM a cada 15 minutos
+Documentation=https://github.com/upereira-jp/finaceiro
+
+[Timer]
+# A CADA 15 MINUTOS, e a escolha e por CUSTO e nao por precisao: o ciclo le 117
+# linhas em ~10s, entao 15 minutos e barato e mantem o espelho novo o bastante
+# para a Central de Ajuda nao mentir. Faturamento nao precisa de frescor de
+# segundos - precisa de nao envelhecer um dia inteiro sem ninguem notar.
+OnCalendar=*:0/15
+# Perdeu a hora porque a maquina estava desligada? Roda ao voltar, uma vez.
+Persistent=true
+# Nao arranca junto com o resto no boot: o servico principal e o banco primeiro.
+OnBootSec=3min
+AccuracySec=30s
+Unit=financeiro-ciclo.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,59 @@
+[Unit]
+# O CICLO DO CONECTOR COM O CRM, agendado.
+#
+# POR QUE ELE EXISTE. Ate 21/08/2026 o ciclo so rodava quando alguem digitava o
+# comando. Medido no dia: nenhum systemd timer, nada no cron, nenhum agendador
+# dentro de scripts/servir.ts. Enquanto ninguem rodasse, o espelho do CRM
+# envelhecia em silencio - cliente novo, UC nova, rateio ativado e geracao
+# lancada nao chegavam aqui, e as telas mostravam um mes que ja tinha mudado.
+#
+# Isso passou a doer em 22/08, quando entraram usuarios novos: a Central de Ajuda
+# le a prontidao AO VIVO para dizer o que esta travando, e uma prontidao lida de
+# um espelho velho e pior que nenhuma - ela responde com confianca um numero que
+# nao vale mais.
+#
+# SEGURO DE REPETIR: o ciclo e idempotente por desenho (R3). Rodado duas vezes
+# seguidas contra producao em 21/08, a segunda passada gravou zero.
+Description=Financeiro G3 - ciclo do conector com o CRM
+Documentation=https://github.com/upereira-jp/finaceiro
+After=network-online.target financeiro.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=financeiro
+Group=financeiro
+WorkingDirectory=/opt/financeiro/app
+
+# O `--auth-user` NAO e descuido nem credencial embutida: e exigencia de desenho
+# (SPEC-002 R12). O conector nao tem caminho privilegiado - ele entra pelo mesmo
+# contexto de tenant de qualquer pessoa, porque "excecao de isolamento e ausencia
+# de isolamento". O uuid abaixo e o `sub` do Supabase Auth do dono, e nao um
+# segredo: sozinho ele nao autentica nada.
+#
+# `--valendo` e obrigatorio e nao tem default, de proposito: o script recusa
+# arrancar sem escolher entre ensaio e valendo, para nunca gravar por descuido.
+ExecStart=/opt/financeiro/node/bin/node --experimental-strip-types scripts/ciclo-crm.ts \
+  --valendo \
+  --auth-user 35f4dda9-5265-434e-8097-5d41c384a9ba \
+  --tenant eac198c0-b0c1-4b13-9b4d-6ac1a6eb011d
+
+EnvironmentFile=/etc/financeiro.env
+
+# O ciclo leva ~10s medidos. 5 minutos e folga para o CRM lento, nao expectativa.
+TimeoutStartSec=300
+
+# O MESMO endurecimento do servico principal. Ele nao escreve arquivo nenhum -
+# so banco -, entao `ProtectSystem=strict` nao o incomoda.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=financeiro-ciclo
