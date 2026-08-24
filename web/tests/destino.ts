@@ -138,10 +138,19 @@ chk('D4', typeof situacaoDaUc === 'function'
 
 // -------------------------------------------------------- D5 o endereco montado
 
-chk('D5', enderecoDoDestino(DESTINO_DA_CAMADA.tarifa_da_uc!) === `/unidades?${CHAVE_DO_FILTRO}=sem_tarifa`,
+chk('D5', enderecoDoDestino(DESTINO_DA_CAMADA.vencimento!) === `/unidades?${CHAVE_DO_FILTRO}=sem_vencimento`,
     'o endereco sai com o filtro embutido — e um link colavel, nao um estado de tela');
 chk('D5b', enderecoDoDestino(DESTINO_DA_CAMADA.contrato_ativo!) === '/contratos',
     'sem filtro, e a rota limpa: `?pendencia=` vazio seria sujeira num endereco que alguem cola');
+
+// D5e AS DUAS CAMADAS DO CAMINHO OFICIAL APONTAM PARA A LEITURA DA CONTA, e nao
+// para o cadastro. E a verificacao que prende a correcao de 24/08/2026: a tarifa
+// que a cobranca usa e a LIDA, e um link para a aba Unidades consumidoras
+// fecharia a coluna de la e deixaria a cobranca recusada do mesmo jeito.
+chk('D5e', DESTINO_DA_CAMADA.conta_lida_da_competencia!.rota === '/documento'
+        && DESTINO_DA_CAMADA.tarifa_na_conta!.rota === '/documento',
+    'a conta lida e o preco do kWh se resolvem na aba da fatura unificada, que e onde a conta '
+    + 'entra — apontar para o cadastro seria mandar trabalhar no lugar errado');
 chk('D5c', enderecoDoDestino(DESTINO_DA_CAMADA.geracao_da_competencia!) === null,
     'e sem tela nao ha endereco — a tela mostra o caminho escrito em vez de um link morto');
 

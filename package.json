@@ -37,7 +37,8 @@
     "enderecos": "node --experimental-strip-types --env-file=.env scripts/importar-enderecos.ts",
     "identidade": "node --experimental-strip-types --env-file=.env scripts/cadastrar-identidade.ts",
     "ensaio-juncao": "node --experimental-strip-types --env-file=.env scripts/ensaio-da-juncao.ts",
-    "repasse": "node --experimental-strip-types --env-file=.env scripts/cadastrar-repasse.ts"
+    "repasse": "node --experimental-strip-types --env-file=.env scripts/cadastrar-repasse.ts",
+    "ensaio-prontidao": "node --experimental-strip-types --env-file=.env scripts/ensaio-da-prontidao.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",

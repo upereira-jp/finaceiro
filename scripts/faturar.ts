@@ -47,7 +47,7 @@ const tem = (nome: string) => process.argv.includes(`--${nome}`);
  * producao devolveu "35 sem_contrato_vigente" e havia mais tres camadas vazias
  * atras, que so apareceriam uma a uma, um ensaio por vez.
  *
- * Este mostra as nove de uma vez, e nao decide nenhuma delas.
+ * Este mostra as doze de uma vez, e nao decide nenhuma delas.
  */
 async function relatorioDeProntidao(a: any, sessao: any, tenantProposto: string | undefined, competencia: string) {
   const p = await a.withTenant(sessao, tenantProposto, () => prontidao(competencia));
@@ -71,8 +71,21 @@ async function relatorioDeProntidao(a: any, sessao: any, tenantProposto: string 
   if (pendentes.length > 0) {
     console.log('\n--- o que cada pendencia significa ---');
     for (const c of pendentes) {
+      /*
+        * A FRASE NAO NOMEIA MAIS O CONTRATO, e a correcao e de 24/08/2026.
+        *
+        * Ela dizia "o universo depende de contrato, e nao ha contrato" para TODA
+        * camada nao medida, o que era verdade quando as tres derivadas dependiam
+        * de contrato. Desde que `vencimento` e `tarifa_na_conta` passaram a
+        * depender da CONTA LIDA, a frase mandava olhar para o lugar errado -
+        * um diagnostico errado com cara de diagnostico.
+        *
+        * O texto generico e o certo aqui: qual e a camada de cima esta na ORDEM
+        * da lista, que e a ordem do trabalho, e a explicacao de cada uma nomeia
+        * a propria dependencia.
+        */
       const cabeca = c.situacao === 'nao_medido'
-        ? `${c.camada} (NAO MEDIDO - o universo depende de contrato, e nao ha contrato)`
+        ? `${c.camada} (NAO MEDIDO - o universo depende de uma camada acima, e ela esta vazia)`
         : `${c.camada} (${c.faltam} de ${c.total})`;
       console.log(`\n  ${cabeca}:\n    ${c.explicacao}`);
     }

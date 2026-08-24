@@ -81,17 +81,27 @@ export const VERBETE_DA_CAMADA: Record<string, Verbete> = {
       + 'não pode ser calculado.',
   },
 
-  vencimento: {
-    titulo: 'Dia de vencimento',
-    simples: 'Tem unidade sem o dia de vencimento preenchido.',
-    consequencia: 'O sistema não escolhe uma data por você. Sem o dia, a cobrança não é gerada.',
+  conta_lida_da_competencia: {
+    titulo: 'Conta da distribuidora do mês',
+    simples: 'Tem unidade sem a conta da distribuidora lida e registrada neste mês.',
+    consequencia: 'É dessa conta que sai o valor a cobrar. Sem ela registrada, a cobrança do mês '
+      + 'não tem de onde nascer.',
   },
 
-  tarifa_da_uc: {
-    titulo: 'Preço do kWh',
-    simples: 'Tem unidade sem o preço do kWh preenchido.',
-    consequencia: 'É por esse preço que a energia vira dinheiro na conta. Sem ele, o valor da '
-      + 'cobrança não pode ser calculado.',
+  vencimento: {
+    titulo: 'Dia de vencimento',
+    simples: 'Tem unidade cuja conta do mês veio sem a data de vencimento e que também não tem o '
+      + 'dia preenchido no cadastro.',
+    consequencia: 'Quando a conta traz a data, ela vale e não há nada a preencher. Quando não '
+      + 'traz, o dia do cadastro é o que salva a cobrança — e o sistema não escolhe uma data por '
+      + 'você.',
+  },
+
+  tarifa_na_conta: {
+    titulo: 'Preço do kWh na conta lida',
+    simples: 'Tem conta lida em que o preço do kWh ficou zerado.',
+    consequencia: 'É por esse preço que a energia vira dinheiro na folha do cliente. Zerado, a '
+      + 'cobrança sairia dizendo que o kWh não custa nada — por isso ela é recusada.',
   },
 
   dono_da_usina: {
@@ -242,10 +252,12 @@ export const GLOSSARIO: readonly TermoDoGlossario[] = [
   },
   {
     termo: 'Preço do kWh (tarifa)',
-    texto: 'Quanto custa cada kWh de energia daquela unidade. Varia de cliente para cliente, e é '
-      + 'por ele que a energia gerada vira valor em reais na cobrança.',
+    texto: 'Quanto custa cada kWh de energia daquela unidade. Varia de cliente para cliente. Na '
+      + 'cobrança de hoje o preço que vale é o lido na conta da distribuidora; o preço da aba '
+      + 'Unidades consumidoras serve o caminho antigo, e continua sendo semeado sozinho.',
     busca: ['tarifa', 'preco do kwh', 'kwh', 'valor da energia', 'preco da energia', 'quanto custa'],
-    caminhos: [{ rota: '/unidades?pendencia=sem_tarifa', rotulo: 'Preencher o preço do kWh', tipo: 'resolver' }],
+    caminhos: [{ rota: '/documento', rotulo: 'Conferir o preço na conta lida', tipo: 'resolver' },
+               { rota: '/unidades?pendencia=sem_tarifa', rotulo: 'Ver o preço no cadastro', tipo: 'ver' }],
   },
   {
     termo: 'Contrato ativo',

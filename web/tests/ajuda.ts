@@ -320,7 +320,7 @@ const camada = (p: Partial<CamadaLida>): CamadaLida =>
   const passos = passosDoEstado([
     camada({ camada: 'documento_do_cliente', faltam: 11, total: 29 }),
     camada({ camada: 'rateio', situacao: 'ok' }),
-    camada({ camada: 'tarifa_da_uc', situacao: 'nao_medido', faltam: 0, total: 0 }),
+    camada({ camada: 'tarifa_na_conta', situacao: 'nao_medido', faltam: 0, total: 0 }),
     camada({ camada: 'dono_da_usina', faltam: 4, total: 4, efeito: 'bloqueia_split' }),
   ]);
 

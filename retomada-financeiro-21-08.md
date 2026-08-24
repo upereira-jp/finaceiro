@@ -172,7 +172,42 @@ A fila completa, com dono, está no **`PLANO-ciclo-do-cliente-2026-08-21.md` §4
    chave Pix ou conta completa, conferida no cadastro porque no pagamento já é
    tarde.
 
-### 4.4 ⚠️ Uma consequência da decisão que ainda não foi absorvida
+### 4.4 ✅ RESOLVIDO em 24/08/2026 — a consequência foi absorvida
+
+> **A prontidão passou a medir o caminho oficial.** As duas camadas foram
+> remedidas e nasceu uma terceira, que é a que faltava:
+>
+> | | antes (21/08) | agora (24/08) |
+> |---|---|---|
+> | `conta_lida_da_competencia` | *não existia* | **pendente 29 de 29** ⬅️ o trabalho real |
+> | `vencimento` | pendente 29/29 | **não medido 0/0** — o universo virou a UC *com* conta |
+> | `tarifa_da_uc` → **`tarifa_na_conta`** | não medido 0/0 | **não medido 0/0**, e agora pela razão certa |
+>
+> O `vencimento` passou a rodar o mesmo predicado de `vencimentoEscolhido` — a
+> conta primeiro, o cadastro como segunda fonte — e a tarifa deixou de olhar o
+> cadastro, porque no caminho oficial ele **não é fonte de nada**: `triarRegistro`
+> recusa por `sem_tarifa_na_conta` olhando só o registro. Uma camada verde sobre
+> o preço do cadastro autorizaria uma cobrança que a triagem recusaria em seguida.
+>
+> **Provado sem PostgreSQL local**, pelo mesmo desenho do ensaio da junção:
+> `npm run ensaio-prontidao` cria uma conta lida contra o schema real, mexe nela
+> campo a campo — tarifa zerada, vencimento apagado, dia do cadastro preenchido,
+> conta de outro mês — confere **9 coisas** e termina em `ROLLBACK`, com a última
+> contando as tabelas para provar que nada ficou. O ramo vazio (o que produção
+> mostra hoje) não exercita nem a junção por número de unidade, nem o filtro de
+> competência, nem a segunda fonte do vencimento; este ensaio exercita os três.
+>
+> **E uma frase que passou a mentir foi corrigida junto:** o relatório de linha de
+> comando dizia *"NÃO MEDIDO — o universo depende de contrato, e não há contrato"*
+> para toda camada não medida. Virou verdade pela metade no instante em que
+> `vencimento` e `tarifa` passaram a depender da **conta lida** — um diagnóstico
+> errado com cara de diagnóstico. O texto agora é genérico, e qual é a camada de
+> cima está na ordem da lista.
+>
+> Sobrou uma pendência de operação, e ela é a de sempre: **as 29 contas do mês
+> ainda entram uma a uma** (`Q-CONTA-LOTE-01`), e agora a tela diz isso.
+
+**O diagnóstico original fica abaixo, intacto:**
 
 **A tela de Pendências continua medindo o caminho antigo em duas camadas.**
 
@@ -187,13 +222,15 @@ foi enganado ainda** — mas assim que existir contrato, a prontidão vai mandar
 preencher 29 vencimentos que o caminho oficial não usa. **É a primeira coisa a
 olhar na próxima sessão.**
 
+*(Foi. Ver o bloco no topo desta seção.)*
+
 ---
 
 ## 5. Armadilhas — o que morde
 
 | | |
 |---|---|
-| **`test:repos` e `test:isolamento` não rodam aqui** | Exigem PostgreSQL local. Tudo o que eles cobririam da junção está no `npm run ensaio-juncao`. **Dívida aberta**, e a próxima sessão num ambiente com Postgres deve rodá-los |
+| **`test:repos` e `test:isolamento` não rodam aqui** | Exigem PostgreSQL local. Tudo o que eles cobririam da junção está no `npm run ensaio-juncao`, e o da prontidão no `npm run ensaio-prontidao` (24/08). **Dívida aberta**, e a próxima sessão num ambiente com Postgres deve rodá-los |
 | **O cliente do Prisma não conhece `fatura_id`** | A migration 34 foi aplicada e o `db pull` **não** rodou. A junção usa SQL cru de propósito, e a guarda de catálogo (`juncaoDaFaturaUnificadaExiste`) evita o `42703`. Rodar `db pull` + `generate` é dívida, não urgência — e cuidado: ele **reverte** edições feitas à mão no `schema.prisma` |
 | **`GET /faturas/:id/documento` ainda compõe a folha de 5 faixas** | Para uma fatura vinda de conta lida, o documento certo é a **2ª via**. Decidir se aquela rota aponta para cá ou sai — item 15 do `PLANO` §4b |
 | **A credencial de dono está em `.env.bak`** | `DIRECT_URL`, usada para aplicar migration. **Nunca imprimir a senha.** Sempre rodar `conferir-banco-alvo identidade` antes: `migrate deploy` contra o banco errado não recusa — ele **cria** |

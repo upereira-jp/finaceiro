@@ -327,12 +327,31 @@ export const TOPICOS: readonly Topico[] = [
              'porcentagem do cliente', 'quanto e do cliente', 'sem usina'],
   },
   {
+    id: 'conta-lida',
+    pergunta: 'Onde subo a conta da distribuidora?',
+    resposta: 'Na aba Fatura unificada, uma conta por vez. É dela que sai o valor a cobrar: o '
+      + 'sistema lê o arquivo, você confere o que foi lido e registra.',
+    passos: [
+      'Abra a aba Fatura unificada.',
+      'Suba o arquivo da conta daquela unidade neste mês e confira campo a campo o que foi lido.',
+      'Registre a conta. Ela passa a aparecer na lista de contas registradas, logo abaixo.',
+      'Na lista, o botão «gerar cobrança» transforma a conta registrada na cobrança do cliente.',
+    ],
+    caminhos: [daCamada('conta_lida_da_competencia', 'Ler a conta da distribuidora')],
+    camada: 'conta_lida_da_competencia',
+    telas: ['/documento'],
+    termos: ['conta', 'conta de luz', 'conta da distribuidora', 'fatura da equatorial', 'equatorial',
+             'subir conta', 'ler conta', 'leitura', 'anexar conta', 'arquivo da conta', 'pdf'],
+  },
+  {
     id: 'vencimento',
     pergunta: 'Onde preencho o dia de vencimento?',
-    resposta: 'Na aba Unidades consumidoras, por unidade. Não existe dia padrão: o sistema prefere '
-      + 'recusar a cobrança a escolher uma data por você.',
+    resposta: 'Quase sempre não precisa: a data vem impressa na conta da distribuidora e o sistema '
+      + 'usa a de lá. O dia do cadastro, na aba Unidades consumidoras, só entra quando a conta vem '
+      + 'sem data.',
     passos: [
-      'Abra a aba Unidades consumidoras.',
+      'Confira se a conta daquele mês traz a data de vencimento. Se traz, não há nada a fazer.',
+      'Se não traz, abra a aba Unidades consumidoras.',
       'Use o filtro de pendência «Sem vencimento» para ver só as que faltam.',
       'Preencha o DIA do mês em cada uma. A cobrança de um mês vence no mês seguinte, nesse mesmo dia.',
     ],
@@ -344,19 +363,20 @@ export const TOPICOS: readonly Topico[] = [
   },
   {
     id: 'tarifa',
-    pergunta: 'Onde coloco o preço do kWh?',
-    resposta: 'É uma coluna da própria linha da unidade, na aba Unidades consumidoras. O preço muda '
-      + 'de cliente para cliente, por isso não há um valor único para todos.',
+    pergunta: 'O preço do kWh saiu zerado. Onde corrijo?',
+    resposta: 'Na própria leitura da conta, na aba Fatura unificada — o preço vem impresso na conta '
+      + 'da distribuidora e é lido com até seis casas depois da vírgula.',
     passos: [
-      'Abra a aba Unidades consumidoras.',
-      'Use o filtro de pendência «Sem tarifa».',
-      'Preencha a coluna «Tarifa R$/kWh» na linha da unidade. Aceita até seis casas depois da vírgula.',
+      'Abra a aba Fatura unificada e localize a conta daquele mês.',
+      'Confira o campo do preço do kWh contra o que está impresso na conta.',
+      'Corrija e registre de novo. Zerado, a cobrança é recusada de propósito.',
+      'A coluna de preço da aba Unidades consumidoras é outra: ela serve o caminho antigo e não entra aqui.',
     ],
-    caminhos: [daCamada('tarifa_da_uc', 'Preencher o preço do kWh')],
-    camada: 'tarifa_da_uc',
-    telas: ['/unidades'],
+    caminhos: [daCamada('tarifa_na_conta', 'Corrigir o preço do kWh na conta lida')],
+    camada: 'tarifa_na_conta',
+    telas: ['/documento'],
     termos: ['tarifa', 'preco do kwh', 'kwh', 'valor da energia', 'preco da energia', 'sem tarifa',
-             'quanto custa o kwh', 'aba tarifas'],
+             'quanto custa o kwh', 'aba tarifas', 'preco zerado', 'tarifa zerada'],
   },
   {
     id: 'endereco-unidade',

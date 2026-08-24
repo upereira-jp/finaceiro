@@ -134,12 +134,38 @@ Nenhum é código. Os importadores já existem e rodam do Codespace contra produ
 | # | Pendência | Estado hoje | Como entra | Dono |
 |:--:|---|---|---|---|
 | 1 | **CPF/CNPJ de 24 pessoas** (29 linhas de cliente) | **26 clientes semeados** pelo ciclo de 20/08 (eram 0) — **0 validados**, e a camada conta `NOT documento_validado`, então ela **não se move** até alguém reenviar ⬇️ | **aba Clientes**: reenviar o número já preenchido (troca a origem para `coleta_local` e valida) | operação |
-| 2 | **Dia de vencimento de 29 UCs** | **0 de 29** | **aba Unidades consumidoras**, linha a linha · ou `npm run vencimentos` em lote | operação |
+| 2 | ~~**Dia de vencimento de 29 UCs**~~ | 🔽 **REBAIXADO em 24/08** — continua **0 de 29**, e deixou de ser bloqueio geral: no caminho oficial o vencimento vem **impresso na conta da distribuidora**, e o cadastro é a **segunda** fonte. Só importa para a conta que vier sem data ⬇️ | **aba Unidades consumidoras**, linha a linha · ou `npm run vencimentos` em lote | operação |
 | 3 | **CPF/CNPJ de 2 originadores** + natureza | 0 | `npm run originadores` | operação |
 | 4 | **Digitar os 29 contratos** | 0 | `npm run contratos` (depende de 1 e 3) | operação |
 | 5 | **Emissor** — razão social, CNPJ, contato | vazio em produção | **Fatura unificada** → «3 · Cadastro da fatura» (`/documento#cadastro`) | dono |
 | ~~6~~ | ~~**Tarifa das 41 UCs**~~ | ✅ **RESOLVIDO em 20/08 — 41 de 41**, semeadas pelo ciclo (34 × `1,13` · 5 × `1,16` · 2 × `1,18`) | — nada a digitar. `Q-VALOR-01(b)` **fechada** | — |
 | 7 | **Endereço do pagador de 29 UCs** | **0 de 29** | **aba Unidades consumidoras**, painel «Endereço do pagador» (17/08) · ou `npm run enderecos` em lote — **só o boleto depende** | operação |
+| **8** | **A conta da distribuidora de cada unidade, no mês** ⬅️ **novo em 24/08** | **0 de 29** | **Fatura unificada** → «1 · Leitura e cálculo»: sobe o arquivo, confere o que foi lido, registra. Depois o botão **«gerar cobrança»** na lista de contas registradas. **Uma por vez** — se vale um caminho em lote é a `Q-CONTA-LOTE-01`, aberta | operação |
+
+> ### ⬇️ 24/08/2026 — a prontidão passou a medir o caminho OFICIAL
+>
+> Não é insumo novo: é insumo que **sempre foi o primeiro** e que o relatório não
+> contava. Decidida a `Q-CICLO-01` em 21/08, o valor da cobrança sai da conta lida
+> — e a tela de Pendências continuava medindo o cadastro em duas camadas.
+>
+> **O que mudou, medido contra produção na mesma hora:**
+>
+> ```
+>   FALTA  conta_lida_da_competencia    29 de 29   ⬅️ nasceu, e é o trabalho real
+>   ?      vencimento                    0 de  0   (era: pendente 29 de 29)
+>   ?      tarifa_na_conta               0 de  0   (era: tarifa_da_uc, não medido)
+> ```
+>
+> O `vencimento` agora roda a **mesma regra da fatura**: a data da conta primeiro,
+> o dia do cadastro como segunda fonte. A tarifa deixou de olhar o cadastro, e a
+> troca de nome foi junto — a coluna «Tarifa R$/kWh» da aba Unidades consumidoras
+> serve o **caminho antigo**, e o preço que a cobrança usa é o **lido na conta**,
+> com seis casas. Mandar corrigir o preço na aba Unidades fecharia a coluna de lá
+> e deixaria a cobrança recusada do mesmo jeito: o pior tipo de link, o que leva a
+> algum lugar.
+>
+> **Sem contrato e sem conta, as duas dizem «ainda não dá para conferir»** — e não
+> «pronto». Zero sobre nada não é pronto, e verde autoriza.
 
 > ### ⬇️ 20/08/2026 — o ciclo RODOU, e os dois itens mudaram de forma diferente
 >

@@ -568,15 +568,21 @@ let liquidacaoJulho: string;
    * O tenant B da fixture nao tem nada, e por isso e o sujeito certo.
    */
   const pB = await emB(() => prontidao('2026-07-01'));
-  /* `tarifa_vigente` VIROU `tarifa_da_uc` em 14/08 (migration 30): a camada
-   * continua existindo, continua sendo derivada e continua bloqueando a fatura -
-   * o que mudou e a UNIDADE de contagem, de distribuidora para UC. O nome mudou
-   * junto porque um rotulo que aponta para uma tabela que nao existe mais e o
-   * comeco de alguem procurar a tabela. */
+  /* `tarifa_vigente` VIROU `tarifa_da_uc` em 14/08 (migration 30) e `tarifa_na_conta`
+   * em 24/08: a camada continua existindo, continua sendo derivada e continua
+   * bloqueando a fatura - o que mudou duas vezes foi a FONTE que ela mede. Primeiro
+   * de distribuidora para UC; depois, com a Q-CICLO-01, do cadastro para a conta
+   * lida, que e de onde o valor sai. O nome mudou junto nas duas, porque um rotulo
+   * que aponta para uma fonte que nao e mais a fonte e o comeco de alguem preencher
+   * a coluna errada.
+   *
+   * E `vencimento` ENTROU NA LISTA em 24/08, pela mesma razao: o universo dela
+   * passou a ser a UC COM conta lida. Sem conta, a fonte principal nao chegou, e
+   * dizer `pendente` ali mandaria preencher o que a conta traz de graca. */
   const derivadas = pB.camadas.filter((c) =>
-    ['geracao_da_competencia', 'tarifa_da_uc', 'regra_de_comissao'].includes(c.camada));
+    ['geracao_da_competencia', 'vencimento', 'tarifa_na_conta', 'regra_de_comissao'].includes(c.camada));
 
-  chk('K18a', derivadas.length === 3 && derivadas.every((c) => c.situacao === 'nao_medido' && c.total === 0),
+  chk('K18a', derivadas.length === 4 && derivadas.every((c) => c.situacao === 'nao_medido' && c.total === 0),
       'camada de universo vazio volta NAO_MEDIDO, nunca ok - zero sobre nada nao e "pronto", e a mesma licao do "zero divergencias" do conector');
   chk('K18b', pB.pode_faturar === false && pB.pode_repartir === false,
       'e `pode_faturar` exige ok, nunca nao_medido: contar o nao medido como pronto seria o relatorio autorizando o que nao conferiu');

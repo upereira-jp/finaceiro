@@ -316,7 +316,7 @@ const camada = (p: Partial<CamadaLida>): CamadaLida =>
     tudoInicial: true,
     passos: passosDoEstado([
       camada({ camada: 'documento_do_cliente', faltam: 11, total: 29 }),
-      camada({ camada: 'tarifa_da_uc', situacao: 'nao_medido', faltam: 0, total: 0 }),
+      camada({ camada: 'tarifa_na_conta', situacao: 'nao_medido', faltam: 0, total: 0 }),
       camada({ camada: 'regra_de_comissao', faltam: 1, total: 1, efeito: 'bloqueia_split' }),
     ]),
   });

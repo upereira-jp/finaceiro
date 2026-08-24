@@ -141,23 +141,53 @@ export const DESTINO_DA_CAMADA: Record<string, DestinoDaCamada> = {
       + 'Se a competência já foi lançada lá e continua faltando aqui, o que rodar é o ciclo.',
   },
 
+  /*
+   * A CONTA LIDA ENTROU NO RELATORIO EM 24/08/2026, e a tela existia desde 14/08.
+   * O que faltava era a Pendencias DIZER que a conta e o insumo: decidida a
+   * Q-CICLO-01, o valor da cobranca sai dela. Ela vem antes das duas de baixo
+   * porque as duas contam SOBRE ela — sem conta, nao ha vencimento nem preco do
+   * kWh para medir.
+   */
+  conta_lida_da_competencia: {
+    rota: '/documento', filtro: null,
+    rotulo: 'Ler a conta da distribuidora',
+    caminho: null,
+    nota: 'Na aba «1 · Leitura e cálculo»: sobe-se o PDF da conta, confere-se campo a campo o que '
+      + 'o leitor extraiu e registra-se. É a conta registrada que vira a cobrança, pelo botão '
+      + '«gerar cobrança» da lista logo abaixo. Uma conta por unidade e por mês, sempre uma de '
+      + 'cada vez — se vale um caminho para subir as 29 de uma pasta só é decisão em aberto, com '
+      + 'dono. Registrar não exige a unidade cadastrada, de propósito, porque quem sobe o arquivo '
+      + 'está conferindo; faturar exige.',
+  },
+
   vencimento: {
     rota: '/unidades', filtro: 'sem_vencimento',
     rotulo: 'Preencher o dia de vencimento',
     caminho: 'npm run vencimentos',
-    nota: 'Não há valor padrão e não vai haver: quem preenche, por UC ou por contrato, é a '
-      + 'Q-SPEC001-02 — o servidor recusa faturar em vez de escolher um dia (regra 10). O que '
-      + 'conta é o DIA: a fatura de uma competência vence no mês seguinte, no mesmo dia.',
+    nota: 'A PRIMEIRA FONTE É A CONTA, e ela normalmente traz a data — esta linha só acusa a '
+      + 'unidade cuja conta veio SEM vencimento impresso. Aí vale o dia do cadastro, que é o que '
+      + 'se preenche aqui, e a cobrança de uma competência vence no mês seguinte nesse mesmo dia. '
+      + 'Não há valor padrão e não vai haver: quem preenche, por UC ou por contrato, é a '
+      + 'Q-SPEC001-02 — o servidor recusa faturar em vez de escolher um dia (regra 10).',
   },
 
-  tarifa_da_uc: {
-    rota: '/unidades', filtro: 'sem_tarifa',
-    rotulo: 'Preencher a tarifa R$/kWh',
+  /*
+   * ERA `tarifa_da_uc` E APONTAVA PARA A ABA UNIDADES, o que virou destino errado
+   * em 21/08 sem ninguem mexer nele: a tarifa do caminho oficial e a LIDA NA
+   * CONTA, com seis casas, e `triarRegistro` nao olha o cadastro. Mandar corrigir
+   * o preco em Unidades consumidoras fecharia a coluna de la e deixaria a
+   * cobranca recusada do mesmo jeito — o pior tipo de link, o que leva a algum
+   * lugar.
+   */
+  tarifa_na_conta: {
+    rota: '/documento', filtro: null,
+    rotulo: 'Corrigir o preço do kWh na conta lida',
     caminho: null,
-    nota: 'Coluna «Tarifa R$/kWh» da própria linha, com até seis casas. A aba Tarifas saiu em '
-      + '14/08 porque servia um número só para todas as UCs, e a medição do CRM mostrou que ele '
-      + 'varia por cliente (35 a 1,130000 · 4 a 1,16 · 2 a 1,180000). O conector semeia a partir '
-      + 'do card quando ele traz consumo em kWh e em reais, e nunca apaga o que foi digitado aqui.',
+    nota: 'O preço vem impresso na conta da distribuidora e é lido com até seis casas. Esta linha '
+      + 'acusa a conta em que ele ficou ZERADO — e zero é recusado de propósito, porque a folha '
+      + 'sairia dizendo que o kWh não custa nada. Corrige-se na própria leitura e registra-se de '
+      + 'novo. A coluna «Tarifa R$/kWh» da aba Unidades consumidoras é outra coisa: ela serve o '
+      + 'caminho em lote, que não é o oficial, e o conector continua semeando ela do card.',
   },
 
   dono_da_usina: {

@@ -84,9 +84,12 @@ export type Prontidao = {
 };
 
 /**
- * As onze camadas, numa consulta so. Eram dez ate 04/08/2026, quando a R9
+ * As DOZE camadas, numa consulta so. Eram dez ate 04/08/2026, quando a R9
  * apareceu como camada: ela ja era lei desde a SPEC-001 e nao era CONTADA, entao
- * o relatorio mandava digitar 29 contratos que nao teriam como ativar.
+ * o relatorio mandava digitar 29 contratos que nao teriam como ativar. A decima
+ * segunda entrou em 24/08/2026 pelo mesmo motivo e uma volta depois: a conta da
+ * distribuidora virou a FONTE do valor pela `Q-CICLO-01`, e este relatorio nao a
+ * contava - ver o bloco de `conta_lida_da_competencia`.
  *
  * O filtro por tenant sai da RLS, nao de um WHERE escrito aqui. Os
  * `tenant_id = tenant_id` nos JOINs existem para o planejador, nao para o
@@ -134,6 +137,34 @@ export async function prontidao(comp: Date | string): Promise<Prontidao> {
              k.originador_tipo_no_fechamento, k.data_fechamento
         FROM uc_ativa uc
         JOIN contrato k ON k.tenant_id = uc.tenant_id AND k.uc_vigente = uc.id AND k.status = 'ativo'
+    ),
+    /*
+     * A CONTA DA DISTRIBUIDORA DESTE MES, e ela e a fonte do caminho OFICIAL.
+     *
+     * A "Q-CICLO-01" foi decidida em 21/08/2026: o valor sai da conta lida, e nao
+     * da geracao medida vezes o rateio vezes a tarifa. Duas camadas deste
+     * relatorio continuavam medindo o caminho antigo, e o efeito estava previsto
+     * por escrito na retomada do mesmo dia: assim que existisse contrato, a
+     * pendencia mandaria preencher 29 vencimentos que a fatura nao usaria - a
+     * conta traz a data.
+     *
+     * A JUNCAO E POR "numero_uc", e nao pela coluna "unidade_consumidora_id" da
+     * propria tabela. Duas razoes, e a segunda e a que decide: "numero_uc" e a
+     * chave de negocio do registro e e por ela que "src/repos/fatura-do-registro"
+     * resolve a UC - medir por um caminho e faturar por outro daria duas
+     * respostas para a mesma pergunta. E o indice unico
+     * (tenant_id, numero_uc, competencia) serve esta consulta inteira e garante
+     * que o JOIN nao multiplica linha: e UMA conta por UC por mes, por construcao.
+     */
+    conta_do_mes AS (
+      SELECT r.tenant_id, r.numero_uc, r.vencimento, r.tarifa_kwh
+        FROM registro_de_fatura_unificada r
+       WHERE r.competencia = ${iso}::date
+    ),
+    uc_com_conta AS (
+      SELECT uc.*, r.vencimento AS vencimento_da_conta, r.tarifa_kwh
+        FROM uc_ativa uc
+        JOIN conta_do_mes r ON r.tenant_id = uc.tenant_id AND r.numero_uc = uc.numero_uc
     )
     SELECT
       (SELECT count(*) FROM uc_ativa)                                        AS ucs_ativas,
@@ -170,35 +201,44 @@ export async function prontidao(comp: Date | string): Promise<Prontidao> {
                            WHERE g.tenant_id = uc.tenant_id AND g.usina_id = uc.usina_id
                              AND g.competencia = ${iso}::date))              AS sem_geracao,
       (SELECT count(DISTINCT uc.usina_id) FROM uc_contratada uc WHERE uc.usina_id IS NOT NULL) AS usinas_contratadas,
-      -- 4. vencimento: Q-SPEC001-02, 100% vazio no CRM
-      (SELECT count(*) FROM uc_ativa uc WHERE uc.data_vencimento IS NULL)    AS sem_vencimento,
-      -- 5. tarifa da UC CONTRATADA (migration 30)
+      -- 4. a conta lida da competencia: a fonte do valor no caminho oficial
+      (SELECT count(*) FROM uc_ativa uc
+        WHERE NOT EXISTS (SELECT 1 FROM conta_do_mes r
+                           WHERE r.tenant_id = uc.tenant_id
+                             AND r.numero_uc = uc.numero_uc))                AS sem_conta,
+      -- 5. vencimento: DUAS fontes, e a conta vem primeiro
       --
-      -- ERA "tarifa vigente por DISTRIBUIDORA", lendo a tabela tarifa, que saiu
-      -- em 14/08. A camada continua existindo e continua bloqueando a fatura pelo
-      -- mesmo motivo (R26: ausencia de preco levanta, nao vira zero) - o que
-      -- mudou e a UNIDADE de contagem. Era "quantas distribuidoras estao sem
-      -- preco"; e "quantas UCs estao sem preco", que e a granularidade real
-      -- medida em 14/08: 35 UCs a 1,130000, 4 a 1,16 e 2 a 1,180000.
+      -- Era "uc.data_vencimento IS NULL" sobre toda UC faturavel, o que media o
+      -- CADASTRO - a segunda fonte - como se fosse a unica. O predicado abaixo e
+      -- o mesmo de "vencimentoEscolhido", linha por linha: vale a data impressa
+      -- na conta; na falta dela, o dia do cadastro. Falta so quando as duas
+      -- faltam, que e a unica situacao em que a fatura de fato nao sai.
+      (SELECT count(*) FROM uc_com_conta uc
+        WHERE uc.vencimento_da_conta IS NULL AND uc.data_vencimento IS NULL) AS sem_vencimento,
+      (SELECT count(*) FROM uc_com_conta)                                    AS ucs_com_conta,
+      -- 6. tarifa LIDA NA CONTA, com seis casas, e ela nao tem segunda fonte
       --
-      -- E ela deixou de depender da COMPETENCIA: a tarifa da UC e a que vale
-      -- agora, e nao uma serie versionada. Comissao e repasse continuam
-      -- versionados porque sao REGRA - a de um contrato fechado em marco e a de
-      -- marco, para sempre (R20-b). Preco nao.
-      (SELECT count(*) FROM uc_contratada uc
-        WHERE uc.tarifa_reais_por_kwh IS NULL)                               AS sem_tarifa,
-      (SELECT count(*) FROM uc_contratada uc)                                AS ucs_contratadas,
-      -- 6. dono da usina: R12, bloqueia o SPLIT e nao a fatura
+      -- ERA a tarifa do CADASTRO ("unidade_consumidora.tarifa_reais_por_kwh",
+      -- migration 30), que e o preco do caminho em lote - o que "app.tarifa_da_uc"
+      -- le para compor. No caminho oficial ele nao entra: "triarRegistro" recusa
+      -- por "sem_tarifa_na_conta" olhando so o registro.
+      --
+      -- "tarifa_kwh" e NOT NULL e tem CHECK (>= 0) no registro, contra
+      -- CHECK (> 0) na fatura. As duas faixas nao coincidem, e a diferenca e
+      -- exatamente o zero - que e o que este "<= 0" conta, sem logica de tres
+      -- valores no meio.
+      (SELECT count(*) FROM uc_com_conta uc WHERE uc.tarifa_kwh <= 0)        AS sem_tarifa,
+      -- 7. dono da usina: R12, bloqueia o SPLIT e nao a fatura
       (SELECT count(*) FROM usina u
         WHERE u.status = 'ativa' AND u.dono_usina_id IS NULL)                AS sem_dono,
       (SELECT count(*) FROM usina u WHERE u.status = 'ativa')                AS usinas_ativas,
-      -- 7. regra de repasse vigente na competencia
+      -- 8. regra de repasse vigente na competencia
       (SELECT count(*) FROM usina u
         WHERE u.status = 'ativa'
           AND NOT EXISTS (SELECT 1 FROM regra_repasse rr
                            WHERE rr.tenant_id = u.tenant_id AND rr.usina_id = u.id
                              AND daterange(rr.vigencia_inicio, rr.vigencia_fim, '[)') @> ${iso}::date)) AS sem_repasse,
-      -- 8. originador do contrato: Q-ORIGINADOR-01, decidida em 29/07/2026.
+      -- 9. originador do contrato: Q-ORIGINADOR-01, decidida em 29/07/2026.
       --    As UCs da carteira LEVAM originador e a comissao esta toda pela
       --    frente - ninguem recebeu nada ainda. Entao contrato ativo com
       --    originador_id nulo nao e "venda sem comissao", e defeito de cadastro.
@@ -206,7 +246,7 @@ export async function prontidao(comp: Date | string): Promise<Prontidao> {
       --    congelado, e sem tier a regra_de_comissao nao tem o que medir.
       (SELECT count(*) FROM uc_contratada uc WHERE uc.originador_id IS NULL)   AS sem_originador,
       (SELECT count(*) FROM uc_contratada uc)                                 AS contratos_ativos,
-      -- 9. regra de comissao para o tier CONGELADO de cada contrato (R20-b),
+      -- 10. regra de comissao para o tier CONGELADO de cada contrato (R20-b),
       --    nas DUAS parcelas do PRD 5.4 - uma vigencia com so uma parcela faz o
       --    split levantar na fatura cheia que usar a outra
       (SELECT count(DISTINCT uc.originador_tipo_no_fechamento) FROM uc_contratada uc
@@ -217,7 +257,7 @@ export async function prontidao(comp: Date | string): Promise<Prontidao> {
                   AND daterange(rc.vigencia_inicio, rc.vigencia_fim, '[)') @> uc.data_fechamento) < 2) AS sem_comissao,
       (SELECT count(DISTINCT uc.originador_tipo_no_fechamento) FROM uc_contratada uc
         WHERE uc.originador_tipo_no_fechamento IS NOT NULL)                  AS tiers_em_uso,
-      -- 10. conector de cobranca ativo (o boleto, PAUTA 5)
+      -- 11. conector de cobranca ativo (o boleto, PAUTA 5)
       (SELECT count(*) FROM conector_cobranca cc WHERE cc.ativo)             AS cobranca_ativa`;
 
   const l = r[0];
@@ -271,21 +311,85 @@ export async function prontidao(comp: Date | string): Promise<Prontidao> {
 
     { camada: 'geracao_da_competencia', faltam: n(l.sem_geracao), total: n(l.usinas_contratadas), derivada: true,
       efeito: 'bloqueia_fatura', dono: 'operacao', questao: 'RATEIO-USO-01',
-      explicacao: 'usina com UC contratada e sem geracao lancada nesta competencia. A base e a geracao ' +
-        'MEDIDA (PAUTA 9a), entao sem a linha a fatura nao nasce - e o caso da usina 0003' },
+      explicacao: 'usina com UC contratada e sem geracao lancada nesta competencia. Ela deixou de ser a ' +
+        'base do VALOR com a Q-CICLO-01 - a conta lida da a base - e continua obrigatoria por outro ' +
+        'motivo: e o registro do mes da usina, contra o qual o repasse ao dono e conferido depois. ' +
+        '`triarRegistro` recusa por `sem_geracao_lancada` igual, e e o caso da usina 0003' },
 
-    { camada: 'vencimento', faltam: n(l.sem_vencimento), total: n(l.ucs_ativas),
+    /*
+     * A CAMADA QUE FALTAVA, e a ausencia dela era consequencia nao absorvida da
+     * `Q-CICLO-01`. Entrou em 24/08/2026.
+     *
+     * Decidido o caminho unificado, o valor da fatura passa a sair da conta da
+     * distribuidora LIDA - e este relatorio nao contava a conta. O buraco era pior
+     * do que uma linha faltando na tabela: as duas camadas logo abaixo mediam o
+     * CADASTRO, que no caminho oficial e segunda fonte de uma delas e nao e fonte
+     * nenhuma da outra. Com contrato digitado, o relatorio mandaria a operacao
+     * preencher 29 vencimentos que a fatura nao usaria, e ficaria verde depois.
+     *
+     * NAO E `derivada`, e a distincao importa: o universo e a UC FATURAVEL, que
+     * nao depende de contrato nem de conta. Zero contas em 29 UCs sai como
+     * `pendente 29 de 29` e nao como `nao_medido` - a ausencia esta medida, e o
+     * trabalho tem nome e tem tela.
+     */
+    { camada: 'conta_lida_da_competencia', faltam: n(l.sem_conta), total: n(l.ucs_ativas),
+      efeito: 'bloqueia_fatura', dono: 'operacao', questao: 'Q-CONTA-LOTE-01',
+      explicacao: 'UC faturavel sem a conta da distribuidora registrada nesta competencia. Desde a ' +
+        'Q-CICLO-01 o valor da fatura SAI da conta lida, entao sem ela nao ha o que cobrar - e a ' +
+        'triagem do caminho oficial nem chega a rodar, porque ela percorre os registros que existem. ' +
+        'A conta entra pela aba da fatura unificada, uma por vez; se vale um caminho em lote para as ' +
+        '29 do mes e a Q-CONTA-LOTE-01, que tem dono e esta aberta. AS DUAS CAMADAS SEGUINTES CONTAM ' +
+        'SOBRE ESTA: enquanto ela nao fechar, vencimento e tarifa aparecem como nao medidos, porque e ' +
+        'a conta que traz os dois' },
+
+    /*
+     * DUAS FONTES DESDE A `Q-CICLO-01`, E A CONTA VEM PRIMEIRO. Remedida em
+     * 24/08/2026 - antes contava `uc.data_vencimento IS NULL` sobre toda UC
+     * faturavel, ou seja, media a SEGUNDA fonte como se fosse a unica.
+     *
+     * O predicado agora e o mesmo de `vencimentoEscolhido`, e ser o mesmo e o
+     * ponto: um relatorio que mede por uma regra e uma fatura que sai por outra
+     * discordam sem que nenhum dos dois pareca errado, que e o modo de falha que
+     * esta prontidao inteira existe para combater.
+     *
+     * O UNIVERSO PASSOU A SER A UC COM CONTA, e por isso ela e `derivada`. Sem a
+     * conta lida nao da para saber se o vencimento falta - a fonte principal nao
+     * chegou. Dizer `pendente` ali mandaria preencher o que a conta traz de
+     * graca; dizer `ok` seria pior, porque autorizaria.
+     */
+    { camada: 'vencimento', faltam: n(l.sem_vencimento), total: n(l.ucs_com_conta), derivada: true,
       efeito: 'bloqueia_fatura', dono: 'operacao', questao: 'Q-SPEC001-02',
-      explicacao: 'UC sem data de vencimento. Nao ha default: quem preenche, por UC ou por contrato, ' +
-        'e questao sem dono resolvido, e escolher um dia aqui seria o improviso que a regra 10 proibe' },
+      explicacao: 'UC com conta lida cujo vencimento nao esta em NENHUMA das duas fontes: nem impresso ' +
+        'na conta da distribuidora, nem como dia do mes no cadastro. A conta vem primeiro porque e mais ' +
+        'especifica - ela diz o vencimento DAQUELE mes, enquanto o cadastro diz um dia fixo que ainda ' +
+        'tem de ser projetado no mes seguinte. Continua sem default e vai continuar sem: escolher uma ' +
+        'data aqui seria o improviso que a regra 10 proibe. O dia do cadastro entra na aba Unidades ' +
+        'consumidoras, e ele so importa para as contas que vierem sem data impressa' },
 
-    { camada: 'tarifa_da_uc', faltam: n(l.sem_tarifa), total: n(l.ucs_contratadas), derivada: true,
+    /*
+     * ERA `tarifa_da_uc`, E O NOME PASSOU A MENTIR EM 21/08. Renomeada e remedida
+     * em 24/08/2026.
+     *
+     * Ela contava `unidade_consumidora.tarifa_reais_por_kwh`, que e o preco do
+     * caminho EM LOTE - o que `app.tarifa_da_uc` le para compor. No caminho
+     * oficial esse campo nao e fonte de nada: `triarRegistro` recusa por
+     * `sem_tarifa_na_conta` olhando `registro.tarifa_kwh`, com seis casas, e nao
+     * ha segunda fonte. Uma camada verde sobre o preco do cadastro autorizaria
+     * uma fatura que a triagem recusaria em seguida - o relatorio dizendo sim
+     * para o que o sistema diz nao.
+     *
+     * O CADASTRO NAO DEIXOU DE EXISTIR: ele continua servindo o caminho em lote,
+     * que nao e o oficial. O que ele deixou de ser e medido AQUI, porque este
+     * relatorio responde "a cobranca deste mes sai?" pelo caminho por onde ela sai.
+     */
+    { camada: 'tarifa_na_conta', faltam: n(l.sem_tarifa), total: n(l.ucs_com_conta), derivada: true,
       efeito: 'bloqueia_fatura', dono: 'operacao', questao: null,
-      explicacao: 'UC contratada sem tarifa (R$/kWh). A composicao do lote levanta no_data_found ' +
-        '(R26): ausencia de preco e erro, nao zero. Preenche-se na aba Unidades consumidoras, coluna ' +
-        '"Tarifa R$/kWh" - a aba Tarifas saiu em 14/08 porque servia UM numero para todas as UCs, ' +
-        'e a medicao do CRM mostrou que ele varia por cliente. O conector semeia a partir do card ' +
-        'quando ele traz consumo em kWh e em reais, e nunca apaga o que foi digitado aqui' },
+      explicacao: 'conta lida cuja tarifa por kWh esta zerada. O registro tem CHECK (tarifa_kwh >= 0) e ' +
+        'a fatura tem CHECK (tarifa_reais_por_kwh > 0): as duas faixas nao coincidem, e a diferenca e ' +
+        'exatamente o zero - que e o que esta camada conta. Uma fatura com tarifa zero imprimiria ' +
+        '"R$ 0,000000 por kWh" no documento que o cliente confere. Corrige-se no campo Tarifa da ' +
+        'propria leitura, na aba da fatura unificada. A tarifa da aba Unidades consumidoras serve o ' +
+        'caminho em lote e NAO entra aqui - o conector continua semeando ela a partir do card' },
 
     { camada: 'dono_da_usina', faltam: n(l.sem_dono), total: n(l.usinas_ativas),
       efeito: 'bloqueia_split', dono: 'operacao', questao: 'AUD-08',

@@ -2,7 +2,7 @@
 //
 // Hoje o sistema nao consegue emitir uma fatura, e o motivo nao e codigo: sao
 // quatro camadas de cadastro vazias. Esta tela e o mesmo `--prontidao` do
-// script, com a mesma disciplina: mostra as nove camadas, com dono nomeado, e
+// script, com a mesma disciplina: mostra as doze camadas, com dono nomeado, e
 // nao decide nenhuma.
 //
 // `nao_medido` E AMARELO E NAO VERDE. Tres camadas tem por universo as UCs
