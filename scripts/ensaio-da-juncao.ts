@@ -52,7 +52,11 @@ const exigirArg = (nome: string): string => {
 
 const AUTH = exigirArg('auth-user');
 const TENANT = exigirArg('tenant');
-const COMP = arg('competencia') ?? '2026-06-01';
+/** `AAAA-MM` e `AAAA-MM-01` valem os dois. Sem esta normalizacao o fixture
+ *  manda "2026-06" para uma coluna `date` e o ensaio morre em 22007 no meio -
+ *  o mesmo tropeco que `scripts/faturar.ts` ja tratava e este nao. */
+const comp = arg('competencia') ?? '2026-06-01';
+const COMP = /^\d{4}-\d{2}$/.test(comp) ? `${comp}-01` : comp;
 
 class Rollback extends Error { constructor() { super('ensaio'); this.name = 'Rollback'; } }
 
