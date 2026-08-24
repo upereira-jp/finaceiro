@@ -35,7 +35,9 @@ import {
   telasCitadas, responder, caminhosDaResposta,
   passosDoEstado, travamCobranca, TOPICOS, PALAVRAS_DA_TELA, type CamadaLida,
 } from '../src/ajuda.ts';
-import { VERBETE_DA_CAMADA, EFEITO, SITUACAO, GLOSSARIO } from '../src/vocabulario.ts';
+import { VERBETE_DA_CAMADA, EFEITO, SITUACAO, GLOSSARIO,
+         ORDEM_DOS_GRUPOS, agruparPorEfeito, tituloDoGrupo, subDoGrupo, contagemDaCamada,
+         mesPorExtenso } from '../src/vocabulario.ts';
 import { DESTINO_DA_CAMADA, enderecoDoDestino } from '../src/destino-da-camada.ts';
 import { CRM, usinaNoCrm } from '../src/crm.ts';
 import { readFileSync } from 'node:fs';
@@ -50,7 +52,12 @@ const chk = (id: string, cond: boolean, d: string) => {
 };
 
 /** A rota de um caminho, sem o filtro. E o que se compara com a lista de telas. */
-const so = (rota: string): string => rota.split('?')[0]!;
+// A ROTA NUA — sem consulta e sem FRAGMENTO. O `#` entrou em 24/08/2026 com o
+// destino do emissor, que precisa de `#cadastro` para revelar a aba oculta da
+// Fatura unificada: sem tirar o fragmento aqui, um caminho legitimo era acusado
+// de nao ser tela de verdade. Os dois separadores saem pelo mesmo motivo — o que
+// se compara com a barra de navegacao e o CAMINHO, nao o endereco inteiro.
+const so = (rota: string): string => rota.split(/[?#]/)[0]!;
 
 /**
  * O CAMINHO E DE VERDADE, e desde 24/08/2026 ha DOIS jeitos de ser de verdade.
@@ -295,6 +302,96 @@ for (const c of CAMADAS) {
   chk('A5f', TOPICOS.some((t) => t.camada === c),
       `${c}: tem um assunto que explica o que fazer, e nao so um numero`);
 }
+
+// ================================== A5g OS DOIS GRUPOS DA TELA DE PENDENCIAS
+//
+// O agrupamento entrou em 24/08/2026. Ele nao classifica nada de novo — usa o
+// `efeito` que o servidor ja manda —, e por isso o risco dele e de OMISSAO: uma
+// linha cujo efeito nao tenha grupo simplesmente nao e desenhada. Ela existiria
+// no payload, contaria em `pode_faturar`, e nao apareceria para ninguem.
+//
+// Numa tela cujo trabalho e nao deixar nada implicito, esse e o pior modo de
+// falha possivel — e e silencioso: sem tela quebrada e sem erro de tipo, porque
+// a chave e `string`.
+
+chk('A5g', ORDEM_DOS_GRUPOS.length === Object.keys(EFEITO).length
+        && ORDEM_DOS_GRUPOS.every((g) => g in EFEITO),
+    'todo efeito que o servidor pode mandar tem um grupo na tela — efeito novo sem grupo faria a '
+    + 'linha SUMIR da tabela em silencio');
+
+{
+  const camadas = [
+    { camada: 'contrato_ativo', efeito: 'bloqueia_fatura' },
+    { camada: 'dono_da_usina', efeito: 'bloqueia_split' },
+    { camada: 'conta_lida_da_competencia', efeito: 'bloqueia_fatura' },
+    { camada: 'cobranca_sicoob', efeito: 'bloqueia_fatura' },
+  ];
+  const grupos = agruparPorEfeito(camadas);
+
+  chk('A5h', grupos.length === 2 && grupos[0]!.chave === 'bloqueia_fatura',
+      'o grupo de FATURAR vem primeiro — e o que tem prazo: a competencia fecha, o repasse espera '
+      + 'o dinheiro entrar');
+
+  chk('A5i', grupos.flatMap((g) => g.camadas).length === camadas.length,
+      'nenhuma linha se perde no agrupamento, e nenhuma e desenhada duas vezes');
+
+  chk('A5j', grupos[0]!.camadas.map((c) => c.camada).join(',')
+             === 'contrato_ativo,conta_lida_da_competencia,cobranca_sicoob',
+      'a ordem DENTRO do grupo e preservada — ela e a ordem do trabalho que o servidor define, e '
+      + 'reordenar aqui faria a tela discordar da fila que ela mesma manda seguir');
+
+  chk('A5k', agruparPorEfeito(camadas.filter((c) => c.efeito === 'bloqueia_fatura')).length === 1,
+      'grupo vazio nao aparece — um titulo sem linha embaixo prometeria conteudo que nao existe');
+}
+
+// A5l O TITULO NOMEIA O MES, e sem `new Date`. `new Date('2026-07-01')` e
+// meia-noite UTC: em fuso negativo `getMonth()` devolve JUNHO, e o titulo diria
+// o mes errado com toda a convicção.
+chk('A5l', mesPorExtenso('2026-07-01') === 'julho de 2026'
+        && mesPorExtenso('2026-01-01') === 'janeiro de 2026'
+        && mesPorExtenso('2026-12-01') === 'dezembro de 2026',
+    'o mes sai por extenso a partir do TEXTO da competencia, sem passar por fuso');
+
+chk('A5m', mesPorExtenso('') === '' && mesPorExtenso('lixo') === '' && mesPorExtenso('2026-13-01') === '',
+    'competencia ilegivel devolve vazio em vez de "undefined de 2026" impresso no titulo');
+
+chk('A5n', tituloDoGrupo('bloqueia_fatura', '2026-07-01') === 'Para gerar as faturas de julho de 2026'
+        && tituloDoGrupo('bloqueia_fatura', '') === 'Para gerar as faturas deste mes'.replace('mes', 'mês'),
+    'o titulo nomeia o mes quando da para le-lo, e cai em "deste mes" quando nao da — nunca fica '
+    + 'com um buraco no meio da frase');
+
+chk('A5o', subDoGrupo('bloqueia_fatura', 29).includes('29 unidades ativas')
+        && !/n[aã]o sai/i.test(subDoGrupo('bloqueia_fatura', 29))
+        && subDoGrupo('bloqueia_fatura', 1).includes('1 unidade ativa'),
+    'a frase do grupo carrega QUANTAS unidades dependem dele, e concorda no singular');
+
+// ============================== A5p O SUBSTANTIVO DA COLUNA "QUANTOS"
+//
+// Medido em 24/08/2026, contra producao: o mesmo formato `X de Y` significava
+// SEIS coisas na mesma coluna. Tres linhas diziam "de 29" e uma delas contava
+// PESSOAS, nao unidades; "Energia gerada 0 de 3" parecia erro para quem sabe que
+// ha QUATRO usinas cadastradas.
+
+for (const [c, v] of Object.entries(VERBETE_DA_CAMADA)) {
+  chk('A5p', v.contagem.singular.trim() !== '' && v.contagem.plural.trim() !== '',
+      `${c}: a coluna "Quantos" diz o que esta contando, nas duas formas`);
+  chk('A5q', !/^[A-Z]/.test(v.contagem.singular) && !/^[A-Z]/.test(v.contagem.plural),
+      `${c}: em minuscula — o substantivo vem DEPOIS do numero, no meio da frase`);
+}
+
+chk('A5r', contagemDaCamada('contrato_ativo', 29) === 'unidades'
+        && contagemDaCamada('contrato_ativo', 1) === 'unidade',
+    'a forma concorda com o TOTAL, e nao com quantos faltam: "0 de 1 unidade", nunca "de 1 unidades"');
+
+// AS TRES LINHAS QUE DIZEM "de 29" NAO CONTAM A MESMA COISA, e este e o caso que
+// deu origem a coluna. `documento_do_cliente` conta cliente distinto — quem tem
+// duas unidades tem UM CPF —, e as outras duas contam unidade.
+chk('A5s', contagemDaCamada('documento_do_cliente', 29) === 'clientes'
+        && contagemDaCamada('conta_lida_da_competencia', 29) === 'unidades',
+    'o CPF conta CLIENTES e a conta da distribuidora conta UNIDADES, mesmo com o total igual');
+
+chk('A5t', contagemDaCamada('inventada', 3) === '',
+    'camada sem verbete devolve vazio em vez de "undefined" impresso ao lado do numero');
 
 // ========================================= A6 os topicos apontam para lugar real
 

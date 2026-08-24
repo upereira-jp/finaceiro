@@ -46,6 +46,7 @@
 // e `navegacao.ts`.
 
 import { TELAS, type Tela } from './navegacao.ts';
+import { FRAGMENTO_DA_ABA_OCULTA } from './abas-da-fatura.ts';
 
 export type DestinoDaCamada = {
   /** A tela onde o dado ENTRA. `null` quando nao existe tela — e ai o `caminho`
@@ -54,6 +55,21 @@ export type DestinoDaCamada = {
   /** O valor de `?pendencia=` que ja abre a tela mostrando SO o que falta.
    *  `null` quando a tela nao tem filtro que corresponda a camada. */
   filtro: string | null;
+  /**
+   * O FRAGMENTO (`#...`), quando a tela de destino tem mais de um painel e o
+   * dado nao mora no primeiro. Entra no ENDERECO e nao na `rota`, e a separacao
+   * e o ponto: `telaDoDestino` casa EXATO contra `navegacao.ts` para achar o
+   * icone e o nome da aba, e uma rota com `#` nao casaria com tela nenhuma — o
+   * link viraria "nao ha tela", que e mentira.
+   *
+   * EXISTE POR UM CASO CONCRETO, e ele foi achado em 24/08/2026 depois de o
+   * link do emissor ja estar no ar: a aba «3 · Cadastro da fatura» esta OCULTA
+   * da barra por decisao do dono (`abas-da-fatura.ts`), e o unico jeito de
+   * alcanca-la e `#cadastro`. Sem o fragmento o link abria a etapa 1 e a etapa
+   * 3 nem aparecia — o pior tipo de link, o que leva a algum lugar. A tela le
+   * `location.hash` na montagem, entao o `pushState` da `Ligacao` basta.
+   */
+  fragmento?: string;
   /** O ATO, em imperativo. Vira o texto do link. */
   rotulo: string;
   /** O caminho FORA da tela: o importador que faz a carteira inteira de uma vez,
@@ -190,6 +206,36 @@ export const DESTINO_DA_CAMADA: Record<string, DestinoDaCamada> = {
       + 'caminho em lote, que não é o oficial, e o conector continua semeando ela do card.',
   },
 
+  /*
+   * O EMISSOR ENTROU EM 24/08/2026, e o destino e a MESMA aba da conta lida —
+   * outra etapa dela, e a etapa e OCULTA. `ABA_OCULTA` em `abas-da-fatura.ts`:
+   * a «3 · Cadastro da fatura» saiu da barra por decisao do dono em 14/08 e so
+   * e revelada por `#cadastro`, que a tela le de `location.hash` ao montar.
+   *
+   * Por isso `rota` e `/documento` e o `#cadastro` vai no FRAGMENTO. A primeira
+   * versao desta linha, no mesmo dia, mandava so `/documento`: abria a etapa 1
+   * e a etapa 3 nem aparecia na barra para quem chegasse ali. O link levava a
+   * algum lugar e nao ao lugar — a regra 3 deste arquivo, contra ele mesmo.
+   */
+  emissor_da_fatura: {
+    rota: '/documento', fragmento: FRAGMENTO_DA_ABA_OCULTA, filtro: null,
+    rotulo: 'Cadastrar quem emite a fatura (etapa 3)',
+    /* `null` E A RESPOSTA CERTA, e a primeira versao desta linha dizia
+       `npm run identidade` — que esta ERRADO. Aquele script cadastra CHAVE PIX
+       e aponta a padrao; ele nao toca `razao_social` nem `cnpj` em passo nenhum.
+       Mandar quem opera rodar um comando que grava outra coisa e pior que nao
+       oferecer comando. A tela e o unico caminho, e o `abas-da-fatura.ts` ja
+       dizia isso: "esta aba e o UNICO caminho de tela para o que a folha
+       imprime". */
+    caminho: null,
+    nota: 'Razão social e CNPJ da empresa que cobra, em «3 · Cadastro da fatura». Nada recusa sem '
+      + 'eles — a folha sai igual, e é esse o problema: o cabeçalho e o rodapé saem sem o nome, o '
+      + 'campo «Beneficiário» da faixa de pagamento sai vazio, e a linha «Atenção ao golpe do '
+      + 'boleto: confira sempre se o beneficiário é X» some inteira, porque ela amarra no nome. O '
+      + 'CNPJ é conferido no dígito ao gravar, então número inventado é recusado na hora. Logotipo, '
+      + 'contato e chave Pix ficam no mesmo cartão e não entram nesta linha — só razão social e CNPJ.',
+  },
+
   dono_da_usina: {
     rota: '/usinas', filtro: 'sem_dono',
     rotulo: 'Vincular o dono da usina',
@@ -254,7 +300,10 @@ export const DESTINO_DA_CAMADA: Record<string, DestinoDaCamada> = {
  *  tela — e ai a tela de Pendencias mostra o `caminho` em vez de um link morto. */
 export function enderecoDoDestino(d: DestinoDaCamada): string | null {
   if (!d.rota) return null;
-  return d.filtro ? `${d.rota}?${CHAVE_DO_FILTRO}=${encodeURIComponent(d.filtro)}` : d.rota;
+  const base = d.filtro ? `${d.rota}?${CHAVE_DO_FILTRO}=${encodeURIComponent(d.filtro)}` : d.rota;
+  // O fragmento vai por ULTIMO, sempre: `#` encerra o endereco, e um `?` depois
+  // dele viraria parte do proprio fragmento em vez de consulta.
+  return d.fragmento ? `${base}${d.fragmento}` : base;
 }
 
 /** A tela de destino, para o link poder carregar o ICONE e o NOME que a barra de

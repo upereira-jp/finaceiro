@@ -133,14 +133,55 @@ Nenhum é código. Os importadores já existem e rodam do Codespace contra produ
 
 | # | Pendência | Estado hoje | Como entra | Dono |
 |:--:|---|---|---|---|
-| 1 | **CPF/CNPJ de 24 pessoas** (29 linhas de cliente) | **26 clientes semeados** pelo ciclo de 20/08 (eram 0) — **0 validados**, e a camada conta `NOT documento_validado`, então ela **não se move** até alguém reenviar ⬇️ | **aba Clientes**: reenviar o número já preenchido (troca a origem para `coleta_local` e valida) | operação |
+| ~~1~~ | ~~**CPF/CNPJ de 24 pessoas**~~ | ✅ **FECHADO — medido em 24/08: 48 clientes com documento e os 48 VALIDADOS**, e a camada `documento_do_cliente` marca **0 de 29**. Era 26 semeados e 0 validados em 20/08; alguém reenviou pela aba Clientes, que é o ato que troca a origem para `coleta_local` | — nada a digitar | — |
 | 2 | ~~**Dia de vencimento de 29 UCs**~~ | 🔽 **REBAIXADO em 24/08** — continua **0 de 29**, e deixou de ser bloqueio geral: no caminho oficial o vencimento vem **impresso na conta da distribuidora**, e o cadastro é a **segunda** fonte. Só importa para a conta que vier sem data ⬇️ | **aba Unidades consumidoras**, linha a linha · ou `npm run vencimentos` em lote | operação |
-| 3 | **CPF/CNPJ de 2 originadores** + natureza | 0 | `npm run originadores` | operação |
-| 4 | **Digitar os 29 contratos** | 0 | `npm run contratos` (depende de 1 e 3) | operação |
-| 5 | **Emissor** — razão social, CNPJ, contato | vazio em produção | **Fatura unificada** → «3 · Cadastro da fatura» (`/documento#cadastro`) | dono |
+| ~~3~~ | ~~**CPF/CNPJ de 2 originadores** + natureza~~ | ✅ **FECHADO — 2 originadores cadastrados, os 2 com documento** (medido em 24/08; eram 0 em 21/08) | — | — |
+| 4 | **Digitar os 29 contratos** | 🔽 **18 de 29 ATIVOS**, e os 18 com originador (eram 0 em 21/08). Faltam **11** — a camada `contrato_ativo` marca 11 de 29 | **aba Contratos** · ou `npm run contratos` em lote. As duas dependências (1 e 3) **fecharam** | operação |
+| 5 | **Emissor** — razão social, CNPJ, contato | **vazio em produção**, e desde 24/08 **aparece na tela de Pendências** como a camada `emissor_da_fatura` — antes só existia nesta lista. Medido: razão social, CNPJ, telefone e endereço todos nulos; chave Pix padrão e modelo padrão ✅ | **Fatura unificada** → «3 · Cadastro da fatura» · ou `npm run identidade` | dono |
 | ~~6~~ | ~~**Tarifa das 41 UCs**~~ | ✅ **RESOLVIDO em 20/08 — 41 de 41**, semeadas pelo ciclo (34 × `1,13` · 5 × `1,16` · 2 × `1,18`) | — nada a digitar. `Q-VALOR-01(b)` **fechada** | — |
 | 7 | **Endereço do pagador de 29 UCs** | **0 de 29** | **aba Unidades consumidoras**, painel «Endereço do pagador» (17/08) · ou `npm run enderecos` em lote — **só o boleto depende** | operação |
 | **8** | **A conta da distribuidora de cada unidade, no mês** ⬅️ **novo em 24/08** | **0 de 29** | **Fatura unificada** → «1 · Leitura e cálculo»: sobe o arquivo, confere o que foi lido, registra. Depois o botão **«gerar cobrança»** na lista de contas registradas. **Uma por vez** — se vale um caminho em lote é a `Q-CONTA-LOTE-01`, aberta | operação |
+
+> ### ⬇️ 24/08/2026, fim do dia — o CICLO INTEIRO foi remedido, e a metade de cima quase fechou
+>
+> Verificação ponta a ponta da geração da fatura **e do recebimento**, contra
+> produção, pelo mesmo caminho da aplicação (`iniciar` → `login` → `withRelatorio`).
+> Nada foi escrito. O que ela achou, e o que ela mudou nesta lista:
+>
+> ```
+>   ANTES (21/08)                        AGORA (24/08)
+>   clientes com documento validado 18   ->  48        camada documento_do_cliente: ok
+>   originadores .................... 0  ->   2        os dois com documento
+>   contratos ativos ................ 0  ->  18        faltam 11 das 29
+>   regras de comissão ............. 10  ->  10        5 tipos x 2 parcelas
+>   percentuais de repasse .......... 4  ->   4        as 4 usinas
+>   donos de usina .................. 0  ->   0        bloqueia REPARTIR
+>   contas lidas .................... 0  ->   0        bloqueia FATURAR
+>   faturas · boletos · liquidações . 0  ->   0        o recebimento nunca rodou
+> ```
+>
+> **O achado novo é o EMISSOR, e ele não era medido por ninguém.** `razao_social` e
+> `cnpj` estão vazios em produção, e **nada recusa por causa disso** — a folha de
+> 7 faixas compõe e imprime igual. O que ela faz é sair sem dizer quem cobra:
+> `linhaDoEmissor()` devolve nulo, o cabeçalho e o rodapé saem sem nome, o campo
+> «Beneficiário» da faixa de pagamento sai vazio e a linha *«Atenção ao golpe do
+> boleto: confira sempre se o beneficiário é X»* **não é impressa**, porque ela
+> amarra no nome. Virou a camada **`emissor_da_fatura`** da tela de Pendências, com
+> `bloqueia_fatura` pelo precedente da `originador_do_contrato` — «estragar não é
+> sempre travar», e a marca vale porque o sistema não pode se declarar pronto para
+> cobrar quando o papel que ele produz não nomeia quem recebe o dinheiro.
+>
+> **O recebimento não está quebrado, e nunca foi exercitado.** As três portas de
+> baixa existem (`webhook-sicoob`, `conciliação`, `baixa manual`), o split roda na
+> mesma transação da baixa e provisiona contas a pagar — e há **0 liquidações**,
+> porque não há fatura. Sem o conector, a única porta viva é a **baixa manual** na
+> aba Emissão e cobrança, e o Pix é `conciliacao: 'manual'` por construção: nada
+> detecta o pagamento sozinho.
+>
+> **E uma questão nova saiu daqui: `Q-PODEFATURAR-01` 🟡.** O cartão «Pode faturar»
+> nunca pode ficar verde, porque `cobranca_sicoob` é `bloqueia_fatura` e o A1 é uma
+> compra que ninguém fez — mesmo com as outras doze camadas fechadas. É decisão de
+> quem cobra (regra 10) e **nada no código foi mudado por conta dela**.
 
 > ### ⬇️ 24/08/2026 — a prontidão passou a medir o caminho OFICIAL
 >

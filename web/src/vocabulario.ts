@@ -43,6 +43,21 @@ export type Verbete = {
   /** O que acontece enquanto isso não for feito. É a consequência, e é ela que
    *  responde «posso deixar para depois?». */
   consequencia: string;
+  /**
+   * O SUBSTANTIVO da coluna «Quantos», nas duas formas.
+   *
+   * Entrou em 24/08/2026 por uma ambiguidade medida: o mesmo formato `X de Y`
+   * significava seis coisas diferentes na mesma coluna. Três linhas diziam
+   * «de 29» e uma delas contava PESSOAS, não unidades; «Energia gerada 0 de 3»
+   * parecia erro para quem sabe que há quatro usinas cadastradas (o universo é
+   * «usinas com contrato», e a coluna não dizia isso).
+   *
+   * DUAS FORMAS E NÃO UMA: o total varia — `regra_de_comissao` conta os tipos de
+   * parceiro EM USO, que hoje é um e amanhã são três. «0 de 1 tipos de parceiro»
+   * é erro de concordância na cara de quem opera, e concordância errada numa tela
+   * de dinheiro faz duvidar do número ao lado.
+   */
+  contagem: { singular: string; plural: string };
 };
 
 /**
@@ -59,12 +74,14 @@ export const VERBETE_DA_CAMADA: Record<string, Verbete> = {
     simples: 'Tem cliente sem o CPF ou o CNPJ confirmado aqui no sistema.',
     consequencia: 'Sem esse número conferido, o contrato dele não pode ser ativado — e sem contrato '
       + 'ativo não existe cobrança para enviar.',
+    contagem: { singular: 'cliente', plural: 'clientes' },
   },
 
   contrato_ativo: {
     titulo: 'Contrato ativo',
     simples: 'Tem unidade de cliente sem contrato ativo no sistema.',
     consequencia: 'A cobrança nasce do contrato. Sem ele, essa unidade fica de fora do mês inteiro.',
+    contagem: { singular: 'unidade', plural: 'unidades' },
   },
 
   rateio: {
@@ -72,6 +89,7 @@ export const VERBETE_DA_CAMADA: Record<string, Verbete> = {
     simples: 'Tem unidade sem usina ligada a ela, ou sem a fatia (o percentual) que cabe ao cliente.',
     consequencia: 'É a fatia que diz quanta energia daquela usina é desse cliente. Sem ela não há '
       + 'como calcular o desconto, e a conta não fecha.',
+    contagem: { singular: 'unidade', plural: 'unidades' },
   },
 
   geracao_da_competencia: {
@@ -79,6 +97,7 @@ export const VERBETE_DA_CAMADA: Record<string, Verbete> = {
     simples: 'Tem usina que ainda não teve a energia deste mês lançada.',
     consequencia: 'A conta do cliente parte da energia que a usina produziu. Sem esse número, o mês '
       + 'não pode ser calculado.',
+    contagem: { singular: 'usina', plural: 'usinas' },
   },
 
   conta_lida_da_competencia: {
@@ -86,6 +105,7 @@ export const VERBETE_DA_CAMADA: Record<string, Verbete> = {
     simples: 'Tem unidade sem a conta da distribuidora lida e registrada neste mês.',
     consequencia: 'É dessa conta que sai o valor a cobrar. Sem ela registrada, a cobrança do mês '
       + 'não tem de onde nascer.',
+    contagem: { singular: 'unidade', plural: 'unidades' },
   },
 
   vencimento: {
@@ -95,6 +115,7 @@ export const VERBETE_DA_CAMADA: Record<string, Verbete> = {
     consequencia: 'Quando a conta traz a data, ela vale e não há nada a preencher. Quando não '
       + 'traz, o dia do cadastro é o que salva a cobrança — e o sistema não escolhe uma data por '
       + 'você.',
+    contagem: { singular: 'conta lida', plural: 'contas lidas' },
   },
 
   tarifa_na_conta: {
@@ -102,6 +123,16 @@ export const VERBETE_DA_CAMADA: Record<string, Verbete> = {
     simples: 'Tem conta lida em que o preço do kWh ficou zerado.',
     consequencia: 'É por esse preço que a energia vira dinheiro na folha do cliente. Zerado, a '
       + 'cobrança sairia dizendo que o kWh não custa nada — por isso ela é recusada.',
+    contagem: { singular: 'conta lida', plural: 'contas lidas' },
+  },
+
+  emissor_da_fatura: {
+    titulo: 'Quem emite a fatura',
+    simples: 'A razão social e o CNPJ da empresa que cobra ainda não foram preenchidos.',
+    consequencia: 'A folha sai assim mesmo, e é esse o risco: ela vai ao cliente sem dizer quem '
+      + 'está cobrando, o campo do beneficiário fica em branco e o aviso «confira sempre se o '
+      + 'beneficiário é...» some da página — justamente o aviso que protege contra boleto falso.',
+    contagem: { singular: 'empresa', plural: 'empresas' },
   },
 
   dono_da_usina: {
@@ -109,6 +140,7 @@ export const VERBETE_DA_CAMADA: Record<string, Verbete> = {
     simples: 'Tem usina sem dono cadastrado.',
     consequencia: 'Dá para cobrar o cliente normalmente. O que trava é depois: quando o dinheiro '
       + 'entrar, não há para quem repassar a parte do dono.',
+    contagem: { singular: 'usina', plural: 'usinas' },
   },
 
   regra_de_repasse: {
@@ -116,6 +148,7 @@ export const VERBETE_DA_CAMADA: Record<string, Verbete> = {
     simples: 'Tem usina sem o percentual de repasse valendo para este mês.',
     consequencia: 'Dá para cobrar. O que trava é a divisão do dinheiro que entrar — sem o '
       + 'percentual, o sistema não sabe quanto é do dono.',
+    contagem: { singular: 'usina', plural: 'usinas' },
   },
 
   originador_do_contrato: {
@@ -123,12 +156,14 @@ export const VERBETE_DA_CAMADA: Record<string, Verbete> = {
     simples: 'Tem contrato ativo sem a indicação de quem trouxe aquele cliente.',
     consequencia: 'Dá para cobrar. O que trava é a comissão: sem saber quem indicou, não há a quem '
       + 'pagar quando o dinheiro entrar.',
+    contagem: { singular: 'contrato', plural: 'contratos' },
   },
 
   regra_de_comissao: {
     titulo: 'Valor da comissão',
     simples: 'Tem contrato cuja comissão ainda não tem valor definido para a data em que foi fechado.',
     consequencia: 'Dá para cobrar. A comissão é que não pode ser calculada quando o dinheiro entrar.',
+    contagem: { singular: 'tipo de parceiro', plural: 'tipos de parceiro' },
   },
 
   cobranca_sicoob: {
@@ -136,6 +171,7 @@ export const VERBETE_DA_CAMADA: Record<string, Verbete> = {
     simples: 'A conexão com o Sicoob ainda não está configurada.',
     consequencia: 'A cobrança até existe e pode ser paga por Pix, e um boleto emitido no site do '
       + 'banco pode ser importado aqui. O que não dá é o sistema emitir o boleto sozinho.',
+    contagem: { singular: 'conexão', plural: 'conexões' },
   },
 };
 
@@ -338,3 +374,115 @@ export const GLOSSARIO: readonly TermoDoGlossario[] = [
     caminhos: [{ rota: '/pendencias', rotulo: 'Conferir o que falta nela', tipo: 'ver' }],
   },
 ];
+
+// ============================================================================
+// OS DOIS GRUPOS DA TELA DE PENDÊNCIAS — 24/08/2026, a pedido do dono.
+//
+// A tabela mostrava treze linhas seguidas, e a coluna «Efeito» era o único lugar
+// que dizia que elas respondem a DUAS perguntas diferentes: «a cobrança deste mês
+// sai?» e «o dinheiro que entrar vai para quem é de direito?». Quem lê de cima
+// para baixo tratava as treze como uma fila só — e trabalhava no dono da usina
+// (que não impede cobrar) achando que estava destravando a fatura.
+//
+// O AGRUPAMENTO NÃO INVENTA CLASSIFICAÇÃO NENHUMA: `efeito` já vem do servidor
+// e já governa `pode_faturar`. O que muda é a leitura — o mesmo dado deixa de
+// morar só numa coluna repetida e passa a ser o título da seção.
+//
+// A ORDEM DENTRO DE CADA GRUPO É PRESERVADA, e ela é a ordem do trabalho
+// (`src/repos/prontidao.ts`). Só uma linha muda de lugar na tela: a conexão com
+// o banco, que era a última de todas e passa a fechar o primeiro grupo — onde
+// ela já estava por efeito.
+//
+// ISTO É `.ts` PURO PELO MOTIVO DE SEMPRE: regra dentro de `.tsx` é inalcançável
+// pelo runner do `web/`, e a regra 8 diz que invariante sem teste é comentário.
+// ============================================================================
+
+const MESES_PT = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+                  'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+
+/**
+ * `'2026-07-01'` -> `'julho de 2026'`. String vazia quando não dá para ler.
+ *
+ * SEM `new Date`, DE PROPÓSITO: `new Date('2026-07-01')` é meia-noite UTC, e em
+ * fuso negativo — o do Brasil — `getMonth()` devolve JUNHO. O título diria o mês
+ * errado, e diria com convicção. Recorte de texto não tem fuso.
+ */
+export function mesPorExtenso(iso: string): string {
+  const m = /^(\d{4})-(\d{2})/.exec(iso ?? '');
+  if (!m) return '';
+  const n = Number(m[2]);
+  return n >= 1 && n <= 12 ? `${MESES_PT[n - 1]} de ${m[1]}` : '';
+}
+
+export type ChaveDoGrupo = 'bloqueia_fatura' | 'bloqueia_split';
+
+/** A ordem em que os grupos aparecem. O de faturar vem primeiro porque é o que
+ *  tem prazo: a competência fecha, e o repasse espera o dinheiro entrar. */
+export const ORDEM_DOS_GRUPOS: readonly ChaveDoGrupo[] = ['bloqueia_fatura', 'bloqueia_split'];
+
+/** O título da seção. Nomeia o MÊS quando ele é legível — «Para gerar as faturas
+ *  de julho de 2026» responde sozinho, e «deste mês» obriga a olhar o seletor. */
+export function tituloDoGrupo(chave: ChaveDoGrupo, competencia: string): string {
+  if (chave !== 'bloqueia_fatura') return 'Para dividir o dinheiro quando ele entrar';
+  const mes = mesPorExtenso(competencia);
+  return mes ? `Para gerar as faturas de ${mes}` : 'Para gerar as faturas deste mês';
+}
+
+/** A frase de baixo. Carrega o NÚMERO de unidades porque é ele que dá tamanho ao
+ *  trabalho: «faltam 11» não diz nada sem saber que o total é 29. */
+export function subDoGrupo(chave: ChaveDoGrupo, unidades: number): string {
+  if (chave !== 'bloqueia_fatura') {
+    return 'A cobrança sai normalmente mesmo com estas linhas abertas. O que fica parado é o '
+         + 'repasse ao dono da usina e a comissão de quem indicou, quando o dinheiro entrar.';
+  }
+  /*
+   * A FRASE NÃO PROMETE MAIS «enquanto qualquer uma estiver aberta, a cobrança
+   * não sai», e a correção é do mesmo dia em que ela nasceu.
+   *
+   * Uma das linhas deste grupo é a conexão com o banco — e ela CONTRADIZ a
+   * promessa: o verbete dela diz, corretamente, que «a cobrança até existe e
+   * pode ser paga por Pix». O título de seção transformava uma imprecisão que
+   * vivia escondida numa coluna repetida numa afirmação de cabeçalho, lida
+   * primeiro e por todo mundo.
+   *
+   * A frase agora diz o que é verdade das treze sem exceção — que o mês depende
+   * delas — e para de afirmar o que só é verdade de doze. Qual delas de fato
+   * impede a cobrança de sair é a `Q-PODEFATURAR-01`, que tem dono e está
+   * aberta; pela regra 10 não é aqui que ela se decide.
+   */
+  const n = `${unidades} unidade${unidades === 1 ? '' : 's'} ativa${unidades === 1 ? '' : 's'}`;
+  return `As ${n} deste mês dependem das linhas abaixo. Comece pelas que estão marcadas como `
+       + 'falta preencher, na ordem em que aparecem.';
+}
+
+/**
+ * As linhas do relatório, na ordem, repartidas em grupos.
+ *
+ * GRUPO VAZIO NÃO APARECE: uma seção com título e nenhuma linha embaixo faria a
+ * tela prometer conteúdo que não existe.
+ *
+ * NENHUMA LINHA SE PERDE, e isso é garantido por TESTE e não por este código: a
+ * suíte confere que `ORDEM_DOS_GRUPOS` cobre exatamente as chaves de `EFEITO`.
+ * Um efeito novo no servidor sem grupo aqui sumiria da tela em silêncio — a
+ * linha existiria no payload e não seria desenhada —, que é o pior modo de falha
+ * possível numa tela cujo trabalho é justamente não deixar nada implícito.
+ */
+export function agruparPorEfeito<T extends { efeito: string }>(
+  camadas: readonly T[],
+): Array<{ chave: ChaveDoGrupo; camadas: T[] }> {
+  return ORDEM_DOS_GRUPOS
+    .map((chave) => ({ chave, camadas: camadas.filter((c) => c.efeito === chave) }))
+    .filter((g) => g.camadas.length > 0);
+}
+
+/**
+ * O SUBSTANTIVO que vai depois de «X de Y» na coluna «Quantos».
+ *
+ * Vazio quando a camada não tem verbete — a suíte impede que isso chegue à tela
+ * (A5), e cair no vazio é melhor que imprimir `undefined` ao lado de um número.
+ */
+export function contagemDaCamada(camada: string, total: number): string {
+  const v = VERBETE_DA_CAMADA[camada];
+  if (!v) return '';
+  return total === 1 ? v.contagem.singular : v.contagem.plural;
+}

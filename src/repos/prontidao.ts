@@ -84,12 +84,17 @@ export type Prontidao = {
 };
 
 /**
- * As DOZE camadas, numa consulta so. Eram dez ate 04/08/2026, quando a R9
+ * As TREZE camadas, numa consulta so. Eram dez ate 04/08/2026, quando a R9
  * apareceu como camada: ela ja era lei desde a SPEC-001 e nao era CONTADA, entao
  * o relatorio mandava digitar 29 contratos que nao teriam como ativar. A decima
  * segunda entrou em 24/08/2026 pelo mesmo motivo e uma volta depois: a conta da
  * distribuidora virou a FONTE do valor pela `Q-CICLO-01`, e este relatorio nao a
  * contava - ver o bloco de `conta_lida_da_competencia`.
+ *
+ * A DECIMA TERCEIRA entrou no MESMO dia, pela verificacao ponta a ponta do
+ * caminho oficial, e e o mesmo modo de falha uma casa adiante: o relatorio
+ * media tudo o que faz a cobranca EXISTIR e nada do que a faz sair NOMEANDO
+ * quem cobra. Ver o bloco de `emissor_da_fatura`.
  *
  * O filtro por tenant sai da RLS, nao de um WHERE escrito aqui. Os
  * `tenant_id = tenant_id` nos JOINs existem para o planejador, nao para o
@@ -228,17 +233,34 @@ export async function prontidao(comp: Date | string): Promise<Prontidao> {
       -- exatamente o zero - que e o que este "<= 0" conta, sem logica de tres
       -- valores no meio.
       (SELECT count(*) FROM uc_com_conta uc WHERE uc.tarifa_kwh <= 0)        AS sem_tarifa,
-      -- 7. dono da usina: R12, bloqueia o SPLIT e nao a fatura
+      -- 7. o EMISSOR: quem assina o documento que o cliente recebe
+      --
+      -- Conta a identidade COMPLETA, e nao a existencia da linha. Em producao a
+      -- linha existe desde a migration 21 e carrega chave Pix padrao e modelo
+      -- padrao; "razao_social" e "cnpj" sao colunas NULAVEIS da migration 26, e
+      -- as duas estao vazias. Contar a LINHA daria a camada por fechada com a
+      -- folha saindo sem beneficiario.
+      --
+      -- "btrim(...) <> ''" e nao so "IS NOT NULL": a rota grava por "texto()",
+      -- que devolve nulo para string vazia, mas a coluna e livre e uma linha
+      -- gravada por script ou por migration futura pode trazer espaco.
+      --
+      -- (Sem crase nos comentarios daqui, como no bloco de "sem_documento":
+      -- isto vive dentro de um template literal e uma crase fecharia a consulta.)
+      (SELECT count(*) FROM identidade_de_cobranca i
+        WHERE i.razao_social IS NOT NULL AND btrim(i.razao_social) <> ''
+          AND i.cnpj IS NOT NULL AND btrim(i.cnpj) <> '')                    AS emissor_completo,
+      -- 8. dono da usina: R12, bloqueia o SPLIT e nao a fatura
       (SELECT count(*) FROM usina u
         WHERE u.status = 'ativa' AND u.dono_usina_id IS NULL)                AS sem_dono,
       (SELECT count(*) FROM usina u WHERE u.status = 'ativa')                AS usinas_ativas,
-      -- 8. regra de repasse vigente na competencia
+      -- 9. regra de repasse vigente na competencia
       (SELECT count(*) FROM usina u
         WHERE u.status = 'ativa'
           AND NOT EXISTS (SELECT 1 FROM regra_repasse rr
                            WHERE rr.tenant_id = u.tenant_id AND rr.usina_id = u.id
                              AND daterange(rr.vigencia_inicio, rr.vigencia_fim, '[)') @> ${iso}::date)) AS sem_repasse,
-      -- 9. originador do contrato: Q-ORIGINADOR-01, decidida em 29/07/2026.
+      -- 10. originador do contrato: Q-ORIGINADOR-01, decidida em 29/07/2026.
       --    As UCs da carteira LEVAM originador e a comissao esta toda pela
       --    frente - ninguem recebeu nada ainda. Entao contrato ativo com
       --    originador_id nulo nao e "venda sem comissao", e defeito de cadastro.
@@ -246,7 +268,7 @@ export async function prontidao(comp: Date | string): Promise<Prontidao> {
       --    congelado, e sem tier a regra_de_comissao nao tem o que medir.
       (SELECT count(*) FROM uc_contratada uc WHERE uc.originador_id IS NULL)   AS sem_originador,
       (SELECT count(*) FROM uc_contratada uc)                                 AS contratos_ativos,
-      -- 10. regra de comissao para o tier CONGELADO de cada contrato (R20-b),
+      -- 11. regra de comissao para o tier CONGELADO de cada contrato (R20-b),
       --    nas DUAS parcelas do PRD 5.4 - uma vigencia com so uma parcela faz o
       --    split levantar na fatura cheia que usar a outra
       (SELECT count(DISTINCT uc.originador_tipo_no_fechamento) FROM uc_contratada uc
@@ -257,7 +279,7 @@ export async function prontidao(comp: Date | string): Promise<Prontidao> {
                   AND daterange(rc.vigencia_inicio, rc.vigencia_fim, '[)') @> uc.data_fechamento) < 2) AS sem_comissao,
       (SELECT count(DISTINCT uc.originador_tipo_no_fechamento) FROM uc_contratada uc
         WHERE uc.originador_tipo_no_fechamento IS NOT NULL)                  AS tiers_em_uso,
-      -- 11. conector de cobranca ativo (o boleto, PAUTA 5)
+      -- 12. conector de cobranca ativo (o boleto, PAUTA 5)
       (SELECT count(*) FROM conector_cobranca cc WHERE cc.ativo)             AS cobranca_ativa`;
 
   const l = r[0];
@@ -390,6 +412,48 @@ export async function prontidao(comp: Date | string): Promise<Prontidao> {
         '"R$ 0,000000 por kWh" no documento que o cliente confere. Corrige-se no campo Tarifa da ' +
         'propria leitura, na aba da fatura unificada. A tarifa da aba Unidades consumidoras serve o ' +
         'caminho em lote e NAO entra aqui - o conector continua semeando ela a partir do card' },
+
+    /*
+     * O EMISSOR DA FATURA, e a camada entrou em 24/08/2026 pela verificacao
+     * ponta a ponta do caminho oficial. Medido em producao no mesmo dia:
+     * `razao_social` e `cnpj` VAZIOS, com 46 UCs ativas e o caminho unificado
+     * ja decidido - ou seja, o documento que o cliente recebe sai sem dizer
+     * quem cobra.
+     *
+     * NAO E "SO UM CAMPO EM BRANCO", e por isso e camada e nao nota de rodape.
+     * `linhaDoEmissor()` devolve `null` quando nao ha razao social, e a folha
+     * reage em TRES lugares de uma vez (src/dominio/folha-unificada.ts):
+     * cabecalho e rodape saem sem emissor, o `beneficiario` da faixa de
+     * pagamento sai nulo, e a linha "Atencao ao golpe do boleto: confira sempre
+     * se o beneficiario e X" simplesmente NAO E IMPRESSA - o aviso antigolpe
+     * amarra no nome, e sem nome ele desaparece em vez de sair pela metade.
+     * A conferencia do boleto importado tambem perde o lado contra o qual
+     * comparar, e passa a so dizer que nao ha com o que comparar.
+     *
+     * `bloqueia_fatura` PELO PRECEDENTE DA `originador_do_contrato`, e nao por
+     * o codigo recusar: nada recusa aqui, a folha compoe e imprime. Vale a
+     * marca porque o efeito sobre `pode_faturar` e o mesmo - o sistema nao pode
+     * se declarar pronto para cobrar quando o papel que ele produz nao nomeia
+     * quem recebe o dinheiro. "Estragar nao e sempre travar", e este e o
+     * segundo caso.
+     *
+     * CONTA A IDENTIDADE COMPLETA E NAO A LINHA: a linha existe em producao
+     * desde a migration 21 e ja carrega chave Pix padrao e modelo padrao. O que
+     * falta sao as duas colunas da migration 26.
+     */
+    { camada: 'emissor_da_fatura', faltam: n(l.emissor_completo) > 0 ? 0 : 1, total: 1,
+      efeito: 'bloqueia_fatura', dono: 'Vinicius', questao: null,
+      explicacao: 'razao social e CNPJ de quem emite a fatura. Nada RECUSA sem eles - a folha ' +
+        'compoe e imprime igual -, e e esse o problema: `linhaDoEmissor()` devolve nulo, o ' +
+        'cabecalho e o rodape saem sem emissor, o `beneficiario` da faixa de pagamento sai nulo e ' +
+        'a linha "Atencao ao golpe do boleto: confira sempre se o beneficiario e X" nao e impressa ' +
+        '- o aviso amarra no nome e some junto com ele. A conferencia do boleto importado perde o ' +
+        'lado contra o qual comparar. As duas colunas sao da migration 26 (Q-DOCG3-08, ja fechada ' +
+        'no schema): o que falta e o insumo, e ele entra por UM caminho so - Fatura unificada > ' +
+        '"3 - Cadastro da fatura" (/documento#cadastro), a aba que esta oculta da barra. NAO ha ' +
+        'importador: `npm run identidade` cadastra CHAVE PIX e nao toca estas duas colunas. ' +
+        'O CNPJ tem digito verificador conferido na gravacao (`CnpjDoEmissorInvalido`, 422), ' +
+        'entao numero inventado nao passa' },
 
     { camada: 'dono_da_usina', faltam: n(l.sem_dono), total: n(l.usinas_ativas),
       efeito: 'bloqueia_split', dono: 'operacao', questao: 'AUD-08',

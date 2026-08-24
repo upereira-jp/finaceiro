@@ -980,14 +980,19 @@ export const TOPICOS: readonly Topico[] = [
     pergunta: 'Como coloco o logotipo e os dados da empresa na fatura?',
     resposta: 'No cadastro do emissor, na aba Fatura unificada. É de lá que saem o nome, o '
       + 'documento, o logotipo e a chave de pagamento impressos na folha.',
+    porque: PORQUE['identidade-da-empresa'],
     passos: [
-      'Abra a aba Fatura unificada.',
-      'Vá ao cadastro do emissor.',
-      'Preencha os dados da empresa, suba o logotipo e cadastre a chave de pagamento.',
+      'Abra a aba Fatura unificada e vá até «3 · Cadastro da fatura».',
+      'Preencha a razão social e o CNPJ — são esses dois que a tela de Pendências cobra.',
+      'Suba o logotipo e cadastre a chave de pagamento, que ficam no mesmo cartão.',
       'Grave e emita uma folha para conferir como ficou.',
     ],
-    caminhos: [ir('/documento', 'Abrir o cadastro do emissor')],
-    camada: null,
+    caminhos: [daCamada('emissor_da_fatura', 'Cadastrar quem emite a fatura')],
+    /* LIGADO A CAMADA EM 24/08/2026. O assunto existia desde a central de ajuda
+       e respondia "onde faço"; o que faltava era ele ser o destino da linha de
+       Pendências — enquanto `camada` foi `null`, a pendência do emissor não
+       existia no relatório e este texto era um conselho sem cobrança atrás. */
+    camada: 'emissor_da_fatura',
     telas: ['/documento'],
     termos: ['logotipo', 'logo', 'dados da empresa', 'emissor', 'cabecalho da fatura', 'marca',
              'nome da empresa na fatura', 'chave de pagamento'],

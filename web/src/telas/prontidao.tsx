@@ -33,7 +33,10 @@ import {
 import { Ligacao } from '../rota.tsx';
 import { competenciaISO } from '../dinheiro.ts';
 import { DESTINO_DA_CAMADA, enderecoDoDestino, telaDoDestino } from '../destino-da-camada.ts';
-import { VERBETE_DA_CAMADA, EFEITO, SITUACAO } from '../vocabulario.ts';
+import {
+  VERBETE_DA_CAMADA, EFEITO, SITUACAO,
+  agruparPorEfeito, tituloDoGrupo, subDoGrupo, contagemDaCamada,
+} from '../vocabulario.ts';
 
 const mesAtual = () => new Date().toISOString().slice(0, 7);
 
@@ -41,6 +44,8 @@ export function TelaProntidao() {
   const [mes, setMes] = useState(mesAtual);
   const { dado, carregando, erro } = useDados<Prontidao>(
     () => api.get(`/faturamento/${competenciaISO(mes)}/prontidao`), [mes]);
+
+  const naoMedidas = dado?.camadas.filter((c) => c.situacao === 'nao_medido').length ?? 0;
 
   return (
     /*
@@ -75,15 +80,37 @@ export function TelaProntidao() {
           <div className="kpis">
             <KpiSimNao nome="Pode faturar" sim={dado.pode_faturar} icone="pode_faturar" />
             <KpiSimNao nome="Pode repartir" sim={dado.pode_repartir} icone="pode_repartir" />
-            <Kpi nome="Unidades ativas" icone="unidades" valor={dado.ucs_ativas} />
+            {/* "Unidades a faturar" E NAO "Unidades ativas", desde 24/08/2026. O campo
+                se chama `ucs_ativas` e o significado dele mudou em 04/08 para
+                "faturaveis" — o servidor registra que "o nome ficou por
+                compatibilidade de payload". O ROTULO nao tem essa obrigacao, e
+                mantê-lo custava caro: o cartao dizia 29 e a aba Unidades lista
+                46 com status ativa. Quem conferisse concluiria que a tela erra. */}
+            <Kpi nome="Unidades a faturar" icone="unidades" valor={dado.ucs_ativas} />
             {/* "O que ainda falta" e nao "Camadas pendentes": o cartao mostra
                 "3 de 11", e o numero so quer dizer alguma coisa se o nome disser
                 de QUE ele e contagem. "Camada" nomeia a estrutura interna do
                 relatorio e nao existe para quem opera. */}
+            {/* O CARTAO DESOBEDECIA A PROPRIA REGRA DA TELA ate 24/08/2026.
+                Ele contava so `pendente`, entao "4 de 13" fazia concluir que 9
+                estavam prontas — e duas delas eram `nao_medido`, que a lista
+                "Como ler esta tela" define, tres paragrafos abaixo, como NAO
+                sendo o mesmo que pronto. Era o defeito que esta tela inteira
+                existe para combater, na propria tela.
+
+                O NUMERO GRANDE CONTINUA SENDO O DAS PENDENTES, de proposito:
+                e ele que responde "quanto trabalho tenho agora". As nao medidas
+                nao sao trabalho ainda — o que as destrava esta uma linha acima.
+                O que mudou e que elas pararam de ser CONTADAS COMO PRONTAS. */}
             <Kpi nome="O que ainda falta" icone="prontidao"
                  valor={<>
                    {dado.camadas.filter((c) => c.situacao === 'pendente').length}
                    <span className="fraco" style={{ fontSize: 14, fontWeight: 500 }}> de {dado.camadas.length}</span>
+                   {naoMedidas > 0 && (
+                     <div className="fraco" style={{ fontSize: 12, fontWeight: 500, marginTop: 2 }}>
+                       e mais {naoMedidas} ainda sem conferir
+                     </div>
+                   )}
                  </>} />
           </div>
 
@@ -99,18 +126,54 @@ export function TelaProntidao() {
             um clique, por decisão do dono no mesmo dia. Quem precisa dos códigos
             continua a um clique deles; quem não sabe o que são não tropeça.
           */}
+          {/*
+            AS LINHAS ENTRAM AGRUPADAS desde 24/08/2026, a pedido do dono. As
+            treze respondem a DUAS perguntas — «a cobrança deste mês sai?» e «o
+            dinheiro que entrar vai para quem é de direito?» —, e até aqui o
+            único lugar que dizia isso era a coluna «Efeito», repetida linha a
+            linha. Quem lia de cima para baixo tratava as treze como uma fila só.
+
+            O AGRUPAMENTO NÃO CLASSIFICA NADA DE NOVO: `efeito` já vem do
+            servidor e já é o que governa `pode_faturar`. A regra é `.ts` puro em
+            `vocabulario.ts`, com suíte própria — inclusive a que garante que
+            efeito novo no servidor não some da tela em silêncio.
+
+            UMA TABELA SÓ, e não duas: as colunas são as mesmas e duas tabelas
+            desalinhariam «Quantos» entre os grupos, que é a coluna que a pessoa
+            compara de relance.
+          */}
           <Tabela cabecalho={<><th>O que falta</th><th>Situação</th><th className="num">Quantos</th><th>Efeito</th><th>Onde resolver</th></>}>
-            {dado.camadas.map((c) => (
-              <tr key={c.camada}>
-                <td><OQueFalta camada={c} /></td>
-                <td><Marca tom={c.situacao}>{SITUACAO[c.situacao]?.curto ?? c.situacao}</Marca></td>
-                <td className="num">
-                  {c.situacao === 'nao_medido' ? '—' : `${c.faltam} de ${c.total}`}
+            {agruparPorEfeito(dado.camadas).flatMap((g) => [
+              <tr key={`grupo:${g.chave}`}>
+                <td colSpan={5} style={{ paddingTop: 22, borderBottom: 'none' }}>
+                  <h3 style={{ margin: 0, fontSize: 15 }}>{tituloDoGrupo(g.chave, dado.competencia)}</h3>
+                  <div className="fraco" style={{ fontSize: 13, marginTop: 4, maxWidth: 760, lineHeight: 1.55 }}>
+                    {subDoGrupo(g.chave, dado.ucs_ativas)}
+                  </div>
                 </td>
-                <td className="fraco" style={{ fontSize: 13 }}>{EFEITO[c.efeito]?.curto ?? c.efeito}</td>
-                <td><OndeResolver camada={c.camada} situacao={c.situacao} /></td>
-              </tr>
-            ))}
+              </tr>,
+              ...g.camadas.map((c) => (
+                <tr key={c.camada}>
+                  <td><OQueFalta camada={c} /></td>
+                  <td><Marca tom={c.situacao}>{SITUACAO[c.situacao]?.curto ?? c.situacao}</Marca></td>
+                  {/* O SUBSTANTIVO ENTROU EM 24/08/2026. O mesmo `X de Y`
+                      significava seis coisas nesta coluna: tres linhas diziam
+                      "de 29" e uma delas contava PESSOAS. Ele vai apagado e
+                      menor porque o numero continua sendo o que se compara de
+                      relance — a palavra so tira a duvida de QUE ele conta. */}
+                  <td className="num">
+                    {c.situacao === 'nao_medido' ? '—' : <>
+                      {c.faltam} de {c.total}{' '}
+                      <span className="fraco" style={{ fontSize: 12, fontWeight: 500 }}>
+                        {contagemDaCamada(c.camada, c.total)}
+                      </span>
+                    </>}
+                  </td>
+                  <td className="fraco" style={{ fontSize: 13 }}>{EFEITO[c.efeito]?.curto ?? c.efeito}</td>
+                  <td><OndeResolver camada={c.camada} situacao={c.situacao} /></td>
+                </tr>
+              )),
+            ])}
           </Tabela>
 
           <h2>Como ler esta tela</h2>
@@ -210,7 +273,11 @@ function OndeResolver({ camada, situacao }: Pick<Camada, 'camada' | 'situacao'>)
   // `src/repos/prontidao.ts` (D1), então na prática não acontece — mas a tela
   // não pode quebrar por uma linha a mais no relatório.
   if (!d) return <span className="fraco">—</span>;
-  if (situacao === 'ok') return <span className="fraco">Fechada</span>;
+  /* NADA, E NAO "Fechada", desde 24/08/2026. A coluna "Situacao" da mesma linha
+     ja diz "Pronto"; duas palavras para o mesmo estado, lado a lado, fazem
+     procurar a diferenca entre elas — e nao ha nenhuma. O travessao e a mesma
+     convencao que a coluna "Quantos" ja usa para "nao ha o que mostrar". */
+  if (situacao === 'ok') return <span className="fraco">—</span>;
 
   const endereco = enderecoDoDestino(d);
   const tela = telaDoDestino(d);

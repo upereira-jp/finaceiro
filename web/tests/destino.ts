@@ -33,6 +33,7 @@ import {
   enderecoDoDestino, telaDoDestino, filtroDaConsulta,
 } from '../src/destino-da-camada.ts';
 import { TELAS, telaDoCaminho } from '../src/navegacao.ts';
+import { FRAGMENTO_DA_ABA_OCULTA, revelaAbaOculta } from '../src/abas-da-fatura.ts';
 import {
   casaComFiltroDeDocumento, ROTULO_DO_FILTRO_DE_DOCUMENTO, ROTULO_DA_SITUACAO_DO_DOCUMENTO,
   type ClienteConferivel,
@@ -153,6 +154,25 @@ chk('D5e', DESTINO_DA_CAMADA.conta_lida_da_competencia!.rota === '/documento'
     + 'entra — apontar para o cadastro seria mandar trabalhar no lugar errado');
 chk('D5c', enderecoDoDestino(DESTINO_DA_CAMADA.geracao_da_competencia!) === null,
     'e sem tela nao ha endereco — a tela mostra o caminho escrito em vez de um link morto');
+
+// D5f O EMISSOR ABRE A ETAPA QUE ESTA ESCONDIDA, e este teste existe por um
+// defeito real de 24/08/2026: a primeira versao do destino mandava `/documento`
+// seco. A aba «3 · Cadastro da fatura» esta OCULTA da barra desde 14/08
+// (`ABA_OCULTA`), entao o link abria a etapa 1 e a etapa 3 nem aparecia — quem
+// clicasse em "Cadastrar quem emite a fatura" nao tinha como chegar no
+// formulario. O fragmento e o unico jeito de revela-la.
+chk('D5f', enderecoDoDestino(DESTINO_DA_CAMADA.emissor_da_fatura!)
+             === `/documento${FRAGMENTO_DA_ABA_OCULTA}`
+        && revelaAbaOculta(FRAGMENTO_DA_ABA_OCULTA),
+    'o link do emissor carrega o fragmento que REVELA a aba oculta — sem ele o destino existe e o '
+    + 'formulario continua inalcancavel');
+
+// E o fragmento NAO pode viver na `rota`: `telaDoDestino` casa exato contra a
+// barra de navegacao, e uma rota com `#` nao acharia tela nenhuma — o link
+// viraria "nao ha tela" para uma camada que TEM tela.
+chk('D5g', DESTINO_DA_CAMADA.emissor_da_fatura!.rota === '/documento'
+        && telaDoDestino(DESTINO_DA_CAMADA.emissor_da_fatura!) !== undefined,
+    'o fragmento fica FORA da rota, entao a camada continua achando a tela na barra');
 
 chk('D5d', destinos.every(([, d]) => {
       const e = enderecoDoDestino(d);
