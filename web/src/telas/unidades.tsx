@@ -404,9 +404,9 @@ function EnderecoDoPagador({ uc, ocupado, aoGravar }: {
   return (
     <div style={{ padding: '12px 4px', display: 'grid', gap: 10 }}>
       <div className="campos">
-        <Campo rotulo="Logradouro" valor={logradouro} ao={setLogradouro} dica="Rua, avenida, quadra" />
-        <Campo rotulo="Número" valor={numero} ao={setNumero} dica="S/N quando não há" />
-        <Campo rotulo="Complemento" valor={complemento} ao={setComplemento} dica="Opcional — não conta como pendência" />
+        <Campo rotulo="Logradouro" porqueDe="endereco-unidade" valor={logradouro} ao={setLogradouro} dica="Rua, avenida, quadra" />
+        <Campo rotulo="Número" porqueDe="endereco-unidade" valor={numero} ao={setNumero} dica="S/N quando não há" />
+        <Campo rotulo="Complemento" porqueDe="endereco-unidade" valor={complemento} ao={setComplemento} dica="Opcional — não conta como pendência" />
       </div>
       <div className="campos">
         <Campo rotulo="Bairro" porqueDe="endereco-unidade" valor={bairro} ao={setBairro} />
@@ -414,8 +414,8 @@ function EnderecoDoPagador({ uc, ocupado, aoGravar }: {
         {/* A UF sobe como veio e o SERVIDOR maiusculiza (`uc.editar`), em vez de
             a tela fazer isso enquanto se digita: normalizar sob o cursor é o tipo
             de esperteza que atrapalha quem apaga uma letra para corrigir. */}
-        <Campo rotulo="UF" valor={uf} ao={setUf} dica="Duas letras" />
-        <Campo rotulo="CEP" valor={cep} ao={setCep} dica="00000-000" />
+        <Campo rotulo="UF" porqueDe="endereco-unidade" valor={uf} ao={setUf} dica="Duas letras" />
+        <Campo rotulo="CEP" porqueDe="endereco-unidade" valor={cep} ao={setCep} dica="00000-000" />
         <div style={{ alignSelf: 'end' }}>
           <button className="primario" disabled={ocupado} onClick={gravar}>
             <Icone nome="confirmar" tamanho={15} peso="bold" /> Gravar endereço

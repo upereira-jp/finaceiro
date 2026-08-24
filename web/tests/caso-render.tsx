@@ -166,10 +166,25 @@ const camada = (p: Partial<CamadaLida>): CamadaLida =>
    *
    * A linha da energia gerada dizia "esse numero nao se digita aqui" e parava:
    * verdadeiro e inutil, porque a pessoa lia "faltam 2 de 4" e nao tinha nem
-   * onde ir OLHAR. Agora leva a Usinas, com o rotulo dizendo que ali se olha.
+   * onde ir OLHAR. Em 21/08 passou a levar a Usinas, para olhar.
+   *
+   * DESDE 24/08 ELA LEVA AO LUGAR ONDE O NUMERO ENTRA, que e o outro sistema —
+   * "nao se digita AQUI" nao e o mesmo que "nao se digita". Enquanto o destino
+   * era so olhar, a linha continuava sem dizer o que fazer.
    */
-  chk('R3c', t.includes('Ver as usinas'),
-      'a pendencia sem tela de preencher leva a tela onde ela ao menos APARECE');
+  chk('R3c', t.includes('Lançar a geração no outro sistema'),
+      'a pendencia sem tela de preencher leva ao sistema onde o numero de fato entra');
+  /*
+   * R3c2 — E ELA SAI COMO LINK, e nao como botao que navega.
+   *
+   * A rota e um endereco completo. Se virasse `onClick` da navegacao interna, o
+   * clique cairia numa rota inexistente deste sistema e a tela ficaria em branco
+   * — que foi exatamente o defeito achado ao ligar o CRM: o painel de ajuda
+   * tratava o caso e a linha da tela de Pendencias desenhava o proprio botao.
+   */
+  chk('R3c2', /<a [^>]*href="https:\/\/[^"]+"[^>]*target="_blank"/.test(html)
+           && /rel="noopener noreferrer"/.test(html),
+      'e sai como ancora com target e rel — abre em outra aba sem dar a ela acesso a esta');
   chk('R3d', botoesDeCaminho(html) === 2,
       `as DUAS linhas terminam num botao — nenhuma pendencia fica sem clique (contados: ${botoesDeCaminho(html)})`);
 }

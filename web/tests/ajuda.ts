@@ -37,6 +37,7 @@ import {
 } from '../src/ajuda.ts';
 import { VERBETE_DA_CAMADA, EFEITO, SITUACAO, GLOSSARIO } from '../src/vocabulario.ts';
 import { DESTINO_DA_CAMADA, enderecoDoDestino } from '../src/destino-da-camada.ts';
+import { CRM } from '../src/ajuda.ts';
 import { TELAS } from '../src/navegacao.ts';
 
 let falhas = 0;
@@ -49,6 +50,20 @@ const chk = (id: string, cond: boolean, d: string) => {
 
 /** A rota de um caminho, sem o filtro. E o que se compara com a lista de telas. */
 const so = (rota: string): string => rota.split('?')[0]!;
+
+/**
+ * O CAMINHO E DE VERDADE, e desde 24/08/2026 ha DOIS jeitos de ser de verdade.
+ *
+ * `crm` aponta para fora deste sistema, e a rota dele e um endereco completo -
+ * comparar com a lista de telas daqui diria "beco" para o unico caminho que
+ * existe naquele caso. Continua sendo verificado, so que contra outra coisa: ele
+ * tem de apontar para o CRM, e nao para um endereco qualquer que alguem colou.
+ */
+const caminhoDeVerdade = (c: { rota: string; tipo: string }) =>
+  c.tipo === 'crm'
+    ? c.rota.startsWith(`${CRM}/`)
+    : TELAS.some((t) => t.rota === so(c.rota));
+
 
 // ============================================================ A1 normalizacao
 //
@@ -287,8 +302,8 @@ for (const t of TOPICOS) {
     chk('A6', CAMADAS.includes(t.camada), `${t.id}: a camada "${t.camada}" existe`);
   }
   for (const c of t.caminhos) {
-    chk('A6b', TELAS.some((tl) => tl.rota === so(c.rota)),
-        `${t.id}: o caminho ${c.rota} e uma tela de verdade`);
+    chk('A6b', caminhoDeVerdade(c),
+        `${t.id}: o caminho ${c.rota} e uma tela de verdade (ou o endereco do outro sistema)`);
     chk('A6g', c.rotulo.trim().length > 3,
         `${t.id}: o caminho "${c.rota}" tem rotulo que diz o ATO, e nao um botao mudo`);
   }
@@ -314,6 +329,23 @@ for (const t of TOPICOS) {
     chk('A6h', (t.porque ?? '').trim().length > 60,
         `${t.id}: diz POR QUE este dado existe, e nao so onde se preenche`);
   }
+}
+
+/*
+ * A6i NENHUM ENDERECO DE FORA QUE NAO SEJA O CRM.
+ *
+ * O caminho `crm` e a unica porta deste sistema para outro, e ela existe porque
+ * quatro dados sao espelhados e nao se digitam aqui. Uma porta que aceitasse
+ * qualquer endereco seria um lugar onde alguem cola um link e a ajuda passa a
+ * mandar a operacao para fora sem ninguem rever - e o painel de ajuda e
+ * exatamente onde uma pessoa nova confia no que le.
+ */
+{
+  const externos = TOPICOS.flatMap((t) => t.caminhos.filter((c) => c.tipo === 'crm'));
+  chk('A6i', externos.length > 0 && externos.every((c) => c.rota.startsWith(`${CRM}/`)),
+      `os ${externos.length} caminhos que saem daqui apontam para o CRM, e so para ele`);
+  chk('A6j', externos.every((c) => !/https?:\/\/[^/]*\bapp\.blackhaus\.io[^/]/.test(c.rota)),
+      'e nenhum deles e o dominio nu — um link tem de cair numa tela de la, nao na porta de entrada');
 }
 
 {
@@ -391,7 +423,24 @@ chk('A7h', passosDoEstado([]).length === 0 && passosDoEstado([camada({ situacao:
  * O caminho delas e `ver`, e a distincao e a que impede a correcao de virar
  * mentira: leva a tela onde aquilo APARECE, com o rotulo dizendo isso.
  */
-for (const c of ['geracao_da_competencia', 'regra_de_comissao']) {
+/*
+ * E DESDE 24/08/2026 AS DUAS TERMINAM EM LUGARES DIFERENTES, de proposito:
+ *
+ *   energia gerada     -> `crm`, porque ela E digitada, so que no OUTRO sistema.
+ *                         Mandar "olhar" onde da para preencher seria pedir menos
+ *                         do que existe;
+ *   valor da comissao  -> `ver`, porque nao ha onde preencher em sistema nenhum:
+ *                         e decisao versionada com dono nomeado.
+ *
+ * A distincao e o que impede a correcao de virar mentira nos dois sentidos.
+ */
+{
+  const p = passosDoEstado([camada({ camada: 'geracao_da_competencia', faltam: 2, total: 4 })])[0]!;
+  chk('A7i', p.caminho?.tipo === 'crm' && p.caminho.rota.startsWith(`${CRM}/`),
+      'energia gerada termina no CRM, que e onde o numero de fato entra');
+}
+
+for (const c of ['regra_de_comissao']) {
   const p = passosDoEstado([camada({ camada: c, faltam: 2, total: 4 })])[0]!;
   chk('A7j', p.caminho !== null && p.caminho.tipo === 'ver' && TELAS.some((t) => t.rota === so(p.caminho!.rota)),
       `${c}: sem tela de preencher, mas com uma tela para OLHAR — "${p.caminho?.rotulo ?? 'NENHUM'}"`);
@@ -461,7 +510,7 @@ const SELVAGENS = [
 for (const consulta of SELVAGENS) {
   const r = responder(consulta);
   const cs = caminhosDaResposta(r);
-  chk('A10', cs.length > 0 && cs.every((c) => TELAS.some((t) => t.rota === so(c.rota))),
+  chk('A10', cs.length > 0 && cs.every(caminhoDeVerdade),
       `"${consulta}" termina em ${cs.length} caminho(s) de verdade — e nunca num beco`);
 }
 

@@ -245,17 +245,44 @@ export function CorpoDaAjuda(p: CorpoDaAjuda) {
  * que não existe lá — e não existe em lugar nenhum, porque aquele número é
  * espelhado do CRM.
  */
+/**
+ * UM CAMINHO, DESENHADO. Existe para haver UM lugar que sabe a diferenca entre
+ * ir para outra tela daqui e sair para outro sistema.
+ *
+ * Nasceu em 24/08/2026 de um defeito real: o caminho do CRM foi tratado no painel
+ * de ajuda e NAO na linha da tela de Pendencias, que desenhava o proprio botao.
+ * O clique la teria chamado a navegacao interna com um endereco completo -
+ * `https://app.blackhaus.io/usinas` como se fosse rota daqui -, e o resultado
+ * seria a tela em branco. Dois lugares desenhando a mesma coisa e um deles
+ * aprendendo o caso novo e a forma exata desse erro.
+ */
+export function BotaoDoCaminho(
+  { caminho, ir, classe }: { caminho: Caminho; ir: (d: string) => void; classe?: string },
+) {
+  const cls = classe ?? (caminho.tipo === 'resolver' ? 'ajuda-ir' : 'ajuda-ir ajuda-ir-ver');
+  if (caminho.tipo === 'crm') {
+    /* ANCORA DE VERDADE, e nao um botao que navega: sai deste sistema, entao
+       abre em outra aba (para nao perder o que a pessoa estava fazendo aqui),
+       aparece como link no menu do botao direito, e diz para onde vai antes do
+       clique. Um `onClick` com `window.open` faria as tres coisas pior. */
+    return (
+      <a className={`${cls} ajuda-ir-crm`} href={caminho.rota} target="_blank" rel="noopener noreferrer">
+        {caminho.rotulo} <Icone nome="abrir_externo" tamanho={13} peso="bold" />
+      </a>
+    );
+  }
+  return (
+    <button type="button" className={cls} onClick={() => ir(caminho.rota)}>
+      {caminho.rotulo} <Icone nome="descer" tamanho={13} peso="bold" />
+    </button>
+  );
+}
+
 export function Caminhos({ caminhos, ir }: { caminhos: readonly Caminho[]; ir: (d: string) => void }) {
   if (caminhos.length === 0) return null;
   return (
     <div className="ajuda-caminhos">
-      {caminhos.map((c) => (
-        <button key={c.rota + c.rotulo} type="button"
-                className={c.tipo === 'ver' ? 'ajuda-ir ajuda-ir-ver' : 'ajuda-ir'}
-                onClick={() => ir(c.rota)}>
-          {c.rotulo} <Icone nome="descer" tamanho={13} peso="bold" />
-        </button>
-      ))}
+      {caminhos.map((c) => <BotaoDoCaminho key={c.rota + c.rotulo} caminho={c} ir={ir} />)}
     </div>
   );
 }
@@ -283,11 +310,8 @@ export function LinhaDoEstado({ passo, ir }: { passo: PassoDoEstado; ir: (d: str
         <span className="fraco" style={{ fontSize: 12 }}>{passo.topico.resposta}</span>
       )}
       {passo.caminho && (
-        <button type="button"
-                className={resolve ? 'ajuda-ir' : 'ajuda-ir ajuda-ir-ver'}
-                onClick={() => ir(passo.caminho!.rota)}>
-          {passo.caminho.rotulo} <Icone nome="descer" tamanho={13} peso="bold" />
-        </button>
+        <BotaoDoCaminho caminho={passo.caminho} ir={ir}
+                        classe={resolve ? 'ajuda-ir' : 'ajuda-ir ajuda-ir-ver'} />
       )}
     </li>
   );

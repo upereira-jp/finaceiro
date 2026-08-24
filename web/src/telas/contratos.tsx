@@ -143,15 +143,15 @@ export function TelaContratos() {
             sub="Liga o cliente, a unidade, a usina e quem trouxe o cliente. É a peça que faz a cobrança existir: sem contrato ativo, aquela unidade fica fora do mês inteiro.">
       <div className="cartao secao">
         <div className="campos">
-          <Campo rotulo="Unidade consumidora" valor={ucId} ao={setUcId}
+          <Campo rotulo="Unidade consumidora" porqueDe="contrato" valor={ucId} ao={setUcId}
                  opcoes={livres.map((u) => ({
                    valor: u.id,
                    texto: `${u.numero_uc}${u.usina_id ? '' : ' (sem usina!)'}`,
                  }))} />
-          <Campo rotulo="Quem trouxe o cliente (obrigatório)" valor={origId} ao={setOrigId}
+          <Campo rotulo="Quem trouxe o cliente (obrigatório)" porqueDe="comissao" valor={origId} ao={setOrigId}
                  opcoes={(origs.dado ?? []).map((o) => ({ valor: o.id, texto: `${o.nome} · ${o.tipo}` }))} />
           <Campo rotulo="Data de fechamento" porqueDe="valor-da-comissao" valor={fechamento} ao={setFechamento} tipo="date" />
-          <Campo rotulo="Valor de referência (R$)" valor={valor} ao={setValor} dica="Ex. 789,00" />
+          <Campo rotulo="Valor de referência (R$)" porqueDe="valor-de-referencia" valor={valor} ao={setValor} dica="Ex. 789,00" />
         </div>
         <p className="sub" style={{ marginTop: 12, marginBottom: 8 }}>
           Quem trouxe o cliente <strong>não muda depois</strong>: se essa pessoa for promovida mais

@@ -45,6 +45,11 @@ export type NomeDeIcone =
    * "estado desta linha" num lugar e "peça ajuda" noutro é a cor sendo o único
    * sinal outra vez, só que com forma. */
   | 'ajuda'
+  /* SAIR DESTE SISTEMA tem desenho proprio, e nao reusa a seta de navegacao: a
+   * seta significa "vai para outra tela daqui" em todo o resto da interface, e o
+   * mesmo desenho significando "abre outro sistema em outra aba" seria a pessoa
+   * descobrindo a diferenca depois do clique. */
+  | 'abrir_externo'
   // cobrança e documento
   | 'boleto' | 'pix' | 'certificado'
   // movimento: as duas que existem para ANIMAR, não para informar

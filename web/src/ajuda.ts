@@ -136,9 +136,26 @@ export type Caminho = {
    *  texto do botão, e um botão que diz o nome da tela não diz o que fazer lá. */
   rotulo: string;
   /** `resolver` — é aqui que o dado entra. `ver` — aqui dá para OLHAR, mas o
-   *  conserto é em outro lugar (ou não é de tela). */
-  tipo: 'resolver' | 'ver';
+   *  conserto é em outro lugar (ou não é de tela). `crm` — o dado é de OUTRO
+   *  SISTEMA e `rota` é um endereço completo, que abre em outra aba. */
+  tipo: 'resolver' | 'ver' | 'crm';
 };
+
+/**
+ * O ENDEREÇO DO CRM, num lugar só.
+ *
+ * Quatro dos dados que a operação precisa NÃO se digitam aqui: a geração de cada
+ * mês, a situação do rateio no funil, o cadastro do cliente e o da usina são
+ * espelhados do outro sistema, e este aqui não escreve lá — de propósito, porque
+ * dois donos para o mesmo número é o próximo ciclo passando por cima em silêncio.
+ *
+ * Até 24/08/2026 a ajuda dizia «não há tela — é espelhado» e parava aí. Está
+ * certo e é um beco: quem lê fica sabendo que não resolve ali e continua sem
+ * saber ONDE resolve. O endereço fecha a frase.
+ */
+export const CRM = 'https://app.blackhaus.io';
+export const noCrm = (caminho: string, rotulo: string): Caminho =>
+  ({ rota: `${CRM}${caminho}`, rotulo, tipo: 'crm' });
 
 /**
  * O caminho de uma pendência do relatório, REUSANDO o mapa que já existe.
@@ -524,7 +541,8 @@ export const TOPICOS: readonly Topico[] = [
      * 21/08. A tela de digitar nao existe e nao vai existir (o numero e
      * espelhado do CRM), mas a de OLHAR existe: e em Usinas que se ve quem ja
      * recebeu o mes. Antes esta linha terminava sem clique nenhum. */
-    caminhos: [ver('/usinas', 'Ver as usinas e o que já chegou'), ver('/pendencias', 'Ver quantas faltam')],
+    caminhos: [noCrm('/usinas', 'Lançar a geração no outro sistema'),
+               ver('/usinas', 'Ver o que já chegou aqui')],
     camada: 'geracao_da_competencia',
     telas: ['/usinas'],
     termos: ['geracao', 'energia gerada', 'kwh gerado', 'producao', 'usina nao gerou',
@@ -759,7 +777,8 @@ export const TOPICOS: readonly Topico[] = [
       'Abra a aba Pendências: o botão de cada linha leva à tela onde aquilo se preenche.',
       'Resolva e rode o ensaio de novo.',
     ],
-    caminhos: [ir('/carteira', 'Abrir Faturamento'), ir('/pendencias', 'Ver o que falta')],
+    caminhos: [ir('/carteira', 'Abrir Faturamento'), ir('/pendencias', 'Ver o que falta no mês'),
+               noCrm('/rateio', 'Conferir a situação no outro sistema')],
     camada: null,
     telas: ['/carteira'],
     termos: ['ficou de fora', 'recusado', 'nao entrou', 'faltou cliente no lote', 'motivo da recusa',
@@ -1001,7 +1020,8 @@ export const TOPICOS: readonly Topico[] = [
       'Busque pelo nome ou pelo documento no campo de busca.',
       'Se ainda assim não aparecer, o cliente pode não ter vindo do CRM ainda.',
     ],
-    caminhos: [ir('/clientes', 'Abrir Clientes'), ver('/unidades', 'Abrir Unidades consumidoras')],
+    caminhos: [ir('/clientes', 'Abrir a lista de clientes'),
+               noCrm('/leads', 'Procurar a ficha no outro sistema')],
     camada: null,
     telas: ['/clientes', '/unidades'],
     termos: ['nao aparece', 'sumiu', 'nao encontro', 'cade o cliente', 'lista vazia', 'nao acho',

@@ -38,6 +38,7 @@ import { Check } from '@phosphor-icons/react/Check';
 import { X } from '@phosphor-icons/react/X';
 import { Question } from '@phosphor-icons/react/Question';
 import { Lifebuoy } from '@phosphor-icons/react/Lifebuoy';
+import { ArrowSquareOut } from '@phosphor-icons/react/ArrowSquareOut';
 import { WarningOctagon } from '@phosphor-icons/react/WarningOctagon';
 import { CheckCircle } from '@phosphor-icons/react/CheckCircle';
 import { Warning } from '@phosphor-icons/react/Warning';
@@ -169,6 +170,7 @@ const DESENHO: Record<NomeDeIcone, Icon> = {
   tema_sistema: Desktop,
   abrir_menu: CaretDown,
   ajuda: Lifebuoy,
+  abrir_externo: ArrowSquareOut,
 
   // cobrança e documento
   boleto: Barcode,

@@ -102,6 +102,11 @@ export const PORQUE: Record<string, string> = {
     + 'cobrança. Ele vem do outro sistema quando o cliente é espelhado de lá; digitado aqui, vale '
     + 'para quem não veio por aquele caminho.',
 
+  'valor-de-referencia':
+    'Porque é o consumo que a pessoa tinha ANTES de entrar, e ele serve de referência para conferir '
+    + 'se a economia prometida está acontecendo. Não é o valor cobrado: quanto o cliente paga sai da '
+    + 'conta da distribuidora daquele mês, não daqui.',
+
   'identidade-da-empresa':
     'Porque a folha precisa dizer quem está cobrando. É a esse nome que o aviso contra o golpe do '
     + 'boleto se amarra — ele manda o cliente conferir o beneficiário, e sem o cadastro preenchido a '

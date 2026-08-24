@@ -396,6 +396,10 @@ export const ESTILO = `
   }
   .campo-porque-botao:hover { color: var(--acento); background: var(--fundo-suave); }
   .campo-porque-botao[aria-expanded="true"] { color: var(--acento); }
+  /* O caminho que SAI do sistema: sublinhado ao passar, para parecer link e nao
+     botao, e sem o tom de acao primaria - ele leva para fora, nao resolve aqui. */
+  .ajuda-ir-crm { text-decoration: none; }
+  .ajuda-ir-crm:hover { text-decoration: underline; }
   .campo-porque {
     margin: 6px 0 0; padding: 8px 10px;
     font-size: 12px; line-height: 1.55; color: var(--fraco);
