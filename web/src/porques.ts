@@ -107,6 +107,21 @@ export const PORQUE: Record<string, string> = {
     + 'se a economia prometida está acontecendo. Não é o valor cobrado: quanto o cliente paga sai da '
     + 'conta da distribuidora daquele mês, não daqui.',
 
+  'contato-do-cliente':
+    'Porque é por onde se fala com ele quando a cobrança não é paga, e porque o documento do cliente '
+    + 'pode ser enviado por ali. Não impede cobrar: impede resolver quando algo dá errado, que é '
+    + 'justamente quando ninguém quer estar procurando telefone.',
+
+  'percentual-do-dono':
+    'Porque é ele que diz quanto do dinheiro que entrar é do dono da usina — o resto fica na empresa. '
+    + 'Vale por período e não se edita: renegociar abre um período novo e fecha o anterior, para o que '
+    + 'já foi pago no mês passado continuar valendo o que valia.',
+
+  'pagar-dono':
+    'Porque é o registro de que a empresa DEVE esse valor a alguém. Ele nasce da divisão do dinheiro '
+    + 'que o cliente pagou, e existe para o pagamento ao dono da usina e a comissão terem prazo, '
+    + 'destinatário e comprovante — em vez de viverem numa conversa.',
+
   'identidade-da-empresa':
     'Porque a folha precisa dizer quem está cobrando. É a esse nome que o aviso contra o golpe do '
     + 'boleto se amarra — ele manda o cliente conferir o beneficiário, e sem o cadastro preenchido a '

@@ -170,7 +170,7 @@ export function TelaCobranca() {
       <div className="cartao">
         <div style={{ ...linha, gap: 12, alignItems: 'flex-start' }}>
           <div style={{ flex: '1 1 320px' }}>
-            <Campo rotulo="Referência da credencial (não o segredo)" valor={credencialRef}
+            <Campo rotulo="Referência da credencial (não o segredo)" porqueDe="banco" valor={credencialRef}
                    ao={setCredencialRef} dica="ex.: sicoob/g3-solar/prod" />
           </div>
           <Campo rotulo="Provedor" valor="Sicoob" ao={() => {}} />
@@ -193,7 +193,7 @@ export function TelaCobranca() {
         )}
 
         <div style={{ ...linha, gap: 12, marginTop: 12 }}>
-          <Campo rotulo="Agência" valor={agencia} ao={setAgencia} dica="0000" />
+          <Campo rotulo="Agência" porqueDe="banco" valor={agencia} ao={setAgencia} dica="0000" />
           <Campo rotulo="Conta" porqueDe="banco" valor={conta} ao={setConta} />
           <Campo rotulo="Número do contrato" porqueDe="banco" valor={numeroContrato} ao={setNumeroContrato} />
           <Campo rotulo="Número do convênio" porqueDe="banco" valor={numeroConvenio} ao={setNumeroConvenio} />

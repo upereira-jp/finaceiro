@@ -220,7 +220,7 @@ export function TelaClientes() {
       <div className="cartao secao">
         <div className="campos">
           <Campo rotulo="Nome" porqueDe="cadastrar-cliente" valor={nome} ao={setNome} />
-          <Campo rotulo="Documento (CPF ou CNPJ)" valor={doc} ao={setDoc} dica="Opcional" />
+          <Campo rotulo="Documento (CPF ou CNPJ)" porqueDe="documento-cliente" valor={doc} ao={setDoc} dica="Opcional" />
           <div style={{ alignSelf: 'end' }}>
             <button className="primario" onClick={criar} disabled={acao.ocupado || !nome.trim()}>
               <Icone nome="acrescentar" tamanho={15} peso="bold" /> Cadastrar
@@ -391,8 +391,8 @@ function Contato({ c, ocupado, aoGravar }: {
   return (
     <div style={{ padding: '12px 4px', display: 'grid', gap: 10 }}>
       <div className="campos">
-        <Campo rotulo="Telefone" valor={telefone} ao={setTelefone} dica="Como o CRM traz, ou corrigido" />
-        <Campo rotulo="E-mail" valor={email} ao={setEmail} dica="Gravado em minúsculas" />
+        <Campo rotulo="Telefone" porqueDe="contato-do-cliente" valor={telefone} ao={setTelefone} dica="Como o CRM traz, ou corrigido" />
+        <Campo rotulo="E-mail" porqueDe="contato-do-cliente" valor={email} ao={setEmail} dica="Gravado em minúsculas" />
         <div style={{ alignSelf: 'end' }}>
           <button className="primario" disabled={ocupado} onClick={() => aoGravar(telefone, email)}>
             <Icone nome="confirmar" tamanho={15} peso="bold" /> Gravar contato

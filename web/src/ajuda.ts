@@ -386,6 +386,38 @@ export const TOPICOS: readonly Topico[] = [
              'qual mes', 'periodo', 'data de referencia'],
   },
 
+  /*
+   * A PERGUNTA QUE O DONO RESPONDEU EM 24/08/2026, e ela nao estava escrita em
+   * lugar nenhum: *"NAO HA FATURA DE JUNHO, JUNHO SAO AS FATURAS DE ANALISE
+   * PARA ENTRAR NO PROGRAMA"*.
+   *
+   * O erro que isto evita e o mais provavel de todos, porque a conta errada e
+   * justamente a que a operacao TEM em maos: a que o cliente mandou para entrar.
+   * Cobra-la significa cobrar desconto sobre um mes em que ele nao recebeu
+   * credito nenhum - e o sistema aceitaria, porque a conta e real.
+   */
+  {
+    id: 'primeira-cobranca-do-cliente',
+    pergunta: 'É a primeira cobrança deste cliente. Qual mês eu cobro?',
+    resposta: 'O primeiro mês em que a conta dele mostra energia compensada. As contas de antes da '
+      + 'entrada no programa não têm desconto: elas serviram para analisar o consumo, e não há o que '
+      + 'cobrar sobre elas.',
+    passos: [
+      'Pegue a conta mais antiga que você tem DEPOIS de o cliente entrar no programa.',
+      'Procure nela a energia compensada. Zerada, aquele mês ainda não teve desconto e não se cobra.',
+      'A distribuidora costuma levar um ciclo de leitura para começar a compensar — o primeiro mês '
+      + 'cobrável quase nunca é o mês em que o cliente assinou.',
+      'Cobre o primeiro mês que tiver energia compensada, e siga daí, um mês por vez.',
+    ],
+    caminhos: [ir('/documento', 'Abrir a leitura da conta'), ir('/pendencias', 'Ver o que falta no mês')],
+    camada: null,
+    telas: ['/documento'],
+    comum: true,
+    termos: ['primeira cobranca', 'primeiro mes', 'qual mes cobrar', 'conta de analise',
+             'conta antiga', 'comecar a cobrar', 'cliente novo', 'entrou agora',
+             'energia compensada', 'nao tem desconto', 'conta sem desconto'],
+  },
+
   // ======================================== as pendências do relatório mensal
   {
     id: 'documento-cliente',

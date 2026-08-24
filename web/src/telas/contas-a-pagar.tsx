@@ -379,14 +379,14 @@ function FormularioDeConta(p: { acao: ReturnType<typeof useAcao>; aoCriar: () =>
       </p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
         <Campo rotulo="Descrição" valor={f.descricao} ao={campo('descricao')} dica="Aluguel do escritório" />
-        <Campo rotulo="Quem recebe" valor={f.beneficiario_nome} ao={campo('beneficiario_nome')} />
+        <Campo rotulo="Quem recebe" porqueDe="pagar-dono" valor={f.beneficiario_nome} ao={campo('beneficiario_nome')} />
         <Campo rotulo="Valor (R$)" valor={f.valor} ao={campo('valor')} dica="0,00" />
         <div>
           <label>Mês de referência</label>
           <CampoData mes valor={f.competencia} ao={campo('competencia')} rotuloAcessivel="Mês de referência" />
           <AjudaDoMes />
         </div>
-        <Campo rotulo="Vencimento" valor={f.vencimento} ao={campo('vencimento')} tipo="date" />
+        <Campo rotulo="Vencimento" porqueDe="pagar-dono" valor={f.vencimento} ao={campo('vencimento')} tipo="date" />
       </div>
       {!trava.pode && <p className="nota" style={{ marginBottom: 0 }}>{trava.porque}</p>}
       <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
