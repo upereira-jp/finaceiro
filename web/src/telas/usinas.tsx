@@ -126,7 +126,7 @@ export function TelaUsinas() {
           <Campo rotulo="Usina" valor={sel} ao={setSel}
                  opcoes={todas.map((u) => ({ valor: u.id, texto: u.codigo_geradora }))} />
           <Campo rotulo="Percentual do dono" valor={pct} ao={setPct} dica="Ex. 70,00" />
-          <Campo rotulo="Vigência a partir de" valor={inicio} ao={setInicio} tipo="date" />
+          <Campo rotulo="Vigência a partir de" porqueDe="repasse" valor={inicio} ao={setInicio} tipo="date" />
           <div style={{ alignSelf: 'end' }}>
             <button className="primario" onClick={abrirVigencia} disabled={acao.ocupado || !sel}>
               <Icone nome="vigencia" tamanho={15} peso="bold" /> Abrir vigência

@@ -150,7 +150,7 @@ export function TelaContratos() {
                  }))} />
           <Campo rotulo="Quem trouxe o cliente (obrigatório)" valor={origId} ao={setOrigId}
                  opcoes={(origs.dado ?? []).map((o) => ({ valor: o.id, texto: `${o.nome} · ${o.tipo}` }))} />
-          <Campo rotulo="Data de fechamento" valor={fechamento} ao={setFechamento} tipo="date" />
+          <Campo rotulo="Data de fechamento" porqueDe="valor-da-comissao" valor={fechamento} ao={setFechamento} tipo="date" />
           <Campo rotulo="Valor de referência (R$)" valor={valor} ao={setValor} dica="Ex. 789,00" />
         </div>
         <p className="sub" style={{ marginTop: 12, marginBottom: 8 }}>

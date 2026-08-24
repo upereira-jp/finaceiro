@@ -409,8 +409,8 @@ function EnderecoDoPagador({ uc, ocupado, aoGravar }: {
         <Campo rotulo="Complemento" valor={complemento} ao={setComplemento} dica="Opcional — não conta como pendência" />
       </div>
       <div className="campos">
-        <Campo rotulo="Bairro" valor={bairro} ao={setBairro} />
-        <Campo rotulo="Município" valor={municipio} ao={setMunicipio} />
+        <Campo rotulo="Bairro" porqueDe="endereco-unidade" valor={bairro} ao={setBairro} />
+        <Campo rotulo="Município" porqueDe="endereco-unidade" valor={municipio} ao={setMunicipio} />
         {/* A UF sobe como veio e o SERVIDOR maiusculiza (`uc.editar`), em vez de
             a tela fazer isso enquanto se digita: normalizar sob o cursor é o tipo
             de esperteza que atrapalha quem apaga uma letra para corrigir. */}

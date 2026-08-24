@@ -62,12 +62,12 @@ export function TelaDonos() {
 
       <div className="cartao secao">
         <div className="campos">
-          <Campo rotulo="Nome" valor={f.nome} ao={p('nome')} />
-          <Campo rotulo="Natureza" valor={f.natureza} ao={p('natureza')}
+          <Campo rotulo="Nome" porqueDe="dono-usina" valor={f.nome} ao={p('nome')} />
+          <Campo rotulo="Natureza" porqueDe="dono-usina" valor={f.natureza} ao={p('natureza')}
                  opcoes={[{ valor: 'pf', texto: 'Pessoa física' }, { valor: 'pj', texto: 'Pessoa jurídica' }]} />
           <Campo rotulo="Documento" valor={f.documento_bruto} ao={p('documento_bruto')} dica="CPF ou CNPJ" />
-          <Campo rotulo="Chave Pix" valor={f.chave_pix} ao={p('chave_pix')} />
-          <Campo rotulo="E-mail" valor={f.email} ao={p('email')} />
+          <Campo rotulo="Chave Pix" porqueDe="dono-usina" valor={f.chave_pix} ao={p('chave_pix')} />
+          <Campo rotulo="E-mail" porqueDe="dono-usina" valor={f.email} ao={p('email')} />
           <div style={{ alignSelf: 'end' }}>
             <button className="primario" onClick={criar}
                     disabled={acao.ocupado || !f.nome.trim() || !f.documento_bruto.trim()}>

@@ -284,10 +284,10 @@ export function TelaDocumento() {
           exatamente o comportamento que o aviso quer impedir.
         </p>
         <div className="campos">
-          <Campo rotulo="Razão social" valor={emissor.razao_social}
+          <Campo rotulo="Razão social" porqueDe="identidade-da-empresa" valor={emissor.razao_social}
                  ao={(v) => setEmissor({ ...emissor, razao_social: v })}
                  dica="Consórcio G3 Gestão de Energia Solar" />
-          <Campo rotulo="CNPJ" valor={emissor.cnpj} ao={(v) => setEmissor({ ...emissor, cnpj: v })}
+          <Campo rotulo="CNPJ" porqueDe="identidade-da-empresa" valor={emissor.cnpj} ao={(v) => setEmissor({ ...emissor, cnpj: v })}
                  dica="Com ou sem máscara" />
         </div>
 

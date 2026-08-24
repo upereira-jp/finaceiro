@@ -385,6 +385,23 @@ export const ESTILO = `
   }
   .ajuda-porque strong { color: var(--texto); font-weight: 600; }
 
+  /* O PORQUE DENTRO DO CAMPO. O botao mora no <label> e por isso o label vira
+     flex - sem isso o icone cai numa linha propria e o rotulo parece quebrado. */
+  label:has(.campo-porque-botao) { display: inline-flex; align-items: center; gap: 6px; }
+  .campo-porque-botao {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; padding: 0;
+    border: none; background: none; cursor: pointer;
+    color: var(--fraco); border-radius: 50%; flex: none;
+  }
+  .campo-porque-botao:hover { color: var(--acento); background: var(--fundo-suave); }
+  .campo-porque-botao[aria-expanded="true"] { color: var(--acento); }
+  .campo-porque {
+    margin: 6px 0 0; padding: 8px 10px;
+    font-size: 12px; line-height: 1.55; color: var(--fraco);
+    background: var(--fundo-suave); border-left: 2px solid var(--borda); border-radius: 3px;
+  }
+
   .ajuda-termo { padding: 9px 0; border-bottom: 1px solid var(--borda-suave); }
   .ajuda-termo:last-child { border-bottom: 0; }
   .ajuda-termo strong { display: block; font-size: 13.5px; }

@@ -194,10 +194,10 @@ export function TelaCobranca() {
 
         <div style={{ ...linha, gap: 12, marginTop: 12 }}>
           <Campo rotulo="Agência" valor={agencia} ao={setAgencia} dica="0000" />
-          <Campo rotulo="Conta" valor={conta} ao={setConta} />
-          <Campo rotulo="Número do contrato" valor={numeroContrato} ao={setNumeroContrato} />
-          <Campo rotulo="Número do convênio" valor={numeroConvenio} ao={setNumeroConvenio} />
-          <Campo rotulo="Certificado A1 vence em" valor={expiraEm} ao={setExpiraEm} tipo="date" />
+          <Campo rotulo="Conta" porqueDe="banco" valor={conta} ao={setConta} />
+          <Campo rotulo="Número do contrato" porqueDe="banco" valor={numeroContrato} ao={setNumeroContrato} />
+          <Campo rotulo="Número do convênio" porqueDe="banco" valor={numeroConvenio} ao={setNumeroConvenio} />
+          <Campo rotulo="Certificado A1 vence em" porqueDe="banco" valor={expiraEm} ao={setExpiraEm} tipo="date" />
         </div>
 
         <div style={{ ...linha, gap: 20, marginTop: 12 }}>

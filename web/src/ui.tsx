@@ -30,6 +30,7 @@ import type { ReactNode, CSSProperties } from 'react';
 import { lerModo, aplicarModo, type ModoTema } from './tema.ts';
 import { Icone, Logotipo } from './icones.tsx';
 import { ICONE_DO_ESTADO, ICONE_DO_AVISO, type NomeDeIcone } from './iconografia.ts';
+import { PORQUE } from './porques.ts';
 
 export { Icone, Logotipo };
 export { ESTILO } from './estilo.ts';
@@ -183,13 +184,52 @@ export function Escolha(p: {
   );
 }
 
+/**
+ * O PORQUE AO LADO DO ROTULO, e ele nasce FECHADO.
+ *
+ * Pedido do dono em 24/08/2026, com a operacao assumindo o sistema. A explicacao
+ * ja existia na central de ajuda, e o custo de chegar la era abrir o painel,
+ * buscar o assunto e perder o formulario de vista - o suficiente para ninguem
+ * fazer, e ai o campo e preenchido no chute.
+ *
+ * FECHADO POR PADRAO E DELIBERADO. Um formulario de oito campos com oito
+ * paragrafos abertos nao e mais explicado: e ilegivel, e a pessoa aprende a
+ * pular tudo. Quem ja sabe nao ve nada; quem nao sabe tem a resposta a um clique
+ * e sem sair da tela.
+ *
+ * O TEXTO NAO MORA AQUI. Vem de `porques.ts`, o mesmo que a central de ajuda le -
+ * duas copias da mesma frase divergiriam na primeira correcao, e as duas
+ * pareceriam certas.
+ */
+function PorqueDoCampo({ chave, rotulo }: { chave: string; rotulo: string }) {
+  const [aberto, setAberto] = useState(false);
+  const texto = PORQUE[chave];
+  if (!texto) return null;
+  return (
+    <>
+      <button type="button" className="campo-porque-botao" aria-expanded={aberto}
+              aria-label={`Por que ${rotulo} é pedido`}
+              onClick={() => setAberto((v) => !v)}>
+        <Icone nome="ajuda" tamanho={13} />
+      </button>
+      {aberto && <p className="campo-porque">{texto}</p>}
+    </>
+  );
+}
+
 export function Campo(p: {
   rotulo: string; valor: string; ao: (v: string) => void;
   tipo?: string; dica?: string; opcoes?: Array<{ valor: string; texto: string }>;
+  /** O `id` do assunto da ajuda que explica POR QUE este dado e pedido. O texto
+   *  sai de `porques.ts`; escrever a explicacao aqui seria a segunda copia. */
+  porqueDe?: string;
 }) {
   return (
     <div>
-      <label>{p.rotulo}</label>
+      <label>
+        {p.rotulo}
+        {p.porqueDe && <PorqueDoCampo chave={p.porqueDe} rotulo={p.rotulo} />}
+      </label>
       {p.opcoes
         ? <Escolha valor={p.valor} ao={p.ao} opcoes={p.opcoes} primeira="—" rotuloAcessivel={p.rotulo} />
         : p.tipo === 'date'

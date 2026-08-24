@@ -219,7 +219,7 @@ export function TelaClientes() {
 
       <div className="cartao secao">
         <div className="campos">
-          <Campo rotulo="Nome" valor={nome} ao={setNome} />
+          <Campo rotulo="Nome" porqueDe="cadastrar-cliente" valor={nome} ao={setNome} />
           <Campo rotulo="Documento (CPF ou CNPJ)" valor={doc} ao={setDoc} dica="Opcional" />
           <div style={{ alignSelf: 'end' }}>
             <button className="primario" onClick={criar} disabled={acao.ocupado || !nome.trim()}>
