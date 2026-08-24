@@ -260,6 +260,31 @@ export const GLOSSARIO: readonly TermoDoGlossario[] = [
                { rota: '/unidades?pendencia=sem_tarifa', rotulo: 'Ver o preço no cadastro', tipo: 'ver' }],
   },
   {
+    termo: 'Pendências',
+    texto: 'A lista do que está faltando para o mês poder ser cobrado. Cada linha diz quantos faltam '
+      + 'de quantos, quem preenche e onde. Vermelho impede cobrar; laranja impede dividir o dinheiro '
+      + 'depois; amarelo é o que ainda não dá para conferir.',
+    busca: ['pendencia', 'pendencias', 'o que falta', 'lista', 'checklist', 'vermelho', 'laranja',
+            'cores', 'status', 'painel'],
+    caminhos: [{ rota: '/pendencias', rotulo: 'Abrir Pendências', tipo: 'resolver' }],
+  },
+  {
+    termo: 'Geração do mês',
+    texto: 'Quanta energia a usina produziu naquele mês. É lançada no outro sistema, o do comercial, e '
+      + 'chega aqui sozinha — não se digita aqui. Sem ela, o mês daquela usina não pode ser cobrado.',
+    busca: ['geracao', 'energia gerada', 'producao', 'kwh gerado', 'quanto a usina gerou',
+            'medicao', 'energia do mes'],
+    caminhos: [{ rota: '/usinas', rotulo: 'Ver o que já chegou de cada usina', tipo: 'ver' }],
+  },
+  {
+    termo: 'Desconto do cliente',
+    texto: 'O quanto o cliente deixa de pagar por usar a energia da usina em vez da energia da '
+      + 'distribuidora. Sai da conta que ele já recebe, e é impresso na folha dele. A parte da '
+      + 'distribuidora não tem desconto: ela é repassada como veio.',
+    busca: ['desconto', 'economia', 'quanto economiza', 'porcentagem', 'abatimento', 'quanto ele paga'],
+    caminhos: [{ rota: '/documento', rotulo: 'Abrir a leitura da conta', tipo: 'ver' }],
+  },
+  {
     termo: 'Contrato ativo',
     texto: 'O contrato precisa estar ativo para a unidade ser cobrada. Ele só ativa depois que o '
       + 'CPF ou CNPJ do cliente estiver confirmado aqui no sistema.',

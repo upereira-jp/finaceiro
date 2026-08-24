@@ -220,6 +220,97 @@ export const TOPICOS: readonly Topico[] = [
              'fatura nao sai', 'nao consigo emitir', 'travado', 'bloqueado', 'nao deixa',
              'por que nao', 'nao da', 'erro ao faturar', 'nao consigo', 'esta impedido'],
   },
+  /*
+   * OS CONCEITUAIS VEM PRIMEIRO, e a ordem foi decidida em 24/08/2026, quando a
+   * equipe de operacao assumiu o sistema.
+   *
+   * Ate aqui a central respondia bem "ONDE eu faco X" e mal "O QUE E X" - medido
+   * com as frases que alguem digita no primeiro dia: "o que sao as pendencias",
+   * "por onde comeco" e "nao sei o que fazer" nao achavam nada. O glossario
+   * cobria parte, e glossario define sem dizer o que fazer com a definicao.
+   *
+   * Estes quatro respondem a pergunta de quem nunca viu o sistema, e cada um
+   * termina numa rota clicavel como todos os outros.
+   */
+  {
+    id: 'primeiro-dia',
+    pergunta: 'Nunca usei este sistema. Por onde começo?',
+    resposta: 'Pela aba Pendências. Ela é a lista do que falta, em ordem: resolver a de cima é o '
+      + 'que faz a de baixo passar a valer. Nada aqui se perde por clicar no lugar errado.',
+    passos: [
+      'Abra a aba Pendências e confira o mês que está selecionado no alto.',
+      'Leia de cima para baixo. A ordem não é por importância — é a ordem do trabalho.',
+      'Comece pela primeira linha vermelha. Cada uma tem um botão que já abre a tela certa, filtrada.',
+      'Volte a Pendências depois de cada tanto: os números mudam sozinhos e mostram o que andou.',
+      'Se travar em alguma palavra, procure aqui mesmo pelo nome dela — o significado está escrito.',
+    ],
+    caminhos: [ir('/pendencias', 'Abrir Pendências'), ver('/clientes', 'Ver a lista de clientes')],
+    camada: null,
+    telas: ['/pendencias'],
+    comum: true,
+    termos: ['por onde comeco', 'primeiro dia', 'sou novo', 'nao sei o que fazer', 'comecar',
+             'do zero', 'nunca usei', 'me ajuda', 'ajuda', 'como funciona', 'perdido',
+             'nao entendi nada', 'tutorial', 'passo a passo'],
+  },
+  {
+    id: 'o-que-e-pendencia',
+    pergunta: 'O que são as pendências?',
+    resposta: 'É a lista do que está faltando para o mês poder ser cobrado. Cada linha é um tipo de '
+      + 'dado que falta, com quantos faltam de quantos, quem preenche e onde se preenche.',
+    passos: [
+      'Vermelho é o que impede cobrar. Sem isso, a cobrança do mês não sai.',
+      'Laranja impede dividir o dinheiro depois: dá para cobrar, mas o repasse ao dono da usina trava.',
+      'Amarelo quer dizer «ainda não dá para conferir» — depende de uma linha de cima que está vazia.',
+      'Verde é o que já está pronto. Nada a fazer ali.',
+      'Os dois cartões do alto resumem tudo: «Pode faturar» e «Pode repartir».',
+    ],
+    caminhos: [ir('/pendencias', 'Abrir Pendências')],
+    camada: null,
+    telas: ['/pendencias'],
+    comum: true,
+    termos: ['o que sao as pendencias', 'pendencia', 'pendencias', 'o que e pendencia',
+             'como resolvo pendencia', 'lista vermelha', 'para que serve essa tela',
+             'o que significa cada cor', 'cores', 'vermelho', 'laranja', 'amarelo'],
+  },
+  {
+    id: 'o-que-e-contrato',
+    pergunta: 'O que é um contrato aqui dentro?',
+    resposta: 'É o registro que liga um cliente a uma unidade e diz quem trouxe esse cliente. Sem '
+      + 'ele ativo, a unidade não é cobrada — ele é o que autoriza a cobrança existir.',
+    passos: [
+      'Ele guarda três coisas que não mudam depois: quem trouxe o cliente, quanto essa pessoa recebe, e a data de fechamento.',
+      'Por isso o sistema exige o CPF ou CNPJ confirmado antes de ativar: contrato ativo é compromisso.',
+      'Uma unidade tem um contrato ativo por vez. O mesmo cliente pode ter vários, um por unidade.',
+      'Corrigir quem trouxe o cliente depois de ativo não é editar: é encerrar e refazer. Confira antes de gravar.',
+    ],
+    /* O segundo caminho aponta para CLIENTES e nao para uma segunda entrada em
+      * Contratos: oferecer a mesma tela duas vezes faz a pessoa escolher entre
+      * dois botoes que fazem a mesma coisa. E o pre-requisito e mesmo o outro
+      * lugar - sem documento confirmado, a ativacao recusa. */
+    caminhos: [daCamada('contrato_ativo', 'Criar e ativar o contrato'),
+               ver('/clientes?pendencia=nao_validado', 'Antes: confirmar o CPF ou CNPJ')],
+    camada: null,
+    telas: ['/contratos'],
+    termos: ['o que e contrato', 'para que serve o contrato', 'por que preciso de contrato',
+             'contrato obrigatorio', 'o que o contrato guarda', 'contrato ativo o que e'],
+  },
+  {
+    id: 'o-que-e-desconto',
+    pergunta: 'O que é o desconto do cliente?',
+    resposta: 'É o quanto o cliente deixa de pagar por usar a energia da usina em vez da energia da '
+      + 'distribuidora. Ele vem da conta que o cliente já recebe, e sai impresso na folha dele.',
+    passos: [
+      'A conta da distribuidora diz quanta energia foi compensada e quanto ela custaria.',
+      'Sobre esse valor entra o desconto combinado, e o que sobra é o que a empresa cobra.',
+      'A parte da distribuidora não tem desconto: ela é repassada como veio.',
+      'Se a conta do cliente ainda não mostra energia compensada, não há desconto naquele mês e não há o que cobrar.',
+    ],
+    caminhos: [ir('/documento', 'Abrir a leitura da conta'), ver('/pendencias', 'Ver o que falta no mês')],
+    camada: null,
+    telas: ['/documento'],
+    termos: ['desconto', 'o que e o desconto', 'quanto o cliente economiza', 'economia',
+             'porcentagem de desconto', 'como o desconto e calculado', 'energia compensada'],
+  },
   {
     id: 'o-que-falta',
     pergunta: 'Onde vejo tudo o que está faltando?',
@@ -413,7 +504,8 @@ export const TOPICOS: readonly Topico[] = [
     camada: 'geracao_da_competencia',
     telas: ['/usinas'],
     termos: ['geracao', 'energia gerada', 'kwh gerado', 'producao', 'usina nao gerou',
-             'nao aparece a geracao', 'sem geracao', 'energia do mes'],
+             'nao aparece a geracao', 'sem geracao', 'energia do mes', 'o que e geracao',
+             'o que e a geracao do mes', 'quem lanca a geracao', 'geracao do mes'],
   },
   {
     id: 'dono-usina',

@@ -79,7 +79,11 @@ const CASOS: Array<[consulta: string, id: string]> = [
   ['não consigo emitir a fatura', 'nao-consigo-cobrar'],
   ['a fatura não sai', 'nao-consigo-cobrar'],
   ['o que falta', 'o-que-falta'],
-  ['por onde começo', 'o-que-falta'],
+  /* MUDOU EM 24/08/2026, quando a operacao assumiu o sistema. Esta frase
+   * respondia `o-que-falta` - a tela certa, e a resposta errada para quem nunca
+   * viu o sistema: ela diz ONDE olhar e nao COMO ler o que esta la. O
+   * `primeiro-dia` leva a mesma tela e ensina a ordem de leitura. */
+  ['por onde começo', 'primeiro-dia'],
   ['sicoob', 'banco'],
   ['o cliente já tem cpf mas diz que falta', 'documento-cliente'],
   ['confirmar documento', 'documento-cliente'],
