@@ -23,6 +23,8 @@
 import {
   INSTRUCOES_DA_FATURA, INSTRUCOES_DO_BOLETO, SCHEMA_DA_FATURA, SCHEMA_DO_BOLETO,
   blocoDoArquivo, numeroParaTexto, MODELO, ArquivoNaoSuportado, leitorConfigurado,
+  SemChaveDaAnthropic, RespostaInesperadaDoModelo, LeitorSemCredencialValida,
+  LeitorSobrecarregado, ArquivoRecusadoPeloLeitor, LeituraRecusada,
 } from '../src/concessionaria/leitor-visao.ts';
 import { CAMPOS_VAZIOS } from '../src/dominio/fatura-unificada.ts';
 
@@ -160,6 +162,76 @@ const REGRA_DA_LINHA_DIGITAVEL =
   else process.env.ANTHROPIC_API_KEY = antes;
 }
 
+// ---------------------------------------- V6 as mensagens sao para quem OPERA
+/*
+ * POR QUE ESTE BLOCO EXISTE, e ele nasceu de um defeito real medido em 24/08:
+ * a chave da Anthropic ficou ausente por semanas, e a frase que aparecia na aba
+ * «1 · Leitura e calculo» dizia o nome da variavel de ambiente, o caminho do
+ * arquivo no servidor e o numero de uma regra do CLAUDE.md.
+ *
+ * Quem le essa aba e quem esta com a conta da distribuidora na mao. Nao tem
+ * acesso ao servidor, nao vai editar arquivo nenhum, e a frase so lhe dizia que
+ * o problema existia - sem dizer o que fazer agora.
+ *
+ * E A MESMA REGRA DAS TELAS, e ela ja tem dois testes: `web/tests/ajuda.ts` V4 e
+ * `web/tests/vocabulario-das-telas.ts` T1 proibem jargao no texto exibido. Estas
+ * mensagens sao exibidas igual e escapavam das duas varreduras porque moram no
+ * backend. Agora nao escapam.
+ *
+ * O QUE ESTE TESTE NAO PROIBE: `${detalhe}` e `${tipo}` interpolados. O que vem
+ * de fora pode ser tecnico, e mesmo assim ajuda - "opendocument" na frase e o
+ * unico jeito de a pessoa entender que mandou o arquivo errado.
+ */
+{
+  const PROIBIDO: Array<[RegExp, string]> = [
+    [/[A-Z][A-Z0-9]*_[A-Z0-9_]+/,        'nome de variavel de ambiente'],
+    [/\/etc\/|\.env\b/,                 'caminho de arquivo do servidor'],
+    [/CLAUDE\.md|\bregra \d/i,           'regra do repositorio'],
+    [/\bQ-[A-Z]/,                        'codigo de questao aberta'],
+    [/`[A-Za-z]+`/,                      'nome de simbolo do codigo em crase'],
+    [/\bAnthropic\b/,                   'nome do fornecedor do modelo'],
+    [/\b\d{3}\/\d{3}\b|\bHTTP \d{3}\b/,   'codigo de status HTTP'],
+  ];
+
+  const mensagens: Array<[string, string]> = [
+    ['SemChaveDaAnthropic',       new SemChaveDaAnthropic().message],
+    ['ArquivoNaoSuportado',       new ArquivoNaoSuportado('application/vnd.oasis.opendocument.text').message],
+    ['RespostaInesperadaDoModelo', new RespostaInesperadaDoModelo('sem bloco de texto').message],
+    ['LeitorSemCredencialValida', new LeitorSemCredencialValida().message],
+    ['LeitorSobrecarregado',      new LeitorSobrecarregado().message],
+    ['ArquivoRecusadoPeloLeitor', new ArquivoRecusadoPeloLeitor('pdf ilegivel').message],
+    ['LeituraRecusada',           new LeituraRecusada('documento pessoal').message],
+  ];
+
+  chk('V6', mensagens.length === 7,
+      `as ${mensagens.length} mensagens do leitor que chegam na tela foram conferidas uma a uma - `
+      + 'um erro novo sem linha aqui passa verde sobre texto que ninguem leu');
+
+  for (const [nome, texto] of mensagens) {
+    const achado = PROIBIDO.find(([re]) => re.test(texto));
+    chk('V6a', achado === undefined,
+        `${nome}: fala com quem opera${achado ? ` — VAZOU ${achado[1]}: "${texto}"` : ''}`);
+  }
+
+  for (const [nome, texto] of mensagens) {
+    chk('V6b', texto.length >= 60,
+        `${nome}: a frase tem corpo — mensagem de uma linha nao chega a dizer o que fazer`);
+  }
+
+  /*
+   * E AS TRES QUE A PESSOA NAO RESOLVE SOZINHA MANDAM PEDIR AJUDA. Sem isto, o
+   * teste acima passaria com uma frase educada que deixa a pessoa parada.
+   */
+  const pedeAjuda = [new SemChaveDaAnthropic().message, new LeitorSemCredencialValida().message];
+  for (const t of pedeAjuda) {
+    chk('V6c', /avise quem cuida/i.test(t) && /à mão/i.test(t),
+        'falta de credencial diz as DUAS saidas: avisar quem instala, e seguir a mao');
+  }
+
+  chk('V6d', new ArquivoNaoSuportado('application/vnd.oasis.opendocument.text').message.includes('opendocument'),
+      'e o tipo recusado continua NOMEADO na frase, que e o que faz a pessoa ver o proprio engano');
+}
+
 console.log();
 if (falhas > 0) { console.log(`--- leitor por visao: ${falhas} FALHA(S)`); process.exit(1); }
-console.log('--- o leitor por modelo de visao: 21 verificacoes, 0 falhas');
+console.log('--- o leitor por modelo de visao: 39 verificacoes, 0 falhas');

@@ -48,13 +48,27 @@ import {
 /** Opus 5. Ver a nota 3 do cabecalho para por que nao e o modelo da referencia. */
 export const MODELO = 'claude-opus-5';
 
+/*
+ * A MENSAGEM E LIDA POR QUEM OPERA, E NAO POR QUEM INSTALA - foi por isso que
+ * ela mudou em 24/08. A versao anterior dizia o nome da variavel de ambiente, o
+ * arquivo onde ela mora e a regra 5 do CLAUDE.md. Tudo verdade, e nada acionavel
+ * por quem esta com a conta da distribuidora na mao: a pessoa nao tem acesso ao
+ * servidor, e a frase so lhe ensina que o problema nao e dela sem dizer o que
+ * fazer agora.
+ *
+ * O CRITERIO E O MESMO DAS TELAS: o rotulo descreve o ATO. Aqui, os dois atos
+ * sao "avise quem cuida da instalacao" e "digite os campos, que continuam
+ * aceitando". O porque tecnico fica NESTE comentario, que e onde ele serve -
+ * a chave e segredo de plataforma, variavel de ambiente e nunca coluna
+ * (CLAUDE.md regra 5), e sem ela o resto do sistema funciona inteiro.
+ */
 export class SemChaveDaAnthropic extends Error {
   readonly status = 503;
   constructor() {
     super(
-      'ANTHROPIC_API_KEY nao esta definida. A leitura de fatura e de boleto por imagem ' +
-      'depende dela, e ela e segredo de PLATAFORMA - variavel de ambiente, nunca coluna ' +
-      '(CLAUDE.md regra 5). Sem ela o resto do sistema funciona; so o leitor nao existe.'
+      'A leitura automática está desligada: falta a credencial do leitor, e ela é ' +
+      'configuração do servidor — não há nada a corrigir nesta tela. Avise quem cuida ' +
+      'da instalação. Enquanto isso, os campos continuam aceitando o preenchimento à mão.'
     );
     this.name = 'SemChaveDaAnthropic';
   }
@@ -64,9 +78,14 @@ export class ArquivoNaoSuportado extends Error {
   readonly status = 422;
   constructor(tipo: string) {
     super(
-      `A leitura nao aceita "${tipo}". Envie PDF ou imagem (PNG, JPEG, WebP, GIF). ` +
-      'A recusa e AQUI e nomeia o que veio: deixar passar produziria um 400 da API ' +
-      'falando de `media_type`, que nao ajuda quem subiu um .docx.'
+      /*
+       * A RECUSA E AQUI E NOMEIA O QUE VEIO: deixar passar produziria um 400 da
+       * API falando de `media_type`, que nao ajuda quem subiu um .docx. O `tipo`
+       * fica na frase porque e o unico jeito de a pessoa entender que mandou o
+       * arquivo errado, e nao que o sistema quebrou.
+       */
+      `A leitura não aceita arquivo deste tipo: "${tipo}". Envie o PDF da conta, ` +
+      'ou uma foto dela em PNG, JPEG, WebP ou GIF.'
     );
     this.name = 'ArquivoNaoSuportado';
   }
@@ -76,8 +95,13 @@ export class RespostaInesperadaDoModelo extends Error {
   readonly status = 502;
   constructor(detalhe: string) {
     super(
-      `O modelo respondeu de forma inesperada: ${detalhe}. Nada foi extraido. ` +
-      'NAO E `LeituraNaoConfigurada` - o extrator existe e respondeu; o que veio e que nao serve.'
+      /*
+       * NAO E `SemChaveDaAnthropic`: o extrator existe e respondeu; o que veio e
+       * que nao serve. A distincao importa para quem le o log e NAO para quem le
+       * a tela - por isso ela desceu para ca em 24/08.
+       */
+      `A leitura não entendeu a resposta e não trouxe nenhum campo: ${detalhe}. ` +
+      'Tente enviar de novo. Se repetir, preencha os campos à mão — nada se perdeu.'
     );
     this.name = 'RespostaInesperadaDoModelo';
   }
@@ -108,9 +132,15 @@ export class LeitorSemCredencialValida extends Error {
   readonly status = 503;
   constructor() {
     super(
-      'A chave da Anthropic foi recusada pela API (401/403). A leitura por imagem esta fora ' +
-      'ate alguem trocar a ANTHROPIC_API_KEY em /etc/financeiro.env. O resto do sistema ' +
-      'funciona, e a aba continua aceitando digitacao manual dos campos.'
+      /*
+       * 401/403 da API: a chave existe e foi RECUSADA - expirou, foi revogada ou
+       * ficou sem credito. Quem conserta troca a ANTHROPIC_API_KEY em
+       * /etc/financeiro.env e reinicia o servico; quem le esta mensagem nao faz
+       * nem uma coisa nem outra, entao a frase pede o que ela PODE fazer.
+       */
+      'A credencial do leitor foi recusada e a leitura automática está fora do ar. ' +
+      'É configuração do servidor: avise quem cuida da instalação. Os campos continuam ' +
+      'aceitando o preenchimento à mão.'
     );
     this.name = 'LeitorSemCredencialValida';
   }
@@ -120,9 +150,10 @@ export class LeitorSobrecarregado extends Error {
   readonly status = 503;
   constructor() {
     super(
-      'A API da Anthropic recusou por limite de taxa ou sobrecarga (429/529). Nada foi ' +
-      'extraido e a chamada nao sera cobrada como leitura util. Tente de novo em alguns ' +
-      'segundos, ou preencha os campos a mao.'
+      /* 429/529 - limite de taxa ou sobrecarga do lado da API. E o unico erro
+       * desta lista que passa sozinho, e por isso e o unico que manda esperar. */
+      'O leitor está ocupado neste momento e não trouxe nenhum campo. Espere alguns ' +
+      'segundos e envie de novo, ou preencha os campos à mão.'
     );
     this.name = 'LeitorSobrecarregado';
   }
@@ -132,8 +163,10 @@ export class ArquivoRecusadoPeloLeitor extends Error {
   readonly status = 422;
   constructor(detalhe: string) {
     super(
-      `A API recusou o arquivo: ${detalhe}. Confira se o PDF abre e se nao esta protegido ` +
-      'por senha - PDF cifrado chega aqui como arquivo valido e e recusado la.'
+      /* PDF cifrado chega ate aqui como arquivo valido e so e recusado do outro
+       * lado - por isso a senha e a primeira coisa que a frase manda conferir. */
+      `A leitura não conseguiu abrir este arquivo: ${detalhe}. Confira se o PDF abre ` +
+      'normalmente no seu computador e se ele não pede senha.'
     );
     this.name = 'ArquivoRecusadoPeloLeitor';
   }
@@ -143,8 +176,9 @@ export class LeituraRecusada extends Error {
   readonly status = 422;
   constructor(categoria: string | null) {
     super(
-      `O modelo recusou ler este documento${categoria ? ` (${categoria})` : ''}. ` +
-      'Nada foi extraido. Confira se o arquivo enviado e mesmo a fatura ou o boleto.'
+      `A leitura recusou este documento${categoria ? ` — ${categoria}` : ''} e não ` +
+      'trouxe nenhum campo. Confira se o arquivo enviado é mesmo a conta da ' +
+      'distribuidora ou o boleto.'
     );
     this.name = 'LeituraRecusada';
   }
