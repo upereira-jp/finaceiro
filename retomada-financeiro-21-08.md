@@ -123,18 +123,41 @@ pelo `financeiro-ciclo.timer` — provado por calendário.
 
 Esta VPS não tem um, e `tests/repos.sh` exige. Duas ferramentas nasceram disso:
 
+> **⚠️ O `npm run` destes comandos NÃO funciona nesta VPS, e a correção é de
+> 24/08.** Os scripts do `package.json` carregam `--env-file=.env`, e **não existe
+> `.env` no diretório da aplicação** — só `.env.bak`, que guarda a credencial de
+> dono. O serviço lê `/etc/financeiro.env`, e é esse arquivo que se passa à mão.
+> Sem isso o comando morre em `node: .env: not found` antes de conectar.
+
 ```bash
 cd /opt/financeiro/app && export PATH=/opt/financeiro/node/bin:$PATH
+E=/etc/financeiro.env   # o env do serviço; `npm run` procuraria um .env que não há
 
-npm run ensaio-juncao -- --auth-user <uuid> --tenant <uuid>
+node --experimental-strip-types --env-file=$E scripts/ensaio-da-juncao.ts \
+  --auth-user <uuid> [--tenant <uuid>]
 #   monta originador, contrato e conta lida como FIXTURE, fatura de verdade
 #   contra o schema real, confere 15 coisas e termina em ROLLBACK.
 #   A última verificação conta as tabelas depois e falha se sobrar linha.
 #   NÃO tem --valendo, e isso é o desenho.
 
-npm run repasse -- --ensaio --auth-user <uuid> --tenant <uuid> --inicio 2026-01-01
+node --experimental-strip-types --env-file=$E scripts/ensaio-da-prontidao.ts \
+  --auth-user <uuid> --competencia 2026-06
+#   NOVO em 24/08. Cria uma conta lida, mexe nela campo a campo e confere que
+#   cada camada do relatório se move pela regra — 9 verificações, ROLLBACK no
+#   fim. É o que cobre a consulta crua da prontidão sem PostgreSQL local.
+
+node --experimental-strip-types --env-file=$E scripts/faturar.ts \
+  --prontidao --auth-user <uuid> --competencia 2026-06
+#   leitura PURA contra produção: o que falta, camada a camada, com dono.
+
+node --experimental-strip-types --env-file=$E scripts/cadastrar-repasse.ts \
+  --ensaio --auth-user <uuid> --inicio 2026-01-01
 #   idem para o percentual. Repetível: usina com vigência aberta é PULADA.
 ```
+
+> `--tenant` é **opcional** para quem tem um vínculo só — os scripts caem no
+> vínculo único da sessão, como o `faturar` sempre fez. Um `--auth-user` que
+> funciona: `35f4dda9-5265-434e-8097-5d41c384a9ba`.
 
 ---
 
