@@ -59,6 +59,8 @@
 // aquilo criaria dois mapas para discordarem em silêncio.
 
 import { PORQUE } from './porques.ts';
+import { CRM } from './crm.ts';
+export { CRM } from './crm.ts';
 import { DESTINO_DA_CAMADA, enderecoDoDestino } from './destino-da-camada.ts';
 import { TELAS } from './navegacao.ts';
 import { VERBETE_DA_CAMADA, GLOSSARIO, type TermoDoGlossario } from './vocabulario.ts';
@@ -141,19 +143,8 @@ export type Caminho = {
   tipo: 'resolver' | 'ver' | 'crm';
 };
 
-/**
- * O ENDEREÇO DO CRM, num lugar só.
- *
- * Quatro dos dados que a operação precisa NÃO se digitam aqui: a geração de cada
- * mês, a situação do rateio no funil, o cadastro do cliente e o da usina são
- * espelhados do outro sistema, e este aqui não escreve lá — de propósito, porque
- * dois donos para o mesmo número é o próximo ciclo passando por cima em silêncio.
- *
- * Até 24/08/2026 a ajuda dizia «não há tela — é espelhado» e parava aí. Está
- * certo e é um beco: quem lê fica sabendo que não resolve ali e continua sem
- * saber ONDE resolve. O endereço fecha a frase.
- */
-export const CRM = 'https://app.blackhaus.io';
+/** O caminho que SAI daqui. O endereço vem de `crm.ts`, que a tela de Usinas
+ *  também lê — ver o cabeçalho de lá para por que não mora neste arquivo. */
 export const noCrm = (caminho: string, rotulo: string): Caminho =>
   ({ rota: `${CRM}${caminho}`, rotulo, tipo: 'crm' });
 

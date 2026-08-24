@@ -37,7 +37,8 @@ import {
 } from '../src/ajuda.ts';
 import { VERBETE_DA_CAMADA, EFEITO, SITUACAO, GLOSSARIO } from '../src/vocabulario.ts';
 import { DESTINO_DA_CAMADA, enderecoDoDestino } from '../src/destino-da-camada.ts';
-import { CRM } from '../src/ajuda.ts';
+import { CRM, usinaNoCrm } from '../src/crm.ts';
+import { readFileSync } from 'node:fs';
 import { TELAS } from '../src/navegacao.ts';
 
 let falhas = 0;
@@ -340,6 +341,27 @@ for (const t of TOPICOS) {
  * mandar a operacao para fora sem ninguem rever - e o painel de ajuda e
  * exatamente onde uma pessoa nova confia no que le.
  */
+/*
+ * A6k A FICHA DA USINA NO OUTRO SISTEMA, e o caso nulo.
+ *
+ * `usinaNoCrm` existe em vez de um template literal solto na tela por UMA razao:
+ * `${CRM}/usinas/${id}` com id nulo monta `/usinas/null`, que e um link que
+ * existe, parece igual aos outros, abre o outro sistema e cai numa ficha que nao
+ * existe. Usina cadastrada a mao aqui nao tem ficha la - para essa o certo e nao
+ * desenhar link nenhum, e e isso que o `null` faz a tela decidir.
+ */
+{
+  const id = '31f37062-946e-4a2c-99b5-14847e50e8c4';
+  chk('A6k', usinaNoCrm(id) === `${CRM}/usinas/${id}`,
+      'com id, o link cai na ficha exata — e nao na lista, onde ainda daria para abrir a usina errada');
+  chk('A6k2', usinaNoCrm(null) === null && usinaNoCrm(undefined) === null && usinaNoCrm('') === null,
+      'e sem id devolve nulo, para a tela nao desenhar um link que termina em "null"');
+
+  const tela = readFileSync(new URL('../src/telas/usinas.tsx', import.meta.url), 'utf8');
+  chk('A6k3', !/\$\{CRM\}\/usinas\/|app\.blackhaus\.io/.test(tela),
+      'e a tela nao monta o endereco a mao: ela chama `usinaNoCrm`, que e onde a guarda mora');
+}
+
 {
   const externos = TOPICOS.flatMap((t) => t.caminhos.filter((c) => c.tipo === 'crm'));
   chk('A6i', externos.length > 0 && externos.every((c) => c.rota.startsWith(`${CRM}/`)),

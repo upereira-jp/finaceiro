@@ -398,6 +398,22 @@ export const ESTILO = `
   .campo-porque-botao[aria-expanded="true"] { color: var(--acento); }
   /* O caminho que SAI do sistema: sublinhado ao passar, para parecer link e nao
      botao, e sem o tom de acao primaria - ele leva para fora, nao resolve aqui. */
+  /* A LIGACAO PARA O OUTRO SISTEMA DENTRO DE UMA TABELA. Discreta por padrao e
+     nomeada ao passar: numa lista de quatro linhas, quatro links coloridos
+     competiriam com o dado. A dica do title diz o que se faz la, porque "geração"
+     sozinho e rotulo e nao ato.
+
+     SEM CRASE NESTE COMENTARIO, e nao e estilo: o arquivo inteiro e um template
+     literal, e uma crase aqui FECHA a folha de estilo no meio - o build morre
+     em "',' expected" numa linha que nao tem virgula nenhuma. */
+  .ligacao-crm {
+    display: inline-flex; align-items: center; gap: 3px;
+    margin-left: 8px; padding: 1px 5px;
+    font-size: 11px; color: var(--fraco); text-decoration: none;
+    border: 1px solid var(--borda); border-radius: 3px; vertical-align: middle;
+  }
+  .ligacao-crm:hover { color: var(--acento); border-color: var(--acento); }
+  .ligacao-crm-texto { letter-spacing: .02em; }
   .ajuda-ir-crm { text-decoration: none; }
   .ajuda-ir-crm:hover { text-decoration: underline; }
   .campo-porque {

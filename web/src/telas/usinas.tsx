@@ -7,6 +7,7 @@
 
 import { useState } from 'react';
 import { api, type Usina, type DonoUsina, type RegraRepasse } from '../api.ts';
+import { usinaNoCrm } from '../crm.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
   Pagina, Aviso, Tabela, Campo, Busca, Ferramentas, Filtro, ThOrd, Marca, Escolha, Icone,
@@ -101,7 +102,27 @@ export function TelaUsinas() {
               vazio={todas.length ? 'Nenhuma usina corresponde à busca ou aos filtros.' : 'Nenhuma usina espelhada.'}>
         {visiveis.map((u) => (
           <tr key={u.id}>
-            <td><strong>{u.codigo_geradora}</strong> {u.apelido && <span className="fraco">· {u.apelido}</span>}</td>
+            <td>
+              <strong>{u.codigo_geradora}</strong> {u.apelido && <span className="fraco">· {u.apelido}</span>}
+              {/* A FICHA NO OUTRO SISTEMA, e ela e o unico lugar onde a geracao
+                  mensal desta usina e digitada. Sem este link, quem le "falta a
+                  geração de julho" sabe o que falta e nao sabe onde: a tela de
+                  la e uma grade de doze meses dentro da ficha, e chegar nela
+                  significa lembrar o endereco, achar a usina na lista e nao
+                  errar de usina - tres chances de errar para um clique.
+
+                  So aparece quando ha id. Ver `usinaNoCrm`: a usina cadastrada a
+                  mao aqui nao tem ficha la, e um link para `/usinas/null` seria
+                  igual aos outros e cairia no vazio. */}
+              {usinaNoCrm(u.crm_usina_id) && (
+                <a className="ligacao-crm" href={usinaNoCrm(u.crm_usina_id)!}
+                   target="_blank" rel="noopener noreferrer"
+                   title={`Abrir a usina ${u.codigo_geradora} no outro sistema — é lá que a geração mensal é lançada`}>
+                  <Icone nome="abrir_externo" tamanho={13} />
+                  <span className="ligacao-crm-texto">geração</span>
+                </a>
+              )}
+            </td>
             <td className="fraco">{u.distribuidora}</td>
             {/* O vinculo do dono grava NO CHANGE, sem botao de confirmar: e uma
                 escolha de lista, nao um valor digitado, e nao ha estado

@@ -231,6 +231,10 @@ export type UnidadeConsumidora = {
 export type Usina = {
   id: string; codigo_geradora: string; apelido: string | null; distribuidora: string;
   dono_usina_id: string | null; status: string;
+  /** O id desta usina no OUTRO sistema, de onde ela é espelhada. Nulo quando a
+   *  usina foi cadastrada à mão aqui — e aí não há ficha de lá para abrir.
+   *  Já vinha na resposta desde sempre; o que faltava era declarar. */
+  crm_usina_id: string | null;
 };
 
 export type DonoUsina = {
