@@ -173,6 +173,22 @@ export type Topico = {
   /** A resposta em uma frase, antes dos passos. Quem só quer confirmar uma
    *  suspeita para aqui. */
   resposta: string;
+  /**
+   * POR QUE ESTE DADO EXISTE — o que quebra sem ele.
+   *
+   * Entrou em 24/08/2026, com a operacao assumindo o sistema, e a razao e uma
+   * frase do dono: *"a central de ajuda ter o porquê de cada informação"*.
+   *
+   * A distincao com `resposta` e a que importa: `resposta` diz ONDE se preenche
+   * e `passos` diz COMO. Nenhum dos dois diz por que alguem esta digitando
+   * aquilo - e quem nao sabe por que um campo existe preenche qualquer coisa
+   * nele para a tela parar de reclamar. Um dia de vencimento inventado nao
+   * levanta erro nenhum: ele so cobra o cliente na data errada, todo mes.
+   *
+   * OBRIGATORIO em todo assunto ligado a uma pendencia, e a suite prende isso:
+   * pendencia E exatamente um dado que alguem precisa digitar.
+   */
+  porque?: string;
   /** O que fazer, na ordem. Imperativo, um ato por linha. */
   passos: readonly string[];
   /** PARA ONDE IR — ao menos um, sempre. É a invariante que a suíte prende, e é
@@ -367,6 +383,9 @@ export const TOPICOS: readonly Topico[] = [
     pergunta: 'O cliente tem CPF na tela, mas o sistema diz que falta. Por quê?',
     resposta: 'Documento que veio do CRM entra como sugestão, não como confirmado — mesmo estando '
       + 'certo. Alguém precisa reenviar o número aqui para ele passar a valer.',
+    porque: 'Porque a cobrança precisa dizer de quem ela é. É esse número que identifica o pagador '
+      + 'no documento que ele recebe, e o sistema o exige antes de deixar um contrato valer — sem ele, '
+      + 'a cobrança sairia sem dono, e uma cobrança sem dono não se defende se alguém contestar.',
     passos: [
       'Abra a aba Clientes.',
       'No filtro «Filtrar por documento», escolha «Ainda não vale para o contrato».',
@@ -385,6 +404,9 @@ export const TOPICOS: readonly Topico[] = [
     pergunta: 'Como crio e ativo o contrato de um cliente?',
     resposta: 'O formulário fica no topo da aba Contratos e já cria ativando. Ele exige duas coisas '
       + 'prontas antes: o CPF/CNPJ confirmado e quem trouxe o cliente.',
+    porque: 'Porque é o contrato que autoriza cobrar aquela unidade. Ele guarda o que foi combinado e '
+      + 'quem tem direito à comissão por ela — sem contrato, o sistema não sabe se a unidade pode ser '
+      + 'cobrada, nem quanto alguém recebe por ela todo mês.',
     passos: [
       'Confirme antes o CPF ou CNPJ do cliente na aba Clientes — sem isso o sistema recusa ativar.',
       'Abra a aba Contratos.',
@@ -406,6 +428,9 @@ export const TOPICOS: readonly Topico[] = [
     pergunta: 'Como ligo a unidade do cliente a uma usina?',
     resposta: 'Na aba Unidades consumidoras, na linha da própria unidade. Primeiro a usina, depois '
       + 'a fatia em percentual — o campo da fatia fica travado enquanto não houver usina.',
+    porque: 'Porque é a fatia que liga a unidade a uma usina. Ela diz de onde veio o crédito daquele '
+      + 'cliente, e é da usina que sai a parte do dono quando o dinheiro entrar. Sem ela a unidade fica '
+      + 'sem origem e o pagamento ao dono não tem como ser calculado.',
     passos: [
       'Abra a aba Unidades consumidoras.',
       'Encontre a unidade e escolha a usina na coluna correspondente.',
@@ -422,6 +447,9 @@ export const TOPICOS: readonly Topico[] = [
     pergunta: 'Onde subo a conta da distribuidora?',
     resposta: 'Na aba Fatura unificada, uma conta por vez. É dela que sai o valor a cobrar: o '
       + 'sistema lê o arquivo, você confere o que foi lido e registra.',
+    porque: 'Porque é a conta da distribuidora que diz quanta energia foi compensada e quanto ela '
+      + 'custou. O valor da cobrança sai de lá, e não de um cálculo que o sistema faça sozinho — é por '
+      + 'isso que o cliente consegue conferir a folha dele contra o papel que já tem em casa.',
     passos: [
       'Abra a aba Fatura unificada.',
       'Suba o arquivo da conta daquela unidade neste mês e confira campo a campo o que foi lido.',
@@ -440,6 +468,10 @@ export const TOPICOS: readonly Topico[] = [
     resposta: 'Quase sempre não precisa: a data vem impressa na conta da distribuidora e o sistema '
       + 'usa a de lá. O dia do cadastro, na aba Unidades consumidoras, só entra quando a conta vem '
       + 'sem data.',
+    porque: 'Porque toda cobrança precisa de uma data, e o sistema não inventa nenhuma. Em geral a '
+      + 'conta da distribuidora já traz a data e nada precisa ser preenchido; o dia do cadastro é a '
+      + 'reserva para quando ela vier sem. Um dia errado aqui não dá erro — só cobra na data errada, '
+      + 'todo mês, até alguém reclamar.',
     passos: [
       'Confira se a conta daquele mês traz a data de vencimento. Se traz, não há nada a fazer.',
       'Se não traz, abra a aba Unidades consumidoras.',
@@ -457,6 +489,9 @@ export const TOPICOS: readonly Topico[] = [
     pergunta: 'O preço do kWh saiu zerado. Onde corrijo?',
     resposta: 'Na própria leitura da conta, na aba Fatura unificada — o preço vem impresso na conta '
       + 'da distribuidora e é lido com até seis casas depois da vírgula.',
+    porque: 'Porque é o preço do kWh que transforma energia em dinheiro na folha do cliente. Ele vem '
+      + 'impresso na conta com seis casas depois da vírgula, e essas casas não são exagero: arredondar '
+      + 'para centavos muda o total de uma unidade em alguns reais por mês.',
     passos: [
       'Abra a aba Fatura unificada e localize a conta daquele mês.',
       'Confira o campo do preço do kWh contra o que está impresso na conta.',
@@ -490,6 +525,9 @@ export const TOPICOS: readonly Topico[] = [
     pergunta: 'A energia gerada do mês não aparece. O que faço?',
     resposta: 'Esse número não se digita aqui: ele é lançado no CRM e chega ao financeiro sozinho. '
       + 'Se já foi lançado lá e continua faltando aqui, é caso de avisar o responsável técnico.',
+    porque: 'Porque é o registro de quanto a usina produziu naquele mês. Ele não entra no valor que o '
+      + 'cliente paga, e é contra ele que o pagamento ao dono da usina é conferido depois — sem esse '
+      + 'número não há como mostrar de onde veio o que foi repassado.',
     passos: [
       'Confira se a geração do mês já foi lançada no CRM.',
       'Na aba Usinas dá para ver quais usinas já receberam o número deste mês.',
@@ -512,6 +550,9 @@ export const TOPICOS: readonly Topico[] = [
     pergunta: 'Como cadastro o dono de uma usina?',
     resposta: 'Primeiro a pessoa precisa existir na aba Donos de usina; depois você a escolhe na '
       + 'linha da usina. A escolha grava na hora, sem botão de confirmar.',
+    porque: 'Porque quando o cliente pagar, uma parte do dinheiro é do dono da usina. Sem ele '
+      + 'cadastrado, o valor entra e fica parado sem destino: dá para cobrar, não dá para repassar. '
+      + 'A chave de pagamento é conferida aqui no cadastro porque, na hora de pagar, já é tarde.',
     passos: [
       'Se o dono ainda não existe, cadastre-o na aba Donos de usina — exige chave Pix ou conta completa.',
       'Abra a aba Usinas.',
@@ -531,6 +572,9 @@ export const TOPICOS: readonly Topico[] = [
     pergunta: 'Como defino quanto o dono da usina recebe?',
     resposta: 'No fim da aba Usinas, na seção de percentual de repasse. Não existe «editar»: abrir '
       + 'um percentual novo fecha o anterior, porque renegociar hoje não muda o que já foi pago.',
+    porque: 'Porque é ela que diz quanto do que entrou é do dono da usina e quanto fica na empresa. '
+      + 'Vale por período, e não «para sempre»: renegociar hoje não muda o que já foi pago no mês '
+      + 'passado, e é por isso que se abre um período novo em vez de editar o número antigo.',
     passos: [
       'Abra a aba Usinas.',
       'Vá até a seção «Percentual de repasse, por vigência», no fim da tela.',
@@ -547,6 +591,9 @@ export const TOPICOS: readonly Topico[] = [
     pergunta: 'Como configuro a emissão de boleto?',
     resposta: 'Na aba Conector Sicoob, com os dados da conta. O certificado e a senha não são '
       + 'digitados ali — eles ficam guardados em cofre e a tela pede só a referência.',
+    porque: 'Porque é a credencial que deixa o sistema emitir o boleto sozinho. Sem ela a cobrança '
+      + 'existe e pode ser paga por Pix normalmente — o que falta é o boleto sair daqui em vez de ser '
+      + 'emitido à mão no banco e importado depois.',
     passos: [
       'Abra a aba Conector Sicoob.',
       'Preencha agência, conta, contrato, convênio e a validade do certificado.',
@@ -566,6 +613,10 @@ export const TOPICOS: readonly Topico[] = [
     pergunta: 'Quem trouxe o cliente e quanto ele recebe de comissão?',
     resposta: 'Quem trouxe fica gravado no contrato e não muda depois. O valor da comissão é '
       + 'decisão da direção, definida por período — não se preenche na tela.',
+    porque: 'Porque é quem recebe comissão por aquela unidade, todo mês, enquanto o cliente pagar. '
+      + 'O nome fica preso ao contrato no momento em que ele é criado e não tem tela de edição — '
+      + 'trocar depois exige refazer o contrato, e o modo de falha é silencioso: sem essa pessoa '
+      + 'preenchida, a divisão do dinheiro roda, fecha e simplesmente não paga ninguém.',
     passos: [
       'Ao criar o contrato, escolha quem trouxe o cliente — o campo é obrigatório.',
       'Se um contrato já ativo estiver com a pessoa errada, fale com a direção antes: corrigir exige encerrar e refazer o contrato.',
@@ -585,6 +636,9 @@ export const TOPICOS: readonly Topico[] = [
     pergunta: 'O sistema diz que falta o valor da comissão. Onde preencho?',
     resposta: 'Não há tela para isso, e é de propósito: o percentual de cada tipo de parceiro é '
       + 'decisão da direção, registrada por período de vigência. Ela não impede cobrar.',
+    porque: 'Porque é ela que diz quanto quem trouxe o cliente recebe, e em quais cobranças. O valor '
+      + 'fica amarrado à data em que o contrato foi fechado, de propósito: uma mudança de hoje não '
+      + 'pode reprecificar uma venda do mês passado, que já foi combinada com outra pessoa.',
     passos: [
       'Cobre o mês normalmente — isto não trava a cobrança, só a divisão do dinheiro depois.',
       'Se esta linha aparecer como «ainda não dá para conferir», olhe a linha de cima primeiro: sem quem trouxe o cliente não há o que medir aqui.',

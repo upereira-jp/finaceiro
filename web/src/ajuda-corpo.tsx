@@ -312,6 +312,12 @@ export function CartaoDeTopico(
       {expandido && (
         <div className="ajuda-resposta">
           <p>{topico.resposta}</p>
+          {/* O PORQUE VEM ANTES DOS PASSOS, e a ordem foi escolhida: quem entende
+              para que serve o campo digita melhor do que quem so seguiu a receita.
+              Depois dos passos, viraria rodape que ninguem le. */}
+          {topico.porque && (
+            <p className="ajuda-porque"><strong>Por que isto é pedido:</strong> {topico.porque}</p>
+          )}
           <ol>{topico.passos.map((x, i) => <li key={i}>{x}</li>)}</ol>
           <Caminhos caminhos={topico.caminhos} ir={ir} />
         </div>

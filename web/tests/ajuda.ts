@@ -297,6 +297,23 @@ for (const t of TOPICOS) {
   }
   chk('A6d', t.passos.length > 0 && t.termos.length >= 3,
       `${t.id}: tem passos e ao menos tres jeitos de ser procurado`);
+
+  /*
+   * A6h TODA PENDENCIA DIZ POR QUE EXISTE, e esta e a verificacao que a
+   * operacao pediu em 24/08/2026: *"a central de ajuda ter o porquê de cada
+   * informação"*.
+   *
+   * Pendencia E um dado que alguem precisa digitar. Um campo obrigatorio sem
+   * motivo escrito nao fica vazio - ele fica preenchido com qualquer coisa que
+   * faca a tela parar de reclamar, e esse e o defeito caro: um dia de vencimento
+   * inventado nao levanta erro nenhum, so cobra o cliente na data errada todo mes.
+   *
+   * O piso de tamanho existe porque "porque sim" cabe em `porque` e passaria.
+   */
+  if (t.camada !== null) {
+    chk('A6h', (t.porque ?? '').trim().length > 60,
+        `${t.id}: diz POR QUE este dado existe, e nao so onde se preenche`);
+  }
 }
 
 {
@@ -511,6 +528,7 @@ const EXIBIDO: Array<[onde: string, texto: string]> = [
     [[`situacao ${k}.curto`, s.curto], [`situacao ${k}.longo`, s.longo]] as Array<[string, string]>),
   ...TOPICOS.flatMap((t) =>
     [[`topico ${t.id}.pergunta`, t.pergunta], [`topico ${t.id}.resposta`, t.resposta],
+     ...(t.porque ? [[`topico ${t.id}.porque`, t.porque] as [string, string]] : []),
      ...t.passos.map((p, i) => [`topico ${t.id}.passo[${i}]`, p] as [string, string]),
      ...t.caminhos.map((c) => [`topico ${t.id}.caminho[${c.rota}]`, c.rotulo] as [string, string]),
     ] as Array<[string, string]>),

@@ -375,6 +375,15 @@ export const ESTILO = `
   .ajuda-resposta { padding: 0 2px 14px 22px; font-size: 13px; line-height: 1.6; }
   .ajuda-resposta p { margin: 0 0 10px; color: var(--fraco); }
   .ajuda-resposta ol { margin: 0 0 12px; padding-left: 18px; display: grid; gap: 6px; }
+  /* O PORQUE E VISUALMENTE DIFERENTE DO RESTO, e nao por enfeite: ele responde
+     outra pergunta que a resposta e os passos. A barra a esquerda o separa sem
+     pedir uma cor propria - o painel ja tem cores demais disputando atencao. */
+  .ajuda-porque {
+    border-left: 2px solid var(--borda);
+    padding: 2px 0 2px 10px;
+    margin: 0 0 12px !important;
+  }
+  .ajuda-porque strong { color: var(--texto); font-weight: 600; }
 
   .ajuda-termo { padding: 9px 0; border-bottom: 1px solid var(--borda-suave); }
   .ajuda-termo:last-child { border-bottom: 0; }
