@@ -37,12 +37,17 @@ import { comporFolhas, BOLETO_VAZIO, TEXTOS_PADRAO,
 import type { TranscricaoDoBoleto } from '../dominio/boleto-importado.ts';
 import { prontidao } from '../repos/prontidao.ts';
 
-export type Requisicao = {
+/** O que existe ANTES de haver sessao. Rota `publica` recebe so isto - nao ha
+ *  `req.sessao` para ela ler por engano, e o tipo e que garante. */
+export type RequisicaoPublica = {
   metodo: string;
   caminho: string;
   params: Record<string, string>;
   query: URLSearchParams;
   corpo: any;
+};
+
+export type Requisicao = RequisicaoPublica & {
   sessao: Sessao;
   /** Vem do header x-tenant-id. PROPOSTA: selecionarTenant() confere contra os
    *  vinculos que o login resolveu, e 404 se nao estiver la (R1). */
@@ -75,8 +80,36 @@ export type Resultado = {
 };
 
 type Handler = (req: Requisicao, app: App) => Promise<Resultado>;
+type HandlerPublico = (req: RequisicaoPublica) => Promise<Resultado>;
 
-export type Rota = { metodo: string; padrao: string; handler: Handler };
+/**
+ * COMO A ROTA E AUTENTICADA, declarado NA LINHA DA ROTA. `ADR-0006`, Decisao 4.
+ *
+ * Ate 28/08/2026 o unico escape da sessao era uma condicao literal dentro de
+ * `servidor.ts`, 300 linhas longe da tabela: `if (metodo === 'GET' && caminho
+ * === '/publico/config')`. A ADR descartou acrescentar a segunda condicao com o
+ * argumento que decide: "duas viram cinco, e o dia em que alguem acrescentar a
+ * sexta sem querer e o dia em que uma rota fica publica sem que nada acuse".
+ *
+ * Virando dado, o inverso passa a ser AFIRMAVEL: `tests/rotas-auth.ts` percorre
+ * a tabela e diz "exatamente estas rotas escapam da sessao". Rota nova nasce
+ * `sessao` **por ausencia**, e quem a tornar publica muda uma linha que a suite
+ * le.
+ *
+ *   sessao   o padrao. Bearer -> auth_user_id -> app.login().
+ *   publica  nao ha o que autenticar: e o que o front precisa ANTES de ter
+ *            credencial. Pedir token para descobrir como autenticar e circular.
+ *   webhook  **NAO e "sem autenticacao"** - e "autenticado por OUTRO
+ *            mecanismo", que a Decisao 1 nomeia: mTLS mais faixa de IP. Rota
+ *            marcada assim que nao passe pela verificacao de origem e, nas
+ *            palavras da ADR, "um buraco com nome bonito". O invariante vale
+ *            nos dois sentidos e esta na suite.
+ */
+export type ModoDeAutenticacao = 'sessao' | 'publica' | 'webhook';
+
+export type Rota =
+  | { metodo: string; padrao: string; auth?: 'sessao' | 'webhook'; handler: Handler }
+  | { metodo: string; padrao: string; auth: 'publica'; handler: HandlerPublico };
 
 const ok = (corpo: unknown): Resultado => ({ status: 200, corpo });
 const criado = (corpo: unknown): Resultado => ({ status: 201, corpo });
@@ -386,6 +419,41 @@ const limite = (q: URLSearchParams) => {
 };
 
 export const ROTAS: Rota[] = [
+  // ----------------------------------------------------------------- publica
+  {
+    /*
+     * Config PUBLICA para o front subir: a URL do Supabase e a chave publicavel.
+     *
+     * ATE 28/08/2026 ELA NAO ESTAVA NESTA TABELA - era um `if` literal dentro de
+     * `servidor.ts`, antes do autenticador. Mudou de lugar pela Decisao 4 do
+     * `ADR-0006`, e o ganho nao e arrumacao: enquanto o escape era um `if`, nada
+     * conseguia afirmar QUANTAS rotas escapavam da sessao.
+     *
+     * NAO VIOLA A REGRA 5, e vale dizer por que: a `anon key` do Supabase e
+     * publica por desenho - ela vai no browser de qualquer jeito, e quem protege
+     * o dado atras dela e a RLS, nao o segredo da chave. O que a regra 5 proibe e
+     * segredo POR TENANT em coluna ou em variavel de ambiente; isto e config de
+     * PLATAFORMA, que a propria regra manda ficar em variavel de ambiente.
+     *
+     * Servida pela API em vez de embutida no build por um motivo pratico: um
+     * build so serve qualquer ambiente, e trocar de projeto Supabase nao exige
+     * recompilar o front.
+     */
+    metodo: 'GET', padrao: '/publico/config', auth: 'publica',
+    handler: async () => {
+      const url = process.env.SUPABASE_URL;
+      const chave = process.env.SUPABASE_ANON_KEY ?? process.env.SUPABASE_PUBLISHABLE_KEY;
+      if (!url || !chave) {
+        return { status: 503, corpo: {
+          erro: 'ConfigAusente',
+          mensagem: 'SUPABASE_URL e SUPABASE_ANON_KEY nao estao no ambiente. Sem elas o front nao ' +
+            'consegue autenticar, e o servidor prefere dizer isso a servir uma tela que nao loga.',
+        } };
+      }
+      return ok({ supabaseUrl: url, supabaseAnonKey: chave });
+    },
+  },
+
   // ------------------------------------------------------------------ sessao
   {
     metodo: 'GET', padrao: '/sessao',
@@ -904,7 +972,31 @@ export const ROTAS: Rota[] = [
    * erro, e transformar repeticao em erro faria a fila reprocessar para sempre.
    */
   {
-    metodo: 'POST', padrao: '/liquidacoes/webhook-sicoob',
+    /*
+     * A UNICA ROTA `webhook` DO SISTEMA. O que a autentica esta em
+     * `src/http/origem-do-webhook.ts` e nao aqui - e sem ela nao ha entrada:
+     * origem nao verificada sai como o **404 generico**, identico ao de rota
+     * inexistente, porque 401 confirmaria a existencia do endpoint para quem
+     * esta tentando.
+     *
+     * O TENANT VAI NO CAMINHO, e e a resposta da `Q-WEBHOOK-TENANT-01` (decidida
+     * em 28/08/2026). A Decisao 2 da ADR mandava resolver o tenant "pela
+     * credencial", e isso deixou de existir quando a Decisao 1 virou mTLS: o
+     * certificado do Sicoob e UM para todos os nossos tenants.
+     *
+     * O `:tenant` NAO E CREDENCIAL - e identificador. O argumento que derrubou a
+     * opcao D da Decisao 1 (segredo em URL vaza em `access.log`, `Referer` e
+     * historico de intermediario) nao se aplica a um uuid que nao autoriza nada
+     * sozinho: quem autoriza e o certificado, e depois dele a R1 confere se o
+     * tenant proposto esta entre os vinculos do usuario de servico.
+     *
+     * SUPOSICAO (ADR-0006 §2.3): o Sicoob acrescenta `/pix` ao fim da URL
+     * cadastrada no portal. Foi medido na API **Pix**, e nao esta medido para a
+     * Cobranca Bancaria. O padrao aqui e o caminho que ESPERAMOS receber; se o
+     * primeiro webhook do sandbox chegar com o sufixo, e este padrao que muda -
+     * nao a autenticacao.
+     */
+    metodo: 'POST', padrao: '/liquidacoes/webhook-sicoob/:tenant', auth: 'webhook',
     handler: (req, app) => emTenant(app, req, async () => ok(await liquidacao.baixar({
       ...req.corpo,
       origem: 'webhook_sicoob',

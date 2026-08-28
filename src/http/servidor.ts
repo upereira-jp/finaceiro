@@ -17,7 +17,10 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { App, Sessao } from '../app.ts';
-import { ROTAS, type Requisicao, type Resultado } from './rotas.ts';
+import { ROTAS, type Requisicao, type RequisicaoPublica, type Resultado,
+  type ModoDeAutenticacao } from './rotas.ts';
+import { evidenciaDaRequisicao, lerConfig, verificarOrigem } from './origem-do-webhook.ts';
+import { authUserIdDeServico, ehUuid } from '../auth/usuario-de-servico.ts';
 import { traduzir, ehInesperado } from './erros.ts';
 
 /** Devolve o auth_user_id de quem chamou, ou lanca com status 401. */
@@ -49,32 +52,6 @@ export type OpcoesDoServidor = {
    */
   estaticos?: string;
 };
-
-/**
- * Config PUBLICA para o front subir: a URL do Supabase e a chave publicavel.
- *
- * NAO VIOLA A REGRA 5, e vale dizer por que: a `anon key` do Supabase e
- * publica por desenho - ela vai no browser de qualquer jeito, e quem protege o
- * dado atras dela e a RLS, nao o segredo da chave. O que a regra 5 proibe e
- * segredo POR TENANT em coluna ou em variavel de ambiente; isto e config de
- * PLATAFORMA, que a propria regra manda ficar em variavel de ambiente.
- *
- * Servida pela API em vez de embutida no build por um motivo pratico: um build
- * so serve qualquer ambiente, e trocar de projeto Supabase nao exige recompilar
- * o front.
- */
-function configPublica(): Resultado {
-  const url = process.env.SUPABASE_URL;
-  const chave = process.env.SUPABASE_ANON_KEY ?? process.env.SUPABASE_PUBLISHABLE_KEY;
-  if (!url || !chave) {
-    return { status: 503, corpo: {
-      erro: 'ConfigAusente',
-      mensagem: 'SUPABASE_URL e SUPABASE_ANON_KEY nao estao no ambiente. Sem elas o front nao ' +
-        'consegue autenticar, e o servidor prefere dizer isso a servir uma tela que nao loga.',
-    } };
-  }
-  return { status: 200, corpo: { supabaseUrl: url, supabaseAnonKey: chave } };
-}
 
 /** Tipos por extensao. Lista fechada: extensao desconhecida sai como octet-stream
  *  em vez de ganhar um tipo adivinhado que o browser vai interpretar. */
@@ -116,21 +93,27 @@ async function servirEstatico(raiz: string, caminho: string, res: ServerResponse
   }
 }
 
-type RotaCompilada = {
-  metodo: string;
-  segmentos: string[];
-  nomes: (string | null)[];
-  handler: (req: Requisicao, app: App) => Promise<Resultado>;
-};
+type Compilada = { metodo: string; segmentos: string[]; nomes: (string | null)[] };
+
+/* O MODO VIAJA JUNTO COM A ROTA ate o despacho. Um `RotaCompilada` que perdesse o
+ * `auth` obrigaria o servidor a procurar de novo qual rota casou - e "procurar de
+ * novo" e onde as duas listas divergem. */
+type RotaCompilada = Compilada & (
+  | { auth: 'sessao' | 'webhook'; handler: (req: Requisicao, app: App) => Promise<Resultado> }
+  | { auth: 'publica'; handler: (req: RequisicaoPublica) => Promise<Resultado> }
+);
 
 const compilar = (): RotaCompilada[] => ROTAS.map((r) => {
   const segmentos = r.padrao.split('/').filter(Boolean);
-  return {
+  const base: Compilada = {
     metodo: r.metodo,
     segmentos: segmentos.map((s) => (s.startsWith(':') ? '*' : s)),
     nomes: segmentos.map((s) => (s.startsWith(':') ? s.slice(1) : null)),
-    handler: r.handler,
   };
+  // Rota que nao declara nasce `sessao`. E a ausencia que fecha, nao a presenca.
+  return r.auth === 'publica'
+    ? { ...base, auth: 'publica' as const, handler: r.handler }
+    : { ...base, auth: (r.auth ?? 'sessao') as 'sessao' | 'webhook', handler: r.handler };
 });
 
 const COMPILADAS = compilar();
@@ -264,11 +247,6 @@ export function criarServidor(o: OpcoesDoServidor): http.Server {
     const caminho = url.pathname.slice(prefixo.length) || '/';
 
     try {
-      // Publica: e o que o front precisa ANTES de ter credencial. Fica antes do
-      // autenticador de proposito - pedir token para descobrir como autenticar
-      // seria circular.
-      if (metodo === 'GET' && caminho === '/publico/config') return responder(req, res, configPublica());
-
       const achou = casar(metodo, caminho);
       if (!achou) {
         const status = caminhoExisteEmOutroMetodo(caminho) ? 405 : 404;
@@ -276,6 +254,76 @@ export function criarServidor(o: OpcoesDoServidor): http.Server {
           erro: status === 405 ? 'MetodoNaoPermitido' : 'RotaNaoEncontrada',
           mensagem: `${metodo} ${caminho}`,
         } });
+      }
+
+      /*
+       * O DESPACHO POR MODO DECLARADO. `ADR-0006`, Decisao 4. Antes de 28/08 o
+       * unico escape era um `if` literal acima desta linha; agora quem escapa
+       * diz isso na propria tabela, e a suite consegue afirmar a lista inteira.
+       */
+      if (achou.rota.auth === 'publica') {
+        // Nao ha o que autenticar: e o que o front precisa ANTES de ter
+        // credencial, e pedir token para descobrir como autenticar e circular.
+        const corpoPublico = await lerCorpo(req, max);
+        return responder(req, res, await achou.rota.handler({
+          metodo, caminho, params: achou.params, query: url.searchParams, corpo: corpoPublico,
+        }));
+      }
+
+      if (achou.rota.auth === 'webhook') {
+        /*
+         * `webhook` NAO E "sem autenticacao" - e autenticado por outro
+         * mecanismo. Recusa por AUSENCIA: sem certificado de cliente verificado
+         * e sem IP na faixa, a resposta e o 404 GENERICO, byte a byte igual ao
+         * de rota inexistente. 401 diria "existe e voce errou a credencial", que
+         * e informacao demais para um endpoint que baixa dinheiro.
+         */
+        const origem = verificarOrigem(evidenciaDaRequisicao(req), lerConfig());
+        if (!origem.verificada) {
+          log(`[financeiro] webhook recusado em ${metodo} ${caminho}: ${origem.motivo}`, undefined);
+          return responder(req, res, { status: 404, corpo: {
+            erro: 'RotaNaoEncontrada', mensagem: `${metodo} ${caminho}`,
+          } });
+        }
+        /*
+         * O TENANT VEM DO CAMINHO (`Q-WEBHOOK-TENANT-01`, decidida em 28/08). Uuid
+         * malformado sai como o MESMO 404 generico: a origem estar verificada nao
+         * e razao para virar oraculo de "este tenant existe?".
+         */
+        const tenantDaRota = achou.params.tenant;
+        if (!ehUuid(tenantDaRota)) {
+          log(`[financeiro] webhook com tenant malformado em ${caminho}`, undefined);
+          return responder(req, res, { status: 404, corpo: {
+            erro: 'RotaNaoEncontrada', mensagem: `${metodo} ${caminho}`,
+          } });
+        }
+
+        /*
+         * E A TRILHA DIZ A VERDADE (Decisao 3): quem baixa e o usuario de servico
+         * daquele tenant, derivado do proprio tenant, sem caminho de login e com
+         * o papel minimo. Nao provisionado = recusa NOMEADA, e nao 500: a
+         * diferenca e entre "falta rodar um script" e "o servidor quebrou".
+         */
+        let sessaoDeServico: Sessao;
+        try {
+          sessaoDeServico = await o.app.login(authUserIdDeServico(tenantDaRota));
+        } catch (e: any) {
+          if (e?.name !== 'UsuarioNaoProvisionado') throw e;
+          log(`[financeiro] webhook de origem VERIFICADA (${origem.sujeito} @ ${origem.ip}) e sem ` +
+              `usuario de servico no tenant ${tenantDaRota}.`, undefined);
+          return responder(req, res, { status: 503, corpo: {
+            erro: 'ServicoDeCobrancaNaoProvisionado',
+            mensagem: 'A origem foi verificada e nao ha usuario de servico neste tenant. Rode ' +
+              'scripts/provisionar-servico-de-cobranca.sql (ADR-0006, Decisao 3). Ate la a baixa ' +
+              'entra pela consulta ativa diaria e pela baixa manual.',
+          } });
+        }
+
+        const corpoWebhook = await lerCorpo(req, max);
+        return responder(req, res, await achou.rota.handler({
+          metodo, caminho, params: achou.params, query: url.searchParams, corpo: corpoWebhook,
+          sessao: sessaoDeServico, tenantProposto: tenantDaRota,
+        }, o.app));
       }
 
       const authUserId = await o.autenticador(req);

@@ -136,6 +136,25 @@ Duas formas, e a diferença entre elas é **em que ordem se descobre o tenant e 
 
 > ### ✅ DECIDIDO em 06/08: **(ii), pela credencial.**
 
+> ### ⚠️ 28/08/2026 — a Decisão 2 ficou SEM MECANISMO, e quem a tirou foi a Decisão 1
+>
+> **O corpo acima fica intacto**, pelo mesmo motivo que o da Decisão 1 ficou: ele
+> registra o que se sabia quando foi escrito, e a (ii) era a escolha certa **para a
+> credencial que existia na manhã de 06/08** — um segredo nosso, por tenant.
+>
+> Naquele mesmo dia a Decisão 1 virou **mTLS**, e o certificado que a Sicoob
+> apresenta é **um só para todos os nossos tenants**. Ele prova a origem e não
+> identifica tenant: a busca `credencial → tenant` que a (ii) pede não tem sobre o
+> que rodar. **E a (i) deixou de ter o defeito que a derrubou** — a objeção era
+> *"leitura não autenticada, antes de verificar credencial"*, e com mTLS a
+> autenticação acontece no handshake, antes de qualquer leitura.
+>
+> Achado **ao construir a Decisão 4**, não auditando o documento. Registrado como
+> **`Q-WEBHOOK-TENANT-01`** 🔴, com três caminhos e uma recomendação; pela regra 10
+> não é do implementador fechar. Enquanto não fechar, a rota **recusa nomeando**:
+> origem verificada e sem sessão de serviço responde `503
+> WebhookSemSessaoDeServico`, e nunca executa.
+
 **Recomendação: (ii).** Ela não tem leitura fora de contexto, não tem oráculo, e — o que decide — **fecha a confusão entre tenants por construção**: com (i), quem tivesse o segredo de um tenant poderia baixar fatura de outro se a ordem "verifica e depois resolve" fosse invertida por alguém que não conhecesse a armadilha. Com (ii) essa inversão não é expressável: não existe tenant antes da credencial.
 
 ---
