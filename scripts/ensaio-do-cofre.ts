@@ -19,7 +19,8 @@
 // AS SEIS PROMESSAS, e as tres do meio sao as que valem:
 //
 //   1. o dono da funcao enxerga o cofre                (senao nada sai)
-//   2. a role de RUNTIME nao enxerga o cofre           (`ADR-0005` opcao A)
+//   2. a role de RUNTIME nao enxerga o cofre, e TEM EXECUTE na resolvedora
+//      (`ADR-0005` opcao A) - por catalogo sempre, e por execucao quando da
 //   3. e ainda assim resolve a credencial do SEU tenant
 //   4. a trilha e gravada NA MESMA TRANSACAO           (regra 9)
 //   5. tenant errado nao resolve                       (isolamento)
@@ -138,15 +139,60 @@ try {
        numero_contrato_cobranca, sandbox, ativo)
     VALUES ($1, 'sicoob', $2, 25546454, 1, 1, true, true)`, [tenant, REF]);
 
-  // --------------------------------- 2 e 3. a role de runtime, como em producao
-  await cliente.query(`SET LOCAL ROLE ${ROLE_RUNTIME}`);
+  /*
+   * VIRAR A ROLE DE RUNTIME, SE DER - e medido em 28/08/2026 que nem sempre da.
+   *
+   * A primeira versao fazia `SET LOCAL ROLE` direto e MORRIA com "permission
+   * denied to set role app_financeiro_login": a conexao de dono da DIRECT_URL
+   * nao e membro da role de runtime. No Supabase o `postgres` nao e superusuario
+   * de verdade, e `SET ROLE` exige pertencer.
+   *
+   * O CONSERTO NAO E PEDIR O GRANT. `GRANT app_financeiro_login TO postgres`
+   * resolveria o ensaio mexendo em PRIVILEGIO DE PRODUCAO para que um teste
+   * passe - trocar a coisa medida pela medicao. E a pergunta nao precisa disso:
+   * "esta role le aquela tabela?" o proprio catalogo responde, por
+   * `has_table_privilege`, que JA considera heranca de role.
+   *
+   * Entao ha dois modos, e o ensaio diz em qual rodou:
+   *
+   *   FORTE       vira a role e TENTA ler o cofre. Prova por execucao.
+   *   DECLARATIVO pergunta ao catalogo. Prova por privilegio.
+   *
+   * O declarativo roda SEMPRE, inclusive quando o forte roda - duas fontes para
+   * a mesma promessa. O que nao existe e pular em silencio.
+   */
+  let comoRuntime = false;
+  {
+    const code = await esperaRecusa(`SET LOCAL ROLE ${ROLE_RUNTIME}`);
+    comoRuntime = code === null;
+    const { rows: [r] } = await cliente.query<{ usuario: string }>('SELECT current_user AS usuario');
+    console.log(comoRuntime
+      ? `\n  modo FORTE: a conexao virou "${ROLE_RUNTIME}".\n`
+      : `\n  modo DECLARATIVO: "${r.usuario}" nao pode virar "${ROLE_RUNTIME}" (${code}).\n`
+        + '  As perguntas de privilegio vao ao catalogo, que considera heranca. Pedir\n'
+        + '  GRANT so para o ensaio passar seria mexer em producao para caber no teste.\n');
+  }
+
   await cliente.query("SELECT set_config('app.tenant_id', $1, true)", [tenant]);
   await cliente.query("SELECT set_config('app.usuario_id', $1, true)", [tenant]);
 
   {
+    // DECLARATIVO, e sempre. `has_table_privilege` enxerga o privilegio herdado
+    // do grupo `app_financeiro`, que e como a role de login recebe o que tem.
+    const { rows: [r] } = await cliente.query<{ le_cofre: boolean; executa: boolean }>(`
+      SELECT has_table_privilege($1, 'vault.decrypted_secrets', 'SELECT')                    AS le_cofre,
+             has_function_privilege($1, 'app.resolver_credencial_cobranca(text)', 'EXECUTE') AS executa`,
+      [ROLE_RUNTIME]);
+    chk('K2a', r.le_cofre === false,
+        `o catalogo diz que "${ROLE_RUNTIME}" NAO tem SELECT em vault.decrypted_secrets - a propriedade central do ADR-0005 A`);
+    chk('K2b', r.executa === true,
+        `e TEM EXECUTE na resolvedora - sem isso a emissao morreria com permission denied na funcao`);
+  }
+
+  if (comoRuntime) {
     const code = await esperaRecusa('SELECT decrypted_secret FROM vault.decrypted_secrets LIMIT 1');
-    chk('K2', code === '42501',
-        `a role "${ROLE_RUNTIME}" NAO le vault.decrypted_secrets direto (SQLSTATE ${code ?? 'nenhum - leu!'}) - a propriedade central do ADR-0005 A`);
+    chk('K2c', code === '42501',
+        `e a leitura direta, TENTADA como "${ROLE_RUNTIME}", e recusada de fato (SQLSTATE ${code ?? 'nenhum - leu!'})`);
   }
 
   {
@@ -178,9 +224,9 @@ try {
 
   // -------------------------------------------- 6. conector desligado nao resolve
   {
-    await cliente.query('RESET ROLE');
+    if (comoRuntime) await cliente.query('RESET ROLE');
     await cliente.query('UPDATE conector_cobranca SET ativo = false WHERE tenant_id = $1', [tenant]);
-    await cliente.query(`SET LOCAL ROLE ${ROLE_RUNTIME}`);
+    if (comoRuntime) await cliente.query(`SET LOCAL ROLE ${ROLE_RUNTIME}`);
     const code = await esperaRecusa('SELECT app.resolver_credencial_cobranca($1)', [REF]);
     chk('K6', code === '42501',
         `conector DESLIGADO nao resolve credencial (SQLSTATE ${code ?? 'nenhum - resolveu!'}) - e o que faz "desligar" ser botao de emergencia de verdade`);
@@ -188,7 +234,7 @@ try {
 
   // ------------------------------- 7. a guarda de identidade do conector morde
   {
-    await cliente.query('RESET ROLE');
+    if (comoRuntime) await cliente.query('RESET ROLE');
     const code = await esperaRecusa(`
       UPDATE conector_cobranca SET ativo = true, numero_cliente = NULL WHERE tenant_id = $1`, [tenant]);
     chk('K7', code === '23514',
