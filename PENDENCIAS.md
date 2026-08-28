@@ -477,6 +477,22 @@
 > **Suíte `EXIT=0`, 2.428 linhas `ok`.** Uma verificação nova varre o corpo cru atrás de qualquer
 > data com hora — a irmã da que varre `null` —, e o teto do `seuNumero` virou constante lida pelo
 > teste, para o número morar num lugar só.
+>
+> **✅ E a `Q-ESCOPO-V3-01` deixou de depender de achar uma página.** Medido: **o Swagger do portal
+> não declara escopo por endpoint** — o ícone que parecia cadeado é *copy to clipboard*. Então não
+> há o que ler, e o servidor de autorização responde sozinho: o `client_credentials` devolve o campo
+> **`scope` com o que foi CONCEDIDO**, e pedir não é receber.
+>
+> `npm run escopos -- sicoob-g3-a1` pede **um escopo por vez** (um conjunto pode ser recusado por
+> causa de um só, e o erro não diz qual), imprime as duas famílias linha a linha, depois pede os
+> vencedores juntos — como o adaptador pede em produção — e cospe a lista pronta para colar em
+> `ESCOPOS`. **Não emite nada e não escreve em lugar nenhum.** Precisa da `COFRE_DATABASE_URL`,
+> porque o `.pfx` está no cofre e o disco foi limpo — então roda no mesmo momento que o
+> `certificado -- client-id`, e a resposta sai em dez segundos.
+>
+> A armadilha está embutida: **nenhum escopo concedido não é resposta sobre família** — é sinal de
+> aplicativo não autorizado ou certificado diferente do que o portal registrou, e o script diz isso
+> em vez de deixar concluir errado.
 
 
 ---
