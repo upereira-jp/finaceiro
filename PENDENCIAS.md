@@ -6,8 +6,8 @@
 | **O que é** | O **índice único** das pendências. Consolida e substitui os dois trackers datados que existiam soltos |
 | **Substitui e apaga** | `PENDENCIAS-2026-08-05.md` e `PROXIMOS-PASSOS-2026-08-09.md` — vencidos, e agora removidos do repo |
 | **NÃO substitui** | `QUESTOES.md` (registro datado, dono por entrada — regra 10) · `RETOMADA-2026-08-15.md` (onde tudo parou) · os `RESUMO-SESSAO-*` (memória datada). Estes continuam sendo a fonte; aqui é o **apontador** |
-| **Data** | 14/08/2026 · rev. 17/08/2026 · rev. 19/08/2026 · rev. **21/08/2026** |
-| **Estado da suíte** | Sem banco: `typecheck` + `documento` + `brcode` + `dominio` + `web` → **`EXIT=0`, 2.067 verificações**. `test:repos` e `test:isolamento` **não rodam nesta VPS** (exigem PostgreSQL local) — o que elas cobririam da junção está no `npm run ensaio-juncao`, 12 de 12 contra produção com rollback |
+| **Data** | 14/08/2026 · rev. 17/08 · rev. 19/08 · rev. 21/08 · rev. **27/08/2026** |
+| **Estado da suíte** | Sem banco: `typecheck` + `documento` + `brcode` + `dominio` + `web` → **`EXIT=0`**, e desde 27/08 com as **51 verificações** de `tests/sicoob-http.ts` dentro do `test:dominio`. Fora da suíte, contra a Sicoob de verdade: `npm run ensaio-sicoob` → **6 de 6**. `test:repos` e `test:isolamento` **não rodam nesta VPS** (exigem PostgreSQL local) |
 | **Produção** | `financeiro.blackhaus.io` · **34 migrations no ar** (a 33 em 20/08, a **34 em 21/08**) · Pix estático e boleto importado no ar · central de ajuda em toda tela · **a conta unificada lida já vira cobrança** (migration 34) · o conector roda sozinho a cada 15 min pelo `financeiro-ciclo.timer` |
 
 > ## A única pendência do repositório é o certificado A1.
@@ -52,6 +52,41 @@
 > termina em **ROLLBACK** — a última verificação conta as quatro tabelas depois da
 > transação e falha se qualquer uma tiver linha. **12 de 12, e produção intacta.**
 
+> ### 27/08/2026 — o A1 chegou, e a frase do topo deixou de ser verdadeira em UM ponto
+>
+> **O código foi escrito.** `src/sicoob/http.ts` existe, e com ele o `cofre.ts` (a
+> resolvedora do `ADR-0005`, que nunca tinha sido implementada), a **migration 35**, o
+> `scripts/certificado.ts` e o `scripts/ensaio-sicoob.ts`. O composition root liga o
+> adaptador **real** por padrão, com `COBRANCA=desligada` como interruptor de emergência.
+>
+> **Duas das três razões para não escrevê-lo caíram, e a segunda caiu por uma medição
+> que ninguém tinha tentado:** o sandbox da Sicoob **responde**. `GET /boletos` devolve
+> 200, `POST /boletos/{nn}/baixar` devolve 204 — e `POST /boletos` devolve **sempre**
+> 400 com o exemplo de erro, para corpo vazio e para corpo bem formado. Ele é **mock
+> estático**. Por isso o `Transporte` do adaptador é injetável: 51 verificações exercem
+> o caminho de sucesso contra transporte próprio, e 6 exercem TLS, cabeçalho e parsing
+> contra a Sicoob de verdade. **A terceira razão continua de pé** — a primeira chamada
+> real vai corrigir alguma suposição —, e cada suposição virou `SUPOSICAO:` no código e
+> entrada no `QUESTOES.md`.
+>
+> **A pergunta que estava aberta desde 05/08 fechou por fonte primária.** O realm
+> `cooperado` declara `tls_client_auth` e `tls_client_certificate_bound_access_tokens:
+> true`: **não há `client_secret`**, o certificado É a credencial, e o token nasce atado
+> a ele.
+>
+> **E apareceu uma armadilha que não estava em documento nenhum.** O Node 22.20 embute
+> OpenSSL 3.5 e **recusa** `.pfx` com cifragem antiga (RC2-40 + SHA1) — que AC brasileira
+> ainda entrega — enquanto o `openssl` do sistema abre o mesmo arquivo sem reclamar. O
+> certificado passaria em toda conferência manual e falharia **só** no processo que emite
+> boleto. `npm run certificado -- normalizar` conserta, e o adaptador reconhece o erro
+> pelo código em vez de vazar `ERR_CRYPTO_*`. Medido em `SICOOB-medido-2026-08-27.md`.
+>
+> **O que falta agora não é código, e não é do repositório fechar (regra 10):** o
+> aplicativo no Portal Developers (precisa do `.pem`, e a ação é humana), o `client_id`
+> autorizado no App Sicoob, e os **três campos de identidade do cooperado** — que agora
+> o banco cobra: `conector_ativo_tem_identidade` impede ligar conector Sicoob sem eles.
+
+
 ---
 
 ## 1. A pendência: o certificado A1
@@ -88,7 +123,13 @@ compõe, emite, imprime e **cobra por Pix estático** — o que não existe é b
 > automática, fila de retentativa, consulta ativa e baixa pela API. O importado
 > fica **fora da consulta ativa** de propósito — `Q-BOLIMP-01`, com a razão medida.
 
-### 1.1 Por que é o único código que falta
+### 1.1 ~~Por que é o único código que falta~~ — **escrito em 27/08/2026**
+
+> **O quadro abaixo é de 14/08 e está mantido porque explica a decisão.** O que mudou:
+> `src/sicoob/http.ts` **existe** desde 27/08, junto com o `cofre.ts` que o `ADR-0005`
+> tinha decidido e ninguém tinha implementado. A `Q-PECA-NAO-PLUGADA-01` não se aplica
+> mais — há cofre, há resolvedora, há quem o chame, e ele foi exercido contra o sandbox
+> real. Ver `SICOOB-medido-2026-08-27.md` e o bloco de 27/08 no topo deste arquivo.
 
 Medido no repositório em 14/08:
 

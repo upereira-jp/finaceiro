@@ -62,6 +62,10 @@ export function TelaCobranca() {
   const [numeroConvenio, setNumeroConvenio] = useState('');
   const [agencia, setAgencia] = useState('');
   const [conta, setConta] = useState('');
+  const [numeroCliente, setNumeroCliente] = useState('');
+  const [codigoModalidade, setCodigoModalidade] = useState('');
+  const [numeroContratoCobranca, setNumeroContratoCobranca] = useState('');
+  const [numeroContaCorrente, setNumeroContaCorrente] = useState('');
   const [expiraEm, setExpiraEm] = useState('');
   const [sandbox, setSandbox] = useState(true);
   const [ativo, setAtivo] = useState(false);
@@ -87,6 +91,10 @@ export function TelaCobranca() {
       numero_convenio: numeroConvenio.trim() || null,
       agencia: agencia.trim() || null,
       conta: conta.trim() || null,
+      numero_cliente: numeroCliente.trim() || null,
+      codigo_modalidade: codigoModalidade.trim() || null,
+      numero_contrato_cobranca: numeroContratoCobranca.trim() || null,
+      numero_conta_corrente: numeroContaCorrente.trim() || null,
       certificado_expira_em: dataOuNull(expiraEm),
       sandbox,
       ativo,
@@ -147,11 +155,11 @@ export function TelaCobranca() {
           nunca cole aqui certificado, senha ou token.
         </p>
         <p className="sub" style={{ marginBottom: 0 }}>
-          <strong>E o cofre ainda não existe.</strong> Até ele e o certificado do banco existirem,
-          cadastrar aqui registra <em>a intenção e os dados que não são secretos</em>: agência,
-          conta, convênio e validade. <strong>Nenhum boleto sai disto ainda</strong> — enquanto
-          isso, dá para cobrar por Pix e importar na aba Emissão e cobrança um boleto emitido no
-          site do banco.
+          <strong>O cofre já existe</strong>, desde 27/08/2026, e o sistema já sabe conversar com o
+          Sicoob. O que ainda falta para sair boleto por aqui está <strong>fora do sistema</strong>:
+          o cadastro do aplicativo no portal do banco, a autorização dele no aplicativo do celular,
+          e os três números de identidade abaixo, que vêm da cooperativa. Enquanto isso, dá para
+          cobrar por Pix e importar na aba Emissão e cobrança um boleto emitido no site do banco.
         </p>
         <DetalheTecnico>
           <p style={{ margin: '0 0 6px' }}>
@@ -159,9 +167,11 @@ export function TelaCobranca() {
             ambiente — o contraexemplo está no banco ao lado.
           </p>
           <p style={{ margin: 0 }}>
-            O <code>ADR-0005</code> (onde mora o segredo do tenant) está em <em>proposta</em>, e é
-            pré-requisito do adaptador real da Sicoob junto com o certificado A1
-            (<code>Q-SICOOB-01</code>).
+            O <code>ADR-0005</code> (onde mora o segredo do tenant) foi implementado na{' '}
+            <strong>migration 35</strong>: o segredo vive em <code>vault.secrets</code>, a role de
+            runtime <em>não</em> alcança o schema <code>vault</code>, e quem atravessa é a função{' '}
+            <code>app.resolver_credencial_cobranca</code> — que confere o tenant e grava trilha na
+            mesma transação da leitura (regra 9).
           </p>
         </DetalheTecnico>
       </div>
@@ -198,6 +208,43 @@ export function TelaCobranca() {
           <Campo rotulo="Número do contrato" porqueDe="banco" valor={numeroContrato} ao={setNumeroContrato} />
           <Campo rotulo="Número do convênio" porqueDe="banco" valor={numeroConvenio} ao={setNumeroConvenio} />
           <Campo rotulo="Certificado A1 vence em" porqueDe="banco" valor={expiraEm} ao={setExpiraEm} tipo="date" />
+        </div>
+
+        {/*
+          A IDENTIDADE DO COOPERADO, e ela e uma SECAO PROPRIA de proposito.
+          Posta na mesma linha de "agencia" e "conta", qualquer pessoa
+          preencheria por semelhanca de nome - e "numero do contrato" (nosso
+          apontamento) NAO e "numeroContratoCobranca" (o do banco). O
+          `SICOOB-contrato-medido` §4 registra que os tres nao se derivam de
+          nada que ja esta nesta tela, e a separacao visual e o que impede a
+          deducao errada de parecer razoavel.
+        */}
+        <div className="secao" style={{ marginTop: 16 }}>
+          <h3 style={{ margin: '0 0 4px', fontSize: 15 }}>Identidade do cooperado na API</h3>
+          <p className="sub" style={{ marginTop: 0, marginBottom: 10 }}>
+            Estes três vêm da <strong>cooperativa</strong>, com o contrato de cobrança — não são a
+            agência, a conta nem o número do contrato acima, e <strong>não se derivam</strong>{' '}
+            deles. Sem os três, o conector não liga: o banco recusa pela constraint e a emissão
+            recusa nomeando qual falta.
+          </p>
+          <div style={{ ...linha, gap: 12 }}>
+            <Campo rotulo="numeroCliente" porqueDe="banco" valor={numeroCliente}
+                   ao={setNumeroCliente} dica="só dígitos" />
+            <Campo rotulo="codigoModalidade" porqueDe="banco" valor={codigoModalidade}
+                   ao={setCodigoModalidade} dica="1 = simples com registro" />
+            <Campo rotulo="numeroContratoCobranca" porqueDe="banco" valor={numeroContratoCobranca}
+                   ao={setNumeroContratoCobranca} />
+            <Campo rotulo="numeroContaCorrente (opcional)" porqueDe="banco" valor={numeroContaCorrente}
+                   ao={setNumeroContaCorrente} />
+          </div>
+          <DetalheTecnico>
+            <p style={{ margin: 0 }}>
+              Vão para a API como <strong>número</strong>, não texto — por isso só dígitos, e por
+              isso zero à esquerda não é guardado: <code>0025</code> e <code>25</code> são o mesmo
+              número JSON. O que não for inteiro positivo é recusado com <code>422</code> em vez de
+              virar <code>null</code> em silêncio.
+            </p>
+          </DetalheTecnico>
         </div>
 
         <div style={{ ...linha, gap: 20, marginTop: 12 }}>

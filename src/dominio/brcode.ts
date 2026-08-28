@@ -247,3 +247,51 @@ export function normalizarBrCode(bruto: string | null | undefined): string {
   ];
   return candidatos.find(crcConfere) ?? aparado;
 }
+
+/**
+ * O `txid` de dentro de um BR Code, ou `null`. Existe porque a resposta da
+ * Cobranca v3 traz `qrCode` (o copia-e-cola) e NAO traz campo de txid, e a
+ * `PortaDeCobranca` tem `pixTxid` - o `SICOOB-contrato-medido` 3.3 deixou a
+ * escolha para quem escrevesse o adaptador: "ou ele sai de dentro do BR Code,
+ * ou fica nulo".
+ *
+ * SAI DE DENTRO, E COM FREQUENCIA E NULO - de proposito. O txid mora no campo
+ * 62, subcampo 05 (Reference Label). Numa cobranca DINAMICA, que e o caso do
+ * boleto hibrido, esse subcampo costuma vir `***`, que na especificacao do BACEN
+ * significa "nao se aplica": o txid de verdade so existe do lado da API Pix,
+ * atras da URL do campo 26. Medido no proprio payload de exemplo do sandbox em
+ * 27/08/2026: `62070503***`.
+ *
+ * ENTAO POR QUE NAO TIRAR O UUID DA URL DO CAMPO 26? Porque aquele identificador
+ * e a LOCALIZACAO DO PAYLOAD, e nao o txid - sao conceitos diferentes na
+ * especificacao, e coincidem em alguns PSPs e nao em outros. Gravar um pelo
+ * outro poria em `boleto.pix_txid` um valor que nao casa com nada na
+ * conciliacao, e um identificador errado e pior que um campo vazio: o vazio
+ * ninguem tenta usar.
+ */
+export function txidDoBrCode(bruto: string | null | undefined): string | null {
+  const t = normalizarBrCode(bruto);
+  if (!t) return null;
+
+  const ler = (texto: string, alvo: string): string | null => {
+    let i = 0;
+    while (i + 4 <= texto.length) {
+      const id = texto.slice(i, i + 2);
+      const n = Number(texto.slice(i + 2, i + 4));
+      // Tamanho nao numerico = payload quebrado. Para em vez de escorregar: um
+      // laco que "tenta continuar" num TLV corrompido le lixo como se fosse dado.
+      if (!Number.isInteger(n) || n < 0) return null;
+      const valor = texto.slice(i + 4, i + 4 + n);
+      if (valor.length < n) return null;
+      if (id === alvo) return valor;
+      i += 4 + n;
+    }
+    return null;
+  };
+
+  const adicional = ler(t, '62');
+  if (!adicional) return null;
+  const txid = ler(adicional, '05');
+  if (!txid || txid === '***') return null;
+  return txid;
+}

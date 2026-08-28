@@ -3,6 +3,7 @@
 // Uso:
 //   DIRECT_URL=... node --experimental-strip-types scripts/conferir-banco-alvo.ts identidade
 //   DIRECT_URL=... node --experimental-strip-types scripts/conferir-banco-alvo.ts migration-32
+//   node --experimental-strip-types scripts/conferir-banco-alvo.ts no-checkout migration-35
 //
 // ============================================================================
 // POR QUE ISTO E UM ARQUIVO E NAO TRES LINHAS DENTRO DO YAML
@@ -34,14 +35,74 @@
 // mundo tem `20260725120000_fundacao_schema` em `_prisma_migrations`.
 
 import pg from 'pg';
+import { existsSync, readdirSync } from 'node:fs';
 
 /** A primeira migration deste repositorio. E a impressao digital do banco. */
 const FUNDACAO = '20260725120000_fundacao_schema';
 
 /** O que a migration 32 deixa no catalogo, e os tres tem de existir juntos. */
 const MIGRATION_32 = '20260817120000_boleto_importado';
+const MIGRATION_35 = '20260827120000_cofre_e_identidade_do_cooperado';
 
 class ConferenciaFalhou extends Error {}
+
+/** De "migration-NN" para o diretorio. Um lugar so, e os dois modos leem dele. */
+const DIRETORIO: Record<string, string> = {
+  'migration-32': MIGRATION_32,
+  'migration-35': MIGRATION_35,
+};
+
+/**
+ * A MIGRATION QUE SE ESPERA APLICAR ESTA NESTE CHECKOUT?
+ *
+ * ESTE MODO NASCEU DE UM FALSO SUCESSO, em 28/08/2026. O workflow
+ * `migrate-financeiro` rodou com `confirmar = aplicar`, terminou VERDE, e
+ * imprimiu "Migrations aplicadas" - tendo aplicado NADA:
+ *
+ *     34 migrations found in prisma/migrations
+ *     No pending migrations to apply.
+ *
+ * A migration 35 existia no disco de quem a escreveu e nunca tinha sido enviada
+ * ao GitHub. O runner clonou a `main`, achou 34, e "sucesso" era literalmente
+ * verdade: nao havia o que aplicar.
+ *
+ * E A CONFERENCIA DE CATALOGO NAO PEGOU porque estava fixa em `migration-32` -
+ * conferindo uma migration de dez dias antes, que ja estava aplicada e ia passar
+ * para sempre. O projeto ja tinha escrito a regra certa depois da 34
+ * ("conferida no catalogo e nao na mensagem do comando") e ela furou num lugar
+ * novo: o catalogo era consultado, mas o da migration errada.
+ *
+ * Este modo roda ANTES de discar para o banco e NAO precisa de credencial: ele
+ * so olha o disco. E a pergunta mais barata do fluxo e a unica que teria
+ * transformado aquele verde em vermelho.
+ */
+function noCheckout(chave: string): void {
+  const dir = DIRETORIO[chave];
+  if (!dir) {
+    console.error(`modo desconhecido: ${JSON.stringify(chave)}. Conheco: ${Object.keys(DIRETORIO).join(', ')}.`);
+    process.exit(1);
+  }
+  const caminho = new URL(`../prisma/migrations/${dir}/migration.sql`, import.meta.url);
+  if (!existsSync(caminho)) {
+    console.error(
+      `\n  a ${chave} (${dir}) NAO esta neste checkout.\n\n` +
+      '  Quase sempre isto quer dizer que ela foi escrita e nao foi commitada/enviada - o\n' +
+      '  runner clona o repositorio, nao o disco de quem escreveu. Aplicar assim termina em\n' +
+      '  VERDE tendo feito nada, porque "nenhuma migration pendente" e literalmente verdade.\n\n' +
+      '  Nada foi tentado contra o banco.\n'
+    );
+    process.exit(1);
+  }
+  const total = readdirSync(new URL('../prisma/migrations/', import.meta.url), { withFileTypes: true })
+    .filter((d) => d.isDirectory()).length;
+  console.log(`${chave} presente no checkout (${dir}) - ${total} migrations no diretorio.`);
+}
+
+// O checkout se confere sem banco, entao vem ANTES da exigencia de DIRECT_URL.
+if (process.argv[2] === 'no-checkout') {
+  noCheckout(process.argv[3] ?? '');
+  process.exit(0);
+}
 
 const url = process.env.DIRECT_URL;
 if (!url || !url.trim()) {
@@ -54,8 +115,8 @@ if (!url || !url.trim()) {
 }
 
 const modo = process.argv[2] ?? '';
-if (modo !== 'identidade' && modo !== 'migration-32') {
-  console.error(`modo desconhecido: ${JSON.stringify(modo)}. Use "identidade" ou "migration-32".`);
+if (modo !== 'identidade' && modo !== 'migration-32' && modo !== 'migration-35') {
+  console.error(`modo desconhecido: ${JSON.stringify(modo)}. Use "identidade", "migration-32" ou "migration-35".`);
   process.exit(1);
 }
 
@@ -152,9 +213,85 @@ async function migration32(): Promise<void> {
     : 'boletos por origem: nenhum boleto na tabela (esperado — o A1 nunca existiu)');
 }
 
+/**
+ * A MIGRATION 35 ENTROU DE FATO?
+ *
+ * Mesma disciplina da 32 - catalogo, nunca a mensagem do comando -, mais UMA
+ * conferencia que as anteriores nao precisavam fazer e que e a mais importante
+ * daqui: **o dono da resolvedora enxerga o cofre?**
+ *
+ * `SECURITY DEFINER` roda com os privilegios de quem e DONO da funcao. Se a
+ * migration for aplicada por uma role sem `SELECT` em `vault.decrypted_secrets`,
+ * a funcao e criada, o `migrate deploy` diz "successfully applied", o catalogo
+ * mostra a funcao presente - e a primeira emissao de boleto morre com
+ * "permission denied for view decrypted_secrets", a tres camadas de distancia da
+ * causa. E o modo de falha classico deste projeto: sucesso aparente agora,
+ * sintoma longe da causa depois.
+ */
+async function migration35(): Promise<void> {
+  const { rows: [r] } = await cliente.query<Record<string, string>>(`
+    SELECT (SELECT count(*) FROM information_schema.columns
+             WHERE table_name = 'conector_cobranca'
+               AND column_name IN ('numero_cliente','codigo_modalidade',
+                                   'numero_contrato_cobranca','numero_conta_corrente')) AS colunas,
+           (SELECT count(*) FROM pg_constraint
+             WHERE conname IN ('conector_identidade_positiva',
+                               'conector_ativo_tem_identidade'))                        AS restricoes,
+           (SELECT count(*) FROM pg_constraint
+             WHERE conname = 'conector_ativo_tem_identidade' AND convalidated)          AS validada,
+           (SELECT count(*) FROM pg_tables WHERE tablename = 'cofre_acesso_log')        AS tabela,
+           (SELECT count(*) FROM pg_policies WHERE tablename = 'cofre_acesso_log')      AS policy,
+           (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+             WHERE n.nspname = 'app' AND p.proname = 'resolver_credencial_cobranca')    AS funcao,
+           (SELECT count(*) FROM _prisma_migrations
+             WHERE migration_name = '${MIGRATION_35}'
+               AND finished_at IS NOT NULL AND rolled_back_at IS NULL)                  AS registro`);
+
+  const faltando = [
+    Number(r.colunas) === 4 ? null : `as 4 colunas de identidade em conector_cobranca (achei ${r.colunas})`,
+    Number(r.restricoes) === 2 ? null : `as 2 constraints do conector (achei ${r.restricoes})`,
+    Number(r.tabela) === 1 ? null : 'a tabela cofre_acesso_log',
+    Number(r.policy) >= 1 ? null : 'a policy de cofre_acesso_log (regra 3: RLS sem policy e falha)',
+    Number(r.funcao) === 1 ? null : 'a funcao app.resolver_credencial_cobranca',
+    Number(r.registro) === 1 ? null : `o registro de ${MIGRATION_35} em _prisma_migrations`,
+  ].filter(Boolean);
+
+  if (faltando.length) {
+    throw new ConferenciaFalhou(`a migration 35 nao esta completa no banco. Falta: ${faltando.join(', ')}.`);
+  }
+  console.log('migration 35 OK — 4 colunas, 2 constraints, cofre_acesso_log com policy, e a resolvedora.');
+
+  // A conferencia que decide se algum boleto vai sair um dia.
+  const { rows: [v] } = await cliente.query<{ dono: string; enxerga: boolean | null }>(`
+    SELECT pg_get_userbyid(proowner) AS dono,
+           has_table_privilege(pg_get_userbyid(proowner),
+                               'vault.decrypted_secrets', 'SELECT') AS enxerga
+      FROM pg_proc WHERE oid = 'app.resolver_credencial_cobranca(text)'::regprocedure`);
+
+  if (!v.enxerga) {
+    throw new ConferenciaFalhou(
+      `a resolvedora existe mas o DONO dela ("${v.dono}") nao enxerga vault.decrypted_secrets. ` +
+      'Nenhum boleto sairia, e o erro apareceria so na primeira emissao. Conserto: ' +
+      'ALTER FUNCTION app.resolver_credencial_cobranca(text) OWNER TO postgres;'
+    );
+  }
+  console.log(`cofre OK — a resolvedora e de "${v.dono}", que enxerga vault.decrypted_secrets.`);
+
+  if (Number(r.validada) !== 1) {
+    console.log(
+      'aviso: conector_ativo_tem_identidade esta NOT VALID (esperado ate alguem preencher os tres\n'
+      + '       campos da cooperativa). Depois de preencher, rode:\n'
+      + '       ALTER TABLE conector_cobranca VALIDATE CONSTRAINT conector_ativo_tem_identidade;');
+  }
+
+  const { rows } = await cliente.query<{ n: string }>('SELECT count(*) AS n FROM vault.secrets');
+  console.log(`segredos no cofre hoje: ${rows[0].n}`);
+}
+
 try {
   await cliente.connect();
   if (modo === 'identidade') await identidade();
+  else if (modo === 'migration-35') await migration35();
   else await migration32();
   await cliente.end();
 } catch (e) {

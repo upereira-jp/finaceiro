@@ -233,3 +233,75 @@ export function emReais(c: Centavos): string {
   const inteiro = s.slice(0, -2).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   return `${negativo ? '-' : ''}R$ ${inteiro},${s.slice(-2)}`;
 }
+
+/**
+ * 113000 -> "1130.00". A FRONTEIRA DE SAIDA do adaptador da Sicoob, e ela existe
+ * porque a API recebe REAIS COM CASAS DECIMAIS onde todo o resto do sistema tem
+ * `Int` em centavos (regra 1).
+ *
+ * POR TEXTO, e a razao e a mesma que `emReais` ja registra: `centavos / 100` e
+ * float, e a regra 1 proibe float "inclusive em calculo intermediario". Aqui o
+ * argumento e mais forte que na exibicao - este numero vai virar boleto, e um
+ * centavo de diferenca entre o que o sistema cobra e o que o banco registra e
+ * divergencia de conciliacao que ninguem consegue explicar depois.
+ *
+ * NAO E `emReais`. A outra formata para OLHO HUMANO - "R$ 1.234,56", com ponto de
+ * milhar e virgula decimal. Esta formata para JSON, e a Sicoob espera o literal
+ * numerico: ponto decimal, sem milhar, sem simbolo. Sao duas gramaticas, e usar
+ * uma no lugar da outra manda "R$ 1.130,00" para um campo `number`.
+ */
+export function centavosParaReaisDecimal(c: Centavos): string {
+  exigirCentavos(c, 'valor');
+  const negativo = c < 0;
+  const s = String(Math.abs(c)).padStart(3, '0');
+  return `${negativo ? '-' : ''}${s.slice(0, -2)}.${s.slice(-2)}`;
+}
+
+export class DecimalInvalido extends TypeError {
+  constructor(bruto: string, porque: string) {
+    super(
+      `"${bruto}" nao e um decimal de dinheiro da API: ${porque}. Esperado o literal ` +
+      'numerico do JSON, como 156.23 ou 1130.00.'
+    );
+    this.name = 'DecimalInvalido';
+  }
+}
+
+/**
+ * "156.23" -> 15623. A FRONTEIRA DE ENTRADA, e ela recebe TEXTO de proposito.
+ *
+ * O QUE ELA NAO ACEITA E O PONTO DA COISA. A API devolve `"valor": 156.23` como
+ * NUMERO JSON, e `JSON.parse` ja entrega float: medido aqui em 27/08/2026,
+ * `0.07 * 100` da `7.000000000000001`. Quem chama esta funcao tem de pegar o
+ * TEXTO do literal antes do parse - `JSON.parse(t, (k, v, ctx) => ctx.source)`,
+ * disponivel no Node 22.20 - e nao o numero ja convertido. Por isso o parametro
+ * e `string`: um tipo que aceitasse `number` faria o caminho errado compilar.
+ *
+ * E ELA NAO REUSA `reaisParaCentavos`, que existe ali em cima e parece servir.
+ * Nao serve, e o modo de falha e silencioso: aquela funcao le a gramatica
+ * BRASILEIRA, onde "1.234" e mil duzentos e trinta e quatro. No literal JSON,
+ * `1.234` e um real e vinte e tres centavos e meio - valor que nem deveria
+ * existir em dinheiro. A mesma string, dois significados, e a diferenca so
+ * apareceria numa fatura de R$ 1.234,00 cobrada como R$ 1,23. Aqui a gramatica
+ * e uma so, e o que fugir dela e recusado.
+ */
+export function reaisDecimalParaCentavos(bruto: string): Centavos {
+  const t = String(bruto).trim();
+  if (!t) throw new DecimalInvalido(bruto, 'esta vazio');
+  if (!/^-?\d+(\.\d{1,2})?$/.test(t)) {
+    // Nomeia o caso mais provavel em vez de dizer so "invalido": notacao
+    // cientifica e o que `JSON.stringify` produz para numero muito grande ou
+    // muito pequeno, e tres casas e o que aparece quando alguem mandou
+    // percentual para ca.
+    const porque = /e/i.test(t) ? 'esta em notacao cientifica'
+      : /\.\d{3,}/.test(t) ? 'tem mais de 2 casas decimais - dinheiro tem 2'
+      : /,/.test(t) ? 'usa virgula decimal, e o literal JSON usa ponto'
+      : 'ha caractere que nao e digito nem ponto decimal';
+    throw new DecimalInvalido(bruto, porque);
+  }
+  const negativo = t.startsWith('-');
+  const [inteira, decimal = ''] = (negativo ? t.slice(1) : t).split('.');
+  const centavos = Number(`${inteira}${decimal.padEnd(2, '0')}`);
+  if (!Number.isSafeInteger(centavos)) throw new DecimalInvalido(bruto, 'passa do inteiro seguro');
+  return negativo ? -centavos : centavos;
+}

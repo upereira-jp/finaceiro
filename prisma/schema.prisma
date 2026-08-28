@@ -238,6 +238,10 @@ model conector_cobranca {
   numero_convenio       String?
   agencia               String?
   conta                 String?
+  numero_cliente           Int?
+  codigo_modalidade        Int?              @db.SmallInt
+  numero_contrato_cobranca Int?
+  numero_conta_corrente    Int?
   certificado_expira_em DateTime?         @db.Date
   ativo                 Boolean           @default(false)
   sandbox               Boolean           @default(true)
@@ -1115,4 +1119,17 @@ enum valor_referencia_origem {
 enum origem_do_campo {
   fixo
   variavel
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model cofre_acesso_log {
+  id             String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id      String              @db.Uuid
+  credencial_ref String
+  usuario_id     String?             @db.Uuid
+  tier           String?
+  ocorrido_em    DateTime            @default(dbgenerated("clock_timestamp()")) @db.Timestamptz(6)
+  xact_id        Unsupported("xid8") @default(dbgenerated("pg_current_xact_id()"))
+
+  @@index([tenant_id, ocorrido_em(sort: Desc)], map: "cofre_acesso_log_tenant_idx")
 }

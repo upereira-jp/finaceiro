@@ -74,12 +74,52 @@ async function conector() {
   return c;
 }
 
+/**
+ * A IDENTIDADE DO COOPERADO, e por que ela nao e mais um `?? null`.
+ *
+ * Estes quatro campos vao para a API como NUMERO JSON, e numero JSON nao tem
+ * zero a esquerda. Quem digita "0025" numa tela quer dizer 25, e guardar o texto
+ * "0025" para mandar 25 depois e guardar uma informacao que nao existe.
+ *
+ * E o que NAO e numero para AQUI, e nao la: um `codigoModalidade` digitado como
+ * "1a" viraria `NaN`, e `NaN` em coluna `integer` o Prisma manda como `null` -
+ * o campo simplesmente sumiria, e o conector ficaria "salvo" e incapaz de
+ * emitir. Recusar aqui e a diferenca entre um erro de digitacao e um conector
+ * que parece pronto.
+ */
+export class IdentidadeInvalida extends Error {
+  readonly status = 422;
+  constructor(campo: string, valor: unknown) {
+    super(
+      `"${campo}" tem de ser um numero inteiro positivo, e veio ${JSON.stringify(valor)}. ` +
+      'Estes campos vem da COOPERATIVA e vao para a API da Sicoob como numero - eles nao se ' +
+      'derivam de agencia, conta nem do numero do contrato desta mesma tela.'
+    );
+    this.name = 'IdentidadeInvalida';
+  }
+}
+
+function inteiroPositivoOuNull(v: unknown, campo: string): number | null {
+  if (v == null || v === '') return null;
+  // `Number(" 12 ")` e 12 e `Number("")` e 0: os dois seriam aceitos por um
+  // `Number.isInteger` ingenuo. O teste e sobre o TEXTO, antes da conversao.
+  const t = String(v).trim();
+  if (!/^\d+$/.test(t)) throw new IdentidadeInvalida(campo, v);
+  const n = Number(t);
+  if (!Number.isSafeInteger(n) || n <= 0) throw new IdentidadeInvalida(campo, v);
+  return n;
+}
+
 export async function cadastrarConector(e: {
   credencial_ref: string;
   numero_contrato?: string | null;
   numero_convenio?: string | null;
   agencia?: string | null;
   conta?: string | null;
+  numero_cliente?: number | string | null;
+  codigo_modalidade?: number | string | null;
+  numero_contrato_cobranca?: number | string | null;
+  numero_conta_corrente?: number | string | null;
   certificado_expira_em?: Date | null;
   sandbox?: boolean;
   ativo?: boolean;
@@ -92,6 +132,10 @@ export async function cadastrarConector(e: {
     numero_convenio: e.numero_convenio ?? null,
     agencia: e.agencia ?? null,
     conta: e.conta ?? null,
+    numero_cliente: inteiroPositivoOuNull(e.numero_cliente, 'numeroCliente'),
+    codigo_modalidade: inteiroPositivoOuNull(e.codigo_modalidade, 'codigoModalidade'),
+    numero_contrato_cobranca: inteiroPositivoOuNull(e.numero_contrato_cobranca, 'numeroContratoCobranca'),
+    numero_conta_corrente: inteiroPositivoOuNull(e.numero_conta_corrente, 'numeroContaCorrente'),
     certificado_expira_em: e.certificado_expira_em ?? null,
     sandbox: e.sandbox ?? true,
     ativo: e.ativo ?? false,

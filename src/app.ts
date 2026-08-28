@@ -19,6 +19,8 @@ import {
   type Sessao, type VinculoDaSessao,
 } from './auth/sessao.ts';
 import { COBRANCA_NAO_CONFIGURADA, type PortaDeCobranca } from './sicoob/porta.ts';
+import { CobrancaSicoob } from './sicoob/http.ts';
+import { cofreDoVault } from './sicoob/cofre.ts';
 
 export class RoleDeRuntimeInsegura extends Error {
   constructor(usuario: string, motivo: string) {
@@ -188,6 +190,32 @@ export function criarApp(connectionString: string, cobranca: PortaDeCobranca = C
   };
 }
 
+/**
+ * QUAL adaptador de cobranca o processo usa.
+ *
+ * O REAL E O PADRAO DESDE 27/08/2026, e a mudanca e menor do que parece: quem
+ * decide se ha cobranca NAO e este arquivo, e `conector_cobranca` - o
+ * `repos/boleto.ts` levanta `CobrancaNaoHabilitada` (412) antes de tocar a porta
+ * quando o tenant nao tem conector ativo. Um adaptador real com zero conectores
+ * ativos se comporta exatamente como o `COBRANCA_NAO_CONFIGURADA` se comportava.
+ *
+ * O QUE ELE GANHA E A CREDENCIAL POR TENANT. `COBRANCA_NAO_CONFIGURADA` recusa
+ * para todo mundo, inclusive para o tenant que TEM certificado - e num sistema
+ * multi-tenant a configuracao nao pode ser do processo.
+ *
+ * `COBRANCA=desligada` volta ao adaptador que recusa. E interruptor de
+ * emergencia, sem deploy: se o certificado vazar ou a API comecar a devolver
+ * lixo, uma variavel de ambiente e um restart param a emissao com erro NOMEADO,
+ * em vez de deixar a fila do PRD 6 martelando o banco.
+ */
+function cobrancaDoAmbiente(): PortaDeCobranca {
+  if (process.env.COBRANCA === 'desligada') {
+    console.log('[financeiro] COBRANCA=desligada - nenhum boleto sera registrado pela API');
+    return COBRANCA_NAO_CONFIGURADA;
+  }
+  return new CobrancaSicoob({ resolver: cofreDoVault });
+}
+
 let instancia: App | undefined;
 
 /**
@@ -198,7 +226,7 @@ export function app(): App {
   if (!instancia) {
     const url = process.env.DATABASE_URL;
     if (!url) throw new SemDatabaseUrl();
-    instancia = criarApp(url);
+    instancia = criarApp(url, cobrancaDoAmbiente());
   }
   return instancia;
 }
