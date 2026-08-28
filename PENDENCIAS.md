@@ -320,6 +320,36 @@
 > **`prisma generate` não é preciso**: a 36 mexe só numa CHECK, e `schema.prisma` não
 > modela CHECK — `numero_contrato_cobranca` já era `Int?`. **Deploy também não**: nenhuma
 > rota mudou e a SPA não foi tocada.
+>
+> ⚠️ **E o comando acima NÃO roda desta VPS — medido em 28/08, e a medição achou uma
+> armadilha que vale mais que a migration.** Tentar aplicar daqui esbarra em duas coisas,
+> e a segunda é a perigosa:
+>
+> 1. **não há `DIRECT_URL` em `/etc/financeiro.env`** — só `DATABASE_URL`, que é o
+>    *session pooler* na 5432 com a role **`app_financeiro_login`**. Ela **não é dona** de
+>    `conector_cobranca` (o dono é `postgres`), então `ALTER TABLE` é recusado. O
+>    `prisma.config.ts` já dizia isso desde 30/07: *"as migrations deste projeto sempre
+>    foram aplicadas de fora, nunca do VPS"*;
+> 2. **`prisma migrate status` por essa conexão responde `36 migrations have not yet been
+>    applied` — TODAS AS 36, inclusive as 35 que estão comprovadamente no ar.** A causa
+>    está medida: `_prisma_migrations` tem **RLS ligada e ZERO policies**. A role tem
+>    `SELECT` (`has_table_privilege` = true) e a tabela existe no catálogo — mas RLS sem
+>    policy filtra **toda** linha para quem não é dono nem `BYPASSRLS`. O `postgres`
+>    atravessa (`relforcerowsecurity = false`), e por isso do Codespace a leitura é
+>    correta.
+>
+> **Por que isso é pior que um erro:** ele não falha, ele MENTE com uma resposta
+> plausível. Quem rodasse `npm run db:migrate` daqui estaria mandando o Prisma **repetir a
+> história inteira** contra produção. A falta de DDL faz isso morrer na primeira migration
+> — mas a proteção é acidental, e é a role errada que a está dando.
+>
+> É o espelho exato do que o commit `1682386` consertou hoje: lá o workflow podia dizer
+> *"aplicadas"* tendo aplicado nada; aqui a leitura diz *"nada aplicado"* tendo aplicado
+> tudo.
+>
+> **O caminho certo continua sendo o documentado:** aplicar de onde existe a `DIRECT_URL`
+> de dono — o Codespace —, e conferir **no catálogo**, nunca na mensagem do comando, que é
+> a regra que a migration 34 e a 35 já seguiram.
 
 
 ---
