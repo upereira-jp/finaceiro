@@ -67,9 +67,20 @@ if (!tenant || !/^[0-9a-f-]{36}$/i.test(tenant)) {
   process.exit(1);
 }
 
-/** A role de runtime. E a que o `financeiro.service` usa, e a que NAO pode
- *  alcancar o cofre. */
-const ROLE_RUNTIME = process.env.ROLE_RUNTIME ?? 'app_financeiro';
+/**
+ * A role de runtime - a que o `financeiro.service` REALMENTE usa para conectar.
+ *
+ * E `app_financeiro_login`, e nao `app_financeiro`. Medido no arranque do
+ * servico em 28/08/2026: "conectado como app_financeiro_login - sem BYPASSRLS,
+ * sem SUPERUSER". A segunda e a role de GRUPO que carrega os grants; a primeira
+ * e a que abre a conexao e herda deles.
+ *
+ * A DIFERENCA IMPORTA PARA ESTE ENSAIO. Testar o grupo responderia "o grupo nao
+ * le o cofre", que nao e a pergunta: a pergunta e se o processo que atende
+ * requisicao le. Herança de role tem `INHERIT`/`NOINHERIT`, e um ensaio contra o
+ * grupo passaria mesmo se a role de login tivesse um grant proprio a mais.
+ */
+const ROLE_RUNTIME = process.env.ROLE_RUNTIME ?? 'app_financeiro_login';
 const MARCA = 'ENSAIO-COFRE';
 const REF = `${MARCA}-${tenant.slice(0, 8)}`;
 
