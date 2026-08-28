@@ -46,6 +46,10 @@ on:
         description: 'Digite "aplicar" para confirmar. Qualquer outra coisa faz o workflow so CONFERIR e parar.'
         required: true
         default: 'conferir'
+      conferencia:
+        description: 'Qual migration este run deve deixar aplicada (ex.: migration-35). E conferida no CATALOGO no fim, e a ausencia dela no checkout aborta antes de discar.'
+        required: true
+        default: 'migration-35'
 
 concurrency:
   group: vps-financeiro          # nunca roda junto com o deploy nem com o recon
@@ -88,6 +92,20 @@ jobs:
           esac
           echo "DIRECT_URL presente, porta aceita."
 
+      # ======================================================================
+      # A GUARDA QUE FALTAVA, e ela nasceu de um falso sucesso em 28/08/2026.
+      #
+      # Um run com `confirmar = aplicar` terminou VERDE e nao aplicou nada: a
+      # migration esperada existia so no disco de quem a escreveu, e o runner
+      # clona o REPOSITORIO. "34 migrations found / No pending migrations to
+      # apply" e literalmente verdade quando a 35 nunca foi enviada.
+      #
+      # Esta pergunta nao custa credencial nem viagem ao banco - ela so olha o
+      # disco do checkout - e e a unica que teria transformado aquele verde em
+      # vermelho, antes de qualquer escrita.
+      - name: a migration esperada esta NESTE CHECKOUT?
+        run: node --experimental-strip-types scripts/conferir-banco-alvo.ts no-checkout '${{ inputs.conferencia }}'
+
       - name: IDENTIDADE do banco alvo (regra 4 — o CRM e read-only absoluto)
         run: node --experimental-strip-types scripts/conferir-banco-alvo.ts identidade
 
@@ -97,18 +115,41 @@ jobs:
         run: npx prisma migrate status || true
 
       - name: APLICAR
+        id: aplicar
         if: ${{ inputs.confirmar == 'aplicar' }}
-        run: npx prisma migrate deploy
+        # A SAIDA E CAPTURADA porque o passo seguinte precisa saber o que
+        # ACONTECEU, e nao so que o comando saiu com 0. "No pending migrations to
+        # apply" e sucesso do comando e pode ser fracasso da intencao - era
+        # exatamente o caso do run de 28/08.
+        run: |
+          set -euo pipefail
+          npx prisma migrate deploy 2>&1 | tee /tmp/migrate.log
+          if grep -q "No pending migrations to apply" /tmp/migrate.log; then
+            echo "aplicou=nada" >> "$GITHUB_OUTPUT"
+          else
+            echo "aplicou=sim" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: conferir o resultado NO CATALOGO
         if: ${{ inputs.confirmar == 'aplicar' }}
-        run: node --experimental-strip-types scripts/conferir-banco-alvo.ts migration-32
+        # A conferencia e da migration que ESTE run devia deixar aplicada, e nao
+        # de uma fixa no arquivo. Uma conferencia presa numa migration antiga
+        # passa para sempre e nao confere nada - foi o que aconteceu em 28/08,
+        # quando ela olhou a 32 (de dez dias antes, ja aplicada) e disse OK.
+        run: node --experimental-strip-types scripts/conferir-banco-alvo.ts '${{ inputs.conferencia }}'
 
       - name: proximo passo
+        # ELE REPETE O QUE O PRISMA RESPONDEU, e nao o que o operador pediu. A
+        # versao anterior imprimia "Migrations aplicadas" sempre que o campo
+        # dizia "aplicar" - inclusive quando nada tinha sido aplicado.
         run: |
-          if [ "${{ inputs.confirmar }}" = "aplicar" ]; then
-            echo "Migrations aplicadas. Agora rode o workflow **deploy-financeiro** para o codigo novo subir."
-          else
+          if [ "${{ inputs.confirmar }}" != "aplicar" ]; then
             echo "Nada foi aplicado — o campo 'confirmar' nao era \"aplicar\"."
             echo "O passo acima mostrou o que esta pendente."
+          elif [ "${{ steps.aplicar.outputs.aplicou }}" = "nada" ]; then
+            echo "::warning::O Prisma respondeu \"No pending migrations to apply\" — NENHUMA migration"
+            echo "::warning::entrou neste run. O banco ja estava no estado do checkout. Se voce esperava"
+            echo "::warning::uma migration nova, ela nao esta no branch que este run clonou."
+          else
+            echo "Migrations aplicadas. Agora rode o workflow **deploy-financeiro** para o codigo novo subir."
           fi
