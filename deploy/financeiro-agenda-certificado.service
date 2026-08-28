@@ -1,0 +1,51 @@
+[Unit]
+# O AVISO DE VENCIMENTO DO A1. `PRD` §6, ultima linha. SO LE - nao escreve nada,
+# nem `agenda_execucao`.
+#
+# POR QUE ELA EXISTE. "Vencido, a emissao para sem erro obvio": o sintoma de um
+# A1 vencido e a fila enchendo de falhas sem causa nomeada. O aviso sai com 30
+# dias de antecedencia (`POLITICA.diasDeAvisoDoCertificado`, `Q-AGENDA-02`)
+# porque renovar A1 tem processo e assinatura, e nao e um clique.
+#
+# A DATA QUE IMPORTA HOJE E 17/08/2027, a renovacao do A1 comprado em 08/2026 - e
+# na renovacao volta a valer a armadilha medida em 27/08/2026: AC brasileira
+# entrega `.pfx` com cifragem antiga (RC2-40 + SHA1) que o Node 22 recusa e o
+# `openssl` do sistema abre sem reclamar. `npm run certificado -- normalizar`
+# antes de subir ao cofre.
+#
+# O QUE ELA NAO FAZ, e precisa ser dito: nao notifica ninguem. O aviso cai no
+# journal. Escolher o canal (e-mail, a tela de Pendencias, outro) e decisao com
+# dono e nao default de quem implementa - regra 10.
+Description=Financeiro G3 - confere o vencimento do certificado A1
+Documentation=https://github.com/upereira-jp/finaceiro
+After=network-online.target financeiro.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=financeiro
+Group=financeiro
+WorkingDirectory=/opt/financeiro/app
+
+# Sem `--valendo` e sem `--ensaio`: a tarefa e de leitura e o script nem os pede.
+ExecStart=/opt/financeiro/node/bin/node --experimental-strip-types scripts/agenda.ts \
+  --certificado \
+  --auth-user 35f4dda9-5265-434e-8097-5d41c384a9ba \
+  --tenant eac198c0-b0c1-4b13-9b4d-6ac1a6eb011d
+
+EnvironmentFile=/etc/financeiro.env
+
+TimeoutStartSec=120
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=financeiro-agenda-certificado

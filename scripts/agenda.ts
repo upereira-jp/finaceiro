@@ -19,9 +19,9 @@
 // ou uma pessoa digitando. O codigo fica igual nos tres, e a escolha continua
 // sendo de quem tem que fazer.
 //
-// EXEMPLO para o VPS de hoje, e ele e sugestao e nao configuracao aplicada:
-//   */15 * * * *  cd /opt/financeiro/app && npm run agenda -- --fila --valendo --auth-user ...
-//   17   6 * * *  cd /opt/financeiro/app && npm run agenda -- --consulta --valendo --auth-user ...
+// QUEM AGENDA, DESDE 28/08/2026: o systemd desta VPS. O dono escolheu o host, que
+// era a lacuna aberta - as tres unidades estao em `deploy/` e o README de la diz
+// a cadencia de cada uma e por que. Este arquivo continua sem agendador dentro.
 //
 // `--ensaio` e `--valendo` sao OBRIGATORIOS para as duas tarefas que escrevem,
 // pelo mesmo motivo do ciclo do CRM e do bootstrap: um processo periodico que
@@ -35,6 +35,7 @@
 import { iniciar, encerrarApp } from '../src/app.ts';
 import {
   executarFilaDeEmissao, executarConsultaAtiva, conferirCertificado,
+  SemConectorDeCobranca,
   type AbrirTransacao, type ResultadoDaAgenda,
 } from '../src/cobranca/agenda.ts';
 import { POLITICA } from '../src/dominio/agenda.ts';
@@ -161,6 +162,30 @@ async function main(): Promise<void> {
       ? await executarFilaDeEmissao(a.cobranca, tx)
       : await executarConsultaAtiva(a.cobranca, tx);
   } catch (e: any) {
+    /*
+     * SEM CONECTOR ATIVO NAO E FALHA DA RODADA - e ausencia de trabalho, e a
+     * distincao existe por causa do systemd. Enquanto o Sicoob nao tiver
+     * aplicativo, `client_id` e os tres numeros da cooperativa,
+     * `conector_cobranca.ativo` e false, e `abrir()` recusa ANTES de criar a
+     * linha de `agenda_execucao` ou de tocar em qualquer boleto.
+     *
+     * Se isso saisse como 1, os dois timers ficariam em `failed` todo dia ate o
+     * Sicoob entrar - e `systemctl list-units --failed` e a unica superficie de
+     * alarme desta maquina (deploy/README.md). Vermelho permanente e alarme
+     * desligado: a primeira falha DE VERDADE chegaria numa lista que ja e
+     * vermelha ha meses.
+     *
+     * Sai como 3, e o unit declara `SuccessExitStatus=3`. Um codigo proprio, e
+     * nao um `|| true`, para que 1 continue significando exatamente o que
+     * significava - e para que a rodada continue IMPRIMINDO o motivo.
+     */
+    if (e instanceof SemConectorDeCobranca) {
+      console.log(`\n${e.message}`);
+      console.log('Nada a fazer nesta rodada, e isso nao e defeito. Quando o conector for');
+      console.log('ativado, ela passa a ter - sem tocar em unit nem em timer.');
+      await encerrarApp();
+      process.exit(3);
+    }
     console.error('\nA AGENDA FALHOU:', e?.message ?? e);
     console.error('\nA linha de agenda_execucao foi fechada com o que ja havia sido feito.');
     console.error('A proxima rodada recompoe: a fila e por estado, nao por posicao.');

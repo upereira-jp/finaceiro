@@ -1,0 +1,68 @@
+[Unit]
+# A FILA DE EMISSAO DE BOLETO, agendada. `PRD` §6, primeiro dos dois processos.
+#
+# POR QUE ELA EXISTE. O motor esta pronto desde 30/07/2026 (`Q-AGENDA-01`), e ate
+# 28/08 nada o chamava: nenhum timer, nenhuma linha de cron, nenhum agendador
+# dentro do processo. Um boleto que falhasse ao ser registrado no banco ficaria
+# na fila para sempre - com `proxima_tentativa_em` carimbado, vencido, e ninguem
+# passando para ver. O modo de falha de um processo periodico e a AUSENCIA de
+# execucao, que nao produz erro nem log nem linha.
+#
+# O agendador nao esta no codigo de proposito: o `PRD` §3 deixou a escolha do
+# host em aberto e a regra 10 proibe que quem implementa escolha por quem decide.
+# A escolha foi feita pelo dono em 28/08/2026 - o host e este systemd.
+#
+# SEGURO DE REPETIR: uma transacao por boleto, e o EXCLUDE
+# `agenda_uma_execucao_por_tarefa` (migration 21) recusa uma segunda rodada
+# simultanea com 409 nomeado, em vez de chamar o banco duas vezes pelo mesmo
+# titulo.
+Description=Financeiro G3 - fila de emissao de boleto (retentativa)
+Documentation=https://github.com/upereira-jp/finaceiro
+After=network-online.target financeiro.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=financeiro
+Group=financeiro
+WorkingDirectory=/opt/financeiro/app
+
+# O `--auth-user` e o mesmo do ciclo do CRM e pela mesma razao: a agenda roda
+# DENTRO de contexto de tenant, sem caminho privilegiado, porque excecao de
+# isolamento e ausencia de isolamento. O uuid e o `sub` do Supabase Auth do dono
+# e sozinho nao autentica nada.
+#
+# `--valendo` nao tem default. E, atencao: `--ensaio` NAO serve aqui - contra a
+# Sicoob de verdade ele registra o boleto LA e da rollback AQUI, deixando os dois
+# lados divergentes. Esta unidade nunca deve ganhar essa flag.
+ExecStart=/opt/financeiro/node/bin/node --experimental-strip-types scripts/agenda.ts \
+  --fila \
+  --valendo \
+  --auth-user 35f4dda9-5265-434e-8097-5d41c384a9ba \
+  --tenant eac198c0-b0c1-4b13-9b4d-6ac1a6eb011d
+
+EnvironmentFile=/etc/financeiro.env
+
+# 3 = "nenhum conector de cobranca ativo neste tenant". Enquanto o Sicoob nao
+# tiver aplicativo, client_id e os tres numeros da cooperativa, e este o codigo
+# de saida de toda rodada - e ele NAO e falha: a rodada nao tinha o que fazer e
+# disse por que. Sem esta linha o unit ficaria vermelho por meses e
+# `list-units --failed`, que e o alarme desta maquina, pararia de significar algo.
+SuccessExitStatus=3
+
+# 200 boletos por rodada, cada um uma chamada HTTP ao banco. 5 minutos e folga
+# para a Sicoob lenta, nao expectativa.
+TimeoutStartSec=300
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=financeiro-agenda-fila

@@ -1,0 +1,14 @@
+[Unit]
+Description=Confere o vencimento do certificado A1 uma vez por dia
+Documentation=https://github.com/upereira-jp/finaceiro
+
+[Timer]
+# Diaria, dez minutos ANTES da consulta ativa: quando as duas cairem no mesmo
+# journal, a causa aparece antes do sintoma.
+OnCalendar=*-*-* 06:07:00
+Persistent=true
+AccuracySec=1min
+Unit=financeiro-agenda-certificado.service
+
+[Install]
+WantedBy=timers.target

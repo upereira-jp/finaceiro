@@ -1,0 +1,50 @@
+[Unit]
+# A CONSULTA ATIVA, agendada. `PRD` §6, segundo dos dois processos.
+#
+# POR QUE ELA EXISTE, e nao e conveniencia: webhook perdido sem consulta ativa e
+# dinheiro recebido que o sistema nunca baixa - e a inadimplencia passa a acusar
+# quem pagou. Ela pergunta ao banco a situacao de cada boleto em aberto e aplica
+# a baixa por `repos/liquidacao.baixar()`, que continua sendo o UNICO gatilho do
+# split (`PRD` §5.2): a comissao e o repasse saem na mesma transacao da baixa.
+#
+# ENQUANTO O `ADR-0006` NAO FOR CONSTRUIDO, ELA E A UNICA PORTA AUTOMATICA DE
+# BAIXA. O webhook existe como rota desde a migration 16 e a Sicoob nao consegue
+# chama-lo - nao ha isencao de autenticacao, nao ha segredo em
+# `conector_cobranca` e nao ha usuario de servico. Sobra esta unidade, uma vez
+# por dia, e a baixa manual na aba Emissao e cobranca.
+Description=Financeiro G3 - consulta ativa da situacao dos boletos
+Documentation=https://github.com/upereira-jp/finaceiro
+After=network-online.target financeiro.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=financeiro
+Group=financeiro
+WorkingDirectory=/opt/financeiro/app
+
+ExecStart=/opt/financeiro/node/bin/node --experimental-strip-types scripts/agenda.ts \
+  --consulta \
+  --valendo \
+  --auth-user 35f4dda9-5265-434e-8097-5d41c384a9ba \
+  --tenant eac198c0-b0c1-4b13-9b4d-6ac1a6eb011d
+
+EnvironmentFile=/etc/financeiro.env
+
+# Ver a nota da fila: 3 = sem conector ativo, e nao e falha.
+SuccessExitStatus=3
+
+TimeoutStartSec=600
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=financeiro-agenda-consulta

@@ -1,0 +1,15 @@
+[Unit]
+Description=Dispara a consulta ativa dos boletos uma vez por dia
+Documentation=https://github.com/upereira-jp/finaceiro
+
+[Timer]
+# DIARIA, e a palavra e do `PRD` §6 - nao e escolha desta unidade. O horario e:
+# 06:17 UTC, madrugada em Goias, antes de o expediente comecar a olhar tela. Os
+# 17 minutos tiram a rodada do minuto redondo que todo mundo agenda.
+OnCalendar=*-*-* 06:17:00
+Persistent=true
+AccuracySec=1min
+Unit=financeiro-agenda-consulta.service
+
+[Install]
+WantedBy=timers.target
