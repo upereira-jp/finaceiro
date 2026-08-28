@@ -11,20 +11,42 @@
 // Por isso e exercivel sem rede e sem Postgres.
 //
 // ============================================================================
+// 0. NEM TODO CORPO E EVENTO: A VALIDACAO DA URL VEM PRIMEIRO
+//
+// Medido em 28/08/2026, na pagina "Visao Geral" da API (colada pelo dono - as
+// paginas do portal sao SPA e nao devolvem conteudo por fetch). Antes de
+// qualquer notificacao de pagamento, a Sicoob manda uma NOTIFICACAO DE VALIDACAO
+// da URL, e ela tem outra forma - sem `dados` e sem `tipoMovimento`:
+//
+//     { "idWebhook": 990, "validacaoWebhook": true }
+//
+// Ela chega no cadastro de um novo webhook, na alteracao da URL e na reativacao.
+//
+// E O QUE ELA EXIGE E O MOTIVO DE ESTA NOTA SER A PRIMEIRA. Palavra do banco:
+// "a URL so sera aceita se o servidor responder com um dos seguintes codigos de
+// status HTTP: 200, 201, 204. Respostas com outros codigos (...) resultam em
+// FALHA NA VALIDACAO do webhook".
+//
+// Antes deste tratamento, este corpo caia na conferencia de `dados` e virava
+// `EventoIlegivel` - ou seja, **400**. O cadastro do webhook nunca teria
+// funcionado, e a falha nao apareceria aqui: apareceria no portal, dizendo que a
+// URL foi recusada, com o nosso lado inteiro parecendo correto.
+//
+// ============================================================================
 // DUAS COISAS QUE ELE RECUSA DE PROPOSITO, e as duas sao lacuna com dono
 //
-// 1. `tipoMovimento` E UMA LISTA FECHADA DE UM ELEMENTO. O exemplo da
-//    documentacao traz `7`, e o significado dos demais codigos NAO esta medido -
-//    a pagina e SPA e nao devolve conteudo sem navegacao autenticada (tentado em
-//    28/08). Entao SO o 7 vira baixa, e todo o resto e ignorado com o codigo
-//    nomeado no log.
+// 1. `tipoMovimento` E UMA LISTA FECHADA DE UM ELEMENTO, e agora por FONTE
+//    PRIMARIA: a pagina da API declara `codigoTipoMovimento 7 - Pagamento (baixa
+//    operacional)` como o movimento da notificacao, e `codigoPeriodoMovimento
+//    1 - Movimento Atual (D0)`. Entao SO o 7 vira baixa.
 //
-//    A ASSIMETRIA E DELIBERADA. Se o 7 nao for "baixa por pagamento", o custo e
-//    nenhuma liquidacao entrar - e a consulta ativa diaria pega no dia seguinte.
-//    Se um codigo desconhecido virasse baixa, o custo seria dinheiro creditado
-//    que ninguem recebeu: baixa por decurso de prazo e baixa por solicitacao do
-//    beneficiario tambem sao "baixa", e nenhuma delas e pagamento.
-//    `Q-WEBHOOK-MOVIMENTO-01`.
+//    E A DUVIDA DE 28/08 CAIU: as siglas de movimentacao (ENTR, PROR, AVENC,
+//    VENC, LIQUI, BAIX, OCRED) sao de OUTRA funcionalidade - o arquivo JSON de
+//    movimentacao da carteira, que se solicita por periodo e se baixa depois.
+//    Nao sao codigos de webhook, e nunca foram o mesmo enum.
+//
+//    A ASSIMETRIA CONTINUA DELIBERADA. Se um codigo desconhecido virasse baixa,
+//    o custo seria dinheiro creditado que ninguem recebeu.
 //
 // 2. `cancelamentoBaixa` EXISTE NO PAYLOAD E O SISTEMA NAO TEM ESTORNO.
 //    `liquidacao.baixar()` e idempotente e nao tem inverso: nao ha caminho que
@@ -60,7 +82,15 @@ export type BaixaDoWebhook = {
   dataLiquidacao: Date;
 };
 
-export type Traducao = BaixaDoWebhook | { tipo: 'ignorado'; motivo: string };
+export type Traducao =
+  | BaixaDoWebhook
+  /**
+   * O aperto de mao da nota 0. NAO e um "ignorado": ignorado quer dizer "e um
+   * evento e escolhemos nao trata-lo"; isto e um evento que o banco espera que
+   * a gente RESPONDA, e responder errado custa o cadastro inteiro.
+   */
+  | { tipo: 'validacao'; idWebhook: string | null }
+  | { tipo: 'ignorado'; motivo: string };
 
 /**
  * Corpo que nao da para ler como evento. **Sai como 400 de proposito**, e nao
@@ -105,13 +135,23 @@ export function traduzirEvento(corpoCru: string): Traducao {
   }
   if (evento == null || typeof evento !== 'object') throw new EventoIlegivel('o corpo nao e um objeto');
 
+  /*
+   * A VALIDACAO VEM ANTES DA CONFERENCIA DE `dados`, e a ordem e o conserto:
+   * este corpo NAO tem `dados`, entao qualquer coisa depois desta linha o
+   * transformaria em 400 - e 400 e exatamente o que faz a Sicoob recusar a URL.
+   */
+  if (evento.validacaoWebhook === true) {
+    return { tipo: 'validacao', idWebhook: texto(evento.idWebhook) };
+  }
+
   const d = evento.dados;
   if (d == null || typeof d !== 'object') throw new EventoIlegivel('falta o objeto `dados`');
 
   if (evento.tipoMovimento !== TIPO_MOVIMENTO_BAIXA) {
     return { tipo: 'ignorado', motivo:
       `tipoMovimento ${JSON.stringify(evento.tipoMovimento)} nao e o de baixa (${TIPO_MOVIMENTO_BAIXA}). ` +
-      'Os demais codigos nao estao medidos - Q-WEBHOOK-MOVIMENTO-01.' };
+      'A pagina da API declara o 7 - Pagamento (baixa operacional) como o movimento da ' +
+      'notificacao; qualquer outro codigo e desconhecido e nao vira dinheiro.' };
   }
 
   if (d.cancelamentoBaixa === true) {

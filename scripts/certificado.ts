@@ -353,16 +353,19 @@ async function guardar(caminho: string, senha: string, ref: string, clientId: st
 
       shred -u ${caminho}
 
-  E ligue o conector do tenant a esta referencia, com os campos que a
-  cooperativa informar. Os DOIS primeiros sao obrigatorios; o
-  numero_contrato_cobranca e OPCIONAL - so existe para cooperado com mais de um
-  contrato, e deixa-lo NULL e o caminho certo de quem tem um so (migration 36):
+  E ligue o conector do tenant a esta referencia. So o numero_cliente vem da
+  cooperativa; o codigo_modalidade ja esta medido (1 = SIMPLES COM REGISTRO).
+
+  NAO PREENCHA numero_contrato_cobranca. Palavra da pagina da API: ele "nao e
+  necessario" para cadastrar boleto, e preenchido INCORRETAMENTE faz a API
+  recusar com "Numero do contrato de cobranca invalido". So use se a cooperativa
+  der ORIENTACAO EXPRESSA para usar. NULL e o default certo (migration 36):
 
     UPDATE conector_cobranca
        SET credencial_ref = '${ref}',
            numero_cliente = <numeroCliente>,
            codigo_modalidade = <codigoModalidade>,
-           -- so esta linha se a cooperativa disser que ha mais de um contrato:
+           -- so descomente sob orientacao EXPRESSA da cooperativa:
            -- numero_contrato_cobranca = <numeroContratoCobranca>,
            certificado_expira_em = '<AAAA-MM-DD>',
            sandbox = false,

@@ -31,10 +31,18 @@ export type IdentidadeDoCooperado = {
   numeroCliente: number;
   codigoModalidade: number;
   /**
-   * OPCIONAL, e a colecao Postman (28/08/2026) e literal: "somente para
-   * cooperados que possuem mais de um contrato com a cooperativa". Exigi-lo
-   * impediria o cooperado de contrato UNICO de ligar o conector - era a
-   * `Q-CONTRATOCOB-01`, e a migration 36 tirou a exigencia do banco.
+   * OPCIONAL, e o DEFAULT CERTO E NULL. A pagina da API (fonte primaria, colada
+   * pelo dono em 28/08/2026) e mais forte que a colecao Postman:
+   *
+   *   "O campo numeroContratoCobranca NAO E NECESSARIO no corpo da requisicao
+   *    para o cadastro de um boleto. (...) Caso este campo seja preenchido
+   *    INCORRETAMENTE, a API retornara o erro 'Numero do contrato de cobranca
+   *    invalido'. (...) O campo so deve ser preenchido em casos muito
+   *    especificos, quando houver uma ORIENTACAO EXPRESSA para utiliza-lo."
+   *
+   * Ou seja: preencher por conta propria nao e "mais completo", e uma FONTE DE
+   * ERRO. Exigi-lo impedia o cooperado de contrato unico de ligar o conector -
+   * era a `Q-CONTRATOCOB-01`, e a migration 36 tirou a exigencia do banco.
    */
   numeroContratoCobranca: number | null;
   /** Opcional no envio: so vai quando preenchido. Nao esta medido se a API o

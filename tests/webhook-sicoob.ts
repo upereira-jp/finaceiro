@@ -41,7 +41,9 @@ const corpo = (mudanca: Record<string, unknown> = {}, raiz: Record<string, unkno
 
 const baixaDe = (texto: string) => {
   const t = traduzirEvento(texto);
-  if (t.tipo !== 'baixa') throw new Error(`esperava baixa, veio ignorado: ${t.motivo}`);
+  if (t.tipo !== 'baixa') {
+    throw new Error(`esperava baixa, veio ${t.tipo}: ${t.tipo === 'ignorado' ? t.motivo : t.idWebhook}`);
+  }
   return t;
 };
 const lanca = (fn: () => unknown) => {
@@ -137,6 +139,34 @@ chk('W24', baixaDe(corpo({ valorPagamento: 0.07, valorBoleto: 0.07 })).valorLiqu
     'o caso do 0.07 - 7 centavos, e nao 7.000000000000001');
 chk('W25', baixaDe(corpo({ valorPagamento: 8.29, valorBoleto: 8.29 })).valorLiquidadoCentavos === 829,
     'e o do 8.29 - 829 centavos, e nao 828.9999999999999');
+
+// ============================================================================
+// A VALIDACAO DA URL - o primeiro corpo que a Sicoob manda, e o que exige 200
+//
+// Medido em 28/08/2026 na pagina "Visao Geral" da API: no cadastro, na alteracao
+// da URL e na reativacao, o banco manda `{idWebhook, validacaoWebhook:true}` -
+// sem `dados` e sem `tipoMovimento` - e so aceita a URL se a resposta for 200,
+// 201 ou 204. Antes disto, este corpo virava EventoIlegivel, que e 400: o
+// cadastro NUNCA teria funcionado.
+// ============================================================================
+{
+  const v = traduzirEvento(JSON.stringify({ idWebhook: 990, validacaoWebhook: true }));
+  chk('V1a', v.tipo === 'validacao',
+      'o corpo de validacao e reconhecido, e NAO cai na conferencia de `dados` que o tornaria 400');
+  chk('V1b', v.tipo === 'validacao' && v.idWebhook === '990',
+      'o idWebhook volta, para o journal dizer QUAL webhook o banco estava validando');
+
+  // A ordem importa: a deteccao tem de vir antes da conferencia de `dados`.
+  chk('V1c', !lanca(() => traduzirEvento(JSON.stringify({ validacaoWebhook: true }))),
+      'validacao sem idWebhook tambem passa - responder 200 vale mais que o campo');
+
+  // E ela nao e uma porta: `validacaoWebhook` falso ou ausente segue o caminho normal.
+  chk('V1d', lanca(() => traduzirEvento(JSON.stringify({ idWebhook: 1, validacaoWebhook: false }))),
+      'validacaoWebhook FALSO nao vira aperto de mao - sem `dados`, continua sendo ilegivel');
+  chk('V1e', traduzirEvento(corpo({}, { validacaoWebhook: false })).tipo === 'baixa',
+      'e um evento de pagamento normal, que traz validacaoWebhook ausente, segue virando baixa');
+}
+
 
 console.log();
 if (falhas > 0) { console.log(`--- webhook sicoob: ${falhas} FALHA(S)`); process.exit(1); }

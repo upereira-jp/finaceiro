@@ -24,6 +24,19 @@
 -- Registrado como `Q-CONTRATOCOB-01`, decidida pelo dono em 28/08/2026 pela
 -- opcao (a) - a que a documentacao sustenta.
 --
+-- E A PAGINA DA API, lida no mesmo dia, e AINDA MAIS FORTE que a colecao. Ela
+-- nao diz "so para quem tem mais de um contrato"; diz para NAO MANDAR:
+--
+--     "O campo numeroContratoCobranca nao e necessario no corpo da requisicao
+--      para o cadastro de um boleto. (...) Caso este campo seja preenchido
+--      incorretamente, a API retornara o erro 'Numero do contrato de cobranca
+--      invalido'. (...) O campo so deve ser preenchido em casos muito
+--      especificos, quando houver uma orientacao expressa para utiliza-lo."
+--
+-- Entao NULL nao e o caso degenerado: e o caso NORMAL, e preencher por conta
+-- propria e fonte de erro. A constraint que exigia o campo estava exigindo
+-- justamente o que o banco pede para omitir.
+--
 -- ============================================================================
 -- O QUE ELA NAO AFROUXA
 --

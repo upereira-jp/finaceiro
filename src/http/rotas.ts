@@ -1006,6 +1006,16 @@ export const ROTAS: Rota[] = [
     handler: (req, app) => emTenant(app, req, async () => {
       const evento = traduzirEvento(typeof req.corpo === 'string' ? req.corpo : '');
 
+      /* A VALIDACAO DA URL SAI 200 E NAO TOCA EM NADA, e este e o primeiro corpo
+       * que a Sicoob manda - no cadastro, na alteracao da URL e na reativacao.
+       * Palavra do banco: so 200, 201 ou 204 fazem a URL ser aceita. Enquanto
+       * isto caia na conferencia de `dados` e virava 400, o webhook NUNCA se
+       * cadastraria - e a falha apareceria no portal, com o nosso lado inteiro
+       * parecendo correto. */
+      if (evento.tipo === 'validacao') {
+        return ok({ validacao: true, id_webhook: evento.idWebhook });
+      }
+
       /* IGNORADO SAI COMO 200, e a escolha e sobre a fila DELES: 4xx e 5xx fazem
        * a Sicoob reprocessar, e reprocessar nao conserta um evento que decidimos
        * nao tratar - so faz o mesmo evento voltar para sempre. O motivo vai no

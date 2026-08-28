@@ -309,6 +309,14 @@
 > **O que sobra da questão não é código:** perguntar à cooperativa se a G3 tem mais de um
 > contrato. A diferença é que agora *"um só"* deixou de ser um bloqueio.
 >
+> **✅ E horas depois a página da API tornou a pergunta desnecessária.** O dono colou a
+> *Visão Geral* da Cobrança v3, e ela é mais forte que a coleção: o campo *"**não é
+> necessário** no corpo da requisição"*, preenchido **incorretamente** faz a API recusar
+> com *"Número do contrato de cobrança inválido"*, e *"só deve ser preenchido em casos
+> muito específicos, quando houver **orientação expressa**"*. Então `NULL` não é o caso
+> degenerado — **é o caso normal**, e preencher por conta própria é fonte de erro. À
+> cooperativa resta **uma** pergunta, o `numeroCliente`.
+>
 > **O comando, para o dono rodar com `!` (a `DIRECT_URL` tem DDL; a `DATABASE_URL` não):**
 >
 > ```bash
@@ -350,6 +358,68 @@
 > **O caminho certo continua sendo o documentado:** aplicar de onde existe a `DIRECT_URL`
 > de dono — o Codespace —, e conferir **no catálogo**, nunca na mensagem do comando, que é
 > a regra que a migration 34 e a 35 já seguiram.
+
+
+> ### 28/08/2026, madrugada — a página da API chegou, e ela achou uma vermelha que nenhum teste pegaria
+>
+> O dono colou a *Visão Geral* da Cobrança Bancária v3. Ela **fechou uma questão, corrigiu
+> um defeito que teria matado o webhook no cadastro, e abriu duas vermelhas** — uma delas
+> sobre dinheiro.
+>
+> **🔴 O WEBHOOK NÃO AVISA LIQUIDAÇÃO — AVISA INTENÇÃO DE PAGAMENTO.** Observação do
+> próprio banco: *"A **baixa operacional não se refere à liquidação final**, mas sim do
+> registro da **intenção de pagamento** realizada"*. E o nosso lado, ao receber, marca a
+> fatura paga **e roda o split na MESMA transação**, criando `contas_a_pagar` do dono da
+> usina. O PRD §5.2 dizia *"o split roda exclusivamente na liquidação, por webhook
+> Sicoob"* — a premissa era que o webhook **é** a liquidação, e o banco diz que não é. A
+> mesma página lista 22 motivos de cancelamento, entre eles *liquidado em duplicidade*,
+> *devolução de pagamento fraudado* e *devolução de recurso financeiro*. **`Q-BAIXAOPER-01`**,
+> e ela move dinheiro: não é do implementador fechar.
+>
+> **🔴 OS ESCOPOS SÃO OUTRA FAMÍLIA.** A *"Lista de escopos da API Cobrança Bancária V3"*
+> traz `boletos_inclusao`, `boletos_consulta`, `boletos_alteracao` e os três de webhook.
+> Nós pedimos `cobranca_boletos_*`, tirados do `scopes_supported` do realm em 27/08 — e as
+> duas famílias existem lá. O argumento de 28/08 (*"fonte primária do servidor vence
+> documento de exemplo"*) não se aplica: isto **não é exemplo**, é a lista da própria V3. E
+> há uma segunda consequência, independente da família: **não pedimos escopo de webhook
+> nenhum**, e cadastrar webhook é chamada de API. **`Q-ESCOPO-V3-01`**.
+>
+> **✅ E UM DEFEITO CONSERTADO NO DIA, que nenhum teste nosso acharia** porque ninguém
+> sabia que este corpo existia. Antes de qualquer notificação de pagamento, a Sicoob manda
+> uma **validação da URL** — no cadastro, na alteração e na reativação:
+>
+> ```json
+> { "idWebhook": 990, "validacaoWebhook": true }
+> ```
+>
+> Sem `dados` e sem `tipoMovimento`. Ele caía na conferência de `dados` e virava
+> `EventoIlegivel`, que é **400** — e a página é literal: *"a URL só será aceita se o
+> servidor responder com 200, 201 ou 204"*. **O webhook nunca teria se cadastrado**, e a
+> falha apareceria no portal, com o nosso lado inteiro parecendo correto. Agora a detecção
+> vem **antes** da conferência de `dados`, sai `200`, e o `idWebhook` vai no journal. **5
+> verificações novas**, e uma delas prova que `validacaoWebhook: false` **não** vira aperto
+> de mão — senão o campo viraria porta.
+>
+> **✅ `Q-WEBHOOK-MOVIMENTO-01` FECHOU, e a escolha que já estava no código era a certa.**
+> `codigoTipoMovimento 7 – Pagamento (baixa operacional)` é fonte primária. E a dúvida
+> caiu: `ENTR`, `PROR`, `AVENC`, `VENC`, `LIQUI`, `BAIX`, `OCRED` são de **outra
+> funcionalidade** — o arquivo de movimentação da carteira. Nunca foram o mesmo enum.
+>
+> **✅ E a regra que valida o idioma inteiro do adaptador**, agora explícita: *"A API não
+> permite o envio de requisições com propriedades opcionais com valores vazios ou nulos;
+> a propriedade **deve ser ignorada** no envio"*. É exatamente o spread condicional do
+> `pagadorSicoob`, do `numeroContaCorrente` e do `numeroContratoCobranca` — e a verificação
+> que varre o corpo cru atrás de `null` deixou de ser zelo e virou conformidade.
+>
+> **🟡 Também medido, sem ser bloqueio:** o cadastro do webhook exige **https na 443** e
+> pede `codigoTipoMovimento`, `codigoPeriodoMovimento` e um **e-mail**
+> (**`Q-WEBHOOK-CADASTRO-01`**); há `GET /Consultar Solicitações de um Webhook` com
+> `3 = enviado / 6 = erro`, que é o diagnóstico de liquidação que não chegou; e os **rate
+> limits** estão medidos — **POST Incluir Boletos é 5/s**, o mais baixo de todos, e as 29
+> UCs cabem em 6 segundos (**`Q-RATELIMIT-01` 🟢**).
+>
+> **As duas páginas do portal continuam SPA** — remedido hoje nas duas URLs, e volta só o
+> título. Tudo isto chegou porque o dono abriu e colou.
 
 
 ---
