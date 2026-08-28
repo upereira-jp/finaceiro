@@ -353,14 +353,17 @@ async function guardar(caminho: string, senha: string, ref: string, clientId: st
 
       shred -u ${caminho}
 
-  E ligue o conector do tenant a esta referencia, com os tres campos que a
-  cooperativa informar:
+  E ligue o conector do tenant a esta referencia, com os campos que a
+  cooperativa informar. Os DOIS primeiros sao obrigatorios; o
+  numero_contrato_cobranca e OPCIONAL - so existe para cooperado com mais de um
+  contrato, e deixa-lo NULL e o caminho certo de quem tem um so (migration 36):
 
     UPDATE conector_cobranca
        SET credencial_ref = '${ref}',
            numero_cliente = <numeroCliente>,
            codigo_modalidade = <codigoModalidade>,
-           numero_contrato_cobranca = <numeroContratoCobranca>,
+           -- so esta linha se a cooperativa disser que ha mais de um contrato:
+           -- numero_contrato_cobranca = <numeroContratoCobranca>,
            certificado_expira_em = '<AAAA-MM-DD>',
            sandbox = false,
            ativo = true

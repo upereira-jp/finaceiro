@@ -421,7 +421,17 @@ export class CobrancaSicoob implements PortaDeCobranca {
     const corpoObjeto = {
       numeroCliente: c.identidade.numeroCliente,
       codigoModalidade: c.identidade.codigoModalidade,
-      numeroContratoCobranca: c.identidade.numeroContratoCobranca,
+      /*
+       * OS DOIS OPCIONAIS SOMEM QUANDO NAO EXISTEM, e nao viram `null`.
+       *
+       * A colecao Postman e literal - "nao e permitido enviar um campo com
+       * valor nulo" -, e o `numeroContratoCobranca` so existe para cooperado
+       * com mais de um contrato. Mandar `numeroContratoCobranca: null` faria a
+       * API recusar o boleto INTEIRO por causa de um campo que ela mesma
+       * declara opcional.
+       */
+      ...(c.identidade.numeroContratoCobranca != null
+        ? { numeroContratoCobranca: c.identidade.numeroContratoCobranca } : {}),
       ...(c.identidade.numeroContaCorrente != null
         ? { numeroContaCorrente: c.identidade.numeroContaCorrente } : {}),
 

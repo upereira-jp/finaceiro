@@ -164,7 +164,7 @@ const PEDIDO = {
   chk('S2h', corpo.dataVencimento === '2026-09-10T00:00:00-03:00',
       'o vencimento sai do UTC da coluna date - um servidor em outro fuso mandaria o dia anterior');
   chk('S2i', corpo.numeroCliente === 25546454 && corpo.codigoModalidade === 1 && corpo.numeroContratoCobranca === 1,
-      'os tres campos de identidade do cooperado vao no corpo');
+      'a identidade do cooperado vai no corpo - aqui o caso de quem TEM contrato numerado');
   chk('S2j', !('numeroContaCorrente' in corpo),
       'numeroContaCorrente NAO vai quando esta vazio: mandar 0 seria afirmar uma conta que ninguem informou');
   chk('S2k', corpo.identificacaoEmissaoBoleto === 2 && corpo.identificacaoDistribuicaoBoleto === 2,
@@ -327,6 +327,30 @@ const PEDIDO = {
              !== seuNumeroDe('7f3a9c21-4b8e-4d55-9a10-2c6e5f0b1d34')
              || true,
       'dois boletos diferentes nao colidem em 20 hex - 80 bits dentro de um tenant');
+}
+
+// ============================================================================
+// O CONTRATO DE COBRANCA - `Q-CONTRATOCOB-01`, decidida em 28/08/2026
+//
+// A colecao Postman: "numeroContratoCobranca: (optional) Somente para
+// cooperados que possuem mais de um contrato com a cooperativa". O cooperado de
+// contrato UNICO nao tem esse numero - e a migration 35 exigia os tres para
+// ligar o conector. A 36 tirou a exigencia, e aqui se prova o outro lado: o
+// campo ausente SOME do corpo, em vez de virar o `null` que a API recusa.
+// ============================================================================
+{
+  const { c, vistos } = adaptador([TOKEN_OK, respostaDeRegistro()], {
+    cofre: { identidade: { numeroContratoCobranca: null } },
+  });
+  await c.registrar(PEDIDO as any);
+  const corpo = JSON.parse(vistos[1].corpo!);
+
+  chk('C1a', !('numeroContratoCobranca' in corpo),
+      'sem contrato numerado, o campo NAO aparece no corpo - mandar null faria a API recusar o boleto inteiro');
+  chk('C1b', !/null/.test(vistos[1].corpo!),
+      'e nenhum null sobrou no corpo cru - a conferencia que pega o campo que alguem esquecer de tornar condicional');
+  chk('C1c', corpo.numeroCliente === 25546454 && corpo.codigoModalidade === 1,
+      'os DOIS que continuam obrigatorios seguem indo: e o contrato que e opcional, nao a identidade toda');
 }
 
 // ============================================================================

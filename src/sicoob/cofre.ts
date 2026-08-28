@@ -20,14 +20,23 @@ import { dbt } from '../db/tipado.ts';
 import type { CredencialRef } from './porta.ts';
 
 /**
- * A identidade do cooperado na Cobranca v3. Os tres primeiros sao
- * OBRIGATORIOS e vem da cooperativa - ver a migration 35 sobre por que nao se
- * derivam de `agencia`/`conta`/`numero_contrato`.
+ * A identidade do cooperado na Cobranca v3. Ela vem da COOPERATIVA - ver a
+ * migration 35 sobre por que nao se deriva de `agencia`/`conta`/`numero_contrato`.
+ *
+ * DOIS sao obrigatorios; os outros dois sao opcionais e SOMEM do corpo quando
+ * nao existem, porque a colecao Postman diz que a API "nao permite enviar um
+ * campo com valor nulo".
  */
 export type IdentidadeDoCooperado = {
   numeroCliente: number;
   codigoModalidade: number;
-  numeroContratoCobranca: number;
+  /**
+   * OPCIONAL, e a colecao Postman (28/08/2026) e literal: "somente para
+   * cooperados que possuem mais de um contrato com a cooperativa". Exigi-lo
+   * impediria o cooperado de contrato UNICO de ligar o conector - era a
+   * `Q-CONTRATOCOB-01`, e a migration 36 tirou a exigencia do banco.
+   */
+  numeroContratoCobranca: number | null;
   /** Opcional no envio: so vai quando preenchido. Nao esta medido se a API o
    *  exige, e mandar `0` seria afirmar uma conta que ninguem informou. */
   numeroContaCorrente: number | null;
@@ -63,8 +72,9 @@ export class CredencialIncompleta extends Error {
   constructor(faltando: string[]) {
     super(
       `O conector de cobranca esta ativo mas incompleto: falta ${faltando.join(', ')}. ` +
-      'Os campos de identidade vem da COOPERATIVA (numeroCliente, codigoModalidade, ' +
-      'numeroContratoCobranca) e nao se derivam de agencia, conta ou numero de contrato. ' +
+      'Estes campos vem da COOPERATIVA e nao se derivam de agencia, conta ou numero ' +
+      'de contrato. (O numeroContratoCobranca NAO entra nesta lista: e opcional, e so ' +
+      'existe para cooperado com mais de um contrato.) ' +
       'Nenhum boleto foi enviado. Preencha na aba Emissao e cobranca e peca de novo.'
     );
     this.name = 'CredencialIncompleta';
@@ -126,7 +136,6 @@ export const cofreDoVault: Resolvedora = async (ref: CredencialRef) => {
   const faltando: string[] = [];
   if (c.numero_cliente == null) faltando.push('numeroCliente');
   if (c.codigo_modalidade == null) faltando.push('codigoModalidade');
-  if (c.numero_contrato_cobranca == null) faltando.push('numeroContratoCobranca');
   if (faltando.length) throw new CredencialIncompleta(faltando);
 
   let linhas: Array<{ segredo: string }>;
@@ -170,7 +179,7 @@ export const cofreDoVault: Resolvedora = async (ref: CredencialRef) => {
     identidade: {
       numeroCliente: c.numero_cliente!,
       codigoModalidade: c.codigo_modalidade!,
-      numeroContratoCobranca: c.numero_contrato_cobranca!,
+      numeroContratoCobranca: c.numero_contrato_cobranca ?? null,
       numeroContaCorrente: c.numero_conta_corrente ?? null,
     },
     toJSON: redigido,

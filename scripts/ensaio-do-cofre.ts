@@ -241,6 +241,23 @@ try {
         `conector Sicoob ATIVO sem numeroCliente e recusado pelo banco (SQLSTATE ${code ?? 'nenhum - aceitou!'}) - a constraint conector_ativo_tem_identidade`);
   }
 
+  // ------- 7b. e ela NAO morde o contrato de cobranca, que a API diz ser opcional
+  /*
+   * O outro lado da mesma guarda, e a razao de existir: a colecao Postman diz
+   * que `numeroContratoCobranca` e "somente para cooperados que possuem mais de
+   * um contrato". Com a constraint da migration 35 exigindo os tres, o
+   * cooperado de contrato UNICO nao conseguia LIGAR o conector - descoberto so
+   * na hora de ativar, com tudo o mais pronto. A migration 36 tirou a
+   * exigencia, e este ensaio e o que impede alguem de recoloca-la sem perceber.
+   */
+  {
+    if (comoRuntime) await cliente.query('RESET ROLE');
+    const code = await esperaRecusa(`
+      UPDATE conector_cobranca SET ativo = true, numero_contrato_cobranca = NULL WHERE tenant_id = $1`, [tenant]);
+    chk('K8', code === null,
+        `conector Sicoob ATIVO SEM numeroContratoCobranca e ACEITO${code ? ` (recusou com ${code} - a migration 36 nao esta no ar)` : ''} - o campo e opcional, e exigi-lo travaria o cooperado de contrato unico`);
+  }
+
   await cliente.query('ROLLBACK');
 
   // ----------------------------------------- 8. o ensaio nao deixou rastro

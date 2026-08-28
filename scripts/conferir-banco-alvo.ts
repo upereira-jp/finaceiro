@@ -279,8 +279,9 @@ async function migration35(): Promise<void> {
 
   if (Number(r.validada) !== 1) {
     console.log(
-      'aviso: conector_ativo_tem_identidade esta NOT VALID (esperado ate alguem preencher os tres\n'
-      + '       campos da cooperativa). Depois de preencher, rode:\n'
+      'aviso: conector_ativo_tem_identidade esta NOT VALID (esperado ate alguem preencher\n'
+      + '       numeroCliente e codigoModalidade - os dois que a migration 36 deixou como\n'
+      + '       exigencia; numeroContratoCobranca e opcional). Depois de preencher, rode:\n'
       + '       ALTER TABLE conector_cobranca VALIDATE CONSTRAINT conector_ativo_tem_identidade;');
   }
 
