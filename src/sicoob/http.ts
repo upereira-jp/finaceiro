@@ -49,6 +49,7 @@ import type {
 } from './porta.ts';
 import type { Resolvedora, CredencialResolvida } from './cofre.ts';
 import { centavosParaReaisDecimal, reaisDecimalParaCentavos, type Centavos } from '../dominio/centavos.ts';
+import { jsonComDinheiroEmTexto } from './json-dinheiro.ts';
 import { txidDoBrCode } from '../dominio/brcode.ts';
 
 /** Os enderecos. O de token saiu do `openid-configuration`, nao de documentacao
@@ -184,33 +185,6 @@ function serializarComValor(objeto: unknown, decimal: string): string {
     );
   }
   return texto.replace(`"${MARCA_VALOR}"`, decimal);
-}
-
-/**
- * `JSON.parse` que devolve DINHEIRO COMO TEXTO.
- *
- * MEDIDO HOJE: `JSON.parse('{"v":0.07}')` ja entrega float, e `0.07 * 100` da
- * `7.000000000000001`. Quem converte depois do parse converte a partir de um
- * numero que ja perdeu a forma. O Node 22.20 expoe o TEXTO original do literal
- * no terceiro argumento do reviver (`ctx.source`), e e ele que vai para
- * `reaisDecimalParaCentavos`.
- *
- * So os campos que sao dinheiro viram texto. `nossoNumero` e `numeroCliente`
- * sao numeros e continuam numeros - transformar tudo em string obrigaria cada
- * leitor a desfazer.
- */
-function jsonComDinheiroEmTexto(texto: string): any {
-  // O `as any` no reviver e do LIB do TypeScript, nao do runtime: o
-  // `lib.es5.d.ts` ainda declara o reviver com dois parametros, e o terceiro -
-  // o `context` com `source` - existe no Node 22.20 e foi medido funcionando
-  // hoje. Sem o cast, o codigo certo nao compila.
-  const reviver = function (chave: string, valor: unknown, ctx?: { source?: string }) {
-    if (typeof valor === 'number' && /^valor/i.test(chave) && ctx?.source != null) {
-      return String(ctx.source);
-    }
-    return valor;
-  } as unknown as (chave: string, valor: unknown) => unknown;
-  return JSON.parse(texto, reviver);
 }
 
 /** O que a API devolve em campo de dinheiro depois do reviver: texto. `null`
@@ -472,9 +446,11 @@ export class CobrancaSicoob implements PortaDeCobranca {
        * nosso canal. Pedir ao banco que emita produziria DOIS documentos para a
        * mesma divida.
        *
-       * SUPOSICAO quanto aos CODIGOS (que `2` e `2` sao esses dois): vem da
-       * documentacao, nao de resposta recebida. Confirmar com a cooperativa
-       * junto dos tres campos de identidade - `Q-EMISSAO-01`.
+       * OS CODIGOS DEIXARAM DE SER SUPOSICAO EM 28/08/2026. A colecao Postman
+       * oficial da Cobranca v3 enumera: emissao `1 - Banco Emite` / `2 - Cliente
+       * Emite`, distribuicao `1 - Banco Distribui` / `2 - Cliente Distribui`. O
+       * `2` e `2` que este arquivo ja mandava e o par certo, e agora por fonte
+       * primaria - `Q-EMISSAO-01` fechada, sem uma linha de codigo mudar.
        */
       identificacaoEmissaoBoleto: 2,
       identificacaoDistribuicaoBoleto: 2,
@@ -651,16 +627,37 @@ export function seuNumeroDe(referencia: string): string {
  * `email` existe la e nao existe no nosso `Pagador`: medido, 3 de 29 clientes
  * faturaveis tem e-mail. Um campo que 26 de 29 mandariam vazio nao entra.
  */
-function pagadorSicoob(p: Pagador) {
+/*
+ * CAMPO OPCIONAL AUSENTE SAI DO CORPO, e nao vai como `null`.
+ *
+ * A regra e do banco, e esta na coleção Postman oficial da Cobranca v3 (medida
+ * em 28/08/2026): *"Se um campo opcional nao for utilizado, e necessario
+ * remove-lo do corpo da solicitacao, pois **nao e permitido enviar um campo com
+ * valor nulo**"*. Ate esta data este arquivo mandava `endereco: null`, `bairro:
+ * null`, `cep: null` - e hoje sao 0 de 29 UCs com endereco do pagador, entao o
+ * corpo com nulos era o caminho GARANTIDO no primeiro boleto.
+ *
+ * OS TETOS TAMBEM SAO DELES, e cortar aqui segue o precedente das
+ * `mensagensInstrucao`: cortar nomeando e melhor que a API cortar em silencio -
+ * ou recusar o boleto inteiro por um caractere.
+ */
+const TETO = { nome: 50, endereco: 40, bairro: 30, cidade: 40 } as const;
+const ate = (v: string, n: number) => (v.length <= n ? v : v.slice(0, n));
+
+export function pagadorSicoob(p: Pagador) {
   const e = p.endereco ?? {};
   const endereco = [e.logradouro, e.numero].filter((x) => x && String(x).trim()).join(', ');
+  const bairro = (e.bairro ?? '').trim();
+  const cidade = (e.municipio ?? '').trim();   // `cidade` la, `municipio` aqui (GLOSSARIO)
+  const cep = (e.cep ?? '').replace(/\D/g, '');
+  const uf = (e.uf ?? '').toUpperCase().trim();
   return {
     numeroCpfCnpj: p.documento.replace(/\D/g, ''),
-    nome: p.nome,
-    endereco: endereco || null,
-    bairro: e.bairro || null,
-    cidade: e.municipio || null,          // `cidade` la, `municipio` aqui (GLOSSARIO)
-    cep: (e.cep ?? '').replace(/\D/g, '') || null,
-    uf: (e.uf ?? '').toUpperCase() || null,
+    nome: ate(p.nome, TETO.nome),
+    ...(endereco ? { endereco: ate(endereco, TETO.endereco) } : {}),
+    ...(bairro ? { bairro: ate(bairro, TETO.bairro) } : {}),
+    ...(cidade ? { cidade: ate(cidade, TETO.cidade) } : {}),
+    ...(cep ? { cep } : {}),
+    ...(uf ? { uf } : {}),
   };
 }

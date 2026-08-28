@@ -138,7 +138,16 @@ function caminhoExisteEmOutroMetodo(caminho: string): boolean {
   return COMPILADAS.some((r) => casar(r.metodo, caminho) !== null);
 }
 
-async function lerCorpo(req: IncomingMessage, max: number): Promise<any> {
+/**
+ * O CORPO COMO VEIO, sem parse. Existe para o `webhook`, e a razao e a regra 1:
+ * `JSON.parse` transforma `407.41` num double, e o texto original do literal -
+ * o unico caminho honesto ate centavos - se perde ali. Quem le um webhook
+ * precisa dos bytes.
+ *
+ * E ele tambem e o que o `ADR-0006` §3 pedia caso a autenticacao viesse a ser
+ * HMAC: "a verificacao e sobre os bytes crus, nao sobre o JSON reserializado".
+ */
+async function lerCorpoCru(req: IncomingMessage, max: number): Promise<string | undefined> {
   const pedacos: Buffer[] = [];
   let total = 0;
   for await (const p of req) {
@@ -146,8 +155,12 @@ async function lerCorpo(req: IncomingMessage, max: number): Promise<any> {
     if (total > max) throw Object.assign(new Error(`Corpo maior que ${max} bytes.`), { status: 413, name: 'CorpoGrandeDemais' });
     pedacos.push(p as Buffer);
   }
-  if (total === 0) return undefined;
-  const texto = Buffer.concat(pedacos).toString('utf8');
+  return total === 0 ? undefined : Buffer.concat(pedacos).toString('utf8');
+}
+
+async function lerCorpo(req: IncomingMessage, max: number): Promise<any> {
+  const texto = await lerCorpoCru(req, max);
+  if (texto === undefined) return undefined;
   try {
     return JSON.parse(texto);
   } catch {
@@ -319,11 +332,25 @@ export function criarServidor(o: OpcoesDoServidor): http.Server {
           } });
         }
 
-        const corpoWebhook = await lerCorpo(req, max);
-        return responder(req, res, await achou.rota.handler({
+        /* O CORPO VAI CRU. Ver `lerCorpoCru`: parsear aqui perderia o texto do
+         * literal de dinheiro antes de o tradutor ver. */
+        const corpoWebhook = await lerCorpoCru(req, max);
+        const r = await achou.rota.handler({
           metodo, caminho, params: achou.params, query: url.searchParams, corpo: corpoWebhook,
           sessao: sessaoDeServico, tenantProposto: tenantDaRota,
-        }, o.app));
+        }, o.app);
+        /*
+         * TODA CHAMADA DE WEBHOOK DEIXA UMA LINHA, inclusive - e principalmente -
+         * a que nao fez nada. Um evento ignorado nao escreve no banco: sem esta
+         * linha, "a Sicoob mandou e nos descartamos" seria indistinguivel de "a
+         * Sicoob nunca mandou", e as duas exigem providencias opostas. A camada
+         * de rota nao loga (nenhum repositorio loga), entao o lugar e aqui, na
+         * fronteira, onde o `log` mora.
+         */
+        const ignorado = (r.corpo as any)?.ignorado;
+        log(`[financeiro] webhook ${r.status} em ${caminho}` +
+            (ignorado ? ` - IGNORADO: ${ignorado}` : ''), undefined);
+        return responder(req, res, r);
       }
 
       const authUserId = await o.autenticador(req);

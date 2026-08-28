@@ -22,7 +22,7 @@
 // deste lado, e o `http.ts` marca cada suposicao com `SUPOSICAO:`.
 
 import {
-  CobrancaSicoob, situacaoDoTexto, seuNumeroDe, ErroDaSicoob,
+  CobrancaSicoob, situacaoDoTexto, seuNumeroDe, ErroDaSicoob, pagadorSicoob,
   type Transporte, type PedidoHttp,
 } from '../src/sicoob/http.ts';
 import { cofreFixo } from '../src/sicoob/cofre.ts';
@@ -327,6 +327,37 @@ const PEDIDO = {
              !== seuNumeroDe('7f3a9c21-4b8e-4d55-9a10-2c6e5f0b1d34')
              || true,
       'dois boletos diferentes nao colidem em 20 hex - 80 bits dentro de um tenant');
+}
+
+// ============================================================================
+// O PAGADOR - campo opcional ausente SAI do corpo (colecao Postman, 28/08/2026)
+// ============================================================================
+{
+  const so = pagadorSicoob({ documento: '099.920.049-59', nome: 'Amanda', endereco: undefined } as any);
+  chk('P1a', !('endereco' in so) && !('bairro' in so) && !('cep' in so) && !('uf' in so),
+      'sem endereco, os campos opcionais NAO aparecem no corpo - o banco recusa nulo');
+  chk('P1b', so.numeroCpfCnpj === '09992004959', 'o documento vai so com digito');
+
+  const cheio = pagadorSicoob({
+    documento: '09992004959', nome: 'Amanda',
+    endereco: { logradouro: 'Rua 87 Quadra 1 Lote 1', numero: '1', bairro: 'Santa Rosa',
+                municipio: 'Luziania', cep: '72320-000', uf: 'df' },
+  } as any);
+  chk('P2a', (cheio as any).endereco === 'Rua 87 Quadra 1 Lote 1, 1',
+      'logradouro e numero viram a UNICA string que a API tem');
+  chk('P2b', (cheio as any).cep === '72320000' && (cheio as any).uf === 'DF',
+      'cep sem mascara e uf em maiuscula, como o campo deles pede');
+
+  const longo = pagadorSicoob({
+    documento: '09992004959',
+    nome: 'A'.repeat(80),
+    endereco: { logradouro: 'R'.repeat(80), numero: '1', bairro: 'B'.repeat(50),
+                municipio: 'C'.repeat(60), cep: '72320000', uf: 'DF' },
+  } as any);
+  chk('P3a', longo.nome.length === 50, 'nome corta em 50 - o teto e deles');
+  chk('P3b', (longo as any).endereco.length === 40, 'endereco corta em 40');
+  chk('P3c', (longo as any).bairro.length === 30 && (longo as any).cidade.length === 40,
+      'bairro em 30 e cidade em 40 - cortar nomeando, e nao deixar a API recusar o boleto inteiro');
 }
 
 console.log(falhas === 0 ? '\nTODAS OK' : `\n${falhas} FALHA(S)`);

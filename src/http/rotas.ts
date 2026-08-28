@@ -30,6 +30,7 @@ import * as documento from '../repos/documento.ts';
 import * as registro from '../repos/registro-unificado.ts';
 import * as faturaDoRegistro from '../repos/fatura-do-registro.ts';
 import * as leitor from '../concessionaria/leitor-visao.ts';
+import { traduzirEvento } from '../sicoob/webhook.ts';
 import { calcular, CAMPOS_VAZIOS, PARAMETROS_PADRAO,
   type CamposDaFaturaUnificada, type ParametrosDaEmissao } from '../dominio/fatura-unificada.ts';
 import { comporFolhas, BOLETO_VAZIO, TEXTOS_PADRAO,
@@ -997,11 +998,40 @@ export const ROTAS: Rota[] = [
      * nao a autenticacao.
      */
     metodo: 'POST', padrao: '/liquidacoes/webhook-sicoob/:tenant', auth: 'webhook',
-    handler: (req, app) => emTenant(app, req, async () => ok(await liquidacao.baixar({
-      ...req.corpo,
-      origem: 'webhook_sicoob',
-      data_liquidacao: data(req.corpo?.data_liquidacao, 'data_liquidacao'),
-    }))),
+    /*
+     * `req.corpo` AQUI E TEXTO CRU, e nao o objeto parseado das outras rotas -
+     * ver `lerCorpoCru` no servidor. Quem traduz e `sicoob/webhook.ts`, e ele
+     * precisa do literal de dinheiro antes de virar double (regra 1).
+     */
+    handler: (req, app) => emTenant(app, req, async () => {
+      const evento = traduzirEvento(typeof req.corpo === 'string' ? req.corpo : '');
+
+      /* IGNORADO SAI COMO 200, e a escolha e sobre a fila DELES: 4xx e 5xx fazem
+       * a Sicoob reprocessar, e reprocessar nao conserta um evento que decidimos
+       * nao tratar - so faz o mesmo evento voltar para sempre. O motivo vai no
+       * corpo e no journal, e nao no silencio. */
+      if (evento.tipo === 'ignorado') return ok({ ignorado: evento.motivo });
+
+      const b = await boleto.porNossoNumero(evento.nossoNumero);
+      /* Titulo que nao e nosso tambem sai 200, e pela mesma razao: nenhuma
+       * repeticao vai fazer ele existir. Se for engano de cadastro da URL, a
+       * linha no journal e o que denuncia. */
+      if (!b) {
+        return ok({ ignorado: `nosso_numero ${evento.nossoNumero} nao pertence a este tenant` });
+      }
+
+      return ok(await liquidacao.baixar({
+        fatura_id: b.fatura_id,
+        valor_liquidado_centavos: evento.valorLiquidadoCentavos,
+        /* O excedente inteiro em juros, multa zero: o payload nao decompoe e o
+         * split reparte pela SOMA dos dois. Rotulo, nao valor - ver o tradutor. */
+        juros_centavos: evento.jurosCentavos,
+        multa_centavos: 0,
+        data_liquidacao: evento.dataLiquidacao,
+        origem: 'webhook_sicoob',
+        id_externo: evento.idExterno,
+      }));
+    }),
   },
   {
     metodo: 'POST', padrao: '/liquidacoes/conciliacao',

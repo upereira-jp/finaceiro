@@ -679,6 +679,24 @@ export async function porFatura(faturaId: string) {
   return dbt().boleto.findFirst({ where: { fatura_id: faturaId } });
 }
 
+/**
+ * O boleto por `nosso_numero`. E por aqui que o webhook da Sicoob acha a fatura:
+ * o payload deles identifica o titulo assim, e nao pelo nosso `fatura_id`.
+ *
+ * `findFirst` e nao `findUnique` de proposito - `nosso_numero` nao tem unico
+ * cheio, e a regra 11 proibe navegar por indice parcial. O filtro de tenant e a
+ * RLS, como em todo o resto.
+ *
+ * NAO FILTRA POR `origem`. Um boleto IMPORTADO (migration 32) tem o
+ * `nosso_numero` TRANSCRITO do titulo que a cooperativa emitiu a mao - se a
+ * Sicoob mandar webhook dele, e a mesma fatura e a baixa vale igual. Filtrar por
+ * `api_sicoob` aqui descartaria em silencio um pagamento de verdade.
+ */
+export async function porNossoNumero(nossoNumero: string) {
+  await exigir('ler');
+  return dbt().boleto.findFirst({ where: { nosso_numero: nossoNumero } });
+}
+
 /** PRD 6, ultima linha: certificado vencido para a emissao "sem erro obvio".
  *  Isto e o erro obvio, e ele nao depende de abrir o cofre. */
 export async function certificadoVenceEm(): Promise<{ dias: number | null; expira_em: Date | null }> {

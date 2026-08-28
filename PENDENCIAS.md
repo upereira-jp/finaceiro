@@ -212,6 +212,60 @@
 > empírica** de que eles apresentam certificado de cliente, que a ADR §7 já dizia ser
 > pré-requisito de **ligar** e não de escrever.
 
+> ### 28/08/2026, noite — o CONTRATO chegou, e ele corrigiu dois defeitos e fechou uma vermelha
+>
+> O dono achou o payload do webhook na documentação do banco e a **coleção Postman oficial**
+> da Cobrança v3. Em uma tarde isso valeu mais que o chamado inteiro que eu ia abrir.
+>
+> **O tradutor do webhook existe** (`src/sicoob/webhook.ts`, 25 verificações). A porta
+> estava autenticada desde a tarde e o corpo não era compreendido: a rota entregava
+> `req.corpo` direto para `liquidacao.baixar()`, que espera os NOSSOS nomes de campo.
+> Agora `nossoNumero` acha a fatura, `numeroIdentificadorBaixa` é a idempotência,
+> `valorPagamento` vira centavos e o excedente sobre `valorBoleto` vira juros.
+>
+> **E o dinheiro chega como float — o corpo do webhook passou a ir CRU até o tradutor.**
+> `"valorPagamento": 407.41` é literal JSON, e `JSON.parse` entrega um double. O detalhe
+> que quase passou: **`407.41 * 100` dá 40741 exato**. Não erra. Erram `0.07 * 100`
+> (7.000000000000001) e `8.29 * 100` (828.9999999999999) — e é isso que torna o caminho
+> ingênuo perigoso em vez de óbvio: ele acerta o número do exemplo e erra outro, meses
+> depois. O `jsonComDinheiroEmTexto` que o adaptador já usava saiu do `http.ts` para um
+> módulo próprio e agora serve os dois.
+>
+> **Dois defeitos reais do adaptador, dos que só apareceriam no primeiro boleto:**
+>
+> | O quê | Consequência |
+> |---|---|
+> | `pagadorSicoob` mandava `endereco: null`, `bairro: null`, `cep: null` | A coleção diz: *"não é permitido enviar um campo com valor nulo"*. Com **0 de 29** endereços de pagador preenchidos, o corpo com nulos era o caminho **garantido** |
+> | Nenhum teto de tamanho nos campos do pagador | Deles: nome 50, endereço 40, bairro 30, cidade 40. Um endereço longo faria a API recusar o boleto inteiro |
+>
+> Os dois estão corrigidos, com 9 verificações novas em `tests/sicoob-http.ts`.
+>
+> **`Q-EMISSAO-01` 🔴 FECHOU sem uma linha mudar:** `identificacaoEmissaoBoleto`
+> `1 - Banco Emite` / `2 - Cliente Emite`, distribuição idem. O `2` e `2` que o adaptador
+> mandava era o par certo, e agora por fonte primária.
+>
+> **E três abriram, mais uma que virou escolha:**
+>
+> - **`Q-CONTRATOCOB-01` 🔴** — `numeroContratoCobranca` é **opcional**, *"somente para
+>   cooperados que possuem mais de um contrato"*, e a nossa constraint exige os três. Um
+>   cooperado de contrato único **não consegue ativar o conector**. Também encolhe a
+>   pergunta à cooperativa: `codigoModalidade` já está medido (`1 - SIMPLES COM REGISTRO`),
+>   então resta o `numeroCliente` e *"temos mais de um contrato?"*;
+> - **`Q-WEBHOOK-MOVIMENTO-01` 🟡** — o `tipoMovimento: 7` do webhook não está no enum de
+>   movimentação (1 a 6). São enums diferentes, e só o 7 vira baixa — o resto é ignorado
+>   nomeando. A coleção sustenta a escolha: ali *Liquidação* e *Baixa* são movimentos
+>   distintos, e baixa inclui decurso de prazo e pedido do cedente, que não são pagamento;
+> - **`Q-WEBHOOK-ESTORNO-01` 🟡** — `cancelamentoBaixa` existe no payload e o sistema não
+>   tem estorno. Ignorado e nomeado, para tratar à mão;
+> - **`Q-ESPECIE-01`** deixou de ser suposição e virou escolha: a lista tem **`FAT - Fatura`**
+>   ao lado do `DM - Duplicata Mercantil` que mandamos hoje. O papel da G3 é fatura de
+>   energia. É decisão fiscal, e trocar depois do primeiro boleto deixa a carteira com duas
+>   espécies.
+>
+> **O que a coleção NÃO mudou:** os escopos. Os nossos quatro saíram do `scopes_supported`
+> do realm, medido em 27/08 — a coleção usa a outra família (`boletos_inclusao`), e as duas
+> existem entre os 29. Fonte primária do servidor de autorização vence documento de exemplo.
+
 
 ---
 
