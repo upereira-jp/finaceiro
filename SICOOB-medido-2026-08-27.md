@@ -217,3 +217,67 @@ e `CredencialIncompleta` nomeia qual falta em vez de mandar um corpo pela metade
 | `client_id` | **não existe** |
 | Os três campos de identidade | **não existem** — pergunta à cooperativa |
 | Webhook | **não desenhado** — `ADR-0006` |
+
+---
+
+## 8. 28/08/2026 — o que aconteceu depois, e o que só apareceu ao executar
+
+Esta seção é acréscimo datado, não revisão do que está acima. O que a §7 listava
+como "escrito, NÃO aplicado" foi aplicado e **conferido no catálogo**.
+
+### O que ficou provado
+
+| | Evidência |
+|---|---|
+| Migration 35 aplicada | `Applying migration 20260827120000_cofre_e_identidade_do_cooperado` · `All migrations have been successfully applied` |
+| Ela está completa | `migration 35 OK — 4 colunas, 2 constraints, cofre_acesso_log com policy, e a resolvedora` |
+| **O cofre funciona** | `cofre OK — a resolvedora e de "postgres", que enxerga vault.decrypted_secrets` |
+| O certificado está guardado | `segredos no cofre hoje: 1` — e o `.pfx` saiu do disco da VPS por `shred` |
+| O isolamento vale | `ensaio-do-cofre`: 8 de 8, com `ROLLBACK`, e nada sobrou depois |
+| O backend roda com tudo isso | `app_financeiro_login`, sem BYPASSRLS · `client gerado cobre as 38 tabelas` (eram 37) |
+
+### As quatro coisas que só apareceram porque foi executado
+
+**1. O A1 da G3 é do tipo antigo — a armadilha da §3 não era hipótese.** Lido do
+arquivo real, sem a senha: `pbeWithSHA1And40BitRC2-CBC`, `pbeWithSHA1And3-KeyTripleDES-CBC`,
+MAC SHA1 com 1024 iterações. O Node recusa; o `normalizar` foi obrigatório, não
+precaução. **Quem renovar o certificado em 17/08/2027 vai passar por isto de novo.**
+
+**2. A conferência de CNPJ acusou o certificado CERTO.** Ela lia os primeiros 14
+dígitos do *subject*, e o primeiro CNPJ de um subject ICP-Brasil é o da **AR
+emissora** (`OU = 32888787000166`); o titular vive no `CN`, depois dos
+dois-pontos. Virou `src/dominio/certificado-icp.ts` com 14 verificações,
+incluindo o subject real como caso de regressão. **Guarda que acusa o certificado
+certo ensina quem opera a ignorar a guarda** — e aí ela não pega o caso de verdade.
+
+**3. O workflow de migration disse "aplicadas" tendo aplicado nada.** Run verde,
+`confirmar = aplicar`, e no log: `34 migrations found` · `No pending migrations to
+apply`. A migration 35 existia só no disco de quem a escreveu — o runner clona o
+**repositório**. E a conferência de catálogo não pegou porque estava **fixa em
+`migration-32`**, já aplicada, que passaria para sempre.
+
+> A regra escrita depois da 34 — *"conferida no catálogo e não na mensagem do
+> comando"* — furou num lugar novo: **o catálogo era consultado, mas o da migration
+> errada.** Consertado com três coisas: a conferência recebe qual migration o run
+> deve deixar aplicada; uma guarda responde se ela está no *checkout* antes de
+> discar para o banco; e a mensagem final repete o que o Prisma respondeu.
+
+**4. A conexão de dono não consegue `SET ROLE` para a role de runtime.**
+`permission denied to set role "app_financeiro_login"` — no Supabase o `postgres`
+não é superusuário de verdade. O conserto **não** foi pedir
+`GRANT app_financeiro_login TO postgres`: isso mexeria em privilégio de produção
+para que um teste passe, trocando a coisa medida pela medição. O ensaio ganhou
+dois modos — **forte** (vira a role e tenta ler) e **declarativo** (pergunta ao
+catálogo, que já considera herança) —, o declarativo roda sempre, e ele diz em
+qual rodou. Nunca pula em silêncio.
+
+### O que continua faltando, e nada disso é código
+
+1. aplicativo no **Portal Developers** — o `.pem` público está pronto na VPS;
+2. **`client_id`** autorizado no App Sicoob → `certificado -- client-id sicoob-g3-a1 <id>`,
+   sem reenviar o certificado;
+3. os três números da **cooperativa** — e agora há onde digitá-los, na aba Conector
+   Sicoob. Enquanto faltarem, `conector_ativo_tem_identidade` segue `NOT VALID` e o
+   banco recusa ligar o conector;
+4. **autenticação do webhook** (`ADR-0006`) — sem ela a liquidação não baixa
+   sozinha, e a consulta ativa detecta sem saber o valor pago.

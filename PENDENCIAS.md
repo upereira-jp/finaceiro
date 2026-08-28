@@ -6,7 +6,7 @@
 | **O que é** | O **índice único** das pendências. Consolida e substitui os dois trackers datados que existiam soltos |
 | **Substitui e apaga** | `PENDENCIAS-2026-08-05.md` e `PROXIMOS-PASSOS-2026-08-09.md` — vencidos, e agora removidos do repo |
 | **NÃO substitui** | `QUESTOES.md` (registro datado, dono por entrada — regra 10) · `RETOMADA-2026-08-15.md` (onde tudo parou) · os `RESUMO-SESSAO-*` (memória datada). Estes continuam sendo a fonte; aqui é o **apontador** |
-| **Data** | 14/08/2026 · rev. 17/08 · rev. 19/08 · rev. 21/08 · rev. **27/08/2026** |
+| **Data** | 14/08/2026 · rev. 17/08 · rev. 19/08 · rev. 21/08 · rev. 27/08 · rev. **28/08/2026** |
 | **Estado da suíte** | Sem banco: `typecheck` + `documento` + `brcode` + `dominio` + `web` → **`EXIT=0`**, e desde 27/08 com as **51 verificações** de `tests/sicoob-http.ts` dentro do `test:dominio`. Fora da suíte, contra a Sicoob de verdade: `npm run ensaio-sicoob` → **6 de 6**. `test:repos` e `test:isolamento` **não rodam nesta VPS** (exigem PostgreSQL local) |
 | **Produção** | `financeiro.blackhaus.io` · **34 migrations no ar** (a 33 em 20/08, a **34 em 21/08**) · Pix estático e boleto importado no ar · central de ajuda em toda tela · **a conta unificada lida já vira cobrança** (migration 34) · o conector roda sozinho a cada 15 min pelo `financeiro-ciclo.timer` |
 
@@ -85,6 +85,40 @@
 > aplicativo no Portal Developers (precisa do `.pem`, e a ação é humana), o `client_id`
 > autorizado no App Sicoob, e os **três campos de identidade do cooperado** — que agora
 > o banco cobra: `conector_ativo_tem_identidade` impede ligar conector Sicoob sem eles.
+
+> ### 28/08/2026 — está tudo no ar, e o cofre tem o certificado dentro
+>
+> **A migration 35 foi aplicada e conferida NO CATÁLOGO**, não na mensagem do comando:
+> `4 colunas, 2 constraints, cofre_acesso_log com policy, e a resolvedora`. Junto veio a
+> resposta da única pergunta que decidia se algum boleto sairia um dia —
+> **`cofre OK — a resolvedora e de "postgres", que enxerga vault.decrypted_secrets`**.
+> Um `SECURITY DEFINER` com dono cego para o cofre teria passado em tudo e falhado só na
+> primeira emissão.
+>
+> **O certificado A1 está no cofre e fora do disco.** `segredos no cofre hoje: 1`, e os
+> dois `.pfx` foram para o `shred`. Ele entrou **sem `client_id`**, de propósito e com
+> opt-in explícito: entre meia credencial no cofre e o certificado inteiro no disco de
+> uma VPS compartilhada com o CRM por semanas, a segunda é pior — e não há estado em
+> que isso emita boleto pela metade, porque a resolvedora recusa nomeando o que falta.
+> Quando o portal existir: `certificado -- client-id sicoob-g3-a1 <id>`, sem reenviar
+> o certificado.
+>
+> **O isolamento foi exercido contra o banco real**, com `ROLLBACK` e sem deixar rastro:
+> `npm run ensaio-cofre` fecha 8 de 8. O backend foi reiniciado e roda como
+> `app_financeiro_login`, sem BYPASSRLS, com o client cobrindo **38** tabelas — eram 37,
+> e a 38ª é a `cofre_acesso_log`.
+>
+> **Três defeitos apareceram só ao executar, e os três estão consertados com teste:** o
+> A1 da G3 é do tipo antigo que o Node recusa (a armadilha medida em 27/08 não era
+> hipótese); a conferência de CNPJ acusava o certificado CERTO, porque lia o CNPJ da AR
+> emissora em vez do `CN`; e **o workflow de migration disse "aplicadas" tendo aplicado
+> nada**, porque o runner clona o repositório e a 35 só existia no disco de quem a
+> escreveu — com a conferência de catálogo presa numa migration de dez dias antes.
+> Detalhe de cada um em `SICOOB-medido-2026-08-27.md` §8.
+>
+> **O que falta continua sendo o que depende de terceiros:** o aplicativo no portal, o
+> `client_id` autorizado, os três números da cooperativa, e a autenticação do webhook
+> (`ADR-0006`) — sem ela a liquidação não baixa sozinha.
 
 
 ---
