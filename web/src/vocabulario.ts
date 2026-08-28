@@ -92,11 +92,40 @@ export const VERBETE_DA_CAMADA: Record<string, Verbete> = {
     contagem: { singular: 'unidade', plural: 'unidades' },
   },
 
+  /*
+   * A CONSEQUÊNCIA DIZIA QUE O VALOR SAI DAQUI, E ISSO DEIXOU DE SER VERDADE EM
+   * 21/08/2026. Corrigida em 25/08/2026.
+   *
+   * O texto anterior era: «A conta do cliente parte da energia que a usina
+   * produziu. Sem esse número, o mês não pode ser calculado.» Desde que o dono
+   * decidiu o caminho da conta unificada, o valor da cobrança sai INTEIRO da
+   * conta da distribuidora lida — os centavos são copiados dela dentro do banco
+   * pelo `INSERT ... SELECT` de `repos/fatura-do-registro.ts`, e `dominio/split.ts`,
+   * que reparte o dinheiro entre dono da usina, parceiro e empresa, não lê a
+   * geração em NENHUMA linha. Medido, e não suposto.
+   *
+   * O SERVIDOR JÁ SABIA E O VERBETE NÃO. A explicação técnica em
+   * `repos/prontidao.ts` diz, desde o mesmo dia, «deixou de ser a base do VALOR
+   * ... e continua obrigatória por outro motivo». Quem opera lia a frase
+   * revogada — e ela leva ao erro caro de mandar procurar a geração quando o que
+   * falta para cobrar é a conta da distribuidora, que é a linha logo abaixo.
+   *
+   * O BLOQUEIO CONTINUA REAL E A FRASE NÃO AMOLECEU: sem esse número a cobrança
+   * do mês não nasce, porque `triarRegistro` recusa e a coluna da fatura é
+   * `NOT NULL`. O que muda é o MOTIVO — e o motivo é o que decide para onde a
+   * pessoa vai trabalhar.
+   *
+   * `porques.ts` e o assunto «geracao» da central de ajuda já estavam certos.
+   * Era só este verbete que tinha ficado para trás, e a suíte não pegava porque
+   * ela confere que a consequência EXISTE, não que ela ainda seja verdade.
+   */
   geracao_da_competencia: {
     titulo: 'Energia gerada no mês',
     simples: 'Tem usina que ainda não teve a energia deste mês lançada.',
-    consequencia: 'A conta do cliente parte da energia que a usina produziu. Sem esse número, o mês '
-      + 'não pode ser calculado.',
+    consequencia: 'O valor cobrado não sai daqui: ele vem da conta da distribuidora. Este número é '
+      + 'o registro do mês da usina, e é contra ele que se confere depois quanto o dono tem a '
+      + 'receber. Enquanto ele não chegar, a cobrança do mês não é gerada para nenhum cliente '
+      + 'dessa usina.',
     contagem: { singular: 'usina', plural: 'usinas' },
   },
 
