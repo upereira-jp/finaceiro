@@ -8,9 +8,14 @@
 | **NÃO substitui** | `QUESTOES.md` (registro datado, dono por entrada — regra 10) · `RETOMADA-2026-08-15.md` (onde tudo parou) · os `RESUMO-SESSAO-*` (memória datada). Estes continuam sendo a fonte; aqui é o **apontador** |
 | **Data** | 14/08/2026 · rev. 17/08 · rev. 19/08 · rev. 21/08 · rev. 27/08 · rev. **28/08/2026** |
 | **Estado da suíte** | Sem banco: `typecheck` + `documento` + `brcode` + `dominio` + `web` → **`EXIT=0`**, e desde 27/08 com as **51 verificações** de `tests/sicoob-http.ts` dentro do `test:dominio`. Fora da suíte, contra a Sicoob de verdade: `npm run ensaio-sicoob` → **6 de 6**. `test:repos` e `test:isolamento` **não rodam nesta VPS** (exigem PostgreSQL local) |
-| **Produção** | `financeiro.blackhaus.io` · **34 migrations no ar** (a 33 em 20/08, a **34 em 21/08**) · Pix estático e boleto importado no ar · central de ajuda em toda tela · **a conta unificada lida já vira cobrança** (migration 34) · o conector roda sozinho a cada 15 min pelo `financeiro-ciclo.timer` |
+| **Produção** | `financeiro.blackhaus.io` · **34 migrations no ar** (a 33 em 20/08, a **34 em 21/08**) · Pix estático e boleto importado no ar · central de ajuda em toda tela · **a conta unificada lida já vira cobrança** (migration 34) · o conector roda sozinho a cada 15 min pelo `financeiro-ciclo.timer`, e desde **28/08** a agenda de cobrança roda sozinha em três timers (`fila` 5 min · `consulta` e `certificado` diárias) |
 
 > ## A única pendência do repositório é o certificado A1.
+>
+> **28/08/2026 — a frase voltou a ser verdadeira, depois de deixar de ser por algumas
+> horas:** o `ADR-0006` era código nosso e estava por escrever. Foi escrito no dia, com
+> as duas decisões que faltavam respondidas pelo dono na mesma tarde. O que resta dele é
+> infraestrutura e um número que só o Sicoob informa. Ver o bloco de 28/08, fim da tarde.
 >
 > Medido e não afirmado: **o único código que falta é `src/sicoob/http.ts`, e ele é
 > exatamente o que o A1 destrava.** Tudo o mais que era código a escrever foi escrito.
@@ -119,6 +124,93 @@
 > **O que falta continua sendo o que depende de terceiros:** o aplicativo no portal, o
 > `client_id` autorizado, os três números da cooperativa, e a autenticação do webhook
 > (`ADR-0006`) — sem ela a liquidação não baixa sozinha.
+
+> ### 28/08/2026, tarde — a agenda ganhou host, e a primeira rodada achou um campo vazio
+>
+> **O motor da agenda existe desde 30/07 e até hoje nada o chamava.** Não era lacuna
+> esquecida: o `PRD` §3 deixou o agendamento *"à escolha do host"* e a regra 10 proíbe
+> quem implementa de escolher por quem decide — por isso `scripts/agenda.ts` roda uma
+> vez e sai, e o exemplo de cron dentro dele dizia, com todas as letras, que era
+> *"sugestão e não configuração aplicada"*. **O dono escolheu em 28/08: o host é o
+> systemd desta VPS.** Três unidades novas, versionadas em `deploy/` como as do ciclo:
+>
+> | Unidade | Cadência | De onde vem o número |
+> |---|---|---|
+> | `financeiro-agenda-fila` | **5 min**, em `:02/5` | é a `base` da política de retentativa (`Q-AGENDA-02`, 300 s). 15 min triplicaria calado uma base já decidida; `:02` evita disputar o pool com o ciclo do CRM |
+> | `financeiro-agenda-consulta` | **diária**, 06:17 UTC | *"consulta ativa **diária**"* é palavra do `PRD` §6 |
+> | `financeiro-agenda-certificado` | **diária**, 06:07 UTC | só lê. Dez minutos antes da consulta, para a causa aparecer antes do sintoma |
+>
+> **As três foram rodadas à mão antes de ligar o timer**, e é daí que sai o resto deste
+> bloco. `list-units --failed` segue **vazio**.
+>
+> **`sem_conector` deixou de ser vermelho no systemd, e não com `|| true`.** Sem conector
+> ativo — que é o estado de hoje e continua até o portal existir — a rodada recusa antes
+> de criar linha em `agenda_execucao`. Isso saía como exit 1, e dois timers em `failed`
+> por meses transformariam a única superfície de alarme da máquina em ruído. Agora sai
+> como **3**, com `SuccessExitStatus=3` no unit: o **1** continua significando o que
+> significava, e o motivo continua impresso no journal.
+>
+> **E a primeira conferência do certificado achou o que ninguém tinha olhado:**
+> `nivel ...... sem_certificado`. O A1 está no cofre desde de manhã, mas
+> **`conector_cobranca.certificado_expira_em` está nulo** — e o aviso dos 30 dias não
+> tem de onde contar. Não é bug: a data é o quarto campo do mesmo `UPDATE` que os três
+> números da cooperativa, e o `guardar` já a pedia. A diferença é que **esta pode ser
+> preenchida hoje**, sem esperar o portal: `17/08/2027`, na aba **Conector Sicoob**
+> (o campo existe na tela — `web/src/telas/cobranca.tsx`). Enquanto ela for nula o
+> sistema **não diz que está ok**, e é o comportamento certo.
+>
+> **O que isto NÃO fecha:** a consulta ativa é, hoje, a única porta automática de baixa,
+> e ela é diária. A porta que falta é o `ADR-0006` — e essa é código nosso, não insumo
+> de terceiro.
+
+> ### 28/08/2026, fim da tarde — a metade do `ADR-0006` que não dependia de ninguém foi construída
+>
+> **A Decisão 4 saiu inteira: a rota declara como é autenticada.** Até hoje o único
+> escape da sessão era um `if` literal dentro de `servidor.ts`, e a ADR já dizia por que
+> isso não escala — *"duas viram cinco, e o dia em que alguém acrescentar a sexta sem
+> querer é o dia em que uma rota fica pública sem que nada acuse"*. Agora `auth` é campo
+> da rota, `sessao` **por ausência**, e `GET /publico/config` deixou de ser condição para
+> virar linha de tabela. O ganho é o inverso: `tests/rotas-auth.ts` afirma **exatamente
+> estas duas rotas escapam da sessão, e mais nenhuma** — sobre as **116** da tabela.
+>
+> **A verificação de origem existe e recusa por ausência.** `src/http/origem-do-webhook.ts`
+> é a Decisão 1 (mTLS + faixa de IP) em forma executável, e ela **não tem default
+> permissivo em nenhum campo**: ambiente vazio recusa, IP sem certificado recusa,
+> certificado sem IP recusa. O cabeçalho `ssl-client-verify` do proxy **só vale vindo da
+> loopback** — é a linha que fecha o modo de falha que a própria ADR nomeia, *"proxy que
+> não repassa o certificado entrega uma requisição indistinguível de uma autenticada"*.
+> Recusa sai como o **404 genérico**, byte a byte igual ao de rota inexistente: medido no
+> ar depois do deploy, e o motivo real fica no journal. **29 verificações**, dentro do
+> `test:dominio`.
+>
+> **E a construção achou o que a leitura não tinha achado: a Decisão 2 tinha ficado sem
+> mecanismo.** Ela resolve o tenant *"pela credencial"* — decidido na manhã de 06/08,
+> quando a credencial era um segredo **nosso**, por tenant. Na mesma data a Decisão 1
+> virou mTLS, e **o certificado do Sicoob é um só para todos os nossos tenants**: ele
+> prova origem e não identifica tenant nenhum. Aberta como `Q-WEBHOOK-TENANT-01` 🔴 e
+> **decidida pelo dono no mesmo dia** — o tenant vai no **caminho da rota**, que é
+> identificador e não credencial. `POST /liquidacoes/webhook-sicoob/:tenant`.
+>
+> **Com ela respondida, a Decisão 3 também coube no dia.** O usuário de serviço tem
+> `auth_user_id` **derivado do tenant** por UUIDv5 — nenhuma coluna nova, nenhuma
+> migration, e nada para guardar: as duas pontas chegam ao mesmo número a partir do mesmo
+> tenant. Ele **não tem caminho de login** porque o uuid existe na nossa tabela `usuario`
+> e não existe no Supabase Auth, e o papel é `cobranca`, o **mínimo** que faz
+> `escrever_carteira` passar — a suíte lê a matriz de `contexto.ts` e afirma que nenhum
+> papel menor serve. `scripts/provisionar-servico-de-cobranca.sql` cria as duas linhas, e
+> `npm run servico-de-cobranca -- --tenant <uuid>` imprime o comando pronto **e a URL a
+> cadastrar no portal**. **42 verificações** no total, e a UUIDv5 é conferida contra o
+> vetor da RFC 4122 — sem ele, o teste só provaria que a função concorda consigo mesma.
+>
+> **Nada disso abriu porta, e cada recusa diz uma coisa diferente:** origem não
+> verificada → **404 genérico**; tenant malformado → o mesmo 404; usuário de serviço
+> ausente → `503 ServicoDeCobrancaNaoProvisionado`. Medidos no ar depois do deploy.
+>
+> **O que falta do `ADR-0006` não é mais código nosso:** a faixa de IP que só o Sicoob
+> informa (`WEBHOOK_IPS`), o TLS chegando ao Node ou repassado pelo proxy — as duas linhas
+> de `nginx` estão no `.env.example` —, rodar o provisionamento, e a **verificação
+> empírica** de que eles apresentam certificado de cliente, que a ADR §7 já dizia ser
+> pré-requisito de **ligar** e não de escrever.
 
 
 ---
