@@ -6,9 +6,9 @@
 | **O que é** | O **índice único** das pendências. Consolida e substitui os dois trackers datados que existiam soltos |
 | **Substitui e apaga** | `PENDENCIAS-2026-08-05.md` e `PROXIMOS-PASSOS-2026-08-09.md` — vencidos, e agora removidos do repo |
 | **NÃO substitui** | `QUESTOES.md` (registro datado, dono por entrada — regra 10) · `RETOMADA-2026-08-28.md` (onde tudo parou — a mais nova) · os `RESUMO-SESSAO-*` (memória datada). Estes continuam sendo a fonte; aqui é o **apontador** |
-| **Data** | 14/08/2026 · rev. 17/08 · rev. 19/08 · rev. 21/08 · rev. 27/08 · rev. **28/08/2026** |
-| **Estado da suíte** | Sem banco: `typecheck` + `documento` + `brcode` + `dominio` + `web` → **`EXIT=0`**, e desde 27/08 com as **51 verificações** de `tests/sicoob-http.ts` dentro do `test:dominio`. Fora da suíte, contra a Sicoob de verdade: `npm run ensaio-sicoob` → **6 de 6**. `test:repos` e `test:isolamento` **não rodam nesta VPS** (exigem PostgreSQL local) |
-| **Produção** | `financeiro.blackhaus.io` · **34 migrations no ar** (a 33 em 20/08, a **34 em 21/08**) · Pix estático e boleto importado no ar · central de ajuda em toda tela · **a conta unificada lida já vira cobrança** (migration 34) · o conector roda sozinho a cada 15 min pelo `financeiro-ciclo.timer`, e desde **28/08** a agenda de cobrança roda sozinha em três timers (`fila` 5 min · `consulta` e `certificado` diárias) |
+| **Data** | 14/08/2026 · rev. 17/08 · rev. 19/08 · rev. 21/08 · rev. 27/08 · rev. **28/08/2026** (noite, e de novo na madrugada) |
+| **Estado da suíte** | Sem banco: `typecheck` + `documento` + `brcode` + `dominio` + `web` → **`EXIT=0`, 2.420 linhas `ok`** (28/08, madrugada), e desde 27/08 com as verificações de `tests/sicoob-http.ts` — hoje **63** — dentro do `test:dominio`. Fora da suíte, contra a Sicoob de verdade: `npm run ensaio-sicoob` → **6 de 6**. `test:repos` e `test:isolamento` **não rodam nesta VPS** (exigem PostgreSQL local) |
+| **Produção** | `financeiro.blackhaus.io` · **35 migrations no ar** (a 34 em 21/08, a **35 em 28/08**) · a **36 escrita e NÃO aplicada** · Pix estático e boleto importado no ar · central de ajuda em toda tela · **a conta unificada lida já vira cobrança** (migration 34) · o conector roda sozinho a cada 15 min pelo `financeiro-ciclo.timer`, e desde **28/08** a agenda de cobrança roda sozinha em três timers (`fila` 5 min · `consulta` e `certificado` diárias) |
 
 > ## A única pendência do repositório é o certificado A1.
 >
@@ -88,8 +88,10 @@
 >
 > **O que falta agora não é código, e não é do repositório fechar (regra 10):** o
 > aplicativo no Portal Developers (precisa do `.pem`, e a ação é humana), o `client_id`
-> autorizado no App Sicoob, e os **três campos de identidade do cooperado** — que agora
+> autorizado no App Sicoob, e os **campos de identidade do cooperado** — que agora
 > o banco cobra: `conector_ativo_tem_identidade` impede ligar conector Sicoob sem eles.
+> *(rev. 28/08: são **dois**, `numeroCliente` e `codigoModalidade` — a migration 36 tirou o
+> `numeroContratoCobranca` da exigência, porque a API o declara opcional.)*
 
 > ### 28/08/2026 — está tudo no ar, e o cofre tem o certificado dentro
 >
@@ -265,6 +267,59 @@
 > **O que a coleção NÃO mudou:** os escopos. Os nossos quatro saíram do `scopes_supported`
 > do realm, medido em 27/08 — a coleção usa a outra família (`boletos_inclusao`), e as duas
 > existem entre os 29. Fonte primária do servidor de autorização vence documento de exemplo.
+
+> ### 28/08/2026, madrugada — a vermelha da noite fechou, e ela era maior que a migration
+>
+> **`Q-CONTRATOCOB-01` 🔴 FECHOU.** O dono escolheu **(a)**, que é o que a documentação
+> sustenta: `numeroContratoCobranca` é **opcional** — *"somente para cooperados que
+> possuem mais de um contrato"* —, e exigi-lo impedia **o cooperado de contrato único de
+> LIGAR o conector**.
+>
+> **O que a medição mostrou, e é a razão de o conserto não ter sido uma linha de SQL:**
+> o campo era obrigatório em **quatro** lugares, e a migration era só o primeiro.
+>
+> | Camada | O que era | O que é |
+> |---|---|---|
+> | `conector_ativo_tem_identidade` | exigia os três para ligar | **migration 36** — exige `numero_cliente` e `codigo_modalidade` |
+> | `cofre.ts` (o tipo) | `numeroContratoCobranca: number` | `number \| null` |
+> | `cofre.ts` (a recusa) | `CredencialIncompleta` cobrava o campo | saiu da lista, e a mensagem diz por quê |
+> | `http.ts` (o corpo) | ia **sempre** | **spread condicional** — some quando é nulo |
+>
+> **A quarta é a que teria mordido.** Afrouxar só o banco e o tipo faria o adaptador
+> mandar `numeroContratoCobranca: null` — e a coleção é literal: *"não é permitido enviar
+> um campo com valor nulo"*. É o **mesmo defeito do `pagadorSicoob`** consertado horas
+> antes, na mesma noite, pelo mesmo motivo. O idioma certo já estava três linhas abaixo,
+> no `numeroContaCorrente`.
+>
+> **A migration 36 nasce `NOT VALID` pela mesma razão da 35** — e aqui isso não esconde
+> risco novo: a constraint nova é **estritamente mais fraca** que a antiga, então não há
+> linha que a antiga aceitava e a nova recusa.
+>
+> **Suíte: `EXIT=0`, 2.420 linhas `ok`** (eram 2.417). As três novas provam o corpo sem o
+> campo, e uma delas **varre o corpo cru atrás de qualquer `null` sobrando** — é a que
+> pega o próximo campo opcional que alguém esquecer de tornar condicional. E a **`K8`** no
+> `ensaio-do-cofre` prova o mesmo contra o banco de verdade, para que ninguém recoloque a
+> exigência sem perceber.
+>
+> ⚠️ **A migration 36 está ESCRITA e NÃO APLICADA** — o banco fica fora do alcance da
+> sessão. O comando está no fim deste bloco de hoje, para o dono aplicar com a
+> `DIRECT_URL`. Enquanto não for aplicada, o código já está certo e o banco ainda recusa
+> ligar conector sem o contrato — a `K8` é exatamente o que grita isso.
+>
+> **O que sobra da questão não é código:** perguntar à cooperativa se a G3 tem mais de um
+> contrato. A diferença é que agora *"um só"* deixou de ser um bloqueio.
+>
+> **O comando, para o dono rodar com `!` (a `DIRECT_URL` tem DDL; a `DATABASE_URL` não):**
+>
+> ```bash
+> export PATH=/opt/financeiro/node/bin:$PATH && cd /opt/financeiro/app
+> npm run db:migrate     # aplica só a 36 - a 35 já está no ar
+> npm run ensaio-do-cofre   # a K8 é a que prova que ela pegou
+> ```
+>
+> **`prisma generate` não é preciso**: a 36 mexe só numa CHECK, e `schema.prisma` não
+> modela CHECK — `numero_contrato_cobranca` já era `Int?`. **Deploy também não**: nenhuma
+> rota mudou e a SPA não foi tocada.
 
 
 ---
