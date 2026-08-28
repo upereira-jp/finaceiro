@@ -45,9 +45,17 @@ export type IdentidadeDoCooperado = {
    * era a `Q-CONTRATOCOB-01`, e a migration 36 tirou a exigencia do banco.
    */
   numeroContratoCobranca: number | null;
-  /** Opcional no envio: so vai quando preenchido. Nao esta medido se a API o
-   *  exige, e mandar `0` seria afirmar uma conta que ninguem informou. */
-  numeroContaCorrente: number | null;
+  /**
+   * OBRIGATORIO. Estava marcado aqui como "nao esta medido se a API o exige" -
+   * e em 28/08/2026 mediu-se: o modelo `Boleto` o marca com `*`, "conta
+   * corrente onde sera realizado o CREDITO DA LIQUIDACAO do boleto".
+   *
+   * Continua valendo que `0` nao serve: inventar conta de credito e o pior
+   * default concebivel num sistema que move dinheiro. Como e exigido e nao se
+   * inventa, ele virou condicao de ATIVAR o conector - `CredencialIncompleta`
+   * recusa antes de qualquer chamada, e a migration 36 o exige no banco.
+   */
+  numeroContaCorrente: number;
 };
 
 export type CredencialResolvida = {
@@ -144,6 +152,7 @@ export const cofreDoVault: Resolvedora = async (ref: CredencialRef) => {
   const faltando: string[] = [];
   if (c.numero_cliente == null) faltando.push('numeroCliente');
   if (c.codigo_modalidade == null) faltando.push('codigoModalidade');
+  if (c.numero_conta_corrente == null) faltando.push('numeroContaCorrente');
   if (faltando.length) throw new CredencialIncompleta(faltando);
 
   let linhas: Array<{ segredo: string }>;
@@ -188,7 +197,7 @@ export const cofreDoVault: Resolvedora = async (ref: CredencialRef) => {
       numeroCliente: c.numero_cliente!,
       codigoModalidade: c.codigo_modalidade!,
       numeroContratoCobranca: c.numero_contrato_cobranca ?? null,
-      numeroContaCorrente: c.numero_conta_corrente ?? null,
+      numeroContaCorrente: c.numero_conta_corrente!,
     },
     toJSON: redigido,
   };
@@ -215,7 +224,7 @@ export function cofreFixo(v: {
       numeroCliente: 25546454,
       codigoModalidade: 1,
       numeroContratoCobranca: 1,
-      numeroContaCorrente: null,
+      numeroContaCorrente: 123456,
       ...v.identidade,
     },
     toJSON: redigido,

@@ -210,7 +210,20 @@ function centavosDe(v: unknown): Centavos | null {
  * curta. Se a API recusar, e aqui que se muda - uma funcao, um lugar.
  */
 function dataSicoob(d: Date): string {
-  return `${d.toISOString().slice(0, 10)}T00:00:00-03:00`;
+  /*
+   * `yyyy-MM-dd` E NADA MAIS, e isto deixou de ser suposicao em 28/08/2026.
+   *
+   * O modelo `Boleto` declara `dataEmissao`, `dataVencimento` e
+   * `dataLimitePagamento` como `string($date)` com "Formato: yyyy-MM-dd", e os
+   * exemplos sao `2025-09-01`. Ate hoje mandavamos a forma longa com fuso
+   * (`...T00:00:00-03:00`), que era o item "formato da data no POST" que o
+   * `SICOOB-medido-2026-08-27` listava como EM ABERTO.
+   *
+   * O `slice(0, 10)` sobre o ISO continua sendo o ponto importante e nao mudou:
+   * ele le a data em UTC, que e como a coluna `date` do Postgres volta. Um
+   * servidor em outro fuso, formatando local, mandaria o DIA ANTERIOR.
+   */
+  return d.toISOString().slice(0, 10);
 }
 
 // ============================================================ 4. A SITUACAO
@@ -432,8 +445,20 @@ export class CobrancaSicoob implements PortaDeCobranca {
        */
       ...(c.identidade.numeroContratoCobranca != null
         ? { numeroContratoCobranca: c.identidade.numeroContratoCobranca } : {}),
-      ...(c.identidade.numeroContaCorrente != null
-        ? { numeroContaCorrente: c.identidade.numeroContaCorrente } : {}),
+
+      /*
+       * OBRIGATORIO, e ele estava saindo do corpo quando faltava - medido em
+       * 28/08/2026 contra o modelo `Boleto`, que o marca com `*`:
+       * "numeroContaCorrente: Numero da Conta Corrente onde sera realizado o
+       * CREDITO DA LIQUIDACAO do boleto".
+       *
+       * O raciocinio antigo continua certo na metade que importa - mandar `0`
+       * seria afirmar uma conta que ninguem informou -, mas a conclusao mudou:
+       * se o campo e exigido e nao se pode inventar, entao ele e condicao de
+       * ATIVAR o conector, e nao de montar o corpo. Quem recusa e o cofre, com
+       * `CredencialIncompleta`, antes de qualquer chamada.
+       */
+      numeroContaCorrente: c.identidade.numeroContaCorrente,
 
       // SUPOSICAO: `DM` (duplicata mercantil), que e o do exemplo da propria
       // documentacao. Se a cooperativa disser que servico de energia e `DS`,
@@ -465,7 +490,32 @@ export class CobrancaSicoob implements PortaDeCobranca {
       identificacaoEmissaoBoleto: 2,
       identificacaoDistribuicaoBoleto: 2,
 
+      /*
+       * OS QUATRO OBRIGATORIOS QUE NAO ESTAVAM INDO. Medidos em 28/08/2026: o
+       * modelo `Boleto` marca `tipoDesconto`, `tipoMulta`, `tipoJurosMora` e
+       * `numeroParcela` com `*`. Nenhum deles saia no corpo, e o primeiro
+       * boleto real teria voltado 400 por campo ausente - nao por valor errado.
+       *
+       * OS VALORES SAO OS DE "NAO COBRAR NADA A MAIS", e isso e o que o sistema
+       * ja faz: a fatura da G3 nao tem desconto por antecipacao, e juros e multa
+       * de atraso entram pela LIQUIDACAO (o excedente que o webhook informa),
+       * nunca por regra registrada no boleto. Registrar juros aqui faria o banco
+       * cobrar por conta propria um valor que o nosso split nao conhece.
+       *
+       *   tipoDesconto  0 = Sem Desconto
+       *   tipoMulta     0 = Isento
+       *   tipoJurosMora 3 = Isento   (aqui o "isento" e 3, e nao 0 - os enums
+       *                               NAO sao paralelos, e trocar os dois daria
+       *                               "1 = valor por dia" sem valor informado)
+       *   numeroParcela 1 = parcela unica (maximo permitido 99)
+       */
+      tipoDesconto: 0,
+      tipoMulta: 0,
+      tipoJurosMora: 3,
+      numeroParcela: 1,
+
       // O hibrido do PRD 4.3: o mesmo documento carrega boleto e Pix.
+      // O modelo confirma o enum: 0 Padrao, 1 Com Pix, 2 Sem Pix.
       codigoCadastrarPIX: 1,
 
       pagador: pagadorSicoob(p.pagador),
@@ -621,9 +671,14 @@ function semPdf(res: any): unknown {
  * `Q-SEUNUMERO-01`: medir o limite na primeira emissao e, se couber, mandar o
  * UUID inteiro.
  */
+/** O teto e 18, e nao 20: o modelo `Boleto` diz "Tamanho maximo 18" em
+ *  `seuNumero` (medido em 28/08/2026). O 20 era estimativa, e um campo de
+ *  tamanho estourado faz a API recusar o boleto INTEIRO. */
+export const SEU_NUMERO_MAX = 18;
+
 export function seuNumeroDe(referencia: string): string {
   const hex = String(referencia).replace(/[^0-9a-zA-Z]/g, '');
-  return hex.slice(0, 20) || 'SEMREFERENCIA';
+  return hex.slice(0, SEU_NUMERO_MAX) || 'SEMREFERENCIA';
 }
 
 /**

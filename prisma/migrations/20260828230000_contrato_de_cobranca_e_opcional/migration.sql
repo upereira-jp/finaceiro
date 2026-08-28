@@ -44,6 +44,16 @@
 -- pelo mesmo motivo de sempre: os dois sao exigidos em todo POST /boletos, e
 -- sem eles o conector ativo e uma promessa que a API recusa.
 --
+-- E ENTRA UM TERCEIRO NO LUGAR DO QUE SAIU: `numero_conta_corrente`. O modelo
+-- `Boleto` (lido em 28/08/2026, depois desta migration ser escrita e ANTES de
+-- ser aplicada) o marca com `*` - "conta corrente onde sera realizado o CREDITO
+-- DA LIQUIDACAO do boleto". Ele estava nesta tabela como opcional, e o adaptador
+-- o omitia quando faltava.
+--
+-- Nao se inventa conta de credito. Entao ele e condicao de ATIVAR, como os
+-- outros dois. O saldo e uma troca, e nao um afrouxamento: a guarda continua
+-- exigindo tres campos - so que os tres CERTOS.
+--
 -- E a `conector_identidade_positiva` (migration 35) NAO e tocada: se o campo
 -- vier preenchido, continua tendo de ser inteiro positivo. Opcional quer dizer
 -- "pode nao existir", nunca "pode ser zero ou lixo".
@@ -60,10 +70,15 @@ ALTER TABLE conector_cobranca
  * consegue saber o que existe em producao, e uma CHECK validada abortaria o
  * deploy inteiro por causa de uma linha antiga.
  *
- * A nova e ESTRITAMENTE MAIS FRACA que a anterior - toda linha que passava na
- * de tres campos passa nesta de dois. Entao, ao contrario da 35, aqui o
- * `NOT VALID` nao esconde risco novo: nao ha linha que a antiga aceitava e a
- * nova recusa. Quem quiser fechar o buraco herdado roda, como antes:
+ * ATENCAO: a nova NAO e mais fraca que a antiga - e uma TROCA. Ela deixa de
+ * exigir `numero_contrato_cobranca` e passa a exigir `numero_conta_corrente`.
+ * Entao existe, sim, linha que a antiga aceitava e esta recusa: um conector
+ * ativo com contrato preenchido e sem conta de credito. Se existir em producao,
+ * a linha fica como esta (o `NOT VALID` nao mexe no que ja esta gravado) e o
+ * proximo UPDATE nela e que vai ser recusado - nomeando o campo que falta, que e
+ * o comportamento certo, porque esse conector nao consegue emitir boleto.
+ *
+ * Quem quiser fechar o buraco herdado roda, como antes:
  *
  *     ALTER TABLE conector_cobranca VALIDATE CONSTRAINT conector_ativo_tem_identidade;
  */
@@ -72,7 +87,8 @@ ALTER TABLE conector_cobranca
     NOT ativo
     OR provedor <> 'sicoob'
     OR (numero_cliente IS NOT NULL
-        AND codigo_modalidade IS NOT NULL)
+        AND codigo_modalidade IS NOT NULL
+        AND numero_conta_corrente IS NOT NULL)
   ) NOT VALID;
 
 COMMENT ON COLUMN conector_cobranca.numero_contrato_cobranca IS

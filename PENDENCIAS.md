@@ -422,6 +422,63 @@
 > título. Tudo isto chegou porque o dono abriu e colou.
 
 
+> ### 28/08/2026, madrugada — o MODELO da API chegou, e ele corrigiu CINCO coisas que só o primeiro boleto acusaria
+>
+> O dono colou o `POST /boletos` inteiro — exemplo, modelo campo a campo, e os models
+> `Boleto`, `RateioCredito` e `WebhookCadastro`. **É a especificação, não mais o exemplo**,
+> e ela cobra o preço de tudo que tinha sido estimado. Cinco defeitos, todos do tipo que
+> nenhum teste nosso acharia porque todos os testes conferiam contra a nossa suposição.
+>
+> | # | O que estava errado | Consequência no primeiro boleto |
+> |:--:|---|---|
+> | 1 | **Quatro obrigatórios não iam no corpo** — `tipoDesconto`, `tipoMulta`, `tipoJurosMora`, `numeroParcela` | `400` por campo ausente. Nem chegaria a ser erro de valor |
+> | 2 | **`numeroContaCorrente` era tratado como opcional** e sumia quando faltava | É marcado `*`: a conta que **recebe o crédito da liquidação** |
+> | 3 | **As datas iam no formato longo** `2026-09-10T00:00:00-03:00` | O modelo diz `string($date)`, **`yyyy-MM-dd`** |
+> | 4 | **`seuNumero` cortava em 20** | O teto é **18**. Campo estourado faz a API recusar o boleto inteiro |
+> | 5 | **Os campos de endereço do pagador** eram tratados como opcionais | São `*`. Com **0 de 29** endereços, nenhum boleto sai |
+>
+> **O 1 é o mais instrutivo, e o valor importa tanto quanto a presença.** Os quatro entram
+> como *"não cobrar nada a mais"*, que é o que o sistema já faz: a fatura da G3 não tem
+> desconto, e juros e multa de atraso entram pela **liquidação** — o excedente que o webhook
+> informa —, nunca por regra registrada no boleto. Registrar juros ali faria o banco cobrar
+> por conta própria um valor que o nosso split não conhece. E os enums **não são paralelos**:
+> desconto e multa isentos são `0`, mas **juros isento é `3`** — o `0` nem existe nesse campo.
+>
+> **O 2 virou uma troca, e não um afrouxamento.** A migration 36 ainda não foi aplicada, então
+> ela foi corrigida no lugar: deixa de exigir `numero_contrato_cobranca` (que o banco pede para
+> **omitir**) e passa a exigir `numero_conta_corrente` (que o banco **exige**). A guarda continua
+> pedindo três campos — só que os três **certos**. ⚠️ Ao contrário do que a versão anterior desta
+> migration dizia, ela **não é mais fraca** que a 35: um conector ativo com contrato preenchido e
+> sem conta de crédito passava antes e não passa agora. Se existir em produção, o `NOT VALID` deixa
+> a linha como está e o próximo `UPDATE` nela é recusado nomeando o campo — que é o certo, porque
+> esse conector não consegue emitir.
+>
+> **O 5 não tem conserto de código, e é o achado que mais muda o plano.** Não se inventa endereço
+> de cliente. **Nenhum boleto sai pela API antes de os 29 endereços existirem** — a lista de
+> endereços deixou de ser qualidade de dado e virou caminho crítico. **`Q-ENDERECO-BLOQUEIO-01`**.
+>
+> **🔴 E apareceu uma decisão de arquitetura que ninguém tinha visto: `rateioCreditos`.** O boleto
+> aceita uma lista de destinos — banco, agência, conta, CPF/CNPJ e nome do titular, percentual ou
+> valor, finalidade TED `10 Crédito em Conta`. **O banco sabe repartir o crédito na origem**, que é
+> literalmente o problema deste projeto. Se usado, o dinheiro chega já partido e o repasse deixa de
+> ser promessa nossa sobre uma *intenção de pagamento* — ou seja, pode tornar a `Q-BAIXAOPER-01`
+> **irrelevante** em vez de resolvida. Cobra os dados bancários do dono da usina **na emissão**, e
+> *donos de usina* está **0**. **`Q-RATEIO-SICOOB-01`**.
+>
+> **Confirmado sem mudar nada:** `numeroContratoCobranca` **não** tem `*` (a decisão de hoje estava
+> certa) · `identificacaoEmissaoBoleto` 1/2 e `identificacaoDistribuicaoBoleto` 1/2 (o `2`/`2`
+> continua) · `codigoCadastrarPIX` **0 Padrão / 1 Com Pix / 2 Sem Pix** (mandamos `1`) · `nossoNumero`
+> é opcional na entrada, então o banco atribui · o `email` do pagador é opcional · e o `406` que o
+> modelo documenta já cai no mesmo tratamento do `400`, porque `erroDaResposta` é agnóstico de status.
+>
+> **`Q-ESPECIE-01` tem lista fechada agora** — 26 espécies, com **`FAT - Fatura`** ao lado do `DM`
+> que mandamos. Não há mais o que medir: é escolha do contador.
+>
+> **Suíte `EXIT=0`, 2.428 linhas `ok`.** Uma verificação nova varre o corpo cru atrás de qualquer
+> data com hora — a irmã da que varre `null` —, e o teto do `seuNumero` virou constante lida pelo
+> teste, para o número morar num lugar só.
+
+
 ---
 
 ## 1. A pendência: o certificado A1

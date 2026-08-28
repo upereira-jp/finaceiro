@@ -23,8 +23,7 @@
 
 import {
   CobrancaSicoob, situacaoDoTexto, seuNumeroDe, ErroDaSicoob, pagadorSicoob,
-  type Transporte, type PedidoHttp,
-} from '../src/sicoob/http.ts';
+  type Transporte, type PedidoHttp, SEU_NUMERO_MAX } from '../src/sicoob/http.ts';
 import { cofreFixo } from '../src/sicoob/cofre.ts';
 import { centavosParaReaisDecimal, reaisDecimalParaCentavos, DecimalInvalido } from '../src/dominio/centavos.ts';
 import { txidDoBrCode, pixEstatico } from '../src/dominio/brcode.ts';
@@ -161,12 +160,14 @@ const PEDIDO = {
   chk('S2g', corpo.valor === 1130,
       'e ele e numero JSON de verdade, nao string: quem le o corpo do outro lado ve um number');
 
-  chk('S2h', corpo.dataVencimento === '2026-09-10T00:00:00-03:00',
-      'o vencimento sai do UTC da coluna date - um servidor em outro fuso mandaria o dia anterior');
+  chk('S2h', corpo.dataVencimento === '2026-09-10' && corpo.dataEmissao === '2026-08-27',
+      'as datas sao `yyyy-MM-dd` puro - o modelo diz string($date), e a forma longa com fuso era estimativa');
+  chk('S2h2', !/T\d\d:/.test(post.corpo!),
+      'e NENHUMA data no corpo leva hora - a varredura pega a proxima que alguem formatar longa');
   chk('S2i', corpo.numeroCliente === 25546454 && corpo.codigoModalidade === 1 && corpo.numeroContratoCobranca === 1,
       'a identidade do cooperado vai no corpo - aqui o caso de quem TEM contrato numerado');
-  chk('S2j', !('numeroContaCorrente' in corpo),
-      'numeroContaCorrente NAO vai quando esta vazio: mandar 0 seria afirmar uma conta que ninguem informou');
+  chk('S2j', corpo.numeroContaCorrente === 123456,
+      'numeroContaCorrente VAI sempre - o modelo o marca obrigatorio: e a conta que recebe o credito da liquidacao');
   chk('S2k', corpo.identificacaoEmissaoBoleto === 2 && corpo.identificacaoDistribuicaoBoleto === 2,
       'cliente emite e cliente distribui - pedir que o banco emita produziria DOIS documentos para a mesma divida');
   chk('S2l', corpo.codigoCadastrarPIX === 1, 'o hibrido do PRD 4.3 e pedido');
@@ -179,8 +180,13 @@ const PEDIDO = {
   chk('S2p', !('email' in corpo.pagador),
       'e-mail nao sobe: 3 de 29 clientes faturaveis tem, e o campo nao existe no nosso Pagador');
 
-  chk('S2q', corpo.seuNumero === '7f3a9c214b8e4d559a10' && corpo.seuNumero.length === 20,
-      'seuNumero e o UUID sem hifens cortado em 20 - o UUID inteiro arriscaria 400 num campo de tamanho nao medido');
+  chk('S2q', corpo.seuNumero === '7f3a9c214b8e4d559a' && corpo.seuNumero.length === 18,
+      'seuNumero e o UUID sem hifens cortado em 18 - o teto e do modelo, e o 20 de antes era estimativa');
+
+  chk('S2y', corpo.tipoDesconto === 0 && corpo.tipoMulta === 0 && corpo.numeroParcela === 1,
+      'os obrigatorios de "nao cobrar nada a mais" vao no corpo - sem eles a API recusa por campo ausente');
+  chk('S2z', corpo.tipoJurosMora === 3,
+      'juros isento e 3, e nao 0 - os enums nao sao paralelos, e o 0 aqui nem existe');
 
   // ------------------------------------------------- e o que VOLTA
   chk('S2r', r.nossoNumero === '40012345' && r.linhaDigitavel.length === 47 && r.codigoBarras.length === 47,
@@ -319,8 +325,9 @@ const PEDIDO = {
 // ========================================================= 8. O seuNumero
 
 {
-  chk('S8a', seuNumeroDe('7f3a9c21-4b8e-4d55-9a10-2c6e5f0b1d33').length === 20,
-      'sempre 20 caracteres a partir de um UUID');
+  chk('S8a', seuNumeroDe('7f3a9c21-4b8e-4d55-9a10-2c6e5f0b1d33').length === SEU_NUMERO_MAX
+             && SEU_NUMERO_MAX === 18,
+      'o corte e 18, que e o teto do modelo `Boleto` - e o teste le a constante, para o numero morar num lugar so');
   chk('S8b', seuNumeroDe('a') === 'a' && seuNumeroDe('') === 'SEMREFERENCIA',
       'referencia curta passa inteira, e vazia nao vira string vazia no boleto');
   chk('S8c', seuNumeroDe('7f3a9c21-4b8e-4d55-9a10-2c6e5f0b1d33')
