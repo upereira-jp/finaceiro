@@ -46,6 +46,7 @@ import https from 'node:https';
 import { URL } from 'node:url';
 import type {
   PortaDeCobranca, PedidoDeBoleto, BoletoRegistrado, SituacaoDoBoleto, CredencialRef, Pagador,
+  faltamNoEndereco,
 } from './porta.ts';
 import type { Resolvedora, CredencialResolvida } from './cofre.ts';
 import { centavosParaReaisDecimal, reaisDecimalParaCentavos, type Centavos } from '../dominio/centavos.ts';

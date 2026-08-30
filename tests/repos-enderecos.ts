@@ -239,6 +239,26 @@ const enderecoDe = async (numero: string): Promise<any> => {
   chk('Y5c', depois.documento === null,
       'e o documento do pagador SEGUE ausente no dado - o lote de endereco nao o traz, e nenhuma '
       + 'view do CRM o expoe. Quem RECUSA o boleto por isso agora e a guarda de boleto.ts (K17c)');
+
+  /*
+   * E EM 28/08/2026 A OUTRA METADE TAMBEM GANHOU GUARDA, pelo mesmo caminho: uma
+   * medicao mudou o que se sabia, e nao uma mudanca de opiniao.
+   *
+   * O bloco acima registrava que o endereco ficava FORA da guarda de emissao
+   * porque "o que a Sicoob exige de fato de endereco nao esta medido". O modelo
+   * `Boleto` marca `endereco`, `bairro`, `cidade`, `cep` e `uf` como
+   * OBRIGATORIOS - so `email` e opcional -, e com isso a exclusao perdeu a razao.
+   *
+   * `PagadorSemEndereco`, 422, antes de tocar a porta e antes de criar linha de
+   * boleto. A regra de QUAIS campos e pura e mora na porta (`faltamNoEndereco`),
+   * exercitada em `E1a`-`E1e` de `tests/sicoob-http.ts` - que roda sem banco, e
+   * por isso roda sempre.
+   *
+   * O QUE ESTE ARQUIVO CONTINUA MEDINDO E O DADO, que e o que ele sabe medir.
+   */
+  chk('Y5d', typeof depois.endereco?.cep === 'string' && depois.endereco.cep.length > 0,
+      'o lote de endereco preenche o que a emissao agora EXIGE - sem ele, PagadorSemEndereco (E1a-E1e) '
+      + 'recusa antes da chamada, em vez de deixar 29 boletos retentando para sempre contra um campo vazio');
 }
 
 // ---------------------------------------------------- Y6 o isolamento

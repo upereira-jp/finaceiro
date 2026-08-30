@@ -33,6 +33,45 @@ export type Pagador = {
   } | null;
 };
 
+/**
+ * OS CINCO CAMPOS DE ENDERECO QUE A API EXIGE, e quais faltam neste pagador.
+ *
+ * ATE 28/08/2026 ISTO NAO PODIA EXISTIR. A guarda de emissao em `repos/boleto.ts`
+ * dizia, por escrito, por que o endereco ficava de fora dela: "o que a Sicoob
+ * exige de fato de endereco NAO ESTA MEDIDO (item (c) da Q-PAGADOR-01), e recusar
+ * por um campo que talvez seja opcional bloquearia boleto que sairia". Era a
+ * decisao certa com o que se sabia.
+ *
+ * AGORA ESTA MEDIDO: no modelo `Boleto`, dentro de `pagador`, os campos
+ * `endereco`, `bairro`, `cidade`, `cep` e `uf` estao todos marcados com `*`. So
+ * `email` e opcional. Entao a premissa da exclusao caiu, e a guarda pode existir.
+ *
+ * `numero` NAO entra na lista: ele nao e campo da API - vira parte da string
+ * `endereco`, e endereco sem numero e endereco que o carteiro entrega.
+ *
+ * POR QUE ISTO IMPORTA MAIS DO QUE PARECE. Sem a guarda, quem recusa e a Sicoob,
+ * com 400, que o adaptador traduz em 502 - e 502 poe o boleto na fila do `PRD` 6,
+ * que por decisao registrada em `dominio/agenda.ts` NUNCA DESISTE SOZINHA. Com 0
+ * de 29 enderecos preenchidos, a primeira emissao em lote poria 29 boletos
+ * retentando para sempre contra um campo que so uma pessoa pode preencher.
+ */
+export const CAMPOS_DE_ENDERECO_EXIGIDOS = ['logradouro', 'bairro', 'municipio', 'cep', 'uf'] as const;
+
+export function faltamNoEndereco(e: Partial<Record<string, unknown>> | null | undefined): string[] {
+  const tem = (v: unknown) => {
+    if (v == null) return false;
+    const t = String(v).trim();
+    // O CEP e o unico com forma: "00000-000" sem digito nenhum e preenchimento
+    // de fachada, e a API recebe `cep` so com digitos.
+    return t !== '';
+  };
+  const faltando = CAMPOS_DE_ENDERECO_EXIGIDOS.filter((c) => !tem((e ?? {})[c]));
+  // CEP presente mas sem digito nenhum conta como ausente - `pagadorSicoob`
+  // tiraria os nao-digitos e mandaria string vazia, que e campo obrigatorio vazio.
+  if (!faltando.includes('cep') && String((e ?? {}).cep).replace(/\D/g, '') === '') faltando.push('cep');
+  return faltando;
+}
+
 export type PedidoDeBoleto = {
   credencialRef: CredencialRef;
   /** Nosso identificador. A Sicoob devolve o dela; guardamos as duas, porque

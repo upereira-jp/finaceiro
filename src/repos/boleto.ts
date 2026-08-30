@@ -20,7 +20,7 @@ import {
   conferirImportacao, explicarRecusa,
   type ConferenciaDaImportacao, type TranscricaoDoBoleto,
 } from '../dominio/boleto-importado.ts';
-import { CobrancaNaoConfigurada, type PortaDeCobranca, type SituacaoDoBoleto } from '../sicoob/porta.ts';
+import { CobrancaNaoConfigurada, faltamNoEndereco, type PortaDeCobranca, type SituacaoDoBoleto } from '../sicoob/porta.ts';
 
 export class CobrancaNaoHabilitada extends Error {
   readonly status = 412;
@@ -63,6 +63,31 @@ export class PagadorSemDocumento extends Error {
       'Nada foi enviado a Sicoob e nenhum boleto foi criado.'
     );
     this.name = 'PagadorSemDocumento';
+  }
+}
+
+/**
+ * A IRMA DA `PagadorSemDocumento`, e ela nasceu tarde de proposito.
+ *
+ * Ate 28/08/2026 esta guarda NAO podia existir: o que a Sicoob exigia de endereco
+ * nao estava medido, e recusar por um campo que talvez fosse opcional bloquearia
+ * boleto que sairia. O modelo `Boleto` fechou a duvida - `endereco`, `bairro`,
+ * `cidade`, `cep` e `uf` sao todos obrigatorios -, e a premissa da exclusao caiu.
+ *
+ * 422 E NAO 502, pela mesma razao da irma: o defeito nao e do outro lado. Um 502
+ * manda procurar indisponibilidade de banco; esta mensagem manda preencher um
+ * campo, e diz QUAL.
+ */
+export class PagadorSemEndereco extends Error {
+  readonly status = 422;
+  constructor(nome: string | null, numeroUc: string, faltando: string[]) {
+    super(
+      `A UC ${numeroUc}${nome ? ` (${nome})` : ''} nao tem ${faltando.join(', ')} no endereco do ` +
+      'cliente, e a Sicoob exige endereco completo no pagador - logradouro, bairro, cidade, CEP e ' +
+      'UF. O dado entra pela aba Clientes ou em lote por `npm run enderecos` — preenchido, peca o ' +
+      'boleto de novo. Nada foi enviado a Sicoob e nenhum boleto foi criado.'
+    );
+    this.name = 'PagadorSemEndereco';
   }
 }
 
@@ -212,13 +237,26 @@ export async function registrar(faturaId: string, cobranca: PortaDeCobranca): Pr
    * em `dominio/agenda.ts`, NUNCA DESISTE SOZINHA. Seria uma tentativa a cada
    * `tetoSegundos`, para sempre, contra a mesma ausencia.
    *
-   * Metade aberta da `Q-PAGADOR-01`. A outra metade - o endereco - fechou em
-   * 05/08 com `npm run enderecos`, e NAO entra nesta guarda: o que a Sicoob
-   * exige de fato de endereco nao esta medido (item (c) da questao), e recusar
-   * por um campo que talvez seja opcional bloquearia boleto que sairia.
+   * O ENDERECO ENTROU NESTA GUARDA EM 28/08/2026, e ate entao NAO estava aqui.
+   * O motivo escrito era: "o que a Sicoob exige de fato de endereco nao esta
+   * medido (item (c) da Q-PAGADOR-01), e recusar por um campo que talvez seja
+   * opcional bloquearia boleto que sairia". Era a decisao certa com o que se
+   * sabia, e o que mudou foi o que se sabe: o modelo `Boleto` marca `endereco`,
+   * `bairro`, `cidade`, `cep` e `uf` como obrigatorios.
+   *
+   * E AQUI A GUARDA VALE MAIS QUE NA IRMA, porque o dado esta em 0 de 29: sem
+   * ela, a primeira emissao em lote poria 29 boletos na fila do `PRD` 6 - que
+   * nunca desiste sozinha - retentando contra um campo que so uma pessoa pode
+   * preencher.
    */
   const documentoDoPagador = uc.cliente.documento?.trim();
   if (!documentoDoPagador) throw new PagadorSemDocumento(uc.cliente.nome, uc.numero_uc);
+
+  const semEndereco = faltamNoEndereco({
+    logradouro: uc.endereco_logradouro, bairro: uc.endereco_bairro,
+    municipio: uc.endereco_municipio, cep: uc.endereco_cep, uf: uc.endereco_uf,
+  });
+  if (semEndereco.length) throw new PagadorSemEndereco(uc.cliente.nome, uc.numero_uc, semEndereco);
 
   const total = f.valor_total_centavos ?? 0;
   const existente = await dbt().boleto.findFirst({ where: { fatura_id: faturaId } });

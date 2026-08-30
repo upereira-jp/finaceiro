@@ -24,6 +24,7 @@
 import {
   CobrancaSicoob, situacaoDoTexto, seuNumeroDe, ErroDaSicoob, pagadorSicoob,
   type Transporte, type PedidoHttp, SEU_NUMERO_MAX } from '../src/sicoob/http.ts';
+import { faltamNoEndereco } from '../src/sicoob/porta.ts';
 import { cofreFixo } from '../src/sicoob/cofre.ts';
 import { centavosParaReaisDecimal, reaisDecimalParaCentavos, DecimalInvalido } from '../src/dominio/centavos.ts';
 import { txidDoBrCode, pixEstatico } from '../src/dominio/brcode.ts';
@@ -389,6 +390,36 @@ const PEDIDO = {
   chk('P3b', (longo as any).endereco.length === 40, 'endereco corta em 40');
   chk('P3c', (longo as any).bairro.length === 30 && (longo as any).cidade.length === 40,
       'bairro em 30 e cidade em 40 - cortar nomeando, e nao deixar a API recusar o boleto inteiro');
+}
+
+// ============================================================================
+// O ENDERECO EXIGIDO - a guarda que so pode existir desde que foi medida
+//
+// Ate 28/08/2026 `repos/boleto.ts` deixava o endereco FORA da guarda de emissao,
+// e o motivo estava escrito: "o que a Sicoob exige de fato de endereco nao esta
+// medido". O modelo `Boleto` marca os cinco com `*`, e a premissa caiu.
+// ============================================================================
+{
+  chk('E1a', faltamNoEndereco({
+    logradouro: 'Rua A', bairro: 'Centro', municipio: 'Anapolis', cep: '75000-000', uf: 'GO',
+  }).length === 0, 'endereco completo nao falta nada - e `numero` NAO e exigido: ele vira parte da string `endereco`');
+
+  chk('E1b', faltamNoEndereco(null).length === 5,
+      'sem endereco nenhum, faltam os cinco - e a mensagem pode dizer todos de uma vez, em vez de um por tentativa');
+
+  chk('E1c', faltamNoEndereco({ logradouro: 'Rua A', bairro: '  ', municipio: 'X', cep: '75000000', uf: 'GO' })
+        .join() === 'bairro',
+      'campo so com espaco conta como ausente - " " nao e bairro, e a API recebe string vazia');
+
+  // O CEP e o unico com forma: `pagadorSicoob` tira os nao-digitos, entao um CEP
+  // sem digito nenhum vira campo obrigatorio VAZIO no corpo.
+  chk('E1d', faltamNoEndereco({ logradouro: 'Rua A', bairro: 'C', municipio: 'X', cep: '-----', uf: 'GO' })
+        .includes('cep'),
+      'CEP sem digito nenhum conta como ausente - senao o corpo sairia com `cep` vazio, que e o que a API recusa');
+
+  chk('E1e', faltamNoEndereco({ logradouro: 'Rua A', bairro: 'C', municipio: 'X', cep: '75000-000' })
+        .join() === 'uf',
+      'e a lista nomeia SO o que falta - quem le a recusa sabe qual campo preencher');
 }
 
 console.log(falhas === 0 ? '\nTODAS OK' : `\n${falhas} FALHA(S)`);
