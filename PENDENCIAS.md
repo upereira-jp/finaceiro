@@ -5,7 +5,7 @@
 | **Para quem** | Quem quiser, em uma tela, a lista viva do que falta — e de quem é cada item |
 | **O que é** | O **índice único** das pendências. Consolida e substitui os dois trackers datados que existiam soltos |
 | **Substitui e apaga** | `PENDENCIAS-2026-08-05.md` e `PROXIMOS-PASSOS-2026-08-09.md` — vencidos, e agora removidos do repo |
-| **NÃO substitui** | `QUESTOES.md` (registro datado, dono por entrada — regra 10) · `RETOMADA-2026-08-28.md` (onde tudo parou — a mais nova) · os `RESUMO-SESSAO-*` (memória datada). Estes continuam sendo a fonte; aqui é o **apontador** |
+| **NÃO substitui** | `QUESTOES.md` (registro datado, dono por entrada — regra 10) · `RETOMADA-2026-08-30.md` (onde tudo parou — a mais nova) · os `RESUMO-SESSAO-*` (memória datada). Estes continuam sendo a fonte; aqui é o **apontador** |
 | **Data** | 14/08/2026 · rev. 17/08 · rev. 19/08 · rev. 21/08 · rev. 27/08 · rev. **28/08/2026** (noite, e de novo na madrugada) |
 | **Estado da suíte** | Sem banco: `typecheck` + `documento` + `brcode` + `dominio` + `web` → **`EXIT=0`, 2.420 linhas `ok`** (28/08, madrugada), e desde 27/08 com as verificações de `tests/sicoob-http.ts` — hoje **63** — dentro do `test:dominio`. Fora da suíte, contra a Sicoob de verdade: `npm run ensaio-sicoob` → **6 de 6**. `test:repos` e `test:isolamento` **não rodam nesta VPS** (exigem PostgreSQL local) |
 | **Produção** | `financeiro.blackhaus.io` · **35 migrations no ar** (a 34 em 21/08, a **35 em 28/08**) · a **36 escrita e NÃO aplicada** · Pix estático e boleto importado no ar · central de ajuda em toda tela · **a conta unificada lida já vira cobrança** (migration 34) · o conector roda sozinho a cada 15 min pelo `financeiro-ciclo.timer`, e desde **28/08** a agenda de cobrança roda sozinha em três timers (`fila` 5 min · `consulta` e `certificado` diárias) |
@@ -493,6 +493,38 @@
 > A armadilha está embutida: **nenhum escopo concedido não é resposta sobre família** — é sinal de
 > aplicativo não autorizado ou certificado diferente do que o portal registrou, e o script diz isso
 > em vez de deixar concluir errado.
+
+> ### 30/08/2026 — a guarda de endereço passou a existir, e a história dela é como este repositório muda de ideia
+>
+> **Não depende do Sicoob em nada**, e por isso saiu enquanto o aplicativo espera autorização.
+>
+> A guarda de emissão em `repos/boleto.ts` dizia, **por escrito**, por que o endereço ficava de
+> fora dela: *"o que a Sicoob exige de fato de endereço **não está medido** (item (c) da
+> `Q-PAGADOR-01`), e recusar por um campo que talvez seja opcional bloquearia boleto que sairia"*.
+> Era a decisão certa com o que se sabia. **Não mudou a opinião — mudou o que se sabe:** o modelo
+> `Boleto` marca `endereco`, `bairro`, `cidade`, `cep` e `uf` como obrigatórios.
+>
+> **E ela vale mais que a irmã `PagadorSemDocumento`, porque o dado está em 0 de 29.** Sem a
+> guarda, quem recusa é a Sicoob com 400 → o adaptador traduz em **502** → e 502 põe o boleto na
+> fila do `PRD` 6, que por decisão registrada em `dominio/agenda.ts` **nunca desiste sozinha**. A
+> primeira emissão em lote poria **29 boletos retentando para sempre** contra um campo que só uma
+> pessoa pode preencher. `PagadorSemEndereco` recusa **antes de criar a linha**, com **422** — um
+> 502 manda procurar indisponibilidade de banco; esta mensagem manda preencher um campo, e diz qual.
+>
+> **A regra mora na PORTA, e não no adaptador.** `faltamNoEndereco` está em `sicoob/porta.ts`
+> porque `repos/` importa a porta e não o `http.ts` — enfiá-la no adaptador faria o repo depender
+> dele. Sendo pura, é exercitada em `tests/sicoob-http.ts`, que **roda sem banco e por isso roda
+> sempre** — ao contrário de `test:repos`, que não roda nesta VPS.
+>
+> Dois detalhes que os testes fixam: **`numero` não é exigido** (vira parte da string `endereco`), e
+> **CEP sem dígito nenhum conta como ausente**, porque `pagadorSicoob` tira os não-dígitos e
+> mandaria campo obrigatório vazio.
+>
+> Em `tests/repos-enderecos.ts` a afirmação `Y5c` **não foi apagada**: ganhou a `Y5d` ao lado, do
+> jeito que a própria `Y5c` já tinha sido encolhida em 06/08. Deixar a frase velha seria a classe do
+> índice vencido que este repositório já pagou quatro vezes.
+>
+> **Suíte `EXIT=0`, 2.433 linhas `ok`.**
 
 
 ---
