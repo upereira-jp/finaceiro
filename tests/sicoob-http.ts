@@ -146,8 +146,10 @@ const PEDIDO = {
       'primeiro sobe o token, por client_credentials');
   chk('S2b', !token.corpo!.includes('client_secret'),
       'e SEM client_secret: o realm declara tls_client_auth, o certificado e a credencial');
-  chk('S2c', token.corpo!.includes('cobranca_boletos_incluir') && !token.corpo!.includes('protesto'),
-      'os escopos pedidos sao os dos tres verbos mais o Pix - nao os 29');
+  chk('S2c', token.corpo!.includes('boletos_inclusao') && !token.corpo!.includes('protesto'),
+      'os escopos pedidos sao os TRES VERBOS da familia medida em 01/09 - nao os 29 do realm');
+  chk('S2c2', !token.corpo!.includes('cobranca_boletos_'),
+      'e nenhum da familia antiga: medida em 01/09, ela sai 400 invalid_scope e o token nem nasce');
 
   chk('S2d', post.cabecalhos.Authorization === 'Bearer tok-1' && post.cabecalhos.client_id === 'CID-1',
       'a chamada leva Bearer E client_id: sem o segundo o gateway devolve 401 mesmo com token valido');

@@ -62,16 +62,66 @@ export const SICOOB = {
 } as const;
 
 /**
- * Os escopos pedidos, e SO os tres verbos da porta mais o Pix do boleto
- * hibrido. Os 29 existem; pedir os 29 seria pedir protesto e negativacao para
- * um sistema que nao protesta ninguem, e escopo a mais e dano a mais no dia em
- * que o token vazar.
+ * Os escopos pedidos - MEDIDOS contra o servidor de autorizacao em 01/09/2026,
+ * e nao lidos. Fecham a `Q-ESCOPO-V3-01`.
+ *
+ * ============================================================================
+ * A LISTA ANTERIOR ESTAVA ERRADA, E O MODO DE FALHA DELA ERA O PIOR POSSIVEL
+ *
+ * Ate hoje esta constante trazia a familia `cobranca_boletos_*`, tirada do
+ * `scopes_supported` do realm `cooperado` - fonte primaria, lida em 27/08. A
+ * pagina da API Cobranca Bancaria V3 listava OUTRA familia, e como o Swagger do
+ * portal nao declara escopo por endpoint (conferido em 28/08: o icone que parece
+ * cadeado e copy-to-clipboard), nao havia o que ler para desempatar.
+ *
+ * O `escopos-sicoob.ts` mediu, um escopo por vez, com o `client_id` do
+ * aplicativo autorizado. O resultado nao e ambiguo:
+ *
+ *     cobranca_boletos_incluir     HTTP 400  invalid_scope
+ *     cobranca_boletos_consultar   HTTP 400  invalid_scope
+ *     cobranca_boletos_baixa       HTTP 400  invalid_scope
+ *     cobranca_boletos_pix         HTTP 400  invalid_scope
+ *     boletos_inclusao             HTTP 200  CONCEDIDO
+ *     boletos_consulta             HTTP 200  CONCEDIDO
+ *     boletos_alteracao            HTTP 200  CONCEDIDO
+ *     webhooks_inclusao            HTTP 200  CONCEDIDO
+ *     webhooks_consulta            HTTP 200  CONCEDIDO
+ *     webhooks_alteracao           HTTP 200  CONCEDIDO
+ *
+ * OS QUATRO ANTIGOS NAO EXISTEM PARA ESTE CLIENTE. E repare no codigo: `400`, na
+ * requisicao do TOKEN. Nao e `403` na emissao, que apontaria para permissao -
+ * o token simplesmente NAO NASCE, e a mensagem que o adaptador imprime nesse
+ * caso manda "conferir se o aplicativo esta AUTORIZADO no portal". O primeiro
+ * boleto teria falhado mandando investigar o banco, com a causa aqui.
+ *
+ * Que os 29 do `scopes_supported` existam continua sendo verdade: o realm e
+ * compartilhado por todos os cooperados e anuncia o catalogo inteiro. Anunciar
+ * nao e conceder, e essa e a licao que sobra.
+ *
+ * ============================================================================
+ * POR QUE TRES E NAO OS SEIS CONCEDIDOS
+ *
+ * O principio nao mudou, so a lista: pedir escopo que nao se usa e dano a mais
+ * no dia em que o token vazar. Estes tres sao os verbos que a porta exerce -
+ * incluir, consultar e a baixa, que cai em `boletos_alteracao` por ser o unico
+ * candidato desta familia (nao ha `boletos_baixa`, e isso NAO esta medido contra
+ * o endpoint de baixa: a primeira baixa real e que confirma).
+ *
+ * OS TRES DE WEBHOOK FICAM DE FORA ATE EXISTIR QUEM OS USE. Eles sao concedidos,
+ * e sao a resposta da outra metade da `Q-ESCOPO-V3-01`: cadastrar a URL de
+ * notificacao POR CODIGO e possivel, e hoje nao ha esse caminho - o cadastro e
+ * feito no portal, a mao. Quando `POST /Cadastrar Webhook` for construido, os
+ * dois primeiros entram aqui junto com ele.
+ *
+ * E NAO HA MAIS ESCOPO DE PIX nesta familia. O antigo `cobranca_boletos_pix`
+ * pedia permissao separada para o QR do boleto hibrido; aqui ele nao tem
+ * equivalente, entao ou vem junto da inclusao ou nao existe. Tambem so a
+ * primeira emissao com `gerarPix` responde.
  */
 export const ESCOPOS = [
-  'cobranca_boletos_incluir',
-  'cobranca_boletos_consultar',
-  'cobranca_boletos_baixa',
-  'cobranca_boletos_pix',
+  'boletos_inclusao',
+  'boletos_consulta',
+  'boletos_alteracao',
 ] as const;
 
 // ============================================================ 1. O TRANSPORTE
