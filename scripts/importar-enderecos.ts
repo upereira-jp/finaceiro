@@ -20,11 +20,23 @@
 // `src/repos/boleto.ts` monta o pagador com os seis campos da UC e eles saem
 // vazios. E a mesma forma da `Q-PAGADOR-01`, do outro lado da cobranca.
 //
-// O QUE ISTO NAO DESTRAVA, e esta dito aqui para nao virar expectativa: nao
-// destrava boleto nenhum. Falta o certificado A1 e a credencial (`Q-SICOOB-01`),
-// falta `src/sicoob/http.ts` (que o `ADR-0005`, decidido em 05/08, agora permite
-// escrever) e falta o desenho do webhook (`Q-WEBHOOK-01`). Este script fecha um
-// dos quatro, e e o unico dos quatro que e coleta e nao decisao nem codigo.
+// O QUE ISTO DESTRAVA, e VIROU AO CONTRARIO em 01/09/2026: o endereco deixou de
+// ser um dos quatro que faltavam e passou a ser O UNICO. Naquele dia o aplicativo
+// foi autorizado, o `client_id` entrou no cofre, os escopos foram MEDIDOS contra o
+// servidor de autorizacao e o conector foi ligado - e a resolvedora foi exercida
+// de ponta a ponta, com a role de runtime sem enxergar o `vault`.
+//
+// Entao a partir daqui a conta e por UC: a que TEM endereco pode emitir, e a que
+// nao tem e recusada com `PagadorSemEndereco` (422) antes de qualquer chamada ao
+// banco - uma a uma, sem contaminar as outras nem entrar na fila que nao desiste.
+//
+// CORPO ANTERIOR, de 05/08, quando nada disso existia, e guardado porque explica
+// por que este script nasceu falando de expectativa: "O QUE ISTO NAO DESTRAVA, e
+// esta dito aqui para nao virar expectativa: nao destrava boleto nenhum. Falta o
+// certificado A1 e a credencial (`Q-SICOOB-01`), falta `src/sicoob/http.ts` (que
+// o `ADR-0005`, decidido em 05/08, agora permite escrever) e falta o desenho do
+// webhook (`Q-WEBHOOK-01`). Este script fecha um dos quatro, e e o unico dos
+// quatro que e coleta e nao decisao nem codigo.".
 //
 // E CONFERIDO ANTES DE CONSTRUIR: o conector NAO escreve `endereco_*`. O objeto
 // `espelho` de `espelharUnidades` tem `cliente_id`, `usina_id`,
@@ -122,9 +134,11 @@ async function main(): Promise<void> {
     console.log('\n   Sao SETE colunas de endereco e SEIS sao obrigatorias - so `complemento` pode');
     console.log('   ficar vazio. A UF e conferida contra a lista fechada de 27 ("GO", nao "GOI"),');
     console.log('   e o CEP contra oito digitos, com mascara ou sem.');
-    console.log('\n   ISTO NAO DESTRAVA BOLETO SOZINHO: faltam o A1 e a credencial (Q-SICOOB-01),');
-    console.log('   o `src/sicoob/http.ts` e o desenho do webhook (Q-WEBHOOK-01). E nao bloqueia');
-    console.log('   fatura nem Pix - a triagem nao tem recusa por endereco.\n');
+    console.log('\n   O ENDERECO E O QUE FALTA PARA EMITIR, e desde 01/09/2026 ele e o UNICO:');
+    console.log('   A1 no cofre, credencial resolvendo, escopos medidos e conector ligado. A UC');
+    console.log('   COM endereco emite; a SEM e recusada com PagadorSemEndereco (422), uma a uma,');
+    console.log('   antes de chamar o banco. E nao bloqueia fatura nem Pix - a triagem nao tem');
+    console.log('   recusa por endereco.\n');
     await encerrarApp();
     return;
   }
@@ -230,8 +244,9 @@ async function main(): Promise<void> {
     : `\n== COMMIT. ${r!.aplicados.length} UC(s) com endereco do pagador. ==`);
 
   if (!ensaio) {
-    console.log('   Endereco NAO destrava boleto sozinho: faltam o A1 e a credencial (Q-SICOOB-01),');
-    console.log('   o `src/sicoob/http.ts` e o desenho do webhook (Q-WEBHOOK-01).');
+    console.log('   Estas UCs passam a PODER emitir: desde 01/09/2026 o endereco e o unico');
+    console.log('   bloqueio do caminho do boleto - A1, credencial, escopos e conector ja estao.');
+    console.log('   A UC que seguir sem endereco continua recusada com PagadorSemEndereco (422).');
   }
 
   await encerrarApp();
