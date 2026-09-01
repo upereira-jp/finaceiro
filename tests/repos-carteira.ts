@@ -236,6 +236,25 @@ let contratoOk: string; let orgId: string;
   // de fora de proposito - o banco pede para OMITIR, e a 36 tirou a exigencia.
   await emA(() => boleto.cadastrarConector({ credencial_ref: 'vault://sicoob/teste', ativo: true, numero_cliente: 99999, codigo_modalidade: 1, numero_conta_corrente: 88888 }));
 
+  /*
+   * O ENDERECO DO PAGADOR ENTRA AQUI PORQUE A GUARDA DE 30/08 VEM ANTES DA PORTA.
+   *
+   * `registrar()` passou a recusar com `PagadorSemEndereco` (422) antes de tocar
+   * a porta - de proposito: sem isso, a primeira emissao em lote poria 29
+   * boletos numa fila que nunca desiste, retentando contra um campo que so uma
+   * pessoa preenche. Com as UCs desta fixture sem endereco, a K5 parava ali e
+   * passava a medir a guarda de endereco em vez da recusa da PORTA, que e o que
+   * ela diz medir - foi assim que ela quebrou quando o CI voltou a rodar.
+   *
+   * A guarda de endereco NAO perde cobertura com isto: ela tem suite propria em
+   * `tests/repos-enderecos.ts` (E1a-E1e), com fixture separada.
+   */
+  await emA(() => db().$executeRaw`
+    UPDATE unidade_consumidora
+       SET endereco_logradouro = 'Rua do Teste', endereco_bairro = 'Centro',
+           endereco_municipio = 'Goiania', endereco_uf = 'GO', endereco_cep = '74000-000'
+     WHERE numero_uc LIKE 'CART-UC-%'`);
+
   const e = await lancou(() => emA(() => boleto.registrar(fs[0]!.id, COBRANCA_NAO_CONFIGURADA)));
   chk('K5', e instanceof CobrancaNaoConfigurada && e.status === 503,
       `sem credencial, a porta padrao RECUSA alto em vez de emitir boleto de mentira (veio ${e?.name})`);
