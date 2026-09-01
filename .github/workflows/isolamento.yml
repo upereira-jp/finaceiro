@@ -110,6 +110,14 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
       - run: npm install
+      # AS DEPS DO WEB TAMBEM, e sem elas este job so PARECIA conferir tipo.
+      # `npm run typecheck` e `tsc --noEmit && tsc -p web --noEmit`, e o segundo
+      # resolve vite, esbuild, react-dom, @phosphor-icons e @supabase/supabase-js
+      # a partir de web/package.json - que `npm install` na raiz nao instala.
+      # Medido em 01/09/2026: 14 erros TS2307/TS7016, e o job estava vermelho por
+      # isso desde que o typecheck passou a incluir o web. Vermelho constante e
+      # vermelho ignorado: nenhum tipo foi conferido no CI nesse periodo.
+      - run: npm --prefix web install --no-audit --no-fund
       - name: prisma generate (raiz e spike)
         # `generate` NAO conecta, mas o prisma.config.ts resolve env('DIRECT_URL')
         # no carregamento e ABORTA se a variavel nao existir. Valor descartavel.
