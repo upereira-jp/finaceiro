@@ -62,20 +62,36 @@ const lancou = async (f: () => Promise<unknown>): Promise<any> => {
       'R9 documento invalido NAO impede o cadastro - so a ativacao do contrato');
 }
 
-// ------------------------------------------------- C5 unico por tenant
+// ------------------------------------------------- C5 R33: o documento PODE repetir
+//
+// ESTE TESTE AFIRMAVA O CONTRARIO ATE 01/09/2026, e ele e a razao de o CI estar
+// vermelho desde 20/08: a migration 33 derrubou `cliente_documento_unico` naquele
+// dia, por regra do dono - "os documentos podem se repetir, pois nas negociacoes
+// mais de uma pessoa pode ser responsavel por uma UC" -, e o teste nao foi
+// atualizado junto. Os quatro casos que a Q-CLIENTEDUP-01 chamava de duplicata
+// eram mesma pessoa com imoveis diferentes.
+//
+// O QUE ELE PRENDE AGORA e o que sobrou de garantia: repetir e permitido, mas a
+// NORMALIZACAO continua - as duas linhas guardam so digitos, venha o documento
+// com pontuacao ou sem. Perder isso faria o mesmo CNPJ virar dois valores
+// distintos no banco, e ai nem quem olha a lista acha a duplicata de verdade.
+//
+// O QUE NAO MUDOU, e vale dizer para nao parecer que a unicidade acabou:
+// `uc_numero_unico` fica (uma UC so pode ser cobrada uma vez) e
+// `cliente_crm_lead_unico` fica (o mesmo card do CRM nunca vira dois clientes).
 {
-  await emA(() => cliente.criar({ nome: 'Primeiro', documento_bruto: '00000000000191' }));
-  const e = await lancou(() => emA(() => cliente.criar({ nome: 'Segundo', documento_bruto: '00.000.000/0001-91' })));
-  chk('C5', e?.code === 'P2002',
-      `documento repetido no mesmo tenant recusado, mesmo com formatacao diferente (${e?.code ?? 'passou'})`);
+  const primeiro = await emA(() => cliente.criar({ nome: 'Primeiro', documento_bruto: '00000000000191' }));
+  const segundo = await emA(() => cliente.criar({ nome: 'Segundo', documento_bruto: '00.000.000/0001-91' }));
+  chk('C5', primeiro.documento === '00000000000191' && segundo.documento === '00000000000191',
+      `R33 o mesmo documento repete no tenant e as DUAS linhas ficam normalizadas (${primeiro.documento}/${segundo.documento})`);
 }
 
-// ------------------------------------------------- C6 o indice E parcial
+// ------------------------------------------------- C6 e o indice nao volta
 {
   await emA(() => cliente.criar({ nome: 'Sem doc 1' }));
   const e = await lancou(() => emA(() => cliente.criar({ nome: 'Sem doc 2' })));
   chk('C6', e === null,
-      'DOIS clientes sem documento coexistem - se falhar, alguem trocou o parcial por unique cheio e proibiu cadastro sem documento');
+      'DOIS clientes sem documento coexistem - se falhar, alguem recriou um unique sobre documento e proibiu o caso legitimo da R33');
 }
 
 // ------------------------------------------------- C7 isolamento por tenant

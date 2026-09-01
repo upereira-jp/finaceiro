@@ -316,7 +316,11 @@ BEGIN
     AND (EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = c.oid
                    AND a.attname = 'tenant_id' AND a.attnum > 0)
          OR c.relname IN ('tenant','usuario','plataforma_admin'))
-    AND c.relname NOT IN ('auditoria','acesso_plataforma_log')
+    -- `cofre_acesso_log` entrou na isencao em 01/09/2026 pela MESMA razao das
+    -- outras duas: ela E uma trilha, e auditar trilha com trilha e regresso
+    -- infinito. A isencao so e honesta porque a G3 abaixo passou a exigir dela o
+    -- append-only por privilegio - sem isso seria "chamar de trilha" e nada mais.
+    AND c.relname NOT IN ('auditoria','acesso_plataforma_log','cofre_acesso_log')
     AND NOT EXISTS (SELECT 1 FROM pg_trigger t
                     WHERE t.tgrelid = c.oid AND t.tgname LIKE 'auditar_%');
   IF txt IS NULL THEN RAISE NOTICE 'ok   G2   inv.17 toda tabela de negocio ou de papel tem gatilho de auditoria';
@@ -384,10 +388,18 @@ BEGIN
 
   -- 18: append-only por PRIVILEGIO, nao por convencao. E a checagem que pega o
   -- ALTER DEFAULT PRIVILEGES da migration 2 reconcedendo DML numa tabela nova.
+  -- `cofre_acesso_log` entra aqui em 01/09/2026, e ela e a MAIS apertada das
+  -- tres: alem de UPDATE e DELETE, o INSERT tambem e revogado. Quem escreve e so
+  -- a resolvedora, que e SECURITY DEFINER e grava na MESMA transacao em que
+  -- entrega a credencial (regra 9). Se a aplicacao pudesse inserir ali, poderia
+  -- forjar trilha de um acesso que nunca houve.
   IF has_table_privilege('app_financeiro','auditoria','UPDATE')
      OR has_table_privilege('app_financeiro','auditoria','DELETE')
      OR has_table_privilege('app_financeiro','acesso_plataforma_log','UPDATE')
-     OR has_table_privilege('app_financeiro','acesso_plataforma_log','DELETE') THEN
+     OR has_table_privilege('app_financeiro','acesso_plataforma_log','DELETE')
+     OR has_table_privilege('app_financeiro','cofre_acesso_log','INSERT')
+     OR has_table_privilege('app_financeiro','cofre_acesso_log','UPDATE')
+     OR has_table_privilege('app_financeiro','cofre_acesso_log','DELETE') THEN
     RAISE WARNING 'FALHA G3 inv.18 log gravavel pela aplicacao'; falhas := falhas + 1;
   ELSE RAISE NOTICE 'ok   G3   inv.18 auditoria e trilha sao append-only para a aplicacao'; END IF;
 
@@ -397,8 +409,18 @@ BEGIN
   SELECT string_agg(p.proname, ', ') INTO txt
   FROM pg_proc p JOIN pg_namespace ns ON ns.oid = p.pronamespace
   WHERE ns.nspname IN ('app','public') AND p.prosecdef
+    -- `resolver_credencial_cobranca` entra em 01/09/2026, e entrar na lista e o
+    -- ato deliberado que a lista existe para exigir: ela e a UNICA ponte entre a
+    -- role de runtime e o schema `vault` (ADR-0005 opcao A), e e SECURITY DEFINER
+    -- porque a role de runtime nao alcanca o cofre DE PROPOSITO. Ela nao afrouxa
+    -- a R2: confere tenant e conector ativo antes de devolver qualquer coisa, e
+    -- grava a trilha na mesma transacao.
+    --
+    -- Ela ficou FORA da lista de 27/08 ate hoje, e ninguem viu porque este teste
+    -- nao rodava. A invariante fez o trabalho dela no primeiro run em que pode.
     AND p.proname NOT IN ('membros_do_tenant','tem_vinculo_no_tenant',
-                          'resolver_login','auditar','exigir_trilha_de_plataforma');
+                          'resolver_login','auditar','exigir_trilha_de_plataforma',
+                          'resolver_credencial_cobranca');
   IF txt IS NULL THEN RAISE NOTICE 'ok   G4   inv.19 nenhum SECURITY DEFINER fora da lista branca';
   ELSE RAISE WARNING 'FALHA G4 inv.19 fora da lista: %', txt; falhas := falhas + 1; END IF;
 
