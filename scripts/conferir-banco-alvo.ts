@@ -283,8 +283,9 @@ async function migration35(): Promise<void> {
   if (Number(r.validada) !== 1) {
     console.log(
       'aviso: conector_ativo_tem_identidade esta NOT VALID (esperado ate alguem preencher\n'
-      + '       numeroCliente e codigoModalidade - os dois que a migration 36 deixou como\n'
-      + '       exigencia; numeroContratoCobranca e opcional). Depois de preencher, rode:\n'
+      + '       numeroCliente, codigoModalidade e numeroContaCorrente - os TRES que a\n'
+      + '       migration 36 exige; numeroContratoCobranca e opcional e o banco pede para\n'
+      + '       OMITIR). Depois de preencher, rode:\n'
       + '       ALTER TABLE conector_cobranca VALIDATE CONSTRAINT conector_ativo_tem_identidade;');
   }
 
