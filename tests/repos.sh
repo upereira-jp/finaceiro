@@ -91,13 +91,22 @@ CREATE TABLE financeiro._vg (
   parceria_tipo text, comissionamento text, partner_id uuid, parceiro_nome text,
   vendedor_origem text, responsavel_atual text, consumo_kwh numeric,
   consumo_reais numeric, created_at timestamptz, comissionamento_n_opcoes bigint,
-  crm_tenant_id uuid);
+  crm_tenant_id uuid,
+  -- AS TRES ULTIMAS ENTRARAM NO CONTRATO DO CRM EM 20/08/2026 (os dois AVISO-dev-crm
+  -- daquele dia) e o SQL de `leitura.ts` passou a pedi-las. Esta fixture ficou para
+  -- tras e o efeito era um 42703 cru - `column "documento" does not exist` - no
+  -- meio da ultima suite, longe de qualquer mensagem que explicasse o porque.
+  -- Faltar coluna aqui NAO e detalhe de fixture: esta tabela E o contrato da view
+  -- do CRM neste teste, e e o unico lugar em que a forma dela e conferida.
+  documento text, documento_tipo text, tarifa_reais_por_kwh numeric);
 INSERT INTO financeiro._vg VALUES
   ('V-1','aaaa1111-0000-4000-8000-00000000cc01','Certo',NULL,NULL,'Vendas - Assinatura',
-   'GANHO',now(),1000,NULL,NULL,'PADRAO',NULL,NULL,NULL,NULL,850,NULL,now(),1,'$CRMT'),
+   'GANHO',now(),1000,NULL,NULL,'PADRAO',NULL,NULL,NULL,NULL,850,NULL,now(),1,'$CRMT',
+   '11144477735','cpf',1.130000),
   ('V-2','aaaa2222-0000-4000-8000-00000000cc02','De outra empresa',NULL,NULL,'Vendas - Assinatura',
    'GANHO',now(),1000,NULL,NULL,'PADRAO',NULL,NULL,NULL,NULL,850,NULL,now(),1,
-   'ffffffff-0000-4000-8000-0000000000ff');
+   'ffffffff-0000-4000-8000-0000000000ff',
+   '52998224725','cpf',1.130000);
 CREATE VIEW financeiro.vendas_ganhas AS SELECT * FROM financeiro._vg;
 
 -- Role de leitura do CRM falso: so SELECT, so no schema financeiro. E o perfil
