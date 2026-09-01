@@ -10,6 +10,10 @@ TENANT_SEED='aaaaaaaa-1111-4000-8000-000000000001'
 
 aplicar () {   # $1 = nome do banco
   $P -d postgres -c "DROP DATABASE IF EXISTS $1 WITH (FORCE)" -c "CREATE DATABASE $1" > /dev/null
+  # O `vault` de mentira ANTES das migrations: a 35 confere privilegio em
+  # `vault.decrypted_secrets`, e `has_table_privilege` LEVANTA quando a relacao
+  # nao existe. Sem isto a suite morre na 35a de 36. Ver tests/vault-de-mentira.sql.
+  $P -d "$1" -f tests/vault-de-mentira.sql > /dev/null
   for m in prisma/migrations/*/migration.sql; do
     # Sem pipe para grep: em pipeline o status de saida e do grep, e uma
     # migration que falha passa em SILENCIO. Foi o que aconteceu em 26/07 - o

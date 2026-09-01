@@ -30,6 +30,10 @@ UC='eeee0001-0000-4000-8000-00000000000e'
 USI='dddd0001-0000-4000-8000-00000000000d'
 
 $P -d postgres -c "DROP DATABASE IF EXISTS fin_repos WITH (FORCE)" -c "CREATE DATABASE fin_repos" > /dev/null
+# O `vault` de mentira ANTES das migrations: a 35 confere privilegio em
+# `vault.decrypted_secrets`, e `has_table_privilege` LEVANTA quando a relacao
+# nao existe. Sem isto a suite morre na 35a de 36. Ver tests/vault-de-mentira.sql.
+$P -d fin_repos -f tests/vault-de-mentira.sql > /dev/null
 for m in prisma/migrations/*/migration.sql; do
   # Sem pipe para grep: em pipeline o status de saida e do grep e a migration
   # falha em silencio. Foi assim que metade da migration 10 nao entrou em 26/07.

@@ -8,6 +8,10 @@ PGUSER="${PGUSER:-postgres}"
 P="psql -h 127.0.0.1 -U $PGUSER -q -v ON_ERROR_STOP=1"
 
 $P -d postgres -c "DROP DATABASE IF EXISTS fin_sessao WITH (FORCE)" -c "CREATE DATABASE fin_sessao" > /dev/null
+# O `vault` de mentira ANTES das migrations: a 35 confere privilegio em
+# `vault.decrypted_secrets`, e `has_table_privilege` LEVANTA quando a relacao
+# nao existe. Sem isto a suite morre na 35a de 36. Ver tests/vault-de-mentira.sql.
+$P -d fin_sessao -f tests/vault-de-mentira.sql > /dev/null
 for m in prisma/migrations/*/migration.sql; do
   if ! $P -d fin_sessao -f "$m" > /tmp/mig.log 2>&1; then
     echo "FALHA na migration $m:"; grep -vE '^(NOTICE|CREATE|ALTER|GRANT|REVOKE|COMMENT|DO|SET)' /tmp/mig.log | head -20; exit 1
