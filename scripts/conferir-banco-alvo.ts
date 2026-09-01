@@ -43,6 +43,7 @@ const FUNDACAO = '20260725120000_fundacao_schema';
 /** O que a migration 32 deixa no catalogo, e os tres tem de existir juntos. */
 const MIGRATION_32 = '20260817120000_boleto_importado';
 const MIGRATION_35 = '20260827120000_cofre_e_identidade_do_cooperado';
+const MIGRATION_36 = '20260828230000_contrato_de_cobranca_e_opcional';
 
 class ConferenciaFalhou extends Error {}
 
@@ -50,6 +51,7 @@ class ConferenciaFalhou extends Error {}
 const DIRETORIO: Record<string, string> = {
   'migration-32': MIGRATION_32,
   'migration-35': MIGRATION_35,
+  'migration-36': MIGRATION_36,
 };
 
 /**
@@ -115,8 +117,9 @@ if (!url || !url.trim()) {
 }
 
 const modo = process.argv[2] ?? '';
-if (modo !== 'identidade' && modo !== 'migration-32' && modo !== 'migration-35') {
-  console.error(`modo desconhecido: ${JSON.stringify(modo)}. Use "identidade", "migration-32" ou "migration-35".`);
+const MODOS = ['identidade', 'migration-32', 'migration-35', 'migration-36'];
+if (!MODOS.includes(modo)) {
+  console.error(`modo desconhecido: ${JSON.stringify(modo)}. Conheco: ${MODOS.join(', ')}.`);
   process.exit(1);
 }
 
@@ -289,9 +292,67 @@ async function migration35(): Promise<void> {
   console.log(`segredos no cofre hoje: ${rows[0].n}`);
 }
 
+/**
+ * A MIGRATION 36 ENTROU DE FATO?
+ *
+ * ELA E A UNICA DA SERIE EM QUE "A CONSTRAINT EXISTE" NAO E EVIDENCIA DE NADA, e
+ * e por isso que este modo precisou nascer em vez de reaproveitar o da 35. A 36
+ * nao cria objeto novo: ela faz `DROP CONSTRAINT` e `ADD CONSTRAINT` com o
+ * MESMO NOME. Conferir por `conname`, como a 35 confere, responde `1` no banco
+ * de antes e no banco de depois - passa sempre, e nao confere coisa alguma.
+ *
+ * O que distingue os dois estados e o TEXTO da restricao, e a diferenca e uma
+ * TROCA e nao um afrouxamento (as duas exigem tres campos):
+ *
+ *     35:  numero_cliente  AND codigo_modalidade AND numero_contrato_cobranca
+ *     36:  numero_cliente  AND codigo_modalidade AND numero_conta_corrente
+ *
+ * Por isso as duas afirmacoes abaixo sao feitas em separado, e a segunda vale
+ * tanto quanto a primeira: o campo novo ENTROU **e** o antigo SAIU. Uma
+ * constraint que exigisse os quatro passaria numa conferencia que so procurasse
+ * `numero_conta_corrente`, e o efeito dela e exatamente o defeito que a 36
+ * existe para consertar - o cooperado de contrato unico sem conseguir ligar o
+ * conector.
+ *
+ * O resto da 36 e o da 35 intacto, entao ela e conferida antes: a 36 e um delta,
+ * e um delta sobre um banco que perdeu o cofre nao e sucesso.
+ */
+async function migration36(): Promise<void> {
+  await migration35();
+
+  const { rows: [r] } = await cliente.query<{ definicao: string | null; registro: string }>(`
+    SELECT (SELECT pg_get_constraintdef(oid) FROM pg_constraint
+             WHERE conname = 'conector_ativo_tem_identidade')            AS definicao,
+           (SELECT count(*) FROM _prisma_migrations
+             WHERE migration_name = '${MIGRATION_36}'
+               AND finished_at IS NOT NULL AND rolled_back_at IS NULL)   AS registro`);
+
+  if (!r.definicao) {
+    throw new ConferenciaFalhou('a constraint conector_ativo_tem_identidade nao existe no banco.');
+  }
+
+  const exigeConta = r.definicao.includes('numero_conta_corrente');
+  const aindaExigeContrato = r.definicao.includes('numero_contrato_cobranca');
+
+  const faltando = [
+    exigeConta ? null : 'a exigencia de numero_conta_corrente (o campo que a 36 faz ENTRAR)',
+    aindaExigeContrato ? 'a constraint AINDA exige numero_contrato_cobranca (o campo que a 36 faz SAIR)' : null,
+    Number(r.registro) === 1 ? null : `o registro de ${MIGRATION_36} em _prisma_migrations`,
+  ].filter(Boolean);
+
+  if (faltando.length) {
+    throw new ConferenciaFalhou(
+      `a migration 36 nao esta no banco. Falta: ${faltando.join('; ')}.\n` +
+      `  definicao atual: ${r.definicao}`
+    );
+  }
+  console.log('migration 36 OK — a constraint exige numero_conta_corrente e NAO exige mais numero_contrato_cobranca.');
+}
+
 try {
   await cliente.connect();
   if (modo === 'identidade') await identidade();
+  else if (modo === 'migration-36') await migration36();
   else if (modo === 'migration-35') await migration35();
   else await migration32();
   await cliente.end();
