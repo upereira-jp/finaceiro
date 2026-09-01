@@ -32,6 +32,25 @@ import * as boleto from '../src/repos/boleto.ts';
 import { montarLinhaDigitavel, digitosDaLinha } from '../src/dominio/linha-digitavel.ts';
 import { pixEstatico } from '../src/dominio/brcode.ts';
 
+/*
+ * O ENDERECO DO PAGADOR NA FIXTURE, e ele nao e enfeite.
+ *
+ * `boleto.registrar()` recusa com `PagadorSemEndereco` (422) ANTES de tocar a
+ * porta desde 30/08/2026 - a Sicoob marca logradouro, bairro, cidade, CEP e UF
+ * como obrigatorios no pagador, e sem a guarda a primeira emissao em lote poria
+ * boletos numa fila que nunca desiste, retentando contra um campo que so uma
+ * pessoa preenche.
+ *
+ * Toda fixture que EMITE precisa dele, e nenhuma tinha: o CI nao rodava quando a
+ * guarda entrou, entao a quebra so apareceu em 01/09. A guarda continua coberta
+ * onde deve estar, em `tests/repos-enderecos.ts` (E1a-E1e), com fixture propria.
+ */
+const ENDERECO_DO_PAGADOR = {
+  endereco_logradouro: 'Rua do Teste', endereco_bairro: 'Centro',
+  endereco_municipio: 'Goiania', endereco_uf: 'GO', endereco_cep: '74000-000',
+} as const;
+
+
 const CONN = process.env.TEST_DATABASE_URL ?? 'postgresql://app_financeiro_login:spike@127.0.0.1:5432/fin_repos';
 const A = process.env.TEST_TENANT_A!;
 const U = process.env.TEST_USUARIO_ADMIN!;
@@ -82,7 +101,7 @@ let vencimentoIso: string;
    * provavel de todos - e o unico em que a importacao escreve por cima de algo. */
   const criarUC = async (numero: string, pct: string) => {
     const uc = await emA(() => ucRepo.criar({
-      cliente_id: CLI, numero_uc: numero, distribuidora: 'Equatorial',
+      cliente_id: CLI, numero_uc: numero, distribuidora: 'Equatorial', ...ENDERECO_DO_PAGADOR,
       tarifa_reais_por_kwh: '1.130000', data_vencimento: new Date(Date.UTC(2026, 0, 10)),
     }));
     await emA(() => rateio.definirRateio({

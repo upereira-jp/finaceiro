@@ -51,6 +51,25 @@ import {
 import { intervaloSegundos, POLITICA, type Politica } from '../src/dominio/agenda.ts';
 import { CobrancaFalsa } from '../src/sicoob/falso.ts';
 
+/*
+ * O ENDERECO DO PAGADOR NA FIXTURE, e ele nao e enfeite.
+ *
+ * `boleto.registrar()` recusa com `PagadorSemEndereco` (422) ANTES de tocar a
+ * porta desde 30/08/2026 - a Sicoob marca logradouro, bairro, cidade, CEP e UF
+ * como obrigatorios no pagador, e sem a guarda a primeira emissao em lote poria
+ * boletos numa fila que nunca desiste, retentando contra um campo que so uma
+ * pessoa preenche.
+ *
+ * Toda fixture que EMITE precisa dele, e nenhuma tinha: o CI nao rodava quando a
+ * guarda entrou, entao a quebra so apareceu em 01/09. A guarda continua coberta
+ * onde deve estar, em `tests/repos-enderecos.ts` (E1a-E1e), com fixture propria.
+ */
+const ENDERECO_DO_PAGADOR = {
+  endereco_logradouro: 'Rua do Teste', endereco_bairro: 'Centro',
+  endereco_municipio: 'Goiania', endereco_uf: 'GO', endereco_cep: '74000-000',
+} as const;
+
+
 const CONN = process.env.TEST_DATABASE_URL ?? 'postgresql://app_financeiro_login:spike@127.0.0.1:5432/fin_repos';
 const A = process.env.TEST_TENANT_A!;
 const B = process.env.TEST_TENANT_B!;
@@ -124,6 +143,7 @@ async function faturaEmitida(
   await emT(() => usinaRepo.editar(u.id, { dono_usina_id: donoId }));
   const uc = await emT(() => ucRepo.criar({
     cliente_id: clienteId, numero_uc: `AGD-UC-${sufixo}`, distribuidora: DISTRIB,
+    ...ENDERECO_DO_PAGADOR,
     /* A tarifa e da UC desde a migration 30 - sem ela `comporLote` levanta (R26),
      * que e o que `tests/regras.sql` mede de proposito e nao o que esta sob
      * teste aqui. */
