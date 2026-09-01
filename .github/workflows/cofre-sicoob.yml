@@ -1,0 +1,183 @@
+# GRAVA O `client_id` NO COFRE E MEDE OS ESCOPOS QUE A SICOOB CONCEDE.
+#
+# ESTE WORKFLOW ESCREVE NO COFRE DE PRODUCAO (o passo 2, e so quando voce digita
+# um client_id). O passo 3 e read-only: ele so fala com o servidor de autorizacao
+# da Sicoob e nao escreve em lugar nenhum.
+#
+# ============================================================================
+# POR QUE ELE EXISTE, e por que os dois passos moram no MESMO job
+#
+# Os dois comandos precisam de `COFRE_DATABASE_URL` — a conexao de DONO, a mesma
+# `DIRECT_URL` das migrations — porque o `.pfx` esta no cofre (`ADR-0005`) e o
+# disco de quem o comprou foi limpo. Essa credencial NAO EXISTE na VPS: o
+# `/etc/financeiro.env` tem so a `DATABASE_URL` de runtime, e a role dela nao
+# alcanca o schema `vault` de proposito. Ate 01/09/2026 a unica saida era abrir
+# um Codespace; aqui a credencial e um secret do Actions e nao sai do runner.
+#
+# E ELES SAO O MESMO JOB porque a ordem e uma dependencia, nao uma conveniencia:
+# o `escopos` recusa a credencial que nao tem `client_id` gravado. Separar em
+# dois workflows so criaria a chance de rodar o segundo antes do primeiro.
+#
+# ============================================================================
+# O QUE O PASSO 3 RESPONDE, e por que a resposta nao esta em documentacao
+#
+# `Q-ESCOPO-V3-01`. Duas fontes primarias discordam sobre a familia de escopos —
+# o realm `cooperado` anuncia `cobranca_boletos_*`; a pagina da API V3 lista
+# `boletos_*` e `webhooks_*` — e o Swagger do portal NAO declara escopo por
+# endpoint (conferido em 28/08: o icone que parece cadeado e copy-to-clipboard).
+# Nao ha o que ler; ha o que medir. O `client_credentials` devolve no corpo do
+# token o campo `scope` com o que foi de fato CONCEDIDO, e pedir nao e receber.
+#
+# O script pede UM ESCOPO POR VEZ (um conjunto pode ser recusado por causa de um
+# so, e ai o erro nao diz qual), depois pede os vencedores juntos, e imprime a
+# lista pronta para colar em `ESCOPOS`, em `src/sicoob/http.ts`.
+#
+# ============================================================================
+# O QUE ELE NAO IMPRIME: o `.pfx`, a senha dele e a `DIRECT_URL`. O `escopos`
+# mostra so os 6 primeiros caracteres do `client_id`; o `certificado` confirma a
+# gravacao sem ecoar o segredo; e o Actions mascara o secret no log.
+#
+# NAO reinicia servico, nao toca a VPS e nao aplica migration. A 36 continua
+# sendo trabalho do `migrate-financeiro.yml`.
+name: cofre-sicoob
+
+on:
+  workflow_dispatch:
+    inputs:
+      client_id:
+        description: 'O client_id do aplicativo do Portal Developers. DEIXE VAZIO para nao gravar nada e so MEDIR os escopos com o que ja esta no cofre.'
+        required: false
+        default: ''
+      credencial_ref:
+        description: 'O nome do segredo no cofre.'
+        required: true
+        default: 'sicoob-g3-a1'
+
+concurrency:
+  # O mesmo grupo do migrate e do deploy. Este workflow nao toca a VPS, mas
+  # escreve no MESMO banco que o `migrate-financeiro` altera — e um `DROP
+  # CONSTRAINT` correndo junto de uma escrita no cofre e um enrosco que ninguem
+  # quer diagnosticar depois.
+  group: vps-financeiro
+  cancel-in-progress: false
+
+jobs:
+  cofre:
+    runs-on: ubuntu-latest
+    env:
+      # A MESMA conexao, com os DOIS nomes que os scripts esperam:
+      # `conferir-banco-alvo` le DIRECT_URL, `certificado` e `escopos` leem
+      # COFRE_DATABASE_URL. Sao credenciais iguais e papeis distintos.
+      DIRECT_URL: ${{ secrets.DIRECT_URL }}
+      COFRE_DATABASE_URL: ${{ secrets.DIRECT_URL }}
+      # Entradas SEMPRE por env, nunca interpoladas dentro do `run`: `${{ }}`
+      # colado no meio de um shell script e injecao de comando por construcao.
+      CLIENT_ID: ${{ inputs.client_id }}
+      REF: ${{ inputs.credencial_ref }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: instalar dependencias
+        run: npm install --no-audit --no-fund
+
+      - name: guardas antes de discar
+        run: |
+          set -euo pipefail
+          if [ -z "${DIRECT_URL:-}" ]; then
+            echo "::error::secret DIRECT_URL ausente. E a conexao de DONO (a mesma das migrations),"
+            echo "::error::e e ela que alcanca vault.decrypted_secrets. A DATABASE_URL de runtime NAO"
+            echo "::error::serve, e nao servir e o desenho do ADR-0005. Cadastre em Settings > Secrets"
+            echo "::error::and variables > Actions. Nada foi tentado."
+            exit 1
+          fi
+          if [ -z "${REF:-}" ]; then
+            echo "::error::credencial_ref vazio."
+            exit 1
+          fi
+          echo "DIRECT_URL presente. Credencial alvo: \"$REF\"."
+
+          # ------------------------------------------------------------------
+          # A GUARDA DO FORMATO, e ela existe por causa do SINTOMA e nao do erro.
+          #
+          # Um client_id colado pela metade e gravavel: o cofre aceita qualquer
+          # string. O que acontece depois e que o passo 3 responde "NENHUM escopo
+          # concedido" — e o proprio script diz que isso significa "aplicativo
+          # nao autorizado ou certificado diferente do registrado". Ou seja: um
+          # paste truncado se disfarca de problema no portal do banco, e manda
+          # investigar o lugar errado.
+          #
+          # O unico client_id medido (01/09/2026) e um UUID. Se o portal passar a
+          # entregar outro formato, e esta guarda que muda — e de proposito ela
+          # aborta em vez de avisar, porque ela roda ANTES da escrita.
+          # ------------------------------------------------------------------
+          if [ -n "${CLIENT_ID:-}" ]; then
+            CLIENT_ID_LIMPO="$(printf '%s' "$CLIENT_ID" | tr -d '[:space:]')"
+            if ! printf '%s' "$CLIENT_ID_LIMPO" | grep -Eiq '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'; then
+              echo "::error::o client_id informado nao tem forma de UUID. O unico medido (01/09/2026) tem,"
+              echo "::error::e gravar um id truncado nao falha aqui: falha no passo 3, disfarcado de"
+              echo "::error::\"aplicativo nao autorizado\". Confira o paste. Nada foi gravado."
+              exit 1
+            fi
+            echo "CLIENT_ID_LIMPO=$CLIENT_ID_LIMPO" >> "$GITHUB_ENV"
+            echo "client_id com forma de UUID. Ele SERA gravado no passo 2."
+          else
+            echo "client_id vazio — o passo 2 sera PULADO e o 3 usa o que ja esta no cofre."
+          fi
+
+      # ======================================================================
+      # REGRA 4: "o financeiro NUNCA executa INSERT, UPDATE ou DELETE no CRM, em
+      # nenhuma circunstancia, por nenhum caminho." Um secret trocado por engano
+      # e exatamente um desses caminhos, e o passo seguinte e um UPDATE.
+      #
+      # A identidade nao e o nome na URL — e o banco alvo carregar a HISTORIA
+      # deste repositorio. Nenhum outro banco do mundo tem a migration de
+      # fundacao registrada em `_prisma_migrations`.
+      - name: IDENTIDADE do banco alvo (regra 4 — o CRM e read-only absoluto)
+        run: node --experimental-strip-types scripts/conferir-banco-alvo.ts identidade
+
+      # ======================================================================
+      # A UNICA ESCRITA DESTE WORKFLOW. Ela troca UM campo do JSON guardado e
+      # regrava pelo `vault.update_secret`, que CIFRA — um UPDATE direto na
+      # coluna guardaria o A1 em claro dentro do proprio cofre. O certificado
+      # nao e reenviado e nao e tocado.
+      - name: GRAVAR o client_id no cofre
+        if: ${{ inputs.client_id != '' }}
+        run: npm run certificado -- client-id "$REF" "$CLIENT_ID_LIMPO"
+
+      # ======================================================================
+      # READ-ONLY. Nao emite boleto, nao escreve no banco e nao escreve no cofre:
+      # so pede token ao servidor de autorizacao, um escopo por vez.
+      - name: MEDIR os escopos que a Sicoob concede
+        run: |
+          set -uo pipefail
+          npm run escopos -- "$REF" 2>&1 | tee /tmp/escopos.log
+          rc=${PIPESTATUS[0]}
+          # A saida vai para o RESUMO do run, e nao so para o log: ela e o
+          # insumo que fecha a Q-ESCOPO-V3-01 e vira a constante ESCOPOS em
+          # src/sicoob/http.ts, entao ela precisa ser copiavel sem cacar linha.
+          {
+            echo '## `npm run escopos` — saida bruta'
+            echo ''
+            echo '```'
+            cat /tmp/escopos.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$rc"
+
+      - name: proximo passo
+        if: ${{ always() }}
+        run: |
+          {
+            echo ''
+            echo '### depois deste run'
+            echo ''
+            echo '1. **Se algum escopo foi CONCEDIDO:** copie a lista impressa no fim para `ESCOPOS`, em `src/sicoob/http.ts` — hoje ela tem a familia do realm, escolhida por leitura e nao por medicao.'
+            echo '2. **Se NENHUM foi:** isso nao e resposta sobre familia. E aplicativo nao autorizado no Sicoobnet, ou certificado diferente do que o portal registrou.'
+            echo '3. **Repare se ha escopo de webhook.** Sem `webhooks_inclusao`/`webhooks_consulta` a URL de notificacao nao se cadastra por codigo.'
+            echo '4. A **migration 36** continua pendente e nao e deste workflow: rode o `migrate-financeiro` com `conferencia = migration-36`.'
+            echo '5. Para **ligar o conector** ainda faltam o `numeroCliente` (pergunta a cooperativa) e o `numeroContaCorrente`.'
+          } >> "$GITHUB_STEP_SUMMARY"
