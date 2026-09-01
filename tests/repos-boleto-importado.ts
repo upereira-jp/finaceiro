@@ -207,7 +207,7 @@ const linhaDaFatura = (valor = valorTotal, iso = vencimentoIso) =>
   /* O conector volta a ATIVO: o Y1 o desligou de proposito, e `baixarNoBanco`
    * pergunta por ele antes de olhar a origem do boleto. Sem religar, a recusa que
    * esta verificacao mede seria confundida com a falta de conector. */
-  await emA(() => boleto.cadastrarConector({ credencial_ref: 'vault://sicoob/bolimp', ativo: true }));
+  await emA(() => boleto.cadastrarConector({ credencial_ref: 'vault://sicoob/bolimp', ativo: true, numero_cliente: 99999, codigo_modalidade: 1, numero_conta_corrente: 88888 }));
   const e = await lancou(() => emA(() => boleto.baixarNoBanco(faturaId, 'teste', {
     baixar: async () => { throw new Error('nao devia chegar a porta'); },
   } as any)));

@@ -159,14 +159,19 @@ async function faturaEmitida(
 let fFalha: string; let fPaga: string; let fCancelada: string; let fB: string;
 
 {
-  await emA(() => boleto.cadastrarConector({ credencial_ref: 'vault://sicoob/agenda', ativo: true }));
+  // A IDENTIDADE VAI JUNTA PORQUE A 36 A EXIGE PARA LIGAR. Ate 28/08 bastava a
+  // referencia; desde a migration 36 um conector `ativo` do provedor sicoob so
+  // entra com numero_cliente, codigo_modalidade e numero_conta_corrente - e a
+  // propria 36 avisou que existiria linha antiga recusada pela nova. Estas
+  // fixtures eram essa linha.
+  await emA(() => boleto.cadastrarConector({ credencial_ref: 'vault://sicoob/agenda', ativo: true, numero_cliente: 99999, codigo_modalidade: 1, numero_conta_corrente: 88888 }));
 
   fFalha = await faturaEmitida(emA, CLI, 'F1', [2028, 1]);
   fPaga = await faturaEmitida(emA, CLI, 'P1', [2028, 2]);
   fCancelada = await faturaEmitida(emA, CLI, 'C1', [2028, 3]);
 
   // O tenant B ganha conector e uma fatura emitida, para o isolamento ter alvo.
-  await emB(() => boleto.cadastrarConector({ credencial_ref: 'vault://sicoob/agenda-b', ativo: true }));
+  await emB(() => boleto.cadastrarConector({ credencial_ref: 'vault://sicoob/agenda-b', ativo: true, numero_cliente: 99999, codigo_modalidade: 1, numero_conta_corrente: 88888 }));
   const clienteB = await emB(async () => {
     const { criar, porDocumento } = await import('../src/repos/cliente.ts');
     return (await porDocumento('529.982.247-25')) ?? criar({ nome: 'Cliente do B', documento_bruto: '529.982.247-25' });
@@ -453,7 +458,7 @@ let fFalha: string; let fPaga: string; let fCancelada: string; let fB: string;
       + 'seria garantir o que ele nao sabe');
 
   await emA(() => boleto.cadastrarConector({
-    credencial_ref: 'vault://sicoob/agenda', ativo: true,
+    credencial_ref: 'vault://sicoob/agenda', ativo: true, numero_cliente: 99999, codigo_modalidade: 1, numero_conta_corrente: 88888,
     certificado_expira_em: new Date(Date.now() - 86_400_000),
   }));
   const vencido = await emA(() => conferirCertificado());
@@ -462,7 +467,7 @@ let fFalha: string; let fPaga: string; let fCancelada: string; let fB: string;
       + 'e o erro obvio');
 
   await emA(() => boleto.cadastrarConector({
-    credencial_ref: 'vault://sicoob/agenda', ativo: true, certificado_expira_em: null,
+    credencial_ref: 'vault://sicoob/agenda', ativo: true, numero_cliente: 99999, codigo_modalidade: 1, numero_conta_corrente: 88888, certificado_expira_em: null,
   }));
 }
 

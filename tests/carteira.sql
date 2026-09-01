@@ -317,9 +317,35 @@ BEGIN
     RAISE NOTICE 'ok   G4   chave privada colada no lugar da referencia e recusada pelo banco';
   END;
 
-  INSERT INTO conector_cobranca (tenant_id, credencial_ref, ativo)
-    VALUES (T, 'vault://sicoob/g3', true);
-  RAISE NOTICE 'ok   G5   a REFERENCIA entra normalmente: vault://sicoob/g3';
+  -- G5 PASSA: a referencia entra, COM a identidade que a migration 36 exige para
+  -- ligar. `numero_contrato_cobranca` fica de fora de proposito: a pagina da API
+  -- pede para OMITIR, e a 36 justamente tirou ele da exigencia.
+  INSERT INTO conector_cobranca (tenant_id, credencial_ref, ativo,
+                                 numero_cliente, codigo_modalidade, numero_conta_corrente)
+    VALUES (T, 'vault://sicoob/g3', true, 99999, 1, 88888);
+  RAISE NOTICE 'ok   G5   a REFERENCIA entra normalmente, com numero_cliente + modalidade + conta';
+
+  -- G5b ACUSA: A LINHA QUE A 35 ACEITAVA E A 36 RECUSA, e ela e o unico jeito de
+  -- provar no CI que a troca da migration 36 pegou.
+  --
+  -- A 36 nao afrouxou nada - ela TROCOU qual e o terceiro campo obrigatorio:
+  -- saiu `numero_contrato_cobranca` (o banco pede para omitir) e entrou
+  -- `numero_conta_corrente` (o modelo do POST /boletos o marca com `*`, e e a
+  -- conta que recebe o credito da liquidacao). Entao um conector ativo COM
+  -- contrato numerado e SEM conta de credito passava antes e tem de falhar agora.
+  --
+  -- Note que a constraint nasce NOT VALID, e isso nao a enfraquece aqui: NOT
+  -- VALID dispensa a checagem das linhas ANTIGAS, e continua valendo para toda
+  -- linha nova - que e exatamente o caso deste INSERT.
+  BEGIN
+    INSERT INTO conector_cobranca (tenant_id, credencial_ref, ativo,
+                                   numero_cliente, codigo_modalidade, numero_contrato_cobranca)
+      VALUES (T, 'vault://sicoob/sem-conta', true, 99999, 1, 12345);
+    RAISE WARNING 'FALHA G5b conector ativo SEM numero_conta_corrente foi aceito - a migration 36 nao pegou';
+    falhas := falhas + 1;
+  EXCEPTION WHEN check_violation THEN
+    RAISE NOTICE 'ok   G5b  migration 36: contrato numerado nao substitui a conta de credito - ativo sem numero_conta_corrente e recusado';
+  END;
 
   -- ============================================================== H. as views
   SELECT count(*) INTO n FROM posicao_da_carteira WHERE competencia = '2026-07-01';

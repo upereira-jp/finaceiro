@@ -231,7 +231,10 @@ let contratoOk: string; let orgId: string;
 {
   const fs = await emA(() => fatura.daCompetencia('2026-07-01'));
   await emA(() => fatura.emitirLote('2026-07-01'));
-  await emA(() => boleto.cadastrarConector({ credencial_ref: 'vault://sicoob/teste', ativo: true }));
+  // Com a identidade que a migration 36 exige para LIGAR: numero_cliente,
+  // codigo_modalidade e numero_conta_corrente. `numero_contrato_cobranca` fica
+  // de fora de proposito - o banco pede para OMITIR, e a 36 tirou a exigencia.
+  await emA(() => boleto.cadastrarConector({ credencial_ref: 'vault://sicoob/teste', ativo: true, numero_cliente: 99999, codigo_modalidade: 1, numero_conta_corrente: 88888 }));
 
   const e = await lancou(() => emA(() => boleto.registrar(fs[0]!.id, COBRANCA_NAO_CONFIGURADA)));
   chk('K5', e instanceof CobrancaNaoConfigurada && e.status === 503,
