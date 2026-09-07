@@ -130,6 +130,60 @@ export function vencimentoDaFatura(c: Date, diaDoVencimento: number): Date {
 }
 
 /**
+ * QUANTOS DIAS O NOSSO BOLETO VENCE ANTES DA CONTA DA DISTRIBUIDORA.
+ *
+ * Regra do dono, 04/09/2026: "a data de vencimento dos boletos gerados deve ser
+ * 3 dias antes da data imposta pela Equatorial".
+ *
+ * O motivo e ordem de pagamento, nao calendario: o cliente recebe as duas contas
+ * do mesmo mes, e quem paga a distribuidora primeiro pode chegar sem caixa na
+ * nossa - sendo que e a G3 quem ja adiantou o credito. Vencer antes poe a
+ * cobranca na frente na fila do cliente.
+ *
+ * E CONSTANTE E NAO COLUNA, de proposito. Enquanto o prazo vale para a carteira
+ * inteira, uma coluna por UC seria N lugares para a regra divergir de si mesma.
+ * No dia em que UMA UC precisar de outro prazo isto vira coluna com default 3, e
+ * a mudanca e uma migration - nao uma caca as chamadas.
+ */
+export const DIAS_DE_ANTECEDENCIA_DO_BOLETO = 3;
+
+/**
+ * O vencimento do NOSSO boleto, a partir do vencimento que a distribuidora impos.
+ *
+ * SAO DIAS CORRIDOS, e o que isso NAO resolve esta dito em vez de escondido:
+ * "3 dias antes" nao diz o que fazer quando o alvo cai em sabado, domingo ou
+ * feriado. Antecipar mais respeita a regra; empurrar para o dia util seguinte a
+ * viola. Nao existe calendario de feriados neste sistema, e inventar um seria o
+ * improviso que a regra 10 proibe - a pergunta e a `Q-VENC3-01`, com dono.
+ *
+ * ATRAVESSAR O MES E COMPORTAMENTO, NAO DEFEITO, e e a razao de a antecipacao
+ * morar numa DATA e nunca num dia do mes. Vencimento no dia 1o vira 26, 28 ou 29
+ * do mes anterior conforme o mes que veio antes: "tres dias antes do dia 1o" nao
+ * e um numero fixo. Uma coluna `dia_vencimento` ja antecipada erraria por ate
+ * tres dias em quatro meses do ano - por isso o cadastro guarda o dia da
+ * DISTRIBUIDORA, e quem subtrai e este codigo, uma vez so.
+ *
+ * Medido na carteira da G3 em 04/09/2026: das 16 UCs com fatura anexada no CRM,
+ * CINCO vencem no dia 1o ou 2 (`13290060`, `55953601208`, `56310801224`,
+ * `276862801233`, `381032001295`). Nelas o boleto vence no mes anterior ao da
+ * conta, e pelo caminho do cadastro isso cai DENTRO da propria competencia - ver
+ * o aviso em `vencimentoEscolhido`.
+ */
+export function anteciparVencimento(
+  imposto: Date,
+  dias: number = DIAS_DE_ANTECEDENCIA_DO_BOLETO,
+): Date {
+  if (!Number.isInteger(dias) || dias < 0) {
+    throw new TypeError(`dias de antecedencia invalidos: ${JSON.stringify(dias)}`);
+  }
+  /* `Date.UTC` normaliza dia zero ou negativo para o mes anterior, inclusive na
+   * virada de ano e em fevereiro. Subtrair em milissegundos passaria pelo
+   * horario de verao no dia em que estas datas deixarem de ser UTC-meia-noite. */
+  return new Date(Date.UTC(
+    imposto.getUTCFullYear(), imposto.getUTCMonth(), imposto.getUTCDate() - dias));
+}
+
+/**
  * PRD 5.4: fatura nao-cheia nao avanca o contador nem gera comissao.
  *
  * O QUE E "CHEIA" NAO ESTA DECLARADO EM DOCUMENTO NENHUM do projeto - nem no

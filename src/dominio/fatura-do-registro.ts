@@ -48,7 +48,7 @@
 // aprendeu o que `sem_contrato_vigente` quer dizer, e um sinonimo seria divida de
 // leitura (regra 7).
 
-import { ehFaturaCheia, vencimentoDaFatura, type Alerta } from './faturamento.ts';
+import { anteciparVencimento, ehFaturaCheia, vencimentoDaFatura, type Alerta } from './faturamento.ts';
 import { paraDecimal, decimalParaTexto, type Decimal } from './fatura-unificada.ts';
 import { exigirCentavos, type Centavos } from './centavos.ts';
 
@@ -188,7 +188,9 @@ export type LinhaDoRegistro = {
   unidade_consumidora_id: string | null;
   usina_id: string | null;
   percentual_rateio: string | null;
-  /** O dia escolhido na aba Unidades consumidoras. Segunda fonte do vencimento. */
+  /** O dia escolhido na aba Unidades consumidoras. Segunda fonte do vencimento,
+   *  e como a primeira ele guarda o dia da DISTRIBUIDORA - nao o do nosso boleto.
+   *  Quem antecipa os 3 dias e `vencimentoEscolhido`, uma vez so. */
   data_vencimento: Date | null;
   rateio_situacao: string | null;
   /** Preenchido quando a UC VEM do rateio do CRM. Sem ele, a regra da situacao
@@ -224,6 +226,9 @@ export type CandidataDoRegistro =
       /** `total_equatorial_centavos`. Copiado, nunca recalculado. */
       valor_tarifas_concessionaria_centavos: Centavos;
       flag_fatura_cheia: boolean;
+      /** O vencimento do NOSSO boleto: ja com os 3 dias de antecedencia sobre o
+       *  que a distribuidora impos. E este que vai para a coluna `vencimento` da
+       *  fatura e, dali, para o boleto. */
       vencimento: Date;
       /** De onde saiu o vencimento. Vai para o relatorio porque as duas fontes
        *  significam coisas diferentes para quem confere. */
@@ -254,15 +259,48 @@ export type CandidataDoRegistro =
  *
  * Efeito pratico medido: no caminho unificado a camada `vencimento` deixa de
  * bloquear as UCs cuja conta traz a data - que e o caso normal.
+ *
+ * ---------------------------------------------------------------------------
+ * E AS DUAS FONTES SAO ANTECIPADAS EM 3 DIAS, porque nenhuma das duas diz o
+ * vencimento do NOSSO boleto: as duas dizem o da DISTRIBUIDORA.
+ *
+ * Regra do dono, 04/09/2026 - o boleto da G3 vence 3 dias antes da data imposta
+ * pela Equatorial. A subtracao mora AQUI, no unico ponto que conhece as duas
+ * fontes, e nao no cadastro: `unidade_consumidora.data_vencimento` guarda o dia
+ * da distribuidora, igual ao que a conta traz, e antecipar na planilha faria a
+ * mesma regra ser aplicada duas vezes no caminho do cadastro e nenhuma no da
+ * conta. Ver `anteciparVencimento` para por que o prazo e uma DATA e nunca um
+ * dia do mes.
+ *
+ * ⚠️ PELO CAMINHO DO CADASTRO, A ANTECIPACAO PODE CAIR DENTRO DA COMPETENCIA.
+ * `vencimentoDaFatura` projeta o dia no mes SEGUINTE justamente porque
+ * "vencimento dentro da propria competencia venceria antes de a fatura poder
+ * existir" - e com dia 1, 2 ou 3 o -3 traz a data de volta para o mes da
+ * competencia (dia 1o de julho, competencia junho, vira 28/06). O boleto
+ * nasceria vencido. NAO ha correcao automatica aqui de proposito: escolher entre
+ * "antecipa mesmo assim", "nao antecipa abaixo do dia 4" e "empurra a projecao
+ * um mes" move dinheiro e e decisao do dono, registrada na `Q-VENC3-01`.
+ *
+ * O caso e estreito e esta medido: vale so quando a conta lida NAO traz data - e
+ * ela quase sempre traz -, e atinge 5 das 16 UCs cujo vencimento foi lido em
+ * 04/09. Pela conta, que e o caminho normal, a data e real e o -3 e so tres dias
+ * antes.
+ *
+ * `imposto` volta junto porque quem confere precisa ver os dois numeros: um
+ * relatorio que mostrasse so o antecipado nao teria como provar que a regra foi
+ * aplicada, nem contra o que.
  */
 export function vencimentoEscolhido(
   l: Pick<LinhaDoRegistro, 'vencimento_da_conta' | 'data_vencimento' | 'competencia'>,
-): { data: Date; de: 'conta' | 'cadastro' } | null {
-  if (l.vencimento_da_conta) return { data: l.vencimento_da_conta, de: 'conta' };
-  if (l.data_vencimento) {
-    return { data: vencimentoDaFatura(l.competencia, l.data_vencimento.getUTCDate()), de: 'cadastro' };
-  }
-  return null;
+): { data: Date; de: 'conta' | 'cadastro'; imposto: Date } | null {
+  const imposto: { data: Date; de: 'conta' | 'cadastro' } | null =
+    l.vencimento_da_conta
+      ? { data: l.vencimento_da_conta, de: 'conta' }
+      : l.data_vencimento
+        ? { data: vencimentoDaFatura(l.competencia, l.data_vencimento.getUTCDate()), de: 'cadastro' }
+        : null;
+  if (!imposto) return null;
+  return { data: anteciparVencimento(imposto.data), de: imposto.de, imposto: imposto.data };
 }
 
 /**
