@@ -70,23 +70,43 @@ import type {
  * rateio tem UC.
  */
 /**
- * A LEITURA DE SITUACAO FALHOU? — o predicado que impede o conector de apagar a
- * carteira inteira por causa de uma view.
+ * ESTA UC PERDERIA A SITUACAO SE O ESPELHO GRAVASSE AGORA?
  *
- * ZERO situacoes com clientes PRESENTES nao e "todo mundo desativou o rateio": e
- * uma das duas leituras tendo falhado. Gravar nulo em `rateio_situacao` nesse
- * caso tira toda UC espelhada do universo faturavel da `prontidao`
- * (`crm_usina_cliente_id IS NULL OR rateio_situacao = 'ativado'`) e faz `triar()`
- * recusar todas por `rateio_nao_ativado` — de 29 para zero, sem erro e sem log,
- * num ciclo que roda a cada 15 minutos.
+ * O QUE ELE PROTEGE. `rateio_situacao` decide o universo faturavel: a `prontidao`
+ * conta `crm_usina_cliente_id IS NULL OR rateio_situacao = 'ativado'`, e `triar()`
+ * recusa por `rateio_nao_ativado` quem nao disser `ativado`. Se a view
+ * `financeiro.rateio_situacao` devolvesse zero linhas — recriada com erro, RLS
+ * mudada do lado de la, deploy do CRM no ar — o espelho gravaria NULL em todas as
+ * UCs e a carteira iria de 29 para ZERO, sem erro e sem log, num ciclo que roda a
+ * cada 15 minutos.
  *
- * Zero e zero e um CRM vazio, que e legitimo. E a ASSIMETRIA que denuncia.
+ * POR QUE E POR UC E NAO POR CICLO, e esta e a correcao de 08/09/2026 sobre a
+ * primeira versao desta guarda. A versao anterior perguntava "a view veio vazia
+ * com clientes presentes?" e disparava uma divergencia por CICLO. Ela quebrou
+ * cinco verificacoes de `tests/conector.ts` — e as verificacoes estavam certas: o
+ * fixture que nao passa situacoes nao esta simulando view quebrada, so nao
+ * exercita aquela view. O criterio esta escrito no proprio conector, no sinal da
+ * R25 logo abaixo: *"CRM vazio contra UC preenchida e o caso NORMAL de hoje, e
+ * anuncia-lo faria o ciclo cuspir 39 sinais em toda rodada — ruido que treina
+ * qualquer um a ignorar o detalhe inteiro"*.
+ *
+ * A pergunta certa nao e "a view falhou?" — e **"ha algo a perder nesta linha?"**.
+ * Tenant novo, primeira rodada e UC que nunca teve situacao passam mudos, porque
+ * NULL sobre NULL nao perde nada. So a UC que TEM valor e sumiu do CRM levanta o
+ * sinal — e ai o valor antigo fica.
+ *
+ * Uma UC desativada no CRM NAO cai aqui: ela continua na view, com
+ * `nao_ativado`. Linha ausente significa "o CRM nao sabe desta UC", que e outra
+ * coisa e merece ser dita.
  *
  * Funcao exportada e nao condicao solta: e regra de negocio, e regra sem teste e
  * comentario (regra 8). Ver `tests/crm-semente.ts`.
  */
-export function leituraDeSituacaoFalhou(situacoes: number, clientes: number): boolean {
-  return situacoes === 0 && clientes > 0;
+export function perderiaSituacaoDaUc(
+  temLinhaNoCrm: boolean,
+  situacaoGravada: string | null | undefined,
+): boolean {
+  return !temLinhaNoCrm && situacaoGravada != null;
 }
 
 export type PortaDeLeitura = {
@@ -1327,46 +1347,6 @@ async function espelharUnidades(
     situacoes.linhas.filter((s) => s.uc?.trim()).map((s) => [s.uc!.trim(), s]),
   );
 
-  /*
-   * ==========================================================================
-   * VIEW DE SITUACAO VAZIA NAO E "TODO MUNDO DESATIVOU" — e leitura que falhou.
-   *
-   * O QUE ACONTECIA ATE 08/09/2026, e ele apaga a carteira inteira em silencio:
-   * se `financeiro.rateio_situacao` devolvesse ZERO linhas enquanto
-   * `rateio_clientes` continuasse devolvendo as 41 — view recriada com erro, RLS
-   * mudada do lado de la, deploy do CRM no ar —, este mapa ficaria vazio, `sit`
-   * seria `undefined` para toda UC e o espelho gravaria `rateio_situacao = NULL`
-   * nas 29.
-   *
-   * O efeito nao aparece aqui: aparece uma camada adiante, e como faturamento
-   * quebrado. O universo faturavel da `prontidao` e
-   * `crm_usina_cliente_id IS NULL OR rateio_situacao = 'ativado'` — com NULL, as
-   * 29 espelhadas SAEM. `triar()` passa a recusar todas por `rateio_nao_ativado`.
-   * De 29 para ZERO, sem erro, sem log, e o `financeiro-ciclo.timer` roda a cada
-   * 15 minutos.
-   *
-   * A ASSIMETRIA E O SINAL. Zero situacoes COM zero clientes e um CRM vazio, que
-   * e legitimo e ja e tratado na linha seguinte. Zero situacoes com clientes
-   * PRESENTES e uma das duas leituras tendo falhado — e a decisao entre "gravar
-   * o que li" e "nao mexer" e a mesma da R33: recusa e alerta nao sao a mesma
-   * coisa, e apagar dado bom por leitura ruim e o pior dos dois erros.
-   *
-   * NAO ABORTA O CICLO INTEIRO: o resto do espelho (cliente, usina, percentual)
-   * continua valendo, e travar tudo por causa de UMA view transformaria uma
-   * degradacao parcial numa parada total. O que se preserva e a coluna que a
-   * leitura vazia estragaria.
-   */
-  const situacaoIndisponivel = leituraDeSituacaoFalhou(situacoes.linhas.length, clientes.linhas.length);
-  if (situacaoIndisponivel) {
-    r.divergencias.push({
-      entidade: 'unidade_consumidora', chave: '(todas)',
-      sinal: `a view de situacao do rateio devolveu ZERO linhas enquanto rateio_clientes devolveu `
-           + `${clientes.linhas.length}. Isso NAO e "o rateio de todo mundo foi desativado": e uma `
-           + 'das duas leituras tendo falhado. `rateio_situacao` NAO foi tocada neste ciclo — '
-           + 'gravar nulo tiraria toda UC espelhada do universo faturavel, e a fatura do mes '
-           + 'pararia sem nada acusar. Confira a view `financeiro.rateio_situacao` no CRM.',
-    });
-  }
   r.lidos += clientes.linhas.length;
   r.porEntidade.unidade_consumidora.lidos = clientes.linhas.length;
   if (clientes.linhas.length === 0) return situacoes.linhas;
@@ -1560,21 +1540,41 @@ async function espelharUnidades(
          * duas, mas a explicacao manda a pessoa a lugares diferentes.
          */
         const sit = situacaoPorUc.get(a.numeroUc);
+        const atual = porNumero.get(a.numeroUc);
+
+        /*
+         * A SITUACAO SO E SOBRESCRITA QUANDO NAO HA O QUE PERDER, e a assimetria
+         * e o ponto — ver `perderiaSituacaoDaUc`. Se esta UC TEM situacao gravada
+         * e sumiu da view, o valor antigo fica e um sinal e levantado: gravar
+         * NULL aqui a tiraria do universo faturavel, e uma view quebrada levaria
+         * a carteira inteira de 29 para zero em quinze minutos.
+         *
+         * NULL sobre NULL passa mudo, e e por isso que tenant novo e primeira
+         * rodada nao produzem ruido.
+         */
+        const perderia = perderiaSituacaoDaUc(sit !== undefined, atual?.rateio_situacao);
+        if (perderia) {
+          r.divergencias.push({
+            entidade: 'unidade_consumidora', chave: a.numeroUc,
+            sinal: `a UC tem rateio_situacao "${atual?.rateio_situacao}" e o CRM NAO devolveu linha `
+                 + 'de situacao para ela neste ciclo. O valor foi PRESERVADO: gravar nulo a tiraria '
+                 + 'do universo faturavel, e a triagem passaria a recusa-la por `rateio_nao_ativado`. '
+                 + 'UC desativada continua na view, com `nao_ativado` — linha ausente significa que o '
+                 + 'CRM nao sabe desta UC. Confira a view `financeiro.rateio_situacao`.',
+          });
+        }
+
         const espelho = {
           cliente_id: clienteId,
           usina_id: usina.id,
           percentual_rateio: a.percentual,
           crm_usina_cliente_id: a.contratoId,
-          /* As tres colunas da situacao saem do espelho quando a leitura falhou —
-           * ver `situacaoIndisponivel`. Preservar o valor anterior e o unico
-           * desfecho que nao apaga a carteira por causa de uma view. */
-          ...(situacaoIndisponivel ? {} : {
+          ...(perderia ? {} : {
             rateio_situacao: texto(sit?.situacao ?? null),
             rateio_em_troca_titularidade: sit?.em_troca_titularidade ?? null,
             rateio_situacao_lida_em: new Date(),
           }),
         };
-        const atual = porNumero.get(a.numeroUc);
         const dia = (d: Date | null | undefined) => (d ? String(d).slice(0, 10) : null);
 
         if (!atual) {

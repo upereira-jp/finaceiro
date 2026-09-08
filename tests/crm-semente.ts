@@ -10,7 +10,7 @@
  * Rodar: node --experimental-strip-types tests/crm-semente.ts
  */
 import {
-  sementeDeDocumento, tarifaDaSemente, corrigeSementeAnterior, leituraDeSituacaoFalhou,
+  sementeDeDocumento, tarifaDaSemente, corrigeSementeAnterior, perderiaSituacaoDaUc,
 } from '../src/crm/sincronizacao.ts';
 
 let falhas = 0;
@@ -148,17 +148,28 @@ chk('S3g', !corrigeSementeAnterior(semente('01186761130', null), '08675136000103
 // recusa todas por `rateio_nao_ativado`. De 29 para zero, sem erro e sem log,
 // num ciclo que roda a cada 15 minutos.
 {
-  chk('V1', leituraDeSituacaoFalhou(0, 41) === true,
-      'zero situacoes com 41 clientes e LEITURA QUE FALHOU - a coluna nao e tocada');
-  chk('V2', leituraDeSituacaoFalhou(0, 0) === false,
-      'zero e zero e um CRM vazio, que e legitimo - e a ASSIMETRIA que denuncia');
-  chk('V3', leituraDeSituacaoFalhou(41, 41) === false,
-      'leitura completa segue o caminho normal');
-  chk('V4', leituraDeSituacaoFalhou(1, 41) === false,
-      'UMA situacao lida ja e leitura que funcionou: 40 UCs sem linha e um fato do CRM, '
-      + 'e a coluna delas deve mesmo ficar nula');
-  chk('V5', leituraDeSituacaoFalhou(41, 0) === false,
-      'situacoes sem clientes nao dispara nada - nao ha espelho a escrever');
+  /* A PERGUNTA CERTA E "HA ALGO A PERDER NESTA LINHA?", e nao "a view falhou?".
+   *
+   * A primeira versao desta guarda, escrita horas antes, perguntava por CICLO:
+   * "zero situacoes com clientes presentes". Ela quebrou cinco verificacoes de
+   * `tests/conector.ts` — e as verificacoes estavam certas. Um fixture que nao
+   * passa situacoes nao esta simulando view quebrada; ele so nao exercita aquela
+   * view. O criterio esta escrito no proprio conector, no sinal da R25: *"CRM
+   * vazio contra UC preenchida e o caso NORMAL de hoje, e anuncia-lo faria o
+   * ciclo cuspir 39 sinais em toda rodada — ruido que treina qualquer um a
+   * ignorar o detalhe inteiro"*. */
+  chk('V1', perderiaSituacaoDaUc(false, 'ativado') === true,
+      'UC com situacao gravada que SUMIU da view: preserva o valor e levanta sinal');
+  chk('V2', perderiaSituacaoDaUc(false, null) === false,
+      'UC sem situacao e sem linha no CRM passa MUDA - null sobre null nao perde nada');
+  chk('V3', perderiaSituacaoDaUc(false, undefined) === false,
+      'UC que esta nascendo tambem passa muda: nao ha valor anterior');
+  chk('V4', perderiaSituacaoDaUc(true, 'ativado') === false,
+      'com linha no CRM o espelho grava normalmente - inclusive para desativar');
+  chk('V5', perderiaSituacaoDaUc(true, null) === false,
+      'e a UC que ganha situacao pela primeira vez grava sem sinal nenhum');
+  chk('V6', perderiaSituacaoDaUc(false, 'nao_ativado') === true,
+      '`nao_ativado` tambem e valor a perder: sumir da view nao e o mesmo que ser desativada');
 }
 
 console.log(`\n${falhas === 0 ? 'TODAS PASSARAM' : `${falhas} FALHA(S)`}`);
