@@ -235,6 +235,46 @@ const FATURA: CamposDaFaturaUnificada = {
       'valor grande continua inteiro seguro depois da multiplicacao em BigInt');
 }
 
+// =================== U10 DINHEIRO NAO TEM TRES CASAS, e "1.234" nao vale R$ 1,23
+//
+// `paraDecimal` trata um ponto seguido de tres digitos como DECIMAL, e faz isso
+// de proposito — ela tambem serve tarifa e fator de CO2, e pela regra oposta
+// `0.029` viraria 29. Para DINHEIRO a mesma regra erra mil vezes na direcao
+// contraria: quem digita "1.234" num campo de reais quis dizer mil duzentos e
+// trinta e quatro, e saia R$ 1,23.
+//
+// E o caminho e o OFICIAL: o fluxo e "o extrator le, a pessoa corrige a mao". O
+// extrator sempre devolve duas casas; quem digita, nao.
+{
+  const cent = (v: string) => textoParaCentavos(v, 'total');
+  chk('U10a', cent('1.234,56') === 123456 && cent('1.234.567,89') === 123456789,
+      'o milhar com virgula nos centavos continua exato');
+  chk('U10b', cent('1234.56') === 123456 && cent('44.00') === 4400 && cent('44,00') === 4400,
+      'duas casas passam com ponto ou com virgula');
+  chk('U10c', cent('1234') === 123400 && cent('0,5') === 50,
+      'inteiro e uma casa continuam valendo');
+
+  for (const ambiguo of ['1.234', '10250.500', '0.029']) {
+    let r = '';
+    try { cent(ambiguo); } catch (e) { r = (e as Error).name; }
+    chk('U10d', r === 'DinheiroComTresCasas',
+        `${JSON.stringify(ambiguo)} em reais e RECUSADO em vez de virar 1/1000 (levantou: ${r || 'nada'})`);
+  }
+
+  // A recusa DIZ COMO ESCREVER. Uma recusa que so diz "invalido" faz a pessoa
+  // tentar de novo do mesmo jeito.
+  let msg = '';
+  try { cent('1.234'); } catch (e) { msg = (e as Error).message; }
+  chk('U10e', msg.includes('1.234,56') && msg.includes('mil vezes'),
+      'a recusa mostra a forma certa e diz o tamanho do erro que evitou');
+
+  // E `paraDecimal` NAO mudou: a tarifa e o fator continuam decimais, que e o
+  // que a medicao de 14/08 protegeu.
+  chk('U10f', decimalParaTexto(paraDecimal('0.029'), 6) === '0.029000'
+           && decimalParaTexto(paraDecimal('1.185396'), 6) === '1.185396',
+      'grandeza fisica continua decimal — a regra do dinheiro nao vazou para ela');
+}
+
 // ============================== U9 O DESCONTO E EXIGIDO, e nao "zero se nao der"
 //
 // O MODO DE FALHA QUE ESTA SECAO FECHA, medido em 08/09/2026: `paraDecimal`
@@ -284,4 +324,4 @@ const FATURA: CamposDaFaturaUnificada = {
 
 console.log();
 if (falhas > 0) { console.log(`--- fatura unificada: ${falhas} FALHA(S)`); process.exit(1); }
-console.log('--- a conta da fatura unificada: 42 verificacoes, 0 falhas');
+console.log('--- a conta da fatura unificada: 51 verificacoes, 0 falhas');

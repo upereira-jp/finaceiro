@@ -190,8 +190,55 @@ export function multiplicarEmCentavos(a: Decimal, b: Decimal): Centavos {
 }
 
 /** `reaisParaCentavos` aceitando a mesma pontuacao do extrator. */
+/**
+ * DINHEIRO NAO TEM TRES CASAS, e essa e a unica coisa que esta funcao sabe a
+ * mais que `paraDecimal`.
+ *
+ * ======================================================================
+ * O DEFEITO QUE ELA FECHA, medido em 08/09/2026
+ *
+ * `paraDecimal` trata UM ponto seguido de tres digitos como DECIMAL, e faz isso
+ * de proposito: ela tambem serve tarifa (`1.185396`) e fator de CO2 (`0.029`), e
+ * o quadro acima registra a medicao que decidiu isso — pela regra da referencia,
+ * `0.029` viraria `29`, e o CO2 impresso sairia mil vezes maior.
+ *
+ * Para DINHEIRO a mesma regra erra na direcao oposta:
+ *
+ *     textoParaCentavos("1.234")  ->  123 centavos   = R$ 1,23
+ *
+ * quando quem digitou "1.234" num campo de reais quis dizer mil duzentos e
+ * trinta e quatro. Erro de MIL VEZES, para menos, em silencio.
+ *
+ * E o caminho e o oficial, nao um canto: o fluxo da fatura unificada e "o
+ * extrator le, a pessoa corrige a mao" — a rota `compor` existe para recompor a
+ * cada 400 ms de digitacao. O extrator sempre devolve duas casas
+ * (`numeroParaTexto(x, 2)`); quem digita, nao.
+ *
+ * RECUSA EM VEZ DE ADIVINHAR. "1.234" em reais e genuinamente ambiguo — milhar
+ * ou decimal —, e as duas leituras diferem por mil vezes. Escolher uma seria
+ * acertar as vezes; a regra 10 chama isso de improviso. Recusar nomeia o campo e
+ * diz como escrever, e custa uma correcao de digitacao.
+ *
+ * Duas casas ou menos passam intactas: `44`, `44,00`, `44.00`, `1.234,56` e
+ * `1.234.567,89` continuam exatamente como estavam.
+ */
+export class DinheiroComTresCasas extends TypeError {
+  readonly status = 422;
+  constructor(campo: string, bruto: string) {
+    super(
+      `${campo} veio como ${JSON.stringify(bruto)}, e dinheiro nao tem tres casas depois da ` +
+      'virgula. Nao da para saber se o ponto e separador de milhar (mil duzentos e trinta e ' +
+      'quatro) ou decimal (um e vinte e tres) — e as duas leituras diferem por mil vezes. ' +
+      'Escreva com virgula nos centavos: "1.234,56" ou "1234,56".'
+    );
+    this.name = 'DinheiroComTresCasas';
+  }
+}
+
 export function textoParaCentavos(bruto: string, campo = 'valor'): Centavos {
-  return multiplicarEmCentavos(paraDecimal(bruto, campo), { valor: 1n, escala: 0 });
+  const d = paraDecimal(bruto, campo);
+  if (d.escala > 2) throw new DinheiroComTresCasas(campo, String(bruto ?? '').trim());
+  return multiplicarEmCentavos(d, { valor: 1n, escala: 0 });
 }
 
 /**

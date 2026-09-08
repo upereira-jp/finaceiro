@@ -10,7 +10,7 @@
  * Rodar: node --experimental-strip-types tests/crm-semente.ts
  */
 import {
-  sementeDeDocumento, tarifaDaSemente, corrigeSementeAnterior,
+  sementeDeDocumento, tarifaDaSemente, corrigeSementeAnterior, leituraDeSituacaoFalhou,
 } from '../src/crm/sincronizacao.ts';
 
 let falhas = 0;
@@ -133,6 +133,33 @@ chk('S3f', !corrigeSementeAnterior(semente('01186761130', 'crm_semente'), null),
 /* Origem desconhecida (dado antigo, migracao) cai no lado seguro: nao mexe. */
 chk('S3g', !corrigeSementeAnterior(semente('01186761130', null), '08675136000103'),
     'origem nula/desconhecida e tratada como local: o conector nao encosta');
+
+// ============ A VIEW DE SITUACAO VAZIA NAO APAGA A CARTEIRA (08/09/2026)
+//
+// O modo de falha que este predicado fecha e o mais caro do conector, e ele e
+// silencioso: se `financeiro.rateio_situacao` devolvesse ZERO linhas enquanto
+// `rateio_clientes` continuasse devolvendo as 41 — view recriada com erro, RLS
+// mudada do lado de la, deploy do CRM no ar —, o espelho gravaria
+// `rateio_situacao = NULL` nas 29 UCs.
+//
+// O estrago nao aparece no conector: aparece como faturamento quebrado. O
+// universo faturavel da prontidao e `crm_usina_cliente_id IS NULL OR
+// rateio_situacao = 'ativado'`, entao com NULL as 29 espelhadas SAEM e `triar()`
+// recusa todas por `rateio_nao_ativado`. De 29 para zero, sem erro e sem log,
+// num ciclo que roda a cada 15 minutos.
+{
+  chk('V1', leituraDeSituacaoFalhou(0, 41) === true,
+      'zero situacoes com 41 clientes e LEITURA QUE FALHOU - a coluna nao e tocada');
+  chk('V2', leituraDeSituacaoFalhou(0, 0) === false,
+      'zero e zero e um CRM vazio, que e legitimo - e a ASSIMETRIA que denuncia');
+  chk('V3', leituraDeSituacaoFalhou(41, 41) === false,
+      'leitura completa segue o caminho normal');
+  chk('V4', leituraDeSituacaoFalhou(1, 41) === false,
+      'UMA situacao lida ja e leitura que funcionou: 40 UCs sem linha e um fato do CRM, '
+      + 'e a coluna delas deve mesmo ficar nula');
+  chk('V5', leituraDeSituacaoFalhou(41, 0) === false,
+      'situacoes sem clientes nao dispara nada - nao ha espelho a escrever');
+}
 
 console.log(`\n${falhas === 0 ? 'TODAS PASSARAM' : `${falhas} FALHA(S)`}`);
 process.exit(falhas === 0 ? 0 : 1);
