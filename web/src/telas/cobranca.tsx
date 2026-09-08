@@ -285,9 +285,31 @@ export function TelaCobranca() {
       </div>
 
       {/* --------------------------------- o que falta para o boleto sair mesmo */}
-      <h2><Icone nome="certificado" tamanho={17} /> O que falta para um boleto ser pagável</h2>
+      {/*
+        ⚠️ ESTA TABELA DIZIA QUATRO COISAS FALSAS ate 08/09/2026, e ela e a tela
+        que responde «posso emitir boleto?».
+
+        As quatro linhas marcavam «falta» ou «proposta» para: o certificado do
+        banco, o cofre da senha, o aviso de pagamento e a rotina diaria. Medido
+        no dia:
+
+          certificado    A1 no cofre desde 01/09, valido ate 17/08/2027 — o
+                         proprio timer diario mede e registrou «342 dias, ok»;
+          cofre          migration 35, aplicada em 27/08 — e ESTA MESMA TELA ja
+                         dizia isso quinze linhas acima, na faixa verde;
+          aviso          `POST /liquidacoes/webhook-sicoob/:tenant` existe desde
+                         28/08, com `auth: 'webhook'` e verificacao de origem;
+          rotina         quatro timers ativos (`ciclo`, `fila`, `consulta`,
+                         `certificado`), rodando desde 28/08.
+
+        O CUSTO NAO E DE LEITURA: quem for decidir se pode liberar as primeiras
+        faturas lia que faltavam quatro coisas que nao faltam — e procurava no
+        lugar errado o que realmente falta.
+      */}
+      <h2><Icone nome="certificado" tamanho={17} /> O que o boleto precisa, e o que já está pronto</h2>
       <p className="sub">
-        Nada disto é código nosso faltando: os quatro estão medidos e cada um tem responsável.
+        Os quatro degraus entre «a fatura existe» e «o cliente paga um boleto nosso». Nenhum é
+        código faltando — e desde 01/09 nenhum deles está pendente.
       </p>
       <div className="rolagem">
         <table>
@@ -295,27 +317,27 @@ export function TelaCobranca() {
           <tbody>
             <tr>
               <td><strong>Certificado do banco</strong></td>
-              <td>O certificado e a credencial de teste da Sicoob. Sem eles o sistema recusa
+              <td>O certificado que identifica a empresa na Sicoob. Sem ele o sistema recusa
                   emitir, com o motivo escrito, em vez de fingir que emitiu.</td>
-              <td><Marca tom="pendente">falta</Marca></td>
+              <td><Marca tom="ok">no cofre</Marca></td>
             </tr>
             <tr>
               <td><strong>Cofre da senha</strong></td>
-              <td>Onde a senha do banco fica guardada. O apelido deste formulário aponta para um
-                  cofre que ainda não existe.</td>
-              <td><Marca tom="pendente">proposta</Marca></td>
+              <td>Onde a senha do certificado fica guardada, cifrada. Nem esta tela nem o banco de
+                  dados da aplicação enxergam o conteúdo.</td>
+              <td><Marca tom="ok">pronto</Marca></td>
             </tr>
             <tr>
               <td><strong>Aviso de pagamento</strong></td>
-              <td>Como o banco avisa o sistema de que o cliente pagou. Hoje toda entrada exige um
-                  crachá que um banco não emite.</td>
-              <td><Marca tom="pendente">falta</Marca></td>
+              <td>Como o banco avisa o sistema de que o cliente pagou. O endereço existe e é
+                  autenticado pela origem, não por senha.</td>
+              <td><Marca tom="ok">pronto</Marca></td>
             </tr>
             <tr>
               <td><strong>Rotina diária</strong></td>
-              <td>Nada roda sozinho ainda: nem a fila que tenta emitir de novo, nem a conferência
-                  diária que pega o pagamento cujo aviso do banco falhou.</td>
-              <td><Marca tom="pendente">falta</Marca></td>
+              <td>A fila que tenta emitir de novo, a conferência diária que pega o pagamento cujo
+                  aviso falhou, e o alerta de vencimento do certificado.</td>
+              <td><Marca tom="ok">rodando</Marca></td>
             </tr>
           </tbody>
         </table>
@@ -326,12 +348,16 @@ export function TelaCobranca() {
           o projeto continua com os ponteiros, a um clique. */}
       <DetalheTecnico>
         <p style={{ margin: 0 }}>
-          Na ordem da tabela: <code>Q-SICOOB-01</code> (certificado A1 e credencial de sandbox;
-          sem eles o adaptador padrão recusa com <strong>503 nomeado</strong>) ·{' '}
-          <code>ADR-0005</code> (onde mora o segredo do tenant, em proposta) ·{' '}
-          <code>Q-WEBHOOK-01</code> (como a Sicoob se autentica no retorno; hoje toda rota exige
-          Bearer do Supabase) · <code>Q-AGENDA-01</code> (sem fila de emissão com retry e sem
-          consulta ativa diária). Todos com dono no <code>QUESTOES.md</code>.
+          Os quatro fecharam entre 27/08 e 01/09/2026, e esta tabela só foi corrigida em 08/09 —
+          ela ficou dizendo «falta» sobre coisas prontas. Na ordem: <code>Q-SICOOB-01</code> (A1
+          ICP-Brasil no cofre, aplicativo ATIVO no Portal Developers, mTLS <code>200</code>) ·{' '}
+          <code>ADR-0005</code> (migration 35, com a resolvedora provada de ponta a ponta:
+          a role de runtime não enxerga o <code>vault</code> e ainda assim recebe o certificado) ·{' '}
+          <code>Q-WEBHOOK-01</code> (<code>auth: &apos;webhook&apos;</code> com verificação de
+          origem, <code>ADR-0006</code>) · <code>Q-AGENDA-01</code> (quatro timers do systemd).
+          <br />O que <strong>continua</strong> aberto e não aparece nesta tabela porque não é
+          degrau daqui: o dígito da conta corrente não está medido (entrou com DV), e a primeira
+          emissão é que vai dizer.
         </p>
       </DetalheTecnico>
     </Pagina>

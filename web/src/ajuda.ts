@@ -480,7 +480,7 @@ export const TOPICOS: readonly Topico[] = [
   {
     id: 'conta-lida',
     pergunta: 'Onde subo a conta da distribuidora?',
-    resposta: 'Na aba Fatura unificada, uma conta por vez. É dela que sai o valor a cobrar: o '
+    resposta: 'Na aba Fatura unificada, uma conta ou o mês inteiro de uma vez. É dela que sai o valor a cobrar: o '
       + 'sistema lê o arquivo, você confere o que foi lido e registra.',
     porque: PORQUE['conta-lida'],
     passos: [
@@ -762,21 +762,31 @@ export const TOPICOS: readonly Topico[] = [
   {
     id: 'gerar-mes',
     pergunta: 'Como gero as cobranças do mês?',
-    resposta: 'Na aba Faturamento. Ela primeiro ENSAIA — mostra o que entraria e o que ficaria de '
-      + 'fora, com o motivo — e só depois você confirma.',
+    /* ATE 08/09/2026 ESTE VERBETE MANDAVA PARA O CAMINHO APOSENTADO. Ele casa os
+     * termos mais buscados do sistema — «gerar fatura», «faturar o mes», «como
+     * faturo» — e respondia «Na aba Faturamento», que deixou de ser onde a
+     * fatura nasce em 21/08, com a Q-CICLO-01. E gerar por lá TRAVA a unidade no
+     * caminho oficial com «esta unidade ja tem fatura». */
+    resposta: 'Da conta da distribuidora, na aba Fatura unificada: você sobe o PDF (pode subir '
+      + 'vários de uma vez), confere o que foi lido, registra, e então clica em «gerar cobrança». '
+      + 'A aba Faturamento é o caminho antigo, em lote — e usá-lo trava a unidade neste.',
     passos: [
       'Confira antes a aba Pendências: o que estiver faltando lá vira recusa aqui.',
-      'Abra a aba Faturamento e escolha o mês.',
-      'Clique em «Simular, sem cobrar ninguém» e leia os motivos de quem ficou de fora.',
-      'Clique em «Gerar as cobranças». Depois, a emissão e a cobrança acontecem na aba Emissão e cobrança.',
+      'Abra a aba Fatura unificada, em «1 · Leitura e cálculo».',
+      'Envie as contas da distribuidora — uma, ou todas as do mês de uma vez.',
+      'Confira cada linha da fila: unidade, mês, total e vencimento. Corrija o que precisar.',
+      'Clique em «Registrar as N contas conferidas».',
+      'Na lista de contas registradas, use «conferir antes» para ver se ela virará cobrança — '
+        + 'isso não grava nada — e então «gerar cobrança».',
+      'Emitir e cobrar acontecem na aba Emissão e cobrança, no mês DA CONTA.',
     ],
     caminhos: [
-      ir('/carteira', 'Abrir Faturamento'),
+      ir('/documento', 'Abrir Fatura unificada'),
       ver('/pendencias', 'Antes: ver o que falta'),
       ver('/faturas', 'Depois: emitir e cobrar'),
     ],
     camada: null,
-    telas: ['/carteira'],
+    telas: ['/documento', '/carteira'],
     comum: true,
     termos: ['gerar fatura', 'fechar o mes', 'faturar o mes', 'rodar o faturamento', 'lote',
              'gerar cobranca', 'carteira', 'faturamento', 'como faturo', 'faturar', 'cobrar',
@@ -788,13 +798,16 @@ export const TOPICOS: readonly Topico[] = [
     resposta: 'Não. O ensaio só simula: ele mostra quem entraria no mês e quem ficaria de fora, com '
       + 'o motivo de cada recusa, e não grava nada. Rodar de novo não faz mal.',
     passos: [
-      'Abra a aba Faturamento e escolha o mês.',
-      'Clique em «Simular, sem cobrar ninguém» quantas vezes quiser — nada é gravado e ninguém é cobrado.',
-      'Só o botão ao lado, «Gerar as cobranças», grava as faturas.',
+      'No caminho oficial: na lista de contas registradas da aba Fatura unificada, clique em '
+        + '«conferir antes». Ele responde se aquela conta viraria cobrança, e por que não, '
+        + 'sem gravar nada.',
+      'No caminho antigo, em lote: abra a aba Faturamento, escolha o mês e clique em '
+        + '«Simular, sem cobrar ninguém» quantas vezes quiser.',
+      'Só «gerar cobrança» e «Gerar as cobranças» gravam alguma coisa.',
     ],
-    caminhos: [ir('/carteira', 'Abrir Faturamento')],
+    caminhos: [ir('/documento', 'Abrir Fatura unificada'), ver('/carteira', 'O caminho em lote')],
     camada: null,
-    telas: ['/carteira'],
+    telas: ['/documento', '/carteira'],
     termos: ['ensaio', 'simular', 'teste', 'sem gravar', 'vai cobrar', 'e seguro', 'ensaiar',
              'da para desfazer', 'sem risco'],
   },

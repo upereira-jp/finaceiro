@@ -77,6 +77,39 @@ export function TelaFaturas() {
     if (ok) { acao.anunciar(`Cobrança da unidade ${numeroDaUc.get(f.unidade_consumidora_id) ?? ''} emitida.`); recarregar(); }
   };
 
+  /*
+   * CANCELAR — o botao que faltava, e o sistema mandava usa-lo.
+   *
+   * A rota existe desde sempre (`POST /faturas/:id/cancelar`) e ate 08/09/2026
+   * NENHUM arquivo de `web/src` a chamava. Enquanto isso, TRES lugares da
+   * interface mandam cancelar: o aviso da tarifa ("corrigir exige cancelar e
+   * refazer"), a pergunta do lote, e a recusa `registro_ja_faturado`, cujo texto
+   * diz literalmente *"Para refazer, cancele a fatura primeiro"*.
+   *
+   * O CUSTO DISSO E MAIOR NA PRIMEIRA FATURA, que e a mais provavel de sair
+   * errada — unidade trocada, competencia trocada, valor conferido depois. O
+   * unico por (unidade, competencia) trancava a segunda tentativa, e o
+   * destravamento era `curl` com token. E o defeito historico deste projeto na
+   * ferramenta mais critica que ele tem.
+   *
+   * O MOTIVO E OBRIGATORIO na rota (422 sem ele), entao ele e perguntado aqui em
+   * vez de descoberto no erro. E o texto do `confirm` diz o que o cancelamento
+   * FAZ alem de mudar o status: solta a conta lida, que volta a ser faturavel —
+   * comportamento novo de 08/09, e sem ele a pessoa nao sabe que pode refazer.
+   */
+  const cancelar = (f: Fatura) => async () => {
+    const uc = numeroDaUc.get(f.unidade_consumidora_id) ?? '';
+    const motivo = prompt(
+      `Cancelar a cobrança da unidade ${uc}?\n\n`
+      + 'A fatura fica registrada como cancelada, com o motivo e a data — ela não some. '
+      + 'A conta lida que a originou é SOLTA e volta a poder virar cobrança de novo.\n\n'
+      + 'Motivo (obrigatório):');
+    if (motivo === null) return;
+    if (!motivo.trim()) { acao.anunciar('Cancelamento não feito: o motivo é obrigatório.'); return; }
+    const ok = await acao.executar(() => api.post(`/faturas/${f.id}/cancelar`, { motivo: motivo.trim() }));
+    if (ok) { acao.anunciar(`Cobrança da unidade ${uc} cancelada. A conta lida voltou a ser faturável.`); recarregar(); }
+  };
+
   const emitirLote = async () => {
     const rascunhos = lista.filter((f) => podeEmitirFatura(f.status)).length;
     if (!rascunhos) return;
@@ -201,11 +234,21 @@ export function TelaFaturas() {
                 ? <Carregando texto="Lendo o mês…" />
                 : faturas.erro
                   ? 'Lista desconhecida — o aviso acima diz por quê.'
-                  : `Nenhuma fatura em ${mes}. Compor o lote é na aba Carteira.`}>
+                  /* O TEXTO MANDAVA PARA O CAMINHO APOSENTADO, e citava um
+                     rotulo que a barra nao usa desde 21/08 ("Carteira"). Pior: a
+                     tela abre no mes CORRENTE, e a fatura do caminho oficial
+                     nasce na competencia da CONTA (MAI/2026, JUN/2026 — quase
+                     nunca o mes de hoje). Entao o vazio era o estado NORMAL logo
+                     depois de gerar a cobranca, e o texto mandava desfazer o
+                     acerto indo compor pelo legado — que trava a mesma unidade
+                     no caminho oficial com `uc_ja_faturada`. */
+                  : `Nenhuma fatura em ${mes}. A cobrança nasce na competência da CONTA da `
+                    + 'distribuidora, que quase nunca é o mês de hoje — troque o mês acima. '
+                    + 'Ela é gerada na aba Fatura unificada, em «gerar cobrança».'}>
         {lista.map((f) => (
           <FaturaLinha key={f.id} f={f} uc={numeroDaUc.get(f.unidade_consumidora_id)}
                        aberta={aberta === f.id} abrir={() => setAberta(aberta === f.id ? null : f.id)}
-                       emitir={emitir(f)} recarregar={recarregar} acao={acao} />
+                       emitir={emitir(f)} cancelar={cancelar(f)} recarregar={recarregar} acao={acao} />
         ))}
       </Tabela>
     </Pagina>
@@ -216,7 +259,7 @@ export function TelaFaturas() {
 
 function FaturaLinha(p: {
   f: Fatura; uc: string | undefined; aberta: boolean; abrir: () => void;
-  emitir: () => Promise<void>; recarregar: () => void;
+  emitir: () => Promise<void>; cancelar: () => Promise<void>; recarregar: () => void;
   acao: ReturnType<typeof useAcao>;
 }) {
   const { f, acao } = p;
@@ -243,6 +286,16 @@ function FaturaLinha(p: {
               <Icone nome="boleto" tamanho={14} />
               {p.aberta ? 'Fechar' : 'Boleto e baixa'}
             </button>
+            {/* CANCELAR VEM POR ULTIMO e sem `primario`: e o ato que desfaz, e
+                nao o do dia. Aparece nos tres estados em que a rota aceita
+                (`rascunho`, `emitida`, `vencida`) — mostra-lo numa fatura paga
+                seria oferecer o que o servidor recusa, e numa ja cancelada seria
+                oferecer duas vezes o mesmo. */}
+            {['rascunho', 'emitida', 'vencida'].includes(f.status) && (
+              <button onClick={() => void p.cancelar()} disabled={acao.ocupado}>
+                <Icone nome="remover" tamanho={14} /> Cancelar
+              </button>
+            )}
           </div>
         </td>
       </tr>
@@ -290,16 +343,45 @@ function PainelDaFatura({ f, recarregar }: { f: Fatura; recarregar: () => void }
   const baixar = async () => {
     if (!confirm(
       `Registrar o pagamento de ${emReais(totalEsperado)} nesta cobrança?\n\n` +
-      'Ao registrar, o dinheiro é dividido na mesma hora: a comissão de quem trouxe o ' +
-      'cliente e a parte do dono da usina. NÃO existe como desfazer isso pelo sistema.')) return;
-    const ok = await acao.executar(() => api.post(`/faturas/${f.id}/baixa-manual`, {
-      valor_liquidado_centavos: totalEsperado,
-      juros_centavos: jurosCent,
-      multa_centavos: multaCent,
-      observacao: observacao.trim() || null,
-      data_liquidacao: new Date().toISOString().slice(0, 10),
-    }));
-    if (ok) { acao.anunciar('Pagamento registrado e o dinheiro foi dividido.'); boleto.recarregar(); recarregar(); }
+      'Ao registrar, o dinheiro é dividido na mesma hora — quando dá: a comissão de quem trouxe ' +
+      'o cliente e a parte do dono da usina. Se faltar o cadastro do dono, a cobrança fica paga ' +
+      'e a divisão fica pendente, e a tela avisa qual foi o caso. ' +
+      'NÃO existe como desfazer isso pelo sistema.')) return;
+    /*
+     * A RESPOSTA E LIDA, e ate 08/09/2026 ela era descartada.
+     *
+     * `baixar()` devolve `split_bloqueado` exatamente para este caso, e o
+     * comentario dele diz por que: *"o dinheiro entrou e o titulo esta pago. E
+     * divergencia - gravada, e alguem precisa olhar"*. A tela anunciava «o
+     * dinheiro foi dividido» sempre, sem olhar.
+     *
+     * NAO E HIPOTETICO: `dono_usina_id` esta em 0 de 4 usinas, e a R12 bloqueia
+     * o split inteiro quando falta o dono. **A PRIMEIRA baixa deste sistema vai
+     * cair nesse ramo** — e ia dizer que dividiu, tendo dividido nada, sem
+     * segunda tela que desmentisse.
+     *
+     * `acao.executar` devolve booleano e joga o corpo fora, entao a resposta e
+     * capturada aqui dentro.
+     */
+    let resposta: { split_bloqueado?: string | null } | null = null;
+    const ok = await acao.executar(async () => {
+      resposta = await api.post<{ split_bloqueado?: string | null }>(
+        `/faturas/${f.id}/baixa-manual`, {
+          valor_liquidado_centavos: totalEsperado,
+          juros_centavos: jurosCent,
+          multa_centavos: multaCent,
+          observacao: observacao.trim() || null,
+          data_liquidacao: new Date().toISOString().slice(0, 10),
+        });
+    });
+    if (ok) {
+      const bloqueio = (resposta as { split_bloqueado?: string | null } | null)?.split_bloqueado;
+      acao.anunciar(bloqueio
+        ? `Pagamento registrado — mas o dinheiro NÃO foi dividido: ${bloqueio}. `
+          + 'A cobrança está paga; o repasse e a comissão ficam pendentes até isso ser resolvido.'
+        : 'Pagamento registrado e o dinheiro foi dividido.');
+      boleto.recarregar(); recarregar();
+    }
   };
 
   return (

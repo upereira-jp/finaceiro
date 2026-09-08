@@ -40,6 +40,7 @@ import {
 } from '../abas-da-fatura.ts';
 import { LOGO_G3_DATA_URI } from '../logo-g3.ts';
 import { lerBase64, mimeDo, reenviavel, naMensagem } from '../arquivo.ts';
+import { EXPLICACAO_DO_REGISTRO } from '../../../src/dominio/fatura-do-registro.ts';
 import {
   recusaDoArquivo, normalizarUc, competenciaDoItem, chaveDoItem,
   pendenciaDoItem, avisoDoItem, chavesRepetidas, podeRegistrar,
@@ -97,6 +98,22 @@ type Rascunho = {
   parametros: ParametrosDaEmissao;
   boleto: BoletoLido;
   campos_personalizados: Record<string, string>;
+  /**
+   * A FILA DO LOTE, e ela entrou no rascunho em 08/09/2026 porque o que se
+   * perdia ali era DINHEIRO.
+   *
+   * A fila vivia so em `useState`. Um F5 no meio de 29 leituras apagava a fila
+   * inteira — e cada linha lida custou uma chamada PAGA ao modelo de visao. E o
+   * F5 acidental e justamente o caminho mais provavel num trabalho que leva
+   * dezenas de minutos com a aba aberta.
+   *
+   * SO O QUE SOBREVIVE A SERIALIZACAO ENTRA: os `File` nao entram no rascunho e
+   * nao poderiam — o navegador nao os devolve depois do recarregamento. Uma
+   * linha que ainda nao tinha sido lida volta como `falhou`, dizendo para subir
+   * o arquivo de novo; uma linha ja lida volta inteira, com os campos que a
+   * chamada paga produziu.
+   */
+  lote?: ItemDoLote[];
 };
 
 const chaveDoRascunho = (tenantId: string | null) =>
@@ -119,13 +136,38 @@ function lerRascunho(tenantId: string | null): Rascunho | null {
       boleto: { ...BOLETO_LIDO_VAZIO, ...(r.boleto ?? {}),
                 instrucoes: Array.isArray(r.boleto?.instrucoes) ? r.boleto.instrucoes : [] },
       campos_personalizados: (r.campos_personalizados ?? {}) as Record<string, string>,
+      lote: Array.isArray(r.lote) ? r.lote.map(restaurarItem) : [],
     };
   } catch { return null; }
 }
 
+/**
+ * A LINHA DA FILA, DE VOLTA DO RASCUNHO.
+ *
+ * Quem estava `na_fila`, `lendo` ou `registrando` volta como `falhou`: o `File`
+ * nao atravessa o recarregamento e a leitura nao pode ser retomada de onde
+ * parou. Dizer isso na propria linha, com o nome do arquivo, e o que permite a
+ * pessoa subir de novo SO os que faltaram — apagar a fila faria ela recomecar as
+ * 29.
+ */
+function restaurarItem(i: ItemDoLote): ItemDoLote {
+  const perdido = i.estado === 'na_fila' || i.estado === 'lendo' || i.estado === 'registrando';
+  if (!perdido) return i;
+  return {
+    ...i,
+    estado: 'falhou',
+    erro: 'A página foi recarregada antes desta leitura terminar. Envie este arquivo de novo.',
+  };
+}
+
 function gravarRascunho(tenantId: string | null, r: Rascunho): void {
   try { localStorage.setItem(chaveDoRascunho(tenantId), JSON.stringify(r)); }
-  catch { /* armazenamento cheio ou desligado: a tela continua */ }
+  catch {
+    /* Armazenamento cheio ou desligado: a tela continua. Com o lote dentro, o
+     * rascunho ficou MAIOR — 29 linhas com 21 campos cada —, entao estourar a
+     * cota deixou de ser hipotetico. Perder o rascunho e ruim; travar a tela por
+     * causa dele seria pior. */
+  }
 }
 
 function apagarRascunho(tenantId: string | null): void {
@@ -259,7 +301,7 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
    * JSX, porque o runner do `web/` nao le `.tsx` e o que nao pode ser verificado
    * nao e regra (regra 8).
    */
-  const [lote, setLote] = useState<ItemDoLote[]>([]);
+  const [lote, setLote] = useState<ItemDoLote[]>(rascunho?.lote ?? []);
   const [registrandoLote, setRegistrandoLote] = useState(false);
   /** As UCs do cadastro, so para AVISAR que a conta e de uma unidade que nao
    *  existe aqui. Nao bloqueia — o servidor aceita `unidade_consumidora_id` nulo. */
@@ -419,8 +461,10 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
    * tem tabela, policy e trilha.
    */
   useEffect(() => {
-    gravarRascunho(tenantId, { campos, parametros, boleto, campos_personalizados: personalizados });
-  }, [tenantId, campos, parametros, boleto, personalizados]);
+    gravarRascunho(tenantId, {
+      campos, parametros, boleto, campos_personalizados: personalizados, lote,
+    });
+  }, [tenantId, campos, parametros, boleto, personalizados, lote]);
 
   /* A composicao pedida ao servidor. `pedido` cresce a cada chamada e a resposta
    * so e aceita se for a do ULTIMO pedido: sem isso, uma resposta lenta de uma
@@ -879,6 +923,36 @@ function AbaDeLeitura(p: PropsDeLeitura) {
           </div>
         </div>
 
+        {/*
+          O EMISSOR VAZIO ACUSA AQUI, e ate 08/09/2026 nao acusava em lugar nenhum
+          que a operacao visse.
+
+          `linhaDoEmissor` devolve `null` quando razao social e CNPJ estao vazios —
+          e eles estao VAZIOS em producao. Nada recusa por isso: a folha compoe,
+          imprime e sai **sem o cabecalho, sem o campo Beneficiario da faixa de
+          pagamento e sem a linha «confira sempre se o beneficiario e...»**, que
+          amarra no nome e some junto com ele. Da para emitir as primeiras faturas
+          sem perceber que elas nao dizem quem esta cobrando.
+
+          O LINK E O CONSERTO DA VEZ: o painel existe, na aba «3 · Cadastro da
+          fatura», que saiu da barra por decisao do dono e so se alcanca pelo
+          fragmento. Ate hoje os dois links que levavam la nao funcionavam de
+          dentro de `/documento` — `pushState` nao disparava `hashchange` (ver
+          `web/src/rota.tsx`).
+        */}
+        {p.composicao && !p.composicao.folha1.cabecalho.emissor && (
+          <Aviso tipo="alerta">
+            <strong>A folha vai sair sem dizer quem está cobrando.</strong> Razão social e CNPJ do
+            emissor estão em branco, e nada recusa por isso: o cabeçalho, o campo «Beneficiário» da
+            faixa de pagamento e o aviso contra boleto falso somem — é o nome que os sustenta.
+            {' '}
+            <button type="button" className="fu-acao"
+                    onClick={() => { window.location.hash = FRAGMENTO_DA_ABA_OCULTA; }}>
+              Cadastrar quem emite a fatura
+            </button>
+          </Aviso>
+        )}
+
         <FilaDoLote
           itens={p.lote} ucs={p.ucsDoCadastro} registrando={p.registrandoLote}
           registrar={p.registrarDoLote} conferir={p.conferirDoLote}
@@ -1278,17 +1352,69 @@ function FaturasRegistradas({ uc, versao, registrar, registrando, statusRegistro
    *  transação do servidor, e dois cliques simultâneos disputariam a trava que
    *  impede o mesmo mês ser cobrado duas vezes. */
   const [cobrando, setCobrando] = useState<string | null>(null);
+  const [ensaiando, setEnsaiando] = useState<string | null>(null);
+  /** O resultado do ensaio por registro. Fica na tela até a lista recarregar —
+   *  quem conferiu dez linhas precisa ver as dez respostas ao mesmo tempo. */
+  const [ensaio, setEnsaio] = useState<Record<string, string>>({});
   const alvo = uc.trim();
 
+  /*
+   * ========================================================================
+   * DOIS MODOS, e o segundo entrou em 08/09/2026 porque a lista do MES nao
+   * existia em lugar nenhum.
+   *
+   * `GET /faturas/unificada/registros` responde as duas perguntas: com
+   * `?unidade_consumidora=` devolve a serie daquela unidade; SEM o parametro
+   * devolve as mais recentes do tenant (`registro.recentes`, rotas.ts). A tela
+   * so sabia fazer a primeira, e desistia quando o campo estava vazio.
+   *
+   * O CUSTO DISSO ERA A LISTA DE TRABALHO DO MES. A camada
+   * `conta_lida_da_competencia` conta "faltam N de 29", e para saber QUAIS a
+   * pessoa digitava 29 numeros de unidade, um por vez — a informacao que o
+   * servidor ja devolve numa chamada. Com o lote de contas subindo 29 arquivos
+   * de uma vez, nao ter onde ver o resultado era o passo seguinte faltando.
+   */
   useEffect(() => {
-    if (!alvo) { setLista(null); setErro(null); return; }
     let vivo = true;
-    api.get<RegistroDeFatura[]>(
-      `/faturas/unificada/registros?unidade_consumidora=${encodeURIComponent(alvo)}`)
+    const caminho = alvo
+      ? `/faturas/unificada/registros?unidade_consumidora=${encodeURIComponent(alvo)}`
+      : '/faturas/unificada/registros?limite=200';
+    api.get<RegistroDeFatura[]>(caminho)
       .then((r) => { if (vivo) { setLista(r); setErro(null); } })
       .catch((e) => { if (vivo) { setLista([]); setErro(naMensagem(e)); } });
     return () => { vivo = false; };
   }, [alvo, versao]);
+
+  /*
+   * CONFERIR ANTES DE COBRAR — o par que faltava.
+   *
+   * Todo outro ato deste sistema que cobra tem ensaio: o botao «Simular, sem
+   * cobrar ninguem» do caminho legado, e o `--ensaio` obrigatorio de todos os
+   * scripts. O ato OFICIAL era o unico sem — a rota
+   * `GET /faturas/unificada/registros/:id/ensaio` existe desde 21/08 e nenhum
+   * arquivo de `web/src` a chamava.
+   *
+   * Sem ela a operacao descobre `sem_geracao_lancada`, `sem_contrato_vigente` ou
+   * `sem_vencimento` CLICANDO em «gerar cobranca», uma unidade por vez, e nao
+   * consegue planejar o mes. A rota nao escreve nada e ja devolve a frase pronta.
+   */
+  async function conferirAntes(r: RegistroDeFatura) {
+    setEnsaiando(r.id);
+    setErro(null);
+    try {
+      const e = await api.get<{ faturar: boolean; motivo?: string; numero_uc: string }>(
+        `/faturas/unificada/registros/${r.id}/ensaio`);
+      setEnsaio((s) => ({ ...s, [r.id]: e.faturar
+        ? 'Esta conta VIRA cobrança — nada foi gravado ainda.'
+        /* A EXPLICACAO VEM DO DOMINIO, e nao de uma tabela escrita aqui: e a
+         * MESMA que o servidor usa para recusar de verdade
+         * (`FaturaDoRegistroRecusada`). Uma copia nesta tela diria uma coisa e a
+         * recusa real diria outra no dia em que um motivo mudasse — e a pessoa
+         * leria as duas na mesma sessao. */
+        : `NÃO vira cobrança: ${EXPLICACAO_DO_REGISTRO[
+            e.motivo as keyof typeof EXPLICACAO_DO_REGISTRO] ?? e.motivo}.` }));
+    } catch (e) { setErro(naMensagem(e)); } finally { setEnsaiando(null); }
+  }
 
   async function apagar(r: RegistroDeFatura) {
     /* A CONFIRMACAO NOMEIA O QUE SAI. A referencia apaga a linha direto; aqui a
@@ -1331,18 +1457,29 @@ function FaturasRegistradas({ uc, versao, registrar, registrando, statusRegistro
 
   return (
     <div className="cartao">
-      <div className="fu-rotulo">Faturas registradas nesta unidade</div>
+      <div className="fu-rotulo">
+        {alvo ? 'Faturas registradas nesta unidade' : 'Contas registradas — todas as unidades'}
+      </div>
 
-      {!alvo && <div className="fu-status">Informe a unidade consumidora para ver o histórico.</div>}
-      {alvo && lista == null && <div className="fu-status">Lendo os registros…</div>}
-      {alvo && lista?.length === 0 && !erro && (
-        <div className="fu-status">Nenhuma fatura registrada ainda.</div>
+      {!alvo && (
+        <div className="fu-status solto">
+          As contas já conferidas e gravadas, da mais nova para a mais velha. Preencha a unidade
+          consumidora ao lado para ver só a série dela.
+        </div>
+      )}
+      {lista == null && <div className="fu-status">Lendo os registros…</div>}
+      {lista?.length === 0 && !erro && (
+        <div className="fu-status">
+          {alvo ? 'Nenhuma fatura registrada nesta unidade.' : 'Nenhuma conta registrada ainda.'}
+        </div>
       )}
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
 
       {(lista ?? []).map((r) => (
         <div key={r.id} className="fu-registro">
-          <span>{r.competencia}</span>
+          {/* NO MODO MES a unidade vem junto: sem ela a lista seria uma coluna de
+              competencias repetidas, e a pessoa nao saberia de quem e cada linha. */}
+          <span>{alvo ? r.competencia : `${r.numero_uc} · ${r.competencia}`}</span>
           <span className="fu-registro-dir">
             <span className="fu-registro-val">{emReais(r.total_centavos)}</span>
             {/* JÁ COBRADA NÃO OFERECE COBRAR DE NOVO, e também não some: quem
@@ -1361,6 +1498,10 @@ function FaturasRegistradas({ uc, versao, registrar, registrando, statusRegistro
                 {/* O ato só é OFERECIDO quando este banco sabe executá-lo.
                     Oferecer sempre trocaria uma recusa nomeada por um clique
                     que falha, e quem opera não tem como saber a diferença. */}
+                <button type="button" className="fu-texto"
+                        onClick={() => void conferirAntes(r)} disabled={ensaiando !== null}>
+                  {ensaiando === r.id ? 'conferindo…' : 'conferir antes'}
+                </button>
                 {r.cobranca_disponivel && (
                   <button type="button" className="fu-texto"
                           onClick={() => void cobrar(r)} disabled={cobrando !== null}>
@@ -1371,6 +1512,9 @@ function FaturasRegistradas({ uc, versao, registrar, registrando, statusRegistro
               </>
             )}
           </span>
+          {ensaio[r.id] && (
+            <div className="fu-status" style={{ width: '100%', marginTop: 4 }}>{ensaio[r.id]}</div>
+          )}
         </div>
       ))}
 

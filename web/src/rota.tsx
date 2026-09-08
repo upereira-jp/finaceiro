@@ -16,8 +16,30 @@ import type { ReactNode, CSSProperties } from 'react';
 const EVENTO = 'financeiro:navegou';
 
 export function navegar(caminho: string): void {
+  const hashAntes = location.hash;
   history.pushState(null, '', caminho);
   dispatchEvent(new Event(EVENTO));
+
+  /*
+   * O FRAGMENTO TAMBEM AVISA, e ate 08/09/2026 ele nao avisava.
+   *
+   * `pushState` nao dispara `popstate` — por isso o evento proprio acima — e
+   * tambem NAO dispara `hashchange`. Quem escuta o fragmento nunca soube que ele
+   * mudou por navegacao interna.
+   *
+   * O CASO CONCRETO, e ele estava no caminho critico: a aba «3 · Cadastro da
+   * fatura» esta oculta da barra por decisao do dono e so aparece com
+   * `#cadastro` no endereco (`abas-da-fatura.ts`). Ela e o UNICO caminho de tela
+   * para a razao social e o CNPJ de quem cobra — que estao VAZIOS em producao, e
+   * cuja falta faz a folha sair sem dizer quem cobra e sem a linha antigolpe do
+   * boleto. Os dois links que levavam ate ela passavam por aqui, entao **quem ja
+   * estava em `/documento` clicava e nada acontecia**: mesma rota, mesmo
+   * componente montado, e o `hashchange` que a tela escuta nunca chegava.
+   *
+   * So dispara quando o fragmento REALMENTE mudou: um evento a cada clique de
+   * barra faria toda tela que escuta hash refazer trabalho a toa.
+   */
+  if (location.hash !== hashAntes) dispatchEvent(new HashChangeEvent('hashchange'));
 }
 
 export function useCaminho(): string {

@@ -5,14 +5,15 @@
 // nao tem "editar percentual", so "abrir nova vigencia", e a anterior fecha na
 // mesma transacao.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api, type Usina, type DonoUsina, type RegraRepasse } from '../api.ts';
 import { usinaNoCrm } from '../crm.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
   Pagina, Aviso, Tabela, Campo, Busca, Ferramentas, Filtro, ThOrd, Marca, Escolha, Icone,
-  useOrdenacao, ordenar, contem, rotulo,
+  useOrdenacao, ordenar, contem, rotulo, linha, CampoData,
 } from '../ui.tsx';
+import { naMensagem } from '../arquivo.ts';
 import { decimalTexto } from '../dinheiro.ts';
 import { divisaoEmPalavras, parteDaG3, parteDaG3ComComissao, comVirgula } from '../repasse-regras.ts';
 import { FILTROS_DA_TELA, filtroDaConsulta } from '../destino-da-camada.ts';
@@ -92,6 +93,8 @@ export function TelaUsinas() {
           </button>
         )}
       </Ferramentas>
+
+      <GeracaoLancada usinas={usinas.dado ?? []} />
 
       <Tabela cabecalho={<>
                 <ThOrd chave="codigo" ordem={ordem} ao={alternar}>Código</ThOrd>
@@ -193,5 +196,105 @@ export function TelaUsinas() {
         </Tabela>
       )}
     </Pagina>
+  );
+}
+
+/* ==================================================== a geração da competência
+ *
+ * O QUE ESTE PAINEL FECHA, e sao tres coisas de uma vez:
+ *
+ *   1. `GET /usinas/:id/geracao` existia desde sempre e **nenhum arquivo de
+ *      `web/src` a chamava**. A rota que responde "esta usina ja tem o numero
+ *      deste mes?" nao tinha leitor;
+ *   2. a Central de Ajuda PROMETIA esta tela: *"Na aba Usinas dá para ver quais
+ *      usinas já receberam o número deste mês"* — e a aba mostrava Código,
+ *      Distribuidora, Dono e Situação. Era a unica promessa mensuravelmente
+ *      falsa da ajuda, e caia numa camada que bloqueia a fatura;
+ *   3. a camada `geracao_da_competencia` da tela de Pendencias dizia "faltam N",
+ *      e descobrir QUAIS exigia abrir a ficha de cada usina no outro sistema.
+ *
+ * NAO E TELA DE DIGITACAO, e a ausencia continua deliberada: o numero e lancado
+ * no CRM, que e o dono dele, e duas telas de escrita criariam dois donos (ver
+ * `destino-da-camada.ts`). Este painel so LE — e ao lado de cada usina que falta
+ * fica o link que ja existia para a ficha de la.
+ */
+function GeracaoLancada({ usinas }: { usinas: Usina[] }) {
+  const [mes, setMes] = useState(() => new Date().toISOString().slice(0, 7));
+  const [porUsina, setPorUsina] = useState<Record<string, string[]>>({});
+  const [erro, setErro] = useState<string | null>(null);
+
+  const ativas = usinas.filter((u) => u.status === 'ativa');
+
+  useEffect(() => {
+    if (ativas.length === 0) return;
+    let vivo = true;
+    Promise.all(ativas.map((u) =>
+      api.get<Array<{ competencia: string; geracao_kwh: string }>>(`/usinas/${u.id}/geracao?limite=24`)
+        .then((l) => [u.id, l.map((g) => String(g.competencia).slice(0, 7))] as const)))
+      .then((pares) => { if (vivo) { setPorUsina(Object.fromEntries(pares)); setErro(null); } })
+      /* Falhar aqui NAO pode esconder a tabela de usinas: este painel e leitura
+       * de apoio, e a lista principal da tela nao depende dele. */
+      .catch((e) => { if (vivo) setErro(naMensagem(e)); });
+    return () => { vivo = false; };
+  }, [usinas.length, ativas.length]);
+
+  if (ativas.length === 0) return null;
+
+  const semNumero = ativas.filter((u) => porUsina[u.id] && !porUsina[u.id]!.includes(mes));
+
+  return (
+    <div className="cartao secao">
+      <div style={{ ...linha, gap: 12, marginBottom: 8 }}>
+        <div>
+          <label>Geração lançada em</label>
+          <CampoData mes valor={mes} ao={setMes} rotuloAcessivel="Competência da geração"
+                     style={{ width: 'auto' }} />
+        </div>
+      </div>
+      <p className="sub" style={{ marginTop: 0 }}>
+        O número é lançado no outro sistema e chega aqui sozinho, em até 15 minutos. Sem ele, a
+        cobrança daquele mês é recusada — e aqui dá para ver quais faltam sem abrir uma a uma.
+      </p>
+
+      {erro && <Aviso tipo="alerta">Não foi possível ler a geração: {erro}</Aviso>}
+
+      <Tabela cabecalho={<><th>Usina</th><th>Geração deste mês</th><th>Último mês com número</th></>}>
+        {ativas.map((u) => {
+          const meses = porUsina[u.id];
+          const tem = meses?.includes(mes);
+          return (
+            <tr key={u.id}>
+              <td>
+                <strong>{u.codigo_geradora}</strong>
+                {u.apelido && <span className="fraco"> · {u.apelido}</span>}
+              </td>
+              <td>
+                {meses === undefined
+                  ? <span className="fraco">lendo…</span>
+                  : tem
+                    ? <Marca tom="ok" icone="confirmar">lançada</Marca>
+                    : <Marca tom="pendente">falta</Marca>}
+                {meses !== undefined && !tem && usinaNoCrm(u.crm_usina_id) && (
+                  <a className="ligacao-crm" style={{ marginLeft: 8 }}
+                     href={usinaNoCrm(u.crm_usina_id)!} target="_blank" rel="noopener noreferrer"
+                     title="Abrir a ficha desta usina no outro sistema, onde a geração é lançada">
+                    <Icone nome="abrir_externo" tamanho={13} />
+                    <span className="ligacao-crm-texto">lançar lá</span>
+                  </a>
+                )}
+              </td>
+              <td className="fraco">{meses?.length ? meses[0]!.split('-').reverse().join('/') : '—'}</td>
+            </tr>
+          );
+        })}
+      </Tabela>
+
+      {semNumero.length > 0 && (
+        <p className="sub">
+          <strong>{semNumero.length} de {ativas.length}</strong> sem o número deste mês. Depois de
+          lançar no outro sistema, o número chega aqui em até 15 minutos.
+        </p>
+      )}
+    </div>
   );
 }

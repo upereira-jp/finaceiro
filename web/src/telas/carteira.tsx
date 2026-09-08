@@ -10,7 +10,7 @@ import { useState } from 'react';
 import { api } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
-  Pagina, Aviso, Tabela, rotulo, linha, Kpi, Marca, Icone, CampoData, AjudaDoMes } from '../ui.tsx';
+  Pagina, Aviso, Tabela, rotulo, linha, Kpi, Marca, Icone, CampoData, AjudaDoMes, DetalheTecnico} from '../ui.tsx';
 import { competenciaISO, emReais } from '../dinheiro.ts';
 
 type Resumo = {
@@ -46,7 +46,38 @@ export function TelaCarteira() {
 
   return (
     <Pagina titulo="Faturamento"
-            sub="Onde a fatura do mês nasce. O ensaio roda a triagem e não escreve nada; compor grava as faturas em rascunho. Emitir e cobrar são a aba Emissão e cobrança.">
+            sub="O caminho em LOTE, que cobra a partir da geração medida. Desde 21/08/2026 o caminho oficial é outro: a fatura nasce da conta da distribuidora, na aba Fatura unificada.">
+      {/*
+        ⚠️ ESTA TELA E O CAMINHO APOSENTADO, e ate 08/09/2026 nada dizia isso.
+        Ela tem o nome mais obvio da barra («Faturamento»), o subtitulo dizia «onde
+        a fatura do mes nasce» — falso desde a `Q-CICLO-01` — e o botao primario.
+        A Central de Ajuda casava «gerar fatura», «faturar o mes» e «como faturo»
+        com ELA.
+
+        E o custo nao e de leitura: uma fatura composta por aqui BLOQUEIA a mesma
+        unidade no caminho oficial, com `uc_ja_faturada`, e desfazer exige o
+        cancelamento — que ate hoje nao tinha botao. Um clique curioso travava o
+        mes.
+      */}
+      <Aviso tipo="alerta">
+        <strong>Este não é o caminho da fatura que o cliente recebe.</strong> Ele cobra a partir
+        da <strong>geração medida</strong> × rateio × tarifa, e o documento que sai não tem as
+        sete faixas nem a economia acumulada. Desde 21/08/2026 a cobrança nasce da{' '}
+        <strong>conta da distribuidora lida</strong>, na aba <strong>Fatura unificada</strong>.
+        <br />
+        <strong>Gerar as cobranças aqui trava o mês daquelas unidades</strong> no caminho oficial:
+        a conta lida passa a ser recusada com «esta unidade já tem fatura», e desfazer é cancelar
+        cada uma na aba Emissão e cobrança.
+        <DetalheTecnico>
+          <p style={{ margin: 0 }}>
+            <code>POST /faturamento/:competencia/compor</code> → <code>fatura.comporLote</code> →{' '}
+            <code>triar()</code>. O caminho oficial é <code>faturarRegistro</code>, e a guarda que
+            colide é <code>uc_ja_faturada</code> em <code>triarRegistro</code>. A tela continua
+            aqui porque é o único caminho de lote que existe, e porque as faturas já compostas por
+            ele precisam de onde ser vistas — ver <code>Q-CICLO-01</code> e <code>Q-CICLO-02</code>.
+          </p>
+        </DetalheTecnico>
+      </Aviso>
       {atual && (
         <div className="kpis">
           <Kpi nome={<>Faturado · {String(atual.competencia).slice(0, 7)}</>} icone="faturado"
@@ -86,8 +117,11 @@ export function TelaCarteira() {
             <button onClick={rodar('ensaio')} disabled={acao.ocupado}>
               <Icone nome="recarregar" tamanho={15} /> Simular, sem cobrar ninguém
             </button>
-            <button className="primario" onClick={rodar('compor')} disabled={acao.ocupado}>
-              <Icone nome="carteira" tamanho={15} peso="bold" /> Gerar as cobranças
+            {/* DEIXOU DE SER `primario` em 08/09/2026: o botao mais destacado da
+                tela nao pode ser o do caminho aposentado. O ato continua
+                disponivel — quem precisa do lote precisa dele. */}
+            <button onClick={rodar('compor')} disabled={acao.ocupado}>
+              <Icone nome="carteira" tamanho={15} /> Gerar as cobranças pelo caminho em lote
             </button>
           </div>
         </div>
