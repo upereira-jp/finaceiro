@@ -25,7 +25,7 @@ import { useState } from 'react';
 import { api } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
-  Pagina, Aviso, Tabela, Campo, Busca, Ferramentas, Filtro, ThOrd, Marca, Icone,
+  Pagina, Aviso, Tabela, Campo, Busca, Ferramentas, Filtro, ThOrd, Marca, Icone, DetalheTecnico,
   Carregando, AjudaDoMes, CampoData, useOrdenacao, ordenar, contem,
 } from '../ui.tsx';
 import { emReais, paraCentavos, competenciaISO } from '../dinheiro.ts';
@@ -35,6 +35,11 @@ import {
   ROTULO_DO_STATUS, ROTULO_DA_FORMA, ROTULO_DO_BENEFICIARIO,
   type ContaAPagar, type FormaDePagamento,
 } from '../contas-regras.ts';
+import {
+  motivoDaEspera, podeRepartirAgora, ordenarPelaEspera, resumoDaEspera, totalCentavos,
+  ROTULO_DO_MOTIVO, EXPLICACAO_DO_MOTIVO, type RepassePendente, type MotivoDaEspera,
+} from '../repasse-pendente.ts';
+import { mesPorExtenso } from '../vocabulario.ts';
 import { paraCsv, reaisParaPlanilha, nomeDoArquivo, type Coluna } from '../csv.ts';
 import { baixarCsv } from '../baixar.ts';
 
@@ -56,10 +61,19 @@ const TOM: Record<ContaAPagar['status'], 'ok' | 'pendente' | 'nao_medido'> = {
   aberta: 'pendente', parcial: 'pendente', paga: 'ok', cancelada: 'nao_medido',
 };
 
+/* AGUARDAR NAO E PENDENCIA, e por isso `aguardando_banco` e `nao_medido` e nao
+ * `pendente`: o tom de pendencia diz "ha trabalho a fazer", e ali nao ha - o
+ * sistema pergunta ao banco todo dia e resolve sozinho. Pintar de pendente
+ * produziria alguem tentando resolver o que nao e resolvivel a mao. */
+const TOM_DA_ESPERA: Record<MotivoDaEspera, 'ok' | 'pendente' | 'nao_medido'> = {
+  sem_dono: 'pendente', aguardando_banco: 'nao_medido', pronto: 'pendente',
+};
+
 export function TelaContasAPagar() {
   const contas = useDados<ContaAPagar[]>(() => api.get('/contas-a-pagar'));
   const resumo = useDados<ResumoLinha[]>(() => api.get('/contas-a-pagar/resumo'));
   const semProvisao = useDados<ItemSemConta[]>(() => api.get('/contas-a-pagar/sem-provisao'));
+  const espera = useDados<RepassePendente[]>(() => api.get('/liquidacoes/pendentes-de-split'));
   const acao = useAcao();
 
   const [busca, setBusca] = useState('');
@@ -131,6 +145,71 @@ export function TelaContasAPagar() {
         <Aviso tipo="alerta">
           {atrasadas.length} conta(s) vencida(s), somando <strong>{emReais(totalAtrasado)}</strong>.
         </Aviso>
+      )}
+
+      {/*
+        * DINHEIRO QUE ENTROU E AINDA NAO VIROU CONTA A PAGAR — o cartao entrou em
+        * 08/09/2026 e ele fecha um vao que era invisivel nesta tela.
+        *
+        * O subtitulo da pagina promete que a parte do dono "nasce sozinha quando
+        * um cliente paga". A partir desta data ela nasce um passo depois: o banco
+        * avisa o pagamento, e o repasse espera a CONFIRMACAO desse pagamento.
+        * Entre um e outro o dinheiro existe, e esta tela dizia "nada a pagar".
+        *
+        * Some quando nao ha espera, e sumir e o certo: fila vazia e o estado
+        * normal, e um cartao permanente escrito "0" poe na tela um problema que
+        * nao existe.
+        */}
+      {(espera.dado?.length ?? 0) > 0 && (
+        <div className="cartao secao">
+          <h3 style={{ marginTop: 0 }}>
+            <Icone nome="pode_repartir" tamanho={17} /> Dinheiro recebido que ainda não foi repartido
+          </h3>
+          <p className="nota">
+            {resumoDaEspera(espera.dado!)} · somam{' '}
+            <strong>{emReais(totalCentavos(espera.dado!))}</strong>
+          </p>
+          <Tabela cabecalho={<><th>Pago em</th><th>Mês de referência</th><th>Usina</th>
+                              <th className="num">Valor</th><th>Situação</th><th>Ação</th></>}>
+            {ordenarPelaEspera(espera.dado!).map((l) => {
+              const m = motivoDaEspera(l);
+              return (
+                <tr key={l.liquidacao_id}>
+                  <td>{String(l.data_liquidacao).slice(0, 10)}</td>
+                  <td>{mesPorExtenso(String(l.competencia)) || String(l.competencia).slice(0, 7)}</td>
+                  <td>{l.codigo_geradora}</td>
+                  <td className="num"><strong>{emReais(l.valor_liquidado_centavos)}</strong></td>
+                  <td>
+                    <Marca tom={TOM_DA_ESPERA[m]}>{ROTULO_DO_MOTIVO[m]}</Marca>
+                    <div className="nota" style={{ marginTop: 4, maxWidth: '46ch' }}>
+                      {EXPLICACAO_DO_MOTIVO[m]}
+                    </div>
+                  </td>
+                  <td>
+                    {podeRepartirAgora(l) ? (
+                      <button disabled={acao.ocupado}
+                              onClick={async () => {
+                                const ok = await acao.executar(
+                                  () => api.post(`/liquidacoes/${l.liquidacao_id}/repartir`, {}));
+                                if (ok) { espera.recarregar(); contas.recarregar(); resumo.recarregar(); }
+                              }}>
+                        Repartir agora
+                      </button>
+                    ) : <span className="nota">—</span>}
+                  </td>
+                </tr>
+              );
+            })}
+          </Tabela>
+          <DetalheTecnico>
+            <p className="nota">
+              A lista vem de <code>GET /liquidacoes/pendentes-de-split</code>: liquidações sem
+              execução de repasse. «Aguardando o banco confirmar» é baixa de origem
+              <code> webhook_sicoob</code>, que a Sicoob define como intenção de pagamento — a
+              consulta ativa diária confirma e reparte (Q-BAIXAOPER-01). «Falta o dono» é a R12.
+            </p>
+          </DetalheTecnico>
+        </div>
       )}
 
       {/* ------------------------------------------------ o resumo por quem recebe */}

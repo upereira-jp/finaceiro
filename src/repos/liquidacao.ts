@@ -304,13 +304,22 @@ export async function repartirPendente(liquidacaoId: string) {
   return split.executar(liquidacaoId);
 }
 
-/** As baixas cujo split nao rodou. E a fila de trabalho da R12, e ela e
- *  visivel em vez de ficar implicita numa ausencia de linha. */
+/**
+ * As baixas cujo split nao rodou. E a fila de trabalho da R12, e ela e visivel em
+ * vez de ficar implicita numa ausencia de linha.
+ *
+ * ELA GANHOU UM SEGUNDO MORADOR EM 08/09/2026, e por isso devolve a `origem`: a
+ * baixa por webhook entra aqui esperando o banco confirmar, e quem le precisa
+ * separar as duas esperas. Sem dono e trabalho de CADASTRO - alguem tem de
+ * agir. Aguardando confirmacao nao e trabalho de ninguem: a consulta diaria
+ * resolve sozinha, e oferecer um botao ali seria oferecer repartir dinheiro
+ * sobre intencao de pagamento, que e o que esta fila existe para impedir.
+ */
 export async function pendentesDeSplit() {
   await exigir('ler');
   const r: any[] = await db().$queryRaw`
     SELECT l.id AS liquidacao_id, l.data_liquidacao, l.valor_liquidado_centavos::int,
-           f.competencia, u.codigo_geradora, (u.dono_usina_id IS NULL) AS usina_sem_dono
+           l.origem, f.competencia, u.codigo_geradora, (u.dono_usina_id IS NULL) AS usina_sem_dono
       FROM liquidacao l
       JOIN fatura f ON f.tenant_id = l.tenant_id AND f.id = l.fatura_id
       JOIN usina  u ON u.tenant_id = f.tenant_id AND u.id = f.usina_id
