@@ -24,7 +24,7 @@
 // a coluna diz isso em vez de desenhar um link para lugar nenhum.
 
 import { useState } from 'react';
-import { api, type Camada, type Prontidao } from '../api.ts';
+import { api, type Camada, type Prontidao, type ExecucaoDoConector } from '../api.ts';
 import { useDados } from '../dados.ts';
 import {
   Pagina, Aviso, Tabela, Marca, Kpi, KpiSimNao, Carregando, CampoData, AjudaDoMes, Icone,
@@ -192,6 +192,8 @@ export function TelaProntidao() {
             <li>A ordem das linhas é a ordem do trabalho: fechar a de cima costuma destravar as de baixo.</li>
             <li><strong>Onde resolver</strong> abre a aba já filtrada, mostrando só o que falta. Onde diz <strong>não há tela</strong>, não há mesmo — o caminho está escrito ao lado.</li>
           </ul>
+
+          <SinaisDoConector />
         </>
       )}
     </Pagina>
@@ -320,5 +322,109 @@ function OndeResolver({ camada, situacao }: Pick<Camada, 'camada' | 'situacao'>)
         </>
       )}
     </div>
+  );
+}
+
+/* ================================================== o que o conector achou
+ *
+ * A TELA RESPONDIA «o que falta?» E NAO «o que aconteceu?», e a segunda pergunta
+ * tinha resposta gravada no banco a cada 15 minutos sem ninguem para ler.
+ *
+ * `conector_execucao` recebe os contadores do ciclo e um `detalhe` com as
+ * divergencias, as recusas e a fila de revisao. Varredura de 08/09/2026: ZERO
+ * ocorrencias da tabela em `src/http/rotas.ts`, em `src/repos/` e em `web/`. A
+ * `SPEC-002` invariante 8 diz que *"`recusados > 0` e visivel em tabela, nunca
+ * so em log"* — e "visivel" queria dizer visivel para quem abrisse o `psql`.
+ *
+ * POR QUE ELE MORA AQUI, e nao numa tela propria: quem abre Pendencias esta
+ * perguntando o que impede o mes de fechar, e uma divergencia do conector e
+ * exatamente isso, so que vinda do outro lado — nao e um campo vazio, e um campo
+ * que discorda. Uma tela nova seria mais um lugar para lembrar de olhar.
+ *
+ * O QUE ELE NAO FAZ: nao resolve nada. Toda correcao de dado espelhado acontece
+ * no CRM, que e o dono dele — e o proprio sinal diz qual registro olhar.
+ */
+function SinaisDoConector() {
+  const [aberto, setAberto] = useState(false);
+  const execucoes = useDados<ExecucaoDoConector[]>(() => api.get('/conector-execucao?limite=1'));
+  const ultima = execucoes.dado?.[0];
+
+  if (execucoes.erro) {
+    return <Aviso tipo="alerta">Não foi possível ler o que o conector achou: {execucoes.erro}</Aviso>;
+  }
+  if (!ultima) return null;
+
+  const sinais = [
+    ...ultima.recusas.map((x) => ({ ...x, tipo: 'recusa' as const })),
+    ...ultima.fila_de_revisao.map((x) => ({ ...x, tipo: 'revisão' as const })),
+    ...ultima.divergencias.map((x) => ({ ...x, tipo: 'divergência' as const })),
+  ];
+  const quando = new Date(ultima.terminado_em ?? ultima.iniciado_em);
+  const relogio = `${String(quando.getHours()).padStart(2, '0')}:${String(quando.getMinutes()).padStart(2, '0')}`;
+
+  return (
+    <>
+      <h2><Icone nome="recarregar" tamanho={17} /> O que a leitura do outro sistema achou</h2>
+      <p className="sub">
+        A cada 15 minutos o sistema relê o outro e compara. Última leitura às {relogio}:{' '}
+        <strong>{ultima.lidos}</strong> registros lidos
+        {ultima.criados > 0 && <>, <strong>{ultima.criados}</strong> criados</>}
+        {ultima.atualizados > 0 && <>, <strong>{ultima.atualizados}</strong> atualizados</>}
+        {ultima.recusados > 0 && <>, <strong>{ultima.recusados}</strong> recusados</>}.
+      </p>
+
+      {ultima.erro && <Aviso tipo="erro">A última leitura terminou mal: {ultima.erro}</Aviso>}
+      {ultima.garantia_de_tenant_degradada && (
+        <Aviso tipo="erro">
+          A leitura rodou por um caminho degradado de separação entre empresas. Não é para
+          acontecer, e precisa ser olhado antes de confiar no que veio.
+        </Aviso>
+      )}
+      {ultima.credito_conferido === false && (
+        <Aviso tipo="alerta">
+          O sistema não conseguiu conferir quem vendeu cada unidade nesta leitura — a comparação
+          abaixo pode estar incompleta.
+        </Aviso>
+      )}
+      {ultima.views_ausentes.length > 0 && (
+        <Aviso tipo="erro">
+          O outro sistema deixou de expor: {ultima.views_ausentes.join(', ')}. Enquanto isso durar,
+          o que vinha de lá não está chegando.
+        </Aviso>
+      )}
+
+      {sinais.length === 0 ? (
+        <p className="sub">Nada a apontar na última leitura.</p>
+      ) : (
+        <>
+          <p className="sub">
+            <strong>{sinais.length}</strong>{' '}
+            {sinais.length === 1 ? 'apontamento' : 'apontamentos'} na última leitura. Eles não
+            impedem nada sozinhos — são coisas que os dois sistemas dizem diferente, e a correção
+            é feita no outro, que é o dono do dado.
+            {' '}
+            <button type="button" onClick={() => setAberto(!aberto)}>
+              {aberto ? 'esconder' : 'ver quais'}
+            </button>
+          </p>
+          {aberto && (
+            <Tabela cabecalho={<><th>Tipo</th><th>Registro</th><th>O que o sistema achou</th></>}>
+              {sinais.slice(0, 60).map((x, i) => (
+                <tr key={`${x.entidade}-${x.chave}-${i}`}>
+                  <td>
+                    <Marca tom={x.tipo === 'recusa' ? 'pendente' : 'nao_medido'}>{x.tipo}</Marca>
+                  </td>
+                  <td><span className="fraco">{x.entidade}</span> {x.chave}</td>
+                  <td>{x.sinal}</td>
+                </tr>
+              ))}
+            </Tabela>
+          )}
+          {aberto && sinais.length > 60 && (
+            <p className="sub">Mostrando os 60 primeiros de {sinais.length}.</p>
+          )}
+        </>
+      )}
+    </>
   );
 }

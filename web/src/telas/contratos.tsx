@@ -39,7 +39,7 @@ import { useState } from 'react';
 import { api, type Contrato, type UnidadeConsumidora, type Originador, type Cliente } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
-  Pagina, Aviso, Tabela, Campo, ThOrd, Marca, Icone, useOrdenacao, ordenar, rotulo,
+  Pagina, Aviso, Tabela, Campo, ThOrd, Marca, Icone, useOrdenacao, ordenar, rotulo, Escolha,
 } from '../ui.tsx';
 import { Ligacao } from '../rota.tsx';
 import { paraCentavos, emReais } from '../dinheiro.ts';
@@ -173,13 +173,23 @@ export function TelaContratos() {
             casa. O erro de leitura tem aviso proprio e vem antes: lista vazia
             por falha nao e lista vazia por ausencia. */}
         {origs.erro && <Aviso tipo="erro">Não consegui carregar a lista de quem trouxe os clientes: {origs.erro}</Aviso>}
+        {/* ATE 08/09/2026 ESTA FRASE MANDAVA PEDIR A OUTRA PESSOA. `POST
+            /originadores` existia e so era alcancavel por `npm run originadores`
+            — script rodado de um Codespace por quem tem o repositorio clonado.
+            Nao ha aba «Originadores» na barra, e nunca houve.
+
+            O CUSTO ESTAVA MEDIDO: 28 de 29 contratos ativos, e o que falta no
+            29º e um originador que nao existe («Out Sales»). A tela EXIGE um do
+            `<select>`, e a saida era pedir a alguem com terminal. E o defeito
+            historico do projeto — «um campo que so o psql alcanca» — na tela que
+            congela a aliquota de comissao para sempre (R20-b). */}
         {!origs.erro && !origs.carregando && (origs.dado ?? []).length === 0 && (
           <Aviso tipo="erro">
             Ninguém cadastrado ainda como quem traz clientes — e o contrato não pode ser criado
             sem isso. A escolha não muda depois, então ela precisa estar certa da primeira vez.
-            Peça ao responsável técnico para cadastrar antes de digitar os contratos.
           </Aviso>
         )}
+        <NovoOriginador aoCriar={() => origs.recarregar()} />
         {trava === 'sem_originador' && (origs.dado ?? []).length > 0 && (
           <Aviso tipo="alerta">
             Escolha quem trouxe o cliente. Isso não pode ser corrigido depois, e sem essa
@@ -215,5 +225,98 @@ export function TelaContratos() {
         ))}
       </Tabela>
     </Pagina>
+  );
+}
+
+/* ================================================= cadastrar quem traz clientes
+ *
+ * O FORMULARIO QUE FALTAVA. `POST /originadores` existe desde 29/07/2026 e a
+ * unica porta era `npm run originadores`; `PATCH` e `DELETE` nao tinham nem tela
+ * nem script. Nao ha aba propria na barra e ele mora AQUI porque e aqui que a
+ * falta aparece: a tela de Contratos exige um do `<select>` e travava sem dizer
+ * onde arrumar.
+ *
+ * O TIPO E O CAMPO CARO, e por isso ele vem com a consequencia escrita ao lado:
+ * a R20-b congela o tier no rascunho do contrato, e trocar depois exige encerrar
+ * e renovar — o que zera o contador de faturas cheias e deixa na trilha uma
+ * renovacao que nao houve.
+ *
+ * O DOCUMENTO E OBRIGATORIO (a coluna e NOT NULL) e o digito e conferido na
+ * gravacao, entao numero inventado e recusado com nome — nao ha o que validar
+ * aqui.
+ */
+function NovoOriginador({ aoCriar }: { aoCriar: () => void }) {
+  const acao = useAcao();
+  const [aberto, setAberto] = useState(false);
+  const [nome, setNome] = useState('');
+  const [documento, setDocumento] = useState('');
+  const [natureza, setNatureza] = useState('pf');
+  const [tipo, setTipo] = useState('vendedor_g3');
+
+  const criar = async () => {
+    if (!nome.trim() || !documento.trim()) {
+      acao.anunciar('Nome e CPF/CNPJ são obrigatórios.');
+      return;
+    }
+    const ok = await acao.executar(() => api.post('/originadores', {
+      nome: nome.trim(),
+      documento_bruto: documento.trim(),
+      natureza,
+      tipo,
+    }));
+    if (ok) {
+      acao.anunciar(`${nome.trim()} cadastrado. Já aparece na lista acima.`);
+      setNome(''); setDocumento(''); setAberto(false);
+      aoCriar();
+    }
+  };
+
+  if (!aberto) {
+    return (
+      <p className="sub">
+        <button type="button" onClick={() => setAberto(true)}>
+          <Icone nome="acrescentar" tamanho={15} /> Cadastrar quem traz clientes
+        </button>
+      </p>
+    );
+  }
+
+  return (
+    <div className="cartao secao">
+      <h3 style={{ marginTop: 0 }}>Quem traz clientes</h3>
+      <div className="campos">
+        <Campo rotulo="Nome ou razão social" valor={nome} ao={setNome} />
+        <Campo rotulo="CPF ou CNPJ" valor={documento} ao={setDocumento}
+               dica="O dígito é conferido ao gravar" />
+        <label>
+          Pessoa
+          <Escolha rotuloAcessivel="Pessoa física ou jurídica" valor={natureza} ao={setNatureza}
+                   opcoes={[{ valor: 'pf', texto: 'Pessoa física' },
+                            { valor: 'pj', texto: 'Pessoa jurídica' }]} />
+        </label>
+        <label>
+          Tipo
+          <Escolha rotuloAcessivel="Tipo de quem traz o cliente" valor={tipo} ao={setTipo}
+                   opcoes={[{ valor: 'vendedor_g3', texto: 'Vendedor da casa' },
+                            { valor: 'terceirizado', texto: 'Terceirizado' },
+                            { valor: 'parceiro_indicador', texto: 'Parceiro indicador' },
+                            { valor: 'parceiro_captador', texto: 'Parceiro captador' },
+                            { valor: 'parceiro_captador_senior', texto: 'Parceiro captador sênior' }]} />
+        </label>
+      </div>
+      <p className="sub">
+        <strong>O tipo decide a comissão</strong>, e ele fica congelado em cada contrato no momento
+        em que o contrato é criado. Trocar depois exige encerrar e refazer o contrato — o que zera
+        a contagem de meses cheios. Confira antes de gravar.
+      </p>
+      {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
+      {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button className="primario" onClick={() => void criar()} disabled={acao.ocupado}>
+          <Icone nome="confirmar" tamanho={15} peso="bold" /> Cadastrar
+        </button>
+        <button onClick={() => setAberto(false)} disabled={acao.ocupado}>Cancelar</button>
+      </div>
+    </div>
   );
 }

@@ -694,6 +694,23 @@ export type DocumentoDaFatura = {
     | { tipo: 'nenhuma'; motivo: string };
 };
 
+/** Uma rodada do conector do CRM, com o que ela achou. Ver
+ *  `src/repos/conector-execucao.ts` — a tabela existia desde 27/07/2026 e nao
+ *  tinha leitor em lugar nenhum ate 08/09. */
+export type ExecucaoDoConector = {
+  id: string; ciclo_id: string;
+  iniciado_em: string; terminado_em: string | null; status: string;
+  lidos: number; criados: number; atualizados: number; desativados: number; recusados: number;
+  divergencias: Array<{ entidade: string; chave: string; sinal: string }>;
+  recusas: Array<{ entidade: string; chave: string; sinal: string }>;
+  fila_de_revisao: Array<{ entidade: string; chave: string; sinal: string }>;
+  erro: string | null;
+  credito_conferido: boolean | null;
+  garantia_de_tenant_degradada: boolean | null;
+  views_novas_no_crm: string[];
+  views_ausentes: string[];
+};
+
 export type Camada = {
   camada: string;
   situacao: 'ok' | 'pendente' | 'nao_medido';

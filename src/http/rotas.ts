@@ -14,6 +14,7 @@
 
 import type { App, Sessao, VinculoDaSessao, ClientTx } from '../app.ts';
 import * as cliente from '../repos/cliente.ts';
+import * as conectorExecucao from '../repos/conector-execucao.ts';
 import * as uc from '../repos/unidade_consumidora.ts';
 import * as usina from '../repos/usina.ts';
 import * as originador from '../repos/originador.ts';
@@ -857,6 +858,25 @@ export const ROTAS: Rota[] = [
     handler: (req, app) => emTenant(app, req, async () => ok(await fatura.daCompetencia(req.params.competencia, {
       limite: limite(req.query),
     }))),
+  },
+  {
+    /*
+     * O QUE O CONECTOR ACHOU — rota nova em 08/09/2026, e ela fecha um silencio
+     * de seis semanas.
+     *
+     * `conector_execucao` recebe, a cada 15 minutos, os contadores do ciclo e um
+     * `detalhe` com divergencias, recusas e fila de revisao. Varredura de 08/09:
+     * ZERO ocorrencias da tabela em `rotas.ts`, em `src/repos/` e em `web/`. A
+     * `SPEC-002` invariante 8 diz que *"`recusados > 0` e visivel em tabela,
+     * nunca so em log"* — e a tabela nao tinha leitor, entao "visivel" queria
+     * dizer visivel para quem abrisse o `psql`.
+     *
+     * Caminho de RELATORIO: leitura pura, e nao disputa slot transacional com a
+     * emissao.
+     */
+    metodo: 'GET', padrao: '/conector-execucao',
+    handler: (req, app) => emRelatorio(app, req, async () =>
+      ok(await conectorExecucao.ultimasExecucoes(numero(req.query.get('limite'), 10)))),
   },
   {
     // Varredura da carteira inteira: caminho de RELATORIO, pool e timeout
