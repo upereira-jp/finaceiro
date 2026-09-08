@@ -215,8 +215,27 @@ let contratoOk: string; let orgId: string;
       `o total e coluna gerada: 565.000 + 12.000 = ${f.valor_total_centavos}`);
   chk('K3f', f.flag_fatura_cheia === true,
       'contrato fechado em 01/05 cobre julho inteiro: fatura cheia');
-  chk('K3g', f.vencimento.toISOString().slice(0, 10) === '2026-08-10',
-      `vence no mes SEGUINTE ao da competencia: ${f.vencimento.toISOString().slice(0, 10)}`);
+  /* ========================================================================
+   * O DIA 10 ERA O DA DISTRIBUIDORA, e a fatura vence TRES DIAS ANTES dele.
+   *
+   * Esta verificacao afirmava `2026-08-10` e passou a falhar em 08/09/2026,
+   * quando `triar()` — o caminho em LOTE — passou a aplicar `anteciparVencimento`
+   * como o caminho oficial ja fazia desde 07/09.
+   *
+   * ELA FALHOU CERTO, e e por isso que o conserto e aqui e nao no codigo: o
+   * `data_vencimento` do cadastro significa, por escrito desde 07/09, o dia da
+   * DISTRIBUIDORA, e a regra do dono e que o nosso boleto vence tres dias antes.
+   * O que a verificacao prendia era o comportamento anterior a regra.
+   *
+   * As DUAS coisas continuam medidas, e e o par que importa: o mes continua sendo
+   * o SEGUINTE ao da competencia (julho -> agosto), e o dia e o da distribuidora
+   * menos tres. Guardar so a data final perderia a primeira metade.
+   * ===================================================================== */
+  const venc = f.vencimento.toISOString().slice(0, 10);
+  chk('K3g', venc === '2026-08-07',
+      `vence tres dias antes do dia 10 da distribuidora: ${venc}`);
+  chk('K3g2', venc.slice(0, 7) === '2026-08',
+      `e continua no mes SEGUINTE ao da competencia (julho): ${venc.slice(0, 7)}`);
 }
 
 // ---------------------------------------------------- K4 o lote e idempotente
