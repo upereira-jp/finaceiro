@@ -18,8 +18,8 @@
 // Dizer isso na tela e a diferenca entre um sistema que parece pronto e um que
 // diz onde esta.
 
-import { useState } from 'react';
-import { api, ErroDaApi } from '../api.ts';
+import { useEffect, useState } from 'react';
+import { api, ErroDaApi, type ConectorCobranca } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import { Pagina, Aviso, Campo, Marca, linha, Interruptor, Icone, DetalheTecnico } from '../ui.tsx';
 import { dataOuNull } from '../dinheiro.ts';
@@ -69,6 +69,43 @@ export function TelaCobranca() {
   const [expiraEm, setExpiraEm] = useState('');
   const [sandbox, setSandbox] = useState(true);
   const [ativo, setAtivo] = useState(false);
+
+  /*
+   * ==========================================================================
+   * O FORMULARIO NASCE COM O QUE ESTA GRAVADO, e ate 08/09/2026 nascia VAZIO.
+   *
+   * `POST /conector-cobranca` e um upsert que preenche campo a campo com
+   * `?? null`, e `ativo` volta a `false` por omissao. Com o formulario vazio e
+   * sem nenhum `GET` que mostrasse o gravado, abrir esta tela para corrigir UM
+   * campo e clicar em «Salvar» **apagava todo o resto e DESLIGAVA o conector** —
+   * com a tela dizendo "salvo".
+   *
+   * Em producao ele esta LIGADO desde 01/09, com numero do cliente, modalidade,
+   * conta corrente, agencia e a validade do certificado. Um clique zerava tudo.
+   *
+   * `?? ''` e nao `?? valor-padrao`: o que nao esta gravado aparece em branco, e
+   * em branco continua significando "nao gravado". Inventar default aqui faria a
+   * tela gravar dado que ninguem digitou.
+   */
+  const [prefilled, setPrefilled] = useState(false);
+  const atual = useDados<ConectorCobranca | null>(() => api.get('/conector-cobranca'));
+  useEffect(() => {
+    if (prefilled || !atual.dado) return;
+    const c = atual.dado;
+    setPrefilled(true);
+    setCredencialRef(c.credencial_ref ?? '');
+    setNumeroContrato(c.numero_contrato ?? '');
+    setNumeroConvenio(c.numero_convenio ?? '');
+    setAgencia(c.agencia ?? '');
+    setConta(c.conta ?? '');
+    setNumeroCliente(c.numero_cliente == null ? '' : String(c.numero_cliente));
+    setCodigoModalidade(c.codigo_modalidade == null ? '' : String(c.codigo_modalidade));
+    setNumeroContratoCobranca(c.numero_contrato_cobranca == null ? '' : String(c.numero_contrato_cobranca));
+    setNumeroContaCorrente(c.numero_conta_corrente == null ? '' : String(c.numero_conta_corrente));
+    setExpiraEm(c.certificado_expira_em ? String(c.certificado_expira_em).slice(0, 10) : '');
+    setSandbox(c.sandbox);
+    setAtivo(c.ativo);
+  }, [atual.dado, prefilled]);
 
   // O provedor NAO e escolha: `boleto.cadastrarConector` grava 'sicoob' fixo no
   // create. O campo existe na coluna porque um segundo banco nao mudaria o resto

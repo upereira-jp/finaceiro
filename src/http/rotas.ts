@@ -933,6 +933,21 @@ export const ROTAS: Rota[] = [
     }))),
   },
   {
+    /*
+     * O QUE ESTA GRAVADO — rota nova em 08/09/2026.
+     *
+     * Sem ela a tela do conector nao tinha como preencher o formulario com o que
+     * ja existe, e `cadastrarConector` e um upsert que apaga o que nao for
+     * redigitado — inclusive `ativo`, que volta a `false` por omissao. Abrir a
+     * tela para corrigir um campo DESLIGAVA o conector em silencio.
+     *
+     * Nao devolve segredo: `credencial_ref` e referencia, que e o que a regra 5
+     * manda circular no lugar do segredo.
+     */
+    metodo: 'GET', padrao: '/conector-cobranca',
+    handler: (req, app) => emTenant(app, req, async () => ok(await boleto.conectorAtual())),
+  },
+  {
     metodo: 'GET', padrao: '/conector-cobranca/certificado',
     handler: (req, app) => emTenant(app, req, async () => ok(await boleto.certificadoVenceEm())),
   },

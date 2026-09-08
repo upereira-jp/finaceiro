@@ -99,19 +99,84 @@ export function TelaDonos() {
                 <ThOrd chave="documento" ordem={ordem} ao={alternar}>Documento</ThOrd>
                 <ThOrd chave="pix" ordem={ordem} ao={alternar}>Pix</ThOrd>
                 <ThOrd chave="situacao" ordem={ordem} ao={alternar}>Situação</ThOrd>
+                <th>Ações</th>
               </>}
               vazio={todos.length
                 ? 'Nenhum dono corresponde à busca ou aos filtros.'
                 : 'Nenhum dono cadastrado — AUD-08.'}>
         {visiveis.map((d) => (
-          <tr key={d.id}>
-            <td>{d.nome} <span className="fraco">· {d.natureza.toUpperCase()}</span></td>
-            <td className="fraco">{d.documento}</td>
-            <td className="fraco">{d.chave_pix ?? d.banco ?? '—'}</td>
-            <td><Marca tom={d.ativo ? 'ok' : 'pendente'}>{d.ativo ? 'Ativo' : 'Inativo'}</Marca></td>
-          </tr>
+          <LinhaDoDono key={d.id} d={d} aoSalvar={() => donos.recarregar()} />
         ))}
       </Tabela>
     </Pagina>
+  );
+}
+
+/* ======================================================= corrigir um dono
+ *
+ * `PATCH /donos-usina/:id` existe desde 28/07/2026 e ate 08/09 nao tinha **nem
+ * tela nem script** — nao existe `npm run donos`. Cadastrar era possivel;
+ * corrigir, nao.
+ *
+ * O QUE ISSO SIGNIFICA EM DINHEIRO: a chave Pix e para onde vao **70%** do que o
+ * cliente paga (`regra_repasse`, as quatro usinas). Uma chave digitada errada no
+ * cadastro so seria descoberta no primeiro repasse — e ate hoje o unico conserto
+ * era `curl` com token, ou apagar e recriar, que perde a trilha.
+ *
+ * `editar` no servidor e PATCH de verdade: so escreve o que vem, campo a campo.
+ * Entao mandar apenas o que mudou nao apaga o resto — ao contrario do conector
+ * de cobranca, que e upsert e cuja armadilha foi fechada no mesmo dia.
+ */
+function LinhaDoDono({ d, aoSalvar }: { d: DonoUsina; aoSalvar: () => void }) {
+  const acao = useAcao();
+  const [editando, setEditando] = useState(false);
+  const [nome, setNome] = useState(d.nome);
+  const [pix, setPix] = useState(d.chave_pix ?? '');
+
+  const salvar = async () => {
+    const mudou: Record<string, unknown> = {};
+    if (nome.trim() && nome.trim() !== d.nome) mudou.nome = nome.trim();
+    if (pix.trim() !== (d.chave_pix ?? '')) mudou.chave_pix = pix.trim() || null;
+    if (Object.keys(mudou).length === 0) { setEditando(false); return; }
+    const ok = await acao.executar(() => api.patch(`/donos-usina/${d.id}`, mudou));
+    if (ok) { setEditando(false); aoSalvar(); }
+  };
+
+  return (
+    <>
+      <tr>
+        <td>{d.nome} <span className="fraco">· {d.natureza.toUpperCase()}</span></td>
+        <td className="fraco">{d.documento}</td>
+        <td className="fraco">{d.chave_pix ?? d.banco ?? '—'}</td>
+        <td><Marca tom={d.ativo ? 'ok' : 'pendente'}>{d.ativo ? 'Ativo' : 'Inativo'}</Marca></td>
+        <td>
+          <button type="button" onClick={() => setEditando(!editando)}>
+            <Icone nome="confirmar" tamanho={14} /> {editando ? 'Fechar' : 'Corrigir'}
+          </button>
+        </td>
+      </tr>
+      {editando && (
+        <tr>
+          <td colSpan={5}>
+            <div className="campos">
+              <Campo rotulo="Nome ou razão social" valor={nome} ao={setNome} />
+              <Campo rotulo="Chave Pix" valor={pix} ao={setPix}
+                     dica="É para onde vai a parte do dono" />
+            </div>
+            <p className="sub">
+              <strong>A chave Pix é para onde vai a parte do dono da usina</strong> — hoje 70% do
+              que o cliente paga. Confira caractere a caractere: uma chave errada só aparece no
+              primeiro repasse, e aí o dinheiro já saiu.
+              {' '}O documento não se corrige aqui: ele identifica a pessoa, e trocá-lo é outro
+              cadastro.
+            </p>
+            {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
+            <button className="primario" onClick={() => void salvar()} disabled={acao.ocupado}>
+              <Icone nome="confirmar" tamanho={15} peso="bold" /> Salvar a correção
+            </button>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }

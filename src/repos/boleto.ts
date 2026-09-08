@@ -168,6 +168,45 @@ function inteiroPositivoOuNull(v: unknown, campo: string): number | null {
   return n;
 }
 
+/**
+ * O CONECTOR COMO ESTA GRAVADO — leitura nova em 08/09/2026, e ela conserta uma
+ * armadilha de PERDA DE DADO.
+ *
+ * `cadastrarConector` e um `upsert` que preenche com `?? null` campo a campo, e
+ * `ativo: e.ativo ?? false`. Nao havia `GET`: a tela de conector nao tinha como
+ * mostrar o que ja estava gravado, entao quem a abrisse para corrigir UM campo e
+ * salvasse **apagava todos os outros e DESLIGAVA o conector** — em silencio, com
+ * o formulario dizendo "salvo".
+ *
+ * Em producao o conector esta LIGADO desde 01/09, com numero do cliente,
+ * modalidade, conta corrente, agencia e a validade do certificado. Um clique em
+ * «Salvar» com o formulario vazio zerava tudo isso.
+ *
+ * SEM SEGREDO NA RESPOSTA, e `credencial_ref` NAO e segredo: e a referencia
+ * opaca que a regra 5 manda usar justamente para o segredo nao viajar. O
+ * certificado e a senha ficam no cofre e nao passam por aqui.
+ */
+export async function conectorAtual() {
+  await exigir('administrar');
+  const l = await dbt().conector_cobranca.findFirst({ where: { tenant_id: tenantCorrente() } });
+  if (!l) return null;
+  return {
+    provedor: l.provedor,
+    credencial_ref: l.credencial_ref,
+    numero_contrato: l.numero_contrato,
+    numero_convenio: l.numero_convenio,
+    agencia: l.agencia,
+    conta: l.conta,
+    numero_cliente: l.numero_cliente,
+    codigo_modalidade: l.codigo_modalidade,
+    numero_contrato_cobranca: l.numero_contrato_cobranca,
+    numero_conta_corrente: l.numero_conta_corrente,
+    certificado_expira_em: l.certificado_expira_em,
+    sandbox: l.sandbox,
+    ativo: l.ativo,
+  };
+}
+
 export async function cadastrarConector(e: {
   credencial_ref: string;
   numero_contrato?: string | null;

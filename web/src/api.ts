@@ -711,6 +711,19 @@ export type ExecucaoDoConector = {
   views_ausentes: string[];
 };
 
+/** O conector de cobranca COMO ESTA GRAVADO. Sem segredo: `credencial_ref` e a
+ *  referencia opaca que a regra 5 manda circular no lugar dele. */
+export type ConectorCobranca = {
+  provedor: string;
+  credencial_ref: string | null;
+  numero_contrato: string | null; numero_convenio: string | null;
+  agencia: string | null; conta: string | null;
+  numero_cliente: number | null; codigo_modalidade: number | null;
+  numero_contrato_cobranca: number | null; numero_conta_corrente: number | null;
+  certificado_expira_em: string | null;
+  sandbox: boolean; ativo: boolean;
+};
+
 export type Camada = {
   camada: string;
   situacao: 'ok' | 'pendente' | 'nao_medido';
