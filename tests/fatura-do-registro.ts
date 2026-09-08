@@ -13,7 +13,7 @@
  *   J1  o MAPA de um para um entre a conta lida e a fatura
  *   J2  a ORDEM da triagem (ordem de utilidade do diagnostico)
  *   J3  cada recusa, uma a uma, com a faixa de CHECK que a motiva
- *   J4  o vencimento e as suas DUAS fontes
+ *   J4  o vencimento, as suas DUAS fontes e os 3 dias de antecedencia
  *   J5  a conferencia da alocacao, exata e sem float
  *   J6  alerta nao e recusa
  *
@@ -24,6 +24,7 @@ import {
   EXPLICACAO_DO_REGISTRO,
   type LinhaDoRegistro, type MotivoDeRecusaDoRegistro,
 } from '../src/dominio/fatura-do-registro.ts';
+import { anteciparVencimento, DIAS_DE_ANTECEDENCIA_DO_BOLETO } from '../src/dominio/faturamento.ts';
 
 let falhas = 0;
 const chk = (id: string, cond: boolean, d: string) => {
@@ -198,21 +199,25 @@ chk('J3m', motivos.every((m) => (EXPLICACAO_DO_REGISTRO[m] ?? '').length > 40),
     'os nove motivos tem explicacao, e ela diz o que fazer - recusa e ponteiro, nao beco');
 
 // ===========================================================================
-// J4 - O VENCIMENTO e as suas duas fontes
+// J4 - O VENCIMENTO, as suas duas fontes e os 3 DIAS DE ANTECEDENCIA
 // ===========================================================================
+
+/* AS DUAS FONTES DIZEM A DATA DA DISTRIBUIDORA, e o nosso boleto vence 3 dias
+ * antes (regra do dono, 04/09/2026). Toda data esperada abaixo ja e a
+ * ANTECIPADA - se alguem apagar a antecipacao, estas seis caem juntas. */
 
 const daConta = triarRegistro(base());
 chk('J4a', daConta.faturar && daConta.vencimento_de === 'conta'
-        && daConta.vencimento.toISOString().slice(0, 10) === '2026-07-15',
-    'com vencimento na conta lida, e ele que vale - e a data que o cliente ja tem no papel');
+        && daConta.vencimento.toISOString().slice(0, 10) === '2026-07-12',
+    'a conta lida impoe 15/07 e o nosso boleto vence 12/07 - tres dias antes');
 
 /* Sem a conta, o cadastro. `vencimentoDaFatura` projeta o DIA no mes seguinte ao
  * da competencia, que e o que a competencia de junho exige: a geracao so e
- * medida depois de o mes virar. */
+ * medida depois de o mes virar. E DEPOIS antecipa. */
 const doCadastro = triarRegistro(com({ vencimento_da_conta: null }));
 chk('J4b', doCadastro.faturar && doCadastro.vencimento_de === 'cadastro'
-        && doCadastro.vencimento.toISOString().slice(0, 10) === '2026-07-10',
-    'sem data na conta, o dia do cadastro e projetado no mes seguinte (junho -> 10/07)');
+        && doCadastro.vencimento.toISOString().slice(0, 10) === '2026-07-07',
+    'sem data na conta, o dia do cadastro projeta em 10/07 e antecipa para 07/07');
 
 chk('J4c', motivo(com({ vencimento_da_conta: null, data_vencimento: null })) === 'sem_vencimento',
     'sem nenhuma das duas fontes, recusa - nao ha default e nao vai haver (regra 10)');
@@ -227,14 +232,57 @@ chk('J4d', vencimentoEscolhido({
     'com as DUAS fontes, a conta ganha - ela e a mais especifica');
 
 /* Dia 31 em mes curto cai no ultimo dia, nunca transborda: transbordar mudaria a
- * competencia de vencimento de parte da carteira quatro vezes por ano. */
+ * competencia de vencimento de parte da carteira quatro vezes por ano. A
+ * antecipacao vem DEPOIS dessa projecao - 28/02 vira 25/02. */
 chk('J4e', triarRegistro(com({
       vencimento_da_conta: null, data_vencimento: dia('2026-01-31'), competencia: dia('2026-01-01'),
     })).faturar
     && (triarRegistro(com({
       vencimento_da_conta: null, data_vencimento: dia('2026-01-31'), competencia: dia('2026-01-01'),
-    })) as any).vencimento.toISOString().slice(0, 10) === '2026-02-28',
-    'dia 31 em fevereiro cai no ultimo dia do mes, e nao transborda para marco');
+    })) as any).vencimento.toISOString().slice(0, 10) === '2026-02-25',
+    'dia 31 em fevereiro cai no ultimo dia (28/02) e so entao antecipa: 25/02');
+
+/* OS DOIS NUMEROS VOLTAM JUNTOS. Um relatorio que mostrasse so o antecipado nao
+ * teria como provar que a regra foi aplicada, nem contra que data. */
+const comImposto = vencimentoEscolhido({
+  vencimento_da_conta: dia('2026-07-15'), data_vencimento: null, competencia: dia('2026-06-01'),
+});
+chk('J4f', comImposto?.imposto.toISOString().slice(0, 10) === '2026-07-15'
+        && comImposto?.data.toISOString().slice(0, 10) === '2026-07-12',
+    '`imposto` guarda a data da distribuidora e `data` a nossa - a conferencia precisa das duas');
+
+/* A ANTECIPACAO E EM DIAS CORRIDOS E ATRAVESSA MES, ANO E FEVEREIRO. E por isso
+ * que ela mora numa DATA: "tres dias antes do dia 1o" vale 26, 28 ou 29 conforme
+ * o mes que veio antes, e nenhum desses e um `dia_vencimento` fixo. */
+chk('J4g', anteciparVencimento(dia('2026-03-01')).toISOString().slice(0, 10) === '2026-02-26'
+        && anteciparVencimento(dia('2026-06-01')).toISOString().slice(0, 10) === '2026-05-29'
+        && anteciparVencimento(dia('2026-01-02')).toISOString().slice(0, 10) === '2025-12-30',
+    'dia 1o de marco vira 26/02, dia 1o de junho vira 29/05 e 02/01 vira 30/12 do ano anterior');
+
+chk('J4h', DIAS_DE_ANTECEDENCIA_DO_BOLETO === 3
+        && anteciparVencimento(dia('2026-07-15'), 0).toISOString().slice(0, 10) === '2026-07-15',
+    'o prazo e 3 e e parametro: com 0 a funcao devolve a propria data imposta');
+
+let recusouDiasInvalidos = 0;
+for (const d of [-1, 1.5, NaN]) {
+  try { anteciparVencimento(dia('2026-07-15'), d); } catch { recusouDiasInvalidos++; }
+}
+chk('J4i', recusouDiasInvalidos === 3,
+    'dias negativos, fracionarios ou NaN levantam - antecipar por acidente moveria dinheiro');
+
+/* ⚠️ O CASO QUE O DONO PRECISA DECIDIR, PRESO AQUI PARA NAO SUMIR (Q-VENC3-01).
+ * Pelo CADASTRO, dia 1, 2 ou 3 traz a data de volta para DENTRO da competencia -
+ * e `vencimentoDaFatura` projeta no mes seguinte justamente porque um vencimento
+ * dentro da competencia vence antes de a fatura poder existir. O boleto nasceria
+ * vencido. O teste NAO diz que isso esta certo: diz que e o comportamento de
+ * hoje, e falha no dia em que alguem mudar sem decidir. */
+const dentroDaCompetencia = triarRegistro(com({
+  vencimento_da_conta: null, data_vencimento: dia('2026-01-01'), competencia: dia('2026-06-01'),
+}));
+chk('J4j', dentroDaCompetencia.faturar
+        && (dentroDaCompetencia as any).vencimento.toISOString().slice(0, 10) === '2026-06-28',
+    'dia 1o pelo cadastro: projeta 01/07 e antecipa para 28/06, DENTRO da competencia de junho '
+    + '- comportamento de hoje, decisao aberta na Q-VENC3-01');
 
 // ===========================================================================
 // J5 - A CONFERENCIA DA ALOCACAO. Exata, sem float, e informativa.
