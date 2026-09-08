@@ -67,3 +67,43 @@ Obrigado!
   momentos, e aí a `Q-WEBHOOK-ESTORNO-01` muda de cor junto.
 - **Não perguntar aqui:** certificado A1, chave Pix vinculada e dígito da conta. As duas
   últimas são do gerente (`PROMPT-gerente-sicoob-2026-09-08.md`) e a primeira já fechou.
+
+---
+
+## 3. RESPONDIDO em 08/09/2026 — e as duas perguntas de retorno
+
+O suporte respondeu **no mesmo dia**, e as respostas estão em `QUESTOES.md` §2.d e
+`adr/ADR-0006` §9. Ficaram **duas coisas para a próxima mensagem no mesmo canal** —
+as duas são consequência direta do que ele respondeu, não perguntas novas.
+
+### A mensagem de retorno — copiar daqui
+
+Olá! Obrigado pelas respostas de ontem — já ajustamos a integração com base nelas. Ficaram duas coisas para fechar:
+
+**1)** Você mencionou que enviaria a **lista dos IPs de origem das notificações**. Pode me mandar? Como o envio não usa mTLS, essa faixa passou a ser o que autoriza a chamada no nosso firewall, e sem ela mantemos o webhook desligado.
+
+**2)** Sobre o **endpoint de movimentação** que você indicou como o lugar onde aparece a liquidação: qual é o caminho dele e como se consulta? Entendi que se solicita por período e depois se baixa o resultado. Preciso de:
+
+- o caminho (path) e o método de cada passo — solicitação e download;
+- o **escopo** que a aplicação precisa ter para acessá-lo (o nosso hoje tem `boletos_*` e `webhooks_*`);
+- o formato do retorno — vi menção a arquivo compactado em base64; é isso mesmo?
+- se dá para pedir **apenas os títulos liquidados** de um dia, ou se vem a movimentação inteira e a filtragem é nossa.
+
+Obrigado!
+
+### Por que a 2 importa, e por que ela NÃO trava nada hoje
+
+A confirmação da liquidação já funciona sem esse endpoint: a consulta ativa lê
+`situacaoBoleto` no `GET /boletos`, e `liquidado` é a confirmação que o split espera.
+O que o endpoint de movimentação acrescenta são duas coisas medidas:
+
+1. **o valor e a data da liquidação** — a `Q-LIQUIDACAO-CONSULTA-01` mediu que o
+   `GET /boletos` não devolve nenhum dos dois. Hoje isso só afeta o caso em que o
+   webhook **não** avisou (webhook desligado): a consulta detecta o título liquidado e
+   não consegue baixá-lo sozinha, porque baixar sem valor seria inventar dinheiro. Sai
+   como divergência, e alguém resolve com baixa manual;
+2. **uma chamada por dia** em vez de uma por título.
+
+**Enquanto o contrato do endpoint não chegar, o cliente dele não é escrito** — inventar
+caminho e formato para depois "ajustar" é o improviso que a regra 10 proíbe, e neste
+caso o improviso ficaria no caminho do dinheiro.

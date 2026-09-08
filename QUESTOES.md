@@ -217,9 +217,15 @@ título deixa de estar em aberto e a cobrança para de ser perseguida.
 
 **Três consequências de implementação, nomeadas para não virarem improviso:**
 
-1. **falta um cliente para o endpoint de movimentação** — hoje só existe a consulta de
-   situação por título (`GET /boletos`), que a `Q-LIQUIDACAO-CONSULTA-01` já tratava
-   como detector de webhook perdido, não como fonte de liquidação;
+1. ~~**falta um cliente para o endpoint de movimentação**~~ — **medido e reduzido em
+   08/09, depois de implementar:** a confirmação **não depende** desse endpoint. A
+   consulta ativa lê `situacaoBoleto` no `GET /boletos`, e `liquidado` é a confirmação
+   que o split espera. O que o endpoint de movimentação acrescenta é o **valor e a data**
+   da liquidação (que o `GET /boletos` não devolve — `Q-LIQUIDACAO-CONSULTA-01`) e uma
+   chamada por dia em vez de uma por título. **O cliente não foi escrito e não será até o
+   contrato chegar:** o caminho, o escopo e o formato do retorno não estão em documento
+   nenhum do repositório, e inventá-los poria improviso no caminho do dinheiro (regra 10).
+   Perguntado ao suporte em `PROMPT-suporte-sicoob-2026-09-08.md` §3;
 2. **`liquidacao.baixar()` deixa de chamar `split.executar()` na mesma transação.** O
    `PRD` §5.2 dizia *"o split roda exclusivamente na liquidação, por webhook Sicoob"* —
    a premissa era que webhook e liquidação eram a mesma coisa, e o banco diz que não
@@ -227,6 +233,26 @@ título deixa de estar em aberto e a cobrança para de ser perseguida.
 3. **a `Q-WEBHOOK-ESTORNO-01` melhora:** há webhook de devolução, então o estorno tem
    aviso — mas, pela decisão acima, ele também só vale depois de confirmado por
    consulta.
+
+### ✅ CONSTRUÍDO no mesmo dia — commit `ee5f908`
+
+`baixar()` deixou de repartir quando a origem é o webhook; `conciliacao` e `manual`
+seguem repartindo na hora, porque as duas **são** confirmação (`ehConfirmacao`, com
+`switch` exaustivo para que origem nova tenha de responder à pergunta). O boleto fica
+`registrado` até o banco confirmar — é o que o mantém em `boleto.emAberto()` para a
+consulta do dia seguinte, e marcá-lo na baixa o tiraria da fila.
+
+**O furo que a implementação achou, e que o desenho não previa:** a confirmação precisa
+vir **antes** de `decidir()`. `decidir()` só sabe transformar `liquidado` em baixa e
+exige data e valor, que o `GET /boletos` não devolve — um título já baixado pelo webhook
+viraria **divergência, uma por dia, para sempre**, porque ele fica na fila até confirmar.
+A guarda entrou antes da decisão e o `AG7d` prende a ordem.
+
+`origem-do-webhook.ts`: IP sozinho autoriza; `WEBHOOK_MTLS_SUJEITO` configurado volta a
+exigir certificado. `OR4` inverteu de sinal e a inversão está registrada dentro do teste.
+
+Suíte sem banco: `EXIT=0`, **2.602** verificações (eram 2.589). `tests/repos-carteira.ts`
+foi atualizado e **não roda nesta máquina** (exige PostgreSQL local).
 
 ### ⬅️ VOLTA PARA O DONO — o prazo de crédito
 
