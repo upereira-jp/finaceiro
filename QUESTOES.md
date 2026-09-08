@@ -48,6 +48,47 @@ Uma questão sem dono nomeado é automaticamente vermelha, por não ter caminho 
 
 ---
 
+## 2.b Decisões técnicas de 08/09/2026 — a delegação, e o que ela não cobre
+
+> **O dono delegou a decisão técnica**, nesta data e por escrito: *"a não ser que
+> minhas decisões precisem ser do operacional da empresa, siga o que for
+> recomendado para melhor arquitetura e visualização dos dados. Foque sempre na
+> UI E UX."*
+>
+> **Isto não revoga a regra 10 — muda o DONO da lacuna quando ela é de
+> engenharia.** A lacuna continua virando registro; o que deixa de acontecer é o
+> projeto parar esperando resposta para uma pergunta que não é de negócio. O
+> gargalo estava medido: 18 🔴 e 33 🟡 abertas, e boa parte sem nada de negócio
+> dentro.
+
+### O que foi decidido e construído nesta data
+
+| # | A lacuna | A decisão | Onde está |
+|:--:|---|---|---|
+| 1 | **`Q-CONTA-LOTE-01`** — 29 contas por mês, uma por vez | **Lote com fila de conferência**, na aba «1 · Leitura e cálculo». Sobe N arquivos, lê 2 por vez, uma linha por arquivo com unidade · mês · total · vencimento · situação. Pendência no topo; duplicata (mesma unidade no mesmo mês) bloqueia **as duas** linhas, porque no `upsert` a segunda sobrescreveria a primeira em silêncio. Um arquivo só continua abrindo sozinho no painel. **«Registrar todas» não existe** de propósito: um lote que registra sem conferência transforma um erro de leitura em 29 | `web/src/lote-de-contas.ts` · `web/tests/lote-de-contas.ts` |
+| 2 | A competência da Equatorial (`MAI/2026`) era recusada pelo caminho oficial | **Uma implementação só**, em `src/dominio/competencia.ts`, usada pelas duas metades. A regra já existia em `fatura-concessionaria.ts` desde 08/08 e era **cópia** — a outra metade nunca aprendeu, e a outra metade é a que grava a conta lida | `src/dominio/competencia.ts` · `tests/competencia.ts` (`K3` compara os dois caminhos entre si) |
+| 3 | O endereço não cabia em `bloqueia_fatura` nem em `bloqueia_split` | **Terceiro efeito: `bloqueia_boleto`**, e o cartão «Pode emitir boleto» na tela. Encaixar em `bloqueia_fatura` seria dizer que a fatura não pode existir, o que é falso — ela sai e é pagável por Pix | `src/repos/prontidao.ts` · `web/src/telas/prontidao.tsx` |
+| 4 | A folha imprimia a data da Equatorial e o boleto vencia 3 dias antes | **A folha imprime o NOSSO vencimento**; a data da distribuidora vira linha própria, nomeada. Duas datas para a mesma dívida no mesmo envelope não é escolha entre duas leituras — é defeito | `src/dominio/folha-unificada.ts` · `tests/folha-unificada.ts` (`V1`…`V8`) |
+| 5 | O botão «Compor valendo» não antecipava os 3 dias | **A mesma função chamada dos dois lugares.** Deixar `triar()` de fora foi deliberado em 07/09 — *"poria a mesma regra em dois lugares"* —, e o argumento caiu no mesmo commit que o criou: ali `data_vencimento` passou a significar o dia da **distribuidora** | `src/dominio/faturamento.ts` · `tests/dominio-carteira.ts` (`F7`) |
+| 6 | Dinheiro digitado com `1.234` valia R$ 1,23 | **`textoParaCentavos` recusa mais de duas casas.** `paraDecimal` não mudou: ela serve tarifa e fator de CO₂, e a medição de 14/08 mostra que a regra oposta faria `0.029` virar `29`. A regra certa para grandeza física erra mil vezes para dinheiro | `src/dominio/fatura-unificada.ts` · `tests/fatura-unificada.ts` (`U10`) |
+| 7 | Fatura de R$ 0,00 morria no `CHECK` com `23514` cru | **`FaturaSemValorParaBoleto`, 422, nomeada.** Emitir ou não uma fatura de valor zero continua sendo decisão de operação — o que não pode é a decisão chegar em forma de erro de banco | `src/repos/boleto.ts` |
+| 8 | Cancelar não liberava a conta lida, e a recusa mandava cancelar | **Cancelar solta o vínculo.** É a única saída expressável: `fatura_id` é coluna do registro, então ele aponta para no máximo uma fatura por vez | `src/repos/fatura.ts` |
+| 9 | View de situação vazia zerava o universo faturável | **Assimetria é sinal**: zero situações **com** clientes presentes é leitura que falhou, não "todo mundo desativou". A coluna não é tocada e uma divergência nomeada é gravada | `src/crm/sincronizacao.ts` · `tests/crm-semente.ts` |
+
+### O que a delegação **não** cobre — continua com o dono
+
+| Questão | Por que é do dono, e não minha |
+|---|---|
+| **`Q-VENC3-01` (a)** | O que fazer quando o −3 cai em sábado, domingo ou feriado. Antecipar mais respeita a regra; empurrar a viola. Não há calendário de feriados no sistema, e inventar um é o improviso que a regra 10 proíbe |
+| **`Q-VENC3-01` (b)** | Dia 1, 2 ou 3 traz a data para dentro da própria competência, e o boleto nasce vencido. Vale igual nos dois caminhos desde hoje |
+| **`AUD-08` — dono das 4 usinas** | Nome, natureza, documento e dados bancários. Não é extraível: a tabela está vazia, `dono_usina_id` é nulo nas quatro e o CRM também não sabe |
+| **O tipo do originador do Rhenan** | "Out Sales" não existe como originador, e o tipo muda a alíquota que a R20-b congela |
+| **Fatura de R$ 0,00 — emitir ou não** | A conta do Fernando Albino fecha em zero. O sistema já recusa o **boleto** com nome; faturar ou não é chamada da operação |
+| **`Q-BAIXAOPER-01` · `Q-RATEIO-SICOOB-01` · `Q-DOCG3-11`** | Movem dinheiro e dependem de terceiro (banco, contador) |
+| **O §4 da `RETOMADA-2026-09-08`** | A usina injetora que a Equatorial nomeia não é nenhuma das quatro do cadastro, e os percentuais divergem em 5 de 5. **Nunca virou questão, e é violação da regra 10** — fica registrado aqui até ter ID próprio. Não impede faturar; quebra a conferência de alocação e mandaria o repasse ao dono errado |
+
+---
+
 ## 3. F0 — o que falta para fechar
 
 Entregas da F0 conforme `PRD-v2.2` §10:

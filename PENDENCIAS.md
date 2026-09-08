@@ -6,9 +6,32 @@
 | **O que é** | O **índice único** das pendências. Consolida e substitui os dois trackers datados que existiam soltos |
 | **Substitui e apaga** | `PENDENCIAS-2026-08-05.md` e `PROXIMOS-PASSOS-2026-08-09.md` — vencidos, e agora removidos do repo |
 | **NÃO substitui** | `QUESTOES.md` (registro datado, dono por entrada — regra 10) · `RETOMADA-2026-08-30.md` (onde tudo parou — a mais nova) · os `RESUMO-SESSAO-*` (memória datada). Estes continuam sendo a fonte; aqui é o **apontador** |
-| **Data** | 14/08/2026 · rev. 17/08 · rev. 19/08 · rev. 21/08 · rev. 27/08 · rev. **28/08/2026** (noite, e de novo na madrugada) |
+| **Data** | 14/08/2026 · rev. 17/08 · rev. 19/08 · rev. 21/08 · rev. 27/08 · rev. 28/08 · rev. **08/09/2026** |
+| ⚠️ **Leia primeiro** | Este arquivo ficou **congelado entre 28/08 e 08/09** enquanto a operação andava, e a `RETOMADA-2026-09-08` continuou mandando o leitor para cá como *"o índice único"*. O bloco **«O que mudou desde 28/08»**, logo abaixo do cabeçalho, é a correção — o corpo antigo fica intacto porque é registro datado, e reescrevê-lo falsificaria a história (mesma decisão do `PATCH-citacoes-2026-07-24`) |
 | **Estado da suíte** | Sem banco: `typecheck` + `documento` + `brcode` + `dominio` + `web` → **`EXIT=0`, 2.420 linhas `ok`** (28/08, madrugada), e desde 27/08 com as verificações de `tests/sicoob-http.ts` — hoje **63** — dentro do `test:dominio`. Fora da suíte, contra a Sicoob de verdade: `npm run ensaio-sicoob` → **6 de 6**. `test:repos` e `test:isolamento` **não rodam nesta VPS** (exigem PostgreSQL local) |
 | **Produção** | `financeiro.blackhaus.io` · **35 migrations no ar** (a 34 em 21/08, a **35 em 28/08**) · a **36 escrita e NÃO aplicada** · Pix estático e boleto importado no ar · central de ajuda em toda tela · **a conta unificada lida já vira cobrança** (migration 34) · o conector roda sozinho a cada 15 min pelo `financeiro-ciclo.timer`, e desde **28/08** a agenda de cobrança roda sozinha em três timers (`fila` 5 min · `consulta` e `certificado` diárias) |
+
+> ## ⚠️ O QUE MUDOU DESDE 28/08 — leia isto antes do corpo do arquivo
+>
+> **Seis fatos deste arquivo deixaram de ser verdade.** Cada linha diz o que ele
+> afirma, o que foi medido e onde está a prova.
+>
+> | O arquivo diz | Medido em | A verdade hoje |
+> |---|:--:|---|
+> | *"A única pendência do repositório é o certificado A1"* | 01/09 | **O A1 existe e está no cofre.** O aplicativo do Portal Developers saiu de `Pendente` e está ATIVO, o mTLS respondeu `200`, o `client_id` está gravado e o conector de cobrança nasceu ligado (`ativo = true`). `src/sicoob/http.ts` existe desde 27/08 |
+> | *"a **36** escrita e NÃO aplicada"* | 01/09 | **A 36 FOI APLICADA**, pelo workflow `migrate-financeiro`, e conferida no catálogo. Da conexão de dono o `migrate status` lista **1** pendente, não 36 |
+> | Item 4: *"18 de 29 contratos ativos"* | 02/09 | **28 de 29.** Falta só o Rhenan (`000406456101252`), e o que falta nele é decisão de TIPO do originador, não digitação |
+> | Item 7: endereço, *"só o boleto depende"*, **0 de 29** | 02/09 e 08/09 | **18 das 29 têm endereço completo.** E ele deixou de ser aviso: desde 28/08 a emissão **RECUSA** com `PagadorSemEndereco` (422), e desde 08/09 a prontidão mede isso na camada `endereco_do_pagador`, com o efeito `bloqueia_boleto` |
+> | Item 8: *"**Uma por vez** — se vale um caminho em lote é a `Q-CONTA-LOTE-01`, aberta"* | 08/09 | **O lote existe.** A aba «1 · Leitura e cálculo» aceita N arquivos de uma vez, com fila de conferência. A `Q-CONTA-LOTE-01` foi decidida — ver `QUESTOES.md` §2.b |
+> | Item 2: *"preencha o DIA do mês"* | 07/09 | O dia que se digita é o **da DISTRIBUIDORA**. O nosso boleto vence **três dias antes**, e quem subtrai é o código. Digitar um dia já adiantado faz a conta ser feita duas vezes |
+>
+> **E o que este arquivo nunca disse, porque o caminho da fatura não passava por
+> aqui:** o que trava a primeira fatura hoje **não é endereço nem contrato** — é a
+> **conta da distribuidora lida** (0 de 29 em 08/09) mais a **geração da
+> competência**. O endereço trava o boleto, que é dois passos adiante. Ver
+> `RETOMADA-2026-09-08.md` §3.
+>
+> **A suíte hoje:** `EXIT=0`, **2.589** verificações sem banco (eram 2.420 aqui).
 
 > ## A única pendência do repositório é o certificado A1.
 >
