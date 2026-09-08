@@ -131,16 +131,45 @@ chk('OR3', !verificarOrigem(
       evidencia({ ip: '200.201.160.9', tlsAutorizado: true }), { ips: [], viaProxy: false }).verificada,
     'WEBHOOK_IPS vazio recusa MESMO com certificado verificado - a faixa entra sempre');
 
-chk('OR4', !verificarOrigem(evidencia({ ip: '200.201.160.9' }), FAIXA).verificada,
-    'IP na faixa e sem certificado nenhum: RECUSA - a faixa nunca vale sozinha');
+/*
+ * ⚠️ OR4 MUDOU DE SINAL EM 08/09/2026, e a inversao e registro e nao conserto.
+ *
+ * Ela afirmava "a faixa nunca vale sozinha", que era a Decisao 1 da ADR-0006:
+ * mTLS + IP. O suporte da Sicoob respondeu que a notificacao NAO usa mTLS, nem
+ * cabecalho, nem assinatura - das quatro formas possiveis a outra ponta nao
+ * oferece nenhuma. Exigir certificado passou a significar RECUSAR TODA
+ * NOTIFICACAO, em silencio, atras do 404 generico.
+ *
+ * O que compensa a guarda mais fraca esta fora deste arquivo: o webhook deixou
+ * de repartir dinheiro (`Q-BAIXAOPER-01`). Ver `adr/ADR-0006` §9.
+ */
+chk('OR4', verificarOrigem(evidencia({ ip: '200.201.160.9' }), FAIXA).verificada,
+    'IP na faixa e sem certificado: PASSA - a faixa ficou sozinha porque a Sicoob nao apresenta '
+    + 'certificado no envio, e uma guarda que recusa 100% das notificacoes nao guarda nada');
+
+chk('OR4b', !verificarOrigem(evidencia({ ip: '200.201.160.9' }), { ...FAIXA, sujeitoEsperado: 'sicoob' }).verificada,
+    'com WEBHOOK_MTLS_SUJEITO configurado o certificado volta a ser exigido: RECUSA - e o caminho '
+    + 'de reativar a guarda antiga por configuracao, sem editar codigo, se a outra ponta mudar');
 
 /* O MODO DE FALHA QUE A ADR NOMEIA: "proxy que nao repassa o certificado entrega
  * uma requisicao indistinguivel de uma autenticada". Aqui quem afirma o SUCCESS
  * e o proprio chamador, de fora. */
 chk('OR5', !verificarOrigem(
       evidencia({ ip: '200.201.160.9', daLoopback: false, cabecalhoVerificado: 'SUCCESS',
-                  cabecalhoSujeito: 'CN=quem-quiser' }), { ...FAIXA, viaProxy: true }).verificada,
-    'ssl-client-verify: SUCCESS vindo de FORA da loopback e ignorado: RECUSA');
+                  cabecalhoSujeito: 'CN=quem-quiser' }),
+      { ...FAIXA, viaProxy: true, sujeitoEsperado: 'sicoob' }).verificada,
+    'ssl-client-verify: SUCCESS vindo de FORA da loopback continua nao valendo como certificado: '
+    + 'RECUSA. A licao da ADR ("proxy que nao repassa o certificado entrega uma requisicao '
+    + 'indistinguivel de uma autenticada") sobreviveu a queda do mTLS obrigatorio');
+
+/* A OUTRA METADE, e ela ficou MAIS importante com o IP sozinho: se `X-Real-IP` de
+ * fora da loopback valesse, qualquer um se declararia dentro da faixa e a unica
+ * guarda que restou seria um cabecalho digitado pelo proprio chamador. */
+chk('OR5b', !verificarOrigem(
+      evidencia({ ip: '203.0.113.9', daLoopback: false, cabecalhoIp: '200.201.160.9' }),
+      { ...FAIXA, viaProxy: true }).verificada,
+    'X-Real-IP vindo de FORA da loopback nao substitui o IP do socket: RECUSA - com a faixa '
+    + 'sozinha, aceitar esse cabecalho entregaria a autenticacao inteira a quem chama');
 
 chk('OR6', !verificarOrigem(
       evidencia({ ip: '127.0.0.1', daLoopback: true, cabecalhoVerificado: 'SUCCESS',

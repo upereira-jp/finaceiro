@@ -1022,8 +1022,14 @@ export const ROTAS: Rota[] = [
   // ------------------------------------------------------------- liquidacoes
   /*
    * O UNICO GATILHO DO SPLIT (PRD 5.2). As tres rotas abaixo entram todas em
-   * liquidacao.baixar(), que roda a reparticao na mesma transacao - nao ha rota
-   * que reparta dinheiro sem que ele tenha entrado.
+   * liquidacao.baixar() - nao ha rota que reparta dinheiro sem que ele tenha
+   * entrado.
+   *
+   * ⚠️ 08/09/2026: `baixar()` NAO reparte mais quando a origem e o webhook. A
+   * Sicoob respondeu que a baixa operacional e INTENCAO de pagamento, entao a
+   * reparticao espera a confirmacao da consulta ativa (`confirmarLiquidacao`).
+   * As outras duas origens - conciliacao e manual - continuam repartindo na
+   * mesma transacao, porque as duas ja SAO confirmacao. Ver `Q-BAIXAOPER-01`.
    *
    * O webhook e idempotente por `id_externo`: o mesmo evento chegando duas vezes
    * devolve a baixa que ja existe, em vez de 409. Fila de webhook reprocessa por

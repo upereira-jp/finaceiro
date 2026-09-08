@@ -309,8 +309,16 @@ let liquidacaoJulho: string;
     origem: 'webhook_sicoob', id_externo: pago.idExterno,
   }));
   liquidacaoJulho = r.liquidacao_id;
-  chk('K7a', r.split !== null && r.split.itens === 4,
-      `a baixa rodou o split na mesma transacao: ${r.split?.itens} itens`);
+
+  /* ⚠️ MUDOU EM 08/09/2026: a baixa por WEBHOOK nao reparte mais. O webhook avisa
+   * intencao de pagamento (palavra da Sicoob), e quem confirma e a consulta ativa
+   * lendo `liquidado` no proprio banco. Ver `Q-BAIXAOPER-01`. */
+  chk('K7a0', r.split === null && r.aguardando_confirmacao === true,
+      'a baixa por webhook entra SEM repartir: o aviso e intencao de pagamento, nao liquidacao');
+
+  const conf = await emA(() => liquidacao.confirmarLiquidacao(liquidacaoJulho));
+  chk('K7a', conf.split !== null && conf.split.itens === 4 && conf.ja_confirmada === false,
+      `a confirmacao rodou o split: ${conf.split?.itens} itens`);
 
   const s = await emA(() => split.porLiquidacao(liquidacaoJulho));
   const por = (t: string) => s!.split_item.find((i) => i.tipo === t)!;
@@ -381,8 +389,18 @@ let liquidacaoJulho: string;
   }));
   const depois = await emA(() => split.porLiquidacao(liquidacaoJulho));
   chk('K8', r.ja_existia === true && r.liquidacao_id === liquidacaoJulho
-        && antes!.split_item.length === depois!.split_item.length,
-      'PRD 6: o mesmo evento chegando de novo devolve a baixa existente, sem 409 e sem repartir duas vezes');
+        && antes!.split_item.length === depois!.split_item.length
+        && r.aguardando_confirmacao === false,
+      'PRD 6: o mesmo evento chegando de novo devolve a baixa existente, sem 409 e sem repartir duas '
+      + 'vezes - e ela ja NAO aguarda confirmacao, porque o split existe');
+
+  /* A CONSULTA ATIVA RODA TODO DIA e reencontra esta liquidacao para sempre.
+   * Confirmar de novo tem de ser barato e nao pode repartir de novo. */
+  const reconf = await emA(() => liquidacao.confirmarLiquidacao(liquidacaoJulho));
+  const depois2 = await emA(() => split.porLiquidacao(liquidacaoJulho));
+  chk('K8b', reconf.ja_confirmada === true && depois!.split_item.length === depois2!.split_item.length,
+      'confirmar duas vezes devolve a mesma execucao e nao cria itens novos - a idempotencia e do '
+      + 'unico por liquidacao, e a consulta diaria depende dela');
 }
 
 // ---------------------------------------------------- K9 a 2a competencia paga a 2a parcela
@@ -397,6 +415,7 @@ let liquidacaoJulho: string;
     fatura_id: f2.id, data_liquidacao: new Date(Date.UTC(2026, 8, 10)),
     valor_liquidado_centavos: pago.valor, origem: 'webhook_sicoob', id_externo: pago.idExterno,
   }));
+  await emA(() => liquidacao.confirmarLiquidacao(r.liquidacao_id));
   const s = await emA(() => split.porLiquidacao(r.liquidacao_id));
   const com = s!.split_item.find((i) => i.tipo === 'comissao')!;
   chk('K9a', s!.parcela_comissao === 2 && com.percentual_aplicado!.toString() === '20',
@@ -419,6 +438,7 @@ let liquidacaoJulho: string;
     fatura_id: fs[0]!.id, data_liquidacao: new Date(Date.UTC(2026, 9, 10)),
     valor_liquidado_centavos: pago.valor, origem: 'webhook_sicoob', id_externo: pago.idExterno,
   }));
+  await emA(() => liquidacao.confirmarLiquidacao(r.liquidacao_id));
   const s = await emA(() => split.porLiquidacao(r.liquidacao_id));
   chk('K10a', s!.parcela_comissao === null && !s!.split_item.some((i) => i.tipo === 'comissao'),
       'da 3a fatura cheia em diante NAO ha item de comissao (PRD 5.4) - e o lucro real da G3 comeca aqui (5.6)');
@@ -446,8 +466,11 @@ let liquidacaoJulho: string;
     fatura_id: nova.id, data_liquidacao: new Date(Date.UTC(2026, 7, 12)),
     valor_liquidado_centavos: nova.valor_total_centavos!, origem: 'manual',
   }));
-  chk('K11b', baixa.split === null && /R12/.test(baixa.split_bloqueado ?? ''),
-      'a baixa VALE e o split fica pendente: recusar a entrada de dinheiro por falta de cadastro puniria o cliente que pagou');
+  chk('K11b', baixa.split === null && /R12/.test(baixa.split_bloqueado ?? '')
+        && baixa.aguardando_confirmacao === false,
+      'a baixa VALE e o split fica pendente: recusar a entrada de dinheiro por falta de cadastro '
+      + 'puniria o cliente que pagou. E ela NAO aguarda confirmacao: origem `manual` e uma pessoa '
+      + 'olhando o extrato, que ja e prova de entrada - o que falta e cadastro, nao confirmacao');
 
   const pendentes = await emA(() => liquidacao.pendentesDeSplit());
   chk('K11c', pendentes.length === 1 && pendentes[0]!.usina_sem_dono === true,

@@ -13,11 +13,53 @@
 //   2. a liquidacao entra                       <- a constraint
 //                                                  `liquidacao_pelo_total` confere
 //                                                  o valor contra esse total novo
-//   3. a fatura vira `paga` e o split roda       <- na mesma transacao
+//   3. a fatura vira `paga` e o titulo para de ser perseguido
 //
 // Inverter 1 e 2 faz a baixa com juros ser recusada pela propria constraint que
 // existe para proteger a baixa sem juros. Foi a primeira coisa que quebrou ao
 // escrever isto, e fica registrada aqui para nao se redescobrir.
+//
+// ⚠️ 08/09/2026 - O SPLIT SAIU DO PASSO 3, E QUEM O TIROU FOI O BANCO.
+//
+// Ate hoje o passo 3 repartia dinheiro na mesma transacao da baixa, e a premissa
+// era o PRD 5.2: "o split roda exclusivamente na liquidacao, por webhook Sicoob".
+// O suporte da Sicoob respondeu em 08/09 que webhook e liquidacao NAO sao a
+// mesma coisa:
+//
+//   "A baixa operacional nao se refere a liquidacao final, mas sim ao registro
+//    da INTENCAO DE PAGAMENTO realizada."
+//   "Qual e o evento de 'o dinheiro entrou e nao volta'? Apenas a alteracao do
+//    status, no endpoint de movimentacao: liquidacao."
+//
+// Entao a regra passa a ser, e ela cabe numa linha: O SPLIT RODA QUANDO O BANCO
+// DIZ `liquidado` NUMA CONSULTA - nunca no aviso do webhook. As tres origens se
+// separam por isso, e a separacao e o mecanismo:
+//
+//   `webhook_sicoob`  intencao de pagamento. Baixa entra, split ESPERA.
+//   `conciliacao`     a consulta ativa leu `situacaoBoleto = liquidado` no
+//                     proprio banco. E a confirmacao: split roda.
+//   `manual`          alguem viu o dinheiro no extrato e baixou a mao. Tambem e
+//                     confirmacao - a pessoa e a fonte, e nao ha consulta que a
+//                     supere.
+//
+// O QUE FAZ A CONFIRMACAO CHEGAR, e sem isto a regra seria uma armadilha: a baixa
+// por webhook NAO marca o boleto como `liquidado`. Ele fica `registrado`, que e o
+// filtro de `boleto.emAberto()`, e por isso a consulta ativa continua olhando
+// para ele todo dia ate o banco confirmar. Marcar o titulo aqui o tiraria da fila
+// e o split nunca rodaria - o dinheiro ficaria parado sem ninguem notar, que e
+// exatamente o modo de falha que esta mudanca existe para fechar.
+//
+// A fila de quem esperou e `pendentesDeSplit()`, que ja existia para a R12 (usina
+// sem dono) e agora tem um segundo morador: liquidacao aguardando confirmacao.
+// Ver `Q-BAIXAOPER-01`, decidida na opcao (b), e `adr/ADR-0006` §9.
+//
+// A BORDA CONHECIDA, nomeada aqui em vez de descoberta depois: `boleto.emAberto()`
+// filtra `origem: 'api_sicoob'`, entao um BOLETO IMPORTADO (Q-BOLIMP-01, emitido a
+// mao no portal e transcrito) nao entra na consulta ativa - e um webhook sobre ele
+// ficaria aguardando confirmacao que nunca vem. Nao se perde: a liquidacao aparece
+// em `pendentesDeSplit()` e `POST /liquidacoes/:id/repartir` a resolve. Fica
+// registrado porque a alternativa - confirmar sozinho o que nao da para consultar -
+// seria repartir sobre intencao de pagamento pela porta dos fundos.
 
 import { dbt } from '../db/tipado.ts';
 import { db, tenantCorrente, exigir } from '../db/contexto.ts';
@@ -76,6 +118,10 @@ export type ResultadoDaBaixa = {
    *  o dinheiro entrou e o titulo esta pago. E divergencia - gravada, e alguem
    *  precisa olhar. Mesma distincao do RESUMO-SESSAO-9 2. */
   split_bloqueado: string | null;
+  /** A baixa entrou e o split NAO rodou porque o evento era intencao de
+   *  pagamento (webhook). Nao e erro nem pendencia de cadastro: e o estado
+   *  normal de uma baixa operacional esperando a consulta confirmar. */
+  aguardando_confirmacao: boolean;
 };
 
 /**
@@ -113,6 +159,9 @@ export async function baixar(e: Baixa): Promise<ResultadoDaBaixa> {
         ja_existia: true,
         split: s ? { split_execucao_id: s.id, itens: s.split_item.length, contas_a_pagar: null } : null,
         split_bloqueado: null,
+        /* Sem split, a repeticao do webhook continua aguardando - e dizer isso e
+         * o que impede a fila de tratar releitura como pendencia nova. */
+        aguardando_confirmacao: !s,
       };
     }
   }
@@ -148,26 +197,99 @@ export async function baixar(e: Baixa): Promise<ResultadoDaBaixa> {
     },
   });
 
-  // 3. titulo pago e dinheiro repartido, na mesma transacao.
+  // 3. o titulo para de ser perseguido. A FATURA VIRA `paga` NAS TRES ORIGENS, e
+  //    isso e deliberado: a baixa operacional e o que o banco manda para dizer
+  //    "nao cobre mais esta pessoa", e continuar cobrando quem pagou seria o erro
+  //    visivel. O que espera confirmacao e o REPASSE, nao a cobranca.
   await dbt().fatura.updateMany({ where: { id: e.fatura_id }, data: { status: 'paga' } });
+
+  if (!ehConfirmacao(e.origem)) {
+    /* O BOLETO FICA `registrado` DE PROPOSITO - ver o cabecalho. E o que o mantem
+     * em `boleto.emAberto()` e faz a consulta ativa voltar a ele amanha. */
+    return {
+      liquidacao_id: l.id, ja_existia: false,
+      split: null, split_bloqueado: null, aguardando_confirmacao: true,
+    };
+  }
+
+  const r = await repartir(l.id, e.fatura_id);
+  return { liquidacao_id: l.id, ja_existia: false, aguardando_confirmacao: false, ...r };
+}
+
+/** A origem prova que o dinheiro entrou, ou so anuncia intencao? A lista e
+ *  fechada e o `switch` e exaustivo de proposito: origem nova nasce tendo de
+ *  responder a esta pergunta, em vez de cair num default silencioso. */
+export function ehConfirmacao(origem: OrigemLiquidacao): boolean {
+  switch (origem) {
+    case 'webhook_sicoob': return false;   // baixa operacional = intencao
+    case 'conciliacao':    return true;    // o banco disse `liquidado`
+    case 'manual':         return true;    // uma pessoa viu o extrato
+  }
+}
+
+/**
+ * Reparte e fecha o titulo. E o unico lugar onde o boleto vira `liquidado`, e
+ * isso importa: enquanto ele nao virar, a consulta ativa continua perguntando.
+ *
+ * O `RepasseBloqueado` da R12 NAO desmarca o titulo, e a assimetria e medida: o
+ * banco ja confirmou o pagamento, entao consultar de novo amanha gastaria uma
+ * chamada por dia por titulo para reler um fato que nao muda. O que fica
+ * pendente e o repasse, e ele tem fila propria (`pendentesDeSplit`).
+ */
+async function repartir(liquidacaoId: string, faturaId: string) {
   await dbt().boleto.updateMany({
-    where: { fatura_id: e.fatura_id, status: { in: ['registrado', 'pendente'] } },
+    where: { fatura_id: faturaId, status: { in: ['registrado', 'pendente'] } },
     data: { status: 'liquidado', baixado_em: new Date() },
   });
 
   try {
-    const s = await split.executar(l.id);
+    const s = await split.executar(liquidacaoId);
     return {
-      liquidacao_id: l.id, ja_existia: false,
       split: { split_execucao_id: s.split_execucao_id, itens: s.itens.length, contas_a_pagar: s.contas_a_pagar },
-      split_bloqueado: null,
+      split_bloqueado: null as string | null,
     };
   } catch (err: any) {
     if (err instanceof split.RepasseBloqueado) {
-      return { liquidacao_id: l.id, ja_existia: false, split: null, split_bloqueado: err.message };
+      return { split: null, split_bloqueado: err.message as string | null };
     }
     throw err;   // qualquer outra falha reverte a transacao inteira (PRD 5.5)
   }
+}
+
+export type Confirmacao = {
+  liquidacao_id: string;
+  /** Ja tinha split quando chegou aqui. Nao e erro: os dois canais trazendo o
+   *  mesmo fato e o caso NORMAL, e nao a borda. */
+  ja_confirmada: boolean;
+  split: { split_execucao_id: string; itens: number; contas_a_pagar: number | null } | null;
+  split_bloqueado: string | null;
+};
+
+/**
+ * A CONFIRMACAO: o banco disse `liquidado`, entao agora o dinheiro se reparte.
+ *
+ * Chamada pela consulta ativa quando ela encontra liquidado um titulo cuja baixa
+ * ja tinha entrado pelo webhook. E idempotente pelo unico por liquidacao do
+ * `split_execucao`, e a idempotencia e conferida ANTES de escrever: a consulta
+ * roda todo dia e reencontraria a mesma liquidacao para sempre.
+ */
+export async function confirmarLiquidacao(liquidacaoId: string): Promise<Confirmacao> {
+  await exigir('escrever_carteira');
+
+  const l = await dbt().liquidacao.findFirst({ where: { id: liquidacaoId } });
+  if (!l) throw Object.assign(new Error('Liquidacao nao encontrada.'), { status: 404 });
+
+  const ja = await split.porLiquidacao(l.id);
+  if (ja) {
+    return {
+      liquidacao_id: l.id, ja_confirmada: true,
+      split: { split_execucao_id: ja.id, itens: ja.split_item.length, contas_a_pagar: null },
+      split_bloqueado: null,
+    };
+  }
+
+  const r = await repartir(l.id, l.fatura_id);
+  return { liquidacao_id: l.id, ja_confirmada: false, ...r };
 }
 
 /**

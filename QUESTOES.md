@@ -89,6 +89,153 @@ Uma questão sem dono nomeado é automaticamente vermelha, por não ter caminho 
 
 ---
 
+## 2.c Decisões do dono em 08/09/2026, à noite
+
+> Duas respostas dadas em conversa e registradas no mesmo dia pela regra 10.
+
+### 1. A base de cobrança é o funil «Clientes ativos»
+
+Verbatim: *"Base da cobrança são os clientes ativos do funil clientes ativos."*
+
+Responde a **`Q-ATIVOS-01` (b)** — se `Clientes ativos` substitui ou complementa
+`rateio_clientes` como fonte de cliente ativo —, e com ela a **`POP-01`** (o
+denominador que faltava) e a metade de gatilho da **`F-01b`** (que etapa marca o
+cliente pagante).
+
+**Medido no CRM em 08/09/2026 19:27Z**, tenant `g3-solar`, via `funil_snapshot`:
+
+| Funil | Etapa | `stage_type` | posições | leads únicos |
+|---|---|:--:|--:|--:|
+| `Clientes ativos - Assinatura` | ATIVOS | `normal` | **29** | **29** |
+| `Rateio` | Desconto Ativo | `won` | 29 | 29 |
+
+**As duas populações têm o mesmo tamanho, e é o mesmo 29 que a prontidão já usa**
+(`crm_usina_cliente_id IS NULL OR rateio_situacao = 'ativado'`). A decisão **não muda
+nenhum número hoje** — muda a fonte de verdade e fecha o denominador que a `POP-01`
+dizia não existir (29 · 36 · 28).
+
+**O que ela ainda não destrava, e é do dev do CRM — `Q-ATIVOS-01` (a):** a etapa
+`ATIVOS` está com `stage_type = 'normal'`. Enquanto ela não for de ganho — ou não
+houver view em `financeiro.*` que exponha as posições desse funil —, o conector **não
+alcança** a população que o dono acaba de nomear como fonte, porque a regra 4 o
+proíbe de ler tabela base. Nada quebra hoje, porque o número coincide.
+
+**E a premissa que segurava o código venceu:** o comentário do `FUNIL_COPIA_DERIVADA`
+em `src/crm/sincronizacao.ts` justifica não mexer dizendo *"o funil está vazio hoje"*.
+Ele não está mais — são 29 posições.
+
+### 2. O tipo do originador «Out Sales» é próprio
+
+Confirma a decisão de 21/08 registrada na `Q-ORIGVEND-01`. O que continua aberto é o
+**cadastro**, não o tipo: `natureza` (`pf`/`pj`) e `documento` — a coluna é `NOT NULL`
+e única por tenant. Sem o registro, `importarContratos` recusa a linha com
+`sem_originador: nao_existe`, e a UC `000406456101252` (Rhenan) segue sem contrato —
+que é a única das 29 sem contrato ativo.
+
+**Achado ao conferir as outras duas UCs do Out Sales, 08/09.** Pelo crédito congelado,
+as três UCs do Out Sales entre as 29 faturáveis são `000406456101252` (Rhenan),
+`000036571501203` (Magda de Souza Oliveira Lima) e `000381032001295` (Alice Ribeiro
+França) — `listas-2026-08-24/04-contratos-dos-29-faturaveis.csv`, coluna
+`originador_crm`, todas com `originador_cadastro = (nao cadastrado)`. Como **28 das 29
+têm contrato ativo e a única sem é a do Rhenan**, e como o importador recusa
+`originador_id` que não existe, **Magda e Alice só podem ter sido contratadas com o
+único originador cadastrado — o da Renata** (`88c7e7b5-46d3-414e-a4b8-13cfdefedd9e`).
+O sinal `C3` do conector é consistente com isso: as 28 divergências de originador por
+nome exato incluem `"Alice Ribeiro Franca" × "Out Sales"`
+(`RETOMADA-2026-09-08.md` §5).
+
+**Consequência, e ela é de beneficiário e não de valor:** o tipo congelado é
+`vendedor_g3` nos dois casos, então a alíquota é a mesma (25% + 25%); quem muda é
+**quem recebe**. Conferir na tela de Contratos e, se confirmado, `encerrar` +
+`renovar` as duas **antes da primeira fatura cheia** — depois dela a renovação zera
+`faturas_cheias_pagas`, que é o contador que paga a comissão.
+
+---
+
+## 2.d Respostas do Sicoob em 08/09/2026 — duas questões fecham, uma decisão de arquitetura cai
+
+> **A rodada de 13/08 falhou por destinatário, e a de 08/09 provou.** As mesmas
+> perguntas, divididas entre **gerente** (chave Pix, dígito da conta) e **suporte
+> técnico** (webhook, baixa operacional), voltaram respondidas no mesmo dia — quatro
+> das seis em menos de cinco minutos de conversa.
+
+### ✅ FECHA — o dígito da conta estava certo
+
+Perguntado se `numeroContaCorrente` leva `1194455` ou `11944552`. Resposta:
+*"Esta opção, com o dígito e sem o -"*. **O que está gravado em
+`conector_cobranca.numero_conta_corrente` está correto** e nada muda. Some a pendência
+que dizia *"se a primeira emissão recusar a conta, é aqui"* — e o `UPDATE` de conserto
+que estava escrito não será usado.
+
+### 🟡 GANHA CAMINHO — `Q-SICOOB-PIXCHAVE-01`
+
+*"Você gera no app do Sicoob"* + *"você precisa vincular ela no contrato de cobrança
+com sua cooperativa"*. **São dois atos, nesta ordem, e o primeiro é nosso:** gerar a
+chave aleatória no Sicoob Empresarial; depois pedir à cooperativa o vínculo com o
+contrato de cobrança. A questão continua aberta porque o segundo ato é de terceiro,
+mas deixou de ser *"como se pede"* e virou *"pedir"*.
+
+### 🔴 → DECIDIDA — `Q-WEBHOOK-01`, e a resposta MATA a Decisão 1 do `ADR-0006`
+
+| Perguntado | Respondido |
+|---|---|
+| A chamada usa mTLS? | *"Apenas no cadastro, durante o envio das notificações **não é feito mTLS**"* |
+| Faixa de IP fixa? | *"Sim, vou te enviar a lista dos nossos IPs"* |
+| Cabeçalho ou assinatura do corpo? | *"Não"* |
+
+**As três formas de credencial estão descartadas pela própria fonte** — cabeçalho e
+HMAC já tinham caído pela documentação, e o mTLS cai agora. Sobra a **faixa de IP**,
+que o `ADR-0006` declarava *"entra sempre e nunca sozinha"*.
+
+**E isso estava a um passo de custar caro em silêncio:** `verificarOrigem` exige
+certificado **antes** de olhar o IP, e a recusa é o `404` genérico. Ligar o webhook
+hoje daria **zero baixas automáticas e nenhum erro visível**.
+
+**Decisão de 08/09 (técnica, delegada):** IP sozinho autoriza — e **o webhook deixa de
+repartir dinheiro**. Ele registra o aviso e enfileira conferência; quem confirma é a
+consulta ativa. Um aviso forjado passa a custar uma consulta desnecessária, não uma
+liquidação inventada. Registrado em `adr/ADR-0006` §9.
+
+**Pendente de terceiro:** a lista de IPs, prometida e não recebida. Sem ela
+`WEBHOOK_IPS` fica vazio, a rota recusa tudo, e é por isso que o webhook segue
+desligado.
+
+### 🔴 → DECIDIDA — `Q-BAIXAOPER-01` fecha na opção (b), e o banco escolheu por nós
+
+| Perguntado | Respondido |
+|---|---|
+| Quanto tempo separa a baixa operacional da liquidação final? | *"Você pode ajustar segundo a necessidade, ficando **D+0, D+2 ou o padrão que é D+1**; o ajuste é feito no contrato de cobrança"* |
+| Existe notificação da liquidação final? | *"**Consulta ativa** no endpoint de movimentação do dia anterior dos títulos liquidados"* |
+| O cancelamento da baixa é notificado? | *"Sim, enviamos webhook quando é comandada uma devolução"* |
+| Qual evento é *"o dinheiro entrou e não volta"*? | *"Apenas a alteração do status, no endpoint de movimentação **liquidação**"* |
+
+**A opção (a) — manter o split na baixa — deixou de ser defensável:** não existe
+notificação de liquidação final, e o evento que temos hoje é declaradamente intenção
+de pagamento. **O split sai do webhook e passa para a confirmação de liquidação lida no
+endpoint de movimentação.** A baixa operacional continua valendo para o que ela é: o
+título deixa de estar em aberto e a cobrança para de ser perseguida.
+
+**Três consequências de implementação, nomeadas para não virarem improviso:**
+
+1. **falta um cliente para o endpoint de movimentação** — hoje só existe a consulta de
+   situação por título (`GET /boletos`), que a `Q-LIQUIDACAO-CONSULTA-01` já tratava
+   como detector de webhook perdido, não como fonte de liquidação;
+2. **`liquidacao.baixar()` deixa de chamar `split.executar()` na mesma transação.** O
+   `PRD` §5.2 dizia *"o split roda exclusivamente na liquidação, por webhook Sicoob"* —
+   a premissa era que webhook e liquidação eram a mesma coisa, e o banco diz que não
+   são. O `PRD` passa a estar desatualizado neste ponto, e isto é o registro;
+3. **a `Q-WEBHOOK-ESTORNO-01` melhora:** há webhook de devolução, então o estorno tem
+   aviso — mas, pela decisão acima, ele também só vale depois de confirmado por
+   consulta.
+
+### ⬅️ VOLTA PARA O DONO — o prazo de crédito
+
+`D+0`, `D+1` (padrão) ou `D+2`, ajustável no contrato de cobrança junto à cooperativa.
+É **fluxo de caixa**, não engenharia: muda quando o dinheiro fica disponível e, com a
+decisão acima, quando o repasse ao dono da usina pode ser executado.
+
+---
+
 ## 3. F0 — o que falta para fechar
 
 Entregas da F0 conforme `PRD-v2.2` §10:

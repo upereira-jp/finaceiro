@@ -1,5 +1,19 @@
-// A VERIFICACAO DE ORIGEM DO WEBHOOK. `ADR-0006`, Decisao 1: **mTLS + faixa de
-// IP**, e a faixa "entra sempre e nunca sozinha".
+// A VERIFICACAO DE ORIGEM DO WEBHOOK. `ADR-0006` §9 (08/09/2026): **faixa de IP**,
+// e o mTLS virou opcional porque a outra ponta nao o oferece.
+//
+// ⚠️ A DECISAO 1 ORIGINAL ERA "mTLS + faixa de IP", e ela caiu por resposta do
+// suporte da Sicoob, verbatim: "Apenas no cadastro, durante o envio das
+// notificacoes NAO e feito mTLS". Cabecalho proprio e assinatura do corpo ja
+// tinham caido pela documentacao ("nao"), entao das quatro formas possiveis a
+// outra ponta nao oferece NENHUMA. A faixa de IP, que esta ADR dizia que "entra
+// sempre e nunca sozinha", ficou sozinha.
+//
+// O QUE COMPENSA A GUARDA MAIS FRACA - e sem isto a mudanca seria so um
+// afrouxamento: o webhook DEIXOU DE REPARTIR DINHEIRO no mesmo dia
+// (`Q-BAIXAOPER-01`). Ele registra a baixa e a consulta ativa confirma no proprio
+// banco antes de qualquer split. Um aviso forjado de um IP falsificado custa, no
+// pior caso, uma consulta desnecessaria - nao uma liquidacao inventada com
+// repasse. Ver `src/repos/liquidacao.ts`.
 //
 // POR QUE ESTE ARQUIVO EXISTE SEPARADO DO SERVIDOR: para ser exercivel sem
 // socket, sem rede e sem processo. A funcao que decide recebe EVIDENCIA - um
@@ -60,8 +74,12 @@ export type ConfigDaOrigem = {
  * quem autentica e a chave privada que a outra ponta apresenta no handshake).
  *
  *   WEBHOOK_IPS            "200.201.160.0/20,200.201.176.10"   vazio = recusa
- *   WEBHOOK_MTLS_VIA_PROXY "1" quando o nginx termina o TLS e repassa
- *   WEBHOOK_MTLS_SUJEITO   trecho do DN esperado, opcional
+ *   WEBHOOK_MTLS_VIA_PROXY "1" quando o nginx termina o TLS e repassa. Desde
+ *                          08/09/2026 governa tambem o `X-Real-IP`: sem ele o
+ *                          IP conferido e o do socket
+ *   WEBHOOK_MTLS_SUJEITO   trecho do DN esperado. Opcional - e configura-lo
+ *                          VOLTA A EXIGIR certificado, que e como se restaura a
+ *                          guarda anterior a §9 da ADR sem tocar em codigo
  */
 export function lerConfig(env: Record<string, string | undefined> = process.env): ConfigDaOrigem {
   const ips = (env.WEBHOOK_IPS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
@@ -165,24 +183,43 @@ export function verificarOrigem(e: Evidencia, c: ConfigDaOrigem): Origem {
   const porTls = e.tlsAutorizado;
   const porProxy = c.viaProxy && e.daLoopback && e.cabecalhoVerificado?.toUpperCase() === 'SUCCESS';
 
-  if (!porTls && !porProxy) {
-    const pista = e.cabecalhoVerificado && !e.daLoopback
-      ? ' Chegou `ssl-client-verify` de fora da loopback, e cabecalho nao e prova: foi ignorado.'
-      : '';
-    return { verificada: false, motivo:
-      'Sem certificado de cliente verificado. TLS no Node nao autorizou, e nao ha ' +
-      `repasse confiavel do proxy (viaProxy=${c.viaProxy}, loopback=${e.daLoopback}).${pista}` };
+  /*
+   * O mTLS DEIXOU DE SER EXIGIDO, e o ramo continua aqui de proposito: a Sicoob
+   * usa certificado no CADASTRO da aplicacao, a topologia do VPS pode mudar e
+   * outro emissor de webhook pode oferecer o que este nao oferece. Apagar o ramo
+   * custaria reescreve-lo; mante-lo custa esta linha.
+   *
+   * `sujeitoEsperado` CONFIGURADO VOLTA A EXIGIR CERTIFICADO, e a regra e
+   * autoevidente: nao ha como conferir o subject de um certificado que nao veio.
+   * E o caminho de quem quiser a guarda antiga de volta sem editar codigo.
+   */
+  const comCertificado = porTls || porProxy;
+  if (c.sujeitoEsperado) {
+    if (!comCertificado) {
+      const pista = e.cabecalhoVerificado && !e.daLoopback
+        ? ' Chegou `ssl-client-verify` de fora da loopback, e cabecalho nao e prova: foi ignorado.'
+        : '';
+      return { verificada: false, motivo:
+        'WEBHOOK_MTLS_SUJEITO esta configurado e exige certificado, e nao veio nenhum ' +
+        `verificado (viaProxy=${c.viaProxy}, loopback=${e.daLoopback}).${pista}` };
+    }
+    const sujeitoVindo = (porTls ? e.tlsSujeito : e.cabecalhoSujeito) ?? '';
+    if (!sujeitoVindo.toLowerCase().includes(c.sujeitoEsperado.toLowerCase())) {
+      return { verificada: false, motivo:
+        `O subject do certificado nao contem "${c.sujeitoEsperado}". Veio: ${sujeitoVindo || '(vazio)'}.` };
+    }
   }
 
   const sujeito = (porTls ? e.tlsSujeito : e.cabecalhoSujeito) ?? '';
-  if (c.sujeitoEsperado && !sujeito.toLowerCase().includes(c.sujeitoEsperado.toLowerCase())) {
-    return { verificada: false, motivo:
-      `O subject do certificado nao contem "${c.sujeitoEsperado}". Veio: ${sujeito || '(vazio)'}.` };
-  }
 
   /* Atras de proxy o IP de quem chamou e o que o proxy repassou; o `remoteAddress`
-   * e o proprio proxy, e conferi-lo autorizaria a loopback em vez do banco. */
-  const ip = porProxy ? e.cabecalhoIp : e.ip;
+   * e o proprio proxy, e conferi-lo autorizaria a loopback em vez do banco.
+   *
+   * O QUE MUDOU COM A QUEDA DO mTLS: o repasse do IP passou a valer sem
+   * `ssl-client-verify`, porque agora ele e a UNICA prova. A condicao continua
+   * sendo a mesma que sempre importou - a requisicao veio da LOOPBACK, ou seja,
+   * do nginx desta maquina. Cabecalho de fora da loopback segue sem valer nada. */
+  const ip = (c.viaProxy && e.daLoopback) ? e.cabecalhoIp : e.ip;
   if (!c.ips.some((entrada) => ipCasa(ip, entrada))) {
     return { verificada: false, motivo: `IP ${ip ?? '(desconhecido)'} fora de WEBHOOK_IPS.` };
   }

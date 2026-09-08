@@ -52,6 +52,12 @@ export type ResultadoDaAgenda = {
   registrados: number;
   falhos: number;
   liquidados: number;
+  /** Baixas que o banco CONFIRMOU nesta rodada, e cujo split rodou agora. Nao
+   *  soma com `liquidados`: aquele conta baixa nova, este conta reparticao - e
+   *  desde 08/09/2026 as duas coisas acontecem em dias diferentes quando o
+   *  webhook chega primeiro. Vive so no resultado e no `detalhe`: coluna nova em
+   *  `agenda_execucao` seria migration, e o numero nao vale uma. */
+  confirmados: number;
   divergentes: number;
   /** O que a rodada NAO alcancou por causa do teto. Zero e um fato; e por isso
    *  que ele e impresso mesmo quando e zero. */
@@ -136,7 +142,7 @@ async function fechar(c: Contexto, r: ResultadoDaAgenda, detalhe: Record<string,
 
 const vazio = (tarefa: Tarefa, cicloId: string): ResultadoDaAgenda => ({
   tarefa, ciclo_id: cicloId, status: 'ok',
-  examinados: 0, registrados: 0, falhos: 0, liquidados: 0, divergentes: 0,
+  examinados: 0, registrados: 0, falhos: 0, liquidados: 0, confirmados: 0, divergentes: 0,
   deixados_para_tras: 0, ocorrencias: [], execucaoGravada: false,
 });
 
@@ -232,8 +238,16 @@ export async function executarFilaDeEmissao(
  * O QUE ACONTECE QUANDO OS DOIS CANAIS TRAZEM O MESMO EVENTO, que e o caso
  * normal e nao a borda: o webhook baixou de manha, a consulta ativa acha o mesmo
  * boleto liquidado a noite, e a baixa e recusada com `FaturaNaoLiquidavel`
- * porque a fatura ja esta `paga`. Isso NAO e falha - e a prova de que o outro
- * canal funcionou. Conta como `nada`, e nao aparece em contador de problema.
+ * porque a fatura ja esta `paga`.
+ *
+ * ⚠️ 08/09/2026 - ESSA RECUSA VIROU O CAMINHO PRINCIPAL, e ate hoje ela era o
+ * fim do caminho. O comentario anterior dizia que a recusa "e a prova de que o
+ * outro canal funcionou" e que nao ha nada a fazer. Isso valia enquanto o
+ * webhook fosse a liquidacao; a Sicoob respondeu que ele e INTENCAO de
+ * pagamento, entao o webhook baixou e NAO repartiu. Quem prova que o dinheiro
+ * entrou e esta consulta, que acabou de ler `liquidado` no proprio banco - e por
+ * isso a recusa passou a disparar `confirmarLiquidacao`, que e onde o split roda
+ * agora. Ver `Q-BAIXAOPER-01` e o cabecalho de `src/repos/liquidacao.ts`.
  */
 export async function executarConsultaAtiva(
   cobranca: PortaDeCobranca,
@@ -268,6 +282,41 @@ export async function executarConsultaAtiva(
         // transacional durante a viagem ate a Sicoob e o caminho para o P2028
         // em maxWait com a carteira crescendo - o teto do pool e 8.
         const situacao = await cobranca.consultar(credencialRef, nossoNumero);
+
+        /*
+         * A CONFIRMACAO VEM ANTES DA DECISAO, e a ordem aqui e o mecanismo - nao
+         * arrumacao.
+         *
+         * `decidir()` so sabe transformar `liquidado` em BAIXA, e para isso exige
+         * data e valor. A `Q-LIQUIDACAO-CONSULTA-01` mediu que o `GET /boletos`
+         * da Sicoob NAO devolve nenhum dos dois: devolve `situacaoBoleto`. Entao
+         * um titulo que o webhook ja baixou de manha chega aqui como `liquidado`
+         * sem data e sem valor, e `decidir()` responde DIVERGENCIA - a resposta
+         * certa para "baixar sem saber o valor", e a errada para o que este caso
+         * e de verdade.
+         *
+         * Porque aqui nao falta nada: a baixa ja existe, com o valor que o
+         * webhook trouxe. O que a consulta acrescenta e a UNICA coisa que
+         * faltava - o banco dizendo `liquidado`, que e a confirmacao que o split
+         * espera desde 08/09/2026.
+         *
+         * Sem esta guarda o efeito seria pior que perder a confirmacao: o titulo
+         * fica `registrado` ate confirmar, entao ele voltaria a esta fila TODO
+         * DIA, gerando uma divergencia nova a cada rodada, para sempre.
+         */
+        if (situacao.situacao === 'liquidado') {
+          const l = await transacao(() => liquidacoes.porFatura(b.fatura_id));
+          if (l) {
+            const c = await transacao(() => liquidacoes.confirmarLiquidacao(l.id));
+            if (!c.ja_confirmada && c.split) r.confirmados += 1;
+            if (c.split_bloqueado) {
+              r.divergentes += 1;
+              r.ocorrencias.push({ boleto_id: b.id, fatura_id: b.fatura_id, sinal: c.split_bloqueado });
+            }
+            continue;
+          }
+        }
+
         const decisao = decidir(situacao);
 
         switch (decisao.acao) {
@@ -297,6 +346,9 @@ export async function executarConsultaAtiva(
                 observacao: 'consulta ativa (PRD §6)',
               }));
               if (!baixa.ja_existia) r.liquidados += 1;
+              /* Nao ha ramo de "aguardando" aqui: `origem: conciliacao` E
+               * confirmacao - o `situacaoBoleto` veio do proprio banco -, entao
+               * `baixar()` ja repartiu. Ver `ehConfirmacao`. */
               if (baixa.split_bloqueado) {
                 // A baixa VALEU e o dinheiro entrou; o que nao rodou foi o
                 // repasse (R12, usina sem dono). Divergencia, nao falha.
@@ -304,7 +356,14 @@ export async function executarConsultaAtiva(
                 r.ocorrencias.push({ boleto_id: b.id, fatura_id: b.fatura_id, sinal: baixa.split_bloqueado });
               }
             } catch (err: any) {
-              if (err instanceof liquidacoes.FaturaNaoLiquidavel) break;   // o webhook chegou antes
+              if (err instanceof liquidacoes.FaturaNaoLiquidavel) {
+                /* A fatura ja esta `paga` e a liquidacao dela nao foi achada pela
+                 * guarda de confirmacao la em cima - entao nao ha o que confirmar
+                 * nem o que baixar. Continua sendo o fim do caminho, e continua
+                 * nao sendo falha. O caso do webhook-que-chegou-antes NAO passa
+                 * mais por aqui: ele e resolvido antes de `decidir()`. */
+                break;
+              }
               if (err instanceof liquidacoes.ValorNaoConfere) {
                 r.divergentes += 1;
                 r.ocorrencias.push({ boleto_id: b.id, fatura_id: b.fatura_id, sinal: err.message });
@@ -329,7 +388,7 @@ export async function executarConsultaAtiva(
     }
 
     concluir(r);
-    await transacao(() => fechar(c, r, { ocorrencias: r.ocorrencias }));
+    await transacao(() => fechar(c, r, { ocorrencias: r.ocorrencias, confirmados: r.confirmados }));
     return r;
   } catch (e: any) {
     r.status = 'erro';

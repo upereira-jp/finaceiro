@@ -29,6 +29,8 @@ import {
   decidir, chaveDaConsultaAtiva, nivelDoCertificado, type Politica,
 } from '../src/dominio/agenda.ts';
 import type { SituacaoDoBoleto } from '../src/sicoob/porta.ts';
+import { readFileSync } from 'node:fs';
+import { ehConfirmacao } from '../src/repos/liquidacao.ts';
 
 let falhas = 0;
 const chk = (id: string, cond: boolean, d: string) => {
@@ -298,6 +300,88 @@ const QUANDO = new Date('2026-08-03T15:42:00.000Z');
   chk('AG6b', nivelDoCertificado(null, P) === 'sem_certificado' && nivelDoCertificado(999, P) === 'ok',
       'sem data cadastrada o sistema diz sem_certificado e NAO diz ok - afirmar "ok" seria garantir '
       + 'o que ele nao sabe, e o PRD 6 avisa que o A1 vencido para a emissao SEM erro obvio');
+}
+
+// ============================================================================
+// 7. A CONFIRMACAO DA LIQUIDACAO - o split saiu do webhook em 08/09/2026
+// ============================================================================
+//
+// O QUE ESTAS VERIFICACOES PRENDEM, e por que elas leem CODIGO-FONTE em vez de
+// chamar funcao: a regra vive na fiacao entre tres arquivos e um banco, e o que
+// importa nela e uma AUSENCIA - `baixar()` NAO reparte quando a origem e o
+// webhook. Ausencia nao se prova chamando a funcao sem banco, e o teste com
+// banco (`tests/repos-carteira.ts`) nao roda nesta maquina. Ler a fonte prende a
+// unica coisa que um refator distraido desfaria em silencio: alguem "consertar"
+// o webhook para repartir de novo, e o sistema voltar a repartir intencao de
+// pagamento sem nenhum teste ficar vermelho.
+
+const fonteLiquidacao = readFileSync(new URL('../src/repos/liquidacao.ts', import.meta.url), 'utf8');
+const fonteAgenda = readFileSync(new URL('../src/cobranca/agenda.ts', import.meta.url), 'utf8');
+
+// ---------------------------------------------------- AG7a a regra do dinheiro
+{
+  chk('AG7a', ehConfirmacao('webhook_sicoob') === false
+        && ehConfirmacao('conciliacao') === true
+        && ehConfirmacao('manual') === true,
+      'so o webhook NAO confirma: ele avisa intencao de pagamento (palavra da Sicoob, 08/09/2026). '
+      + 'A consulta ativa leu `liquidado` no proprio banco e a baixa manual teve uma pessoa olhando '
+      + 'o extrato - as duas provam entrada de dinheiro, o aviso nao');
+}
+
+// ---------------------------------------------------- AG7b o webhook nao reparte
+{
+  const corpoDoBaixar = fonteLiquidacao.slice(
+    fonteLiquidacao.indexOf('export async function baixar('),
+    fonteLiquidacao.indexOf('export function ehConfirmacao('),
+  );
+  chk('AG7b', corpoDoBaixar.includes('ehConfirmacao(e.origem)')
+        && !corpoDoBaixar.includes('split.executar('),
+      'baixar() nao chama split.executar em lugar nenhum e decide por ehConfirmacao - se esta '
+      + 'linha ficar vermelha, o sistema voltou a repartir dinheiro sobre intencao de pagamento');
+}
+
+// ---------------------------------------------------- AG7c o titulo fica na fila
+{
+  const corpoDoBaixar = fonteLiquidacao.slice(
+    fonteLiquidacao.indexOf('export async function baixar('),
+    fonteLiquidacao.indexOf('export function ehConfirmacao('),
+  );
+  const corpoDoRepartir = fonteLiquidacao.slice(
+    fonteLiquidacao.indexOf('async function repartir('),
+    fonteLiquidacao.indexOf('export type Confirmacao'),
+  );
+  chk('AG7c', !corpoDoBaixar.includes("status: 'liquidado'") && corpoDoRepartir.includes("status: 'liquidado'"),
+      'quem marca o boleto como liquidado e repartir(), nunca baixar() - o titulo fica `registrado` '
+      + 'ate o banco confirmar, e e isso que o mantem em boleto.emAberto() para a consulta de amanha. '
+      + 'Marcar na baixa o tiraria da fila e o split nunca rodaria');
+}
+
+// ---------------------------------------------------- AG7d a confirmacao vem antes de decidir()
+{
+  const iConsulta = fonteAgenda.indexOf('await cobranca.consultar(');
+  const iConfirma = fonteAgenda.indexOf('confirmarLiquidacao(', iConsulta);
+  const iDecide = fonteAgenda.indexOf('decidir(situacao)', iConsulta);
+  chk('AG7d', iConsulta > 0 && iConfirma > iConsulta && iConfirma < iDecide,
+      'a consulta ativa confirma a liquidacao ANTES de chamar decidir() - e a ordem e o mecanismo: '
+      + 'decidir() so sabe virar BAIXA e exige data e valor, que o GET /boletos da Sicoob nao '
+      + 'devolve (Q-LIQUIDACAO-CONSULTA-01). Depois de decidir(), o titulo ja baixado pelo webhook '
+      + 'viraria DIVERGENCIA - uma por dia, para sempre, porque ele fica na fila ate confirmar');
+}
+
+// ---------------------------------------------------- AG7d2 a guarda so vale com liquidacao nossa
+{
+  const trecho = fonteAgenda.slice(fonteAgenda.indexOf("if (situacao.situacao === 'liquidado')"));
+  chk('AG7d2', trecho.slice(0, 700).includes('porFatura(') && trecho.slice(0, 700).includes('if (l)'),
+      'a guarda confirma a liquidacao QUE EXISTE, e cai fora quando nao ha nenhuma - `liquidado` no '
+      + 'banco sem baixa nossa e o caminho normal da consulta ativa, e ele segue por decidir()');
+}
+
+// ---------------------------------------------------- AG7e a confirmacao e idempotente
+{
+  const corpo = fonteLiquidacao.slice(fonteLiquidacao.indexOf('export async function confirmarLiquidacao('));
+  chk('AG7e', corpo.indexOf('split.porLiquidacao(') < corpo.indexOf('repartir('),
+      'confirmarLiquidacao confere se ja ha split ANTES de repartir - a consulta roda todo dia e '
+      + 'reencontraria a mesma liquidacao para sempre');
 }
 
 console.log(`\n${falhas === 0 ? 'agenda (puro): todas as verificacoes passaram'

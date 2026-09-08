@@ -200,6 +200,8 @@ Dinheiro em centavos (`Int`). Toda entidade de negócio tem `tenant_id` não-nul
 
 O split roda **exclusivamente na liquidação** (regime de caixa), por webhook Sicoob ou baixa via conciliação. **Nunca na emissão.** Boleto registrado não aceita pagamento parcial: liquidação é sempre pelo valor cheio.
 
+> ⚠️ **Emenda de 08/09/2026 — "por webhook Sicoob" está SUPERADO, e quem o superou foi o banco.** O suporte da Sicoob respondeu que a *baixa operacional* notificada pelo webhook **não é a liquidação**: *"não se refere à liquidação final, mas sim ao registro da **intenção de pagamento** realizada"*, e que o evento de "o dinheiro entrou e não volta" é *"apenas a alteração do status, no endpoint de movimentação: liquidação"*. A frase acima pressupunha que webhook e liquidação eram a mesma coisa. **O regime de caixa não muda** — muda qual evento o prova: o webhook registra a baixa e o split roda quando o banco confirma `liquidado` numa consulta. Ver `QUESTOES.md` §2.d (`Q-BAIXAOPER-01`) e o cabeçalho de `src/repos/liquidacao.ts`.
+
 ### 5.3 Repasse ao dono da usina
 
 `repasse = percentual_repasse_usina × (valor_consumo + juros_multa_proporcionais)`

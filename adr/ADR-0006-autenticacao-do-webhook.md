@@ -236,3 +236,57 @@ O que B torna possível e A não:
 | O corpo cru, se for HMAC | `lerCorpo` entrega parseado. Preservar os bytes muda o servidor, não só a rota |
 | Quem provisiona o usuário de serviço | Como o `bootstrap-plataforma-admin.sql`: provisionamento, não migration — e sem caminho de login |
 | O que responder a uma chamada recusada | `401` diz "existe e você errou a credencial"; `404` não confirma nada. Para endpoint que recebe dinheiro, a segunda tem argumento |
+
+---
+
+## 9. ⚠️ REVISÃO DE 08/09/2026 — a Decisão 1 caiu, e quem a derrubou foi o suporte da Sicoob
+
+**O corpo acima fica intacto** — é registro datado, e o raciocínio de 06/08 estava
+correto para a evidência que existia. O que mudou é a evidência.
+
+**Resposta do suporte técnico da Sicoob, 08/09/2026, sobre a Cobrança v3:**
+
+| Perguntado | Respondido |
+|---|---|
+| A chamada ao nosso endpoint usa mTLS, como diz o manual do Pix? | *"Apenas no cadastro, durante o envio das notificações **não é feito mTLS**"* |
+| Existe faixa de IP fixa de origem? | *"Sim, vou te enviar a lista dos nossos IPs"* |
+| O POST leva cabeçalho próprio ou assinatura do corpo? | *"Não"* |
+
+**As três opções de credencial estão mortas, e não sobrou nenhuma.** A §2 já previa o
+caso — *"se a Sicoob só oferecer um dos três, a decisão está tomada pela outra ponta"* —
+mas o desfecho é o que ela não previu: **a outra ponta não oferece nenhum**. A opção A
+(cabeçalho) e a B (HMAC) já tinham caído pela documentação; a C (mTLS) cai agora por
+resposta direta. Resta a **E (faixa de IP)**, que esta ADR declarou que *"entra sempre e
+nunca sozinha"* — e que vai ter que ficar sozinha.
+
+### 9.1 O que estava a um passo de acontecer em silêncio
+
+`verificarOrigem` exige `porTls || porProxy` **antes** de olhar o IP. Com o banco não
+apresentando certificado, **toda notificação seria recusada** — e recusada com o `404`
+genérico da Decisão 4, que é indistinguível de rota inexistente. Ligar o webhook hoje
+produziria zero baixas automáticas e nenhum erro visível do lado deles.
+
+### 9.2 A decisão nova: **faixa de IP + o webhook deixa de ser fonte de verdade**
+
+**Decidido em 08/09/2026** (delegação técnica do dono, mesma data). A autenticação por
+IP sozinha não sustenta uma escrita de dinheiro — então a resposta não é enfraquecer a
+guarda, é **mudar o que o webhook autoriza**:
+
+1. **`verificarOrigem` passa a aceitar IP sozinho**, com `WEBHOOK_IPS` continuando
+   obrigatório: vazio segue recusando tudo. O ramo de mTLS **não sai** — vira opcional,
+   porque o cadastro ainda usa mTLS e a topologia pode mudar;
+2. **o webhook não reparte dinheiro.** Ele registra o aviso e enfileira uma
+   **conferência**. Quem confirma é a consulta ativa — ver `Q-BAIXAOPER-01`, decidida no
+   mesmo dia;
+3. com isso, um aviso forjado de um IP falsificado passa a custar, no pior caso, **uma
+   consulta desnecessária ao banco** — e não uma liquidação inventada com split.
+
+**O que isso melhora, e é o motivo de a queda da Decisão 1 não ser má notícia:** a
+arquitetura deixa de depender de o banco autenticar bem, e passa a depender do banco
+**dizer a verdade quando perguntado** — que é a única coisa que ele garante.
+
+### 9.3 Pendente de terceiro
+
+**A lista de IPs**, prometida na mesma conversa e ainda não recebida. Sem ela
+`WEBHOOK_IPS` fica vazio e a rota recusa tudo — o que é o comportamento certo, e é
+também o motivo de o webhook continuar desligado até a lista chegar.
