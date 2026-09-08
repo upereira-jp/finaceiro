@@ -22,7 +22,9 @@ import {
   lerCompetencia, competenciaEmIso, competenciaEmBr, MES_POR_EXTENSO,
   FORMATOS_DA_COMPETENCIA,
 } from '../src/dominio/competencia.ts';
-import { primeiroDiaDaCompetencia, CompetenciaIlegivel } from '../src/repos/registro-unificado.ts';
+import {
+  primeiroDiaDaCompetencia, CompetenciaIlegivel, RegistroJaFaturado,
+} from '../src/repos/registro-unificado.ts';
 import { lerFaturaDaConcessionaria } from '../src/dominio/fatura-concessionaria.ts';
 
 let falhas = 0;
@@ -122,6 +124,29 @@ const iso = (b: string) => {
   chk('K6c', competenciaEmBr(lerCompetencia('2026-5')! ?? { ano: '', mes: '' }) === '05/2026'
           || lerCompetencia('2026-5') === null,
       'AAAA-M com um digito so: ou normaliza, ou recusa — nunca inventa mes');
+}
+
+// ============ K7 A CONTA QUE JA VIROU FATURA NAO E REESCRITA NEM APAGADA
+//
+// `registrar()` e `upsert` pela chave (unidade, competencia), e ate 08/09/2026
+// reenviar o mesmo PDF depois da fatura emitida reescrevia as NOVE parcelas em
+// centavos em silencio — a segunda via passaria a imprimir numeros diferentes
+// dos que o cliente recebeu, e a economia acumulada da folha do mes seguinte
+// sairia de uma serie alterada. `apagar` era pior: levava a fonte inteira.
+//
+// A recusa aponta a saida, e a saida passou a EXISTIR no mesmo dia: cancelar a
+// fatura solta o vinculo (`cancelar` em src/repos/fatura.ts). Antes disso o
+// texto de `registro_ja_faturado` mandava cancelar e o cancelamento nao soltava
+// nada — a instrucao nao funcionava.
+{
+  const e = new RegistroJaFaturado('000091584701207', '05/2026', 'regravar a conta lida');
+  chk('K7a', e.status === 409, 'e 409 e nao 422: nao ha campo a corrigir, o ESTADO e que impede');
+  chk('K7b', e.message.includes('000091584701207') && e.message.includes('05/2026'),
+      'a recusa diz QUAL unidade e QUAL mes');
+  chk('K7c', e.message.includes('Cancele a fatura primeiro'),
+      'a recusa aponta a saida — recusa e ponteiro, nao beco');
+  chk('K7d', e.message.includes('segunda via') && e.message.includes('economia acumulada'),
+      'e diz o que estaria em risco, que e o que faz a pessoa entender por que nao pode');
 }
 
 console.log(falhas === 0 ? '\nEXIT=0' : `\nFALHAS: ${falhas}`);

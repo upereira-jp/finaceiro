@@ -39,7 +39,7 @@ import {
   segundaViaDoRegistro, divergenciasDaSegundaVia, type LinhaGravada,
 } from '../dominio/segunda-via.ts';
 import {
-  lerCompetencia, competenciaEmIso, FORMATOS_DA_COMPETENCIA,
+  lerCompetencia, competenciaEmIso, competenciaEmBr, FORMATOS_DA_COMPETENCIA,
 } from '../dominio/competencia.ts';
 
 export class RegistroNaoEncontrado extends Error {
@@ -47,6 +47,38 @@ export class RegistroNaoEncontrado extends Error {
   constructor(id: string) {
     super(`Registro de fatura ${id} nao encontrado neste tenant.`);
     this.name = 'RegistroNaoEncontrado';
+  }
+}
+
+/**
+ * A CONTA JA VIROU FATURA, e mexer nela agora mudaria uma cobranca existente.
+ *
+ * ATE 08/09/2026 NADA IMPEDIA ISSO, nos dois sentidos. `registrar()` e `upsert`
+ * pela chave (unidade, competencia): reenviar o mesmo PDF depois de a fatura ter
+ * sido emitida reescrevia, em silencio, as NOVE parcelas em centavos. E `apagar`
+ * removia a linha inteira. As duas coisas atingem dado que ja saiu:
+ *
+ *   - a SEGUNDA VIA recompoe a folha a partir do registro, entao ela passaria a
+ *     imprimir numeros diferentes dos que o cliente recebeu;
+ *   - a ECONOMIA ACUMULADA soma os descontos da serie, e ela sai impressa na
+ *     folha 2 de todo mes seguinte;
+ *   - `fatura.valor_consumo_centavos` foi copiado daqui no `faturarRegistro`, e
+ *     nao muda junto — o documento e a cobranca passariam a discordar.
+ *
+ * 409 e nao 422: nao ha campo a corrigir na requisicao. O estado e que impede, e
+ * a saida existe e esta na frase — cancelar a fatura solta o vinculo desde
+ * 08/09/2026 (ver `cancelar` em `src/repos/fatura.ts`).
+ */
+export class RegistroJaFaturado extends Error {
+  readonly status = 409;
+  constructor(numeroUc: string, competencia: string, acao: string) {
+    super(
+      `A conta da unidade ${numeroUc} em ${competencia} ja virou fatura, e ${acao} agora mudaria ` +
+      'uma cobranca que ja existe - a segunda via e a economia acumulada saem deste registro, e o ' +
+      'valor da fatura foi copiado dele. Cancele a fatura primeiro: o cancelamento solta a conta ' +
+      'lida e ela volta a ser faturavel.'
+    );
+    this.name = 'RegistroJaFaturado';
   }
 }
 
@@ -141,6 +173,20 @@ export async function registrar(e: RegistroDeFatura) {
   if (!numero_uc) throw new UcIlegivel();
   const competencia = primeiroDiaDaCompetencia(e.campos.mes_referencia);
 
+  /* A GUARDA VEM ANTES DE TUDO, inclusive das nove conferencias de centavo: o
+   * que ela impede nao e um valor errado, e a reescrita de um valor CERTO que ja
+   * virou cobranca. Ver `RegistroJaFaturado`. */
+  const anterior = await dbt().registro_de_fatura_unificada.findFirst({
+    where: { tenant_id, numero_uc, competencia },
+    select: { fatura_id: true },
+  });
+  if (anterior?.fatura_id) {
+    throw new RegistroJaFaturado(numero_uc, competenciaEmBr({
+      ano: String(competencia.getUTCFullYear()),
+      mes: String(competencia.getUTCMonth() + 1).padStart(2, '0'),
+    }), 'regravar a conta lida');
+  }
+
   const uc = await dbt().unidade_consumidora.findFirst({
     where: { tenant_id, numero_uc }, select: { id: true },
   });
@@ -232,6 +278,19 @@ export async function apagar(id: string) {
   const tenant_id = tenantCorrente();
   const existe = await dbt().registro_de_fatura_unificada.findFirst({ where: { id, tenant_id } });
   if (!existe) throw new RegistroNaoEncontrado(id);
+  /* MESMA GUARDA DO `registrar`, e pelo mesmo motivo — aqui e pior: apagar leva
+   * junto a fonte da segunda via de uma fatura que EXISTE, e a fatura fica sem
+   * de onde recompor a folha que o cliente recebeu. */
+  if (existe.fatura_id) {
+    throw new RegistroJaFaturado(
+      existe.numero_uc,
+      competenciaEmBr({
+        ano: String(existe.competencia.getUTCFullYear()),
+        mes: String(existe.competencia.getUTCMonth() + 1).padStart(2, '0'),
+      }),
+      'apagar a conta lida',
+    );
+  }
   await dbt().registro_de_fatura_unificada.delete({ where: { id } });
 }
 

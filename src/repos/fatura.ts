@@ -329,6 +329,38 @@ export async function cancelar(id: string, motivo: string) {
     if (!f) throw new FaturaNaoEncontrada();
     throw new TransicaoDeFaturaInvalida(f.status, 'cancelada', 'estado nao permite cancelamento');
   }
+
+  /*
+   * ==========================================================================
+   * CANCELAR LIBERA A CONTA LIDA, e ate 08/09/2026 nao liberava.
+   *
+   * `registro_de_fatura_unificada.fatura_id` aponta a conta lida para a fatura
+   * que ela virou (migration 34). `triarRegistro` recusa com
+   * `registro_ja_faturado` quando ele esta preenchido, e o texto dessa recusa
+   * diz, literalmente: *"Para refazer, cancele a fatura primeiro"*.
+   *
+   * So que cancelar nao mexia no vinculo. A instrucao da mensagem NAO FUNCIONAVA:
+   * quem emitisse a fatura errada — unidade trocada, competencia trocada, valor
+   * conferido depois — cancelava, como o sistema manda, e descobria que aquela
+   * conta tinha ficado permanentemente nao faturavel, com o sistema repetindo a
+   * instrucao que ele proprio acabara de desobedecer. E o primeiro lote e
+   * exatamente onde esse estado nasce.
+   *
+   * SOLTAR E A UNICA SAIDA POSSIVEL, e nao uma escolha entre duas: `fatura_id` e
+   * coluna do REGISTRO, entao ele aponta para no maximo uma fatura por vez.
+   * Refaturar exige o vinculo apontando para a fatura nova — guardar o antigo e
+   * apontar o novo ao mesmo tempo nao e expressavel nesta modelagem. A fatura
+   * cancelada continua inteira no banco, com `cancelada_em` e o motivo: o que se
+   * perde e a seta, nao a historia.
+   *
+   * `updateMany` e nao `update`: sem registro vinculado o resultado e zero
+   * linhas, que e o caso normal do caminho legado — a fatura de lote nao nasce
+   * de conta lida nenhuma.
+   */
+  await dbt().registro_de_fatura_unificada.updateMany({
+    where: { fatura_id: id },
+    data: { fatura_id: null },
+  });
 }
 
 /**

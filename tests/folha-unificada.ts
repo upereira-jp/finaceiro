@@ -353,6 +353,55 @@ const folhas = comporFolhas(COMPLETA, contaCompleta, EMISSOR,
       'consumo e CO2 saem com UNIDADE e vem prontos da conta - grandeza fisica nunca vira centavo');
 }
 
+// ============================ V O VENCIMENTO IMPRESSO E O NOSSO, e nao o dela
+//
+// A regra dos 3 dias entrou em 07/09/2026 e alcancou o BOLETO. Esta folha — o
+// documento que o cliente EFETIVAMENTE recebe — continuou imprimindo a data que
+// a distribuidora imprimiu no papel dela ate 08/09, e o resultado eram duas
+// datas para a mesma divida no mesmo envelope, com a que vale para juros sendo
+// justamente a que NAO estava escrita.
+//
+// Nenhuma das 35 verificacoes anteriores media a data impressa — foi por isso
+// que a divergencia atravessou o merge sem nada ficar vermelho.
+{
+  const f = comporFolhas(COMPLETA, contaCompleta, EMISSOR, BOLETO_VAZIO);
+  const meta = (rotulo: string) => f.folha1.cliente.meta.find((m) => m.rotulo === rotulo)?.valor;
+
+  chk('V1', meta('Vencimento') === '12/08/2026',
+      `a folha imprime o NOSSO vencimento, tres dias antes de 15/08 (imprimiu: ${meta('Vencimento')})`);
+  chk('V2', f.folha1.total.vencimento === '12/08/2026',
+      'a barra do total imprime a mesma data — duas datas na mesma pagina seria pior que a errada');
+  chk('V3', meta('Vencimento na conta da Equatorial') === '15/08/2026',
+      'a data da distribuidora NAO some: e o unico jeito de casar este papel com a conta recebida');
+
+  // A antecipacao atravessa o mes, e e por isso que ela mora numa DATA e nunca
+  // num dia do mes. Cinco das 16 UCs medidas em 04/09 vencem no dia 1o ou 2.
+  const diaUm = comporFolhas({ ...COMPLETA, vencimento: '01/09/2026' }, contaCompleta, EMISSOR, BOLETO_VAZIO);
+  chk('V4', diaUm.folha1.cliente.meta.find((m) => m.rotulo === 'Vencimento')?.valor === '29/08/2026',
+      'vencimento no dia 1o de setembro vira 29 de agosto — a antecipacao atravessa o mes');
+
+  // Data ilegivel NAO vira data derivada de lixo: imprime o que veio, para a
+  // pessoa corrigir.
+  const ruim = comporFolhas({ ...COMPLETA, vencimento: 'AGO/2026' }, contaCompleta, EMISSOR, BOLETO_VAZIO);
+  const rv = ruim.folha1.cliente.meta.find((m) => m.rotulo === 'Vencimento')?.valor;
+  chk('V5', rv === 'AGO/2026',
+      `data que nao e DD/MM/AAAA sai como veio, sem inventar (saiu: ${rv})`);
+  chk('V6', ruim.folha1.cliente.meta.every((m) => m.rotulo !== 'Vencimento na conta da Equatorial'),
+      'e sem a segunda linha: repetir a mesma data duas vezes faria procurar a diferenca');
+
+  // A CONFERENCIA PARA DE ACUSAR O QUE O SISTEMA CRIOU. Com o boleto tres dias
+  // antes e a folha na data da conta, `conferirBoleto` divergia em TODA fatura.
+  const comBoleto = comporFolhas(COMPLETA, contaCompleta, EMISSOR,
+    boletoCom({ vencimento: '12/08/2026', valor: decimalBr(paraDecimal(String(contaCompleta.total_centavos / 100)), 2) }));
+  chk('V7', !comBoleto.folha2.pagamento.alertas.some((x) => x.includes('vence em')),
+      'boleto com a NOSSA data nao gera alerta de vencimento — antes gerava em toda fatura');
+
+  const boletoNaDataDela = comporFolhas(COMPLETA, contaCompleta, EMISSOR,
+    boletoCom({ vencimento: '15/08/2026' }));
+  chk('V8', boletoNaDataDela.folha2.pagamento.alertas.some((x) => x.includes('12/08/2026')),
+      'boleto emitido na data da Equatorial E acusado, e a frase diz a data que deveria ter');
+}
+
 console.log();
 if (falhas > 0) { console.log(`--- folhas unificadas: ${falhas} FALHA(S)`); process.exit(1); }
-console.log('--- as duas folhas compostas: 35 verificacoes, 0 falhas');
+console.log('--- as duas folhas compostas: 43 verificacoes, 0 falhas');

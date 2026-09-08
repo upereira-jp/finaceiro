@@ -52,6 +52,7 @@ import type { Resolvedora, CredencialResolvida } from './cofre.ts';
 import { centavosParaReaisDecimal, reaisDecimalParaCentavos, type Centavos } from '../dominio/centavos.ts';
 import { jsonComDinheiroEmTexto } from './json-dinheiro.ts';
 import { txidDoBrCode } from '../dominio/brcode.ts';
+import { normalizar as normalizarDocumento } from '../dominio/documento.ts';
 
 /** Os enderecos. O de token saiu do `openid-configuration`, nao de documentacao
  *  de terceiro - e por isso ele e o mesmo para sandbox e producao. */
@@ -768,7 +769,28 @@ export function pagadorSicoob(p: Pagador) {
   const cep = (e.cep ?? '').replace(/\D/g, '');
   const uf = (e.uf ?? '').toUpperCase().trim();
   return {
-    numeroCpfCnpj: p.documento.replace(/\D/g, ''),
+    /*
+     * `normalizarDocumento` E NAO `replace(/\D/g, '')` — conserto de 08/09/2026.
+     *
+     * O `replace` tirava LETRAS, e desde 01/07/2026 o CNPJ alfanumerico existe:
+     * doze posicoes que podem ser `0-9` ou `A-Z`, com dois digitos verificadores
+     * numericos. `src/dominio/documento.ts` guarda as letras DE PROPOSITO, e diz
+     * isso na primeira linha da funcao — *"NAO remove letras: isso seria destruir
+     * CNPJ alfanumerico"*. Aqui elas eram destruidas dez arquivos adiante.
+     *
+     * O resultado nao era um erro: era um NUMERO PLAUSIVEL que nao pertence a
+     * ninguem. `12ABC34501DE35` virava `1234501 35`, e o boleto subiria com o
+     * documento de outra pessoa — ou seria recusado com 400, que o adaptador
+     * traduz em 502 e a fila do `PRD` 6, que nunca desiste sozinha, retentaria
+     * para sempre contra um dado que nao tem conserto por retentativa.
+     *
+     * O QUE ISTO NAO RESOLVE, e fica dito em vez de escondido: se a Sicoob aceita
+     * letras neste campo nao esta medido — o modelo `Boleto` do portal nao diz. O
+     * que se sabe e que mandar o documento CERTO e recusado com nome e melhor que
+     * mandar um errado que passa. Se a primeira emissao de um pagador
+     * alfanumerico for recusada, e aqui.
+     */
+    numeroCpfCnpj: normalizarDocumento(p.documento),
     nome: ate(p.nome, TETO.nome),
     ...(endereco ? { endereco: ate(endereco, TETO.endereco) } : {}),
     ...(bairro ? { bairro: ate(bairro, TETO.bairro) } : {}),

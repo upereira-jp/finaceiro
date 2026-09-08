@@ -293,7 +293,25 @@ export function triar(l: LinhaCandidata, c: Date): Candidata {
     unidade_consumidora_id: l.unidade_consumidora_id,
     contrato_id: l.contrato_id,
     usina_id: l.usina_id,
-    vencimento: vencimentoDaFatura(c, l.data_vencimento.getUTCDate()),
+    /*
+     * OS TRES DIAS VALEM AQUI TAMBEM, desde 08/09/2026.
+     *
+     * Quando a regra entrou, em 07/09, este caminho ficou de fora de proposito:
+     * ele nao e o oficial desde a `Q-CICLO-01`, e o registro daquele dia dizia
+     * que mexer nele "poria a mesma regra em dois lugares". O argumento era bom
+     * e deixou de valer por uma consequencia da propria leva: no mesmo commit,
+     * `unidade_consumidora.data_vencimento` passou a significar, por escrito, o
+     * dia da DISTRIBUIDORA. A partir dali o lote nao estava "sem a regra nova" —
+     * estava produzindo, a partir de um campo com significado novo, uma data que
+     * CONTRADIZ a regra do dono.
+     *
+     * E o botao existe: «Compor valendo» na tela Faturamento chama `comporLote`,
+     * que passa por aqui. A mesma UC ganhava dois vencimentos conforme o clique.
+     *
+     * NAO E A REGRA EM DOIS LUGARES: e a MESMA funcao chamada de dois lugares,
+     * que e o oposto. `anteciparVencimento` continua sendo a unica que subtrai.
+     */
+    vencimento: anteciparVencimento(vencimentoDaFatura(c, l.data_vencimento.getUTCDate())),
     flag_fatura_cheia: ehFaturaCheia(l.data_fechamento, c),
     alertas: l.dono_usina_id ? [] : ['usina_sem_dono'],
   };

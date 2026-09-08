@@ -1,5 +1,20 @@
 // IMPORTACAO do DIA DE VENCIMENTO das UCs, pelo CAMINHO DA APLICACAO.
 //
+// ============================================================================
+// ⚠️ O DIA QUE ENTRA AQUI E O DA DISTRIBUIDORA, e nao o dia em que queremos
+// receber. Vale desde 07/09/2026 e nao havia nada escrito dizendo isso.
+//
+// A regra do dono e "o boleto vence tres dias antes da data imposta pela
+// Equatorial", e quem subtrai e o codigo (`anteciparVencimento`), uma vez so.
+// A coluna `unidade_consumidora.data_vencimento` passou a significar, por
+// escrito, o dia DELA.
+//
+// A ARMADILHA E QUE A DUPLA SUBTRACAO NAO PRODUZ ERRO. Quem preencher a planilha
+// com o dia que ja considera os tres dias - que e como a regra foi comunicada ao
+// time - faz o sistema subtrair de novo: o boleto vence SEIS dias antes, todo
+// mes, e nada falha. O sintoma so aparece quando um cliente reclamar.
+// ============================================================================
+//
 // USO
 //   npm run vencimentos -- --modelo --auth-user <uuid> --saida vencimentos.csv
 //        O modelo sai PREENCHIDO com as UCs reais e a coluna do dia em branco -
@@ -124,7 +139,10 @@ async function main(): Promise<void> {
     console.log('   e vao marcadas com NAO na coluna `fatura` - o rateio delas nao esta ativado no CRM,');
     console.log('   entao a triagem as recusa por `rateio_nao_ativado` ANTES de olhar o vencimento.');
     console.log(`   ${semDia} das ${faturaveis.length} que faturam estao SEM dia hoje - e o trabalho.`);
-    console.log('\n   Preencha a coluna dia_vencimento e importe com --ensaio.');
+    console.log('\n   Preencha a coluna dia_vencimento com o DIA DA DISTRIBUIDORA (o que vem impresso');
+    console.log('   na conta), e NAO com o dia em que queremos receber: o boleto vence tres dias');
+    console.log('   antes, e quem subtrai e o sistema. Um dia ja adiantado aqui e adiantado de novo.');
+    console.log('   Depois importe com --ensaio.');
     console.log('   As demais colunas sao so para voce saber qual linha e qual - o importador');
     console.log('   le as duas primeiras e ignora o resto.\n');
     await encerrarApp();

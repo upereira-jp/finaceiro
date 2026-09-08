@@ -500,13 +500,16 @@ export const TOPICOS: readonly Topico[] = [
     pergunta: 'Onde preencho o dia de vencimento?',
     resposta: 'Quase sempre não precisa: a data vem impressa na conta da distribuidora e o sistema '
       + 'usa a de lá. O dia do cadastro, na aba Unidades consumidoras, só entra quando a conta vem '
-      + 'sem data.',
+      + 'sem data — e nos dois casos o que se informa é o dia DA DISTRIBUIDORA: o nosso boleto '
+      + 'vence três dias antes, e quem subtrai é o sistema.',
     porque: PORQUE['vencimento'],
     passos: [
       'Confira se a conta daquele mês traz a data de vencimento. Se traz, não há nada a fazer.',
       'Se não traz, abra a aba Unidades consumidoras.',
       'Use o filtro de pendência «Sem vencimento» para ver só as que faltam.',
-      'Preencha o DIA do mês em cada uma. A cobrança de um mês vence no mês seguinte, nesse mesmo dia.',
+      'Preencha o dia da DISTRIBUIDORA — não o dia em que você quer receber. A cobrança de um mês '
+        + 'usa esse dia no mês seguinte, e o boleto sai três dias antes dele.',
+      'Digitar um dia já adiantado faz o sistema adiantar de novo: seriam seis dias, todo mês.',
     ],
     caminhos: [daCamada('vencimento', 'Preencher o dia de vencimento')],
     camada: 'vencimento',

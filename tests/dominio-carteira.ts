@@ -357,6 +357,38 @@ const base = (over: Partial<EntradaDoSplit> = {}): EntradaDoSplit => ({
       'usina sem dono FATURA e alerta: a cobranca ao cliente nao depende do cadastro do dono (R12 bloqueia o repasse, nao a fatura)');
 }
 
+// ================== F7 OS TRES DIAS VALEM NOS DOIS CAMINHOS, e nao so no oficial
+//
+// Ate 08/09/2026 a antecipacao existia so em `vencimentoEscolhido` (o caminho da
+// conta lida). O botao «Compor valendo» da tela Faturamento chama `comporLote`,
+// que passa por `triar()` — e ele nao antecipava. A mesma unidade ganhava dois
+// vencimentos conforme o clique, e o campo de onde ele sai passou a significar,
+// no mesmo commit de 07/09, "o dia da DISTRIBUIDORA".
+{
+  const linha = {
+    unidade_consumidora_id: 'uc-1', numero_uc: 'UC-1', contrato_id: 'k-1', usina_id: 'u-1',
+    percentual_rateio: '10.0000', data_vencimento: dia(2026, 1, 10), data_fechamento: dia(2026, 1, 1),
+    geracao_kwh: '10000.0000', dono_usina_id: 'd-1', ja_tem_fatura: false,
+    rateio_situacao: 'ativado', crm_usina_cliente_id: 'crm-k-1',
+  };
+  const t = triar(linha, competencia('2026-07-01'));
+  const iso = t.faturar ? t.vencimento.toISOString().slice(0, 10) : 'RECUSOU';
+
+  // Dia 10 da distribuidora, competencia julho -> vence 10/08 -> o nosso, 07/08.
+  chk('F7a', iso === '2026-08-07',
+      `o lote antecipa os tres dias como o caminho oficial (deu: ${iso})`);
+  chk('F7b', vencimentoDaFatura(competencia('2026-07-01'), 10).toISOString().slice(0, 10) === '2026-08-10',
+      'e `vencimentoDaFatura` NAO mudou de significado: ela continua devolvendo o dia da distribuidora');
+
+  // A borda registrada como Q-VENC3-01(b): dia 1, 2 ou 3 traz a data para dentro
+  // da propria competencia. Vale igual nos dois caminhos, e por isso e uma
+  // pergunta com dono e nao um caso especial escondido em um deles.
+  const diaUm = triar({ ...linha, data_vencimento: dia(2026, 1, 1) }, competencia('2026-07-01'));
+  const isoUm = diaUm.faturar ? diaUm.vencimento.toISOString().slice(0, 10) : 'RECUSOU';
+  chk('F7c', isoUm === '2026-07-29',
+      `dia 1o cai dentro da propria competencia nos DOIS caminhos - Q-VENC3-01(b) (deu: ${isoUm})`);
+}
+
 // ==================================================== F6 as guardas do boleto
 //
 // AS TRES RECUSAS QUE ACONTECEM ANTES DE FALAR COM O BANCO, e o que esta suite
@@ -391,4 +423,4 @@ const base = (over: Partial<EntradaDoSplit> = {}): EntradaDoSplit => ({
 
 console.log();
 if (falhas > 0) { console.log(`--- dominio da carteira: ${falhas} FALHA(S)`); process.exit(1); }
-console.log('--- dominio da carteira: 51 verificacoes, 0 falhas');
+console.log('--- dominio da carteira: 54 verificacoes, 0 falhas');

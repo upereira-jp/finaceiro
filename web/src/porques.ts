@@ -54,8 +54,10 @@ export const PORQUE: Record<string, string> = {
   'vencimento':
     'Porque toda cobrança precisa de uma data, e o sistema não inventa nenhuma. Em geral a '
     + 'conta da distribuidora já traz a data e nada precisa ser preenchido; o dia do cadastro é a '
-    + 'reserva para quando ela vier sem. Um dia errado aqui não dá erro — só cobra na data errada, '
-    + 'todo mês, até alguém reclamar.',
+    + 'reserva para quando ela vier sem. O que se guarda aqui é o dia DA DISTRIBUIDORA: o nosso '
+    + 'boleto vence três dias antes, e é o sistema que subtrai. Por isso um dia já adiantado '
+    + 'digitado aqui é adiantado de novo — e nenhum dos dois erros dá erro: só cobra na data '
+    + 'errada, todo mês, até alguém reclamar.',
   'tarifa':
     'Porque é o preço do kWh que transforma energia em dinheiro na folha do cliente. Ele vem '
     + 'impresso na conta com seis casas depois da vírgula, e essas casas não são exagero: arredondar '

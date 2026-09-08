@@ -31,6 +31,7 @@ import { historicoPlausivel, paraDecimal, decimalBr, serieNaMesmaEscala, textoPa
 import { conferirLinhaDigitavel, linhaDigitavelFormatada, conferirBoleto, explicarDivergencia,
          codigoDeBarrasDaLinha, type ConferenciaDoBoleto } from './linha-digitavel.ts';
 import { barrasDoCodigo } from './codigo-de-barras.ts';
+import { anteciparVencimento } from './faturamento.ts';
 import { svgDoBrCode } from './qrcode.ts';
 import { normalizarBrCode, crcConfere } from './brcode.ts';
 
@@ -269,7 +270,28 @@ export function comporFolhas(
   const linhaEmissor = linhaDoEmissor(emissor);
   const mes = competencia(campos.mes_referencia);
   const numero = numeroDaFatura(campos.unidade_consumidora, mes);
-  const venc = ou(campos.vencimento);
+  /*
+   * ========================================================================
+   * O VENCIMENTO IMPRESSO E O NOSSO, e ate 08/09/2026 era o da EQUATORIAL.
+   *
+   * A regra dos 3 dias entrou em 07/09 (`anteciparVencimento`) e alcancou o
+   * BOLETO: `vencimentoEscolhido` subtrai antes de gravar a fatura. Esta folha
+   * — o documento que o cliente EFETIVAMENTE recebe — continuou imprimindo
+   * `campos.vencimento`, que e a data que a distribuidora imprimiu no papel
+   * dela. Resultado: duas datas para a mesma divida, no mesmo envelope, e a que
+   * vale para juros era justamente a que NAO estava escrita.
+   *
+   * E havia um segundo efeito, pior porque parecia defeito de terceiro: a
+   * conferencia do boleto compara o vencimento dos 44 digitos contra o que a
+   * folha diz. Com o boleto tres dias antes, ela acusava divergencia em TODA
+   * fatura — uma acusacao que o proprio sistema fabricava.
+   *
+   * A DATA DA DISTRIBUIDORA NAO SOME: ela vira uma linha propria do quadro do
+   * cliente, nomeada. Ela e o unico jeito de a pessoa casar este papel com a
+   * conta que recebeu da Equatorial, e some-la trocaria uma confusao por outra.
+   */
+  const vencEquatorial = ou(campos.vencimento);
+  const venc = ou(nossoVencimento(campos.vencimento), vencEquatorial);
 
   /*
    * OS TRES CARTOES SO EXISTEM COM TARIFA CHEIA, e a ausencia e nomeada em vez de
@@ -396,7 +418,10 @@ export function comporFolhas(
     linha_digitavel: boleto.linha_digitavel || null,
     codigo_barras: null,
     valor_total_centavos: conta.total_centavos,
-    vencimento_iso: isoDaData(campos.vencimento),
+    /* O NOSSO vencimento, e nao o da conta: o codigo de barras carrega a data do
+     * titulo que registramos. Comparar com a data da Equatorial acusaria
+     * divergencia em toda fatura — ver o bloco de `nossoVencimento`. */
+    vencimento_iso: isoDaData(venc),
   });
   const conf = conferirLinhaDigitavel(boleto.linha_digitavel);
   const cod = conf.valida ? codigoDeBarrasDaLinha(boleto.linha_digitavel) : null;
@@ -413,6 +438,12 @@ export function comporFolhas(
           { rotulo: 'Unidade consumidora', valor: ou(campos.unidade_consumidora) },
           { rotulo: 'Mês de referência', valor: mes },
           { rotulo: 'Vencimento', valor: venc },
+          /* SO APARECE QUANDO AS DUAS DATAS DIFEREM. Numa fatura sem data lida,
+           * ou num futuro em que a antecedencia seja zero, repetir o mesmo dia
+           * em duas linhas seguidas faria a pessoa procurar a diferenca. */
+          ...(vencEquatorial !== venc
+            ? [{ rotulo: 'Vencimento na conta da Equatorial', valor: vencEquatorial }]
+            : []),
           { rotulo: 'Período de leitura', valor: periodoDeLeitura(campos) },
           { rotulo: 'Emissão', valor: ou(campos.data_emissao) },
           { rotulo: 'Classificação', valor: ou(campos.classificacao) },
@@ -488,6 +519,22 @@ export function comporFolhas(
  * a comparacao de vencimento nunca aconteceria - e "nao da para conferir" sairia
  * como "conferiu e bateu", que e o pior dos dois.
  */
+/**
+ * O VENCIMENTO DO NOSSO TITULO, a partir do que a distribuidora imprimiu.
+ *
+ * Devolve `null` quando a data lida nao e `DD/MM/AAAA` — e ai a folha imprime o
+ * que veio, sem inventar. Uma fatura cuja data o extrator nao leu direito deve
+ * mostrar o texto original para a pessoa corrigir, e nao uma data derivada de
+ * lixo.
+ */
+function nossoVencimento(br: string): string | null {
+  const iso = isoDaData(br);
+  if (!iso) return null;
+  const d = anteciparVencimento(new Date(`${iso}T00:00:00.000Z`));
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`;
+}
+
 function isoDaData(br: string): string | null {
   const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(br ?? '').trim());
   return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
@@ -623,7 +670,7 @@ function comporPagamento(
     linha_formatada: conf.valida ? linhaDigitavelFormatada(b.linha_digitavel) : null,
     rodape_legal: textos.rodape_legal.map((t) => String(t ?? '').trim()).filter(Boolean),
     conferencia,
-    alertas: alertasDoBoleto(b, campos, conta, conferencia, emissor),
+    alertas: alertasDoBoleto(b, campos, conta, conferencia, emissor, vencimento),
   };
 }
 
@@ -653,6 +700,10 @@ function alertasDoBoleto(
   conta: ContaDaFatura,
   conferencia: ConferenciaDoBoleto,
   emissor: EmissorDaFatura,
+  /** O NOSSO vencimento (a data da distribuidora menos os 3 dias), e nao
+   *  `campos.vencimento`. Ver o bloco de `nossoVencimento`: comparar o boleto
+   *  contra a data da conta acusaria divergencia em toda fatura. */
+  nossoVenc: string,
 ): string[] {
   const a: string[] = [];
 
@@ -665,13 +716,13 @@ function alertasDoBoleto(
   const venc = b.vencimento.trim();
   if (venc && !/^\d{2}\/\d{2}\/\d{4}$/.test(venc)) {
     a.push(`O vencimento lido no PDF do boleto ("${venc}") não está em DD/MM/AAAA — não deu para conferi-lo.`);
-  } else if (venc && campos.vencimento.trim() && venc !== campos.vencimento.trim()) {
+  } else if (venc && nossoVenc.trim() && nossoVenc.trim() !== '—' && venc !== nossoVenc.trim()) {
     /* A TERCEIRA PERGUNTA DA REFERENCIA (§4.1), e ela e sobre o TEXTO: o codigo
      * de barras ja e conferido pela aritmetica acima, e as duas podem discordar
      * entre si - e nesse caso o boleto discorda de si mesmo, que e a informacao
      * mais util das tres. */
     a.push(`O vencimento lido no PDF do boleto é ${venc} e esta fatura vence em `
-         + `${campos.vencimento.trim()}.`);
+         + `${nossoVenc.trim()}.`);
   }
 
   const valor = b.valor.trim();

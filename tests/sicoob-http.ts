@@ -370,7 +370,34 @@ const PEDIDO = {
   const so = pagadorSicoob({ documento: '099.920.049-59', nome: 'Amanda', endereco: undefined } as any);
   chk('P1a', !('endereco' in so) && !('bairro' in so) && !('cep' in so) && !('uf' in so),
       'sem endereco, os campos opcionais NAO aparecem no corpo - o banco recusa nulo');
-  chk('P1b', so.numeroCpfCnpj === '09992004959', 'o documento vai so com digito');
+  chk('P1b', so.numeroCpfCnpj === '09992004959', 'o CPF continua saindo so com digito, sem mascara');
+
+  /* ======================================================================
+   * O CNPJ ALFANUMERICO NAO PODE SER DESTRUIDO, e ate 08/09/2026 era.
+   *
+   * O adaptador fazia `documento.replace(/\D/g, '')` — e desde 01/07/2026 o
+   * CNPJ tem doze posicoes que podem ser `0-9` ou `A-Z`. `src/dominio/
+   * documento.ts` guarda as letras DE PROPOSITO e diz isso na propria funcao;
+   * aqui, dez arquivos adiante, elas sumiam.
+   *
+   * O modo de falha nao era erro: era um NUMERO PLAUSIVEL que nao e de ninguem.
+   * O boleto subiria com o documento de outra pessoa, ou seria recusado com 400
+   * — que vira 502 e cai na fila que nunca desiste, retentando para sempre
+   * contra um dado que retentativa nao conserta.
+   * ====================================================================== */
+  const alfa = pagadorSicoob({
+    documento: '12.ABC.345/01DE-35', nome: 'Empresa Nova', endereco: undefined,
+  } as any);
+  chk('P1c', alfa.numeroCpfCnpj === '12ABC34501DE35',
+      `o CNPJ alfanumerico chega INTEIRO ao banco (saiu: ${alfa.numeroCpfCnpj})`);
+  chk('P1d', alfa.numeroCpfCnpj.length === 14,
+      'e com os 14 caracteres - antes sobravam 9, um numero que nao e de ninguem');
+
+  const minusculo = pagadorSicoob({
+    documento: '12abc34501de35', nome: 'Empresa Nova', endereco: undefined,
+  } as any);
+  chk('P1e', minusculo.numeroCpfCnpj === '12ABC34501DE35',
+      'e maiusculiza, porque a Receita emite em maiuscula');
 
   const cheio = pagadorSicoob({
     documento: '09992004959', nome: 'Amanda',

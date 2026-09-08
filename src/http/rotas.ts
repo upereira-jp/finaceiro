@@ -140,6 +140,28 @@ function dataOuNull(v: unknown, campo: string): Date | null {
   return data(v, campo);
 }
 
+/**
+ * TEXTO OBRIGATORIO, e a recusa nomeia o campo.
+ *
+ * Existe porque identificador que chega de fora vira `where` de consulta, e no
+ * Prisma um OBJETO no lugar de uma string nao e erro: `{ id: { gt: "" } }` e
+ * filtro valido e casa com a tabela inteira do tenant. Recusar aqui, na
+ * fronteira, e mais barato do que confiar na ordem das escritas la dentro.
+ */
+function textoDoCorpo(v: unknown, campo: string): string {
+  if (typeof v !== 'string' || !v.trim()) {
+    throw new TypeError(`${campo} e obrigatorio e deve ser texto (recebeu ${
+      v === null ? 'null' : Array.isArray(v) ? 'lista' : typeof v}).`);
+  }
+  return v.trim();
+}
+
+/** O mesmo, aceitando ausencia. `null` quando nao veio. */
+function textoOuNull(v: unknown, campo: string): string | null {
+  if (v == null || v === '') return null;
+  return textoDoCorpo(v, campo);
+}
+
 /** Unidade de trabalho transacional. Uma transacao por requisicao. */
 /**
  * O TETO DO ARQUIVO DE LEITURA, e ele e a metade de um par que precisa fechar.
@@ -1044,9 +1066,31 @@ export const ROTAS: Rota[] = [
     }),
   },
   {
+    /*
+     * OS CAMPOS SAO ESCOLHIDOS UM A UM, e ate 08/09/2026 esta rota espalhava o
+     * corpo cru (`...req.corpo`) — a UNICA das tres de baixa que fazia isso; a
+     * irma logo abaixo, `baixa-manual`, sempre escolheu.
+     *
+     * O que o espalhamento deixava passar: `fatura_id` chega ao repositorio sem
+     * ser texto, e la ele vira `where: { id: e.fatura_id }` de um `updateMany`.
+     * Um objeto como `{"gt": ""}` e filtro VALIDO no Prisma e casa com todas as
+     * faturas do tenant — a primeira escrita de `baixar()` (juros e multa)
+     * passaria por cima da carteira inteira. Hoje a transacao da requisicao
+     * reverte tudo porque o `create` seguinte recusa o objeto, mas a protecao e
+     * ACIDENTAL: ela depende da ordem das escritas dentro do repositorio, e essa
+     * ordem e detalhe de implementacao, nao contrato.
+     *
+     * `texto()` recusa o que nao for string e devolve a mensagem que nomeia o
+     * campo, como o resto das rotas.
+     */
     metodo: 'POST', padrao: '/liquidacoes/conciliacao',
     handler: (req, app) => emTenant(app, req, async () => ok(await liquidacao.baixar({
-      ...req.corpo,
+      fatura_id: textoDoCorpo(req.corpo?.fatura_id, 'fatura_id'),
+      valor_liquidado_centavos: req.corpo?.valor_liquidado_centavos,
+      juros_centavos: req.corpo?.juros_centavos,
+      multa_centavos: req.corpo?.multa_centavos,
+      id_externo: textoOuNull(req.corpo?.id_externo, 'id_externo'),
+      observacao: textoOuNull(req.corpo?.observacao, 'observacao'),
       origem: 'conciliacao',
       data_liquidacao: data(req.corpo?.data_liquidacao, 'data_liquidacao'),
     }))),

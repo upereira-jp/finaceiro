@@ -438,6 +438,7 @@ model fatura {
   usina                                 usina               @relation(fields: [tenant_id, usina_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "fatura_usina_fk")
   liquidacao                            liquidacao?
   split_execucao                        split_execucao[]
+  registro_de_fatura_unificada          registro_de_fatura_unificada?
 
   @@unique([tenant_id, unidade_consumidora_id, competencia_faturada], map: "fatura_competencia_unica_por_uc")
   @@unique([tenant_id, id], map: "fatura_id_tenant")
@@ -911,8 +912,23 @@ model registro_de_fatura_unificada {
   tenant                      tenant               @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "registro_fatura_unificada_tenant_fk")
   unidade_consumidora         unidade_consumidora? @relation(fields: [tenant_id, unidade_consumidora_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "registro_fatura_unificada_uc_fk")
 
+  /// A coluna existe no banco desde a migration 34 (21/08/2026) e este arquivo
+  /// nao a conhecia ate 08/09. O client gerado ficava CEGO para ela, e o codigo
+  /// contornava por fora: `comFatura` em `src/repos/fatura-do-registro.ts` le
+  /// `fatura_id` com `$queryRaw` porque "o cliente gerado do Prisma so conhece a
+  /// coluna depois da migration 34". Contorno em vez de conserto — e enquanto
+  /// ele durou, nenhuma leitura tipada podia perguntar se a conta ja virou
+  /// fatura, o que e a pergunta que separa "corrigir" de "sobrescrever cobranca".
+  ///
+  /// O indice de la e CHEIO e nao parcial, por decisao registrada na propria
+  /// migration: assim a cardinalidade que o `db pull` infere — um registro para
+  /// no maximo uma fatura — e a verdadeira, e a regra 11 trabalha a favor.
+  fatura_id                   String?              @db.Uuid
+  fatura                      fatura?              @relation(fields: [tenant_id, fatura_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "registro_fatura_unificada_fatura_fk")
+
   @@unique([tenant_id, id], map: "registro_fatura_unificada_id_tenant")
   @@unique([tenant_id, numero_uc, competencia], map: "registro_fatura_unificada_unico")
+  @@unique([tenant_id, fatura_id], map: "registro_fatura_unificada_fatura_unico")
   @@index([tenant_id, competencia(sort: Desc)], map: "registro_fatura_unificada_competencia_idx")
   @@index([tenant_id, unidade_consumidora_id], map: "registro_fatura_unificada_uc_idx")
 }

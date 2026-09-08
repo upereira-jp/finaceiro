@@ -374,10 +374,46 @@ export function criarServidor(o: OpcoesDoServidor): http.Server {
         /* O CORPO VAI CRU. Ver `lerCorpoCru`: parsear aqui perderia o texto do
          * literal de dinheiro antes de o tradutor ver. */
         const corpoWebhook = await lerCorpoCru(req, max);
-        const r = await achou.rota.handler({
-          metodo, caminho, params: achou.params, query: url.searchParams, corpo: corpoWebhook,
-          sessao: sessaoDeServico, tenantProposto: tenantDaRota,
-        }, o.app);
+        let r: Resultado;
+        try {
+          r = await achou.rota.handler({
+            metodo, caminho, params: achou.params, query: url.searchParams, corpo: corpoWebhook,
+            sessao: sessaoDeServico, tenantProposto: tenantDaRota,
+          }, o.app);
+        } catch (e) {
+          /*
+           * ==================================================================
+           * A RECUSA POR REGRA DE NEGOCIO TAMBEM DEIXA LINHA, e ate 08/09/2026
+           * ela era a UNICA que nao deixava.
+           *
+           * O bloco de log logo abaixo so roda quando o handler RETORNA. Quando
+           * ele levanta, a excecao pula direto para o `catch` do fim, que so
+           * registra o que `ehInesperado` considera 5xx - e uma recusa de
+           * negocio tem `status`, entao ela e "esperada" e passa muda.
+           *
+           * O caso concreto, e ele e provavel na PRIMEIRA liquidacao: alguem da
+           * baixa manual (`POST /faturas/:id/baixa-manual`, origem 'manual',
+           * `id_externo` nulo - que nao colide com a idempotencia por
+           * (origem, id_externo)) e depois o webhook da Sicoob chega. A fatura ja
+           * esta `paga`, `FaturaNaoLiquidavel` levanta, o cliente recebe 409 - e
+           * a Sicoob, que reprocessa o que nao foi aceito, volta a mandar o mesmo
+           * evento indefinidamente. Do nosso lado: nada. Nem no banco, porque a
+           * transacao reverteu, nem no journal.
+           *
+           * "A Sicoob mandou e nos recusamos" fica indistinguivel de "a Sicoob
+           * nunca mandou" — que e exatamente a confusao que o comentario abaixo
+           * diz existir para evitar, e ele so cobria metade dos desfechos.
+           *
+           * RELANCA depois de registrar: quem traduz a excecao em resposta
+           * continua sendo o `catch` do fim, e duplicar a traducao aqui criaria
+           * um segundo formato de erro para as mesmas rotas.
+           */
+          const nome = e instanceof Error ? e.name : 'erro';
+          const st = (e as { status?: number })?.status ?? 500;
+          log(`[financeiro] webhook ${st} em ${caminho} - RECUSADO: ${nome}: `
+              + `${e instanceof Error ? e.message : String(e)}`, undefined);
+          throw e;
+        }
         /*
          * TODA CHAMADA DE WEBHOOK DEIXA UMA LINHA, inclusive - e principalmente -
          * a que nao fez nada. Um evento ignorado nao escreve no banco: sem esta

@@ -360,9 +360,11 @@ export function TelaUnidades() {
         ))}
       </Tabela>
       <p className="sub" style={{ marginTop: 12 }}>
-        O que vale é o <strong>dia</strong>: a cobrança de um mês vence no <strong>mês seguinte</strong>,
-        nesse mesmo dia. Dia 29, 30 ou 31 em mês curto cai no último dia do mês, sem passar para o
-        seguinte.
+        O que vale é o <strong>dia</strong>, e ele é o <strong>dia da distribuidora</strong> — não o
+        dia em que queremos receber. A cobrança de um mês usa esse dia no <strong>mês seguinte</strong>,
+        e o nosso boleto vence <strong>três dias antes</strong> dele: quem subtrai é o sistema.
+        Digitar um dia já adiantado faz a conta ser feita duas vezes. Dia 29, 30 ou 31 em mês curto
+        cai no último dia do mês, sem passar para o seguinte.
       </p>
       <p className="sub">
         A <strong>tarifa</strong> é o preço do kWh <strong>desta</strong> unidade, com até seis casas
