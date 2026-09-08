@@ -52,16 +52,26 @@ export type Camada = {
   /** O universo contra o qual `faltam` foi contado. Sem ele, "faltam 3" nao diz
    *  se e de 3 ou de 300. */
   total: number;
-  /** `bloqueia_fatura` impede a cobranca existir; `bloqueia_split` deixa faturar
+  /** `bloqueia_fatura` impede a cobranca existir; `bloqueia_boleto` deixa a
+   *  fatura existir e impede o TITULO de nascer; `bloqueia_split` deixa faturar
    *  e estraga a reparticao quando o dinheiro entrar. A distincao e a mesma da
    *  R33 - recusa e alerta nao sao a mesma coisa.
+   *
+   *  O `bloqueia_boleto` ENTROU EM 08/09/2026 e fechou um verde falso. Ate
+   *  entao o relatorio so tinha os dois extremos, e o endereco do pagador - que
+   *  desde 28/08 faz `repos/boleto.ts` RECUSAR a emissao com `PagadorSemEndereco`
+   *  - nao cabia em nenhum: nao impede a fatura existir e nao tem nada a ver com
+   *  o split. Ficou de fora, e a consequencia era a tela dizer «Pode faturar:
+   *  sim» num mes em que nenhuma das UCs conseguiria ter boleto registrado.
+   *  Encaixar no `bloqueia_fatura` teria sido pior: diria que a fatura nao pode
+   *  existir, o que e falso, e travaria o faturamento de quem so cobra por Pix.
    *
    *  ESTRAGAR NAO E SEMPRE TRAVAR, e a `originador_do_contrato` e o caso: ali o
    *  split roda ate o fim, fecha em zero de comissao e nao levanta. Vale a mesma
    *  marca porque o efeito sobre `pode_repartir` e o mesmo - o sistema nao pode
    *  se declarar pronto para repartir -, e porque a alternativa era uma marca
    *  nova cujo unico conteudo seria "e pior que as outras". */
-  efeito: 'bloqueia_fatura' | 'bloqueia_split';
+  efeito: 'bloqueia_fatura' | 'bloqueia_boleto' | 'bloqueia_split';
   explicacao: string;
   /** A questao aberta que a destrava, quando ha uma. Recusa e ponteiro, nao beco. */
   questao: string | null;
@@ -79,6 +89,9 @@ export type Prontidao = {
   /** True so quando NENHUMA camada de `bloqueia_fatura` tem pendencia. Nao
    *  promete que a fatura vai sair certa - promete que ela pode sair. */
   pode_faturar: boolean;
+  /** True quando a cobranca pode existir E virar titulo — nenhuma camada de
+   *  `bloqueia_fatura` nem de `bloqueia_boleto` com pendencia. */
+  pode_cobrar: boolean;
   pode_repartir: boolean;
   camadas: Camada[];
 };
@@ -250,6 +263,25 @@ export async function prontidao(comp: Date | string): Promise<Prontidao> {
       (SELECT count(*) FROM identidade_de_cobranca i
         WHERE i.razao_social IS NOT NULL AND btrim(i.razao_social) <> ''
           AND i.cnpj IS NOT NULL AND btrim(i.cnpj) <> '')                    AS emissor_completo,
+      -- 7b. ENDERECO DO PAGADOR: bloqueia o BOLETO, e nao a fatura.
+      --
+      -- Os cinco campos sao obrigatorios no modelo "Boleto" da Sicoob (medido em
+      -- 28/08/2026), e "faltamNoEndereco" em src/sicoob/porta.ts e quem decide -
+      -- esta contagem repete a MESMA lista, em SQL, porque a prontidao mede em
+      -- conjunto e nao linha a linha. Se a lista mudar la, muda aqui: e o unico
+      -- lugar do sistema com uma segunda copia dela, e esta nota existe para que
+      -- a proxima pessoa saiba disso.
+      --
+      -- O universo e a UC CONTRATADA e nao a faturavel: sem contrato ativo a UC
+      -- ja e recusada uma camada antes, e conta-la aqui somaria o mesmo trabalho
+      -- duas vezes em dois lugares - foi o que a camada de vencimento fez ate
+      -- 04/08 e o que inflou cada linha em 12.
+      (SELECT count(*) FROM uc_contratada uc
+        WHERE btrim(coalesce(uc.endereco_logradouro, '')) = ''
+           OR btrim(coalesce(uc.endereco_bairro, '')) = ''
+           OR btrim(coalesce(uc.endereco_municipio, '')) = ''
+           OR btrim(coalesce(uc.endereco_uf, '')) = ''
+           OR regexp_replace(coalesce(uc.endereco_cep, ''), '[^0-9]', '', 'g') = '')  AS sem_endereco,
       -- 8. dono da usina: R12, bloqueia o SPLIT e nao a fatura
       (SELECT count(*) FROM usina u
         WHERE u.status = 'ativa' AND u.dono_usina_id IS NULL)                AS sem_dono,
@@ -455,6 +487,34 @@ export async function prontidao(comp: Date | string): Promise<Prontidao> {
         'O CNPJ tem digito verificador conferido na gravacao (`CnpjDoEmissorInvalido`, 422), ' +
         'entao numero inventado nao passa' },
 
+    /*
+     * O ENDERECO DO PAGADOR — a camada que faltava, e ela nao e de fatura.
+     *
+     * ENTROU EM 08/09/2026, e o que ela fecha e um VERDE FALSO. Desde 28/08
+     * `repos/boleto.ts:259` recusa a emissao com `PagadorSemEndereco` (422)
+     * quando falta qualquer um dos cinco campos que o modelo `Boleto` da Sicoob
+     * marca como obrigatorios. A prontidao nao contava isso, entao o cartao de
+     * maior consequencia da tela podia dizer «Pode faturar: sim» num mes em que
+     * NENHUMA UC conseguiria ter titulo registrado.
+     *
+     * `bloqueia_boleto` E NAO `bloqueia_fatura`, e a escolha e a que evita o
+     * erro simetrico: a fatura EXISTE sem endereco, e ela e cobravel por Pix
+     * estatico. Marcar como bloqueio de fatura pararia o faturamento de quem
+     * cobra por outro meio para exigir um campo que so o boleto usa.
+     *
+     * O universo e a UC CONTRATADA, e nao a faturavel: sem contrato a UC ja e
+     * recusada uma camada acima, e conta-la aqui mandaria a operacao preencher
+     * endereco de quem nem contrato tem — que foi exatamente o erro da camada de
+     * vencimento ate 04/08.
+     */
+    { camada: 'endereco_do_pagador', faltam: n(l.sem_endereco), total: n(l.contratos_ativos), derivada: true,
+      efeito: 'bloqueia_boleto', dono: 'operacao', questao: 'Q-ENDERECO-BLOQUEIO-01',
+      explicacao: 'UC com contrato ativo sem endereco completo do pagador. A Sicoob exige logradouro, ' +
+        'bairro, municipio, CEP e UF, e a emissao e RECUSADA sem eles (`PagadorSemEndereco`, 422) - a ' +
+        'fatura existe e continua cobravel por Pix, o BOLETO e que nao nasce. Nao bloqueia faturar de ' +
+        'proposito. O numero nao entra na exigencia. Entra pela aba Unidades consumidoras, linha a ' +
+        'linha, ou em lote por `npm run enderecos`' },
+
     { camada: 'dono_da_usina', faltam: n(l.sem_dono), total: n(l.usinas_ativas),
       efeito: 'bloqueia_split', dono: 'operacao', questao: 'AUD-08',
       explicacao: 'usina ativa sem dono cadastrado. NAO impede faturar - a cobranca ao cliente nao ' +
@@ -501,6 +561,23 @@ export async function prontidao(comp: Date | string): Promise<Prontidao> {
     competencia: iso,
     ucs_ativas: n(l.ucs_ativas),
     pode_faturar: camadas.filter((x) => x.efeito === 'bloqueia_fatura').every((x) => x.situacao === 'ok'),
+    /*
+     * `pode_cobrar` — a pergunta que a tela nao sabia fazer ate 08/09/2026.
+     *
+     * "Pode faturar" responde se a COBRANCA pode existir; esta responde se ela
+     * consegue virar TITULO. Sao coisas diferentes desde 28/08, quando a
+     * emissao passou a recusar pagador sem endereco, e ate agora o relatorio so
+     * tinha a primeira - entao ele dizia «sim» para um mes em que nenhum boleto
+     * sairia.
+     *
+     * Exige `pode_faturar` junto de proposito: um boleto sem fatura nao existe,
+     * e um `true` aqui com aquele `false` seria uma promessa que a camada de
+     * cima ja desmentiu.
+     */
+    pode_cobrar: camadas.filter((x) => x.efeito === 'bloqueia_fatura' || x.efeito === 'bloqueia_boleto')
+      .every((x) => x.situacao === 'ok'),
+    /* Continua sendo "TODAS as camadas ok", e por isso a de endereco entrou nele
+     * junto: o significado nao mudou, o conjunto e que cresceu. */
     pode_repartir: camadas.every((x) => x.situacao === 'ok'),
     camadas,
   };

@@ -91,6 +91,39 @@ export class PagadorSemEndereco extends Error {
   }
 }
 
+/**
+ * A TERCEIRA GUARDA DO PAGADOR, e esta e sobre o VALOR.
+ *
+ * A coluna nasceu com `CHECK (valor_registrado_centavos > 0)` na migration 16, e
+ * ate 08/09/2026 nada perguntava pelo valor antes do `create` - que fica FORA do
+ * `try` que traduz o erro do adaptador. Uma fatura de R$ 0,00 chegava ao banco e
+ * voltava como `23514` cru: HTTP 500, mensagem de Postgres na tela, fatura
+ * EMITIDA e sem boleto, e nenhuma pista de que a causa era o valor.
+ *
+ * NAO E CENARIO HIPOTETICO. A retomada de 08/09/2026 mediu, entre as seis contas
+ * candidatas a primeira fatura, uma que fecha em **R$ 0,00** - a compensacao
+ * cobriu tudo. Emitir ou nao uma fatura de valor zero e decisao de operacao; o
+ * que nao pode e a decisao chegar em forma de erro de banco.
+ *
+ * 422 E A MESMA ESCOLHA DAS IRMAS: o defeito nao e do outro lado, e a frase
+ * manda fazer alguma coisa. Nada e enviado a Sicoob, e a fila do `PRD` 6 - que
+ * nunca desiste sozinha - nao recebe um titulo que jamais poderia nascer.
+ */
+export class FaturaSemValorParaBoleto extends Error {
+  readonly status = 422;
+  constructor(numeroUc: string, competencia: Date | null) {
+    const mes = competencia ? competencia.toISOString().slice(0, 7) : 'a competencia';
+    super(
+      `A fatura da UC ${numeroUc} em ${mes} fecha em R$ 0,00, e boleto de valor zero o banco nao ` +
+      'registra - a coluna do titulo exige valor maior que zero. Isso costuma significar que a ' +
+      'compensacao cobriu a conta inteira no mes: nao e defeito, e a fatura continua valida e ' +
+      'visivel. Se ela nao devia fechar em zero, confira a conta lida da distribuidora antes de ' +
+      'pedir o boleto de novo. Nada foi enviado a Sicoob e nenhum boleto foi criado.'
+    );
+    this.name = 'FaturaSemValorParaBoleto';
+  }
+}
+
 /** O conector do tenant corrente, ou erro. Nunca devolve credencial ao chamador
  *  alem da referencia - e a referencia nao e segredo. */
 async function conector() {
@@ -259,6 +292,11 @@ export async function registrar(faturaId: string, cobranca: PortaDeCobranca): Pr
   if (semEndereco.length) throw new PagadorSemEndereco(uc.cliente.nome, uc.numero_uc, semEndereco);
 
   const total = f.valor_total_centavos ?? 0;
+  /* ANTES do `create`, e nao dentro do `try`: o `create` esta fora dele, e um
+   * `23514` cru subindo daqui seria 500 com mensagem de Postgres. Ver
+   * `FaturaSemValorParaBoleto`. */
+  if (total <= 0) throw new FaturaSemValorParaBoleto(uc.numero_uc, f.competencia ?? null);
+
   const existente = await dbt().boleto.findFirst({ where: { fatura_id: faturaId } });
   if (existente?.status === 'registrado') return { registrado: true, boleto: existente };
 

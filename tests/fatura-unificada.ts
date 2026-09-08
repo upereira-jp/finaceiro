@@ -235,6 +235,53 @@ const FATURA: CamposDaFaturaUnificada = {
       'valor grande continua inteiro seguro depois da multiplicacao em BigInt');
 }
 
+// ============================== U9 O DESCONTO E EXIGIDO, e nao "zero se nao der"
+//
+// O MODO DE FALHA QUE ESTA SECAO FECHA, medido em 08/09/2026: `paraDecimal`
+// devolve ZERO para texto sem digito nenhum — o que e correto para os campos
+// LIDOS da conta (`outros_encargos` ausente e zero de verdade) e catastrofico
+// para o desconto, que decide quanto o cliente paga.
+//
+// Numa conta de R$ 1.185,40 de energia compensada, `percentual_desconto: "abc"`
+// dava desconto R$ 0,00 e o cliente pagava R$ 237,08 A MAIS — sem erro, sem log
+// e sem excecao. A faixa 0..50 nao pegava: lixo virava zero, e zero esta dentro
+// da faixa. E o numero nao para na tela: `registros` grava as nove parcelas, e
+// `faturarRegistro` as copia para `fatura.valor_consumo_centavos`.
+{
+  const base = { ...FATURA, energia_compensada_kwh: '1000', tarifa_kwh: '1.185396' };
+  const comPerc = (perc: unknown) =>
+    calcular(base, { percentual_desconto: perc as string, fator_emissao: '0.029' });
+
+  chk('U9a', comPerc('20').desconto_centavos === 23708,
+      'o caminho bom nao mudou: 20% de R$ 1.185,40 e R$ 237,08');
+  chk('U9b', comPerc('20,5').desconto_centavos === 24301,
+      'virgula continua valendo — e como a pessoa digita');
+  chk('U9c', comPerc('0').desconto_centavos === 0,
+      'zero EXPLICITO e escolha legitima e passa: a recusa e sobre lixo, nao sobre o valor');
+
+  for (const lixo of ['abc', '', '   ', '12%', 'R$ 20', '1e3', null, undefined, {}]) {
+    let recusou = '';
+    try { comPerc(lixo); } catch (e) { recusou = (e as Error).name; }
+    chk('U9d', recusou === 'DecimalInvalido',
+        `percentual ${JSON.stringify(lixo)} e RECUSADO e nao vira 0% (levantou: ${recusou || 'nada'})`);
+  }
+
+  // `1e3` e `R$ 20` sao o caso que a limpeza do `paraDecimal` transformava em
+  // numero PLAUSIVEL e errado — 13% e 20% respectivamente —, e por isso a forma
+  // e conferida por expressao explicita em vez de "o que sobrar depois de limpar".
+  let n = '';
+  try { comPerc('1e3'); } catch (e) { n = (e as Error).name; }
+  chk('U9e', n === 'DecimalInvalido',
+      'notacao cientifica nao vira percentual silencioso — antes dava 13%');
+
+  // O fator de CO2 passa pela MESMA exigencia: ele nao move dinheiro, mas um
+  // zero silencioso imprime "0 kg de CO2 evitados" na folha do cliente.
+  let f = '';
+  try { calcular(base, { percentual_desconto: '20', fator_emissao: 'abc' }); }
+  catch (e) { f = (e as Error).name; }
+  chk('U9f', f === 'DecimalInvalido', 'o fator de emissao tambem e exigido, e nao vira zero');
+}
+
 console.log();
 if (falhas > 0) { console.log(`--- fatura unificada: ${falhas} FALHA(S)`); process.exit(1); }
-console.log('--- a conta da fatura unificada: 29 verificacoes, 0 falhas');
+console.log('--- a conta da fatura unificada: 42 verificacoes, 0 falhas');

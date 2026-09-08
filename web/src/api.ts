@@ -698,12 +698,12 @@ export type Camada = {
   camada: string;
   situacao: 'ok' | 'pendente' | 'nao_medido';
   faltam: number; total: number;
-  efeito: 'bloqueia_fatura' | 'bloqueia_split';
+  efeito: 'bloqueia_fatura' | 'bloqueia_boleto' | 'bloqueia_split';
   explicacao: string; questao: string | null; dono: string;
 };
 
 export type Prontidao = {
   competencia: string; ucs_ativas: number;
-  pode_faturar: boolean; pode_repartir: boolean;
+  pode_faturar: boolean; pode_cobrar: boolean; pode_repartir: boolean;
   camadas: Camada[];
 };

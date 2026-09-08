@@ -21,7 +21,9 @@ import {
   situacaoDoEndereco, camposDoEnderecoPreenchidos, enderecoNumaLinha,
   CAMPOS_DO_ENDERECO, ROTULO_DO_ENDERECO, TOM_DO_ENDERECO,
   type UcParaSituacao, type SituacaoDaUc, type SituacaoDoEndereco,
+  tomDoEndereco, rotuloDoEndereco, enderecoEmiteBoleto,
 } from '../src/unidades-regras.ts';
+import { CAMPOS_DE_ENDERECO_EXIGIDOS } from '../../src/sicoob/porta.ts';
 
 let falhas = 0;
 const chk = (id: string, cond: boolean, d: string) => {
@@ -195,16 +197,60 @@ console.log('== a situacao de uma UC: duas fontes, um rotulo ==\n');
   chk('E1g', situacaoDoEndereco({ endereco_complemento: 'fundos' }) === 'vazio',
       'so complemento continua `vazio` - ele nao entra na contagem');
 
-  /* A REGRA 10 NA COR. Nenhum campo de endereco recusa boleto hoje
-   * (`repos/boleto.ts` recusa por CPF/CNPJ e NAO por endereco), entao `parcial`
-   * nao pode ser pintado como erro: seria a tela afirmando uma exigencia que
-   * ninguem mediu. */
-  chk('E1h', TOM_DO_ENDERECO.parcial === 'nao_medido' && TOM_DO_ENDERECO.vazio === 'pendente',
-      'incompleto e `nao_medido` e nao `pendente` - o item (c) da Q-PAGADOR-01 esta aberto');
+  /* ========================================================================
+   * A COR PASSOU A SER MEDIDA, e ate 08/09/2026 esta verificacao prendia o
+   * CONTRARIO do que o servidor faz.
+   *
+   * O texto antigo dizia: "Nenhum campo de endereco recusa boleto hoje
+   * (`repos/boleto.ts` recusa por CPF/CNPJ e NAO por endereco)". Isso era
+   * verdade quando foi escrito e deixou de ser em 28/08/2026, quando
+   * `PagadorSemEndereco` entrou em `repos/boleto.ts:259`. A verificacao seguiu
+   * verde por onze dias dando aval a um texto de tela que mandava a operacao
+   * ignorar o unico bloqueio do primeiro boleto.
+   *
+   * A licao e sobre a FORMA da verificacao, e nao sobre o valor: um teste que
+   * compara uma constante com uma constante escrita por mim nao mede nada — ele
+   * congela a minha opiniao do dia. Por isso a E1h agora pergunta ao SERVIDOR.
+   * ===================================================================== */
+  chk('E1h', tomDoEndereco(completo) === 'ok'
+          && tomDoEndereco({ ...completo, endereco_cep: '' }) === 'pendente'
+          && tomDoEndereco({}) === 'pendente',
+      'endereco que NAO emite e `pendente` (vermelho), e nao `nao_medido` - a Sicoob recusa');
+
+  /* O `numero` e o unico campo do formulario que a emissao NAO exige, e isto e
+   * o que separa "incompleto" de "nao emite". Uma unidade sem numero conta como
+   * `parcial` no rotulo e sai com boleto normalmente. */
+  chk('E1h2', situacaoDoEndereco({ ...completo, endereco_numero: '' }) === 'parcial'
+           && tomDoEndereco({ ...completo, endereco_numero: '' }) === 'ok'
+           && enderecoEmiteBoleto({ ...completo, endereco_numero: '' }),
+      'sem numero: `parcial` para o rotulo, mas EMITE - o numero nao e campo da API');
+
+  /* A LISTA DE EXIGIDOS SAI DA FONTE DO SERVIDOR, e nao de uma copia aqui.
+   * Enquanto as duas metades usarem `faltamNoEndereco`, a tela nao pode dizer
+   * "completo" sobre uma unidade que a emissao recusa. Se alguem acrescentar um
+   * campo la, esta verificacao falha aqui - que e o ponto. */
+  chk('E1h3', [...CAMPOS_DE_ENDERECO_EXIGIDOS].sort().join(',') === 'bairro,cep,logradouro,municipio,uf',
+      `os cinco exigidos sao os do servidor (achei: ${[...CAMPOS_DE_ENDERECO_EXIGIDOS].join(', ')})`);
+
+  for (const campo of CAMPOS_DE_ENDERECO_EXIGIDOS) {
+    const coluna = `endereco_${campo === 'municipio' ? 'municipio' : campo}` as keyof typeof completo;
+    chk('E1h4', tomDoEndereco({ ...completo, [coluna]: '' }) === 'pendente',
+        `sem ${campo} a unidade NAO emite - e a tela pinta de vermelho`);
+  }
+
+  /* O rotulo DIZ O QUE FALTA. "Endereco incompleto" mandava a pessoa abrir a
+   * linha para descobrir qual dos seis campos era; com 29 unidades isso e 29
+   * cliques para saber onde esta o trabalho. */
+  chk('E1h5', rotuloDoEndereco({ ...completo, endereco_cep: '' }) === 'Falta CEP'
+           && rotuloDoEndereco({ ...completo, endereco_cep: '', endereco_uf: '' }) === 'Falta CEP e UF'
+           && rotuloDoEndereco(completo) === 'Endereço completo',
+      'o rotulo nomeia os campos que faltam, e liga os dois ultimos com "e"');
 
   const estados: SituacaoDoEndereco[] = ['vazio', 'parcial', 'completo'];
   chk('E1i', estados.every((s) => ROTULO_DO_ENDERECO[s].length > 0 && TOM_DO_ENDERECO[s] !== undefined),
       'os tres estados tem rotulo e tom');
+  chk('E1i2', TOM_DO_ENDERECO.parcial === 'pendente',
+      'a tabela antiga tambem deixou de dizer que incompleto e apenas "nao medido"');
 }
 
 // ------------------------------------------- E2 o endereco numa linha so

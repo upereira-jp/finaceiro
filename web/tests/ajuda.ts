@@ -288,8 +288,11 @@ for (const [c, v] of Object.entries(VERBETE_DA_CAMADA)) {
       `${c}: o titulo NAO e o nome da coluna capitalizado`);
 }
 
-chk('A5e', Object.keys(EFEITO).length === 2 && Object.keys(SITUACAO).length === 3,
-    'os dois efeitos e as tres situacoes tem traducao — nenhum estado da tela sobra em ingles de banco');
+/* TRES desde 08/09/2026: `bloqueia_boleto` entrou junto com a camada de
+ * endereco do pagador, que nao cabia nos dois extremos — ela nao impede a
+ * cobranca existir e nao tem nada a ver com a divisao do dinheiro. */
+chk('A5e', Object.keys(EFEITO).length === 3 && Object.keys(SITUACAO).length === 3,
+    'os tres efeitos e as tres situacoes tem traducao — nenhum estado da tela sobra em ingles de banco');
 
 /*
  * A5f — TODA PENDENCIA DO RELATORIO TEM UM ASSUNTO QUE A EXPLICA.

@@ -72,13 +72,22 @@ export function TelaProntidao() {
       {dado && (
         <>
           {/*
-            OS DOIS PRIMEIROS CARTOES SAO AS DUAS RESPOSTAS DE CONSEQUENCIA, e por
+            OS TRES PRIMEIROS CARTOES SAO AS TRES RESPOSTAS DE CONSEQUENCIA, e por
             isso sao os unicos com icone grande de sim/nao: "pode faturar" decide
-            se a cobranca existe, "pode repartir" decide se o dinheiro que entrar
-            e distribuido. A palavra continua escrita ao lado do desenho.
+            se a cobranca existe, "pode emitir boleto" decide se ela vira titulo,
+            e "pode repartir" decide se o dinheiro que entrar e distribuido. A
+            palavra continua escrita ao lado do desenho.
+
+            O DO MEIO ENTROU EM 08/09/2026 e fechou um verde falso. Com dois
+            cartoes, a tela podia dizer «Pode faturar: sim» num mes em que
+            NENHUMA unidade conseguiria ter boleto registrado — porque desde
+            28/08 a emissao recusa pagador sem endereco, e o relatorio nao
+            contava isso. Um cartao que responde a pergunta errada com confianca
+            e pior que um cartao a menos: ele autoriza.
           */}
           <div className="kpis">
             <KpiSimNao nome="Pode faturar" sim={dado.pode_faturar} icone="pode_faturar" />
+            <KpiSimNao nome="Pode emitir boleto" sim={dado.pode_cobrar} icone="boleto" />
             <KpiSimNao nome="Pode repartir" sim={dado.pode_repartir} icone="pode_repartir" />
             {/* "Unidades a faturar" E NAO "Unidades ativas", desde 24/08/2026. O campo
                 se chama `ucs_ativas` e o significado dele mudou em 04/08 para

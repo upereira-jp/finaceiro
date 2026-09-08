@@ -38,6 +38,9 @@ import type { DadosDoBoleto } from '../dominio/folha-unificada.ts';
 import {
   segundaViaDoRegistro, divergenciasDaSegundaVia, type LinhaGravada,
 } from '../dominio/segunda-via.ts';
+import {
+  lerCompetencia, competenciaEmIso, FORMATOS_DA_COMPETENCIA,
+} from '../dominio/competencia.ts';
 
 export class RegistroNaoEncontrado extends Error {
   readonly status = 404;
@@ -51,8 +54,8 @@ export class CompetenciaIlegivel extends TypeError {
   readonly status = 422;
   constructor(bruto: string) {
     super(
-      `Nao consegui ler a competencia "${bruto}". Use MM/AAAA (o que o extrator devolve) `
-      + 'ou AAAA-MM. A competencia e a CHAVE do registro por UC: sem ela, a segunda fatura '
+      `Nao consegui ler a competencia "${bruto}". Use ${FORMATOS_DA_COMPETENCIA}. `
+      + 'A competencia e a CHAVE do registro por UC: sem ela, a segunda fatura '
       + 'do mesmo mes viraria uma linha nova em vez de corrigir a primeira.'
     );
     this.name = 'CompetenciaIlegivel';
@@ -71,22 +74,23 @@ export class UcIlegivel extends TypeError {
 }
 
 /**
- * `MM/AAAA` ou `AAAA-MM` -> o PRIMEIRO DIA do mes.
+ * `MM/AAAA`, `AAAA-MM` ou `MMM/AAAA` -> o PRIMEIRO DIA do mes.
  *
  * O dia 1 nao e detalhe: e o CHECK `registro_competencia_no_dia_1` da migration
  * 29, e o motivo e o mesmo de `fatura.competencia`. Sem ele a mesma UC teria uma
  * linha para 01/07 e outra para 15/07, e a unica coisa que existe e o mes.
+ *
+ * O `MMM/AAAA` ENTROU EM 08/09/2026 e e o formato que a Equatorial de fato
+ * imprime — `MAI/2026`, nao `05/2026`. A leitura mora em
+ * `src/dominio/competencia.ts`, compartilhada com `fatura-concessionaria.ts`,
+ * que ja aceitava os tres desde 08/08; enquanto eram duas copias, o caminho
+ * OFICIAL era justamente o que recusava a fatura real. O bloco de abertura
+ * daquele arquivo tem a medicao.
  */
 export function primeiroDiaDaCompetencia(bruto: string): Date {
-  const s = String(bruto ?? '').trim();
-  const br = /^(\d{2})\/(\d{4})$/.exec(s);
-  const iso = /^(\d{4})-(\d{2})/.exec(s);
-  const ano = br ? br[2] : iso?.[1];
-  const mes = br ? br[1] : iso?.[2];
-  if (!ano || !mes) throw new CompetenciaIlegivel(bruto);
-  const n = Number(mes);
-  if (!Number.isInteger(n) || n < 1 || n > 12) throw new CompetenciaIlegivel(bruto);
-  return new Date(`${ano}-${mes}-01T00:00:00.000Z`);
+  const c = lerCompetencia(bruto);
+  if (!c) throw new CompetenciaIlegivel(String(bruto ?? '').trim());
+  return new Date(`${competenciaEmIso(c)}T00:00:00.000Z`);
 }
 
 /** `AAAA-MM-DD` -> `Date`, e `null` quando nao e data. O extrator devolve

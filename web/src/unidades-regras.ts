@@ -1,5 +1,12 @@
 // A SITUACAO DE UMA UC COMO A PESSOA LE, e ela vem de DUAS fontes.
 //
+// IMPORTA `faltamNoEndereco` DE `src/sicoob/porta.ts`, que e a MESMA funcao com
+// que `src/repos/boleto.ts` recusa a emissao. O modulo e puro — o unico import
+// dele e de TIPO —, entao entra no bundle como qualquer arquivo daqui. E o
+// mesmo caminho ja usado por `lote-de-contas.ts` para a competencia, e existe
+// pela mesma razao: enquanto a regra vive em dois lugares, consertar um nao
+// conserta o outro.
+//
 // Pura e fora do `.tsx`: o runner do `web/` nao le JSX, entao regra dentro do
 // componente e inalcancavel por teste (regra 8).
 //
@@ -26,6 +33,8 @@
 // por `POST /unidades-consumidoras` NAO tem `crm_usina_cliente_id`, entao o CRM
 // nao tem opiniao sobre ela - e ela conta como Ativa. Sem isso, toda UC local
 // ficaria "aguardando ativacao" para sempre, esperando um CRM que nao sabe dela.
+
+import { faltamNoEndereco } from '../../src/sicoob/porta.ts';
 
 export type UcParaSituacao = {
   status: string;
@@ -191,14 +200,76 @@ export const ROTULO_DO_ENDERECO: Record<SituacaoDoEndereco, string> = {
   completo: 'Endereço completo',
 };
 
+/**
+ * ⚠️ MANTIDA SO PARA O ROTULO — o TOM nao sai mais daqui. Ver `tomDoEndereco`.
+ *
+ * Ate 08/09/2026 esta tabela decidia a cor, e ela dizia que endereco incompleto
+ * era `nao_medido` — "amarelo" —, com o argumento de que a exigencia da Sicoob
+ * nao estava medida. **Ela passou a estar, em 28/08/2026**: `src/sicoob/porta.ts`
+ * registra que no modelo `Boleto`, dentro de `pagador`, os campos `endereco`,
+ * `bairro`, `cidade`, `cep` e `uf` sao todos obrigatorios, e desde entao
+ * `src/repos/boleto.ts:259` RECUSA a emissao com `PagadorSemEndereco` (422).
+ *
+ * A tela ficou onze dias dizendo «isto nao impede cobrar» sobre a unica coisa
+ * que, hoje, impede — e em amarelo, que e a cor de "pode deixar para depois".
+ */
 export const TOM_DO_ENDERECO: Record<SituacaoDoEndereco, 'ok' | 'pendente' | 'nao_medido'> = {
   vazio: 'pendente',
-  /* `nao_medido` e nao `pendente`: com o item (c) da `Q-PAGADOR-01` em aberto,
-   * "faltam campos" pode ser suficiente para a Sicoob. Pintar de vermelho seria
-   * a tela afirmando uma exigencia que ninguem mediu. */
-  parcial: 'nao_medido',
+  parcial: 'pendente',
   completo: 'ok',
 };
+
+/**
+ * O QUE FALTA PARA O BOLETO SAIR, na mesma conta que o servidor faz.
+ *
+ * NAO E UMA LISTA ESCRITA AQUI: chama `faltamNoEndereco` de
+ * `src/sicoob/porta.ts`, a MESMA funcao que `repos/boleto.ts` usa para recusar.
+ * Uma copia divergiria no dia em que a lista mudasse, e o sintoma seria a tela
+ * dizendo «completo» sobre uma unidade que a emissao recusa — que e exatamente
+ * a classe de defeito que esta linha existe para fechar.
+ *
+ * `numero` NAO entra, e a diferenca importa: uma unidade com os cinco campos
+ * exigidos e sem numero conta como `parcial` para o rotulo e EMITE normalmente.
+ * Por isso o tom pergunta por esta funcao, e nao pela contagem de campos.
+ */
+export function faltamParaOBoleto(u: EnderecoDaUc): string[] {
+  return faltamNoEndereco({
+    logradouro: u.endereco_logradouro,
+    bairro: u.endereco_bairro,
+    municipio: u.endereco_municipio,
+    cep: u.endereco_cep,
+    uf: u.endereco_uf,
+  });
+}
+
+/** `true` quando esta unidade consegue ter boleto registrado hoje. */
+export const enderecoEmiteBoleto = (u: EnderecoDaUc): boolean => faltamParaOBoleto(u).length === 0;
+
+/**
+ * O TOM DA PILULA, e ele responde a pergunta que decide o trabalho do dia: esta
+ * unidade consegue emitir? Verde so quando sim; vermelho quando nao.
+ *
+ * Nao ha `nao_medido` aqui de proposito — "nao sei" era a resposta certa
+ * enquanto a exigencia da Sicoob nao estava medida, e nao e mais.
+ */
+export const tomDoEndereco = (u: EnderecoDaUc): 'ok' | 'pendente' =>
+  (enderecoEmiteBoleto(u) ? 'ok' : 'pendente');
+
+/** O rotulo da pilula, dizendo o que falta quando falta. */
+export function rotuloDoEndereco(u: EnderecoDaUc): string {
+  const faltam = faltamParaOBoleto(u);
+  if (faltam.length === 0) {
+    return situacaoDoEndereco(u) === 'completo' ? 'Endereço completo' : 'Emite (sem número)';
+  }
+  const nomes: Record<string, string> = {
+    logradouro: 'logradouro', bairro: 'bairro', municipio: 'município', cep: 'CEP', uf: 'UF',
+  };
+  const lista = faltam.map((c) => nomes[c] ?? c);
+  const texto = lista.length === 1
+    ? lista[0]
+    : `${lista.slice(0, -1).join(', ')} e ${lista[lista.length - 1]}`;
+  return `Falta ${texto}`;
+}
 
 /** Quantos dos seis campos estao preenchidos. Espaco em branco nao conta. */
 export function camposDoEnderecoPreenchidos(u: EnderecoDaUc): number {

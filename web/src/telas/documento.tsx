@@ -268,7 +268,30 @@ export function TelaDocumento() {
           montada a partir da NOSSA fatura - saiu inteiro, por decisao do dono:
           *"quero apenas o que roda na referencia"*. Ver o bloco no pe deste
           arquivo para o que saiu, o que ficou de proposito e o que isso custou. */}
+      {/*
+        `key={tenantId}` — TROCAR DE EMPRESA REMONTA A TELA, e ate 08/09/2026 nao
+        remontava.
+
+        O seletor da barra troca de empresa SEM RECARREGAR a pagina. Sem a `key`,
+        o React mantem o MESMO componente montado: os 21 campos lidos, o boleto,
+        os parametros e a fila de contas do mes continuam em `useState`, agora
+        debaixo de outro tenant. Duas consequencias, e as duas sao de vazamento:
+
+          1. o efeito que grava o rascunho depende de `tenantId`, entao trocar de
+             empresa GRAVA os campos da empresa A na chave da empresa B — nome,
+             CPF/CNPJ, endereco e as nove parcelas em centavos de um cliente que
+             nao e dela;
+          2. a fila do lote continua na tela, e «Registrar» escreveria em
+             `registro_de_fatura_unificada` do tenant NOVO — sem erro, porque o
+             servidor obedece ao tenant da sessao, e sem colisao, porque a chave
+             (unidade, competencia) provavelmente nao existe la.
+
+        A chave do rascunho ja levava o tenant justamente para isto nao acontecer
+        (ver `chaveDoRascunho`), e ela sozinha nao bastava: ela separa o que esta
+        GRAVADO e nao o que esta EM MEMORIA. Remontar zera as duas coisas.
+      */}
       <FaturaUnificada
+        key={tenantId ?? 'sem-tenant'}
         logoUrl={logoUrl}
         tenantId={tenantId ?? null}
         cadastro={<Cadastro>

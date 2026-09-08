@@ -354,11 +354,50 @@ export type ContaDaFatura = {
  * o extrator viu discordar do residuo, `residuo_discorda` fica `true` e quem
  * emite ve. A folha nao muda; o que muda e alguem saber.
  */
+/**
+ * OS DOIS PARAMETROS SAO EXIGIDOS, e ate 08/09/2026 eles eram OPCIONAIS na
+ * pratica — com o pior default possivel.
+ *
+ * `paraDecimal` devolve ZERO para texto que nao tem digito nenhum: ele limpa a
+ * entrada com `replace(/[^\d,.\-]/g, '')` e, se sobrar string vazia, devolve
+ * `{valor: 0n}` sem levantar. Isso e o certo para os campos LIDOS da conta —
+ * `outros_encargos` ausente e zero de verdade. E o exato oposto do certo para o
+ * desconto, que decide QUANTO O CLIENTE PAGA.
+ *
+ * Medido em 08/09/2026 sobre uma conta de R$ 1.185,40 de energia compensada:
+ *
+ *     percentual        desconto     o cliente paga
+ *     "20"              R$ 237,08    R$ 948,32
+ *     "abc"             R$   0,00    R$ 1.185,40   <- 237,08 a mais, em silencio
+ *     "" / null / {}    R$   0,00    R$ 1.185,40   <- idem
+ *
+ * A faixa 0..50 (`exigirPercentualNaFaixa`) NAO pega nenhum desses: lixo vira
+ * zero, e zero esta dentro da faixa. So o negativo era recusado.
+ *
+ * `POST /faturas/unificada/registros` aceita `parametros` do corpo e grava as
+ * nove parcelas em `registro_de_fatura_unificada`; `faturarRegistro` copia essa
+ * coluna para `fatura.valor_consumo_centavos`. Ou seja, o numero errado nao para
+ * na tela — ele vira a divida do cliente.
+ *
+ * E a mesma tentacao que `fatura-concessionaria.ts` nomeia no cabecalho:
+ * **AUSENTE NAO E ZERO**.
+ */
+function percentualExigido(bruto: unknown, campo: string): string {
+  if (bruto === null || bruto === undefined) throw new DecimalInvalido(campo, bruto);
+  const t = String(bruto).trim();
+  /* Forma explicita, e nao "o que sobrar depois de limpar": `1e3`, `12%`,
+   * `R$ 20` e `[object Object]` sao entradas que a limpeza do `paraDecimal`
+   * transforma em numero plausivel e errado. Aqui elas sao recusadas. */
+  if (!/^-?\d+(?:[.,]\d+)?$/.test(t)) throw new DecimalInvalido(campo, bruto);
+  return t;
+}
+
 export function calcular(c: CamposDaFaturaUnificada, p: ParametrosDaEmissao): ContaDaFatura {
   const kwh = paraDecimal(c.energia_compensada_kwh, 'energia_compensada_kwh');
   const tarifa = paraDecimal(c.tarifa_kwh, 'tarifa_kwh');
-  const fator = paraDecimal(p.fator_emissao, 'fator_emissao');
-  const perc = paraDecimal(p.percentual_desconto, 'percentual_desconto');
+  const fator = paraDecimal(percentualExigido(p.fator_emissao, 'fator_emissao'), 'fator_emissao');
+  const perc = paraDecimal(percentualExigido(p.percentual_desconto, 'percentual_desconto'),
+                           'percentual_desconto');
   const percTxt = decimalParaTexto(perc, 2);
   exigirPercentualNaFaixa(perc, percTxt);
 

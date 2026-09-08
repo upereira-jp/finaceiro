@@ -129,6 +129,32 @@ jobs:
       - name: tsc --noEmit
         run: npm run typecheck
 
+      # ======================================================================
+      # AS SUITES PURAS RODAM AQUI, e ate 08/09/2026 elas NAO RODAVAM NO CI.
+      #
+      # Medido em 08/09: de 2.516 verificacoes sem banco, o CI executava
+      # `tests/documento.ts` e mais nada — 17. As outras 2.499 nao rodavam em
+      # workflow nenhum, e entre elas esta o caminho INTEIRO do primeiro boleto:
+      # `linha-digitavel`, `codigo-de-barras`, `brcode`, `qrcode`, `sicoob-http`
+      # e `webhook-sicoob`. Uma regressao em qualquer um passava verde em todo
+      # push, e o unico sinal seria o primeiro boleto sair errado.
+      #
+      # MORAM NESTE JOB, e nao num quinto, porque precisam exatamente do que ele
+      # ja montou: as deps da raiz, as do `web/` e o `prisma generate` — varias
+      # suites importam repositorios, que importam o client gerado. Um job novo
+      # repetiria os tres passos para rodar `node`.
+      #
+      # SAO TRES PASSOS E NAO UM `npm test`: com um passo so, a primeira suite a
+      # falhar esconde as outras duas, e o painel do Actions diz "falhou" sem
+      # dizer onde. Assim o nome do passo vermelho JA e o diagnostico.
+      # ======================================================================
+      - name: verificacoes do documento e dos codigos bancarios
+        run: npm run test:brcode
+      - name: verificacoes das telas
+        run: npm run test:web
+      - name: verificacoes de dominio
+        run: npm run test:dominio
+
   repositorios:
     # Roda por app_financeiro_login, SEM BYPASSRLS: a unica configuracao em que as
     # 24 policies sao avaliadas. Por `postgres` (rolbypassrls = true) daria verde

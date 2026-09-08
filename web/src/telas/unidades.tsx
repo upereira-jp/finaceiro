@@ -13,9 +13,12 @@
 // `PENDENCIAS.md` §2.a - 0 de 29 -, e o unico caminho era `npm run enderecos`,
 // rodado de um Codespace contra producao. As colunas sao da UC, o
 // `PATCH /unidades-consumidoras/:id` ja as aceitava, e o que faltava era a tela.
-// O endereco NAO trava nada hoje, e isso e deliberado: `repos/boleto.ts` recusa
-// pagador sem CPF/CNPJ e nao recusa por endereco, porque o que a Sicoob exige de
-// fato esta em aberto no item (c) da `Q-PAGADOR-01`. A tela conta e nao decide.
+// ⚠️ O ENDERECO TRAVA A EMISSAO desde 28/08/2026, e este comentario dizia o
+// contrario ate 08/09. `repos/boleto.ts:259` recusa com `PagadorSemEndereco`
+// (422) quando falta logradouro, bairro, municipio, CEP ou UF — os cinco sao
+// obrigatorios no modelo `Boleto` da Sicoob, e o item (c) da `Q-PAGADOR-01`
+// deixou de estar aberto. A tela pergunta a MESMA funcao do servidor
+// (`faltamNoEndereco`), entao ela nao pode mais discordar dele.
 
 import { Fragment, useState } from 'react';
 import { api, type UnidadeConsumidora, type Usina } from '../api.ts';
@@ -28,7 +31,7 @@ import {
   situacaoDaUc, ehFaturavel, contarSituacoes,
   ROTULO_DA_SITUACAO, TOM_DA_SITUACAO, ICONE_DA_SITUACAO,
   situacaoDoEndereco, camposDoEnderecoPreenchidos, enderecoNumaLinha,
-  CAMPOS_DO_ENDERECO, ROTULO_DO_ENDERECO, TOM_DO_ENDERECO,
+  CAMPOS_DO_ENDERECO, tomDoEndereco, rotuloDoEndereco, enderecoEmiteBoleto,
   type SituacaoDaUc,
 } from '../unidades-regras.ts';
 import { decimalTexto } from '../dinheiro.ts';
@@ -74,7 +77,12 @@ export function TelaUnidades() {
       (pendencia !== 'sem_vencimento' || !u.data_vencimento) &&
       (pendencia !== 'sem_tarifa' || !u.tarifa_reais_por_kwh) &&
       (pendencia !== 'sem_usina' || !u.usina_id) &&
-      (pendencia !== 'sem_endereco' || situacaoDoEndereco(u) !== 'completo')),
+      /* `enderecoEmiteBoleto` e nao `situacaoDoEndereco(u) !== 'completo'`: a
+         camada `endereco_do_pagador` da prontidao conta quem NAO EMITE, e uma
+         unidade sem o numero aparece como incompleta e emite normalmente. Filtro
+         que nao casa com a contagem manda a pessoa para uma lista maior do que a
+         linha prometeu — a regra 2 do cabecalho de `destino-da-camada.ts`. */
+      (pendencia !== 'sem_endereco' || !enderecoEmiteBoleto(u))),
     ordem,
     {
       uc: (u) => u.numero_uc,
@@ -161,7 +169,7 @@ export function TelaUnidades() {
   const semTarifa = todas.filter((u) => !u.tarifa_reais_por_kwh && ehFaturavel(u)).length;
   /* MESMO CRITERIO DOS OUTROS DOIS - so as faturaveis -, e pelo mesmo motivo:
    * contar as 41 mandaria preencher doze enderecos de UC que nao vai faturar. */
-  const semEndereco = todas.filter((u) => situacaoDoEndereco(u) !== 'completo' && ehFaturavel(u)).length;
+  const semEndereco = todas.filter((u) => !enderecoEmiteBoleto(u) && ehFaturavel(u)).length;
   const contagem = contarSituacoes(todas);
 
   return (
@@ -205,20 +213,25 @@ export function TelaUnidades() {
         </Aviso>
       )}
       {semEndereco > 0 && (
-        /* ALERTA E NAO ERRO, e a diferenca e a regra 10. Nenhum campo de endereco
-           recusa boleto hoje: `repos/boleto.ts` para o pagador sem CPF/CNPJ e
-           deixa o endereco passar, porque o que a Sicoob exige de fato nao foi
-           medido — item (c) da `Q-PAGADOR-01`. Pintar de vermelho seria a tela
-           afirmando uma exigencia que ninguem verificou. */
-        <Aviso tipo="alerta">
-          <strong>{semEndereco} unidade(s) sem o endereço completo.</strong> É o endereço que sai
-          impresso no boleto. <strong>Isto não impede cobrar</strong> — por isso é aviso e não
-          erro. Preencha abrindo a linha da unidade.
+        /* ERRO E NAO ALERTA, e a troca tem data: 28/08/2026. Ate entao a tela
+           dizia «isto nao impede cobrar», e estava certa — o que a Sicoob exigia
+           de endereco nao estava medido. Passou a estar: os cinco campos sao
+           obrigatorios no modelo `Boleto` e `src/repos/boleto.ts` RECUSA com
+           `PagadorSemEndereco` (422). O texto antigo sobreviveu onze dias
+           mandando a operacao deixar para depois a unica coisa que, hoje, impede
+           o primeiro boleto de sair. */
+        <Aviso tipo="erro">
+          <strong>{semEndereco} unidade(s) não emitem boleto por falta de endereço.</strong>{' '}
+          O banco exige logradouro, bairro, município, CEP e UF do pagador, e a emissão é{' '}
+          <strong>recusada</strong> sem eles — a fatura existe, o boleto não sai. Preencha abrindo
+          a linha da unidade.
           <DetalheTecnico>
             <p style={{ margin: 0 }}>
-              Quanto de endereço a Sicoob realmente exige é o item (c) da <code>Q-PAGADOR-01</code>,
-              aberto e com dono — por isso a contagem avisa em vez de recusar. Ganhou tela em
-              17/08; antes disso só por <code>npm run enderecos</code>.
+              A recusa é <code>PagadorSemEndereco</code> (422) em <code>src/repos/boleto.ts</code>,
+              e a lista de campos sai de <code>faltamNoEndereco</code> em{' '}
+              <code>src/sicoob/porta.ts</code> — a mesma função que esta tela chama, para as duas
+              metades não divergirem. O número não entra na lista. Para a carteira inteira de uma
+              vez, <code>npm run enderecos</code>.
             </p>
           </DetalheTecnico>
         </Aviso>
@@ -326,10 +339,8 @@ export function TelaUnidades() {
                       aria-expanded={enderecoAberto === u.id}
                       title={enderecoNumaLinha(u) ?? 'Nenhum campo de endereço preenchido'}>
                 <Icone nome={enderecoAberto === u.id ? 'limpar' : 'unidades'} tamanho={14} />
-                <Marca tom={TOM_DO_ENDERECO[situacaoDoEndereco(u)]}>
-                  {situacaoDoEndereco(u) === 'parcial'
-                    ? `${camposDoEnderecoPreenchidos(u)} de ${CAMPOS_DO_ENDERECO.length}`
-                    : ROTULO_DO_ENDERECO[situacaoDoEndereco(u)]}
+                <Marca tom={tomDoEndereco(u)}>
+                  {rotuloDoEndereco(u)}
                 </Marca>
               </button>
             </td>
@@ -374,7 +385,7 @@ export function TelaUnidades() {
  *
  * ELE NÃO TRAVA A EMISSÃO, e a tela diz isso em vez de fingir rigor: a guarda do
  * repositório recusa pagador sem CPF/CNPJ e **deixa o endereço passar**, porque o
- * que a Sicoob exige de fato não foi medido — item (c) da `Q-PAGADOR-01`, que tem
+ * que a Sicoob exige de fato PASSOU a ser medido em 28/08/2026 — ver `porta.ts`, que tem
  * dono e não é o implementador (regra 10). Recusar por um campo que talvez seja
  * opcional bloquearia boleto que sairia.
  *
@@ -424,12 +435,15 @@ function EnderecoDoPagador({ uc, ocupado, aoGravar }: {
       </div>
       <span className="fraco" style={{ fontSize: 13 }}>
         É o endereço que sai impresso no boleto, e é <strong>da unidade</strong> — não do cliente,
-        que pode ter várias. Ele <strong>não impede a emissão</strong>.
+        que pode ter várias. Sem logradouro, bairro, município, CEP e UF a{' '}
+        <strong>emissão é recusada</strong>; o número é o único opcional.
         <DetalheTecnico>
           <p style={{ margin: 0 }}>
-            O que a Sicoob exige de endereço ainda não foi medido (<code>Q-PAGADOR-01</code>, item
-            c). Para a carteira inteira de uma vez, <code>npm run enderecos</code> continua
-            existindo.
+            Os cinco campos são obrigatórios no modelo <code>Boleto</code> da Sicoob, medido em
+            28/08/2026 — o item (c) da <code>Q-PAGADOR-01</code> deixou de estar aberto. A recusa é{' '}
+            <code>PagadorSemEndereco</code> (422), e a lista sai de <code>faltamNoEndereco</code>{' '}
+            em <code>src/sicoob/porta.ts</code>. Para a carteira inteira de uma vez,{' '}
+            <code>npm run enderecos</code> continua existindo.
           </p>
         </DetalheTecnico>
       </span>

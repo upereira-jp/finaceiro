@@ -236,6 +236,26 @@ export const DESTINO_DA_CAMADA: Record<string, DestinoDaCamada> = {
       + 'contato e chave Pix ficam no mesmo cartão e não entram nesta linha — só razão social e CNPJ.',
   },
 
+  /*
+   * O ENDERECO DO PAGADOR — camada nova em 08/09/2026, e a UNICA de
+   * `bloqueia_boleto`. Ela nao impede a fatura existir; impede o titulo nascer.
+   *
+   * O FILTRO CASA COM A CONTAGEM, que e a regra 2 do cabecalho deste arquivo: a
+   * camada conta quem NAO EMITE (os cinco campos da Sicoob), e nao quem tem o
+   * cadastro incompleto. Sao conjuntos diferentes — uma unidade sem `numero`
+   * aparece como incompleta e emite normalmente —, e apontar o filtro errado
+   * mandaria a pessoa para uma lista maior do que a linha prometeu.
+   */
+  endereco_do_pagador: {
+    rota: '/unidades', filtro: 'sem_endereco',
+    rotulo: 'Preencher o endereço do pagador',
+    caminho: 'npm run enderecos',
+    nota: 'A Sicoob exige logradouro, bairro, município, CEP e UF do pagador, e a emissão é '
+      + 'RECUSADA sem eles — a fatura existe e continua cobrável por Pix, o que não nasce é o '
+      + 'boleto. O número é o único campo do formulário que não entra na exigência. Entra linha a '
+      + 'linha na aba Unidades consumidoras, ou na carteira inteira pelo importador em lote.',
+  },
+
   dono_da_usina: {
     rota: '/usinas', filtro: 'sem_dono',
     rotulo: 'Vincular o dono da usina',

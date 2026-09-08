@@ -26,11 +26,42 @@ aplicar () {   # $1 = nome do banco
   done
 }
 
+# Quantas verificacoes FALHARAM em todas as suites. Ver `suite` abaixo.
+FALHAS=0
+
+# ============================================================================
+# `suite` CONTA AS FALHAS, e ate 08/09/2026 ela as IMPRIMIA e devolvia 0.
+#
+# O defeito e o mesmo que `aplicar` acima descreve e evita, quinze linhas antes:
+# "em pipeline o status de saida e do grep". Aqui a cauda do pipeline era um
+# `sed`, que sempre sai 0 - entao `RAISE WARNING` virava a linha "FALHA: ..." na
+# tela e o script seguia como se nada fosse. Nenhuma das nove verificacoes de
+# catalogo (CAT-1 a CAT-9), que sao as que o CLAUDE.md manda fazer "por consulta
+# ao catalogo, jamais por revisao de PR" para as regras 2, 3 e 11, conseguia
+# derrubar o CI. `npm test` -> `test:isolamento` -> este arquivo -> exit 0.
+#
+# Consequencia pratica: "CI verde nos 5 jobs" nao dizia nada sobre as quatro
+# suites SQL. Um indice parcial novo sobre o conjunto de uma FK, uma view sem
+# `security_invoker` ou uma tabela com RLS e zero policies passariam verdes.
+#
+# Os dois `|| true` sao obrigatorios por causa do `set -o pipefail` do topo: um
+# `grep` que nao acha nada devolve 1, e sem eles o script morreria pela AUSENCIA
+# de aviso - o inverso exato do que se quer medir.
+# ============================================================================
 suite () {     # $1 = banco, $2 = arquivo .sql
-  psql -h 127.0.0.1 -U "$PGUSER" -d "$1" -f "$2" 2>&1 \
+  local saida
+  saida="$(psql -h 127.0.0.1 -U "$PGUSER" -d "$1" -f "$2" 2>&1 \
     | sed "s|^psql:$2:[0-9]*: ||" \
-    | grep -E '^(NOTICE|WARNING|ERROR)' \
-    | sed 's/^NOTICE:  //; s/^WARNING:  /FALHA: /'
+    | { grep -E '^(NOTICE|WARNING|ERROR)' || true; } \
+    | sed 's/^NOTICE:  //; s/^WARNING:  /FALHA: /')"
+  printf '%s\n' "$saida"
+
+  local n
+  n="$(printf '%s\n' "$saida" | grep -cE '^(FALHA:|ERROR)' || true)"
+  if [ "$n" -gt 0 ]; then
+    FALHAS=$((FALHAS + n))
+    echo "  ^^ $n verificacao(oes) FALHOU em $2"
+  fi
 }
 
 echo "=== migrations + suite de isolamento (banco fin_test)"
@@ -76,3 +107,10 @@ echo "=== catalogo (fin_test): CLAUDE.md 1, 2, 3 e 11 por consulta ao catalogo"
 # passava verde com a falha na tela. `distribuidora` esteve nessa lista desde a
 # migration 10 sem quebrar nada. Agora e suite com RAISE WARNING, como as outras.
 suite fin_test tests/catalogo.sql
+
+echo
+if [ "$FALHAS" -gt 0 ]; then
+  echo "FALHAS: $FALHAS"
+  exit 1
+fi
+echo "EXIT=0"

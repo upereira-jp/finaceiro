@@ -19,6 +19,10 @@ import {
   type LinhaCandidata,
 } from '../src/dominio/faturamento.ts';
 
+import {
+  FaturaSemValorParaBoleto, PagadorSemDocumento, PagadorSemEndereco,
+} from '../src/repos/boleto.ts';
+
 let falhas = 0;
 const chk = (id: string, cond: boolean, d: string) => {
   if (!cond) falhas++;
@@ -353,6 +357,38 @@ const base = (over: Partial<EntradaDoSplit> = {}): EntradaDoSplit => ({
       'usina sem dono FATURA e alerta: a cobranca ao cliente nao depende do cadastro do dono (R12 bloqueia o repasse, nao a fatura)');
 }
 
+// ==================================================== F6 as guardas do boleto
+//
+// AS TRES RECUSAS QUE ACONTECEM ANTES DE FALAR COM O BANCO, e o que esta suite
+// consegue medir delas sem banco: que existem, que sao 422 e que a frase manda
+// fazer alguma coisa. O caminho completo (fixture, RLS, `registrar()`) e das
+// suites de repositorio, que rodam no CI.
+//
+// A DE VALOR ZERO NASCEU EM 08/09/2026 e fechou um 500. A coluna do titulo tem
+// `CHECK (valor_registrado_centavos > 0)` desde a migration 16, e o `create` que
+// a viola fica FORA do `try` que traduz erro de adaptador: uma fatura de
+// R$ 0,00 subia como `23514` cru, com a fatura ja EMITIDA e sem boleto. A
+// retomada de 08/09 mediu uma conta assim entre as seis candidatas a primeira
+// fatura — a compensacao cobriu o mes inteiro.
+{
+  const zero = new FaturaSemValorParaBoleto('000091584701207', dia(2026, 5, 1));
+  chk('F6a', zero.status === 422 && zero.name === 'FaturaSemValorParaBoleto',
+      'valor zero e recusa NOMEADA de 422, e nao 23514 cru virando 500');
+  chk('F6b', zero.message.includes('000091584701207') && zero.message.includes('2026-05'),
+      'a recusa diz QUAL unidade e QUAL mes - sem isso, num lote nao se sabe qual conta olhar');
+  chk('F6c', zero.message.includes('R$ 0,00') && zero.message.includes('compensacao'),
+      'a frase explica que zero costuma ser a compensacao cobrindo o mes, e nao defeito');
+  chk('F6d', zero.message.includes('Nada foi enviado a Sicoob'),
+      'diz que nada saiu - a mesma promessa das duas irmas, e o que impede alguem conferir no banco');
+
+  const semDoc = new PagadorSemDocumento('Fulano', '000091584701207');
+  const semEnd = new PagadorSemEndereco('Fulano', '000091584701207', ['cep', 'uf']);
+  chk('F6e', semDoc.status === 422 && semEnd.status === 422,
+      'as tres guardas do pagador falam a mesma lingua: 422, e nao 502');
+  chk('F6f', semEnd.message.includes('cep') && semEnd.message.includes('uf'),
+      'a recusa de endereco NOMEIA os campos que faltam');
+}
+
 console.log();
 if (falhas > 0) { console.log(`--- dominio da carteira: ${falhas} FALHA(S)`); process.exit(1); }
-console.log('--- dominio da carteira: 45 verificacoes, 0 falhas');
+console.log('--- dominio da carteira: 51 verificacoes, 0 falhas');

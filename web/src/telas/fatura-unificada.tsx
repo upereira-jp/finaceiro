@@ -27,9 +27,9 @@ import {
   api, CAMPOS_DA_FATURA_VAZIOS, PARAMETROS_PADRAO, BOLETO_LIDO_VAZIO,
   type CamposDaFatura, type ParametrosDaEmissao, type BoletoLido,
   type ComposicaoUnificada, type LinhaDetalhada, type CampoPersonalizado,
-  type RegistroDeFatura,
+  type RegistroDeFatura, type UnidadeConsumidora, type ModeloDeFatura,
 } from '../api.ts';
-import { Aviso, Campo, Icone } from '../ui.tsx';
+import { Aviso, Campo, Icone, Marca, Tabela } from '../ui.tsx';
 import { TrianguloDeAviso } from '../icones.tsx';
 import { escalaDaPrevia, regraDaPagina, PX_POR_MM } from '../layout-regras.ts';
 import { emReais } from '../dinheiro.ts';
@@ -40,6 +40,12 @@ import {
 } from '../abas-da-fatura.ts';
 import { LOGO_G3_DATA_URI } from '../logo-g3.ts';
 import { lerBase64, mimeDo, reenviavel, naMensagem } from '../arquivo.ts';
+import {
+  recusaDoArquivo, normalizarUc, competenciaDoItem, chaveDoItem,
+  pendenciaDoItem, avisoDoItem, chavesRepetidas, podeRegistrar,
+  resumoDoLote, ordemDaFila, LEITURAS_SIMULTANEAS,
+  type ItemDoLote,
+} from '../lote-de-contas.ts';
 
 /** `setState` sem depender do namespace `React` — o transform novo nao o poe em escopo. */
 type Ajustar<T> = (f: (anterior: T) => T) => void;
@@ -213,6 +219,10 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
   const rascunho = lerRascunho(tenantId);
   const [campos, setCampos] = useState<CamposDaFatura>(rascunho?.campos ?? CAMPOS_DA_FATURA_VAZIOS);
   const [parametros, setParametros] = useState<ParametrosDaEmissao>(rascunho?.parametros ?? PARAMETROS_PADRAO);
+  /* `true` assim que a tela passa a ter opiniao propria sobre os parametros:
+   * rascunho recuperado, segunda via carregada, ou alguem digitando no campo.
+   * Enquanto for `false`, o padrao CADASTRADO manda — ver o bloco em `compor`. */
+  const parametrosTocados = useRef(rascunho?.parametros != null);
   const [boleto, setBoleto] = useState<BoletoLido>(rascunho?.boleto ?? BOLETO_LIDO_VAZIO);
   const [personalizados, setPersonalizados] = useState<Record<string, string>>(
     rascunho?.campos_personalizados ?? {});
@@ -223,7 +233,6 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
   const [statusFatura, setStatusFatura] = useState(
     rascunho ? 'Rascunho recuperado — os campos abaixo são os que estavam em edição.' : 'Nenhum arquivo enviado.');
   const [statusBoleto, setStatusBoleto] = useState('Nenhum boleto enviado.');
-  const [lendoFatura, setLendoFatura] = useState(false);
   const [lendoBoleto, setLendoBoleto] = useState(false);
   const [registrando, setRegistrando] = useState(false);
   const [statusRegistro, setStatusRegistro] = useState<string | null>(null);
@@ -231,6 +240,162 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
    * exclusao. E o que manda `FaturasRegistradas` reler a lista sem que esta tela
    * guarde uma copia dela para manter em dia. */
   const [registrosVersao, setRegistrosVersao] = useState(0);
+
+  /*
+   * ==========================================================================
+   * O LOTE DO MES — `Q-CONTA-LOTE-01`, decidida em 08/09/2026
+   *
+   * A carteira tem 29 UCs e a conta da distribuidora chega todo mes. Ate aqui a
+   * tela subia UM arquivo por vez, e a camada `conta_lida_da_competencia` da
+   * prontidao marcava 0 de 29 — nao por falta de servidor, que esta inteiro,
+   * mas porque o unico jeito de exercita-lo era 29 idas ao seletor de arquivo.
+   *
+   * O QUE ESTE ESTADO NAO E: um segundo caminho de composicao. A fila LE e
+   * REGISTRA pelas MESMAS duas rotas que o painel de uma conta ja usa
+   * (`/faturas/ler-fatura` e `/faturas/unificada/registros`). Quem confere campo
+   * a campo continua conferindo no painel — «Conferir» traz a linha para ca.
+   *
+   * As regras de "esta linha pode registrar?" moram em `lote-de-contas.ts`, sem
+   * JSX, porque o runner do `web/` nao le `.tsx` e o que nao pode ser verificado
+   * nao e regra (regra 8).
+   */
+  const [lote, setLote] = useState<ItemDoLote[]>([]);
+  const [registrandoLote, setRegistrandoLote] = useState(false);
+  /** As UCs do cadastro, so para AVISAR que a conta e de uma unidade que nao
+   *  existe aqui. Nao bloqueia — o servidor aceita `unidade_consumidora_id` nulo. */
+  const [ucsDoCadastro, setUcsDoCadastro] = useState<ReadonlySet<string>>(new Set());
+
+  /* Os `File` NAO entram no estado do React: eles nao sao serializaveis, nao vao
+   * para o rascunho e manter um PDF de 3 MB por linha em `useState` seguraria a
+   * memoria da aba inteira depois que a leitura ja acabou. O estado guarda o que
+   * a tela mostra; o arquivo vive aqui e some assim que e lido. */
+  const arquivosDoLote = useRef(new Map<string, File>());
+  const proximoIdDoLote = useRef(0);
+  const loteAgora = useRef<ItemDoLote[]>([]);
+  useEffect(() => { loteAgora.current = lote; }, [lote]);
+
+  useEffect(() => {
+    let vivo = true;
+    api.get<UnidadeConsumidora[]>('/unidades-consumidoras')
+      .then((l) => { if (vivo) setUcsDoCadastro(new Set(l.map((u) => normalizarUc(u.numero_uc)))); })
+      /* A LISTA E CONVENIENCIA, e falhar em busca-la nao pode travar o lote: sem
+       * ela `avisoDoItem` simplesmente nao acusa UC desconhecida (verificacao
+       * `L3i`), que e o certo — acusar sem saber seria acusar o proprio
+       * desconhecimento. */
+      .catch(() => { if (vivo) setUcsDoCadastro(new Set()); });
+    return () => { vivo = false; };
+  }, [tenantId]);
+
+  const ajustarItem = useCallback((id: string, mudar: (i: ItemDoLote) => ItemDoLote) => {
+    setLote((s) => s.map((i) => (i.id === id ? mudar(i) : i)));
+  }, []);
+
+  const lerItemDoLote = useCallback(async (id: string) => {
+    const f = arquivosDoLote.current.get(id);
+    if (!f) return;
+    ajustarItem(id, (i) => ({ ...i, estado: 'lendo', erro: null }));
+    try {
+      const lido = await api.post<CamposDaFatura>('/faturas/ler-fatura', {
+        conteudo_base64: await lerBase64(f), tipo: mimeDo(f),
+      });
+      const campos = { ...CAMPOS_DA_FATURA_VAZIOS, ...lido };
+      ajustarItem(id, (i) => ({ ...i, estado: 'lido', erro: null, campos }));
+      /* UM ARQUIVO SO ABRE SOZINHO NO PAINEL — e o fluxo que a tela tinha antes
+       * do lote, preservado inteiro. Quem sobe uma conta continua vendo os campos
+       * aparecerem sem clicar em nada; quem sobe 29 nao quer que a vigesima nona
+       * sobrescreva a conferencia da primeira. */
+      if (loteAgora.current.length === 1) {
+        setCampos(campos);
+        setStatusFatura('Dados extraídos. Confira os campos ao lado.');
+      }
+    } catch (e) {
+      /* A LINHA QUE FALHOU NAO SOME e continua com o nome do arquivo: e por ele
+       * que a pessoa sabe qual PDF reenviar. Some seria pior que falhar. */
+      ajustarItem(id, (i) => ({ ...i, estado: 'falhou', erro: naMensagem(e) }));
+    } finally {
+      arquivosDoLote.current.delete(id);
+    }
+  }, [ajustarItem]);
+
+  /*
+   * A BOMBA DA FILA: no maximo `LEITURAS_SIMULTANEAS` leituras ao mesmo tempo.
+   *
+   * Reage a `lote` porque toda leitura que termina muda o estado — entao a
+   * proxima parte sozinha, sem `setInterval` e sem uma fila paralela ao React
+   * que pudesse discordar do que a tela mostra.
+   */
+  useEffect(() => {
+    const lendo = lote.filter((i) => i.estado === 'lendo').length;
+    if (lendo >= LEITURAS_SIMULTANEAS) return;
+    const proximo = lote.find((i) => i.estado === 'na_fila' && arquivosDoLote.current.has(i.id));
+    if (proximo) void lerItemDoLote(proximo.id);
+  }, [lote, lerItemDoLote]);
+
+  function adicionarAoLote(escolhidos: FileList | null) {
+    const arquivos = Array.from(escolhidos ?? []);
+    if (arquivos.length === 0) return;
+    const novos: ItemDoLote[] = arquivos.map((f) => {
+      const id = `a${proximoIdDoLote.current++}`;
+      const recusa = recusaDoArquivo({ nome: f.name, tamanho: f.size, tipo: mimeDo(f) });
+      /* A RECUSA VIRA LINHA, e nao um alerta que some. Num lote de 29, dizer "um
+       * arquivo foi ignorado" e nao dizer QUAL e o mesmo que nao dizer nada. */
+      if (recusa) return { id, nome: f.name, tamanho: f.size, estado: 'falhou' as const, campos: null, erro: recusa };
+      arquivosDoLote.current.set(id, f);
+      return { id, nome: f.name, tamanho: f.size, estado: 'na_fila' as const, campos: null, erro: null };
+    });
+    setLote((s) => [...s, ...novos]);
+  }
+
+  /**
+   * REGISTRA AS LINHAS, UMA DE CADA VEZ.
+   *
+   * SEQUENCIAL e nao em paralelo: sao escritas na mesma tabela, cada uma abre
+   * transacao no servidor, e um lote de 29 gravacoes simultaneas disputaria os
+   * mesmos slots que a emissao. Em serie a barra de progresso tambem significa
+   * alguma coisa — e quem olha ve onde parou.
+   *
+   * NAO MANDA `parametros`: sem eles a rota aplica o `modeloVigente()`, que e o
+   * percentual de desconto CADASTRADO. Mandar os do painel faria o lote gravar
+   * 29 faturas com o padrao da tela (20%) mesmo quando o cadastro diz outro
+   * numero — e o desconto e o que decide o valor cobrado.
+   */
+  async function registrarDoLote(ids: readonly string[]) {
+    setRegistrandoLote(true);
+    try {
+      for (const id of ids) {
+        const item = loteAgora.current.find((i) => i.id === id);
+        if (!item?.campos) continue;
+        ajustarItem(id, (i) => ({ ...i, estado: 'registrando', erro: null }));
+        try {
+          await api.post('/faturas/unificada/registros', {
+            campos: item.campos, boleto: BOLETO_LIDO_VAZIO, campos_personalizados: {},
+          });
+          ajustarItem(id, (i) => ({ ...i, estado: 'registrado', erro: null }));
+          setRegistrosVersao((v) => v + 1);
+        } catch (e) {
+          ajustarItem(id, (i) => ({ ...i, estado: 'falhou', erro: naMensagem(e) }));
+        }
+      }
+    } finally { setRegistrandoLote(false); }
+  }
+
+  /** Traz a linha para o painel de conferencia — o mesmo painel de sempre. */
+  function conferirDoLote(item: ItemDoLote) {
+    if (!item.campos) return;
+    setCampos(item.campos);
+    setBoleto(BOLETO_LIDO_VAZIO);
+    setStatusFatura(`Conferindo "${item.nome}". Os campos ao lado são os desta conta.`);
+    setStatusRegistro(null);
+  }
+
+  /** Uma conta SEM arquivo: limpa o painel e deixa a pessoa digitar. E o caminho
+   *  das UCs cuja conta ninguem tem em PDF — 11 delas em 08/09/2026. */
+  function digitarConta() {
+    setCampos(CAMPOS_DA_FATURA_VAZIOS);
+    setBoleto(BOLETO_LIDO_VAZIO);
+    setStatusFatura('Digitando uma conta sem arquivo — preencha os campos ao lado e registre.');
+    setStatusRegistro(null);
+  }
 
   /*
    * ==========================================================================
@@ -279,6 +444,41 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
       });
       if (meu !== pedido.current) return;
       setComposicao(r); setErroDaComposicao(null);
+
+      /*
+       * ======================================================================
+       * O DESCONTO PASSA A SAIR DO CADASTRO, e ate 08/09/2026 nao saia.
+       *
+       * A rota `compor` monta os parametros assim:
+       *
+       *     { do modelo vigente, ...(o que a tela mandou) }
+       *
+       * e o comentario dela diz *"o que a tela manda so sobrepoe quando ela
+       * manda de fato"*. So que a tela mandava SEMPRE: `parametros` nascia em
+       * `PARAMETROS_PADRAO` (20%) e ia junto em toda composicao e em todo
+       * registro. O resultado e que `modelo_de_fatura.percentual_desconto_padrao`
+       * — a coluna que a migration 28 criou exatamente para isso — era INERTE:
+       * cadastrar 15% no modelo nao mudava uma fatura sequer, e ninguem via,
+       * porque 20 e um numero plausivel em todo lugar onde ele aparecia.
+       *
+       * O desconto decide o valor cobrado do cliente. Um padrao errado nao sai
+       * como erro: sai como fatura de valor errado, comissao errada e repasse
+       * errado, exatamente como a nota de abertura de `fatura-concessionaria.ts`
+       * descreve para o total da distribuidora.
+       *
+       * ADOTA UMA VEZ E SO SE NINGUEM TOCOU. Quem digita 25 no campo continua com
+       * 25 — `parametrosTocados` e o que separa "a tela nunca opinou" de "a
+       * pessoa decidiu". Uma segunda via tambem conta como decisao: ela restaura
+       * os parametros COM QUE AQUELA FATURA FOI GRAVADA, e sobrescreve-los pelo
+       * padrao de hoje faria a segunda via mentir sobre o que foi cobrado.
+       */
+      if (!parametrosTocados.current && r.modelo) {
+        parametrosTocados.current = true;
+        setParametros({
+          percentual_desconto: r.modelo.percentual_desconto_padrao,
+          fator_emissao: r.modelo.fator_emissao_padrao,
+        });
+      }
     } catch (e) {
       if (meu !== pedido.current) return;
       setErroDaComposicao(naMensagem(e));
@@ -292,19 +492,12 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
   const mudar = (k: keyof CamposDaFatura) => (v: string) =>
     setCampos((s) => ({ ...s, [k]: v }));
 
-  async function enviarFatura(f: File) {
-    setLendoFatura(true);
-    setStatusFatura(`Lendo ${f.name}…`);
-    try {
-      const lido = await api.post<CamposDaFatura>('/faturas/ler-fatura', {
-        conteudo_base64: await lerBase64(f), tipo: mimeDo(f),
-      });
-      setCampos({ ...CAMPOS_DA_FATURA_VAZIOS, ...lido });
-      setStatusFatura('Dados extraídos. Confira os campos ao lado.');
-    } catch (e) {
-      setStatusFatura(`Não foi possível ler: ${naMensagem(e)} Preencha os campos manualmente.`);
-    } finally { setLendoFatura(false); }
-  }
+  /* `enviarFatura` MORREU EM 08/09/2026, e a remocao e o ponto. Ela subia UM
+   * arquivo direto para o painel; a fila do lote faz o mesmo por
+   * `lerItemDoLote`, e com um arquivo so o resultado abre sozinho aqui. Manter as
+   * duas seria dois caminhos para o mesmo ato, divergindo no dia em que um
+   * deles mudasse — foi exatamente assim que a competencia da Equatorial passou
+   * a ser aceita num caminho e recusada no outro. */
 
   async function enviarBoleto(f: File) {
     setLendoBoleto(true);
@@ -341,6 +534,20 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
       setStatusRegistro(`Fatura registrada para a UC ${campos.unidade_consumidora} `
                       + `em ${campos.mes_referencia}. O desconto entra na economia acumulada.`);
       setRegistrosVersao((v) => v + 1);
+      /* A LINHA DO LOTE FECHA JUNTO. Registrar pelo painel uma conta que veio da
+       * fila e o caminho normal — «Conferir» traz ela para ca. A identidade e a
+       * CHAVE (UC, competencia), a mesma do `upsert` do servidor: sem isto a fila
+       * continuaria oferecendo «Registrar» para uma conta ja gravada, e o segundo
+       * clique sobrescreveria o que a pessoa acabou de conferir. */
+      const gravada = chaveDoItem({
+        id: '', nome: '', tamanho: 0, estado: 'lido', erro: null, campos,
+      });
+      if (gravada) {
+        setLote((s) => s.map((i) => (
+          i.estado !== 'registrado' && chaveDoItem(i) === gravada
+            ? { ...i, estado: 'registrado', erro: null }
+            : i)));
+      }
       /* Recompoe: a economia acumulada mudou, e ela sai impressa na folha 2. */
       void compor(campos, parametros, boleto, personalizados);
     } catch (e) {
@@ -375,7 +582,11 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
         campos: CamposDaFatura; parametros: ParametrosDaEmissao; boleto: BoletoLido;
       }>(`/faturas/unificada/registros/${id}/segunda-via`);
       setCampos({ ...CAMPOS_DA_FATURA_VAZIOS, ...v.campos });
-      setParametros(v.parametros);
+      /* A segunda via restaura os parametros COM QUE AQUELA FATURA FOI GRAVADA.
+     * E decisao registrada, e nao padrao a adotar: sobrescreve-la pelo padrao de
+     * hoje faria a segunda via mentir sobre o que foi cobrado. */
+    parametrosTocados.current = true;
+    setParametros(v.parametros);
       setBoleto({ ...BOLETO_LIDO_VAZIO, ...v.boleto });
       setPersonalizados({});
       setStatusFatura(`2ª via de ${competencia} carregada do que foi gravado.`);
@@ -392,6 +603,10 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
                       + 'As faturas já registradas ficam.')) return;
     setCampos(CAMPOS_DA_FATURA_VAZIOS);
     setBoleto(BOLETO_LIDO_VAZIO);
+    /* Fatura nova volta a NAO TER OPINIAO: a proxima composicao readota o padrao
+     * do cadastro. Sem isto, quem editasse o desconto uma vez o levaria para
+     * todas as contas da sessao. */
+    parametrosTocados.current = false;
     setParametros(PARAMETROS_PADRAO);
     setPersonalizados({});
     setComposicao(null);
@@ -425,13 +640,13 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
         {abaAtual === 'leitura' && (
           <AbaDeLeitura
             campos={campos} mudar={mudar} setCampos={setCampos}
-            parametros={parametros} setParametros={setParametros}
+            parametros={parametros}
+            setParametros={(f) => { parametrosTocados.current = true; setParametros(f); }}
             boleto={boleto} setBoleto={setBoleto}
             personalizados={personalizados} setPersonalizados={setPersonalizados}
-            composicao={composicao}
+            composicao={composicao} modelo={composicao?.modelo ?? null}
             statusFatura={statusFatura} statusBoleto={statusBoleto}
-            lendoFatura={lendoFatura} lendoBoleto={lendoBoleto}
-            enviarFatura={enviarFatura} enviarBoleto={enviarBoleto}
+            lendoBoleto={lendoBoleto} enviarBoleto={enviarBoleto}
             registrar={registrar} registrando={registrando} statusRegistro={statusRegistro}
             registrosVersao={registrosVersao}
             segundaVia={(id, comp, uc) => void carregarSegundaVia(id, comp, uc)}
@@ -443,6 +658,13 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
             }}
             irParaEmissao={() => irPara('emissao')}
             novaFatura={novaFatura}
+            lote={lote} ucsDoCadastro={ucsDoCadastro} registrandoLote={registrandoLote}
+            adicionarAoLote={adicionarAoLote}
+            registrarDoLote={(ids) => void registrarDoLote(ids)}
+            conferirDoLote={conferirDoLote}
+            digitarConta={digitarConta}
+            removerDoLote={(id) => setLote((s) => s.filter((i) => i.id !== id))}
+            limparLote={() => { arquivosDoLote.current.clear(); setLote([]); }}
           />
         )}
         {/* A PREVIA EM LOTE SAIU DA TELA INTEIRA em 14/08 (tarde), e nao so desta
@@ -547,9 +769,11 @@ type PropsDeLeitura = {
   personalizados: Record<string, string>;
   setPersonalizados: Ajustar<Record<string, string>>;
   composicao: ComposicaoUnificada | null;
+  /** O cadastro de fatura vigente, so para a tela DIZER de onde vem o padrao. */
+  modelo: ModeloDeFatura | null;
   statusFatura: string; statusBoleto: string;
-  lendoFatura: boolean; lendoBoleto: boolean;
-  enviarFatura: (f: File) => void; enviarBoleto: (f: File) => void;
+  lendoBoleto: boolean;
+  enviarBoleto: (f: File) => void;
   registrar: () => void; registrando: boolean; statusRegistro: string | null;
   /** Sobe de 1 a cada escrita (registro novo ou exclusao). E o que faz a lista de
    *  `FaturasRegistradas` recarregar sem que a tela guarde copia dela. */
@@ -559,6 +783,17 @@ type PropsDeLeitura = {
   segundaVia: (id: string, competencia: string, uc: string) => void;
   irParaEmissao: () => void;
   novaFatura: () => void;
+
+  // ------------------------------------------------ o lote (`Q-CONTA-LOTE-01`)
+  lote: ItemDoLote[];
+  ucsDoCadastro: ReadonlySet<string>;
+  registrandoLote: boolean;
+  adicionarAoLote: (f: FileList | null) => void;
+  registrarDoLote: (ids: readonly string[]) => void;
+  conferirDoLote: (i: ItemDoLote) => void;
+  digitarConta: () => void;
+  removerDoLote: (id: string) => void;
+  limparLote: () => void;
 };
 
 function AbaDeLeitura(p: PropsDeLeitura) {
@@ -619,16 +854,36 @@ function AbaDeLeitura(p: PropsDeLeitura) {
       <div className="fu-coluna">
         {/* --------------------------------------------- o PDF da Equatorial */}
         <div className="cartao">
-          <div className="fu-rotulo">Fatura da Equatorial Goiás</div>
+          <div className="fu-rotulo">Contas da Equatorial Goiás</div>
+          {/*
+            UM CAMPO SO, COM `multiple`, E NAO DOIS. Ate 08/09/2026 esta area
+            aceitava um arquivo por vez, e a carteira tem 29 contas por mes.
+            Manter os dois campos — "uma" e "várias" — criaria duas portas para o
+            mesmo ato, que e a divergencia que a regra 7 chama de divida de
+            leitura. Com `multiple`, escolher um arquivo continua fazendo
+            exatamente o que fazia: ele abre sozinho no painel ao lado.
+          */}
           <label className="fu-solta">
-            <input type="file" accept="application/pdf,image/*"
-                   disabled={p.lendoFatura}
-                   onChange={(e) => reenviavel(e, p.enviarFatura)} />
-            <div className="fu-solta-titulo">Enviar fatura da distribuidora</div>
-            <div className="fu-solta-sub">PDF ou foto/scan — os dados são extraídos e preenchidos ao lado</div>
+            <input type="file" accept="application/pdf,image/*" multiple
+                   onChange={(e) => { p.adicionarAoLote(e.target.files); e.target.value = ''; }} />
+            <div className="fu-solta-titulo">Enviar as contas da distribuidora</div>
+            <div className="fu-solta-sub">
+              PDF ou foto/scan — pode escolher várias de uma vez. Os dados são extraídos de cada uma
+            </div>
           </label>
           <div className="fu-status solto">{p.statusFatura}</div>
+          <div className="fu-status solto">
+            <button type="button" className="fu-acao" onClick={p.digitarConta}>
+              Digitar uma conta sem arquivo
+            </button>
+          </div>
         </div>
+
+        <FilaDoLote
+          itens={p.lote} ucs={p.ucsDoCadastro} registrando={p.registrandoLote}
+          registrar={p.registrarDoLote} conferir={p.conferirDoLote}
+          remover={p.removerDoLote} limpar={p.limparLote}
+        />
 
         {/* ------------------------------------------ o boleto a gerar */}
         <div className="fu-painel">
@@ -749,6 +1004,17 @@ function AbaDeLeitura(p: PropsDeLeitura) {
             <Campo rotulo="Fator CO₂ (kg/kWh)" valor={p.parametros.fator_emissao}
                    ao={(v) => p.setParametros((s) => ({ ...s, fator_emissao: v }))} />
           </div>
+          {/* DE ONDE O NUMERO VEIO, escrito na tela. Os dois campos sao editaveis
+              e o valor deles agora nasce do cadastro da fatura — sem esta linha,
+              quem ve "20" nao tem como saber se e o padrao da empresa ou um
+              default de codigo, e foi justamente essa duvida que deixou a coluna
+              do cadastro inerte por 25 dias. */}
+          <p className="sub">
+            {p.modelo
+              ? `Padrão do cadastro «${p.modelo.nome}»: ${p.modelo.percentual_desconto_padrao}% de desconto. `
+              : 'Ainda sem cadastro de fatura — os valores abaixo são os de partida do sistema. '}
+            Alterar aqui vale só para esta conta.
+          </p>
           <p className="sub">Fator médio da margem de operação do SIN — MCTI/SIRENE.</p>
         </div>
 
@@ -875,6 +1141,131 @@ function AbaDeLeitura(p: PropsDeLeitura) {
  * status e texto para humano e muda por motivos que nao sao escrita (uma falha,
  * por exemplo). Quem sobe a versao e quem escreveu.
  */
+/* ====================================================== a fila do lote do mes */
+
+/**
+ * A FILA DAS CONTAS DO MES — uma linha por arquivo, e o trabalho no topo.
+ *
+ * O QUE ELA MOSTRA E O QUE DECIDE SE A CONTA PODE SER GRAVADA, e nao um
+ * resumo bonito: unidade, mes, total e vencimento sao os quatro campos que
+ * respondem "esta e a conta certa, deste mes?". Um lote que so dissesse
+ * "26 arquivos lidos" pediria confianca no lugar de conferencia — e a gravacao e
+ * por (unidade, mes), entao um mes lido errado sobrescreve a conta certa sem
+ * levantar erro nenhum.
+ *
+ * O CARTAO SO APARECE COM FILA. Vazio, ele seria uma tabela vazia ocupando a
+ * primeira dobra da tela mais usada do sistema.
+ */
+function FilaDoLote({ itens, ucs, registrando, registrar, conferir, remover, limpar }: {
+  itens: ItemDoLote[];
+  ucs: ReadonlySet<string>;
+  registrando: boolean;
+  registrar: (ids: readonly string[]) => void;
+  conferir: (i: ItemDoLote) => void;
+  remover: (id: string) => void;
+  limpar: () => void;
+}) {
+  const repetidas = useMemo(() => chavesRepetidas(itens), [itens]);
+  const resumo = useMemo(() => resumoDoLote(itens, ucs), [itens, ucs]);
+  const ordenados = useMemo(() => ordemDaFila(itens, ucs), [itens, ucs]);
+  const prontos = ordenados.filter((i) => podeRegistrar(i, ucs, repetidas)).map((i) => i.id);
+
+  if (itens.length === 0) return null;
+
+  return (
+    <div className="cartao">
+      <div className="fu-rotulo">Fila deste mês</div>
+
+      <div className="fu-status solto">
+        {resumo.total} {resumo.total === 1 ? 'arquivo' : 'arquivos'}
+        {resumo.lendo > 0 && ` · ${resumo.lendo} em leitura`}
+        {resumo.prontos > 0 && ` · ${resumo.prontos} conferidas`}
+        {resumo.comPendencia > 0 && ` · ${resumo.comPendencia} a corrigir`}
+        {resumo.registrados > 0 && ` · ${resumo.registrados} registradas`}
+      </div>
+
+      {/* O BOTAO DIZ QUANTAS, e nao "registrar tudo". A diferenca nao e de estilo:
+          ele age SO sobre as linhas conferidas, e o numero e a promessa do que
+          vai acontecer. "Tudo" prometeria incluir as que tem pendencia. */}
+      <div className="fu-status solto" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button type="button" className="fu-acao"
+                disabled={registrando || prontos.length === 0}
+                onClick={() => registrar(prontos)}>
+          {registrando
+            ? 'Registrando…'
+            : `Registrar ${prontos.length} ${prontos.length === 1 ? 'conta conferida' : 'contas conferidas'}`}
+        </button>
+        <button type="button" className="fu-acao" disabled={registrando} onClick={limpar}>
+          Limpar a fila
+        </button>
+      </div>
+
+      {resumo.comPendencia > 0 && (
+        <Aviso tipo="alerta">
+          {resumo.comPendencia === 1
+            ? 'Uma conta precisa de correção antes de ser registrada — ela está no topo da lista.'
+            : `${resumo.comPendencia} contas precisam de correção antes de serem registradas — elas estão no topo da lista.`}
+          {' '}Abra em «Conferir», ajuste os campos ao lado e registre.
+        </Aviso>
+      )}
+
+      <Tabela cabecalho={<>
+        <th>Arquivo</th><th>Unidade</th><th>Mês</th>
+        <th>Total</th><th>Vencimento</th><th>Situação</th><th />
+      </>}>
+        {ordenados.map((i) => {
+          const pendencia = pendenciaDoItem(i, ucs, repetidas);
+          const aviso = avisoDoItem(i, ucs);
+          const uc = normalizarUc(i.campos?.unidade_consumidora);
+          return (
+            <tr key={i.id}>
+              <td>
+                <div>{i.nome}</div>
+                {(pendencia || aviso) && (
+                  <div className="fu-status" style={{ marginTop: 4 }}>{pendencia ?? aviso}</div>
+                )}
+              </td>
+              <td>{uc || '—'}</td>
+              <td>{competenciaDoItem(i) || (i.campos?.mes_referencia || '—')}</td>
+              <td>{i.campos?.valor_total_equatorial || '—'}</td>
+              <td>{i.campos?.vencimento || '—'}</td>
+              <td><SituacaoDaLinha item={i} pendente={pendencia !== null} /></td>
+              <td>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {i.campos && i.estado !== 'registrando' && (
+                    <button type="button" className="fu-acao" onClick={() => conferir(i)}>Conferir</button>
+                  )}
+                  {i.estado === 'lido' && !pendencia && (
+                    <button type="button" className="fu-acao" disabled={registrando}
+                            onClick={() => registrar([i.id])}>Registrar</button>
+                  )}
+                  {i.estado !== 'registrando' && (
+                    <button type="button" className="fu-acao" disabled={registrando}
+                            onClick={() => remover(i.id)}>Tirar</button>
+                  )}
+                </div>
+              </td>
+            </tr>
+          );
+        })}
+      </Tabela>
+    </div>
+  );
+}
+
+/** A pilula de estado da linha. Cor, icone e PALAVRA — os tres sinais, como
+ *  manda a restricao 3 do tema; ver `Marca` em `ui.tsx`. */
+function SituacaoDaLinha({ item, pendente }: { item: ItemDoLote; pendente: boolean }) {
+  if (item.estado === 'registrado') return <Marca tom="ok" icone="confirmar">Registrada</Marca>;
+  if (item.estado === 'registrando') return <Marca tom="nao_medido" icone="carregando">Gravando…</Marca>;
+  if (item.estado === 'lendo') return <Marca tom="nao_medido" icone="carregando">Lendo…</Marca>;
+  if (item.estado === 'na_fila') return <Marca tom="nao_medido">Na fila</Marca>;
+  if (item.estado === 'falhou') return <Marca tom="pendente">Não leu</Marca>;
+  return pendente
+    ? <Marca tom="pendente">Corrigir</Marca>
+    : <Marca tom="ok">Conferida</Marca>;
+}
+
 function FaturasRegistradas({ uc, versao, registrar, registrando, statusRegistro, aoApagar, segundaVia }: {
   uc: string; versao: number;
   registrar: () => void; registrando: boolean; statusRegistro: string | null;

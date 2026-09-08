@@ -75,10 +75,34 @@ const TIPOS: Record<string, string> = {
  * jeito que falha - sempre falta uma codificacao.
  */
 async function servirEstatico(raiz: string, caminho: string, res: ServerResponse): Promise<void> {
-  const pedido = path.resolve(raiz, '.' + decodeURIComponent(caminho));
-  const dentro = pedido === raiz || pedido.startsWith(raiz + path.sep);
+  /*
+   * O DECODE PODE LEVANTAR, E ATE 08/09/2026 ELE DERRUBAVA O PROCESSO.
+   *
+   * `decodeURIComponent('/%E0%A4%A')` lanca `URIError: URI malformed` — escape
+   * percentual truncado e entrada VALIDA para `new URL`, que nao decodifica o
+   * `pathname`. A chamada estava FORA do `try` de baixo, dentro de uma funcao
+   * `async` cujo `Promise` o `http.createServer` nao aguarda: a rejeicao subia
+   * como `unhandledRejection`, e no Node 22 o padrao disso e ABORTAR.
+   *
+   * Custo medido do defeito: um GET sem credencial, sem corpo e sem sessao
+   * (`/%E0%A4%A` chega aqui porque nao comeca com o prefixo da API) matava a API
+   * e a SPA. Com `Restart=always` e `RestartSec=5` no systemd, cada pedido
+   * comprava ~5 s de indisponibilidade — e toda requisicao em voo morria junto,
+   * inclusive uma emissao de boleto no meio do caminho.
+   *
+   * CAMINHO ILEGIVEL VIRA ROTA DE SPA, e nao 400: e o que ja acontece com
+   * qualquer caminho que nao aponte para arquivo — `/contratos` e tela, nao
+   * arquivo. Um `%` solto na barra de endereco nao merece tratamento proprio.
+   */
+  let decodificado: string | null = null;
+  try { decodificado = decodeURIComponent(caminho); } catch { decodificado = null; }
 
-  const alvo = dentro && path.extname(pedido) ? pedido : path.join(raiz, 'index.html');
+  const pedido = decodificado === null ? null : path.resolve(raiz, '.' + decodificado);
+  const dentro = pedido !== null && (pedido === raiz || pedido.startsWith(raiz + path.sep));
+
+  const alvo = dentro && pedido !== null && path.extname(pedido)
+    ? pedido
+    : path.join(raiz, 'index.html');
   try {
     const conteudo = await fs.readFile(alvo);
     const tipo = TIPOS[path.extname(alvo).toLowerCase()] ?? 'application/octet-stream';
@@ -243,7 +267,22 @@ export function criarServidor(o: OpcoesDoServidor): http.Server {
   const prefixo = o.prefixoApi ?? '/api';
   const raizEstatica = o.estaticos ? path.resolve(o.estaticos) : null;
 
-  return http.createServer(async (req, res) => {
+  /*
+   * NENHUM PEDIDO DERRUBA O PROCESSO — e ate 08/09/2026 um derrubava.
+   *
+   * O handler e `async`, e o `http.createServer` NAO aguarda a Promise que ele
+   * devolve: o que rejeitar aqui dentro vira `unhandledRejection`, e o padrao
+   * disso no Node 22 e abortar. Ou seja, qualquer excecao fora dos `try` de
+   * dentro — e havia uma, o `decodeURIComponent` do caminho estatico — era um
+   * pedido anonimo trocado por ~5 s de indisponibilidade, cortesia do
+   * `Restart=always`.
+   *
+   * A guarda e ESTRUTURAL e nao pontual: consertar so o `decodeURIComponent`
+   * consertaria o caso conhecido e deixaria a MAQUINA do defeito de pe para o
+   * proximo `throw` que nascesse acima de um `try`. Aqui a promessa e sempre
+   * consumida, e o pior desfecho passa a ser um 500 nesta conexao.
+   */
+  const atender = async (req: http.IncomingMessage, res: ServerResponse): Promise<void> => {
     const url = new URL(req.url ?? '/', 'http://interno');
     const metodo = (req.method ?? 'GET').toUpperCase();
 
@@ -397,6 +436,21 @@ export function criarServidor(o: OpcoesDoServidor): http.Server {
       }
       responder(req, res, traduzir(e));
     }
+  };
+
+  return http.createServer((req, res) => {
+    void atender(req, res).catch((e) => {
+      log('[financeiro] o handler falhou fora de todo try - pedido recusado com 500', e);
+      /* `headersSent` porque a falha pode ter acontecido DEPOIS de a resposta
+       * comecar a sair; escrever cabecalho duas vezes levantaria de novo, agora
+       * de dentro do `catch`, e voltaria ao processo caindo. */
+      try {
+        if (!res.headersSent) {
+          res.writeHead(500, { 'content-type': 'application/json; charset=utf-8' });
+        }
+        res.end(JSON.stringify({ erro: 'ErroInterno', mensagem: 'Nao foi possivel atender o pedido.' }));
+      } catch { /* conexao ja morta: nao ha o que responder, e nao ha o que fazer */ }
+    });
   });
 }
 

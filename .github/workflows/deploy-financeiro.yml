@@ -105,6 +105,34 @@ jobs:
           echo "head: $OLD -> $NEW"
           g log --oneline -1
 
+          # ====================================================================
+          # O CLIENT GERADO, ANTES DO RESTART — acrescentado em 08/09/2026.
+          #
+          # `src/generated/` esta no .gitignore, entao o `git ff` acima NUNCA o
+          # traz: depois de uma migration que cria tabela, o disco fica com o
+          # client da versao anterior. Foi assim em 30/07/2026, e o sintoma
+          # chegou pela tela — "Cannot read properties of undefined (reading
+          # 'findFirst')" na aba Documento (ver src/app.ts:108-141).
+          #
+          # Desde entao existe a guarda de arranque `conferirClienteGerado()`,
+          # que LEVANTA quando falta modelo. Ela transformou o defeito silencioso
+          # num servico que nao sobe — melhor, mas o desfecho ainda era deploy
+          # vermelho e producao parada ate alguem lembrar do comando.
+          #
+          # ANTES DO RESTART e nao depois, e essa e a ordem que importa: com
+          # `set -e`, um `generate` que falhe aborta o job com o processo ANTIGO
+          # ainda no ar. O pior caso passa a ser "nao publicou", e nunca
+          # "publicou e derrubou".
+          #
+          # `DIRECT_URL` descartavel: `generate` NAO conecta, mas o
+          # `prisma.config.ts` resolve a variavel no carregamento e aborta se ela
+          # nao existir. Mesmo valor de mentira que o job `tipos` do CI usa.
+          # Medido nesta VPS em 08/09: 850 ms, como `financeiro`, 46 arquivos.
+          # ====================================================================
+          echo "===== CLIENT DO PRISMA (o .gitignore nao o traz no pull) ====="
+          runuser -u financeiro -- bash -lc \
+            "cd '$APP' && DIRECT_URL='postgresql://ninguem@127.0.0.1:5432/naoconecta' npx prisma generate"
+
           echo "===== BUILD DA SPA (regenera web/dist com a logo) ====="
           runuser -u financeiro -- bash -lc "cd '$APP' && npm run web:build"
           test -f "$APP/web/dist/index.html" || { echo "ERRO: web/dist/index.html ausente apos build"; exit 1; }

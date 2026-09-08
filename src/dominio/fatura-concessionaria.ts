@@ -47,6 +47,7 @@
 // nenhuma. Quem decide o que fazer com os erros e o chamador.
 
 import { reaisParaCentavos, ReaisInvalidos, type Centavos } from './centavos.ts';
+import { lerCompetencia, competenciaEmIso, FORMATOS_DA_COMPETENCIA } from './competencia.ts';
 
 /** Como o campo chega do extrator: o texto cru, ou a ausencia dele. */
 export type CampoBruto = string | null | undefined;
@@ -210,56 +211,27 @@ function numeroDaUC(bruto: CampoBruto, erros: ErroDaLeitura[]): string | null {
 }
 
 /**
- * O mes por extenso abreviado, como a Equatorial escreve.
+ * A COMPETENCIA. A leitura mora em `src/dominio/competencia.ts` desde
+ * 08/09/2026 — aqui fica so a RECUSA, no vocabulario deste arquivo.
  *
- * MEDIDO EM 08/08/2026 numa fatura REAL: a competencia sai como `FEV/2026`, e
- * nao `02/2026`. A primeira versao desta funcao aceitava `MM/AAAA` e `AAAA-MM`
- * e teria RECUSADO toda fatura da Equatorial - o defeito que so apareceu porque
- * o dono trouxe o documento em vez de descreve-lo.
- *
- * Sem acento e em maiuscula porque e assim que o PDF traz; a normalizacao de
- * entrada tira acento antes de consultar, para o caso de outro layout trazer
- * `MAR/2026` com til em alguma variante.
+ * ATE ENTAO ELA ERA UMA COPIA, e a copia custou: a regra dos tres formatos
+ * aprendeu `MMM/AAAA` aqui, em 08/08/2026, numa fatura REAL (`FEV/2026`, e nao
+ * `02/2026`), e a OUTRA leitura — `registro-unificado.ts`, que e o caminho
+ * oficial da `Q-CICLO-01` — nunca aprendeu. Consertar um lado nao consertava o
+ * outro, e nada falhava no dia em que a regra mudava. Regra 7.
  */
-const MES_POR_EXTENSO: Readonly<Record<string, string>> = {
-  JAN: '01', FEV: '02', MAR: '03', ABR: '04', MAI: '05', JUN: '06',
-  JUL: '07', AGO: '08', SET: '09', OUT: '10', NOV: '11', DEZ: '12',
-};
-
 function competenciaDe(bruto: CampoBruto, erros: ErroDaLeitura[]): string | null {
   if (vazio(bruto)) {
     erros.push({ campo: 'competencia', motivo: 'ausente — a fatura da concessionaria e sempre de um mes' });
     return null;
   }
   const t = String(bruto).trim();
-  let ano: string | undefined;
-  let mes: string | undefined;
-
-  const iso = /^(\d{4})-(\d{2})(-\d{2})?$/.exec(t);
-  const br = /^(\d{2})\/(\d{4})$/.exec(t);
-  const extenso = /^([A-Za-zÀ-ÿ]{3,})\.?\/(\d{4})$/.exec(t);
-  if (iso) { ano = iso[1]; mes = iso[2]; }
-  else if (br) { ano = br[2]; mes = br[1]; }
-  else if (extenso) {
-    const nome = extenso[1]!.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().slice(0, 3);
-    mes = MES_POR_EXTENSO[nome];
-    ano = extenso[2];
-    if (!mes) {
-      erros.push({ campo: 'competencia', motivo: `"${t}" tem mes por extenso que nao reconheco ("${nome}")` });
-      return null;
-    }
-  }
-
-  if (!ano || !mes) {
-    erros.push({ campo: 'competencia', motivo: `"${t}" nao e MM/AAAA, AAAA-MM nem MMM/AAAA` });
+  const c = lerCompetencia(t);
+  if (!c) {
+    erros.push({ campo: 'competencia', motivo: `"${t}" nao e ${FORMATOS_DA_COMPETENCIA}` });
     return null;
   }
-  const m = Number(mes);
-  if (m < 1 || m > 12) {
-    erros.push({ campo: 'competencia', motivo: `"${t}" tem mes ${mes}` });
-    return null;
-  }
-  return `${ano}-${mes}-01`;
+  return competenciaEmIso(c);
 }
 
 // ---------------------------------------------------------------- a leitura

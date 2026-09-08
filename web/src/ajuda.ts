@@ -534,16 +534,22 @@ export const TOPICOS: readonly Topico[] = [
   },
   {
     id: 'endereco-unidade',
-    pergunta: 'Falta o endereço de uma unidade. Onde preencho?',
-    resposta: 'Na aba Unidades consumidoras, abrindo a linha. O endereço não impede cobrar, mas é '
-      + 'ele que sai impresso na folha que o cliente recebe.',
+    pergunta: 'Falta o endereço de uma unidade. O que isso trava?',
+    /* ATE 08/09/2026 ESTA RESPOSTA DIZIA «o endereço não impede cobrar», e era a
+     * mesma frase da tela de Unidades. Ela virou falsa em 28/08, quando a
+     * emissão passou a recusar pagador sem endereço. */
+    resposta: 'Trava o boleto, e só ele: a cobrança existe e pode ser paga por Pix, mas o banco '
+      + 'recusa emitir o título sem logradouro, bairro, município, CEP e UF. Preenche-se na aba '
+      + 'Unidades consumidoras, abrindo a linha. O número é o único campo que não é exigido.',
+    porque: PORQUE['endereco-unidade'],
     passos: [
       'Abra a aba Unidades consumidoras.',
       'Use o filtro de pendência «Sem endereço completo».',
-      'Abra a linha da unidade e complete o endereço.',
+      'Abra a linha da unidade e complete os cinco campos exigidos.',
+      'A pílula da linha fica verde quando aquela unidade já consegue emitir.',
     ],
     caminhos: [ir('/unidades?pendencia=sem_endereco', 'Completar o endereço')],
-    camada: null,
+    camada: 'endereco_do_pagador',
     telas: ['/unidades'],
     termos: ['endereco', 'rua', 'cep', 'cidade', 'sem endereco', 'endereco incompleto',
              'endereco da unidade', 'endereco do cliente'],
@@ -1388,7 +1394,7 @@ export type CamadaLida = {
   situacao: 'ok' | 'pendente' | 'nao_medido';
   faltam: number;
   total: number;
-  efeito: 'bloqueia_fatura' | 'bloqueia_split';
+  efeito: 'bloqueia_fatura' | 'bloqueia_boleto' | 'bloqueia_split';
 };
 
 export type PassoDoEstado = {
@@ -1398,7 +1404,7 @@ export type PassoDoEstado = {
   frase: string;
   faltam: number;
   total: number;
-  efeito: 'bloqueia_fatura' | 'bloqueia_split';
+  efeito: 'bloqueia_fatura' | 'bloqueia_boleto' | 'bloqueia_split';
   /**
    * PARA ONDE IR. `resolver` quando a pendência tem tela de preenchimento;
    * `ver` quando não tem e o melhor que existe é a tela onde dá para olhar.

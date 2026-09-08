@@ -164,6 +164,14 @@ export const VERBETE_DA_CAMADA: Record<string, Verbete> = {
     contagem: { singular: 'empresa', plural: 'empresas' },
   },
 
+  endereco_do_pagador: {
+    titulo: 'Endereço do pagador',
+    simples: 'Tem unidade com contrato ativo e sem o endereço completo do pagador.',
+    consequencia: 'A cobrança existe e pode ser paga por Pix. O que não sai é o boleto: o banco '
+      + 'recusa emitir sem logradouro, bairro, município, CEP e UF. O número não é exigido.',
+    contagem: { singular: 'unidade', plural: 'unidades' },
+  },
+
   dono_da_usina: {
     titulo: 'Dono da usina',
     simples: 'Tem usina sem dono cadastrado.',
@@ -215,6 +223,11 @@ export const EFEITO: Record<string, { curto: string; longo: string }> = {
   bloqueia_fatura: {
     curto: 'Impede cobrar',
     longo: 'Enquanto isso faltar, a cobrança deste mês não pode ser gerada.',
+  },
+  bloqueia_boleto: {
+    curto: 'Impede o boleto sair',
+    longo: 'A cobrança existe e pode ser paga por Pix. O que o banco recusa é emitir o boleto, '
+      + 'então a fatura fica sem título para o cliente pagar no banco.',
   },
   bloqueia_split: {
     curto: 'Impede dividir o dinheiro',
@@ -443,16 +456,20 @@ export function mesPorExtenso(iso: string): string {
   return n >= 1 && n <= 12 ? `${MESES_PT[n - 1]} de ${m[1]}` : '';
 }
 
-export type ChaveDoGrupo = 'bloqueia_fatura' | 'bloqueia_split';
+export type ChaveDoGrupo = 'bloqueia_fatura' | 'bloqueia_boleto' | 'bloqueia_split';
 
-/** A ordem em que os grupos aparecem. O de faturar vem primeiro porque é o que
- *  tem prazo: a competência fecha, e o repasse espera o dinheiro entrar. */
-export const ORDEM_DOS_GRUPOS: readonly ChaveDoGrupo[] = ['bloqueia_fatura', 'bloqueia_split'];
+/** A ordem em que os grupos aparecem, e ela é a do trabalho: a cobrança precisa
+ *  existir antes de virar título, e o dinheiro precisa entrar antes de ser
+ *  dividido. O de faturar vem primeiro porque é o que tem prazo — a competência
+ *  fecha; o repasse espera o dinheiro. */
+export const ORDEM_DOS_GRUPOS: readonly ChaveDoGrupo[] =
+  ['bloqueia_fatura', 'bloqueia_boleto', 'bloqueia_split'];
 
 /** O título da seção. Nomeia o MÊS quando ele é legível — «Para gerar as faturas
  *  de julho de 2026» responde sozinho, e «deste mês» obriga a olhar o seletor. */
 export function tituloDoGrupo(chave: ChaveDoGrupo, competencia: string): string {
-  if (chave !== 'bloqueia_fatura') return 'Para dividir o dinheiro quando ele entrar';
+  if (chave === 'bloqueia_split') return 'Para dividir o dinheiro quando ele entrar';
+  if (chave === 'bloqueia_boleto') return 'Para o boleto sair';
   const mes = mesPorExtenso(competencia);
   return mes ? `Para gerar as faturas de ${mes}` : 'Para gerar as faturas deste mês';
 }
@@ -460,6 +477,10 @@ export function tituloDoGrupo(chave: ChaveDoGrupo, competencia: string): string 
 /** A frase de baixo. Carrega o NÚMERO de unidades porque é ele que dá tamanho ao
  *  trabalho: «faltam 11» não diz nada sem saber que o total é 29. */
 export function subDoGrupo(chave: ChaveDoGrupo, unidades: number): string {
+  if (chave === 'bloqueia_boleto') {
+    return 'A cobrança existe e pode ser paga por Pix mesmo com estas linhas abertas. O que não '
+         + 'nasce é o boleto — o banco recusa emitir, e a fatura fica sem título.';
+  }
   if (chave !== 'bloqueia_fatura') {
     return 'A cobrança sai normalmente mesmo com estas linhas abertas. O que fica parado é o '
          + 'repasse ao dono da usina e a comissão de quem indicou, quando o dinheiro entrar.';

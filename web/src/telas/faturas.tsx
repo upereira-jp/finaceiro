@@ -308,10 +308,35 @@ function PainelDaFatura({ f, recarregar }: { f: Fatura; recarregar: () => void }
       <div>
         <h3><Icone nome="boleto" tamanho={16} /> Boleto</h3>
         {boleto.erro && <Aviso tipo="erro">Falha ao ler o boleto: {boleto.erro}</Aviso>}
+        {/*
+          AS QUATRO RECUSAS, ESCRITAS ANTES DE ACONTECEREM — e ate 08/09/2026 a
+          tela so conhecia duas.
+
+          O texto antigo nomeava 412 (sem conector) e 503 (sem certificado), que
+          sao as duas do BANCO. As que vao disparar primeiro sao as outras duas,
+          do CADASTRO, e nenhuma delas aparecia aqui:
+
+            documento do pagador   e a PRIMEIRA camada que bloqueia a fatura na
+                                   tela de Pendencias;
+            endereco do pagador    faltava em 11 das 29 unidades em 08/09/2026, e
+                                   recusa desde 28/08.
+
+          O botao acende para todas elas — quem pede o boleto so descobre no
+          erro. Dizer antes custa quatro linhas e evita a pessoa concluir que o
+          sistema quebrou quando ele esta recusando certo.
+        */}
+        {!boleto.carregando && !boleto.dado && podeGerarBoleto(f.status, null) && (
+          <p className="sub" style={{ margin: '0 0 8px' }}>
+            O que faz a emissão ser recusada, e todas antes de falar com o banco:{' '}
+            <strong>CPF/CNPJ do cliente</strong> em branco · <strong>endereço do pagador</strong>{' '}
+            incompleto (logradouro, bairro, município, CEP e UF) · fatura que fecha em{' '}
+            <strong>R$ 0,00</strong> · e a conexão com o banco ainda não configurada.
+          </p>
+        )}
         {!boleto.carregando && !boleto.erro && !boleto.dado && (
           <p className="sub" style={{ margin: '0 0 8px' }}>
             Esta fatura não tem boleto. {podeGerarBoleto(f.status, null)
-              ? 'Pedir o boleto chama o banco pela porta de cobrança — sem conector ativo a resposta é 412, e sem certificado A1 é 503. As duas são nomeadas.'
+              ? 'Pedir o boleto confere primeiro o cadastro e só então chama o banco. As quatro recusas são nomeadas e nenhuma delas envia nada ao banco.'
               : `Só fatura emitida ganha boleto, e esta está em "${rotulo(f.status)}".`}
           </p>
         )}
