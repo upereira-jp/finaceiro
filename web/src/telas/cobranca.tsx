@@ -23,6 +23,7 @@ import { api, ErroDaApi, type ConectorCobranca } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import { Pagina, Aviso, Campo, Marca, linha, Interruptor, Icone, DetalheTecnico } from '../ui.tsx';
 import { dataOuNull } from '../dinheiro.ts';
+import { podeReligarNaTela } from '../saude-do-dinheiro.ts';
 import {
   motivoDaTravaDoConector, podeSalvarConector, sinalDeSegredo,
   estadoDoCertificado, DIAS_DE_AVISO_DO_CERTIFICADO,
@@ -78,6 +79,15 @@ export function TelaCobranca() {
   const cert = useDados<Certificado | null>(semConectorEhResposta);
   const aviso = useDados<AvisoDePagamento>(avisoDePagamento);
   const acao = useAcao();
+
+  /* O FORMULARIO DE RELIGAR, e ele e um campo so.
+   *
+   * O e-mail e pedido e nao herdado porque NAO HA DE ONDE HERDAR: medido em
+   * 09/09/2026, o `GET /webhooks` da Sicoob **nao devolve o e-mail** que foi
+   * enviado no cadastro. Prefixar com um palpite seria a tela inventando um
+   * endereco para onde o banco vai avisar que parou de avisar. */
+  const religar = useAcao();
+  const [emailDoAviso, setEmailDoAviso] = useState('');
 
   const [credencialRef, setCredencialRef] = useState('');
   const [numeroContrato, setNumeroContrato] = useState('');
@@ -235,6 +245,41 @@ export function TelaCobranca() {
             Isso <em>não</em> quer dizer que está tudo bem: quer dizer que ninguém sabe.
             {aviso.dado.motivo && <> <span className="sub">({aviso.dado.motivo})</span></>}
           </>)}
+
+          {/* ================================================== O BOTÃO DE RELIGAR
+            * Ele fecha a metade que faltava do alerta. Até 09/09/2026 o sistema
+            * percebia sozinho que o banco tinha desligado o aviso — e a faixa
+            * terminava mandando *chamar alguém*, porque recadastrar só existia
+            * como comando de terminal. Detectar e mandar chamar é metade.
+            *
+            * SÓ APARECE NOS DOIS NÍVEIS EM QUE RELIGAR É SEGURO. Em `ativo` ele
+            * criaria um segundo webhook e o banco passaria a notificar EM DOBRO
+            * o mesmo pagamento, sem caminho de volta; em `nao_verificavel`
+            * ninguém sabe se já existe um, e não saber não autoriza agir. O
+            * servidor recusa os dois de qualquer forma (`podeReligarOAviso`) —
+            * esconder aqui é para não oferecer o que vai ser negado. */}
+          {podeReligarNaTela(aviso.dado.nivel) && (
+            <div style={{ marginTop: 12, display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div style={{ minWidth: 260 }}>
+                <Campo rotulo="E-mail para o banco avisar se a entrega falhar"
+                       valor={emailDoAviso} ao={setEmailDoAviso}
+                       tipo="email" dica="alguem@suaempresa.com.br" />
+              </div>
+              <button className="primario"
+                      disabled={religar.ocupado || !emailDoAviso.includes('@')}
+                      onClick={() => void religar.executar(async () => {
+                        await api.post('/conector-cobranca/aviso-pagamento', { email: emailDoAviso });
+                        religar.anunciar('Aviso religado. O banco manda agora uma notificação de '
+                          + 'teste para confirmar o endereço.');
+                        aviso.recarregar();
+                      })}>
+                <Icone nome={religar.ocupado ? 'carregando' : 'cobranca'} tamanho={15} peso="bold" />
+                {aviso.dado.nivel === 'inativado' ? 'Religar o aviso' : 'Cadastrar o aviso'}
+              </button>
+            </div>
+          )}
+          {religar.erro && <div style={{ marginTop: 8 }}><strong>Não deu:</strong> {religar.erro}</div>}
+          {religar.sucesso && <div style={{ marginTop: 8 }}>✅ {religar.sucesso}</div>}
         </Aviso>
       )}
 

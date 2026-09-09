@@ -141,3 +141,23 @@ export function faixasDaSaude(e: {
 
   return f;
 }
+
+/**
+ * O ESPELHO DA GUARDA DO SERVIDOR — `podeReligarOAviso`, em
+ * `src/dominio/agenda.ts`.
+ *
+ * POR QUE ELE E COPIA E NAO IMPORTACAO: o `web/` e outro `tsconfig` e outro
+ * pacote, e nao alcanca `src/`. Mesma situacao das transicoes de fatura em
+ * `cobranca-regras.ts`, que tambem espelham o servidor.
+ *
+ * O RISCO DE COPIA E DERIVA, e ele esta prendido: `SD-14` importa as DUAS e
+ * exige que concordem nos quatro niveis. O dia em que o servidor mudar e este
+ * arquivo nao, a suite fica vermelha — nao e disciplina de quem escreve.
+ *
+ * E O SERVIDOR CONTINUA MANDANDO. Isto aqui decide se o BOTAO aparece; quem
+ * recusa de verdade e a rota. Esconder existe para nao oferecer o que vai ser
+ * negado, e nao para autorizar.
+ */
+export function podeReligarNaTela(nivel: NivelDoAviso | null): boolean {
+  return nivel === 'inativado' || nivel === 'ausente';
+}

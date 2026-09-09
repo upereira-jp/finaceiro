@@ -903,6 +903,23 @@ export class CobrancaSicoob implements PortaDeCobranca {
    * exatamente o "vermelho permanente e alarme desligado" que o `deploy/README`
    * nomeia. `sicoob/webhook.ts` so traduz o 7.
    */
+  /**
+   * `PortaDeCobranca.religarAvisoDePagamento` - a mesma escrita, na lingua da
+   * porta. Tres linhas de proposito: o vocabulario da Sicoob (`idWebhook`,
+   * `codigoTipoMovimento`, `codigoPeriodoMovimento`) para AQUI, como parou em
+   * `avisoDePagamento`.
+   *
+   * O tipo e o periodo NAO sao parametro: quem chama pede "religa o aviso de
+   * pagamento", e qual movimento e esse e conhecimento deste adaptador. Deixar
+   * escolher permitiria religar o tipo errado a partir de um botao de tela.
+   */
+  async religarAvisoDePagamento(
+    ref: CredencialRef, p: { url: string; email: string },
+  ): Promise<{ id: string }> {
+    const r = await this.cadastrarWebhook(ref, p);
+    return { id: r.idWebhook };
+  }
+
   async avisoDePagamento(ref: CredencialRef): Promise<AvisoDePagamento[]> {
     const lista = await this.consultarWebhooks(ref, { codigoTipoMovimento: TIPO_MOVIMENTO_PAGAMENTO });
     return lista.map((w) => ({

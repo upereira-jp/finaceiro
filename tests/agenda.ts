@@ -648,6 +648,113 @@ chk('AG9i', cod('vencido', 'nao_verificavel') === 4,
       + 'e nao um alerta pendurado na fila de 5 minutos');
 }
 
+// ============================================================================
+// AG10 — RELIGAR O AVISO: a guarda que existe porque nao ha inverso
+// ============================================================================
+//
+// O QUE ESTAS LINHAS PROTEGEM E DINHEIRO EM DOBRO. `POST /webhooks` da Sicoob
+// NAO e idempotente: cadastrar duas vezes cria dois webhooks e o banco passa a
+// notificar EM DOBRO o mesmo pagamento. Nao ha rota nossa que desfaca — o
+// conserto seria no banco, a mao.
+//
+// A guarda ja existia dentro do script `webhook-sicoob`, onde era protegida
+// pelo fato de que quem digita um comando com `--valendo` leu o cabecalho. Ela
+// virou dominio porque agora ha um BOTAO na tela, e botao e apertado por quem
+// nao leu nada.
+
+import { podeReligarOAviso } from '../src/dominio/agenda.ts';
+import {
+  religarAvisoDePagamento, NaoDaParaReligar, AdaptadorNaoReliga,
+} from '../src/cobranca/agenda.ts';
+
+console.log('\n-- AG10 religar o aviso de pagamento --');
+
+chk('AG10a', podeReligarOAviso('inativado').pode === true,
+    'com o aviso DESLIGADO pelo banco, religar e o conserto — pode');
+chk('AG10b', podeReligarOAviso('ausente').pode === true,
+    'e sem aviso nenhum tambem: e o primeiro cadastro');
+
+chk('AG10c', podeReligarOAviso('ativo').pode === false,
+    'com um ATIVO, NAO — um segundo webhook faz o banco notificar em dobro o mesmo pagamento, '
+    + 'e nao ha caminho neste sistema que desfaca');
+
+chk('AG10d', podeReligarOAviso('nao_verificavel').pode === false,
+    'e "nao deu para perguntar" tambem e NAO, que e a metade delicada: nao saber se ja existe '
+    + 'um nao autoriza cadastrar. E a mesma disciplina do diagnostico, do lado da ESCRITA — la '
+    + 'nao saber nao autoriza dizer que esta bem; aqui nao autoriza agir');
+
+// -------------------------------------- AG10e o motivo nunca vem vazio
+{
+  const recusas = (['ativo', 'nao_verificavel'] as const).map((n) => podeReligarOAviso(n));
+  chk('AG10e', recusas.every((r) => !r.pode && r.motivo.length > 60 && /dobro|nao saber|nao autoriza/i.test(r.motivo)),
+      'toda recusa carrega o motivo por extenso, e ele diz a CONSEQUENCIA — a mensagem do '
+      + 'servidor vai inteira para a tela, e "nao pode" sem porque manda a pessoa tentar de novo');
+}
+
+// ---------------------------- AG10f..AG10i a orquestracao, com porta de mentira
+{
+  const REF = 'ref-de-mentira';
+  const P = { url: 'https://exemplo.com.br/w', email: 'a@b.com' };
+  const base = {
+    async registrar() { throw new Error('nao usado'); },
+    async consultar() { throw new Error('nao usado'); },
+    async baixar() { throw new Error('nao usado'); },
+  } as any;
+
+  const porta = (avisos: any[] | null, aoReligar?: () => void) => ({
+    ...base,
+    avisoDePagamento: async () => {
+      if (avisos === null) throw new Error('a Sicoob nao respondeu');
+      return avisos;
+    },
+    religarAvisoDePagamento: async () => { aoReligar?.(); return { id: '999' }; },
+  });
+
+  const pegar = async (f: () => Promise<unknown>) => {
+    try { await f(); return null; } catch (e: any) { return e; }
+  };
+
+  // um webhook morto -> religa
+  {
+    let chamou = false;
+    const r = await religarAvisoDePagamento(
+      porta([{ id: '1', url: null, inativado_em: '2026-09-09', motivo_da_inativacao: 'x' }], () => { chamou = true; }),
+      REF, P) as any;
+    chk('AG10f', chamou && r.id === '999' && r.nivelAntes === 'inativado',
+        'com o webhook morto ele CONSULTA, decide e escreve — e devolve o nivel de ANTES, para '
+        + 'quem chamou poder dizer o que foi consertado');
+  }
+
+  // um vivo -> recusa E NAO ESCREVE
+  {
+    let chamou = false;
+    const e = await pegar(() => religarAvisoDePagamento(
+      porta([{ id: '1', url: null, inativado_em: null, motivo_da_inativacao: null }], () => { chamou = true; }),
+      REF, P));
+    chk('AG10g', e instanceof NaoDaParaReligar && e.status === 409 && !chamou,
+        'com um vivo ele recusa com 409 e — o que importa — NAO CHAMA o banco. Consultar depois '
+        + 'de escrever nao serviria de nada: o cadastro nao tem inverso');
+  }
+
+  // Sicoob muda -> recusa E NAO ESCREVE
+  {
+    let chamou = false;
+    const e = await pegar(() => religarAvisoDePagamento(porta(null, () => { chamou = true; }), REF, P));
+    chk('AG10h', e instanceof NaoDaParaReligar && !chamou,
+        'e com a Sicoob fora do ar tambem NAO escreve — a consulta passa por '
+        + '`conferirAvisoDePagamento`, que traduz rede caida em `nao_verificavel` em vez de '
+        + 'estourar 500 no botao');
+  }
+
+  // adaptador que nao sabe -> 503 nomeado
+  {
+    const e = await pegar(() => religarAvisoDePagamento(base, REF, P));
+    chk('AG10i', e instanceof AdaptadorNaoReliga && e.status === 503,
+        'e um adaptador que nao sabe religar diz isso com nome e 503, em vez de estourar '
+        + '`undefined is not a function` tres camadas adiante');
+  }
+}
+
 console.log(`\n${falhas === 0 ? 'agenda (puro): todas as verificacoes passaram'
                               : `agenda (puro): ${falhas} FALHA(S)`}`);
 process.exit(falhas === 0 ? 0 : 1);

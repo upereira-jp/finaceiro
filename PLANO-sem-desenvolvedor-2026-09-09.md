@@ -35,11 +35,20 @@ para chegar lá.
 São só três, e as três são do caminho do dinheiro. É por isso que são o topo da
 lista.
 
-### A1 · Recadastrar o aviso de pagamento 🔴
+### A1 · Recadastrar o aviso de pagamento — ✅ **CONSTRUÍDO em 09/09/2026**
 
-**Hoje:** `npm run webhook-sicoob -- --cadastrar` no terminal, como root.
-**Não há rota HTTP e não há tela** — medido: a única rota com "webhook" no nome é
-a que o *banco* chama.
+**Antes:** `npm run webhook-sicoob -- --cadastrar` no terminal, como root. Sem
+rota e sem tela.
+
+**Agora:** botão **«Religar o aviso»** dentro da própria faixa que acusa o
+problema, na tela de Cobrança — com a guarda no servidor (`podeReligarOAviso`),
+porque `POST /webhooks` não tem inverso e dois webhooks fazem o banco notificar
+em dobro. Só aparece nos dois níveis em que religar é seguro. Detalhe e as nove
+decisões em `QUESTOES.md` §2.i.
+
+⚠️ **Não foi exercido contra a Sicoob de verdade** — exercer exige um webhook
+morto, e o de produção está vivo. O caminho de escrita é o mesmo que registrou o
+id 13407.
 
 **Por que é a primeira da lista:** o alarme que subiu hoje aponta exatamente para
 isto. Quando a Sicoob desligar o aviso, a faixa em Pendências vai dizer
@@ -176,9 +185,9 @@ novo entra lendo, não perguntando.
 
 | Ordem | O quê | Por quê nessa ordem |
 |:--:|---|---|
+| ~~1~~ | ~~**A1** — botão de religar~~ | ✅ **feito em 09/09** |
 | **1** | **A3** — as duas linhas do `.env` | Cinco minutos, e é o único item **aberto agora** que perde dinheiro (o aviso do banco chega e é recusado em silêncio) |
-| **2** | **A1** — botão de religar o aviso | É para onde o alarme novo aponta. Sem ele, o sistema detecta e manda chamar alguém |
-| **3** | **Bloco D itens 7, 2 e 4** | São o que trava a **primeira fatura** e o **primeiro repasse**. Nada disso é código |
+| **2** | **Bloco D itens 7, 2 e 4** | São o que trava a **primeira fatura** e o **primeiro repasse**. Nada disso é código |
 | **4** | **A2** — tela do certificado | Tem prazo (17/08/2027) e não tem pressa |
 | **5** | **D5** — o canal que empurra | Decidir se vale contratar um serviço de e-mail |
 | **6** | `destravar-uc` na tela | Exceção rara; só quando o resto estiver fechado |

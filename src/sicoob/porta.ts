@@ -165,6 +165,30 @@ export interface PortaDeCobranca {
    * responder", e quem chama tem de distinguir as duas - ver `nivelDoAviso`.
    */
   avisoDePagamento?(credencialRef: CredencialRef): Promise<AvisoDePagamento[]>;
+
+  /**
+   * OPCIONAL PELO MESMO MOTIVO do irmao acima, e com um agravante: este ESCREVE.
+   *
+   * Ele religa o canal por onde o banco avisa que um boleto foi pago - o unico
+   * verbo desta porta que muda algo do lado de la sem que haja um titulo
+   * envolvido. Nao entra na lista obrigatoria porque um adaptador que nao sabe
+   * consultar webhook tambem nao teria como saber cadastrar um, e porque
+   * `COBRANCA_NAO_CONFIGURADA` inventaria uma resposta sobre um canal que nao
+   * existe no mundo dele.
+   *
+   * ⚠️ NAO E IDEMPOTENTE, e a porta nao esconde isso: chamar duas vezes cria
+   * DOIS webhooks e o banco notifica em dobro. A guarda que impede e
+   * `podeReligarOAviso`, no dominio, e ela roda ANTES - quem chama este metodo
+   * ja decidiu que pode.
+   *
+   * A URL vem de FORA, e nao daqui: ela e derivada do tenant
+   * (`sicoob/webhook.ts`), e um adaptador que a inventasse poria o dinheiro de
+   * um tenant no endereco de outro.
+   */
+  religarAvisoDePagamento?(
+    credencialRef: CredencialRef,
+    p: { url: string; email: string },
+  ): Promise<{ id: string }>;
 }
 
 export class CobrancaNaoConfigurada extends Error {

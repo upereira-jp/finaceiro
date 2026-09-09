@@ -353,3 +353,59 @@ export function saudeDoCaminhoDoDinheiro(e: {
 
   return { codigo: 0, resumo: 'o caminho do dinheiro esta de pe' };
 }
+
+// ============================================================================
+// RELIGAR O AVISO DE PAGAMENTO: quando pode, e quando NAO pode
+// ============================================================================
+
+/**
+ * A GUARDA QUE EXISTE PORQUE O CADASTRO NAO TEM INVERSO.
+ *
+ * `POST /webhooks` da Sicoob NAO e idempotente: cadastrar duas vezes cria dois
+ * webhooks, e o banco passa a notificar EM DOBRO o mesmo pagamento. Nao ha rota
+ * nossa que desfaca isso - o conserto seria no banco, a mao.
+ *
+ * O script `webhook-sicoob --cadastrar` ja tinha esta guarda; ela vem para o
+ * dominio porque agora ha um BOTAO, e botao e apertado por quem nao leu o
+ * cabecalho do script. Regra 8: a guarda que protege dinheiro tem teste.
+ *
+ * AS QUATRO RESPOSTAS, e a que surpreende e a ultima:
+ *
+ *   `inativado`       PODE. O banco desligou; recadastrar e o conserto, e o
+ *                     inativo nao conta como duplicata para o proprio banco;
+ *   `ausente`         PODE. Nunca houve. E o primeiro cadastro;
+ *   `ativo`           NAO. Ja ha um vivo, e um segundo faz notificar em dobro;
+ *   `nao_verificavel` NAO, e este e o ponto delicado. Nao saber se ja existe um
+ *                     NAO autoriza cadastrar - a aposta otimista aqui cria a
+ *                     duplicata que nao se desfaz. E a mesma disciplina que faz
+ *                     `nao_verificavel` nao virar `ativo` no diagnostico, agora
+ *                     do lado da ESCRITA: la, nao saber nao autoriza dizer que
+ *                     esta bem; aqui, nao saber nao autoriza agir.
+ */
+export type PermissaoDeReligar =
+  | { pode: true }
+  | { pode: false; motivo: string };
+
+export function podeReligarOAviso(nivel: NivelDoAviso): PermissaoDeReligar {
+  switch (nivel) {
+    case 'inativado':
+    case 'ausente':
+      return { pode: true };
+    case 'ativo':
+      return {
+        pode: false,
+        motivo:
+          'ja ha um aviso de pagamento ATIVO no banco. Cadastrar um segundo faz a Sicoob '
+          + 'notificar EM DOBRO o mesmo pagamento, e nao ha caminho neste sistema que desfaca - '
+          + 'o conserto seria no banco, a mao. Nada foi enviado.',
+      };
+    case 'nao_verificavel':
+      return {
+        pode: false,
+        motivo:
+          'nao deu para perguntar ao banco quais avisos existem, entao nao da para saber se '
+          + 'cadastrar criaria um segundo. Nao saber NAO autoriza agir: a aposta otimista aqui '
+          + 'cria a notificacao em dobro, que nao se desfaz. Tente de novo em alguns minutos.',
+      };
+  }
+}

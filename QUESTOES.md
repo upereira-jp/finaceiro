@@ -611,6 +611,67 @@ Suíte sem banco: `EXIT=0`, **2.713** verificações (eram 2.678) — `AG9a`…`
 
 ---
 
+## 2.i Decisões técnicas de 09/09/2026 — o alerta ganha BOTÃO, e o A3 fecha
+
+**Dono destas decisões: o implementador** (§2.b), com **uma lacuna nomeada no fim**.
+
+### O que as motivou
+
+A `2.h` deu canal ao alerta, e o `PLANO-sem-desenvolvedor-2026-09-09.md` mediu o
+que sobrava: das três coisas que a operação não conseguia fazer sozinha, **a
+primeira era religar o aviso de pagamento** — só existia como comando de
+terminal, sem rota e sem tela. O sistema **detectava sozinho e mandava chamar
+alguém**. Metade.
+
+### As decisões
+
+| # | Decisão | Por quê, em uma linha |
+|:--:|---|---|
+| 1 | **`POST /conector-cobranca/aviso-pagamento`, e não o `PATCH … /reativar` do banco** | O `PATCH` existe no contrato da Sicoob e **nunca foi exercido** — não houve webhook morto para exercer. O `POST` foi provado em 09/09 (id 13407). Trocar por um verbo não medido, na rota que religa o dinheiro, seria apostar |
+| 2 | **A guarda virou domínio (`podeReligarOAviso`)** | Ela já existia dentro do script, protegida pelo fato de que quem digita `--valendo` leu o cabeçalho. Agora há um **botão**, e botão é apertado por quem não leu nada. `POST /webhooks` não é idempotente: dois webhooks = banco notificando **em dobro**, sem caminho de volta |
+| 3 | **`nao_verificavel` NÃO autoriza religar** | A metade delicada. É a mesma disciplina do diagnóstico, do lado da **escrita**: lá, não ter perguntado não autoriza dizer que está bem; aqui, **não saber não autoriza agir** — a aposta otimista cria a duplicata que não se desfaz |
+| 4 | **Consulta ANTES, sempre** | Perguntar depois não serviria de nada. `AG10g`/`AG10h` medem exatamente isto: nos dois casos de recusa, o banco **não é chamado** |
+| 5 | **A URL é derivada, não vem do corpo** | Aceitá-la de fora deixaria um pedido HTTP mandar o aviso de pagamento de um tenant para o endereço de outro |
+| 6 | **O e-mail é pedido, não herdado** | Medido: `GET /webhooks` **não devolve o e-mail** do cadastro. Não há de onde herdar, e prefixar um palpite seria a tela inventando para onde o banco avisa que parou de avisar |
+| 7 | **`administrar` e não `escrever_carteira`** | O diagnóstico irmão **lê**; este **cadastra canal de dinheiro** no banco. É o inverso exato do argumento que criou a `credencialDeCobranca()` |
+| 8 | **A tela espelha a guarda, com teste anti-deriva** | O `web/` é outro pacote e não alcança `src/`. `SD-14` importa as duas e exige que concordem nos quatro níveis — botão oferecido onde o servidor recusa manda apertar e ler erro; botão escondido onde ele aceitaria deixa o conserto invisível |
+| 9 | **Continua NÃO sendo automático** | A Sicoob desliga porque **o nosso** endpoint falhou. Religar sozinho sem saber o motivo é laço: religa, falha, desliga. O botão põe o gatilho na mão de quem pode olhar antes — e essa parte segue sendo decisão do dono |
+
+### ⚠️ LACUNA NOMEADA — `Q-AUDIT-EXTERNO-01` 🟡, dono: **implementador**
+
+**Religar o aviso não deixa trilha nossa**, e a regra 9 pede *"quem, quando, o
+quê"* para cadastro. O motivo é estrutural e foi medido, não suposto:
+
+- o ato **não escreve nada no nosso banco**, então o gatilho de auditoria — que é
+  quem grava — não tem o que pegar;
+- e a aplicação **não pode** gravar direto: `GRANT SELECT ON auditoria TO
+  app_financeiro`, `GRANT INSERT … TO auditor_financeiro`. Só a função
+  `SECURITY DEFINER` escreve.
+
+**O conserto é uma migration pequena** — uma `SECURITY DEFINER` para atos
+externos (`tabela = 'aviso_de_pagamento_sicoob'`, `operacao`, `usuario_id`,
+`depois = {id, email, url}`) — e ela **não foi feita nesta leva** de propósito:
+inventar um `INSERT` que a policy talvez recuse faria a falha aparecer **dentro**
+do botão que religa o dinheiro, que é o antipadrão que este projeto já nomeou
+(*"diagnóstico que derruba o caminho do dinheiro é pior que a doença"*).
+
+Enquanto isso, o rastro existe **fora** do nosso banco e é conferível:
+`npm run webhook-sicoob -- --solicitacoes --data <dia>` mostra cada tentativa do
+lado da Sicoob, e o nginx registra a validação chegando.
+
+### Medido, e o que não foi
+
+`AG10a`…`AG10i` (a guarda por exaustão nos quatro níveis, e a orquestração com
+porta de mentira: nos dois casos de recusa o banco **não é chamado**, conferido
+por mutação) · `SD-14`/`SD-15` (a tela não diverge do servidor).
+
+⚠️ **NÃO foi exercido contra a Sicoob de verdade**, e não dá: exercer exige um
+webhook **morto**, e o de produção está vivo (id 13407). O caminho de escrita é o
+mesmo `cadastrarWebhook` que registrou esse id em 09/09 — o que é novo é a rota,
+a guarda e o botão.
+
+---
+
 ## 3. F0 — o que falta para fechar
 
 Entregas da F0 conforme `PRD-v2.2` §10:

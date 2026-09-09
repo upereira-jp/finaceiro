@@ -31,8 +31,9 @@ import * as documento from '../repos/documento.ts';
 import * as registro from '../repos/registro-unificado.ts';
 import * as faturaDoRegistro from '../repos/fatura-do-registro.ts';
 import * as leitor from '../concessionaria/leitor-visao.ts';
-import { conferirAvisoDePagamento } from '../cobranca/agenda.ts';
-import { traduzirEvento } from '../sicoob/webhook.ts';
+import { conferirAvisoDePagamento, religarAvisoDePagamento } from '../cobranca/agenda.ts';
+import { traduzirEvento, urlDoWebhook } from '../sicoob/webhook.ts';
+import { tenantCorrente } from '../db/contexto.ts';
 import { calcular, CAMPOS_VAZIOS, PARAMETROS_PADRAO,
   type CamposDaFaturaUnificada, type ParametrosDaEmissao } from '../dominio/fatura-unificada.ts';
 import { comporFolhas, BOLETO_VAZIO, TEXTOS_PADRAO,
@@ -989,6 +990,65 @@ export const ROTAS: Rota[] = [
         });
       }
       return ok({ sem_conector: false, ...await conferirAvisoDePagamento(app.cobranca, c.credencial_ref) });
+    }),
+  },
+  {
+    /*
+     * RELIGAR O AVISO — o botao, e ele fecha a metade que faltava do alerta.
+     *
+     * Desde 09/09/2026 o sistema percebe sozinho quando a Sicoob desliga o aviso
+     * de pagamento. So que a faixa que ele desenha terminava mandando *chamar
+     * alguem*: recadastrar so existia como comando de terminal. Detectar e
+     * mandar chamar e metade.
+     *
+     * ⚠️ `POST` E NAO `PATCH`, e a escolha e do banco e nao nossa: o contrato da
+     * Sicoob tem `PATCH /webhooks/{id}/reativar`, que NUNCA foi exercido contra
+     * producao — nao houve webhook morto para exercer. O caminho aqui e o do
+     * `POST /webhooks`, que ja foi provado em 09/09 (id 13407). Trocar por um
+     * verbo nao medido, na rota que religa o dinheiro, seria apostar.
+     *
+     * A URL NAO VEM DO CORPO. Ela e derivada do tenant corrente por
+     * `urlDoWebhook` — aceita-la de fora deixaria um pedido HTTP mandar o aviso
+     * de pagamento de um tenant para o endereco de outro. O e-mail vem, porque
+     * so a pessoa sabe qual e, e porque `GET /webhooks` NAO o devolve: nao ha de
+     * onde herdar o anterior.
+     *
+     * `administrar` E NAO `escrever_carteira`: o diagnostico irmao le, este
+     * CADASTRA canal de dinheiro no banco. `conectorAtual()` ja exige o papel
+     * certo, e a rota reusa a mesma porta de entrada do resto do cadastro.
+     */
+    metodo: 'POST', padrao: '/conector-cobranca/aviso-pagamento',
+    handler: (req, app) => emTenant(app, req, async () => {
+      const email = String(req.corpo?.email ?? '').trim();
+      if (!email.includes('@')) {
+        return {
+          status: 422,
+          corpo: {
+            erro: 'EmailObrigatorio',
+            mensagem:
+              'Informe o e-mail que a Sicoob avisa quando a entrega falhar. Ele nao e '
+              + 'burocracia: e o unico lugar onde o banco conta que parou de notificar, e sem '
+              + 'alguem lendo esse endereco o aviso de que o dinheiro parou de ser avisado nao '
+              + 'chega a ninguem. Nada foi enviado.',
+          },
+        };
+      }
+
+      const c = await boleto.conectorAtual();
+      if (!c) {
+        return {
+          status: 412,
+          corpo: {
+            erro: 'CobrancaNaoHabilitada',
+            mensagem: 'Nao ha conector de cobranca cadastrado neste tenant. Nada foi enviado.',
+          },
+        };
+      }
+
+      const r = await religarAvisoDePagamento(app.cobranca, c.credencial_ref, {
+        url: urlDoWebhook(tenantCorrente()), email,
+      });
+      return criado(r);
     }),
   },
   {

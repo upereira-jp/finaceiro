@@ -22,7 +22,8 @@
 //      aviso" parece perda de dinheiro.
 
 import { readFileSync } from 'node:fs';
-import { faixasDaSaude, type NivelDoAviso } from '../src/saude-do-dinheiro.ts';
+import { faixasDaSaude, podeReligarNaTela, type NivelDoAviso } from '../src/saude-do-dinheiro.ts';
+import { podeReligarOAviso } from '../../src/dominio/agenda.ts';
 import type { EstadoDoCertificado } from '../src/cobranca-regras.ts';
 
 let falhas = 0;
@@ -162,6 +163,30 @@ function avisos2(): NivelDoAviso[] { return ['inativado', 'ausente', 'nao_verifi
   chk('SD-13', iFaixa > 0 && iTabela > iFaixa,
       'e ela fica ACIMA da tabela das camadas — a pergunta «o dinheiro anda?» e mais alta que '
       + '«o mes fecha?», e quem le de cima para baixo tem de topar com ela primeiro');
+}
+
+// ------------------- SD-14 o botao de religar nao pode divergir do servidor
+{
+  /* A COPIA E DELIBERADA e o risco dela esta prendido aqui. O `web/` e outro
+   * pacote e nao alcanca `src/`, entao `podeReligarNaTela` repete a regra de
+   * `podeReligarOAviso`. Esta linha importa AS DUAS e exige que concordem — o
+   * dia em que o servidor mudar e a tela nao, a suite fica vermelha.
+   *
+   * E o que a divergencia custaria nao e cosmetico: um botao oferecido onde o
+   * servidor recusa manda a pessoa apertar e ler um erro; um botao ESCONDIDO
+   * onde o servidor aceitaria deixa o aviso de pagamento morto na tela, com o
+   * conserto existindo e invisivel. */
+  const niveis: NivelDoAviso[] = ['ativo', 'inativado', 'ausente', 'nao_verificavel'];
+  const divergem = niveis.filter((n) => podeReligarNaTela(n) !== podeReligarOAviso(n).pode);
+
+  chk('SD-14', divergem.length === 0,
+      'o botao de religar aparece exatamente nos niveis em que o servidor deixa religar, nos '
+      + `quatro${divergem.length ? ` (divergem: ${divergem.join(', ')})` : ''} - a tela nao oferece `
+      + 'o que vai ser negado, nem esconde o conserto de quem precisa dele');
+
+  chk('SD-15', podeReligarNaTela(null) === false,
+      'e enquanto a leitura nao voltou o botao NAO aparece: oferecer religar sem saber o estado '
+      + 'e o mesmo `nao_verificavel` que o servidor recusa');
 }
 
 console.log(`\n${falhas === 0 ? 'saude-do-dinheiro: todas as verificacoes passaram'

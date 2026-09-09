@@ -35,7 +35,7 @@ import * as boletos from '../repos/boleto.ts';
 import * as liquidacoes from '../repos/liquidacao.ts';
 import { CobrancaNaoConfigurada, type PortaDeCobranca, type AvisoDePagamento } from '../sicoob/porta.ts';
 import {
-  decidir, nivelDoCertificado, nivelDoAviso, POLITICA,
+  decidir, nivelDoCertificado, nivelDoAviso, podeReligarOAviso, POLITICA,
   type Politica, type NivelDoAviso,
 } from '../dominio/agenda.ts';
 
@@ -503,4 +503,67 @@ export function alertaDoAviso(c: ConferenciaDoAviso): string[] {
         'Isto NAO quer dizer que esta tudo bem - quer dizer que ninguem sabe.',
       ];
   }
+}
+
+// ============================================================================
+// 5. RELIGAR O AVISO DE PAGAMENTO
+// ============================================================================
+
+export class NaoDaParaReligar extends Error {
+  readonly status = 409;
+  constructor(motivo: string) { super(motivo); this.name = 'NaoDaParaReligar'; }
+}
+
+export class AdaptadorNaoReliga extends Error {
+  readonly status = 503;
+  constructor() {
+    super(
+      'Este adaptador de cobranca nao sabe religar o aviso de pagamento. Sem conector Sicoob '
+      + 'configurado nao ha canal para religar, e a fatura continua cobravel por outro meio.'
+    );
+    this.name = 'AdaptadorNaoReliga';
+  }
+}
+
+/**
+ * O BOTAO, e ele fecha a metade que faltava do alerta de 09/09/2026.
+ *
+ * A leva daquele dia fez o sistema PERCEBER sozinho que a Sicoob desligou o
+ * aviso de pagamento - e a faixa que ela desenha termina dizendo *"recadastrar e
+ * trabalho de quem administra o servidor"*. Ou seja: o sistema detectava e
+ * mandava chamar alguem. Metade.
+ *
+ * ⚠️ POR QUE ELE NAO E AUTOMATICO, e a decisao continua sendo do dono. A Sicoob
+ * desliga porque O NOSSO endpoint falhou. Religar sozinho sem saber o motivo e
+ * um laco: religa, falha de novo, desliga de novo - e cada volta cria uma
+ * solicitacao no banco. O botao poe o gatilho na mao de quem pode olhar antes.
+ *
+ * A ORDEM DOS TRES PASSOS E A GUARDA. Ele CONSULTA o banco, decide com
+ * `podeReligarOAviso` e so entao escreve. Perguntar depois nao serviria de nada:
+ * `POST /webhooks` nao tem inverso, e o segundo webhook faz o banco notificar em
+ * dobro o mesmo pagamento.
+ *
+ * ⚠️ ELE ESCREVE NO BANCO DE FORA E NAO DEIXA TRILHA NOSSA, e isso esta
+ * REGISTRADO e nao escondido: nada e gravado no nosso banco, entao o gatilho de
+ * auditoria - que e quem grava, porque `app_financeiro_login` so tem SELECT em
+ * `auditoria` - nao tem o que pegar. Ver `Q-AUDIT-EXTERNO-01`.
+ */
+export async function religarAvisoDePagamento(
+  cobranca: PortaDeCobranca,
+  credencialRef: string,
+  p: { url: string; email: string },
+): Promise<{ id: string; nivelAntes: NivelDoAviso }> {
+  if (typeof cobranca.religarAvisoDePagamento !== 'function') throw new AdaptadorNaoReliga();
+
+  /* A CONSULTA USA `conferirAvisoDePagamento` e nao a porta crua, de proposito:
+   * ela ja traduz falha de rede em `nao_verificavel` em vez de excecao - e
+   * `nao_verificavel` e um dos dois motivos de RECUSA aqui. Chamando a porta
+   * direta, a Sicoob fora do ar viraria erro 500 no botao em vez da frase que
+   * explica por que nao da para agir sem saber. */
+  const antes = await conferirAvisoDePagamento(cobranca, credencialRef);
+  const permissao = podeReligarOAviso(antes.nivel);
+  if (!permissao.pode) throw new NaoDaParaReligar(permissao.motivo);
+
+  const r = await cobranca.religarAvisoDePagamento(credencialRef, p);
+  return { id: r.id, nivelAntes: antes.nivel };
 }
