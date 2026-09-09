@@ -146,14 +146,51 @@ jobs:
         # ELE REPETE O QUE O PRISMA RESPONDEU, e nao o que o operador pediu. A
         # versao anterior imprimia "Migrations aplicadas" sempre que o campo
         # dizia "aplicar" - inclusive quando nada tinha sido aplicado.
+        #
+        # ⚠️ E ELE ESCREVE NO RESUMO DO RUN, e nao so no log, desde 09/09/2026.
+        # O MOTIVO ACONTECEU NAQUELE DIA: um run de CONFERENCIA saiu VERDE, com
+        # `APLICAR` e a conferencia de catalogo `skipped`, e foi lido como
+        # "migration aplicada" - porque na lista do Actions um run que aplicou e
+        # um que so conferiu tem exatamente o mesmo tique verde. O log dizia a
+        # verdade na ultima linha, e ninguem abre o log de um run verde.
+        #
+        # Nao da para pintar de amarelo: o GitHub so tem verde e vermelho, e
+        # FALHAR seria pior - conferir e modo legitimo, e vermelho que mente
+        # custa mais que alarme nenhum (`deploy/README`). O que da e o resumo,
+        # que aparece no ALTO da pagina do run, antes dos jobs.
         run: |
           if [ "${{ inputs.confirmar }}" != "aplicar" ]; then
             echo "Nada foi aplicado — o campo 'confirmar' nao era \"aplicar\"."
             echo "O passo acima mostrou o que esta pendente."
+            {
+              echo "# ⚠️ NADA FOI APLICADO"
+              echo
+              echo "Este run foi de **conferência**: o campo \`confirmar\` veio como"
+              echo "\`${{ inputs.confirmar }}\` e nao como \`aplicar\`, entao os passos **APLICAR** e"
+              echo "**conferir o resultado NO CATALOGO** ficaram \`skipped\`."
+              echo
+              echo "O tique verde deste run quer dizer *\"a conferencia passou\"*, e **nao**"
+              echo "*\"a migration entrou\"*. Para aplicar de verdade, rode outra vez com"
+              echo "\`confirmar = aplicar\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::NADA FOI APLICADO - este run foi de conferencia (confirmar='${{ inputs.confirmar }}'). Rode de novo com confirmar=aplicar."
           elif [ "${{ steps.aplicar.outputs.aplicou }}" = "nada" ]; then
             echo "::warning::O Prisma respondeu \"No pending migrations to apply\" — NENHUMA migration"
             echo "::warning::entrou neste run. O banco ja estava no estado do checkout. Se voce esperava"
             echo "::warning::uma migration nova, ela nao esta no branch que este run clonou."
+            {
+              echo "# ⚠️ NENHUMA MIGRATION ENTROU"
+              echo
+              echo "O campo \`confirmar\` era \`aplicar\`, mas o Prisma respondeu"
+              echo "*No pending migrations to apply* — o banco ja estava no estado deste checkout."
+              echo "Se voce esperava uma migration nova, ela nao esta no branch que este run clonou."
+            } >> "$GITHUB_STEP_SUMMARY"
           else
             echo "Migrations aplicadas. Agora rode o workflow **deploy-financeiro** para o codigo novo subir."
+            {
+              echo "# ✅ MIGRATION APLICADA"
+              echo
+              echo "Conferida **no catalogo** como \`${{ inputs.conferencia }}\` — nao pela mensagem"
+              echo "do comando. Proximo passo: o workflow **deploy-financeiro**, para o codigo novo subir."
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
