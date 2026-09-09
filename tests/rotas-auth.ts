@@ -31,6 +31,7 @@ import {
   verificarOrigem, lerConfig, ipCasa, normalizarIp, ehLoopback,
   type Evidencia, type ConfigDaOrigem,
 } from '../src/http/origem-do-webhook.ts';
+import { IPS_DO_SICOOB, BLOCOS_DECLARADOS, HOSTS_DECLARADOS, linhaDeAmbiente } from '../src/http/ips-do-sicoob.ts';
 import { authUserIdDeServico, uuidV5, ehUuid, NAMESPACE_SERVICO } from '../src/auth/usuario-de-servico.ts';
 
 let falhas = 0;
@@ -203,6 +204,114 @@ chk('IP6', !ipCasa(undefined, '0.0.0.0/0'), 'IP desconhecido nao casa NEM /0 - a
 chk('IP7', !ipCasa('198.51.100.7', '198.51.100.0/33'), 'mascara invalida nao casa nada, em vez de casar tudo');
 chk('IP8', normalizarIp('::FFFF:1.2.3.4') === '1.2.3.4' && ehLoopback('::1'),
     'normalizacao e loopback reconhecem as duas formas');
+
+// ============================================================================
+// 2.b A LISTA REAL DA SICOOB (09/09/2026) - a transcricao contra a mensagem
+// ============================================================================
+//
+// POR QUE ISTO E TESTE E NAO SO UM DOCUMENTO: a lista chegou como texto de
+// WhatsApp, foi transcrita a mao para `src/http/ips-do-sicoob.ts`, e um digito
+// trocado ali nao produz erro - produz notificacao de pagamento recusada com o
+// 404 generico, que e indistinguivel de "a Sicoob nao chamou". Estas
+// verificacoes refazem a aritmetica do banco contra os numeros que ELE
+// imprimiu, e nao contra a nossa propria transcricao.
+
+const inteiroV4 = (ip: string) => ip.split('.').reduce((a, o) => a * 256 + Number(o), 0) >>> 0;
+const textoV4 = (x: number) => [x >>> 24, (x >>> 16) & 255, (x >>> 8) & 255, x & 255].join('.');
+const redeE = (cidr: string) => {
+  const [r, b] = cidr.split('/');
+  const masc = (0xffffffff << (32 - Number(b))) >>> 0;
+  const rede = (inteiroV4(r) & masc) >>> 0;
+  return { rede, fim: (rede | (~masc >>> 0)) >>> 0 };
+};
+
+/* SIC1 e a verificacao central: para cada bloco, a mascara que gravamos tem de
+ * produzir EXATAMENTE o primeiro host, o ultimo host e a contagem que o banco
+ * escreveu. Mascara larga demais, estreita demais ou octeto trocado quebram
+ * pelo menos uma das tres. */
+let transcricaoOk = true;
+let somaDeHosts = 0;
+for (const b of BLOCOS_DECLARADOS) {
+  const { rede, fim } = redeE(b.cidr);
+  somaDeHosts += b.hosts;
+  if (textoV4(rede + 1) !== b.primeiro) transcricaoOk = false;
+  if (textoV4(fim - 1) !== b.ultimo) transcricaoOk = false;
+  if (fim - rede - 1 !== b.hosts) transcricaoOk = false;
+  // e o bloco tem de estar na lista que o ambiente vai receber
+  if (!IPS_DO_SICOOB.includes(b.cidr as (typeof IPS_DO_SICOOB)[number])) transcricaoOk = false;
+}
+chk('SIC1', transcricaoOk,
+    'os 9 blocos: a mascara gravada reproduz o primeiro host, o ultimo host e a contagem que '
+    + 'o Sicoob declarou por escrito em cada um - e todos os 9 estao na lista publicada');
+
+chk('SIC2', somaDeHosts === HOSTS_DECLARADOS && BLOCOS_DECLARADOS.length === IPS_DO_SICOOB.length,
+    `a soma dos hosts da os ${HOSTS_DECLARADOS} do cabecalho da mensagem, e nao ha bloco a mais `
+    + 'nem a menos entre o declarado e o publicado');
+
+/* SIC3 - O ROTULO FORA DA FORMA NORMAL. O banco escreveu `177.53.253.0/23` para
+ * o intervalo 177.53.252.1-177.53.253.254. Normalizamos para `177.53.252.0/23`,
+ * e normalizar e mudar o TEXTO: esta verificacao prova que nao mudou o
+ * CONJUNTO. Se algum dia alguem "consertar" a normalizacao de volta, os dois
+ * lados continuam tendo de aceitar os mesmos enderecos. */
+const foraDaForma = BLOCOS_DECLARADOS.find((b) => b.rotuloRecebido !== b.cidr)!;
+chk('SIC3', foraDaForma !== undefined
+        && ['177.53.252.0', '177.53.252.1', '177.53.253.254', '177.53.253.255']
+             .every((ip) => ipCasa(ip, foraDaForma.cidr) === ipCasa(ip, foraDaForma.rotuloRecebido))
+        && !ipCasa('177.53.251.255', foraDaForma.cidr) && !ipCasa('177.53.254.0', foraDaForma.cidr),
+    'o rotulo recebido `177.53.253.0/23` e a forma normalizada `177.53.252.0/23` aceitam '
+    + 'exatamente os mesmos enderecos: a normalizacao mexeu no texto e nao no conjunto');
+
+/* SIC4 - AS BORDAS DE FORA. Quatro dos blocos sao contiguos (177.53.249.0 ate
+ * 177.53.255.255 sem buraco), entao o vizinho de um bloco costuma ser OUTRO
+ * bloco da lista. Os enderecos abaixo estao fora de TODOS os nove. */
+const listaCasa = (ip: string) => IPS_DO_SICOOB.some((e) => ipCasa(ip, e));
+chk('SIC4', ['177.53.248.255', '177.54.0.0', '187.4.128.127', '187.4.128.192',
+             '187.72.5.127', '187.72.6.0', '189.74.157.191', '189.74.158.0',
+             '200.186.0.95', '200.186.0.128', '201.45.121.79', '201.45.121.96']
+            .every((ip) => !listaCasa(ip)),
+    'o endereco imediatamente antes e imediatamente depois de cada faixa contigua e RECUSADO - '
+    + 'e o que acusa mascara larga demais, que aceitaria vizinho de graca');
+
+chk('SIC5', ['177.53.249.1', '177.53.255.254', '187.4.128.129', '187.72.5.200',
+             '189.74.157.254', '200.186.0.126', '201.45.121.81']
+            .every((ip) => listaCasa(ip)),
+    'enderecos de dentro de blocos diferentes sao aceitos - a lista cobre os 9, e nao so o primeiro');
+
+/*
+ * ⚠️ SIC6 E A ARMADILHA QUE FARIA A LISTA INTEIRA NAO VALER NADA, e ela nao
+ * esta na lista: esta na TOPOLOGIA.
+ *
+ * O `financeiro.service` escuta em 127.0.0.1:3000 e quem fala com a internet e
+ * o nginx. Entao o `remoteAddress` de TODA notificacao da Sicoob e 127.0.0.1, e
+ * o IP real chega no `X-Real-IP` - que o vhost ja repassa desde sempre.
+ * `verificarOrigem` so olha esse cabecalho quando `viaProxy` esta ligado.
+ *
+ * COM `WEBHOOK_IPS` PREENCHIDO E `WEBHOOK_MTLS_VIA_PROXY` AUSENTE, o que e
+ * conferido contra a lista e 127.0.0.1 - que nunca esta nela. Resultado: 100%
+ * das notificacoes recusadas, com o 404 generico, sem erro visivel de nenhum
+ * lado. E o mesmo modo de falha da §9.1 da ADR-0006, com outra causa.
+ *
+ * O nome da variavel diz `MTLS` por historia: ela nasceu para repassar o
+ * resultado do certificado. Com o mTLS morto (§9), o que ela governa hoje e o
+ * IP - e por isso ela deixou de ser opcional nesta topologia.
+ */
+const producao = (ipReal: string, viaProxy: boolean) => verificarOrigem(
+  evidencia({ ip: '127.0.0.1', daLoopback: true, cabecalhoIp: ipReal }),
+  { ips: [...IPS_DO_SICOOB], viaProxy });
+
+chk('SIC6', producao('177.53.252.10', true).verificada && !producao('177.53.252.10', false).verificada,
+    'ATRAS DO NGINX a mesma notificacao legitima PASSA com WEBHOOK_MTLS_VIA_PROXY=1 e RECUSA sem '
+    + 'ele: com a lista certa e a flag ausente, 100% das notificacoes morrem no 404 generico');
+
+chk('SIC7', !producao('203.0.113.9', true).verificada,
+    'e a flag nao afrouxa nada: IP repassado de fora da lista continua RECUSADO');
+
+/* SIC8 - A LINHA QUE O DONO COLA em /etc/financeiro.env e a lista que estas
+ * verificacoes acabaram de conferir. Sem isto, o teste prova a lista do
+ * repositorio e a producao recebe outra coisa. */
+const doAmbiente = lerConfig({ WEBHOOK_IPS: linhaDeAmbiente().replace(/^WEBHOOK_IPS="|"$/g, '') });
+chk('SIC8', JSON.stringify(doAmbiente.ips) === JSON.stringify([...IPS_DO_SICOOB]),
+    'a linha pronta de ambiente atravessa `lerConfig` e volta exatamente a lista verificada acima');
 
 // --- a configuracao
 const cfg = lerConfig({ WEBHOOK_IPS: ' 1.2.3.0/24 , 4.5.6.7 ', WEBHOOK_MTLS_VIA_PROXY: '1', WEBHOOK_MTLS_SUJEITO: ' sicoob ' });

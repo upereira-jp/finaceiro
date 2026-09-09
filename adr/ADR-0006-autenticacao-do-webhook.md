@@ -285,8 +285,80 @@ guarda, é **mudar o que o webhook autoriza**:
 arquitetura deixa de depender de o banco autenticar bem, e passa a depender do banco
 **dizer a verdade quando perguntado** — que é a única coisa que ele garante.
 
-### 9.3 Pendente de terceiro
+### 9.3 ✅ A LISTA CHEGOU — 09/09/2026
 
-**A lista de IPs**, prometida na mesma conversa e ainda não recebida. Sem ela
-`WEBHOOK_IPS` fica vazio e a rota recusa tudo — o que é o comportamento certo, e é
-também o motivo de o webhook continuar desligado até a lista chegar.
+**Recebida do suporte técnico, no mesmo canal:** *"Lista de IPs Expandidos por Bloco
+CIDR — Total de blocos: 9 | Total de IPs: 2078"*, com cada bloco acompanhado do
+primeiro e do último endereço por extenso.
+
+| | |
+|---|---|
+| `177.53.249.0/24` | 177.53.249.1 – 177.53.249.254 · 254 |
+| `177.53.250.0/23` | 177.53.250.1 – 177.53.251.254 · 510 |
+| `177.53.252.0/23` | 177.53.252.1 – 177.53.253.254 · 510 |
+| `177.53.254.0/23` | 177.53.254.1 – 177.53.255.254 · 510 |
+| `187.4.128.128/26` | 187.4.128.129 – 187.4.128.190 · 62 |
+| `187.72.5.128/25` | 187.72.5.129 – 187.72.5.254 · 126 |
+| `189.74.157.192/26` | 189.74.157.193 – 189.74.157.254 · 62 |
+| `200.186.0.96/27` | 200.186.0.97 – 200.186.0.126 · 30 |
+| `201.45.121.80/28` | 201.45.121.81 – 201.45.121.94 · 14 |
+
+**Conferida na chegada, e as três contas fecham:** a soma dos hosts declarados dá os
+2078 do cabeçalho; cada par (primeiro, último) é reproduzido pela máscara declarada; e
+nenhum bloco tem aritmética quebrada. `tests/rotas-auth.ts` (`SIC1`..`SIC8`) refaz essa
+conta a cada suíte, **contra os números que o banco escreveu** e não contra a nossa
+própria transcrição — três classes de erro de digitação foram exercidas por mutação
+(máscara larga, octeto trocado, bloco faltando) e as três quebram.
+
+**Um rótulo veio fora da forma normal, e não é erro do banco:** o terceiro bloco chegou
+escrito `177.53.253.0/23`, com o intervalo `177.53.252.1 - 177.53.253.254`. Um `/23`
+que contém `177.53.253.0` tem rede `177.53.252.0` — o intervalo está certo e o rótulo
+só não estava normalizado. `ipCasa` aplica a máscara antes de comparar e casaria as
+duas formas identicamente; a lista guarda a normalizada, e o `SIC3` prova que
+normalizar mexeu no texto e não no conjunto.
+
+**Onde ela vive, e a fronteira é deliberada:** a lista efetiva é `WEBHOOK_IPS`, variável
+de ambiente, como esta ADR sempre disse. `src/http/ips-do-sicoob.ts` **não a aplica** —
+lá ela é o registro do que o terceiro declarou, para que a configuração possa ser
+conferida contra ele. Se o módulo fosse o default de `WEBHOOK_IPS`, um deploy sem
+configuração passaria a aceitar chamada, que é o default permissivo que a §9.2 proíbe.
+
+### 9.4 ⚠️ A SEGUNDA FORMA DE RECUSAR 100% EM SILÊNCIO, achada ao ligar
+
+A §9.1 nomeou uma: exigir mTLS que a outra ponta não apresenta. **Há uma segunda, e ela
+não está no código — está na topologia.**
+
+O `financeiro.service` escuta em `127.0.0.1:3000`; quem fala com a internet é o nginx.
+Então o `remoteAddress` de **toda** notificação da Sicoob é `127.0.0.1`, e o endereço
+verdadeiro chega no `X-Real-IP`, que o vhost repassa desde sempre. `verificarOrigem` só
+olha esse cabeçalho quando `viaProxy` está ligado.
+
+**Com `WEBHOOK_IPS` preenchido e `WEBHOOK_MTLS_VIA_PROXY` ausente, o que é conferido
+contra a lista é `127.0.0.1`** — que nunca está nela. As nove faixas certas, e 100% das
+notificações recusadas atrás do 404 genérico.
+
+**E o sintoma convida ao conserto errado.** O motivo registrado é
+`IP 127.0.0.1 fora de WEBHOOK_IPS`, que sugere pôr `127.0.0.1` na lista — o que
+entregaria a autorização a qualquer coisa que alcance a porta 3000. O `OR9` já tinha
+previsto essa reação em 08/08; agora ela tem uma faixa real do lado para tornar o erro
+plausível.
+
+**O nome da variável participa do problema.** `WEBHOOK_MTLS_VIA_PROXY` nasceu para
+repassar o resultado do certificado; com o mTLS morto, o que ela governa hoje é o IP.
+Quem ler o nome em 2027 conclui *"não fazemos mTLS, então isto fica desligado"* — e
+desliga o webhook inteiro. O nome **não foi trocado** (troca de nome de variável de
+ambiente é mudança de configuração implantada, e ela ainda não foi implantada em lugar
+nenhum), mas o `.env.example`, o código e esta ADR agora dizem o que ela faz.
+
+**O conserto é conferível, e essa é a parte que importa:** `npm run origem-webhook`
+simula uma notificação vinda de cada um dos nove blocos, na topologia real (socket na
+loopback, IP no `X-Real-IP`), e responde `PASSA` ou `RECUSA` bloco a bloco, com controle
+negativo. Sai `0` só quando aceitaria as nove e recusaria o resto. **Medido contra a
+produção em 09/09/2026: recusaria 9 de 9** — as duas variáveis estão ausentes.
+
+### 9.5 O que falta para LIGAR
+
+Nada de terceiro. **Duas linhas em `/etc/financeiro.env`** (que a sessão não escreve —
+o classificador bloqueia, como no banco e no nginx), e o `origem-webhook` para conferir
+depois. O passo 4 da ordem de ligar do `.env.example` deixou de ser "o primeiro webhook
+do sandbox prova que eles apresentam certificado": não apresentam, e a §9 é isso.

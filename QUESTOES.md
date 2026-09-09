@@ -196,9 +196,9 @@ repartir dinheiro**. Ele registra o aviso e enfileira conferência; quem confirm
 consulta ativa. Um aviso forjado passa a custar uma consulta desnecessária, não uma
 liquidação inventada. Registrado em `adr/ADR-0006` §9.
 
-**Pendente de terceiro:** a lista de IPs, prometida e não recebida. Sem ela
-`WEBHOOK_IPS` fica vazio, a rota recusa tudo, e é por isso que o webhook segue
-desligado.
+**~~Pendente de terceiro: a lista de IPs~~ — CHEGOU em 09/09/2026.** Ver a §2.e: a
+lista foi conferida e o que falta para ligar deixou de ser de terceiro e passou a ser
+duas linhas em `/etc/financeiro.env`.
 
 ### 🔴 → DECIDIDA — `Q-BAIXAOPER-01` fecha na opção (b), e o banco escolheu por nós
 
@@ -259,6 +259,88 @@ foi atualizado e **não roda nesta máquina** (exige PostgreSQL local).
 `D+0`, `D+1` (padrão) ou `D+2`, ajustável no contrato de cobrança junto à cooperativa.
 É **fluxo de caixa**, não engenharia: muda quando o dinheiro fica disponível e, com a
 decisão acima, quando o repasse ao dono da usina pode ser executado.
+
+---
+
+## 2.e Respostas do Sicoob em 09/09/2026 — a lista de IPs chegou, e o endereço do endpoint também
+
+> **As duas eram consequência da rodada de 08/09, não perguntas novas.** Voltaram pelo
+> mesmo canal do suporte técnico. Uma fecha; a outra anda e não fecha.
+
+### ✅ FECHA — a faixa de IP do webhook
+
+*"Lista de IPs Expandidos por Bloco CIDR — Total de blocos: 9 | Total de IPs: 2078"*,
+cada bloco com o primeiro e o último endereço por extenso. **Conferida na chegada e as
+três contas fecham** — soma dos hosts = 2078, cada par (primeiro, último) reproduzido
+pela máscara, nenhum bloco com aritmética quebrada. A lista, a procedência e o rótulo
+que veio fora da forma normal estão em `adr/ADR-0006` §9.3.
+
+**Com isso a `ADR-0006` não tem mais pendência de terceiro.** O que falta para ligar o
+webhook são **duas linhas em `/etc/financeiro.env`** — e a segunda é a descoberta desta
+rodada.
+
+### ⚠️ ACHADO AO LIGAR — a lista certa e o webhook recusando 100%
+
+`verificarOrigem` confere o IP do socket, salvo quando `viaProxy` está ligado. O
+`financeiro.service` escuta em `127.0.0.1:3000` atrás do nginx: **o IP do socket é
+sempre `127.0.0.1`**, e o verdadeiro chega no `X-Real-IP` que o vhost já repassa.
+
+Com `WEBHOOK_IPS` preenchido e `WEBHOOK_MTLS_VIA_PROXY` ausente, o que é conferido
+contra as nove faixas é `127.0.0.1` — **100% das notificações recusadas, atrás do 404
+genérico, sem erro visível de nenhum lado**. É o modo de falha da `ADR-0006` §9.1 com
+outra causa, e o `OR9` já tinha previsto que o sintoma (`IP 127.0.0.1 fora de
+WEBHOOK_IPS`) convida a pôr `127.0.0.1` na lista, que é o conserto errado.
+
+**Medido contra a produção em 09/09: as duas variáveis estão ausentes, recusaria 9 de
+9.** Registrado em `adr/ADR-0006` §9.4.
+
+### ✅ CONSTRUÍDO — a conferência, porque o 404 genérico não deixa ninguém descobrir
+
+`npm run origem-webhook` simula uma notificação vinda de cada um dos nove blocos, **na
+topologia real** (socket na loopback, IP no `X-Real-IP`), e responde `PASSA`/`RECUSA`
+bloco a bloco, com controle negativo e código de saída. `--ips "..."` confere a linha
+**antes** de ela existir em arquivo nenhum; sem argumento, confere o que a produção tem.
+Ele não abre banco, não abre rede e não imprime segredo.
+
+`src/http/ips-do-sicoob.ts` guarda o que o banco declarou — **e não autoriza nada**: a
+lista efetiva continua sendo `WEBHOOK_IPS`, porque um módulo que virasse o default faria
+um deploy sem configuração passar a aceitar chamada. `tests/rotas-auth.ts` ganhou
+`SIC1`..`SIC8`, que refazem a aritmética **contra os números que o banco escreveu**;
+três classes de erro de transcrição foram exercidas por mutação (máscara larga, octeto
+trocado, bloco faltando) e as três quebram a suíte.
+
+Suíte sem banco: `EXIT=0`, **2.619** verificações (eram 2.602).
+
+### 🟡 ANDA E NÃO FECHA — o endpoint de movimentação
+
+| Perguntado | Respondido |
+|---|---|
+| Caminho e método de cada passo | *"O endpoint é o `POST /boletos/movimentacoes`"* · *"Primeiro você solicita uma movimentação e depois você consulta ela pelo `GET /boletos/movimentacoes`"* |
+| Dá para pedir só os títulos de um dia? | *"É possível filtrar pelos dias que você deseja"* |
+| Qual escopo a aplicação precisa | **sem resposta** |
+| Formato do retorno (arquivo compactado em base64?) | **sem resposta** |
+
+**O que isso confirma, e é a parte de arquitetura:** o endpoint é **assíncrono em dois
+tempos** — solicita, depois busca. Não é um `GET` que devolve a movimentação do dia. A
+conciliação diária que fosse usá-lo precisa de **duas passagens**, não de uma chamada,
+e isso muda a forma do cliente futuro: ele tem estado (uma solicitação pendente entre as
+duas passagens), e não é uma função pura de leitura.
+
+**O cliente continua não escrito, e a decisão de 08/09 não mudou de razão.** Chegaram o
+caminho e o método; faltam **o corpo da solicitação, o escopo e o formato do retorno**.
+Montar um `POST` com corpo adivinhado é exatamente o improviso da regra 10, e ele ficaria
+no caminho do dinheiro.
+
+**Uma tentativa de fechar o contrato sem o suporte falhou, e o registro poupa a próxima:**
+a coleção Postman pública da Cobrança v3
+(`documenter.getpostman.com/view/20565799/2sA3QqfsDi`) **é SPA e devolve só o título por
+`WebFetch`**, igual às páginas do portal. Não há caminho de leitura automática daqui.
+
+**Nada disso trava hoje:** a confirmação da liquidação não depende desse endpoint — a
+consulta ativa lê `situacaoBoleto` no `GET /boletos`, e `liquidado` é a confirmação que o
+split espera. O que ele acrescenta são o **valor e a data** da liquidação
+(`Q-LIQUIDACAO-CONSULTA-01`) e uma chamada por dia em vez de uma por título. As três
+perguntas que faltam estão em `PROMPT-suporte-sicoob-2026-09-08.md` §4.
 
 ---
 
@@ -507,7 +589,7 @@ Entregas da F0 conforme `PRD-v2.2` §10:
 | ~~**Q-EMISSAO-01**~~ | — | **✅ FECHADA em 28/08/2026 POR FONTE PRIMÁRIA, e sem uma linha de código mudar.** A coleção Postman oficial da Cobrança v3 enumera os dois campos: emissão `1 - Banco Emite` / `2 - Cliente Emite`; distribuição `1 - Banco Distribui` / `2 - Cliente Distribui`. O `2` e `2` que o adaptador já mandava desde 27/08 é o par certo — nós emitimos o documento e nós o entregamos, e pedir ao banco que emitisse produziria dois papéis para a mesma dívida. O `SUPOSICAO:` saiu do código. Corpo original abaixo. **27/08/2026 — `identificacaoEmissaoBoleto` e `identificacaoDistribuicaoBoleto` MOVEM DINHEIRO, e os códigos vieram de documentação, não de resposta recebida.** O adaptador manda `2` e `2` — "cliente emite" e "cliente distribui". **A escolha em si não é chute:** o documento que o cliente recebe é nosso (`layout-do-documento.ts`), a conferência dos 44 dígitos recusa o que não fecha, e a entrega é pelo nosso canal — pedir que o banco emita produziria **dois documentos para a mesma dívida**, e o banco cobra pela impressão e postagem de cada um. **O que não está medido é se `2` é mesmo esse valor.** Confirmar com a cooperativa junto dos três campos de identidade, antes do primeiro boleto real | Vinicius + cooperativa |
 | **Q-ESPECIE-01** | 🟡 | **28/08/2026 — DEIXOU DE SER SUPOSIÇÃO E VIROU ESCOLHA, porque a lista apareceu.** A coleção Postman traz as 26 espécies aceitas, e **`FAT - Fatura` está entre elas**, ao lado de `DM - Duplicata Mercantil`. O documento que a G3 emite é uma **fatura** de energia, não uma duplicata mercantil — que é título de venda de mercadoria. `DM` é o que o exemplo do banco usa e o que o adaptador manda hoje; `FAT` é o que o papel é. **A diferença é fiscal e cartorial, não técnica**: a espécie viaja no registro do título e importa em protesto. **Decidir com o contador**, junto das quatro vermelhas da F0 — e trocar depois do primeiro boleto emitido significa dois títulos com espécies diferentes na mesma carteira. Corpo original abaixo. **27/08/2026 — `codigoEspecieDocumento` está em `DM` (duplicata mercantil), que é o do exemplo da documentação.** Energia por assinatura pode ser `DS` (duplicata de serviço). Não muda o valor cobrado; muda o que o título é juridicamente, e portanto o que se pode protestar. A G3 não protesta ninguém hoje, então o risco é baixo e não é zero. **Perguntar à cooperativa**  **28/08 — a lista está FECHADA e medida** (modelo `Boleto`, `codigoEspecieDocumento`, máx. 3 caracteres): `CH DM DMI DS DSI DR LC NCC NCE NCI NCR NP NPR TM TS NS RC` **`FAT`** `ND AP ME PC NF DD BDP OU`. Mandamos **`DM - Duplicata Mercantil`**; o papel da G3 é fatura de energia e a lista tem **`FAT - Fatura`**. Não há mais o que medir — é escolha fiscal do contador, e trocar depois do primeiro boleto deixa a carteira com duas espécies. | Vinicius + cooperativa |
 | **Q-SEUNUMERO-01** | 🟢 | **27/08/2026 — O `seuNumero` sobe truncado em 20 caracteres porque o limite do campo não está medido.** A referência da porta é o `boleto.id`, um UUID de 36; campo "uso da empresa" em padrão bancário costuma ter menos. **Não é chave de conciliação** — essa é `nossoNumero` + `boleto.id` —, é o que aparece no extrato para olho humano. 20 hex são 80 bits: colisão dentro de um tenant não é risco real. **Medir na primeira emissão** e, se couber, mandar o UUID inteiro | implementador, na 1ª emissão |
-| **Q-LIQUIDACAO-CONSULTA-01** | 🟡 | **27/08/2026 — A consulta ativa detecta a liquidação e NÃO sabe de quanto foi.** Medido no sandbox: o `GET /boletos` devolve `situacaoBoleto` mas **não** devolve valor liquidado, data de liquidação nem id de evento. Traz `valorMulta` e `valorJurosMora`, que são o **configurado** no título e não o pago — preenchê-los seria afirmar juros que talvez não tenham corrido. Então os quatro campos voltam vazios, e isso **não quebra nada**: quem baixa é `repos/liquidacao.ts` pelo webhook, e a consulta ativa do `PRD` §6 existe para *detectar* liquidação cujo webhook falhou. **O que falta:** medir, na primeira liquidação real, se há outro endpoint (`listaHistorico`? movimentação?) que traga o valor pago — senão uma liquidação cujo webhook falhou fica detectada e não baixada | implementador, na 1ª liquidação |
+| **Q-LIQUIDACAO-CONSULTA-01** | 🟡 | **27/08/2026 — A consulta ativa detecta a liquidação e NÃO sabe de quanto foi.** Medido no sandbox: o `GET /boletos` devolve `situacaoBoleto` mas **não** devolve valor liquidado, data de liquidação nem id de evento. Traz `valorMulta` e `valorJurosMora`, que são o **configurado** no título e não o pago — preenchê-los seria afirmar juros que talvez não tenham corrido. Então os quatro campos voltam vazios, e isso **não quebra nada**: quem baixa é `repos/liquidacao.ts` pelo webhook, e a consulta ativa do `PRD` §6 existe para *detectar* liquidação cujo webhook falhou. **09/09/2026 — o endpoint TEM nome, e é o de movimentação:** o suporte respondeu `POST /boletos/movimentacoes` para solicitar e `GET /boletos/movimentacoes` para consultar, filtrável por dias (§2.e). **Deixou de ser «existe algum?» e virou «falta o contrato dele»** — corpo da solicitação, escopo e formato do retorno seguem sem resposta, e sem eles o cliente não se escreve (regra 10). Enquanto isso, uma liquidação cujo webhook falhou fica detectada e não baixada, e sai como divergência para baixa manual | implementador, na 1ª liquidação |
 
 ## 6. F3 — split e comissão
 

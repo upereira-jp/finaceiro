@@ -6,7 +6,7 @@
 | **O que é** | O **índice único** das pendências. Consolida e substitui os dois trackers datados que existiam soltos |
 | **Substitui e apaga** | `PENDENCIAS-2026-08-05.md` e `PROXIMOS-PASSOS-2026-08-09.md` — vencidos, e agora removidos do repo |
 | **NÃO substitui** | `QUESTOES.md` (registro datado, dono por entrada — regra 10) · `RETOMADA-2026-08-30.md` (onde tudo parou — a mais nova) · os `RESUMO-SESSAO-*` (memória datada). Estes continuam sendo a fonte; aqui é o **apontador** |
-| **Data** | 14/08/2026 · rev. 17/08 · rev. 19/08 · rev. 21/08 · rev. 27/08 · rev. 28/08 · rev. **08/09/2026** |
+| **Data** | 14/08/2026 · rev. 17/08 · rev. 19/08 · rev. 21/08 · rev. 27/08 · rev. 28/08 · rev. 08/09 · rev. **09/09/2026** |
 | ⚠️ **Leia primeiro** | Este arquivo ficou **congelado entre 28/08 e 08/09** enquanto a operação andava, e a `RETOMADA-2026-09-08` continuou mandando o leitor para cá como *"o índice único"*. O bloco **«O que mudou desde 28/08»**, logo abaixo do cabeçalho, é a correção — o corpo antigo fica intacto porque é registro datado, e reescrevê-lo falsificaria a história (mesma decisão do `PATCH-citacoes-2026-07-24`) |
 | **Estado da suíte** | Sem banco: `typecheck` + `documento` + `brcode` + `dominio` + `web` → **`EXIT=0`, 2.420 linhas `ok`** (28/08, madrugada), e desde 27/08 com as verificações de `tests/sicoob-http.ts` — hoje **63** — dentro do `test:dominio`. Fora da suíte, contra a Sicoob de verdade: `npm run ensaio-sicoob` → **6 de 6**. `test:repos` e `test:isolamento` **não rodam nesta VPS** (exigem PostgreSQL local) |
 | **Produção** | `financeiro.blackhaus.io` · **35 migrations no ar** (a 34 em 21/08, a **35 em 28/08**) · a **36 escrita e NÃO aplicada** · Pix estático e boleto importado no ar · central de ajuda em toda tela · **a conta unificada lida já vira cobrança** (migration 34) · o conector roda sozinho a cada 15 min pelo `financeiro-ciclo.timer`, e desde **28/08** a agenda de cobrança roda sozinha em três timers (`fila` 5 min · `consulta` e `certificado` diárias) |
@@ -24,6 +24,8 @@
 > | Item 7: endereço, *"só o boleto depende"*, **0 de 29** | 02/09 e 08/09 | **18 das 29 têm endereço completo.** E ele deixou de ser aviso: desde 28/08 a emissão **RECUSA** com `PagadorSemEndereco` (422), e desde 08/09 a prontidão mede isso na camada `endereco_do_pagador`, com o efeito `bloqueia_boleto` |
 > | Item 8: *"**Uma por vez** — se vale um caminho em lote é a `Q-CONTA-LOTE-01`, aberta"* | 08/09 | **O lote existe.** A aba «1 · Leitura e cálculo» aceita N arquivos de uma vez, com fila de conferência. A `Q-CONTA-LOTE-01` foi decidida — ver `QUESTOES.md` §2.b |
 > | Item 2: *"preencha o DIA do mês"* | 07/09 | O dia que se digita é o **da DISTRIBUIDORA**. O nosso boleto vence **três dias antes**, e quem subtrai é o código. Digitar um dia já adiantado faz a conta ser feita duas vezes |
+> | Bloco de 28/08: *"o que falta do `ADR-0006` (...) a faixa de IP que só o Sicoob informa"* | 09/09 | **A lista CHEGOU** — 9 blocos, 2078 hosts, conferida na chegada (`ADR-0006` §9.3). E a mesma leitura achou que a lista **sozinha não liga o webhook**: atrás do nginx o IP do socket é sempre `127.0.0.1`, então sem `WEBHOOK_MTLS_VIA_PROXY=1` as nove faixas certas recusam 100% em silêncio (§9.4). Confere-se com `npm run origem-webhook`; a produção hoje **recusaria 9 de 9** |
+> | Bloco de 28/08: a Decisão 1 é *"mTLS + faixa de IP"* | 08/09 | **O mTLS caiu** — a Sicoob não apresenta certificado no envio, nem cabeçalho, nem assinatura. A faixa de IP ficou sozinha, e o que compensa é o webhook ter deixado de repartir dinheiro. `ADR-0006` §9 |
 >
 > **E o que este arquivo nunca disse, porque o caminho da fatura não passava por
 > aqui:** o que trava a primeira fatura hoje **não é endereço nem contrato** — é a
@@ -31,7 +33,7 @@
 > competência**. O endereço trava o boleto, que é dois passos adiante. Ver
 > `RETOMADA-2026-09-08.md` §3.
 >
-> **A suíte hoje:** `EXIT=0`, **2.589** verificações sem banco (eram 2.420 aqui).
+> **A suíte hoje:** `EXIT=0`, **2.619** verificações sem banco (eram 2.420 aqui).
 
 > ## A única pendência do repositório é o certificado A1.
 >

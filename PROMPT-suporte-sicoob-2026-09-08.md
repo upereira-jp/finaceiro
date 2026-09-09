@@ -72,6 +72,16 @@ Obrigado!
 
 ## 3. RESPONDIDO em 08/09/2026 — e as duas perguntas de retorno
 
+> ### ✅ AS DUAS FORAM RESPONDIDAS EM 09/09/2026. Uma fechou, a outra andou.
+> **A (1), a lista de IPs, CHEGOU e está fechada** — 9 blocos, 2078 hosts, conferida na
+> chegada e gravada em `adr/ADR-0006` §9.3. Não há mais pendência de terceiro na ADR.
+> **A (2), o endpoint de movimentação, veio pela metade:** vieram o caminho e o método
+> (`POST` para solicitar, `GET` para consultar) e o filtro por dias; **não vieram o
+> escopo nem o formato do retorno**. O que falta virou a §4 desta mesma folha.
+>
+> As respostas estão em `QUESTOES.md` §2.e. **A mensagem abaixo já foi enviada** — fica
+> como registro do que se perguntou.
+
 O suporte respondeu **no mesmo dia**, e as respostas estão em `QUESTOES.md` §2.d e
 `adr/ADR-0006` §9. Ficaram **duas coisas para a próxima mensagem no mesmo canal** —
 as duas são consequência direta do que ele respondeu, não perguntas novas.
@@ -107,3 +117,39 @@ O que o endpoint de movimentação acrescenta são duas coisas medidas:
 **Enquanto o contrato do endpoint não chegar, o cliente dele não é escrito** — inventar
 caminho e formato para depois "ajustar" é o improviso que a regra 10 proíbe, e neste
 caso o improviso ficaria no caminho do dinheiro.
+
+---
+
+## 4. A TERCEIRA MENSAGEM — o que faltou do endpoint de movimentação (09/09/2026)
+
+| Campo | Valor |
+|---|---|
+| **Para quem** | o mesmo canal do suporte técnico que respondeu 08/09 e 09/09 |
+| **O que ela fecha** | o contrato do `/boletos/movimentacoes`, que é o que falta para o cliente ser escrito sem improviso |
+| **Urgência** | **baixa, e é importante dizer por quê**: a confirmação da liquidação já funciona sem ele (a consulta ativa lê `situacaoBoleto`). Ele acrescenta valor e data da liquidação, e uma chamada por dia em vez de uma por título |
+
+### A mensagem — copiar daqui
+
+Olá! Obrigado pela lista de IPs e pelo caminho do endpoint de movimentação — já configuramos os dois lados aqui.
+
+Sobre o `/boletos/movimentacoes`, entendi o fluxo em dois passos (solicita no POST, consulta no GET) e o filtro por período. Faltaram três detalhes para eu implementar sem chutar:
+
+**1)** Qual é o **escopo** que a aplicação precisa ter para acessar esses dois endpoints? O nosso hoje tem `boletos_consulta`, `boletos_inclusao`, `boletos_alteracao` e a família `webhooks_*`. Se for um escopo novo, preciso pedir a habilitação antes.
+
+**2)** Qual é o **corpo da solicitação** no POST? Um exemplo de requisição e de resposta já resolve — principalmente os nomes dos campos de período e o identificador que o GET usa depois para buscar o resultado.
+
+**3)** Qual é o **formato do retorno** do GET? Vi menção a arquivo compactado em base64 em outra documentação de vocês; é isso mesmo, ou vem JSON direto? E o retorno traz o **valor e a data efetivos da liquidação** de cada título? É esse o dado que estamos buscando: o `GET /boletos` devolve a situação (`liquidado`), mas não o valor pago nem a data.
+
+Obrigado!
+
+### Notas internas — NÃO mandar
+
+- **A (3) é a pergunta que justifica o endpoint.** Se o retorno não trouxer valor e data
+  efetivos, o endpoint deixa de valer a pena: a consulta ativa já detecta `liquidado`
+  sozinha, e o ganho seria só "uma chamada por dia". Vale perguntar antes de construir.
+- **A (2) existe porque o fluxo é assíncrono**, e isso mudou a forma do cliente futuro:
+  ele tem estado entre as duas passagens, e não é uma função pura de leitura.
+- **Não tentar fechar isto por documentação pública.** Medido em 09/09: a coleção Postman
+  da Cobrança v3 (`documenter.getpostman.com/view/20565799/2sA3QqfsDi`) é SPA e devolve
+  só o título, igual às páginas do portal. O canal do suporte é o único caminho.
+- **Nada aqui bloqueia o primeiro boleto nem a primeira liquidação.**
