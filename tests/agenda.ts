@@ -384,6 +384,109 @@ const fonteAgenda = readFileSync(new URL('../src/cobranca/agenda.ts', import.met
       + 'reencontraria a mesma liquidacao para sempre');
 }
 
+// ============================================================================
+// AG8 — O AVISO DE PAGAMENTO. `nivelDoAviso` e o que se imprime a partir dele.
+//
+// O QUE ESTAS VERIFICACOES AFIRMAM, e por que nao sao a tabela de novo.
+//
+// Um teste com quatro linhas - null, [], [morto], [vivo] - passaria com uma
+// funcao que devolvesse qualquer coisa, desde que eu copiasse a saida. O que
+// importa aqui sao tres propriedades, e as tres tem consequencia em dinheiro:
+//
+//   nao colapsar   `ausente`, `nao_verificavel` e `ativo` sao estados
+//                  diferentes do mundo, e o unico erro caro e responder `ativo`
+//                  para qualquer um dos outros dois - seria o sistema garantindo
+//                  que o banco avisa quando ninguem perguntou
+//   contaminar     um inativo na lista basta, seja qual for o tamanho dela. E
+//                  verificado por EXAUSTAO sobre todas as combinacoes ate 5
+//                  elementos (63 listas), e nao por exemplo escolhido
+//   nao silenciar  todo nivel que nao seja `ativo` produz texto. Nivel novo sem
+//                  frase e alerta que nao alerta
+
+import { nivelDoAviso } from '../src/dominio/agenda.ts';
+import { conferirAvisoDePagamento, alertaDoAviso } from '../src/cobranca/agenda.ts';
+
+const vivo = { inativado_em: null };
+const morto = { inativado_em: '2026-09-20T10:00:00' };
+
+// ---------------------------------------------------- AG8a os tres "nao sei" nao viram "ok"
+chk('AG8a', nivelDoAviso(null) === 'nao_verificavel' && nivelDoAviso(undefined) === 'nao_verificavel',
+    'nao ter perguntado devolve `nao_verificavel`, e nao `ativo` - a mesma distincao do '
+    + '`sem_certificado` do vizinho: o sistema nao afirma o que nao sabe');
+
+chk('AG8b', nivelDoAviso([]) === 'ausente',
+    'lista vazia e `ausente` e nao `inativado` - nunca ter cadastrado e ter sido DESLIGADO pelo '
+    + 'banco pedem a mesma acao e contam historias opostas sobre o que aconteceu');
+
+chk('AG8c', nivelDoAviso([vivo]) === 'ativo' && nivelDoAviso([morto]) === 'inativado',
+    'o carimbo de inativacao e o que decide, e so ele');
+
+// ---------------------------------------------------- AG8d contaminacao, por exaustao
+{
+  let erradas = 0, listas = 0;
+  for (let n = 1; n <= 5; n++) {
+    for (let mascara = 0; mascara < (1 << n); mascara++) {
+      const lista = Array.from({ length: n }, (_, i) => ((mascara >> i) & 1 ? morto : vivo));
+      const temMorto = lista.some((a) => a.inativado_em !== null);
+      const nivel = nivelDoAviso(lista);
+      listas++;
+      if (nivel !== (temMorto ? 'inativado' : 'ativo')) erradas++;
+    }
+  }
+  chk('AG8d', erradas === 0 && listas === 62,
+      `todas as ${listas} listas de 1 a 5 avisos: UM inativo basta para o nivel ser `
+      + '`inativado`. Com dois cadastrados e um desligado nao da para saber qual o banco usaria, '
+      + 'e a resposta otimista seria aposta sobre dinheiro');
+}
+
+// ---------------------------------------------------- AG8e nenhum nivel fica calado, exceto o bom
+{
+  const niveis = ['ativo', 'inativado', 'ausente', 'nao_verificavel'] as const;
+  const linhas = niveis.map((nivel) => alertaDoAviso({
+    nivel, avisos: nivel === 'inativado' ? [{ id: '1', url: null, inativado_em: 'x', motivo_da_inativacao: null }] : [],
+    motivo: nivel === 'nao_verificavel' ? 'a rede caiu' : null,
+  }));
+  chk('AG8e', linhas[0]!.length === 0 && linhas.slice(1).every((l) => l.length > 0),
+      '`ativo` nao imprime nada e os outros TRES imprimem - inclusive `nao_verificavel`, que e o '
+      + 'que separa "olhei e esta bem" de "nao olhei"');
+
+  chk('AG8f', linhas[3]!.join(' ').toLowerCase().includes('nao quer dizer que esta tudo bem'),
+      'o texto de `nao_verificavel` DIZ que nao e garantia - a linha existe porque quem le um '
+      + 'diagnostico sem alarme conclui que passou');
+
+  chk('AG8g', linhas[1]!.some((l) => l.includes('consulta ativa')),
+      'o alerta de desligado nomeia a consulta ativa: o dinheiro nao se perde, ele ATRASA ate a '
+      + 'rodada diaria - sem isso o alerta parece perda de dinheiro e vira panico');
+}
+
+// ---------------------------------------------------- AG8h o diagnostico nao pode derrubar a rodada
+{
+  const portaSemAviso = { async registrar() { throw 0; }, async consultar() { throw 0; }, async baixar() {} } as any;
+  const portaQueExplode = {
+    ...portaSemAviso,
+    async avisoDePagamento() { throw Object.assign(new Error('ECONNRESET'), { status: 502 }); },
+  } as any;
+
+  const semSuporte = await conferirAvisoDePagamento(portaSemAviso, 'ref');
+  const comFalha = await conferirAvisoDePagamento(portaQueExplode, 'ref');
+
+  chk('AG8h', semSuporte.nivel === 'nao_verificavel' && comFalha.nivel === 'nao_verificavel',
+      'adaptador que nao sabe perguntar e Sicoob fora do ar dao os DOIS em `nao_verificavel`, sem '
+      + 'lancar: um diagnostico que derruba a fila de emissao e pior que a doenca que diagnostica');
+
+  chk('AG8i', semSuporte.motivo !== null && comFalha.motivo !== null
+              && comFalha.motivo!.includes('ECONNRESET'),
+      'e o motivo vem SEMPRE preenchido, com a mensagem original dentro - "nao sei" sem motivo e '
+      + 'indistinguivel de "esqueci de olhar"');
+
+  let vazou: unknown = null;
+  const portaComBug = { ...portaSemAviso, async avisoDePagamento() { throw new TypeError('bug meu'); } } as any;
+  try { await conferirAvisoDePagamento(portaComBug, 'ref'); } catch (e) { vazou = e; }
+  chk('AG8j', vazou instanceof TypeError,
+      'TypeError e RangeError PASSAM por cima do catch, como no laco da rodada: defeito de '
+      + 'programacao virando "nao verificavel" e o bug se escondendo atras do proprio diagnostico');
+}
+
 console.log(`\n${falhas === 0 ? 'agenda (puro): todas as verificacoes passaram'
                               : `agenda (puro): ${falhas} FALHA(S)`}`);
 process.exit(falhas === 0 ? 0 : 1);

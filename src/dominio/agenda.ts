@@ -228,3 +228,51 @@ export function nivelDoCertificado(dias: number | null, p: Politica = POLITICA):
   if (dias <= p.diasDeAvisoDoCertificado) return 'vence_em_breve';
   return 'ok';
 }
+
+// ====================================================== o aviso de pagamento
+
+export type NivelDoAviso =
+  | 'ativo'           // ha aviso e o banco nao o desligou
+  | 'inativado'       // o banco DESLIGOU. Nenhum pagamento e avisado
+  | 'ausente'         // o banco respondeu, e nao ha aviso nenhum cadastrado
+  | 'nao_verificavel'; // ninguem perguntou, ou o adaptador nao sabe perguntar
+
+/**
+ * O IRMAO DE `nivelDoCertificado`, e existe pelo mesmo motivo dele.
+ *
+ * A Sicoob INATIVA o webhook quando a entrega falha - o modelo do `GET /webhooks`
+ * traz `dataHoraInativacao` e `descricaoMotivoInativacao`, e o exemplo do proprio
+ * banco preenche o segundo com "Erro ao enviar notificacao". Isso foi descoberto
+ * em 09/09/2026, ao ler o contrato, e nao estava no projeto.
+ *
+ * POR QUE ELE PRECISA EXISTIR: um aviso desligado e SILENCIOSO do nosso lado. Nao
+ * chega erro, nao chega nada - e "nenhuma notificacao" e indistinguivel de
+ * "ninguem pagou". E o mesmo formato de dano do A1 vencido ("a emissao para sem
+ * erro obvio"), uma camada adiante: aqui o dinheiro ENTRA na conta e o sistema
+ * nunca fica sabendo.
+ *
+ * As quatro respostas sao quatro estados do mundo e nenhuma delas colapsa nas
+ * outras:
+ *
+ *   `ausente` NAO e `inativado`. Nunca ter cadastrado e o estado de quem ainda
+ *   nao ligou; ser desligado pelo banco e o estado de quem ligou e perdeu. As
+ *   duas pedem a mesma acao e contam historias opostas sobre o que aconteceu.
+ *
+ *   `nao_verificavel` NAO e `ativo`, e esta e a distincao que o
+ *   `sem_certificado` do vizinho ja ensinou: nao ter perguntado nao autoriza
+ *   ninguem a dizer que esta bem. Um adaptador sem `avisoDePagamento` - o falso,
+ *   o nao-configurado - responde isto, e nao silencio.
+ *
+ * UM SO INATIVO CONTAMINA A LISTA. Se ha dois avisos do mesmo tipo e um esta
+ * desligado, o nivel e `inativado`: nao da para saber qual dos dois o banco
+ * usaria, e a resposta otimista seria uma aposta sobre dinheiro.
+ */
+export function nivelDoAviso(avisos: readonly Aviso[] | null | undefined): NivelDoAviso {
+  if (avisos == null) return 'nao_verificavel';
+  if (avisos.length === 0) return 'ausente';
+  return avisos.some((a) => a.inativado_em != null) ? 'inativado' : 'ativo';
+}
+
+/** So o que o nivel le. Estrutural de proposito: o dominio nao importa a porta,
+ *  e um tipo com um campo nao merece uma dependencia de modulo. */
+type Aviso = { inativado_em: string | null };

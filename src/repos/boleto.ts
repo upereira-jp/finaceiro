@@ -207,6 +207,36 @@ export async function conectorAtual() {
   };
 }
 
+/**
+ * SO A REFERENCIA, e so para quem ja pode agir na carteira.
+ *
+ * POR QUE ELA EXISTE SEPARADA DE `conectorAtual`, e a razao apareceu medindo e
+ * nao pensando: o usuario de servico do webhook tem papel `cobranca` - o MINIMO
+ * que faz `escrever_carteira` passar, escolhido de proposito para que a
+ * notificacao nao ganhe escrita de cadastro. E `conectorAtual` exige
+ * `administrar`. O resultado era um absurdo silencioso: **o usuario que RECEBE o
+ * aviso de pagamento nao podia perguntar se o aviso ainda existe.**
+ *
+ * A saida NAO foi subir o papel dele. Foi dar ao diagnostico a permissao certa,
+ * e ela e `escrever_carteira` pelo argumento da autoridade: quem ja pode
+ * registrar e baixar titulo NAQUELE banco pode perguntar aquele mesmo banco se o
+ * canal de aviso esta vivo. E estritamente MENOS do que ele ja faz, com a mesma
+ * contraparte.
+ *
+ * `ler` seria largo demais - daria a referencia ao papel `leitura`, que nao tem
+ * nada que fazer com ela. `administrar` e o que ja se mostrou estreito demais.
+ *
+ * DEVOLVE DOIS CAMPOS E NAO TREZE: `conectorAtual` traz agencia, conta e numero
+ * do cooperado, que sao dado corporativo e nao tem por que atravessar um
+ * diagnostico de webhook. `credencial_ref` nao e segredo (regra 5) - e a
+ * referencia opaca que existe para o segredo nao viajar.
+ */
+export async function credencialDeCobranca() {
+  await exigir('escrever_carteira');
+  const l = await dbt().conector_cobranca.findFirst({ where: { tenant_id: tenantCorrente() } });
+  return l ? { credencial_ref: l.credencial_ref, ativo: l.ativo } : null;
+}
+
 export async function cadastrarConector(e: {
   credencial_ref: string;
   numero_contrato?: string | null;

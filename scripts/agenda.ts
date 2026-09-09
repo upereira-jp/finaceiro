@@ -5,6 +5,7 @@
 //   npm run agenda -- --fila     --valendo --auth-user <uuid> [--tenant <uuid>]
 //   npm run agenda -- --consulta --valendo --auth-user <uuid> [--tenant <uuid>]
 //   npm run agenda -- --certificado --auth-user <uuid>      (so le, nao escreve)
+//   npm run agenda -- --webhook     --auth-user <uuid>      (so le, nao escreve)
 //
 // POR QUE ELE RODA UMA VEZ E SAI, em vez de ficar de pe com um `setInterval`.
 //
@@ -35,9 +36,11 @@
 import { iniciar, encerrarApp } from '../src/app.ts';
 import {
   executarFilaDeEmissao, executarConsultaAtiva, conferirCertificado,
+  conferirAvisoDePagamento, alertaDoAviso,
   SemConectorDeCobranca,
   type AbrirTransacao, type ResultadoDaAgenda,
 } from '../src/cobranca/agenda.ts';
+import { credencialDeCobranca } from '../src/repos/boleto.ts';
 import { POLITICA } from '../src/dominio/agenda.ts';
 
 class RollbackDoEnsaio extends Error {
@@ -82,12 +85,14 @@ function imprimir(r: ResultadoDaAgenda): void {
 
 async function main(): Promise<void> {
   const fila = tem('fila'), consulta = tem('consulta'), certificado = tem('certificado');
-  const quantas = [fila, consulta, certificado].filter(Boolean).length;
+  const webhook = tem('webhook');
+  const quantas = [fila, consulta, certificado, webhook].filter(Boolean).length;
   if (quantas !== 1) {
-    console.error('ERRO: informe UMA tarefa: --fila, --consulta ou --certificado.');
+    console.error('ERRO: informe UMA tarefa: --fila, --consulta, --certificado ou --webhook.');
     console.error('  --fila        retenta os boletos que falharam no registro (PRD §6)');
     console.error('  --consulta    pergunta ao banco a situacao dos boletos em aberto (PRD §6)');
     console.error('  --certificado so le a data de expiracao do A1 e classifica');
+    console.error('  --webhook     so pergunta ao banco se o aviso de pagamento ainda esta ligado');
     process.exit(2);
   }
 
@@ -123,6 +128,32 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (webhook) {
+    const c = await a.withTenant(sessao, tenantProposto, async () => {
+      const conector = await credencialDeCobranca();
+      if (!conector) return null;
+      return conferirAvisoDePagamento(a.cobranca, conector.credencial_ref);
+    }) as any;
+
+    console.log('\n--- aviso de pagamento (o webhook de liquidacao) ---');
+    if (!c) {
+      console.log('  nao ha conector de cobranca cadastrado neste tenant.');
+      await encerrarApp();
+      return;
+    }
+    console.log(`  nivel ...... ${c.nivel}`);
+    for (const w of c.avisos) {
+      console.log(`  ${w.inativado_em ? '☠️ INATIVO' : '✅ ativo  '}  id ${w.id}  ${w.url ?? '(sem url)'}`);
+    }
+    for (const l of alertaDoAviso(c)) console.log(`\n  ${l}`);
+    /* Sai 0 mesmo desligado, como o `--certificado` sai 0 mesmo vencido. E um
+     * RELATORIO que alguem pediu, e nao uma guarda: quem pergunta esta olhando a
+     * resposta. Quem precisa de alarme e a rodada periodica, e la o alerta sai
+     * junto do trabalho, abaixo. */
+    await encerrarApp();
+    return;
+  }
+
   // ---------------------------------------------------------- as que escrevem
   const ensaio = tem('ensaio'), valendo = tem('valendo');
   if (ensaio === valendo) {
@@ -154,6 +185,31 @@ async function main(): Promise<void> {
   const cert = await a.withTenant(sessao, tenantProposto, () => conferirCertificado()) as any;
   if (cert.nivel === 'vencido' || cert.nivel === 'vence_em_breve') {
     console.log(`\n  certificado A1: ${cert.nivel} (${cert.dias} dia(s))\n`);
+  }
+
+  /*
+   * O AVISO DE PAGAMENTO SAI JUNTO PELO MESMO ARGUMENTO DO CERTIFICADO, uma
+   * camada adiante. O A1 vencido para a emissao sem erro obvio; o aviso
+   * desligado para a BAIXA sem erro obvio - e a Sicoob desliga sozinha quando a
+   * entrega falha. Do nosso lado nao chega sinal nenhum: "nenhuma notificacao" e
+   * indistinguivel de "ninguem pagou".
+   *
+   * A CONSULTA ATIVA E QUEM MAIS PRECISA SABER, e por isso o alerta mora aqui:
+   * ela EXISTE para compensar webhook perdido (PRD §6). Quando o aviso cai, ela
+   * deixa de ser rede de seguranca e passa a ser a unica fonte de baixa - o
+   * dinheiro nao se perde, ele atrasa ate a proxima rodada diaria. Quem opera
+   * tem direito de saber que trocou de regime.
+   *
+   * NAO INTERROMPE E NAO MUDA O CODIGO DE SAIDA. Ver `conferirAvisoDePagamento`.
+   */
+  const aviso = await a.withTenant(sessao, tenantProposto, async () => {
+    const conector = await credencialDeCobranca();
+    return conector ? conferirAvisoDePagamento(a.cobranca, conector.credencial_ref) : null;
+  }) as any;
+  if (aviso && aviso.nivel !== 'ativo') {
+    console.log('');
+    for (const l of alertaDoAviso(aviso)) console.log(`  ${l}`);
+    console.log('');
   }
 
   let r: ResultadoDaAgenda;

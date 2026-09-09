@@ -447,6 +447,76 @@ Portal Developers. O resumo do run a imprime pronta para copiar.
 
 ---
 
+## 2.g Decisões técnicas de 09/09/2026 — o aviso de pagamento deixa de ser silencioso
+
+**Dono destas decisões: o implementador**, pela delegação de 08/09 (§2.b). Nenhuma
+delas move dinheiro nem depende de fato do negócio.
+
+### O que as motivou, e a data importa
+
+Foi o contrato do `GET /webhooks`, lido horas antes, que trouxe o fato:
+**a Sicoob INATIVA o webhook quando a entrega falha** — `dataHoraInativacao` e
+`descricaoMotivoInativacao`, com o exemplo do próprio banco preenchendo o segundo
+com *«Erro ao enviar notificação»*. O projeto não conhecia esse modo de falha.
+
+Ele é **silencioso do nosso lado**: um webhook desligado não avisa, e *"nenhuma
+notificação"* é indistinguível de *"ninguém pagou"*. Até aqui, a única forma de
+descobrir era alguém digitar a consulta à mão. É o mesmo formato de dano do A1
+vencido — *"a emissão para sem erro óbvio"* (PRD §6) — uma camada adiante: aqui o
+dinheiro **já entrou na conta** e o sistema nunca fica sabendo.
+
+### As seis decisões
+
+| Decisão | Por quê, em uma linha |
+|---|---|
+| **O alerta sai junto da rodada, e não vira tarefa nova** | Cópia exata do alerta do certificado: ele já sai junto das duas que escrevem, e a **consulta ativa** é quem mais precisa saber — ela existe para compensar webhook perdido (PRD §6), e quando o aviso cai ela deixa de ser rede de segurança e passa a ser a única fonte de baixa |
+| **Nenhum timer novo** | A `financeiro-agenda-consulta.timer` já roda diária. Uma unidade a mais teria a mesma cobertura e mais superfície de operação |
+| **NÃO derruba a rodada nem muda o código de saída** | Um aviso desligado não quebra a consulta ativa. Pôr o timer em `failed` sem que o trabalho tenha falhado mente sobre **qual** coisa quebrou, e `systemctl list-units --failed` é a única superfície de alarme desta máquina |
+| **Erro de rede vira `nao_verificavel`, não exceção** | A Sicoob fora do ar não pode impedir a fila de emitir nem a consulta de baixar. Diagnóstico que derruba o caminho do dinheiro é pior que a doença que diagnostica. `TypeError`/`RangeError` continuam passando por cima, como no laço da rodada |
+| **`avisoDePagamento` é OPCIONAL na porta** | Os três verbos são o caminho do dinheiro e todo adaptador tem de saber fazer os três; este é diagnóstico, e exigi-lo obrigaria o falso e o não-configurado a inventar resposta sobre um webhook que não existe no mundo deles. **Ausente responde `nao_verificavel`, nunca silêncio** |
+| **Só o tipo 7 (pagamento)** | Webhook de outro tipo de movimento pode estar inativo sem efeito nenhum sobre baixa, e gritar por ele seria alarme falso — o «vermelho permanente é alarme desligado» do `deploy/README` |
+
+### Os quatro níveis, e por que nenhum colapsa no outro
+
+`ativo` · `inativado` · `ausente` · `nao_verificavel`.
+
+- **`ausente` não é `inativado`.** Nunca ter cadastrado é o estado de quem ainda
+  não ligou; ser desligado pelo banco é o de quem ligou e perdeu. Pedem a mesma
+  ação e contam histórias opostas sobre o que aconteceu.
+- **`nao_verificavel` não é `ativo`**, e é a lição que o `sem_certificado` já
+  tinha ensinado: não ter perguntado não autoriza ninguém a dizer que está bem.
+- **Um inativo contamina a lista.** Com dois cadastrados e um desligado não dá
+  para saber qual o banco usaria, e a resposta otimista seria aposta sobre
+  dinheiro. Verificado por **exaustão** sobre as 62 listas de 1 a 5 avisos.
+
+### ⚠️ A permissão — um absurdo que só apareceu medindo, e o conserto NÃO foi subir o papel
+
+A primeira execução contra produção falhou com `PapelInsuficiente`. A causa é uma
+assimetria que ninguém tinha visto: **o usuário de serviço que RECEBE o aviso de
+pagamento não podia perguntar se o aviso ainda existe.** Ele tem papel `cobranca`
+— o mínimo que faz `escrever_carteira` passar, escolhido de propósito em 09/09
+para que a notificação não ganhasse escrita de cadastro — e `conectorAtual()`
+exige `administrar`.
+
+**A saída foi dar ao diagnóstico a permissão certa**, e ela é `escrever_carteira`,
+pelo argumento da autoridade: *quem já pode registrar e baixar título naquele
+banco pode perguntar àquele mesmo banco se o canal de aviso está vivo* — é
+estritamente **menos** do que ele já faz, com a mesma contraparte. `ler` seria
+largo demais (daria a referência ao papel `leitura`); `administrar` já se mostrou
+estreito demais.
+
+`credencialDeCobranca()` devolve **dois campos e não treze**: `conectorAtual` traz
+agência, conta e número do cooperado, que são dado corporativo e não têm por que
+atravessar um diagnóstico de webhook.
+
+### Medido contra a produção, e não deduzido
+
+`npm run agenda -- --webhook --auth-user c7cd8e8f-…` → **`nivel ativo`, id 13407**,
+rodando **como o próprio usuário de serviço**. Suíte sem banco: `EXIT=0`,
+**2.676** verificações (eram 2.663) — `AG8a`…`AG8j` e `WC7b`…`WC7d`.
+
+---
+
 ## 3. F0 — o que falta para fechar
 
 Entregas da F0 conforme `PRD-v2.2` §10:

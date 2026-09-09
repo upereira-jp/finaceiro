@@ -31,6 +31,15 @@ import {
 
 type Certificado = { dias: number | null; expira_em: string | null };
 
+/** O espelho de `ConferenciaDoAviso` do servidor. Os quatro niveis chegam
+ *  inteiros ate aqui de proposito: colapsar `nao_verificavel` em `ativo` na
+ *  borda seria a tela afirmando o que o sistema nao sabe. */
+type AvisoDePagamento = {
+  nivel: 'ativo' | 'inativado' | 'ausente' | 'nao_verificavel';
+  avisos: Array<{ id: string; url: string | null; inativado_em: string | null; motivo_da_inativacao: string | null }>;
+  motivo: string | null;
+};
+
 /** O 412 do servidor significa "nao ha conector", e e RESPOSTA - nao falha de
  *  leitura. Confundir os dois e o defeito que a tela de Contratos tinha em
  *  28/07: `catch` que transforma erro em ausencia. Aqui a distincao e explicita e
@@ -53,8 +62,21 @@ const EXPLICACAO: Record<MotivoDeTravaDoConector, string> = {
   credencial_ref_parece_segredo: '',   // a tela monta a frase com o sinal reconhecido
 };
 
+/** Mesma regra do vizinho, e um degrau a mais: aqui NENHUM erro sobe. A leitura
+ *  disca a Sicoob, e a Sicoob fora do ar nao pode derrubar a tela que cadastra o
+ *  conector — a pessoa ficaria sem conseguir corrigir justamente o que talvez
+ *  esteja errado. Falha vira `nao_verificavel`, que e o que ela e. */
+const avisoDePagamento = async (): Promise<AvisoDePagamento> => {
+  try {
+    return await api.get<AvisoDePagamento>('/conector-cobranca/aviso-pagamento');
+  } catch (e) {
+    return { nivel: 'nao_verificavel', avisos: [], motivo: e instanceof ErroDaApi ? e.message : 'a leitura falhou' };
+  }
+};
+
 export function TelaCobranca() {
   const cert = useDados<Certificado | null>(semConectorEhResposta);
+  const aviso = useDados<AvisoDePagamento>(avisoDePagamento);
   const acao = useAcao();
 
   const [credencialRef, setCredencialRef] = useState('');
@@ -180,6 +202,39 @@ export function TelaCobranca() {
       {situacao === 'ok' && (
         <Aviso tipo="ok">
           Conector ativo, certificado com <strong>{cert.dado?.dias} dia(s)</strong> de validade.
+        </Aviso>
+      )}
+
+      {/* ------------------------------- o aviso de pagamento (webhook), no ar
+        * IRMAO DO BLOCO DE CIMA, e a pergunta e da mesma familia: "o que faz o
+        * dinheiro andar ainda esta de pe?". A diferenca e onde mora a resposta —
+        * a validade do A1 esta no nosso banco, e esta so existe na Sicoob.
+        *
+        * POR QUE ELE MERECE ESPACO NA TELA: a Sicoob DESLIGA o webhook quando a
+        * entrega falha, e nao nos conta. Do lado de quem opera, um webhook
+        * desligado e uma tela de recebimentos que simplesmente para de encher —
+        * "ninguem pagou" e "o banco parou de avisar" tem exatamente a mesma cara.
+        * Sem esta linha, a unica forma de saber e alguem rodar um script. */}
+      {aviso.dado && aviso.dado.nivel !== 'ativo' && (
+        <Aviso tipo={aviso.dado.nivel === 'nao_verificavel' ? 'alerta' : 'erro'}>
+          {aviso.dado.nivel === 'inativado' && (<>
+            <strong>O banco desligou o aviso de pagamento.</strong> Enquanto estiver assim, um
+            boleto pago <strong>não avisa o sistema</strong> — a Sicoob inativa o webhook quando a
+            entrega falha{aviso.dado.avisos.find((w) => w.motivo_da_inativacao)?.motivo_da_inativacao
+              && <> (motivo dela: <em>{aviso.dado.avisos.find((w) => w.motivo_da_inativacao)!.motivo_da_inativacao}</em>)</>}.
+            {' '}<strong>O dinheiro não se perde:</strong> a consulta diária ao banco continua dando
+            baixa, então o que muda é o atraso — de minutos para até um dia. Recadastrar o aviso é
+            trabalho de quem administra o servidor.
+          </>)}
+          {aviso.dado.nivel === 'ausente' && (<>
+            <strong>Não há aviso de pagamento cadastrado no banco.</strong> Boleto pago só vira baixa
+            na consulta diária, nunca na hora. Não é erro — é uma etapa da instalação que falta.
+          </>)}
+          {aviso.dado.nivel === 'nao_verificavel' && (<>
+            <strong>Não deu para perguntar ao banco</strong> se o aviso de pagamento está ligado.
+            Isso <em>não</em> quer dizer que está tudo bem: quer dizer que ninguém sabe.
+            {aviso.dado.motivo && <> <span className="sub">({aviso.dado.motivo})</span></>}
+          </>)}
         </Aviso>
       )}
 

@@ -120,6 +120,29 @@ export type SituacaoDoBoleto = {
 };
 
 /**
+ * O QUE O MOTOR PRECISA SABER SOBRE O AVISO DE PAGAMENTO, e nada alem disso.
+ *
+ * NAO E O MODELO DO BANCO. `WebhookCadastrado`, em `sicoob/http.ts`, tem onze
+ * campos e fala a lingua da Sicoob; este tem quatro e responde a UNICA pergunta
+ * que a agenda faz - "o banco ainda avisa quando alguem paga?". Subir o modelo
+ * inteiro ate aqui poria o vocabulario da integracao dentro da porta, que existe
+ * exatamente para nao ter nenhum.
+ *
+ * `inativado_em` e o campo que decide, e a escolha e a mesma de
+ * `webhookInativo`: NAO se deriva de codigo de situacao. O contrato da Sicoob
+ * nomeia um codigo e nao explica os outros - e a producao ja devolveu 2 onde o
+ * exemplo do proprio banco mostrava 3, com a mesma descricao. Enum conhecido
+ * pela metade nao vira afirmacao.
+ */
+export type AvisoDePagamento = {
+  id: string;
+  url: string | null;
+  /** Carimbo do banco quando ele DESLIGOU o aviso. Enquanto for null, ele avisa. */
+  inativado_em: string | null;
+  motivo_da_inativacao: string | null;
+};
+
+/**
  * O contrato. Tres verbos, e nao mais: registrar, consultar, baixar.
  *
  * A CONSULTA ATIVA E REQUISITO, nao conveniencia - o PRD 6 pede "consulta ativa
@@ -131,6 +154,17 @@ export interface PortaDeCobranca {
   registrar(pedido: PedidoDeBoleto): Promise<BoletoRegistrado>;
   consultar(credencialRef: CredencialRef, nossoNumero: string): Promise<SituacaoDoBoleto>;
   baixar(credencialRef: CredencialRef, nossoNumero: string, motivo: string): Promise<void>;
+
+  /**
+   * OPCIONAL, e o opcional e a decisao. Os tres verbos acima sao o caminho do
+   * dinheiro e todo adaptador tem de saber fazer os tres; este e DIAGNOSTICO, e
+   * exigi-lo obrigaria `COBRANCA_NAO_CONFIGURADA` e a `CobrancaFalsa` a inventar
+   * uma resposta sobre um webhook que nao existe no mundo delas.
+   *
+   * Ausente NAO significa "esta tudo bem": significa "este adaptador nao sabe
+   * responder", e quem chama tem de distinguir as duas - ver `nivelDoAviso`.
+   */
+  avisoDePagamento?(credencialRef: CredencialRef): Promise<AvisoDePagamento[]>;
 }
 
 export class CobrancaNaoConfigurada extends Error {

@@ -31,6 +31,7 @@ import * as documento from '../repos/documento.ts';
 import * as registro from '../repos/registro-unificado.ts';
 import * as faturaDoRegistro from '../repos/fatura-do-registro.ts';
 import * as leitor from '../concessionaria/leitor-visao.ts';
+import { conferirAvisoDePagamento } from '../cobranca/agenda.ts';
 import { traduzirEvento } from '../sicoob/webhook.ts';
 import { calcular, CAMPOS_VAZIOS, PARAMETROS_PADRAO,
   type CamposDaFaturaUnificada, type ParametrosDaEmissao } from '../dominio/fatura-unificada.ts';
@@ -950,6 +951,26 @@ export const ROTAS: Rota[] = [
   {
     metodo: 'GET', padrao: '/conector-cobranca/certificado',
     handler: (req, app) => emTenant(app, req, async () => ok(await boleto.certificadoVenceEm())),
+  },
+  {
+    /*
+     * A IRMA DA DE CIMA, e ela pergunta AO BANCO — rota nova em 09/09/2026.
+     *
+     * As duas respondem a mesma classe de pergunta: "o que faz o dinheiro andar
+     * ainda esta de pe?". A do certificado le uma data do nosso banco; esta
+     * disca a Sicoob, porque a resposta so existe la — e o motivo de existir e
+     * que a Sicoob INATIVA o webhook quando a entrega falha, sem nos dizer.
+     *
+     * NUNCA LEVANTA POR CULPA DA SICOOB: rede caida devolve `nao_verificavel`
+     * com o motivo dentro, e a tela mostra "ninguem sabe" em vez de um vermelho
+     * que culpa o webhook por um problema de rede. Ver `conferirAvisoDePagamento`.
+     */
+    metodo: 'GET', padrao: '/conector-cobranca/aviso-pagamento',
+    handler: (req, app) => emTenant(app, req, async () => {
+      const c = await boleto.credencialDeCobranca();
+      if (!c) return ok({ nivel: 'nao_verificavel', avisos: [], motivo: 'nao ha conector de cobranca cadastrado' });
+      return ok(await conferirAvisoDePagamento(app.cobranca, c.credencial_ref));
+    }),
   },
   {
     // A porta vem do composition root. O handler nao sabe se atras dela ha

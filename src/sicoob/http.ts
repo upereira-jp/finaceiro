@@ -46,6 +46,7 @@ import https from 'node:https';
 import { URL } from 'node:url';
 import type {
   PortaDeCobranca, PedidoDeBoleto, BoletoRegistrado, SituacaoDoBoleto, CredencialRef, Pagador,
+  AvisoDePagamento,
   faltamNoEndereco,
 } from './porta.ts';
 import type { Resolvedora, CredencialResolvida } from './cofre.ts';
@@ -891,6 +892,25 @@ export class CobrancaSicoob implements PortaDeCobranca {
       );
     }
     return lista.map(webhookDoJson);
+  }
+
+  /**
+   * A MESMA LEITURA, na lingua da porta - `PortaDeCobranca.avisoDePagamento`.
+   *
+   * O que ela acrescenta e o FILTRO: so o tipo 7 (pagamento). Um webhook de
+   * outro tipo de movimento pode estar inativo sem que isso tenha qualquer
+   * efeito sobre baixa, e fazer a agenda gritar por ele seria alarme falso -
+   * exatamente o "vermelho permanente e alarme desligado" que o `deploy/README`
+   * nomeia. `sicoob/webhook.ts` so traduz o 7.
+   */
+  async avisoDePagamento(ref: CredencialRef): Promise<AvisoDePagamento[]> {
+    const lista = await this.consultarWebhooks(ref, { codigoTipoMovimento: TIPO_MOVIMENTO_PAGAMENTO });
+    return lista.map((w) => ({
+      id: w.idWebhook,
+      url: w.url,
+      inativado_em: w.dataHoraInativacao,
+      motivo_da_inativacao: w.descricaoMotivoInativacao,
+    }));
   }
 
   // ---------------------------------------------- solicitacoes de um webhook

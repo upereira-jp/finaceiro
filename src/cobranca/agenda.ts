@@ -33,8 +33,11 @@ import { tenantCorrente, exigir } from '../db/contexto.ts';
 import { ehSqlstate, SQLSTATE } from '../db/sqlstate.ts';
 import * as boletos from '../repos/boleto.ts';
 import * as liquidacoes from '../repos/liquidacao.ts';
-import { CobrancaNaoConfigurada, type PortaDeCobranca } from '../sicoob/porta.ts';
-import { decidir, nivelDoCertificado, POLITICA, type Politica } from '../dominio/agenda.ts';
+import { CobrancaNaoConfigurada, type PortaDeCobranca, type AvisoDePagamento } from '../sicoob/porta.ts';
+import {
+  decidir, nivelDoCertificado, nivelDoAviso, POLITICA,
+  type Politica, type NivelDoAviso,
+} from '../dominio/agenda.ts';
 
 /** Igual ao `AbrirLote` do conector: o motor nao sabe montar contexto de tenant,
  *  e quem monta e `app.withTenant` - o mesmo caminho de qualquer requisicao. */
@@ -409,4 +412,95 @@ export async function executarConsultaAtiva(
 export async function conferirCertificado(p: Politica = POLITICA) {
   const { dias, expira_em } = await boletos.certificadoVenceEm();
   return { nivel: nivelDoCertificado(dias, p), dias, expira_em };
+}
+
+// ============================================================================
+// 4. O ALERTA DO AVISO DE PAGAMENTO
+// ============================================================================
+
+export type ConferenciaDoAviso = {
+  nivel: NivelDoAviso;
+  avisos: AvisoDePagamento[];
+  /** Por que nao deu para verificar. Preenchido so em `nao_verificavel`, e
+   *  preenchido SEMPRE nesse caso: "nao sei" sem motivo e indistinguivel de
+   *  "esqueci de olhar". */
+  motivo: string | null;
+};
+
+/**
+ * IRMAO DO §3, e a simetria e o argumento inteiro.
+ *
+ * O alerta do certificado existe porque "o A1 vencido para a emissao sem erro
+ * obvio". Este existe porque o aviso de pagamento desligado para a BAIXA sem
+ * erro obvio - e um degrau pior, porque o dinheiro ja entrou na conta. A Sicoob
+ * inativa o webhook quando a entrega falha (`sicoob/http.ts`, `consultarWebhooks`),
+ * e do nosso lado isso nao produz sinal nenhum.
+ *
+ * NAO E TAREFA PROPRIA, pelo mesmo motivo do certificado: sai junto das duas que
+ * ja rodam. A consulta ativa diaria e o lugar natural - ela e, literalmente, o
+ * mecanismo que compensa webhook perdido (PRD 6), entao ela e quem mais tem
+ * interesse em saber que o webhook parou de existir.
+ *
+ * POR QUE ELE NAO DERRUBA A RODADA. Um aviso desligado nao quebra a consulta
+ * ativa; ele torna a consulta ativa a UNICA fonte de baixa, que e exatamente o
+ * cenario para o qual ela foi construida. Fazer a tarefa falhar poria o timer em
+ * `failed` sem que o trabalho da rodada tivesse falhado - e `systemctl
+ * list-units --failed` e a unica superficie de alarme desta maquina
+ * (`deploy/README.md`). Alarme que mente sobre QUAL coisa quebrou custa mais do
+ * que alarme nenhum.
+ *
+ * ERRO DE REDE VIRA `nao_verificavel` E NAO EXCECAO, e esta e a decisao mais
+ * importante do arquivo: a Sicoob fora do ar nao pode impedir a fila de emitir
+ * nem a consulta de baixar. Um diagnostico que derruba o caminho do dinheiro e
+ * pior do que a doenca que ele diagnostica.
+ */
+export async function conferirAvisoDePagamento(
+  cobranca: PortaDeCobranca,
+  credencialRef: string,
+): Promise<ConferenciaDoAviso> {
+  if (typeof cobranca.avisoDePagamento !== 'function') {
+    return {
+      nivel: nivelDoAviso(null), avisos: [],
+      motivo: 'este adaptador de cobranca nao sabe perguntar ao banco quais avisos existem',
+    };
+  }
+  try {
+    const avisos = await cobranca.avisoDePagamento(credencialRef);
+    return { nivel: nivelDoAviso(avisos), avisos, motivo: null };
+  } catch (e: any) {
+    if (e instanceof TypeError || e instanceof RangeError) throw e;
+    return {
+      nivel: nivelDoAviso(null), avisos: [],
+      motivo: `a leitura falhou: ${String(e?.message ?? e)}`,
+    };
+  }
+}
+
+/** As frases do alerta, em um lugar so - o script imprime, e a tela vai querer
+ *  as mesmas palavras. Vazio quando nao ha o que dizer, e vazio E a resposta:
+ *  quem imprime nao precisa saber quais niveis merecem linha. */
+export function alertaDoAviso(c: ConferenciaDoAviso): string[] {
+  switch (c.nivel) {
+    case 'ativo':
+      return [];
+    case 'inativado': {
+      const l = ['O AVISO DE PAGAMENTO ESTA DESLIGADO. Nenhum pagamento e avisado pelo banco.'];
+      for (const a of c.avisos.filter((a) => a.inativado_em != null)) {
+        l.push(`  id ${a.id} inativado em ${a.inativado_em}: ${a.motivo_da_inativacao ?? 'sem motivo informado'}`);
+      }
+      l.push('A consulta ativa diaria continua baixando - o dinheiro nao se perde, ele ATRASA.');
+      l.push('Recadastrar: npm run webhook-sicoob -- --auth-user <uuid> --cadastrar --email <e> --valendo');
+      return l;
+    }
+    case 'ausente':
+      return [
+        'NAO HA AVISO DE PAGAMENTO CADASTRADO no banco, e nunca houve ou ele foi removido.',
+        'So a consulta ativa diaria baixa. Cadastrar: npm run webhook-sicoob -- --cadastrar.',
+      ];
+    case 'nao_verificavel':
+      return [
+        `O aviso de pagamento NAO foi verificado nesta rodada (${c.motivo ?? 'sem motivo'}).`,
+        'Isto NAO quer dizer que esta tudo bem - quer dizer que ninguem sabe.',
+      ];
+  }
 }

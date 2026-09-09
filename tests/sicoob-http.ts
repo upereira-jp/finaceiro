@@ -616,6 +616,27 @@ const PEDIDO = {
   chk('WC7', v3[1]!.url === 'https://exemplo.invalido/v3/webhooks?idWebhook=4&codigoTipoMovimento=7',
       `os dois filtros entram na query (foi ${v3[1]!.url})`);
 
+  /* A MESMA LEITURA NA LINGUA DA PORTA. `avisoDePagamento` e o que a agenda
+   * chama, e ele acrescenta uma coisa so - o filtro do tipo 7. Um webhook de
+   * outro tipo de movimento pode estar inativo sem efeito nenhum sobre baixa, e
+   * gritar por ele seria o "vermelho permanente" que desliga o alarme. */
+  const { c: c3b, vistos: v3b } = adaptador([TOKEN_OK, {
+    status: 200, texto: JSON.stringify({ resultado: [UM_WEBHOOK] }),
+  }]);
+  const avisos = await c3b.avisoDePagamento('ref-1');
+  chk('WC7b', v3b[1]!.url === 'https://exemplo.invalido/v3/webhooks?codigoTipoMovimento=7',
+      `avisoDePagamento filtra o tipo 7 e SO ele (foi ${v3b[1]!.url})`);
+  chk('WC7c', avisos.length === 1 && avisos[0]!.id === '4'
+        && avisos[0]!.inativado_em === UM_WEBHOOK.dataHoraInativacao
+        && avisos[0]!.motivo_da_inativacao === UM_WEBHOOK.descricaoMotivoInativacao,
+      'o carimbo de inativacao e o motivo atravessam a traducao intactos - sao os dois campos '
+      + 'de que o nivel depende, e perder qualquer um faria um webhook morto parecer vivo');
+  chk('WC7d', Object.keys(avisos[0]!).sort().join() === 'id,inativado_em,motivo_da_inativacao,url'
+        && !('codigoSituacao' in avisos[0]!),
+      'e o vocabulario da Sicoob PARA aqui: quatro campos, sem codigoSituacao - a porta existe '
+      + 'para o motor nao conhecer o modelo do banco, e o codigo cru ja provou variar (2 onde o '
+      + 'exemplo dizia 3, com a mesma descricao)');
+
   // ------------------------------------------------------- solicitacoes
   const PAGINA = {
     resultado: {
