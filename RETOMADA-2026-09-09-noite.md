@@ -5,8 +5,8 @@
 | **Para quem** | Quem abrir a próxima sessão. **Dois minutos** |
 | **Substitui** | `RETOMADA-2026-09-09.md` para efeito de "onde estamos". O corpo dela continua correto; o que venceu é o **§0** — as três pendências foram postas ao dono e as três voltaram com resposta |
 | **O que esta leva fez** | Fechou as três decisões do §0 anterior. Uma virou código (**o calendário bancário**), uma virou registro (**D+1**), uma foi adiada com o custo medido (**`dono_usina`**). E o portão do webhook que era `psql` a mão virou workflow |
-| **Suíte** | sem banco: `EXIT=0`, **2.637** verificações (eram 2.619). **E o CI voltou ao verde** — ver §7 |
-| **Repositório** | `main` = `4d74603` + o conserto do §7, e `origin` está junto. ⚠️ **`git push` daqui é bloqueado pelo classificador** — o dono empurra |
+| **Suíte** | sem banco: `EXIT=0`, **2.637** verificações (eram 2.619). **E o CI fechou VERDE nos cinco jobs** (run `34363949451`) — o primeiro desde 27/08. Ver §7 |
+| **Repositório** | `main` = **`d808fa6`**, e `origin/main` está junto |
 | **Produção** | ✅ **sem deriva** — o `deploy-financeiro` rodou às 14:15 e o serviço subiu **14:16:09** em `4d74603`. `GET /` responde 200 e o bundle novo carrega a regra na tela |
 
 > ## A frase de uma linha
@@ -20,7 +20,9 @@
 
 ## 0. O primeiro movimento da próxima sessão
 
-1. **Fazer o `git push` e o deploy** — §5. Nada mais desta leva depende de decisão;
+1. **Nada desta leva.** Push, deploy e CI estão fechados — `origin/main` = `d808fa6`,
+   serviço de 14:16:09 em `4d74603` (o `d808fa6` só toca teste e não pede deploy), e o
+   `isolamento` fechou verde nos cinco jobs;
 2. **`Q-VENC3-01` (b)** é a borda que sobrou, e ela **piorou dois dias** com a (a):
    pelo caminho do cadastro, dia 1º com competência de junho agora vence **26/06** e
    não 28/06, porque 28/06 é domingo. Continua estreita (só quando a conta lida não
@@ -189,6 +191,9 @@ o `!` calou o compilador exatamente sobre o campo que o teste vizinho garante se
 nulo. `TypeError: Cannot read properties of null`, em produção do CI, todo push.
 
 O conserto é uma palavra: o número sai da **confirmação**, que é quem reparte agora.
+**Conferido no Actions e não deduzido:** run `34363949451`, os cinco jobs verdes —
+`repositorios`, `tipos`, `middleware`, `migrations-rls-rbac-e-seed` e
+`vazamento-no-pool`.
 
 ⚠️ **Por que isso durou um dia inteiro sem ninguém tropeçar:** `test:repos` **não roda
 nesta VPS** (exige PostgreSQL local) e não roda no `npm test` daqui. O único lugar do
@@ -197,3 +202,10 @@ ninguém abre depois de um push que "passou" localmente. É o mesmo modo de falh
 próprio `tests/run.sh` documenta duas vezes (*"em pipeline o status de saída é do
 grep"*), na camada de fora: **verde local não é verde**, quando a suíte que importa
 mora noutro lugar.
+
+**A conferência que passa a valer depois de todo push**, porque o `gh` está instalado
+e autenticado nesta máquina:
+
+```
+gh run list --workflow=isolamento --limit 2
+```
