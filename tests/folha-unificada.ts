@@ -376,9 +376,17 @@ const folhas = comporFolhas(COMPLETA, contaCompleta, EMISSOR,
 
   // A antecipacao atravessa o mes, e e por isso que ela mora numa DATA e nunca
   // num dia do mes. Cinco das 16 UCs medidas em 04/09 vencem no dia 1o ou 2.
+  //
+  // ESTE CASO GANHOU UMA SEGUNDA CAMADA EM 09/09/2026: 01/09 menos 3 da 29/08,
+  // que e SABADO, e a decisao da `Q-VENC3-01` (a) recua ate o dia util anterior.
+  // A folha imprime 28/08 — a mesma data que o boleto carrega nos 44 digitos, e
+  // e por isso que a mudanca tinha de alcancar o papel junto: se so o boleto
+  // recuasse, `conferirBoleto` acusaria divergencia em toda fatura de borda.
   const diaUm = comporFolhas({ ...COMPLETA, vencimento: '01/09/2026' }, contaCompleta, EMISSOR, BOLETO_VAZIO);
-  chk('V4', diaUm.folha1.cliente.meta.find((m) => m.rotulo === 'Vencimento')?.valor === '29/08/2026',
-      'vencimento no dia 1o de setembro vira 29 de agosto — a antecipacao atravessa o mes');
+  chk('V4', diaUm.folha1.cliente.meta.find((m) => m.rotulo === 'Vencimento')?.valor === '28/08/2026',
+      'vencimento no dia 1o de setembro atravessa o mes (29/08) e recua do sabado para sexta 28/08');
+  chk('V4b', diaUm.folha1.cliente.meta.find((m) => m.rotulo === 'Vencimento na conta da Equatorial')?.valor === '01/09/2026',
+      'e a data da Equatorial continua impressa ao lado, intacta — o recuo e nosso, nao dela');
 
   // Data ilegivel NAO vira data derivada de lixo: imprime o que veio, para a
   // pessoa corrigir.

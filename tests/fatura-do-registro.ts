@@ -13,7 +13,7 @@
  *   J1  o MAPA de um para um entre a conta lida e a fatura
  *   J2  a ORDEM da triagem (ordem de utilidade do diagnostico)
  *   J3  cada recusa, uma a uma, com a faixa de CHECK que a motiva
- *   J4  o vencimento, as suas DUAS fontes e os 3 dias de antecedencia
+ *   J4  o vencimento, as suas DUAS fontes, os 3 dias e o recuo ao dia util
  *   J5  a conferencia da alocacao, exata e sem float
  *   J6  alerta nao e recusa
  *
@@ -25,6 +25,7 @@ import {
   type LinhaDoRegistro, type MotivoDeRecusaDoRegistro,
 } from '../src/dominio/fatura-do-registro.ts';
 import { anteciparVencimento, DIAS_DE_ANTECEDENCIA_DO_BOLETO } from '../src/dominio/faturamento.ts';
+import { ehDiaUtilBancario } from '../src/dominio/calendario-bancario.ts';
 
 let falhas = 0;
 const chk = (id: string, cond: boolean, d: string) => {
@@ -203,13 +204,18 @@ chk('J3m', motivos.every((m) => (EXPLICACAO_DO_REGISTRO[m] ?? '').length > 40),
 // ===========================================================================
 
 /* AS DUAS FONTES DIZEM A DATA DA DISTRIBUIDORA, e o nosso boleto vence 3 dias
- * antes (regra do dono, 04/09/2026). Toda data esperada abaixo ja e a
- * ANTECIPADA - se alguem apagar a antecipacao, estas seis caem juntas. */
+ * antes (regra do dono, 04/09/2026) E DEPOIS RECUA ATE O DIA UTIL BANCARIO
+ * (regra do dono, 09/09/2026 - a `Q-VENC3-01` (a)). Toda data esperada abaixo ja
+ * e a final - se alguem apagar qualquer uma das duas metades, estas caem juntas.
+ *
+ * ESTE PRIMEIRO CASO EXERCE AS DUAS DE UMA VEZ, e foi por sorte do calendario:
+ * 15/07/2026 menos 3 da 12/07, que e DOMINGO. O boleto vence 10/07, sexta. Ate
+ * 09/09/2026 este teste esperava o domingo. */
 
 const daConta = triarRegistro(base());
 chk('J4a', daConta.faturar && daConta.vencimento_de === 'conta'
-        && daConta.vencimento.toISOString().slice(0, 10) === '2026-07-12',
-    'a conta lida impoe 15/07 e o nosso boleto vence 12/07 - tres dias antes');
+        && daConta.vencimento.toISOString().slice(0, 10) === '2026-07-10',
+    'a conta lida impoe 15/07, tres dias antes da 12/07 e domingo, e o boleto vence sexta 10/07');
 
 /* Sem a conta, o cadastro. `vencimentoDaFatura` projeta o DIA no mes seguinte ao
  * da competencia, que e o que a competencia de junho exige: a geracao so e
@@ -248,7 +254,7 @@ const comImposto = vencimentoEscolhido({
   vencimento_da_conta: dia('2026-07-15'), data_vencimento: null, competencia: dia('2026-06-01'),
 });
 chk('J4f', comImposto?.imposto.toISOString().slice(0, 10) === '2026-07-15'
-        && comImposto?.data.toISOString().slice(0, 10) === '2026-07-12',
+        && comImposto?.data.toISOString().slice(0, 10) === '2026-07-10',
     '`imposto` guarda a data da distribuidora e `data` a nossa - a conferencia precisa das duas');
 
 /* A ANTECIPACAO E EM DIAS CORRIDOS E ATRAVESSA MES, ANO E FEVEREIRO. E por isso
@@ -280,9 +286,33 @@ const dentroDaCompetencia = triarRegistro(com({
   vencimento_da_conta: null, data_vencimento: dia('2026-01-01'), competencia: dia('2026-06-01'),
 }));
 chk('J4j', dentroDaCompetencia.faturar
-        && (dentroDaCompetencia as any).vencimento.toISOString().slice(0, 10) === '2026-06-28',
-    'dia 1o pelo cadastro: projeta 01/07 e antecipa para 28/06, DENTRO da competencia de junho '
-    + '- comportamento de hoje, decisao aberta na Q-VENC3-01');
+        && (dentroDaCompetencia as any).vencimento.toISOString().slice(0, 10) === '2026-06-26',
+    'dia 1o pelo cadastro: projeta 01/07 e antecipa para 26/06, DENTRO da competencia de junho '
+    + '- comportamento de hoje, decisao (b) aberta na Q-VENC3-01');
+
+/* ⚠️ E A (a) PIOROU A (b) EM DOIS DIAS, o que e registro e nao surpresa: 28/06
+ * e domingo, entao o recuo ao dia util leva a 26/06 - mais fundo dentro da
+ * competencia. A borda (b) segue com o dono e segue estreita (so quando a conta
+ * lida NAO traz data), mas quem for decidi-la precisa saber que o piso agora e
+ * menor. */
+
+/* O QUE A DECISAO DE 09/09 GARANTE, e e a unica coisa que ela garante: nenhum
+ * vencimento nosso cai em sabado, domingo ou feriado nacional - por nenhuma das
+ * duas fontes, em nenhum mes do ano. A varredura e o teste porque um exemplo
+ * escolhido a mao provaria so o exemplo. */
+let caiuEmDiaNaoUtil = 0;
+for (let m = 0; m < 12; m++) {
+  for (let d = 1; d <= 28; d++) {
+    const imposta = new Date(Date.UTC(2026, m, d));
+    const v = anteciparVencimento(imposta);
+    if (!ehDiaUtilBancario(v)) caiuEmDiaNaoUtil++;
+    /* E NUNCA EMPURRA: o nosso vencimento e sempre <= o imposto menos 3 dias. */
+    if (v.getTime() > new Date(Date.UTC(2026, m, d - 3)).getTime()) caiuEmDiaNaoUtil++;
+  }
+}
+chk('J4k', caiuEmDiaNaoUtil === 0,
+    'nos 336 vencimentos possiveis de 2026, nenhum cai em dia nao-util e nenhum e empurrado '
+    + 'para depois do -3: a antecipacao so aumenta a folga');
 
 // ===========================================================================
 // J5 - A CONFERENCIA DA ALOCACAO. Exata, sem float, e informativa.

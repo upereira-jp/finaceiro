@@ -55,7 +55,9 @@ export const PORQUE: Record<string, string> = {
     'Porque toda cobrança precisa de uma data, e o sistema não inventa nenhuma. Em geral a '
     + 'conta da distribuidora já traz a data e nada precisa ser preenchido; o dia do cadastro é a '
     + 'reserva para quando ela vier sem. O que se guarda aqui é o dia DA DISTRIBUIDORA: o nosso '
-    + 'boleto vence três dias antes, e é o sistema que subtrai. Por isso um dia já adiantado '
+    + 'boleto vence três dias antes — e recua até o dia útil anterior quando essa data cai em '
+    + 'sábado, domingo ou feriado nacional, porque adiantar respeita a regra e empurrar a violaria. '
+    + 'Quem subtrai é o sistema. Por isso um dia já adiantado '
     + 'digitado aqui é adiantado de novo — e nenhum dos dois erros dá erro: só cobra na data '
     + 'errada, todo mês, até alguém reclamar.',
   'tarifa':

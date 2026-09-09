@@ -1,0 +1,177 @@
+# Provisiona o USUARIO DE SERVICO do webhook de cobranca — ESTE WORKFLOW MUTA A PRODUCAO.
+#
+# ============================================================================
+# POR QUE ELE EXISTE, e ele nasceu de uma pendencia que nao era de codigo
+#
+# Em 09/09/2026 o webhook de liquidacao passou a aceitar as nove faixas de IP do
+# Sicoob, e a `RETOMADA-2026-09-09` §1 nomeou os dois portoes seguintes que
+# "nao tem como ser medidos desta sessao". O primeiro deles e este: sem o usuario
+# de servico do tenant, a rota responde `503 ServicoDeCobrancaNaoProvisionado` —
+# o webhook chega, e nao ha quem assine a trilha da baixa.
+#
+# O caminho ate hoje era o dono abrir um terminal e rodar `psql "$DIRECT_URL"` a
+# mao, duas vezes (ensaio e valendo), com dois uuids colados. Isso e trabalho
+# perfeitamente possivel e e exatamente o tipo de trabalho que ficava parado por
+# semanas — e o uuid colado a mao e o modo de falha que a GUARDA 2 do proprio SQL
+# existe para pegar. Aqui ele vira um botao com dois campos.
+#
+# ============================================================================
+# A CREDENCIAL NAO DESCE PARA A VPS, e a razao e a mesma do `migrate-financeiro`:
+# `DIRECT_URL` e a conexao de DONO, a VPS e COMPARTILHADA com o CRM, e o
+# `/etc/financeiro.env` do runtime nao a tem — nem deve ter. Ela e secret do
+# Actions e nao sai do runner.
+#
+# ============================================================================
+# O QUE ELE FAZ, e nada alem disto:
+#
+#   1. DERIVA o auth_user_id do tenant (UUIDv5). Ele nunca e digitado;
+#   2. confere a IDENTIDADE do banco alvo (regra 4 — o CRM e read-only absoluto);
+#   3. roda o SQL em `modo=ensaio`, que termina em ROLLBACK — SEMPRE, inclusive
+#      quando o operador pediu para valer. O ensaio e o que mostra o que seria
+#      feito, e ele custa um segundo;
+#   4. so entao, e so com `confirmar = aplicar`, roda de novo em `modo=valendo`.
+#
+# O QUE ELE NAO FAZ: nao cadastra a URL no Portal Developers do Sicoob (isso e
+# acao humana, e o resumo do run imprime a URL pronta), nao reinicia servico e
+# nao toca o checkout da VPS.
+name: provisionar-cobranca
+
+on:
+  workflow_dispatch:
+    inputs:
+      tenant:
+        description: 'O tenant do financeiro. O default e o de producao — so mude se souber por que.'
+        required: true
+        default: 'eac198c0-b0c1-4b13-9b4d-6ac1a6eb011d'
+      confirmar:
+        description: 'Digite "aplicar" para gravar. Qualquer outra coisa roda SO o ensaio (ROLLBACK) e para.'
+        required: true
+        default: 'ensaio'
+
+concurrency:
+  group: vps-financeiro          # nunca roda junto com o deploy, a migration ou o recon
+  cancel-in-progress: false
+
+jobs:
+  provisionar:
+    runs-on: ubuntu-latest
+    env:
+      DIRECT_URL: ${{ secrets.DIRECT_URL }}
+      # Entrada SEMPRE por env, nunca interpolada dentro do `run`: `${{ }}` colado
+      # no meio de um shell script e injecao de comando por construcao.
+      TENANT: ${{ inputs.tenant }}
+      CONFIRMAR: ${{ inputs.confirmar }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: cliente psql 16
+        run: |
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client-16
+
+      - name: instalar dependencias
+        run: npm install --no-audit --no-fund
+
+      - name: guardas antes de discar
+        run: |
+          set -euo pipefail
+          if [ -z "${DIRECT_URL:-}" ]; then
+            echo "::error::secret DIRECT_URL ausente. E a conexao DIRETA de dono, a mesma das"
+            echo "::error::migrations. Cadastre em Settings > Secrets and variables > Actions."
+            echo "::error::Nada foi tentado."
+            exit 1
+          fi
+          # O SQL usa `\if` e `\gset` do psql, que sao do CLIENTE. Num pooler de
+          # TRANSACAO a sessao muda de conexao entre comandos e o `\gset` le do
+          # lugar errado — e o sintoma nao e erro, e um COMMIT que nao commita.
+          case "$DIRECT_URL" in
+            *:6543/*) echo "::error::DIRECT_URL aponta para a porta 6543 (transaction pooler)."
+                      echo "::error::Este script e uma TRANSACAO com metacomandos de sessao. Use a 5432."
+                      exit 1;;
+          esac
+          if ! printf '%s' "$TENANT" | grep -Eiq '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'; then
+            echo "::error::o tenant informado nao tem forma de UUID. Nada foi tentado."
+            exit 1
+          fi
+          echo "DIRECT_URL presente, porta aceita, tenant com forma de UUID."
+
+      # ======================================================================
+      # O auth_user_id NAO SE DIGITA — ele e UUIDv5 do tenant. A GUARDA 2 do SQL
+      # existe justamente porque um uuid colado a mao daria ao servico de um
+      # tenant um vinculo no outro; derivar aqui torna a guarda desnecessaria em
+      # vez de confiar nela.
+      - name: DERIVAR o auth_user_id do servico
+        run: |
+          set -euo pipefail
+          AUTH="$(node --experimental-strip-types -e '
+            import("./src/auth/usuario-de-servico.ts").then((m) => {
+              process.stdout.write(m.authUserIdDeServico(process.env.TENANT));
+            });
+          ')"
+          echo "AUTH=$AUTH" >> "$GITHUB_ENV"
+          echo "auth_user_id derivado: $AUTH"
+
+      - name: IDENTIDADE do banco alvo (regra 4 — o CRM e read-only absoluto)
+        run: node --experimental-strip-types scripts/conferir-banco-alvo.ts identidade
+
+      # ======================================================================
+      # O ENSAIO RODA SEMPRE, inclusive quando o operador pediu para valer. Ele
+      # termina em ROLLBACK e mostra as duas etapas, o `resolver_login` e a
+      # conferencia do papel — que e o que de fato importa, porque e
+      # `app.resolver_login` que o webhook chama.
+      - name: ENSAIO (termina em ROLLBACK — nada e gravado)
+        run: |
+          set -euo pipefail
+          psql "$DIRECT_URL" -v ON_ERROR_STOP=1 \
+            -v modo=ensaio -v tenant_id="$TENANT" -v auth_user_id="$AUTH" \
+            -f scripts/provisionar-servico-de-cobranca.sql 2>&1 | tee /tmp/ensaio.log
+
+      - name: APLICAR (COMMIT)
+        id: aplicar
+        if: ${{ inputs.confirmar == 'aplicar' }}
+        run: |
+          set -euo pipefail
+          psql "$DIRECT_URL" -v ON_ERROR_STOP=1 \
+            -v modo=valendo -v tenant_id="$TENANT" -v auth_user_id="$AUTH" \
+            -f scripts/provisionar-servico-de-cobranca.sql 2>&1 | tee /tmp/valendo.log
+          # O SQL ja imprime `conferencia_do_papel`. Aqui a saida do comando vira
+          # o veredito do JOB: um papel diferente de `cobranca` daria ao webhook
+          # escrita de cadastro, e isso nao pode terminar verde.
+          if ! grep -q 'papel OK' /tmp/valendo.log; then
+            echo "::error::o papel do usuario de servico NAO e 'cobranca'. Confira antes de ligar o webhook."
+            exit 1
+          fi
+
+      - name: proximo passo
+        if: ${{ always() }}
+        run: |
+          {
+            echo '## Usuario de servico do webhook de cobranca'
+            echo ''
+            echo "| campo | valor |"
+            echo "|---|---|"
+            echo "| tenant | \`$TENANT\` |"
+            echo "| auth_user_id | \`${AUTH:-nao derivado}\` (DERIVADO, nao escolhido) |"
+            echo "| modo | \`$CONFIRMAR\` |"
+            echo ''
+            if [ "$CONFIRMAR" = "aplicar" ]; then
+              echo '**Gravado.** O portao do `503 ServicoDeCobrancaNaoProvisionado` esta aberto.'
+            else
+              echo '**Nada foi gravado** — o campo `confirmar` nao era `aplicar`. O ensaio acima'
+              echo 'mostrou exatamente o que seria feito.'
+            fi
+            echo ''
+            echo '### O portao seguinte e humano: a URL no Portal Developers do Sicoob'
+            echo ''
+            echo '```'
+            echo "https://financeiro.blackhaus.io/api/liquidacoes/webhook-sicoob/$TENANT"
+            echo '```'
+            echo ''
+            echo 'Sem ela cadastrada, o banco nao chama ninguem — e este workflow nao tem como'
+            echo 'saber se ela foi cadastrada, porque as paginas do portal sao SPA.'
+          } >> "$GITHUB_STEP_SUMMARY"

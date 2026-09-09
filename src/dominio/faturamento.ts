@@ -21,6 +21,8 @@
 // a contagem de recusas e o que traz o problema a tona. Foi assim que a
 // Q-VALOR-01 apareceu, em 27/07, em vez de virar 40 faturas erradas.
 
+import { recuarParaDiaUtil } from './calendario-bancario.ts';
+
 export type MotivoDeRecusa =
   | 'sem_geracao_lancada'
   | 'sem_rateio'
@@ -150,11 +152,21 @@ export const DIAS_DE_ANTECEDENCIA_DO_BOLETO = 3;
 /**
  * O vencimento do NOSSO boleto, a partir do vencimento que a distribuidora impos.
  *
- * SAO DIAS CORRIDOS, e o que isso NAO resolve esta dito em vez de escondido:
- * "3 dias antes" nao diz o que fazer quando o alvo cai em sabado, domingo ou
- * feriado. Antecipar mais respeita a regra; empurrar para o dia util seguinte a
- * viola. Nao existe calendario de feriados neste sistema, e inventar um seria o
- * improviso que a regra 10 proibe - a pergunta e a `Q-VENC3-01`, com dono.
+ * SAO 3 DIAS CORRIDOS E DEPOIS UM RECUO ATE O DIA UTIL BANCARIO - e a segunda
+ * metade entrou em 09/09/2026, quando o dono decidiu a `Q-VENC3-01` (a):
+ * "antecipar ate o dia util anterior". Ate entao a antecipacao era so corrida e
+ * o boleto podia vencer num domingo.
+ *
+ * A ORDEM DAS DUAS OPERACOES E O QUE IMPORTA, e ela nao e comutativa: subtrai-se
+ * primeiro, recua-se depois. Recuar antes deslocaria o ponto de partida e a
+ * conta dos 3 dias passaria a ser feita contra uma data que a distribuidora
+ * nunca imprimiu.
+ *
+ * O RECUO NUNCA EMPURRA. A regra do dono e "3 dias ANTES"; empurrar para o dia
+ * util seguinte deixaria o boleto a 1 ou 2 dias da conta da Equatorial, que e
+ * exatamente o aperto que a regra existe para evitar. Recuar mais so aumenta a
+ * folga. Quem sabe quais dias sao uteis e `calendario-bancario.ts`, e o
+ * calendario e NACIONAL de proposito - o motivo esta la.
  *
  * ATRAVESSAR O MES E COMPORTAMENTO, NAO DEFEITO, e e a razao de a antecipacao
  * morar numa DATA e nunca num dia do mes. Vencimento no dia 1o vira 26, 28 ou 29
@@ -179,8 +191,12 @@ export function anteciparVencimento(
   /* `Date.UTC` normaliza dia zero ou negativo para o mes anterior, inclusive na
    * virada de ano e em fevereiro. Subtrair em milissegundos passaria pelo
    * horario de verao no dia em que estas datas deixarem de ser UTC-meia-noite. */
-  return new Date(Date.UTC(
+  const corridos = new Date(Date.UTC(
     imposto.getUTCFullYear(), imposto.getUTCMonth(), imposto.getUTCDate() - dias));
+  /* O recuo vale TAMBEM com `dias = 0`, e isso e invariante e nao efeito
+   * colateral: o vencimento do nosso titulo e sempre um dia util bancario,
+   * qualquer que seja o prazo de antecedencia configurado. */
+  return recuarParaDiaUtil(corridos);
 }
 
 /**

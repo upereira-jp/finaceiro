@@ -364,7 +364,9 @@ export function TelaUnidades() {
         dia em que queremos receber. A cobrança de um mês usa esse dia no <strong>mês seguinte</strong>,
         e o nosso boleto vence <strong>três dias antes</strong> dele: quem subtrai é o sistema.
         Digitar um dia já adiantado faz a conta ser feita duas vezes. Dia 29, 30 ou 31 em mês curto
-        cai no último dia do mês, sem passar para o seguinte.
+        cai no último dia do mês, sem passar para o seguinte. E se os três dias caírem em
+        <strong> sábado, domingo ou feriado nacional</strong>, o boleto vence no{' '}
+        <strong>dia útil anterior</strong> — nunca no seguinte, que encurtaria a folga.
       </p>
       <p className="sub">
         A <strong>tarifa</strong> é o preço do kWh <strong>desta</strong> unidade, com até seis casas

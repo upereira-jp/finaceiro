@@ -6,7 +6,7 @@
 | **O que é** | O **índice único** das pendências. Consolida e substitui os dois trackers datados que existiam soltos |
 | **Substitui e apaga** | `PENDENCIAS-2026-08-05.md` e `PROXIMOS-PASSOS-2026-08-09.md` — vencidos, e agora removidos do repo |
 | **NÃO substitui** | `QUESTOES.md` (registro datado, dono por entrada — regra 10) · `RETOMADA-2026-08-30.md` (onde tudo parou — a mais nova) · os `RESUMO-SESSAO-*` (memória datada). Estes continuam sendo a fonte; aqui é o **apontador** |
-| **Data** | 14/08/2026 · rev. 17/08 · rev. 19/08 · rev. 21/08 · rev. 27/08 · rev. 28/08 · rev. 08/09 · rev. **09/09/2026** |
+| **Data** | 14/08/2026 · rev. 17/08 · rev. 19/08 · rev. 21/08 · rev. 27/08 · rev. 28/08 · rev. 08/09 · rev. **09/09/2026** · rev. **09/09/2026, noite** |
 | ⚠️ **Leia primeiro** | Este arquivo ficou **congelado entre 28/08 e 08/09** enquanto a operação andava, e a `RETOMADA-2026-09-08` continuou mandando o leitor para cá como *"o índice único"*. O bloco **«O que mudou desde 28/08»**, logo abaixo do cabeçalho, é a correção — o corpo antigo fica intacto porque é registro datado, e reescrevê-lo falsificaria a história (mesma decisão do `PATCH-citacoes-2026-07-24`) |
 | **Estado da suíte** | Sem banco: `typecheck` + `documento` + `brcode` + `dominio` + `web` → **`EXIT=0`, 2.420 linhas `ok`** (28/08, madrugada), e desde 27/08 com as verificações de `tests/sicoob-http.ts` — hoje **63** — dentro do `test:dominio`. Fora da suíte, contra a Sicoob de verdade: `npm run ensaio-sicoob` → **6 de 6**. `test:repos` e `test:isolamento` **não rodam nesta VPS** (exigem PostgreSQL local) |
 | **Produção** | `financeiro.blackhaus.io` · **35 migrations no ar** (a 34 em 21/08, a **35 em 28/08**) · a **36 escrita e NÃO aplicada** · Pix estático e boleto importado no ar · central de ajuda em toda tela · **a conta unificada lida já vira cobrança** (migration 34) · o conector roda sozinho a cada 15 min pelo `financeiro-ciclo.timer`, e desde **28/08** a agenda de cobrança roda sozinha em três timers (`fila` 5 min · `consulta` e `certificado` diárias) |
@@ -33,7 +33,10 @@
 > competência**. O endereço trava o boleto, que é dois passos adiante. Ver
 > `RETOMADA-2026-09-08.md` §3.
 >
-> **A suíte hoje:** `EXIT=0`, **2.619** verificações sem banco (eram 2.420 aqui).
+> | Bloco de 07/09: a `Q-VENC3-01` (a), *"hoje são dias corridos, e o boleto pode vencer num domingo"* | 09/09 | **DECIDIDA E CONSTRUÍDA.** O dono escolheu *"antecipar até o dia útil anterior"*, e o calendário bancário nacional existe agora (`src/dominio/calendario-bancario.ts`). `anteciparVencimento` subtrai os 3 dias **e depois recua**, nessa ordem. A borda **(b) continua aberta**, e o piso dela baixou dois dias — `QUESTOES.md` §2.f |
+> | §1 da `RETOMADA-2026-09-09`: o usuário de serviço do webhook é *"banco, e banco volta para o dono"* | 09/09 | **Continua sendo do dono APERTAR o botão, e deixou de ser digitar `psql`.** O workflow `provisionar-cobranca` deriva o `auth_user_id`, confere a identidade do banco, roda o ensaio sempre e só então grava. O outro portão (a URL no Portal Developers) continua humano |
+>
+> **A suíte hoje:** `EXIT=0`, **2.637** verificações sem banco (eram 2.420 aqui).
 
 > ## A única pendência do repositório é o certificado A1.
 >

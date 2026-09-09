@@ -79,9 +79,9 @@ Uma questão sem dono nomeado é automaticamente vermelha, por não ter caminho 
 
 | Questão | Por que é do dono, e não minha |
 |---|---|
-| **`Q-VENC3-01` (a)** | O que fazer quando o −3 cai em sábado, domingo ou feriado. Antecipar mais respeita a regra; empurrar a viola. Não há calendário de feriados no sistema, e inventar um é o improviso que a regra 10 proíbe |
+| ~~**`Q-VENC3-01` (a)**~~ | ✅ **DECIDIDA em 09/09/2026 — «antecipar até o dia útil anterior»**, e construída no mesmo dia (§2.f). O calendário bancário nacional existe agora: `src/dominio/calendario-bancario.ts` |
 | **`Q-VENC3-01` (b)** | Dia 1, 2 ou 3 traz a data para dentro da própria competência, e o boleto nasce vencido. Vale igual nos dois caminhos desde hoje |
-| **`AUD-08` — dono das 4 usinas** | Nome, natureza, documento e dados bancários. Não é extraível: a tabela está vazia, `dono_usina_id` é nulo nas quatro e o CRM também não sabe |
+| **`AUD-08` — dono das 4 usinas** | Nome, natureza, documento e dados bancários. Não é extraível: a tabela está vazia, `dono_usina_id` é nulo nas quatro e o CRM também não sabe. **Adiada pelo dono em 09/09** com o custo medido — §2.f |
 | **O tipo do originador do Rhenan** | "Out Sales" não existe como originador, e o tipo muda a alíquota que a R20-b congela |
 | **Fatura de R$ 0,00 — emitir ou não** | A conta do Fernando Albino fecha em zero. O sistema já recusa o **boleto** com nome; faturar ou não é chamada da operação |
 | **`Q-BAIXAOPER-01` · `Q-RATEIO-SICOOB-01` · `Q-DOCG3-11`** | Movem dinheiro e dependem de terceiro (banco, contador) |
@@ -344,6 +344,109 @@ perguntas que faltam estão em `PROMPT-suporte-sicoob-2026-09-08.md` §4.
 
 ---
 
+## 2.f Decisões do dono em 09/09/2026, à noite — as três que o §0 da retomada listava
+
+As três pendências que a `RETOMADA-2026-09-09` §0 mandava decidir primeiro foram
+postas ao dono na mesma pergunta. **Duas fecharam e a terceira foi adiada com
+consciência do que ela custa.**
+
+### ✅ FECHA E FOI CONSTRUÍDA — `Q-VENC3-01` (a), o −3 em fim de semana e feriado
+
+> *"Antecipar até o dia útil anterior."*
+
+A pergunta estava aberta desde 07/09 e era a única das duas bordas que atinge a
+carteira inteira — a (b) só vale quando a conta lida não traz data. **Antecipar
+respeita a regra e empurrar a violaria:** empurrar para a segunda deixaria o
+boleto a 1 ou 2 dias da conta da Equatorial, que é exatamente o aperto que os 3
+dias existem para evitar. Recuar só aumenta a folga.
+
+**O que entrou:** `src/dominio/calendario-bancario.ts`, e a subtração de
+`anteciparVencimento` passou a ser *"3 dias corridos e depois recua até o dia
+útil"*. A ordem das duas operações não é comutativa e está escrita no código:
+recuar antes deslocaria o ponto de partida, e a conta dos 3 dias passaria a ser
+feita contra uma data que a distribuidora nunca imprimiu.
+
+**Três decisões técnicas dentro dela, tomadas aqui e registradas em vez de
+escondidas** (delegação de 08/09 — ver §2.b):
+
+| Decisão | Por quê |
+|---|---|
+| **O calendário é NACIONAL** | Quem liquida boleto é o SPB/STR, que roda no calendário nacional. Feriado municipal fecha a agência da esquina e não para a compensação — entraria como falso positivo, antecipando título que ninguém estava impedido de pagar |
+| **A Quarta-feira de Cinzas NÃO é feriado** | O banco abre ao meio-dia; o título que vence nela é pago nela. É a pegadinha da lista, e o `CAL2c` a prende |
+| **24/12 e 31/12 são dia útil** | São ponto facultativo de *atendimento*, não feriado: a agência não abre e o pagamento digital funciona o dia inteiro. Tratá-los como não-útil anteciparia todo vencimento de fim de ano sem que nenhum cliente estivesse impedido. O `CAL4a` é o teste que falha primeiro no dia em que a operação medir o contrário |
+
+**A Páscoa é uma função e não uma tabela**, e isso também é decisão: uma lista de
+datas coladas venceria em silêncio — no ano seguinte ao último que alguém
+digitou, o Carnaval simplesmente deixaria de ser feriado e nenhum teste saberia.
+
+**Medido:** `tests/calendario-bancario.ts`, 16 verificações, com varredura de 40
+anos (≈14.600 datas) provando as três invariantes que exemplo nenhum prova — o
+recuo sempre termina em dia útil, **nunca empurra para frente**, e nunca recua
+mais de 4 dias. Suíte sem banco `EXIT=0`, **2.637** verificações (eram 2.619).
+
+⚠️ **A (a) piorou a (b) em dois dias, e isso é registro e não surpresa.** Pelo
+caminho do cadastro, dia 1º com competência de junho projetava 01/07 e antecipava
+para 28/06 — que é **domingo**, e agora recua para **26/06**, mais fundo dentro da
+competência. O `J4j` foi atualizado e continua prendendo o comportamento sem
+afirmar que ele está certo. **A (b) segue aberta e segue com o dono**, e quem for
+decidi-la precisa saber que o piso baixou.
+
+### ✅ DECIDIDA — o prazo de crédito é **D+1**
+
+> *"Assumir D+1 e seguir."*
+
+O Sicoob respondeu em 08/09 que é ajustável no contrato de cobrança: `D+0`, `D+1`
+(o padrão) ou `D+2` (§2.d). O dono escolheu **seguir com o padrão** em vez de
+segurar o assunto até falar com a cooperativa.
+
+**Onde isso NÃO entrou, e não entrar é a decisão:** não virou constante nem
+coluna, porque **nada consome o número hoje**. O repasse não espera D+1 — ele
+espera a *confirmação* do banco (`Q-BAIXAOPER-01`, §2.d), que é um fato observado
+e não um prazo projetado. Uma constante sem consumidor seria uma segunda fonte de
+verdade esperando divergir da primeira. Ela entra no dia em que existir projeção
+de caixa, e o lugar dela já tem nome: ao lado de `liquidacao`.
+
+**O que muda se a cooperativa disser outro número:** um parâmetro, não o desenho.
+
+### 🟡 ADIADA COM CONSCIÊNCIA — `dono_usina`
+
+> *"Deixar para depois."*
+
+A tabela continua vazia, as 4 usinas continuam com `dono_usina_id` NULL e
+`regra_repasse` continua 70% nas quatro — **70% do dinheiro com percentual
+definido e nenhum destinatário**. O CRM também não sabe (`dono_lead_nome` NULL
+nas quatro), então não há de onde extrair: é informação que só existe fora do
+sistema.
+
+**O que o adiamento custa, medido e não estimado:** não bloqueia faturar e não
+bloqueia emitir boleto. Bloqueia o **split**, e só quando a primeira fatura for
+paga — a R12 trava o repasse inteiro. Até lá, `triarRegistro` já emite o alerta
+`usina_sem_dono` em toda fatura (`J6b`), a camada `dono_da_usina` da prontidão
+mede 4 de 4 pendentes com efeito `bloqueia_split`, e a fila de
+`repasse-pendente` já tem tela desde 08/09 e distingue *"sem dono"* (trabalho de
+alguém) de *"aguardando o banco"* (trabalho de ninguém).
+
+**Não falta código:** `/donos` cadastra e `/usinas` vincula, com o vínculo
+gravando no change. Falta o dado — nome, PF/PJ, documento e chave Pix (ou
+banco+agência+conta) — e ele volta para o dono.
+
+### 🔧 E o portão que sobrou do webhook virou botão
+
+A `RETOMADA-2026-09-09` §1 nomeou dois portões que *"não têm como ser medidos
+desta sessão"*. O primeiro — o **usuário de serviço do tenant**, sem o qual a rota
+responde `503 ServicoDeCobrancaNaoProvisionado` — era `psql "$DIRECT_URL"` a mão,
+duas vezes, com dois uuids colados. Virou o workflow **`provisionar-cobranca`**,
+no mesmo molde do `migrate-financeiro`: a credencial não desce para a VPS, o
+`auth_user_id` é **derivado** (nunca digitado), a identidade do banco é conferida
+antes, o **ensaio roda sempre** — inclusive quando se pediu para valer — e o job
+fica vermelho se o papel gravado não for `cobranca`.
+
+**O segundo portão continua humano e não tem automação possível:** a URL
+`https://financeiro.blackhaus.io/api/liquidacoes/webhook-sicoob/<tenant>` no
+Portal Developers. O resumo do run a imprime pronta para copiar.
+
+---
+
 ## 3. F0 — o que falta para fechar
 
 Entregas da F0 conforme `PRD-v2.2` §10:
@@ -503,7 +606,7 @@ Entregas da F0 conforme `PRD-v2.2` §10:
 
 | ID | Nível | Pergunta | Quem |
 |---|:--:|---|---|
-| **Q-VENC3-01** | 🟡 | **NOVA em 07/09/2026 — a regra dos 3 dias foi construída, e ela deixa DUAS bordas sem dono.** Regra do dono, 04/09: *"a data de vencimento dos boletos gerados deve ser 3 dias antes da data imposta pela Equatorial."* **Construída:** `anteciparVencimento` em `src/dominio/faturamento.ts`, chamada por `vencimentoEscolhido` — as **duas** fontes (a conta lida e o dia do cadastro) passam por ela, porque as duas dizem a data da DISTRIBUIDORA e nenhuma diz a nossa. Sete verificações novas em `tests/fatura-do-registro.ts` (J4a…J4j), suíte `EXIT=0`, **2.434 → 2.439** linhas `ok`, zero migrations. **Efeito colateral de cadastro, e ele foi corrigido junto:** `unidade_consumidora.data_vencimento` passou a significar, por escrito, *o dia da distribuidora* — gravar ali um dia já antecipado subtrairia duas vezes pelo caminho do cadastro e uma só pelo da conta, dando à mesma UC dois vencimentos conforme a conta do mês trouxesse ou não a data impressa. O CSV de `/opt/financeiro/listas-2026-09-04/` foi refeito com o dia da Equatorial por causa disso. **AS DUAS BORDAS, e nenhuma é do implementador fechar (regra 10):** **(a) fim de semana e feriado** — "3 dias antes" não diz o que fazer quando o alvo cai em sábado, domingo ou feriado. Antecipar mais respeita a regra; empurrar para o dia útil seguinte a viola. Não existe calendário de feriados neste sistema e inventar um seria improviso, então hoje são **dias corridos**, e o boleto pode vencer num domingo. **(b) o boleto que nasce vencido** — pelo caminho do **cadastro**, dia 1, 2 ou 3 traz a data de volta para DENTRO da competência (dia 1º de julho, competência junho → **28/06**), e `vencimentoDaFatura` projeta no mês seguinte justamente porque *"vencimento dentro da própria competência venceria antes de a fatura poder existir"*. O `J4j` prende o comportamento de hoje sem afirmar que ele está certo. **Medido em 04/09:** das 16 UCs cujo vencimento foi lido das faturas do CRM, **cinco** vencem no dia 1º ou 2 — `13290060`, `55953601208`, `56310801224`, `276862801233`, `381032001295`. **A borda (b) é estreita**: só vale quando a conta lida NÃO traz data, e ela quase sempre traz. **Decidir (b):** (i) antecipar mesmo assim, e aceitar boleto vencido quando a conta vier sem data; (ii) não antecipar abaixo do dia 4; (iii) empurrar a projeção do cadastro um mês nesses casos. **Fora do escopo desta entrega, e nomeado para não sumir:** o caminho contratual legado (`triar()` em `faturamento.ts`) **não** antecipa — ele não é o caminho oficial desde a `Q-CICLO-01`, e mexer nele sem decisão duplicaria a regra em dois lugares | Vinicius |
+| **Q-VENC3-01** | 🟡 | **NOVA em 07/09/2026 — a regra dos 3 dias foi construída, e ela deixa DUAS bordas sem dono.** Regra do dono, 04/09: *"a data de vencimento dos boletos gerados deve ser 3 dias antes da data imposta pela Equatorial."* **Construída:** `anteciparVencimento` em `src/dominio/faturamento.ts`, chamada por `vencimentoEscolhido` — as **duas** fontes (a conta lida e o dia do cadastro) passam por ela, porque as duas dizem a data da DISTRIBUIDORA e nenhuma diz a nossa. Sete verificações novas em `tests/fatura-do-registro.ts` (J4a…J4j), suíte `EXIT=0`, **2.434 → 2.439** linhas `ok`, zero migrations. **Efeito colateral de cadastro, e ele foi corrigido junto:** `unidade_consumidora.data_vencimento` passou a significar, por escrito, *o dia da distribuidora* — gravar ali um dia já antecipado subtrairia duas vezes pelo caminho do cadastro e uma só pelo da conta, dando à mesma UC dois vencimentos conforme a conta do mês trouxesse ou não a data impressa. O CSV de `/opt/financeiro/listas-2026-09-04/` foi refeito com o dia da Equatorial por causa disso. **AS DUAS BORDAS, e nenhuma é do implementador fechar (regra 10):** **(a) fim de semana e feriado** — "3 dias antes" não diz o que fazer quando o alvo cai em sábado, domingo ou feriado. Antecipar mais respeita a regra; empurrar para o dia útil seguinte a viola. Não existe calendário de feriados neste sistema e inventar um seria improviso, então hoje são **dias corridos**, e o boleto pode vencer num domingo. **(b) o boleto que nasce vencido** — pelo caminho do **cadastro**, dia 1, 2 ou 3 traz a data de volta para DENTRO da competência (dia 1º de julho, competência junho → **28/06**), e `vencimentoDaFatura` projeta no mês seguinte justamente porque *"vencimento dentro da própria competência venceria antes de a fatura poder existir"*. O `J4j` prende o comportamento de hoje sem afirmar que ele está certo. **Medido em 04/09:** das 16 UCs cujo vencimento foi lido das faturas do CRM, **cinco** vencem no dia 1º ou 2 — `13290060`, `55953601208`, `56310801224`, `276862801233`, `381032001295`. **A borda (b) é estreita**: só vale quando a conta lida NÃO traz data, e ela quase sempre traz. **Decidir (b):** (i) antecipar mesmo assim, e aceitar boleto vencido quando a conta vier sem data; (ii) não antecipar abaixo do dia 4; (iii) empurrar a projeção do cadastro um mês nesses casos. **Fora do escopo desta entrega, e nomeado para não sumir:** o caminho contratual legado (`triar()` em `faturamento.ts`) **não** antecipa — ele não é o caminho oficial desde a `Q-CICLO-01`, e mexer nele sem decisão duplicaria a regra em dois lugares. ✅ **09/09/2026 — A (a) FOI DECIDIDA E CONSTRUÍDA: «antecipar até o dia útil anterior».** O texto acima fica como estava porque é registro datado; o que mudou está em §2.f. Entraram `src/dominio/calendario-bancario.ts` (Páscoa por algoritmo, os 12–13 feriados bancários nacionais, o recuo) e `tests/calendario-bancario.ts` (16 verificações, varredura de 40 anos). `anteciparVencimento` passou a subtrair **e depois recuar**, nessa ordem. ⚠️ **A (b) CONTINUA ABERTA e o piso dela baixou dois dias:** 28/06 é domingo, então o exemplo do texto acima hoje dá **26/06** — mais fundo dentro da competência. O `J4j` foi atualizado. Restam (b) e o `triar()` legado | Vinicius |
 | **POP-01** | 🟡 | **Tres populacoes, tres numeros, e o faturamento precisa de um denominador.** 29 leads em `Rateio Concluido` · 36 vinculos em `usina_clientes` · 28 de 36 homologadas (sessao 3). Qual e a base de cobranca? | Vinicius + operacao |
 | **F-01b** | 🔴 | **Sucessora do F-01.** Nenhuma etapa do funil marca o cliente pagante — o card sai do `won` à mão, e o estado "desconto na fatura" vive fora do CRM. O gatilho real é a 1ª fatura com desconto da distribuidora. Faturar no `won` do Rateio fatura cedo demais | Vinicius + operação |
 | ~~**Q-021 / AUD-03**~~ | — | ~~Faturar pela geração nominal ou pela série real?~~ **RESOLVIDA em 28/07 — ver §9** |
