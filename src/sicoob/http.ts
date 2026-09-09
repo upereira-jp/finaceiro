@@ -108,11 +108,17 @@ export const SICOOB = {
  * candidato desta familia (nao ha `boletos_baixa`, e isso NAO esta medido contra
  * o endpoint de baixa: a primeira baixa real e que confirma).
  *
- * OS TRES DE WEBHOOK FICAM DE FORA ATE EXISTIR QUEM OS USE. Eles sao concedidos,
- * e sao a resposta da outra metade da `Q-ESCOPO-V3-01`: cadastrar a URL de
- * notificacao POR CODIGO e possivel, e hoje nao ha esse caminho - o cadastro e
- * feito no portal, a mao. Quando `POST /Cadastrar Webhook` for construido, os
- * dois primeiros entram aqui junto com ele.
+ * OS TRES DE WEBHOOK FICAM DE FORA, e em 09/09/2026 isso deixou de ser espera e
+ * virou desenho. Eles sao concedidos, e sao a resposta da outra metade da
+ * `Q-ESCOPO-V3-01`. O que mudou: descobriu-se que cadastrar a URL POR CODIGO
+ * nao e uma alternativa e sim o UNICO caminho - **o aplicativo do Portal
+ * Developers nao tem tela de webhook** (o dono conferiu campo a campo). A frase
+ * que estava aqui, "o cadastro e feito no portal, a mao", era suposicao herdada
+ * de material publico e nunca tinha sido medida.
+ *
+ * `cadastrarWebhook` existe desde entao e pede o escopo por conta propria - ver
+ * `ESCOPOS_DE_WEBHOOK`, logo abaixo desta lista, para por que ele NAO se somou
+ * a ela como este comentario planejava.
  *
  * E NAO HA MAIS ESCOPO DE PIX nesta familia. O antigo `cobranca_boletos_pix`
  * pedia permissao separada para o QR do boleto hibrido; aqui ele nao tem
@@ -124,6 +130,28 @@ export const ESCOPOS = [
   'boletos_consulta',
   'boletos_alteracao',
 ] as const;
+
+/**
+ * O ESCOPO DO CADASTRO DE WEBHOOK, e ele NAO entra em `ESCOPOS` - decisao de
+ * 09/09/2026, e ela contraria o que o comentario acima planejava ("os dois
+ * primeiros entram aqui junto com ele").
+ *
+ * O PLANO ERA PIOR QUE O PRINCIPIO QUE O JUSTIFICAVA. Somar `webhooks_*` a
+ * `ESCOPOS` faria TODO token de emissao de boleto carregar permissao de trocar
+ * a URL de notificacao - e trocar essa URL e desviar o aviso de que o dinheiro
+ * entrou. O cadastro de webhook e ato ADMINISTRATIVO, roda uma vez por
+ * ambiente e por um script, enquanto a emissao roda todo mes por processo
+ * exposto. Dar a permissao rara ao caminho frequente e exatamente o que o
+ * principio de "escopo a mais e dano a mais" existe para impedir.
+ *
+ * Por isso `token()` passou a aceitar a lista, e o cache passou a ser chaveado
+ * por (credencial, escopos): dois tokens com poderes diferentes nao podem
+ * compartilhar entrada, ou o primeiro a chegar decidiria o poder do segundo.
+ *
+ * `webhooks_consulta` entra aqui junto com o `GET` de solicitacoes, quando ele
+ * existir. Hoje nao existe, e escopo sem uso e a mesma dose de dano.
+ */
+export const ESCOPOS_DE_WEBHOOK = ['webhooks_inclusao'] as const;
 
 // ============================================================ 1. O TRANSPORTE
 
@@ -362,11 +390,24 @@ export class CobrancaSicoob implements PortaDeCobranca {
    * da requisicao do outro lado. Sessenta segundos e mais que o timeout de 30s
    * da chamada, entao um token aprovado aqui nao expira no meio dela.
    *
-   * Chaveado por `credencial_ref`, que e referencia opaca e nao segredo: um
-   * `Map` cuja CHAVE fosse o `client_id` poria credencial em heap dump por um
-   * motivo sem necessidade.
+   * Chaveado por `credencial_ref` MAIS OS ESCOPOS, que e referencia opaca e nao
+   * segredo: um `Map` cuja CHAVE fosse o `client_id` poria credencial em heap
+   * dump por um motivo sem necessidade.
+   *
+   * OS ESCOPOS ENTRARAM NA CHAVE EM 09/09/2026, com o cadastro de webhook. Sem
+   * eles, um token pedido com `webhooks_inclusao` ficaria guardado sob a mesma
+   * chave do token de emissao, e a proxima emissao usaria um token SEM
+   * `boletos_inclusao` - falha 403 no caminho do dinheiro, causada por um
+   * script administrativo que rodou minutos antes. O inverso e pior e mais
+   * silencioso: o cadastro reaproveitaria o token de boleto e falharia dizendo
+   * que falta permissao que o aplicativo tem.
    */
-  private readonly tokens = new Map<CredencialRef, TokenEmMemoria>();
+  private readonly tokens = new Map<string, TokenEmMemoria>();
+
+  /** A chave do cache. Ver o comentario acima para por que os escopos entram. */
+  private chaveDoToken(ref: CredencialRef, escopos: readonly string[]): string {
+    return `${ref}|${escopos.join(' ')}`;
+  }
 
   constructor(o: OpcoesDoAdaptador) {
     this.resolver = o.resolver;
@@ -387,16 +428,20 @@ export class CobrancaSicoob implements PortaDeCobranca {
    * para ele traz `token_fixo`. Isso e do sandbox e nao vaza para producao,
    * onde `tokenFixo` e sempre `null`.
    */
-  private async token(ref: CredencialRef, c: CredencialResolvida): Promise<string> {
+  private async token(
+    ref: CredencialRef, c: CredencialResolvida,
+    escopos: readonly string[] = ESCOPOS,
+  ): Promise<string> {
     if (c.tokenFixo) return c.tokenFixo;
 
-    const guardado = this.tokens.get(ref);
+    const chave = this.chaveDoToken(ref, escopos);
+    const guardado = this.tokens.get(chave);
     if (guardado && guardado.expiraEm > this.agora()) return guardado.token;
 
     const corpo = new URLSearchParams({
       grant_type: 'client_credentials',
       client_id: c.clientId,
-      scope: ESCOPOS.join(' '),
+      scope: escopos.join(' '),
     }).toString();
 
     const r = await this.transporte({
@@ -437,7 +482,7 @@ export class CobrancaSicoob implements PortaDeCobranca {
 
     const segundos = Number(j?.expires_in);
     const folga = 60;
-    this.tokens.set(ref, {
+    this.tokens.set(chave, {
       token,
       // Sem `expires_in` utilizavel, o cache dura o minimo e a proxima chamada
       // pede de novo. Nunca "para sempre": um token eterno em memoria e o que
@@ -450,8 +495,9 @@ export class CobrancaSicoob implements PortaDeCobranca {
   private async chamar(
     ref: CredencialRef, c: CredencialResolvida,
     metodo: 'GET' | 'POST', caminho: string, corpo?: string,
+    escopos: readonly string[] = ESCOPOS,
   ): Promise<RespostaHttp> {
-    const token = await this.token(ref, c);
+    const token = await this.token(ref, c, escopos);
     const r = await this.transporte({
       url: `${this.base(c)}${caminho}`,
       metodo,
@@ -473,7 +519,7 @@ export class CobrancaSicoob implements PortaDeCobranca {
     // o cache e DEIXA FALHAR: quem retenta e a fila do PRD 6, com intervalo
     // exponencial. Retentar aqui dentro esconderia do `tentativas` que houve
     // duas chamadas, e a fila e o unico lugar do sistema que conta isso.
-    if (r.status === 401) this.tokens.delete(ref);
+    if (r.status === 401) this.tokens.delete(this.chaveDoToken(ref, escopos));
     return r;
   }
 
@@ -688,6 +734,131 @@ export class CobrancaSicoob implements PortaDeCobranca {
     const r = await this.chamar(ref, c, 'POST', `/boletos/${encodeURIComponent(nossoNumero)}/baixar`, corpo);
     if (r.status !== 204 && (r.status < 200 || r.status >= 300)) throw erroDaResposta(r);
   }
+
+  // ------------------------------------------------------- cadastrar webhook
+
+  /**
+   * CADASTRA A URL QUE RECEBE O AVISO DE PAGAMENTO. `POST /webhooks`.
+   *
+   * POR QUE ISTO E CODIGO E NAO UM FORMULARIO, e a resposta so chegou em
+   * 09/09/2026: **o aplicativo do Portal Developers NAO TEM tela de webhook.**
+   * A pagina do aplicativo lista dados do cooperado, `client_id` e os escopos
+   * das quatro APIs, e nada mais - o dono conferiu campo a campo. Ate esta data
+   * o projeto registrava, em dois lugares, que *"o cadastro e feito no portal, a
+   * mao"*, e isso era suposicao herdada de material publico, nunca medida.
+   * Nao ha caminho manual: ou este `POST` existe, ou o banco nunca notifica.
+   *
+   * O CONTRATO E FONTE PRIMARIA - o dono colou o Swagger do proprio endpoint,
+   * porque as paginas do portal sao SPA e nao vem por `WebFetch`. Corpo:
+   *
+   *     { "url", "codigoTipoMovimento": 7, "codigoPeriodoMovimento": 1, "email" }
+   *
+   * e sucesso e **201** com `{ "resultado": { "idWebhook": 1234 } }`. Os erros
+   * (400 negocio, 406 inconsistencia, 500 interno) usam o MESMO formato
+   * `mensagens[]` que `erroDaResposta` ja sabe ler desde 27/08 - nao ha
+   * tradutor novo aqui, e nao ter e o sinal de que a familia e a mesma.
+   *
+   * OS DOIS CODIGOS SAO CONSTANTES E NAO PARAMETROS, e isso e deliberado:
+   * `codigoTipoMovimento 7` (Pagamento - baixa operacional) e o UNICO que
+   * `sicoob/webhook.ts` traduz em baixa, e `codigoPeriodoMovimento 1`
+   * (Movimento Atual, D0) e o unico periodo que o endpoint oferece. Aceitar
+   * outro valor aqui seria permitir cadastrar um webhook cujos eventos o nosso
+   * tradutor ignora - assinar aviso que ninguem le.
+   *
+   * O `email` E DE QUEM OPERA, e nao do sistema: e para la que o banco avisa
+   * quando a NOTIFICACAO FALHA. Um endereco que ninguem le transforma "o
+   * dinheiro parou de ser avisado" em silencio dos dois lados, que e o mesmo
+   * modo de falha do 404 generico da guarda de origem. Por isso ele e
+   * obrigatorio e nao tem default.
+   *
+   * ESCOPO PROPRIO, ver `ESCOPOS_DE_WEBHOOK`: este token nasce podendo cadastrar
+   * webhook e NAO podendo emitir boleto, e o de emissao segue sem poder trocar
+   * a URL de notificacao.
+   */
+  async cadastrarWebhook(
+    ref: CredencialRef, p: { url: string; email: string },
+  ): Promise<{ idWebhook: string }> {
+    const url = String(p.url ?? '').trim();
+    const email = String(p.email ?? '').trim();
+
+    /* AS DUAS GUARDAS SAO DO BANCO, e conferi-las aqui e barato porque a
+     * alternativa e cara: a Sicoob aceita o cadastro e depois REPROVA a URL na
+     * validacao, e a reprovacao aparece no portal, nao aqui. Ver o cabecalho de
+     * `sicoob/webhook.ts`: "a URL so sera aceita se o servidor responder 200,
+     * 201 ou 204" - e antes disso ela precisa ser https na 443. */
+    const u = ehUrlDeWebhook(url);
+    if (!u) {
+      throw Object.assign(
+        new TypeError(
+          `URL invalida para webhook: ${JSON.stringify(url)}. A Sicoob exige https e porta 443 - ` +
+          'uma URL http, com porta explicita diferente de 443 ou malformada e recusada na validacao, ' +
+          'e a recusa aparece no portal do banco e nao aqui. Nada foi enviado.'
+        ),
+        { status: 422 },
+      );
+    }
+    if (!email || !email.includes('@')) {
+      throw Object.assign(
+        new TypeError(
+          'e-mail obrigatorio no cadastro do webhook: e para onde a Sicoob avisa que a notificacao ' +
+          'esta FALHANDO. Sem alguem lendo esse endereco, "o dinheiro parou de ser avisado" nao chega ' +
+          'a ninguem. Nada foi enviado.'
+        ),
+        { status: 422 },
+      );
+    }
+
+    const c = await this.resolver(ref);
+    const corpo = JSON.stringify({
+      url,
+      codigoTipoMovimento: TIPO_MOVIMENTO_PAGAMENTO,
+      codigoPeriodoMovimento: PERIODO_MOVIMENTO_ATUAL,
+      email,
+    });
+
+    const r = await this.chamar(ref, c, 'POST', '/webhooks', corpo, ESCOPOS_DE_WEBHOOK);
+    if (r.status < 200 || r.status >= 300) throw erroDaResposta(r);
+
+    /* O `idWebhook` E O UNICO PRODUTO DESTA CHAMADA que sobrevive a ela, e sem
+     * ele nao ha como consultar nem alterar o webhook depois. Sai como TEXTO
+     * pela mesma razao dos outros identificadores do adaptador: o banco manda
+     * `1234` como numero JSON, e numero de identificador que passa por float
+     * perde digito em silencio quando cresce. */
+    const id = JSON.parse(r.texto)?.resultado?.idWebhook;
+    if (id == null) {
+      throw Object.assign(
+        new Error(
+          `A Sicoob respondeu HTTP ${r.status} sem "resultado.idWebhook". O webhook pode ter sido ` +
+          'cadastrado - confira com uma consulta antes de tentar de novo, para nao cadastrar dois.'
+        ),
+        { status: 502 },
+      );
+    }
+    return { idWebhook: String(id) };
+  }
+}
+
+/** `codigoTipoMovimento 7` - Pagamento (baixa operacional). O unico que
+ *  `sicoob/webhook.ts` traduz em baixa. */
+export const TIPO_MOVIMENTO_PAGAMENTO = 7;
+
+/** `codigoPeriodoMovimento 1` - Movimento Atual (D0). */
+export const PERIODO_MOVIMENTO_ATUAL = 1;
+
+/**
+ * https na 443, e nada mais - as duas exigencias que o banco publica.
+ *
+ * `new URL` recusa o malformado; o resto e a leitura literal da regra. A porta
+ * VAZIA conta como 443 (e o default do https), entao ela passa; `:443` explicito
+ * tambem. Qualquer outra porta e recusada aqui em vez de na validacao do banco,
+ * onde o erro chega dias depois e por outro canal.
+ */
+export function ehUrlDeWebhook(bruta: string): URL | null {
+  let u: URL;
+  try { u = new URL(String(bruta)); } catch { return null; }
+  if (u.protocol !== 'https:') return null;
+  if (u.port !== '' && u.port !== '443') return null;
+  return u;
 }
 
 // ============================================================ 7. AUXILIARES

@@ -9,6 +9,7 @@
 //   npm run servico-de-cobranca -- --tenant <uuid do tenant>
 
 import { authUserIdDeServico, ehUuid, nomeDoServico, emailDoServico } from '../src/auth/usuario-de-servico.ts';
+import { urlDoWebhook } from '../src/sicoob/webhook.ts';
 
 const arg = (n: string) => { const i = process.argv.indexOf(`--${n}`); return i >= 0 ? process.argv[i + 1] : undefined; };
 const tenant = arg('tenant');
@@ -28,9 +29,14 @@ console.log(`
   email ............. ${emailDoServico(tenant!)}
   papel ............. cobranca (o minimo que faz escrever_carteira passar)
 
-  A URL que se cadastra no Portal Developers do Sicoob:
+  A URL do webhook deste tenant:
 
-      https://financeiro.blackhaus.io/api/liquidacoes/webhook-sicoob/${tenant}
+      ${urlDoWebhook(tenant!)}
+
+  ⚠️ ELA NAO SE CADASTRA NO PORTAL - medido em 09/09/2026, o aplicativo do Portal
+  Developers NAO TEM tela de webhook. O cadastro e por API, e ha script:
+
+      npm run webhook-sicoob -- --auth-user <uuid> --email <endereco>
 
   Provisionar (ensaio primeiro - ele da ROLLBACK e mostra o que faria):
 

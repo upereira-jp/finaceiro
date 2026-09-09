@@ -200,3 +200,35 @@ export function traduzirEvento(corpoCru: string): Traducao {
     dataLiquidacao,
   };
 }
+
+// ============================================================================
+// A URL QUE SE CADASTRA NO BANCO, e ela mora aqui porque e a outra ponta deste
+// mesmo tradutor: e o endereco cujo corpo as funcoes acima leem.
+//
+// POR QUE UMA FUNCAO E NAO UM LITERAL EM CADA SCRIPT. Ate 09/09/2026 o endereco
+// existia escrito a mao em `scripts/servico-de-cobranca.ts`, e o cadastro do
+// webhook ia precisar dele de novo. Dois literais da mesma URL em dois scripts
+// nao divergem no dia em que sao escritos - divergem no dia em que UM deles e
+// corrigido. E o modo de falha seria o pior possivel: o banco notificando um
+// endereco que ninguem confere, com os dois lados achando que cadastraram o
+// certo.
+//
+// O HOST E CONSTANTE, e nao variavel de ambiente, porque ele nao e configuracao
+// deste processo: e o endereco PUBLICO que o nginx serve e que o certificado
+// TLS cobre. Uma env aqui daria a impressao de que trocar o valor basta, quando
+// trocar de verdade exige vhost, certificado e um novo cadastro no banco.
+
+/** O host publico do financeiro. https na 443 - as duas exigencias do banco. */
+export const HOST_PUBLICO = 'https://financeiro.blackhaus.io';
+
+/**
+ * O endereco que recebe a notificacao de pagamento DESTE tenant.
+ *
+ * O tenant vai no CAMINHO e nao em cabecalho porque a notificacao da Sicoob nao
+ * carrega nada nosso: o corpo tem o `nossoNumero` do titulo e mais nada, e sem o
+ * tenant na URL a rota nao saberia em qual carteira procurar. `ADR-0006` D
+ * lembra que isto NAO e segredo - a autorizacao e a faixa de IP.
+ */
+export function urlDoWebhook(tenantId: string): string {
+  return `${HOST_PUBLICO}/api/liquidacoes/webhook-sicoob/${tenantId}`;
+}

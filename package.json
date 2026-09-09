@@ -38,6 +38,7 @@
     "enderecos": "node --experimental-strip-types --env-file=.env scripts/importar-enderecos.ts",
     "certificado": "node --experimental-strip-types scripts/certificado.ts",
     "servico-de-cobranca": "node --experimental-strip-types scripts/servico-de-cobranca.ts",
+    "webhook-sicoob": "node --experimental-strip-types scripts/cadastrar-webhook.ts",
     "identidade": "node --experimental-strip-types --env-file=.env scripts/cadastrar-identidade.ts",
     "ensaio-juncao": "node --experimental-strip-types --env-file=.env scripts/ensaio-da-juncao.ts",
     "repasse": "node --experimental-strip-types --env-file=.env scripts/cadastrar-repasse.ts",

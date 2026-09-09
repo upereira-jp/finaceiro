@@ -23,7 +23,9 @@
 
 import {
   CobrancaSicoob, situacaoDoTexto, seuNumeroDe, ErroDaSicoob, pagadorSicoob,
-  type Transporte, type PedidoHttp, SEU_NUMERO_MAX } from '../src/sicoob/http.ts';
+  type Transporte, type PedidoHttp, SEU_NUMERO_MAX,
+  ehUrlDeWebhook, ESCOPOS, ESCOPOS_DE_WEBHOOK } from '../src/sicoob/http.ts';
+import { urlDoWebhook } from '../src/sicoob/webhook.ts';
 import { faltamNoEndereco } from '../src/sicoob/porta.ts';
 import { cofreFixo } from '../src/sicoob/cofre.ts';
 import { centavosParaReaisDecimal, reaisDecimalParaCentavos, DecimalInvalido } from '../src/dominio/centavos.ts';
@@ -449,6 +451,108 @@ const PEDIDO = {
   chk('E1e', faltamNoEndereco({ logradouro: 'Rua A', bairro: 'C', municipio: 'X', cep: '75000-000' })
         .join() === 'uf',
       'e a lista nomeia SO o que falta - quem le a recusa sabe qual campo preencher');
+}
+
+// ===========================================================================
+// W - O CADASTRO DO WEBHOOK (`POST /webhooks`)
+//
+// POR QUE ELE EXISTE COMO CODIGO, e a razao so ficou conhecida em 09/09/2026: o
+// aplicativo do Portal Developers NAO TEM tela de webhook. Ate entao o projeto
+// afirmava, em dois lugares, que "o cadastro e feito no portal, a mao" - e era
+// suposicao herdada de material publico, nunca medida. Ou este POST existe, ou
+// o banco nunca notifica.
+//
+// O contrato e fonte primaria (o Swagger do proprio endpoint, colado pelo dono).
+// O QUE ESTAS VERIFICACOES NAO PROVAM continua sendo o mesmo do resto do
+// arquivo: que a Sicoob aceita este corpo. Elas provam o que sobe.
+// ===========================================================================
+{
+  const CADASTRADO = { status: 201, texto: JSON.stringify({ resultado: { idWebhook: 1234 } }) };
+  const URL_OK = urlDoWebhook('eac198c0-b0c1-4b13-9b4d-6ac1a6eb011d');
+  const P = { url: URL_OK, email: 'financeiro@exemplo.com.br' };
+
+  const { c, vistos } = adaptador([TOKEN_OK, CADASTRADO]);
+  const r = await c.cadastrarWebhook('ref-1', P);
+
+  chk('W1', r.idWebhook === '1234',
+      `o 201 devolve resultado.idWebhook, e ele sai como TEXTO: ${r.idWebhook}`);
+
+  const enviado = JSON.parse(vistos[1]!.corpo!);
+  chk('W2', vistos[1]!.metodo === 'POST' && vistos[1]!.url === 'https://exemplo.invalido/v3/webhooks',
+      `o caminho e POST /webhooks na base da cobranca v3 (foi ${vistos[1]!.metodo} ${vistos[1]!.url})`);
+  chk('W3', Object.keys(enviado).sort().join() === 'codigoPeriodoMovimento,codigoTipoMovimento,email,url'
+        && enviado.codigoTipoMovimento === 7 && enviado.codigoPeriodoMovimento === 1
+        && enviado.url === URL_OK && enviado.email === P.email,
+      'o corpo tem exatamente os quatro campos do contrato, com 7 (pagamento) e 1 (D0) FIXOS - '
+      + 'cadastrar outro tipo seria assinar aviso que o nosso tradutor ignora');
+
+  /* ⚠️ O ESCOPO E O PONTO DA ENTREGA. O token deste cadastro nasce podendo
+   * cadastrar webhook e NAO podendo emitir boleto. Se `ESCOPOS` inteiro subisse
+   * aqui, todo token de emissao passaria a poder trocar a URL de notificacao -
+   * e trocar essa URL e desviar o aviso de que o dinheiro entrou. */
+  const pedidoDeToken = new URLSearchParams(vistos[0]!.corpo!);
+  chk('W4', pedidoDeToken.get('scope') === ESCOPOS_DE_WEBHOOK.join(' ')
+        && !pedidoDeToken.get('scope')!.includes('boletos_'),
+      `o token do cadastro pede SO ${ESCOPOS_DE_WEBHOOK.join(' ')} - nenhum escopo de boleto junto`);
+
+  /* E O CACHE NAO PODE MISTURAR OS DOIS. Sem os escopos na chave, a emissao
+   * seguinte reusaria o token de webhook e falharia com 403 no caminho do
+   * dinheiro, minutos depois de um script administrativo ter rodado. */
+  const { c: c2, vistos: v2 } = adaptador([TOKEN_OK, CADASTRADO, TOKEN_OK, respostaDeRegistro()]);
+  await c2.cadastrarWebhook('ref-1', P);
+  await c2.registrar(PEDIDO as any);
+  const escoposPedidos = v2.filter((p) => p.url === 'https://auth.invalido/token')
+    .map((p) => new URLSearchParams(p.corpo!).get('scope'));
+  chk('W5', escoposPedidos.length === 2
+        && escoposPedidos[0] === ESCOPOS_DE_WEBHOOK.join(' ')
+        && escoposPedidos[1] === ESCOPOS.join(' '),
+      'a MESMA credencial pede DOIS tokens quando os escopos diferem - o cache e por (ref, escopos), '
+      + 'e nao por ref');
+
+  /* AS DUAS GUARDAS QUE RECUSAM ANTES DE CHAMAR. A Sicoob aceita o cadastro e
+   * REPROVA a URL depois, na validacao - e a reprovacao aparece no portal, dias
+   * depois e por outro canal. Barato conferir aqui. */
+  for (const [id, ruim, porque] of [
+    ['W6a', 'http://financeiro.blackhaus.io/api/x', 'http nao e https'],
+    ['W6b', 'https://financeiro.blackhaus.io:8443/api/x', 'porta diferente de 443'],
+    ['W6c', 'nao-e-url', 'malformada'],
+  ] as const) {
+    const { c: cx, vistos: vx } = adaptador([TOKEN_OK, CADASTRADO]);
+    let erro: any = null;
+    try { await cx.cadastrarWebhook('ref-1', { ...P, url: ruim }); } catch (e) { erro = e; }
+    chk(id, erro?.status === 422 && vx.length === 0,
+        `${porque}: recusa 422 e NAO chega a discar (${vx.length} chamada(s))`);
+  }
+
+  const { c: c3, vistos: v3 } = adaptador([TOKEN_OK, CADASTRADO]);
+  let semEmail: any = null;
+  try { await c3.cadastrarWebhook('ref-1', { url: URL_OK, email: '  ' }); } catch (e) { semEmail = e; }
+  chk('W7', semEmail?.status === 422 && v3.length === 0,
+      'sem e-mail recusa antes de discar - e para la que o banco avisa que a notificacao esta falhando');
+
+  chk('W8', ehUrlDeWebhook('https://a.b/c') !== null && ehUrlDeWebhook('https://a.b:443/c') !== null,
+      'porta vazia e :443 explicito passam - as duas sao a mesma porta em https');
+
+  /* O ERRO DO BANCO JA TEM TRADUTOR: 400, 406 e 500 usam o mesmo `mensagens[]`
+   * do resto da API, e nao ha parser novo aqui. Nao ter e o sinal de que a
+   * familia e a mesma. */
+  const { c: c4 } = adaptador([TOKEN_OK, {
+    status: 406,
+    texto: JSON.stringify({ mensagens: [{ codigo: 'X1', mensagem: 'url ja cadastrada' }] }),
+  }]);
+  let recusa: any = null;
+  try { await c4.cadastrarWebhook('ref-1', P); } catch (e) { recusa = e; }
+  chk('W9', recusa instanceof ErroDaSicoob && recusa.httpStatus === 406
+        && recusa.codigos.join() === 'X1',
+      `o 406 vira ErroDaSicoob com o codigo do banco: ${recusa?.message}`);
+
+  /* 2xx SEM `idWebhook` NAO PODE VIRAR SUCESSO SILENCIOSO: o webhook pode ter
+   * sido criado, e tentar de novo cadastraria o segundo. A mensagem diz isso. */
+  const { c: c5 } = adaptador([TOKEN_OK, { status: 201, texto: JSON.stringify({ resultado: {} }) }]);
+  let mudo: any = null;
+  try { await c5.cadastrarWebhook('ref-1', P); } catch (e) { mudo = e; }
+  chk('W10', mudo?.status === 502 && /confira com uma consulta/.test(String(mudo?.message)),
+      '201 sem idWebhook levanta 502 e manda CONSULTAR antes de repetir - repetir criaria dois');
 }
 
 console.log(falhas === 0 ? '\nTODAS OK' : `\n${falhas} FALHA(S)`);

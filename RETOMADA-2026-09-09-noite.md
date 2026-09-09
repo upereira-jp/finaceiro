@@ -5,7 +5,7 @@
 | **Para quem** | Quem abrir a próxima sessão. **Dois minutos** |
 | **Substitui** | `RETOMADA-2026-09-09.md` para efeito de "onde estamos". O corpo dela continua correto; o que venceu é o **§0** — as três pendências foram postas ao dono e as três voltaram com resposta |
 | **O que esta leva fez** | Fechou as três decisões do §0 anterior. Uma virou código (**o calendário bancário**), uma virou registro (**D+1**), uma foi adiada com o custo medido (**`dono_usina`**). E o portão do webhook que era `psql` a mão virou workflow |
-| **Suíte** | sem banco: `EXIT=0`, **2.637** verificações (eram 2.619). **E o CI fechou VERDE nos cinco jobs** (run `34363949451`) — o primeiro desde 27/08. Ver §7 |
+| **Suíte** | sem banco: `EXIT=0`, **2.649** verificações (eram 2.619). **E o CI fechou VERDE nos cinco jobs** (run `34363949451`) — o primeiro desde 27/08. Ver §7 |
 | **Repositório** | `main` = **`d011c69`** + este registro, e `origin/main` está junto |
 | **Produção** | ✅ **sem deriva** — o `deploy-financeiro` rodou às 14:15 e o serviço subiu **14:16:09** em `4d74603`. `GET /` responde 200 e o bundle novo carrega a regra na tela |
 
@@ -155,7 +155,7 @@ responde 200 e o bundle servido já carrega a regra nova na tela.
 **✅ O `provisionar-cobranca` rodou nos dois modos, e o usuário de serviço EXISTE.**
 Ver §8.
 
-**Sobra um passo, e ele é humano:** cadastrar a URL acima no Portal Developers.
+⚠️ **E o passo que sobrava não era humano — era código que faltava.** Ver §9.
 
 ---
 
@@ -243,3 +243,76 @@ os quatro controles negativos recusados, `EXIT=0`.
 **Dos três portões do webhook, dois estão abertos e o terceiro é humano:** a URL no
 Portal Developers. Nenhum workflow tem como saber se ela foi cadastrada — as páginas
 do portal são SPA. Depois dela, a primeira notificação real é o que fecha o caminho.
+
+---
+
+## 9. Não existe cadastro de webhook «no portal» — e a suposição era nossa
+
+**O dono abriu o aplicativo do Portal Developers e conferiu campo a campo.** A
+página tem: dados do cooperado, descrição, `client_id`, o token endpoint e os
+escopos das quatro APIs contratadas. **E nada mais.** Não há configuração de
+webhook em lugar nenhum.
+
+**A frase que estava errada estava escrita em dois lugares nossos** — em
+`src/sicoob/http.ts` e na `Q-WEBHOOK-CADASTRO-01`: *"o cadastro é feito no
+portal, à mão"*. Era suposição herdada de material público, escrita em 28/08 e
+nunca medida. A `ADR-0006` §61 até registrava o inverso como ação pendente
+(*"abrir a aplicação no portal e ver o que a configuração de webhook oferece"*) —
+e ninguém tinha aberto.
+
+**Então `POST /webhooks` não é uma alternativa mais elegante: é o único caminho.**
+Ou ele existe, ou o banco nunca notifica, e o dinheiro entra na conta sem o
+sistema saber.
+
+### O que entrou
+
+O contrato veio do Swagger do próprio endpoint, colado pelo dono — as páginas do
+portal são SPA e não vêm por `WebFetch`, e é o mesmo caminho que corrigiu cinco
+defeitos do `POST /boletos` em 28/08.
+
+| Arquivo | O quê |
+|---|---|
+| `src/sicoob/http.ts` | `cadastrarWebhook` · `ESCOPOS_DE_WEBHOOK` · `ehUrlDeWebhook` · o cache de token chaveado por **(credencial, escopos)** |
+| `src/sicoob/webhook.ts` | `urlDoWebhook(tenant)` — o endereço deixou de ser literal repetido em script |
+| `scripts/cadastrar-webhook.ts` | `npm run webhook-sicoob`, **ensaio por padrão** |
+| `tests/sicoob-http.ts` | `W1`…`W10`, 12 verificações |
+
+### A decisão que contraria o que o próprio código planejava
+
+O comentário de `ESCOPOS` dizia que, construído o cadastro, *"os dois primeiros
+entram aqui junto com ele"*. **Não entraram, e o princípio que ele mesmo invoca é
+a razão:** somar `webhooks_*` a `ESCOPOS` faria **todo** token de emissão de
+boleto carregar permissão de trocar a URL de notificação — e trocar essa URL é
+desviar o aviso de que o dinheiro entrou. Cadastro de webhook é ato
+administrativo, roda uma vez por ambiente; emissão roda todo mês por processo
+exposto. Dar a permissão rara ao caminho frequente é exatamente o que "escopo a
+mais é dano a mais" existe para impedir.
+
+**O custo disso foi o cache**, e ele é o achado da entrega: `tokens` era chaveado
+só por `credencial_ref`. Um token pedido com `webhooks_inclusao` ficaria guardado
+sob a mesma chave do token de emissão, e a **próxima emissão usaria um token sem
+`boletos_inclusao`** — 403 no caminho do dinheiro, causado por um script
+administrativo que rodou minutos antes. A chave passou a ser
+**(credencial, escopos)**, e o `W5` prende isso.
+
+### O que ele recusa antes de discar
+
+`https` e porta 443 são exigência publicada do banco, e o e-mail é obrigatório
+sem default. As três recusas saem **422 sem nenhuma chamada** (`W6a`…`W7`) — a
+Sicoob aceitaria o cadastro e **reprovaria a URL depois**, na validação, e a
+reprovação aparece no portal, dias depois e por outro canal.
+
+⚠️ **Este cadastro não tem inverso conhecido hoje:** cadastrar duas vezes cria
+dois webhooks e o banco notifica em dobro. Por isso o padrão é ensaio.
+
+### O que falta, e é contrato que não temos
+
+Dos seis endpoints da família, dois valem construir e nenhum é bloqueio:
+
+- **`GET /webhooks`** — conferir se já existe um **antes** de criar o segundo, e
+  recuperar o `idWebhook` de quem não anotou. Transforma o aviso acima em guarda;
+- **`GET /webhooks/{id}/solicitacoes`** — o diagnóstico do dia em que uma
+  liquidação não chegar (`codigoSolicitacaoSituacao` **3** = enviado com sucesso ·
+  **6** = erro no envio).
+
+`PATCH`, `DELETE` e `reativar` não estão no caminho da primeira notificação.
