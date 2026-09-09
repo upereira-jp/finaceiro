@@ -1,0 +1,102 @@
+[Unit]
+# A SAUDE DO CAMINHO DO DINHEIRO. SO LE - nao escreve nada, nem `agenda_execucao`.
+#
+# ELA SUBSTITUI a `financeiro-agenda-certificado`, que rodava diaria desde
+# 28/08/2026 e olhava METADE do problema. O texto daquela unidade registrava a
+# propria falta com todas as letras:
+#
+#     "O QUE ELA NAO FAZ, e precisa ser dito: nao notifica ninguem. O aviso cai
+#      no journal. Escolher o canal (e-mail, a tela de Pendencias, outro) e
+#      decisao com dono e nao default de quem implementa - regra 10."
+#
+# O CANAL FOI ESCOLHIDO EM 09/09/2026, E E ESTA UNIDADE. O `README` deste
+# diretorio chama `systemctl list-units --failed` de "a unica superficie de
+# alarme desta maquina", e ate hoje nenhum dos dois alertas da agenda - o A1 e o
+# aviso de pagamento - aparecia la.
+#
+# POR QUE ELA PODE FICAR VERMELHA SEM MENTIR, e este e o argumento inteiro.
+#
+# A objecao que manteve o alerta fora do alarme era correta: por o timer da
+# CONSULTA em `failed` porque o webhook morreu mentiria sobre qual coisa quebrou
+# - a consulta funcionou, quem morreu foi o aviso. Vermelho que mente custa mais
+# que alarme nenhum.
+#
+# Esta unidade nao tem esse problema porque o trabalho dela E a afirmacao. Ela
+# afirma "o caminho do dinheiro esta de pe"; quando fica vermelha, o que falhou
+# e exatamente isso, e o journal diz qual metade. E ela NAO CARREGA DINHEIRO
+# NENHUM: a fila continua emitindo e a consulta continua baixando com esta
+# unidade em `failed`, porque nenhuma das duas depende dela.
+#
+# OS CODIGOS DE SAIDA, e a fronteira entre 4 e 5 e a mesma que separa
+# `inativado` de `nao_verificavel` - "esta quebrado" nao e "ninguem sabe":
+#
+#   0  de pe
+#   3  nao ha conector de cobranca. Nada a conferir, e NAO e falha - mesmo 3 da
+#      fila e da consulta. Sem o `SuccessExitStatus=3` abaixo, uma maquina que
+#      ainda nao ligou o banco ficaria vermelha todo dia, e vermelho permanente
+#      e alarme desligado
+#   4  precisa de acao humana: A1 vencido / vencendo / sem data, ou o banco
+#      desligou o aviso, ou nunca houve aviso.  VERMELHO
+#   5  nao deu para perguntar ao banco.  VERMELHO, e pelo mesmo motivo que
+#      `nao_verificavel` nao vira `ativo`: nao ter perguntado nao autoriza dizer
+#      que esta bem. Some sozinho na proxima rodada se era a Sicoob fora do ar;
+#      insiste, dia apos dia, se nao era
+#
+# ELA SE APAGA SOZINHA. `failed` de um oneshot dura ate a proxima execucao
+# passar - entao o dia em que o A1 for renovado, ou o webhook recadastrado, a
+# lista de falhas fica limpa sem ninguem digitar `reset-failed`. Um alarme que
+# exige gesto manual para desligar e um alarme que fica ligado.
+#
+# A DATA QUE IMPORTA HOJE E 17/08/2027, a renovacao do A1 comprado em 08/2026 -
+# e o codigo 4 comeca 30 dias antes (`POLITICA.diasDeAvisoDoCertificado`,
+# `Q-AGENDA-02`), porque renovar A1 tem processo e assinatura e nao e um clique.
+# Na renovacao volta a valer a armadilha medida em 27/08/2026: AC brasileira
+# entrega `.pfx` com cifragem antiga (RC2-40 + SHA1) que o Node 22 recusa e o
+# `openssl` do sistema abre sem reclamar. `npm run certificado -- normalizar`
+# antes de subir ao cofre.
+#
+# O QUE ELA AINDA NAO FAZ: nao manda e-mail. Nao ha MTA nesta maquina e um relay
+# e contrato com terceiro - decisao do dono, registrada em `QUESTOES.md` §2.h.
+# O que existe hoje sao dois canais, e eles se completam: esta unidade, para
+# quando ninguem esta olhando, e a faixa no alto da tela de Pendencias, para
+# quando alguem esta.
+Description=Financeiro G3 - confere se o caminho do dinheiro esta de pe (A1 + aviso de pagamento)
+Documentation=https://github.com/upereira-jp/finaceiro
+After=network-online.target financeiro.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=financeiro
+Group=financeiro
+WorkingDirectory=/opt/financeiro/app
+
+# Sem `--valendo` e sem `--ensaio`: a tarefa e de leitura e o script nem os pede.
+ExecStart=/opt/financeiro/node/bin/node --experimental-strip-types scripts/agenda.ts \
+  --saude \
+  --auth-user 35f4dda9-5265-434e-8097-5d41c384a9ba \
+  --tenant eac198c0-b0c1-4b13-9b4d-6ac1a6eb011d
+
+EnvironmentFile=/etc/financeiro.env
+
+# 3 = sem conector de cobranca. Ver o bloco de codigos acima. 4 e 5 NAO entram
+# aqui de proposito: sao exatamente os dois que precisam ficar vermelhos.
+SuccessExitStatus=3
+
+# Ela disca a Sicoob (handshake mTLS + token), entao nao e a leitura instantanea
+# que a `certificado` era. 120 s cobre com folga; o que passar disso e a Sicoob
+# fora do ar, e isso ja tem codigo proprio - 5, e nao um timeout de unidade.
+TimeoutStartSec=180
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=financeiro-saude-cobranca

@@ -6,7 +6,11 @@ name: isolamento
 
 on:
   push:
-    paths: ['prisma/**', 'src/**', 'tests/**', 'spike-transacao/**', 'package.json', '.github/workflows/**']
+    # `.github/**` e nao `.github/workflows/**`: desde 09/09/2026 os cinco jobs
+    # dependem de `.github/instalar-psql.sh`, que NAO esta em `workflows/`. Com o
+    # filtro antigo, uma mudanca so nele nao rodaria CI nenhum - e o script e
+    # justamente o passo que ja derrubou quatro jobs de uma vez.
+    paths: ['prisma/**', 'src/**', 'tests/**', 'spike-transacao/**', 'package.json', '.github/**']
   pull_request:
   workflow_dispatch:
 
@@ -24,11 +28,12 @@ jobs:
           --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
+      # O `apt-get update` mora SO no script, e o motivo esta la dentro: sem
+      # restricao ele atualiza tambem as fontes de terceiro da imagem do runner,
+      # e em 09/09/2026 o indice do Google Chrome derrubou quatro destes cinco
+      # jobs sem que uma linha nossa tivesse mudado.
       - name: cliente psql 16
-        run: |
-          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
-          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
-          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client-16
+        run: bash .github/instalar-psql.sh 16
       - name: migrations + suite de isolamento
         env:
           PGPASSWORD: spike
@@ -52,7 +57,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
       - name: cliente psql 16
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+        run: bash .github/instalar-psql.sh
       - name: spike de transacao
         working-directory: spike-transacao
         env:
@@ -77,7 +82,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
       - name: cliente psql
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+        run: bash .github/instalar-psql.sh
       - name: dependencias
         run: npm install
       # DIRECT_URL com valor DESCARTAVEL, e o motivo esta no job `tipos`: o
@@ -174,7 +179,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
       - name: cliente psql 16
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+        run: bash .github/instalar-psql.sh
       - name: suites de repositorio
         env:
           PGPASSWORD: spike

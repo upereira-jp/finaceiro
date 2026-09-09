@@ -517,6 +517,85 @@ rodando **como o próprio usuário de serviço**. Suíte sem banco: `EXIT=0`,
 
 ---
 
+## 2.h Decisões técnicas de 09/09/2026, madrugada — o alerta ganha canal, e o CI para de depender de terceiro
+
+**Dono destas decisões: o implementador**, pela delegação de 08/09 (§2.b) — com
+**uma exceção nomeada no fim**, que volta para o dono porque envolve contratar.
+
+### O que as motivou
+
+A leva anterior (§2.g) fechou o diagnóstico e deixou por escrito o preço dele:
+
+> *o nível chega a dois lugares — o journal do systemd e a tela de Cobrança — e
+> **nenhum dos dois procura ninguém**. Trocou-se «ninguém sabe» por «quem abrir a
+> tela sabe». É melhor, e não é aviso.*
+
+E a falta era mais velha que isso. O próprio
+`deploy/financeiro-agenda-certificado.service` registrava desde **28/08**:
+*«não notifica ninguém. O aviso cai no journal. Escolher o canal (e-mail, a tela
+de Pendências, outro) é decisão com dono e não default de quem implementa»*.
+
+Junto veio a **pendência 6** da mesma retomada: quatro `apt-get update` no
+`isolamento.yml`, e qualquer fonte de terceiro quebrada na imagem do runner
+derrubando o CI inteiro — como o índice do **Google Chrome** derrubou quatro dos
+cinco jobs em 09/09, sem que uma linha nossa tivesse mudado.
+
+### As decisões
+
+| # | Decisão | Por quê, em uma linha |
+|:--:|---|---|
+| 1 | **O canal são DOIS, e eles se completam** | Uma unidade do systemd que fica vermelha, para quando **ninguém** está olhando, e uma faixa no alto de **Pendências**, para quando **alguém** está. Um canal só cobre metade das horas do dia |
+| 2 | **Uma unidade PRÓPRIA, `financeiro-saude-cobranca`** | A objeção que manteve o alerta fora do alarme era correta: pôr a **consulta** em `failed` porque o webhook morreu mente sobre qual coisa quebrou. Uma unidade cujo trabalho INTEIRO é afirmar *«o caminho do dinheiro está de pé»* não tem esse problema — quando ela fica vermelha, o que falhou é exatamente a afirmação que ela faz |
+| 3 | **Ela SUBSTITUI a `financeiro-agenda-certificado`, não convive** | Aquela lia metade do problema e saía sempre 0. Manter as duas poria dois relatórios no mesmo journal, e quem lesse acharia que a velha é a nova. **Exige `disable` da antiga** — está no `deploy/README` |
+| 4 | **`nao_verificavel` fica VERMELHO (código 5)** | É a decisão que mais custou. Fazer a Sicoob fora do ar sair 0 refaria, no alarme, o erro que `nivelDoAviso` existe para não cometer. O 5 custa um vermelho de um dia numa queda transiente; compra a queda que dura um mês. E ele **se apaga sozinho**: `failed` de um `oneshot` dura até a próxima execução passar |
+| 5 | **`sem conector` continua sendo 3, e 3 é sucesso** | Mesmo 3 da fila e da consulta. Sem ele, uma máquina que ainda não ligou o banco ficaria vermelha todo dia — «vermelho permanente é alarme desligado» |
+| 6 | **A precedência é 3 > 4 > 5** | Com o A1 vencido **e** a Sicoob muda, o que dá para fazer hoje é renovar o A1. O código aponta o que tem dono, não o que apareceu primeiro |
+| 7 | **A faixa vai em Pendências, não em Cobrança** | Cobrança é a tela de **configurar** o banco, aberta uma vez por trimestre: o alerta morava na tela que ninguém abre. Pendências é a primeira da barra e a que a operação abre todo dia. A de Cobrança **fica**, porque é lá que se conserta |
+| 8 | **`sem_conector` vira campo próprio da rota, e não um quinto nível** | Os quatro níveis descrevem o estado do aviso **no banco**; «não há conector» é o estado de quem nunca ligou banco nenhum. Sem a distinção, uma instalação sem banco veria âmbar na primeira tela **para sempre** |
+| 9 | **Sem cache na leitura da tela** | A lição do §2 da retomada era sobre um **timer** de 5 minutos; aqui quem chama é uma **pessoa** abrindo tela, e `useDados` não faz polling. Se um dia deixar de ser verdade, o lugar do cache é o servidor |
+| 10 | **O `apt-get update` do CI vira lista de PERMISSÃO** | Só a fonte do Ubuntu e a do PostgreSQL. Apagar a do Chrome resolveria hoje; a próxima imagem do runner traz outra. **Lista de negação envelhece; lista de permissão não** |
+| 11 | **Um script só, `.github/instalar-psql.sh`** | O comando estava copiado em **seis** lugares de dois workflows. Consertar em seis lugares é, um dia, consertar em cinco |
+| 12 | **O filtro de `push` passa a `.github/**`** | Os cinco jobs dependem do script, e ele não mora em `workflows/`. Com o filtro antigo, uma mudança só nele não rodaria CI nenhum |
+
+### ⬅️ VOLTA PARA O DONO — o terceiro canal, e é o único que **empurra**
+
+`Q-ALERTA-EMAIL-01` 🟡 — **os dois canais construídos são de PUXAR, não de
+empurrar.** A unidade vermelha e a faixa na tela esperam alguém olhar. O único
+canal que procura a pessoa é e-mail (ou mensagem), e ele **não é decisão técnica**:
+
+- **não há MTA nesta máquina** — verificado em 09/09: nem `postfix`, nem `exim`,
+  nem `msmtp`, nem `sendmail`;
+- um relay é **contratar terceiro** (Resend, SES, SMTP de provedor) — e pela
+  delegação de 08/09 «comprar/contratar com terceiro» é exatamente o que volta;
+- e enviar direto de VPS para Gmail sem SPF/DKIM próprio **cai em spam**, que é o
+  pior dos mundos: um canal que parece existir e não entrega. Alarme que mente.
+
+**O que a decisão destrava:** hoje o pior caso é o webhook cair numa sexta e
+ninguém abrir Pendências até segunda — três dias em que a baixa só acontece uma
+vez por dia. Não perde dinheiro; atrasa.
+
+### Medido contra a produção, e não deduzido
+
+```
+--saude --auth-user 35f4dda9-… --tenant eac198c0-…
+  certificado A1 ....... ok (341 dia(s))     → 17/08/2027, confere
+  aviso de pagamento ... ativo
+  => 0 DE PE                                  EXIT=0
+```
+
+E o caminho **vermelho** também, por mutação — forçado o nível a `vencido`, o
+mesmo comando saiu **`=> 4 PRECISA DE AÇÃO HUMANA`, `EXIT=4`**, que é o código
+que o `SuccessExitStatus=3` deixa passar para `failed`.
+
+⚠️ **O que NÃO foi medido:** a unidade em `systemctl list-units --failed` de
+verdade — instalá-la é passo do dono (`deploy/README`, bloco de 09/09), e este
+ambiente não instala unit.
+
+Suíte sem banco: `EXIT=0`, **2.713** verificações (eram 2.678) — `AG9a`…`AG9p`,
+`SD-1`…`SD-11` e `CI-1`…`CI-8`.
+
+---
+
 ## 3. F0 — o que falta para fechar
 
 Entregas da F0 conforme `PRD-v2.2` §10:

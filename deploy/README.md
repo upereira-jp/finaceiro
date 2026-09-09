@@ -16,8 +16,8 @@ Estes arquivos são a fonte; `/etc` é a cópia.
 | `financeiro-agenda-fila.timer` | dispara a fila a cada **5 minutos**, em `:02/5` |
 | `financeiro-agenda-consulta.service` | roda **uma** consulta ativa da situação dos boletos |
 | `financeiro-agenda-consulta.timer` | dispara a consulta **uma vez por dia**, 06:17 UTC |
-| `financeiro-agenda-certificado.service` | lê o vencimento do A1 e classifica. **Não escreve nada** |
-| `financeiro-agenda-certificado.timer` | dispara a conferência **uma vez por dia**, 06:07 UTC |
+| `financeiro-saude-cobranca.service` | confere se o caminho do dinheiro está de pé — o A1 **e** o aviso de pagamento. **Não escreve nada**, e é a única que **fica vermelha** |
+| `financeiro-saude-cobranca.timer` | dispara a conferência **uma vez por dia**, 06:37 UTC |
 
 As três da agenda entraram em **28/08/2026**. O motor delas existe desde 30/07
 (`Q-AGENDA-01`) e até essa data **nada o chamava** — o `PRD` §3 deixou a escolha
@@ -36,8 +36,24 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now financeiro-ciclo.timer
 sudo systemctl enable --now financeiro-agenda-fila.timer
 sudo systemctl enable --now financeiro-agenda-consulta.timer
-sudo systemctl enable --now financeiro-agenda-certificado.timer
+sudo systemctl enable --now financeiro-saude-cobranca.timer
 ```
+
+**Ao atualizar a partir de 09/09/2026**, a `financeiro-agenda-certificado` foi
+**substituída** pela `financeiro-saude-cobranca` — não é renomeação cosmética, é
+outra unidade: aquela lia metade do problema e saía sempre 0, esta lê as duas
+metades e **fica vermelha**. O `install` acima não apaga a antiga, então:
+
+```bash
+sudo systemctl disable --now financeiro-agenda-certificado.timer
+sudo rm -f /etc/systemd/system/financeiro-agenda-certificado.{service,timer}
+sudo systemctl daemon-reload
+sudo systemctl start financeiro-saude-cobranca.service   # a primeira leitura, agora
+systemctl status financeiro-saude-cobranca.service
+```
+
+Sem o `disable`, as duas rodam: a velha continua caindo no journal às 06:07 sem
+avisar ninguém, e quem ler o journal vai achar que é a nova.
 
 ## Conferir
 
@@ -46,12 +62,22 @@ systemctl list-timers 'financeiro*'              # quando roda a próxima de cad
 journalctl -u financeiro-ciclo -n 40             # o relatório da última
 journalctl -u financeiro-agenda-fila -n 40       # idem, a fila de emissão
 systemctl list-units --failed                    # o que falhou aparece aqui
+journalctl -u financeiro-saude-cobranca -n 40    # por que o caminho do dinheiro está vermelho
 ```
+
+**A `financeiro-saude-cobranca` é a única unidade daqui que fica vermelha de
+propósito**, e é o canal de alarme dos dois avisos da agenda — o A1 e o aviso de
+pagamento. Ela não carrega dinheiro: a fila continua emitindo e a consulta
+continua baixando com ela em `failed`. E ela **se apaga sozinha** — `failed` de
+um `oneshot` dura até a próxima execução passar, então o dia em que o A1 for
+renovado ou o webhook recadastrado a lista fica limpa sem ninguém digitar
+`reset-failed`.
 
 ## O código de saída 3, e por que ele não é `|| true`
 
-As duas unidades que escrevem (`fila` e `consulta`) declaram `SuccessExitStatus=3`,
-e **3 quer dizer uma coisa só**: *nenhum conector de cobrança ativo neste tenant*.
+As duas que escrevem (`fila` e `consulta`) e a `saude-cobranca` declaram
+`SuccessExitStatus=3`, e **3 quer dizer uma coisa só**: *nenhum conector de
+cobrança ativo neste tenant*.
 Enquanto o Sicoob não tiver aplicativo no portal, `client_id` e os três números da
 cooperativa, `conector_cobranca.ativo` é `false` e a rodada recusa **antes** de
 criar linha em `agenda_execucao` ou tocar em boleto.
@@ -65,13 +91,20 @@ motivo no journal.
 Quando o conector for ativado, as duas passam a trabalhar **sem tocar em unit nem
 em timer**.
 
+A `saude-cobranca` acrescenta **4** e **5** ao vocabulário, e esses dois **ficam
+vermelhos**: 4 é *precisa de ação humana* (A1 vencido, vencendo ou sem data; o
+banco desligou o aviso, ou nunca houve aviso) e 5 é *não deu para perguntar*. Os
+dois estão fora do `SuccessExitStatus` de propósito — são exatamente o que se
+quer ver na lista de falhas. A fronteira entre eles é a mesma que separa
+`inativado` de `nao_verificavel`: **"está quebrado" não é "ninguém sabe"**.
+
 ## Desligar
 
 ```bash
 sudo systemctl disable --now financeiro-ciclo.timer
 sudo systemctl disable --now financeiro-agenda-fila.timer
 sudo systemctl disable --now financeiro-agenda-consulta.timer
-sudo systemctl disable --now financeiro-agenda-certificado.timer
+sudo systemctl disable --now financeiro-saude-cobranca.timer
 ```
 
 O espelho para de se atualizar sozinho na hora, e **nada mais quebra** — as telas
@@ -92,9 +125,11 @@ roda em `:00`, `:15`, `:30` e `:45`.
 não for construído, **ela é a única porta automática de baixa**: o webhook existe
 como rota e a Sicoob não consegue chamá-lo.
 
-**Certificado: diária, 06:07 UTC**, dez minutos antes da consulta, para que a causa
-apareça no journal antes do sintoma. Ela **não notifica ninguém** — o aviso cai no
-journal, e escolher o canal é decisão com dono (regra 10).
+**Saúde do caminho do dinheiro: diária, 06:37 UTC**, vinte minutos **depois** da
+consulta. A ordem é o inverso da que a `certificado` usava, e o motivo é que o
+papel inverteu: aquela vinha antes para a *causa* aparecer no journal antes do
+*sintoma*; esta afirma sobre o estado em que o dia terminou, e afirmação feita
+antes do trabalho seria sobre ontem.
 
 ## Por que 15 minutos no ciclo do CRM
 

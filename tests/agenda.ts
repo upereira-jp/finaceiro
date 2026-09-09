@@ -29,7 +29,7 @@ import {
   decidir, chaveDaConsultaAtiva, nivelDoCertificado, type Politica,
 } from '../src/dominio/agenda.ts';
 import type { SituacaoDoBoleto } from '../src/sicoob/porta.ts';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { ehConfirmacao } from '../src/repos/liquidacao.ts';
 
 let falhas = 0;
@@ -524,6 +524,128 @@ chk('AG8c', nivelDoAviso([vivo]) === 'ativo' && nivelDoAviso([morto]) === 'inati
   chk('AG8l', cert > escrevem && cert < guarda,
       'e o certificado continua saindo nas DUAS, ANTES dessa guarda - ele quebra a EMISSAO, que e o '
       + 'trabalho da fila, e a assimetria entre os dois alertas e deliberada');
+}
+
+// ============================================================================
+// AG9 — A SAUDE DO CAMINHO DO DINHEIRO, e o canal que ela finalmente tem
+// ============================================================================
+//
+// O QUE ESTAS LINHAS PRENDEM, e a pendencia tinha nome e dono. Ate 09/09/2026 os
+// dois alertas desta agenda chegavam ao journal e a uma tela, e NENHUM DOS DOIS
+// PROCURA NINGUEM - o `deploy/README` chama `systemctl list-units --failed` de
+// "a unica superficie de alarme desta maquina", e nenhum dos dois aparecia la.
+// O texto do `financeiro-agenda-certificado.service` registrava a falta com
+// todas as letras desde 28/08.
+//
+// A METADE DELICADA E O CODIGO 5. E tentador fazer `nao_verificavel` sair 0 para
+// que uma queda da Sicoob nao pinte a maquina de vermelho - e seria refazer, no
+// alarme, exatamente o erro que `nivelDoAviso` existe para nao cometer: nao ter
+// perguntado nao autoriza dizer que esta bem. O que o 5 custa e um vermelho de
+// um dia numa queda transiente; o que ele compra e a queda que dura um mes.
+
+import {
+  saudeDoCaminhoDoDinheiro,
+  type NivelDoCertificado, type NivelDoAviso as NivelDoAvisoDominio,
+} from '../src/dominio/agenda.ts';
+
+const cod = (certificado: NivelDoCertificado | null, aviso: NivelDoAvisoDominio | null) =>
+  saudeDoCaminhoDoDinheiro({ certificado, aviso }).codigo;
+
+console.log('\n-- AG9 a saude do caminho do dinheiro --');
+
+chk('AG9a', cod('ok', 'ativo') === 0,
+    'A1 em dia e aviso ligado saem 0 - a unidade fica verde e nao ha o que fazer');
+
+chk('AG9b', cod(null, null) === 3,
+    'sem conector de cobranca sai 3, o mesmo 3 da fila e da consulta: nada a conferir, e NAO e '
+    + 'falha. Sem isso, uma maquina que ainda nao ligou o banco ficaria vermelha todo dia, e '
+    + 'vermelho permanente e alarme desligado');
+
+chk('AG9c', cod('vencido', 'ativo') === 4, 'A1 vencido pede acao humana (4)');
+chk('AG9d', cod('vence_em_breve', 'ativo') === 4,
+    'e A1 vencendo tambem, porque renovar tem processo e assinatura - avisar no dia do '
+    + 'vencimento seria avisar tarde');
+chk('AG9e', cod('ok', 'inativado') === 4, 'o banco ter desligado o aviso pede acao humana (4)');
+chk('AG9f', cod('ok', 'ausente') === 4, 'e nunca ter havido aviso tambem - a acao e a mesma');
+
+chk('AG9g', cod('sem_certificado', 'ativo') === 5,
+    'A1 sem data cadastrada sai 5 e nao 4: ninguem sabe se ha problema, e o 5 diz isso');
+chk('AG9h', cod('ok', 'nao_verificavel') === 5,
+    'e a Sicoob fora do ar tambem sai 5 - VERMELHO, pelo mesmo motivo que faz `nao_verificavel` '
+    + 'nao colapsar em `ativo`. Some sozinho na proxima rodada se era transiente; insiste, dia '
+    + 'apos dia, se nao era');
+
+chk('AG9i', cod('vencido', 'nao_verificavel') === 4,
+    'com A1 vencido E Sicoob muda, o codigo e 4 e nao 5: o que da para fazer hoje e renovar o '
+    + 'A1. A precedencia aponta o que tem dono, nao o que apareceu primeiro');
+
+// ------------------------------------------- AG9j a exaustao dos 16 pares
+{
+  const certs: NivelDoCertificado[] = ['ok', 'sem_certificado', 'vencido', 'vence_em_breve'];
+  const avisos: NivelDoAvisoDominio[] = ['ativo', 'inativado', 'ausente', 'nao_verificavel'];
+  let verdes = 0, todosConhecidos = true;
+  for (const c of certs) {
+    for (const a of avisos) {
+      const k = cod(c, a);
+      if (![0, 4, 5].includes(k)) todosConhecidos = false;
+      if (k === 0) verdes++;
+    }
+  }
+  /* POR EXAUSTAO E NAO POR EXEMPLO ESCOLHIDO A MAO: a unica combinacao verde dos
+   * dezesseis pares e `ok` + `ativo`. Um `if` a mais em qualquer um dos dois
+   * `switch` faria um estado ruim sair 0, e nenhum caso avulso pegaria isso. */
+  chk('AG9j', verdes === 1 && todosConhecidos,
+      `dos 16 pares possiveis, exatamente UM sai 0 (achados ${verdes}), e nenhum sai codigo `
+      + 'fora de {0,4,5}');
+}
+
+// ------------------------------- AG9k..AG9n o canal, do lado do systemd
+{
+  const unit = readFileSync(new URL('../deploy/financeiro-saude-cobranca.service', import.meta.url), 'utf8');
+  const timer = readFileSync(new URL('../deploy/financeiro-saude-cobranca.timer', import.meta.url), 'utf8');
+
+  chk('AG9k', /^ExecStart=.*\n?.*--saude/m.test(unit.replace(/\\\n\s*/g, ' ')),
+      'a unidade chama a tarefa `--saude`, que e a unica que sai com codigo');
+
+  /* A MUTACAO QUE ESTA LINHA PEGA E A QUE APAGA O ALARME SEM DELETAR NADA:
+   * acrescentar 4 e 5 ao `SuccessExitStatus` deixa a unidade sempre verde e o
+   * arquivo continua parecendo certo. Foi assim que o alerta ficou dois dias sem
+   * canal - por parecer que tinha um. */
+  const sucesso = (unit.match(/^SuccessExitStatus=(.*)$/m)?.[1] ?? '').split(/\s+/);
+  chk('AG9l', sucesso.includes('3') && !sucesso.includes('4') && !sucesso.includes('5'),
+      '3 e sucesso (sem conector nao e falha) e 4 e 5 NAO sao - eles existem exatamente para '
+      + `ficar em \`systemctl list-units --failed\` (declarado: ${sucesso.join(' ') || '(nada)'})`);
+
+  chk('AG9m', /OnCalendar=\*-\*-\* 06:3\d:00/.test(timer) && /Persistent=true/.test(timer),
+      'ela roda uma vez por dia, DEPOIS da consulta das 06:17 - ela afirma sobre o estado em que '
+      + 'o dia terminou, e afirmacao feita antes do trabalho seria sobre ontem');
+
+  /* A UNIDADE VELHA PRECISA TER SUMIDO DO REPOSITORIO, e nao e limpeza: o
+   * `install` do README copia `deploy/financeiro-*`, entao um arquivo esquecido
+   * aqui volta a instalar a unidade que nao avisa ninguem - e as duas passam a
+   * cair no mesmo journal, com quem le achando que a velha e a nova. */
+  chk('AG9n', !existsSync(new URL('../deploy/financeiro-agenda-certificado.service', import.meta.url)),
+      'a unidade antiga (`financeiro-agenda-certificado`) saiu do repositorio - o `install` do '
+      + 'README copia `deploy/financeiro-*`, e um arquivo esquecido aqui reinstalaria o alerta '
+      + 'que nao avisa ninguem');
+}
+
+// ------------------------------------- AG9o o script sai com o codigo
+{
+  const fonteScript = readFileSync(new URL('../scripts/agenda.ts', import.meta.url), 'utf8');
+  const i = fonteScript.indexOf('if (saude) {');
+  const fim = fonteScript.indexOf('-- as que escrevem');
+  const trecho = i >= 0 && fim > i ? fonteScript.slice(i, fim) : '';
+  chk('AG9o', trecho.includes('process.exit(veredito.codigo)'),
+      'a tarefa `--saude` sai com o codigo do dominio - sem isto ela imprime o diagnostico e '
+      + 'sai 0, que e o estado que esta entrega existe para acabar');
+
+  /* A CADENCIA DO §2 CONTINUA VALENDO, e por isto ela e medida aqui tambem: o
+   * `--saude` disca a Sicoob, e se ele escorregar para o caminho comum das duas
+   * tarefas que escrevem, volta a discar a cada 5 minutos pela fila. */
+  chk('AG9p', i > 0 && i < fim,
+      'e o bloco do `--saude` fica ANTES de «as que escrevem» - ele e tarefa avulsa de leitura, '
+      + 'e nao um alerta pendurado na fila de 5 minutos');
 }
 
 console.log(`\n${falhas === 0 ? 'agenda (puro): todas as verificacoes passaram'

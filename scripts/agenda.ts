@@ -6,6 +6,7 @@
 //   npm run agenda -- --consulta --valendo --auth-user <uuid> [--tenant <uuid>]
 //   npm run agenda -- --certificado --auth-user <uuid>      (so le, nao escreve)
 //   npm run agenda -- --webhook     --auth-user <uuid>      (so le, nao escreve)
+//   npm run agenda -- --saude       --auth-user <uuid>      (so le; SAI COM CODIGO)
 //
 // POR QUE ELE RODA UMA VEZ E SAI, em vez de ficar de pe com um `setInterval`.
 //
@@ -41,7 +42,7 @@ import {
   type AbrirTransacao, type ResultadoDaAgenda,
 } from '../src/cobranca/agenda.ts';
 import { credencialDeCobranca } from '../src/repos/boleto.ts';
-import { POLITICA } from '../src/dominio/agenda.ts';
+import { POLITICA, saudeDoCaminhoDoDinheiro } from '../src/dominio/agenda.ts';
 
 class RollbackDoEnsaio extends Error {
   readonly valor: unknown;
@@ -85,14 +86,16 @@ function imprimir(r: ResultadoDaAgenda): void {
 
 async function main(): Promise<void> {
   const fila = tem('fila'), consulta = tem('consulta'), certificado = tem('certificado');
-  const webhook = tem('webhook');
-  const quantas = [fila, consulta, certificado, webhook].filter(Boolean).length;
+  const webhook = tem('webhook'), saude = tem('saude');
+  const quantas = [fila, consulta, certificado, webhook, saude].filter(Boolean).length;
   if (quantas !== 1) {
-    console.error('ERRO: informe UMA tarefa: --fila, --consulta, --certificado ou --webhook.');
+    console.error('ERRO: informe UMA tarefa: --fila, --consulta, --certificado, --webhook ou --saude.');
     console.error('  --fila        retenta os boletos que falharam no registro (PRD §6)');
     console.error('  --consulta    pergunta ao banco a situacao dos boletos em aberto (PRD §6)');
     console.error('  --certificado so le a data de expiracao do A1 e classifica');
     console.error('  --webhook     so pergunta ao banco se o aviso de pagamento ainda esta ligado');
+    console.error('  --saude       os dois acima juntos, e SAI COM CODIGO: 0 de pe, 3 sem conector,');
+    console.error('                4 precisa de acao humana, 5 nao deu para perguntar');
     process.exit(2);
   }
 
@@ -152,6 +155,76 @@ async function main(): Promise<void> {
      * junto do trabalho, abaixo. */
     await encerrarApp();
     return;
+  }
+
+  /*
+   * ======================================================================
+   * --saude: OS DOIS ALERTAS JUNTOS, E O UNICO QUE SAI COM CODIGO
+   * ======================================================================
+   *
+   * ELE E O CANAL, e ate 09/09/2026 nao havia canal nenhum. Os dois alertas
+   * desta agenda chegavam ao journal e a uma tela, e NENHUM DOS DOIS PROCURA
+   * NINGUEM - o `deploy/README` chama `systemctl list-units --failed` de "a
+   * unica superficie de alarme desta maquina", e nenhum deles aparecia la. O
+   * comentario do proprio `financeiro-agenda-certificado.service` registrava a
+   * falta desde 28/08: *"nao notifica ninguem. O aviso cai no journal"*.
+   *
+   * POR QUE UMA TAREFA SEPARADA, E NAO O CODIGO DE SAIDA DAS OUTRAS. Por a
+   * consulta em `failed` porque o WEBHOOK morreu mentiria sobre qual coisa
+   * quebrou: a consulta funcionou. Foi essa objecao - correta - que manteve o
+   * alerta fora do alarme. Uma unidade cujo trabalho INTEIRO e afirmar que o
+   * caminho do dinheiro esta de pe nao tem esse problema: quando ela fica
+   * vermelha, o que falhou e exatamente a afirmacao que ela faz.
+   *
+   * NAO E TIMER NOVO. Ela SUBSTITUI a `financeiro-agenda-certificado`, que ja
+   * rodava diaria e so olhava metade do problema - ver `deploy/README.md`.
+   *
+   * A CADENCIA CONTINUA SENDO A DO §2: uma vez por dia. Este e o mesmo
+   * diagnostico que nao pode morar na fila de 5 minutos, e ele nao mora.
+   */
+  if (saude) {
+    const e = await a.withTenant(sessao, tenantProposto, async () => {
+      const conector = await credencialDeCobranca();
+      if (!conector) return null;
+      const [cert, aviso] = [
+        await conferirCertificado(),
+        await conferirAvisoDePagamento(a.cobranca, conector.credencial_ref),
+      ];
+      return { cert, aviso };
+    }) as any;
+
+    const veredito = saudeDoCaminhoDoDinheiro({
+      certificado: e ? e.cert.nivel : null,
+      aviso: e ? e.aviso.nivel : null,
+    });
+
+    console.log('\n--- saude do caminho do dinheiro ---');
+    if (e) {
+      console.log(`  certificado A1 ....... ${e.cert.nivel}` +
+                  (e.cert.dias === null ? '' : ` (${e.cert.dias} dia(s))`));
+      console.log(`  aviso de pagamento ... ${e.aviso.nivel}`);
+    }
+
+    /* AS FRASES SAO AS MESMAS DA TELA E DO `--webhook`, e de proposito: quem le
+     * o journal depois de ver a faixa na tela precisa reconhecer o mesmo texto.
+     * `alertaDoAviso` existe para isso. */
+    if (e) for (const l of alertaDoAviso(e.aviso)) console.log(`  ${l}`);
+
+    /* A ULTIMA LINHA E A QUE O `systemctl status` MOSTRA, entao ela carrega o
+     * codigo E o resumo. Sem o codigo escrito por extenso, quem olha o status de
+     * uma unidade vermelha ve "exit-code" e um numero sem dicionario. */
+    console.log(`\n  => ${veredito.codigo} ${
+      veredito.codigo === 0 ? 'DE PE' : veredito.codigo === 3 ? 'SEM CONECTOR (nao e falha)'
+      : veredito.codigo === 4 ? 'PRECISA DE ACAO HUMANA' : 'NAO DEU PARA PERGUNTAR'
+    }: ${veredito.resumo}`);
+    if (veredito.codigo === 4 || veredito.codigo === 5) {
+      console.error(`  Esta unidade fica em \`systemctl list-units --failed\` ate a proxima rodada`);
+      console.error('  diaria encontrar tudo de pe. Ela nao interrompe nada: a fila continua');
+      console.error('  emitindo e a consulta continua baixando.');
+    }
+
+    await encerrarApp();
+    process.exit(veredito.codigo);
   }
 
   // ---------------------------------------------------------- as que escrevem

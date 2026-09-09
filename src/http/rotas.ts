@@ -968,8 +968,27 @@ export const ROTAS: Rota[] = [
     metodo: 'GET', padrao: '/conector-cobranca/aviso-pagamento',
     handler: (req, app) => emTenant(app, req, async () => {
       const c = await boleto.credencialDeCobranca();
-      if (!c) return ok({ nivel: 'nao_verificavel', avisos: [], motivo: 'nao ha conector de cobranca cadastrado' });
-      return ok(await conferirAvisoDePagamento(app.cobranca, c.credencial_ref));
+      /*
+       * `sem_conector` E CAMPO PROPRIO, E NAO UM QUINTO NIVEL. Os quatro niveis
+       * descrevem o estado do AVISO no banco; "nao ha conector" e o estado de
+       * quem nunca ligou banco nenhum, e nao cabe entre eles - o nivel continua
+       * sendo `nao_verificavel`, que e a verdade (ninguem perguntou).
+       *
+       * O CAMPO ENTROU EM 09/09/2026 porque a tela de Pendencias passou a mostrar
+       * esta leitura, e ela e a PRIMEIRA do sistema. Sem a distincao, uma
+       * instalacao que ainda nao ligou o banco veria "nao deu para perguntar ao
+       * banco" em ambar na primeira tela, todo dia, para sempre - e vermelho
+       * permanente e alarme desligado. Nao vira 412 pelo mesmo motivo de sempre:
+       * ausencia de conector e RESPOSTA, e a tela de Cobranca ja usa o motivo
+       * dentro do corpo para dizer isso a quem esta configurando.
+       */
+      if (!c) {
+        return ok({
+          sem_conector: true, nivel: 'nao_verificavel', avisos: [],
+          motivo: 'nao ha conector de cobranca cadastrado',
+        });
+      }
+      return ok({ sem_conector: false, ...await conferirAvisoDePagamento(app.cobranca, c.credencial_ref) });
     }),
   },
   {

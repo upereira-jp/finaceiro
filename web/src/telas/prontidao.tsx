@@ -24,7 +24,7 @@
 // a coluna diz isso em vez de desenhar um link para lugar nenhum.
 
 import { useState } from 'react';
-import { api, type Camada, type Prontidao, type ExecucaoDoConector } from '../api.ts';
+import { api, ErroDaApi, type Camada, type Prontidao, type ExecucaoDoConector } from '../api.ts';
 import { useDados } from '../dados.ts';
 import {
   Pagina, Aviso, Tabela, Marca, Kpi, KpiSimNao, Carregando, CampoData, AjudaDoMes, Icone,
@@ -33,12 +33,106 @@ import {
 import { Ligacao } from '../rota.tsx';
 import { competenciaISO } from '../dinheiro.ts';
 import { DESTINO_DA_CAMADA, enderecoDoDestino, telaDoDestino } from '../destino-da-camada.ts';
+import { estadoDoCertificado } from '../cobranca-regras.ts';
+import { faixasDaSaude, type NivelDoAviso } from '../saude-do-dinheiro.ts';
 import {
   VERBETE_DA_CAMADA, EFEITO, SITUACAO,
   agruparPorEfeito, tituloDoGrupo, subDoGrupo, contagemDaCamada,
 } from '../vocabulario.ts';
 
 const mesAtual = () => new Date().toISOString().slice(0, 7);
+
+/* ==========================================================================
+ * A SAUDE DO CAMINHO DO DINHEIRO, no alto da PRIMEIRA tela
+ * ==========================================================================
+ *
+ * ELA E O SEGUNDO DOS DOIS CANAIS, e ate 09/09/2026 nao havia canal nenhum. Os
+ * alertas do A1 e do aviso de pagamento chegavam ao journal do systemd e a tela
+ * de **Cobranca** — e a de Cobranca e a pior das duas para isso: e a tela de
+ * CONFIGURAR o banco, aberta uma vez por trimestre. O alerta morava na tela que
+ * ninguem abre.
+ *
+ * O outro canal e a unidade `financeiro-saude-cobranca`, que fica vermelha em
+ * `systemctl list-units --failed`. Ela cobre quando NINGUEM esta olhando; esta
+ * faixa cobre quando alguem esta.
+ *
+ * ⚠️ NENHUM ERRO SOBE, e a regra e a mesma da vizinha em `cobranca.tsx`, um
+ * degrau mais forte: a Sicoob fora do ar nao pode derrubar a PRIMEIRA tela do
+ * sistema — a que a operacao usa para saber o que fazer hoje. Falha vira
+ * `nao_verificavel`, que e o que ela e, e o 412 ("nao ha conector") vira
+ * `sem_conector`, que nao gera faixa nenhuma.
+ *
+ * E ELA NAO BLOQUEIA A TELA: sao dois `useDados` proprios, entao a tabela das
+ * camadas renderiza no tempo dela, sem esperar o handshake mTLS com o banco.
+ *
+ * POR QUE NAO HA CACHE, e a pergunta e legitima depois do §2 da retomada de
+ * 09/09 — o diagnostico foi tirado da fila de 5 minutos justamente por discar a
+ * Sicoob 288 vezes por dia. A diferenca e a natureza de quem chama: la era um
+ * TIMER, aqui e uma PESSOA abrindo uma tela. A cadencia e humana e limitada por
+ * construcao, e a leitura so acontece na montagem (o `useDados` nao faz polling).
+ * Se um dia isso deixar de ser verdade, o lugar do cache e o servidor, e nao aqui.
+ */
+type CertificadoNaTela = { dias: number | null; expira_em: string | null } | null;
+
+const certificadoOuNada = async (): Promise<CertificadoNaTela> => {
+  try {
+    return await api.get<{ dias: number | null; expira_em: string | null }>(
+      '/conector-cobranca/certificado');
+  } catch (e) {
+    /* O 412 e RESPOSTA ("nao ha conector"), nao falha de leitura — mesma
+     * distincao de `cobranca.tsx`. Aqui os dois casos caem no mesmo `null`
+     * porque `sem_conector` e `nao_medido` nao geram faixa nem um nem outro:
+     * o que esta tela nao pode e inventar alarme sobre um banco que ninguem
+     * ligou. Ver `faixasDaSaude`. */
+    void (e instanceof ErroDaApi);
+    return null;
+  }
+};
+
+/** `sem_conector` vem do servidor como campo proprio, e nao como um quinto
+ *  nivel — ver o comentario da rota. Ele e o que impede esta tela de acusar
+ *  ambar para sempre numa instalacao que ainda nao ligou banco nenhum.
+ *
+ *  Falha de leitura vira `sem_conector: false` + `nao_verificavel`: e a leitura
+ *  honesta dos dois casos juntos, porque a tela PERGUNTOU e nao soube. O unico
+ *  silencio autorizado e o de quem nao tem banco. */
+type LeituraDoAviso = { sem_conector: boolean; nivel: NivelDoAviso };
+
+const avisoOuNaoVerificavel = async (): Promise<LeituraDoAviso> => {
+  try {
+    return await api.get<LeituraDoAviso>('/conector-cobranca/aviso-pagamento');
+  } catch {
+    return { sem_conector: false, nivel: 'nao_verificavel' };
+  }
+};
+
+function SaudeDoDinheiro() {
+  const cert = useDados<CertificadoNaTela>(certificadoOuNada);
+  const aviso = useDados<LeituraDoAviso>(avisoOuNaoVerificavel);
+
+  /* SEM CONECTOR NAO GERA FAIXA NENHUMA, nem do A1 nem do aviso: nao ha banco
+   * ligado, entao nao ha caminho do dinheiro sobre o qual alarmar. Enquanto a
+   * leitura nao voltar (`aviso.dado === null`), `temConector` tambem e falso —
+   * uma faixa que pisca vermelho durante o carregamento e ruido, e o custo de
+   * esperar um segundo e zero. */
+  const temConector = aviso.dado != null && !aviso.dado.sem_conector;
+  const faixas = faixasDaSaude({
+    certificado: estadoDoCertificado({ temConector, dias: cert.dado?.dias ?? null }),
+    aviso: temConector ? aviso.dado!.nivel : null,
+  });
+  if (faixas.length === 0) return null;
+
+  return (
+    <>
+      {faixas.map((f) => (
+        <Aviso key={f.titulo} tipo={f.tom}>
+          <strong>{f.titulo}</strong> {f.corpo}
+          {f.destino && <> <Ligacao para={f.destino.endereco}>Abrir {f.destino.rotulo}</Ligacao></>}
+        </Aviso>
+      ))}
+    </>
+  );
+}
 
 export function TelaProntidao() {
   const [mes, setMes] = useState(mesAtual);
@@ -62,6 +156,12 @@ export function TelaProntidao() {
       </div>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
+
+      {/* ANTES DAS CAMADAS, e de proposito. As camadas dizem o que falta para
+          FATURAR este mes; esta faixa diz se o que ja foi faturado consegue ser
+          cobrado e baixado. E a pergunta mais alta das duas, e um mes inteiro de
+          camadas fechadas nao vale nada com o caminho do dinheiro quebrado. */}
+      <SaudeDoDinheiro />
       {/* "Conferindo o mês" e nao "Contando as camadas", desde 21/08/2026.
           "Camada" e o nome da estrutura interna do relatorio — a propria suite da
           ajuda o proibe no texto exibido (V4) —, e esta frase era a PRIMEIRA

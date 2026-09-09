@@ -276,3 +276,80 @@ export function nivelDoAviso(avisos: readonly Aviso[] | null | undefined): Nivel
 /** So o que o nivel le. Estrutural de proposito: o dominio nao importa a porta,
  *  e um tipo com um campo nao merece uma dependencia de modulo. */
 type Aviso = { inativado_em: string | null };
+
+// ============================================================================
+// A SAUDE DO CAMINHO DO DINHEIRO, num numero que o systemd entende
+// ============================================================================
+
+/**
+ * O QUE ESTA FUNCAO FECHA, e ela e a resposta a uma pendencia nomeada.
+ *
+ * Ate 09/09/2026 os dois alertas desta agenda - o do A1 e o do aviso de
+ * pagamento - chegavam a dois lugares, o journal e uma tela, e NENHUM DOS DOIS
+ * PROCURA NINGUEM. O `deploy/README` chama `systemctl list-units --failed` de
+ * "a unica superficie de alarme desta maquina", e nenhum dos dois aparecia la.
+ * O texto do proprio `financeiro-agenda-certificado.service` dizia isso com
+ * todas as letras desde 28/08: *"nao notifica ninguem. O aviso cai no journal"*.
+ *
+ * A TROCA QUE TINHA SIDO FEITA ERA "ninguem sabe" -> "quem abrir a tela sabe".
+ * E melhor, e nao e aviso.
+ *
+ * POR QUE UM CODIGO DE SAIDA E NAO UMA EXCECAO. Quem consome isto e uma unidade
+ * do systemd cujo trabalho INTEIRO e afirmar que o caminho do dinheiro esta de
+ * pe. Quando a afirmacao e falsa, a unidade fica `failed` - e isso NAO mente,
+ * que era a objecao que manteve o alerta fora do alarme ate hoje. Por o timer da
+ * CONSULTA em `failed` mentiria: a consulta funcionou, quem morreu foi o
+ * webhook. Uma unidade cuja unica tarefa e conferir nao tem esse problema, e por
+ * isso ela e separada.
+ *
+ * OS QUATRO CODIGOS, e a fronteira entre 4 e 5 e a mesma que separa `inativado`
+ * de `nao_verificavel` - "esta quebrado" nao e "ninguem sabe":
+ *
+ *   0  de pe. Nada a fazer.
+ *   3  NAO HA CONECTOR DE COBRANCA. Nada a conferir, e nao e falha - mesmo 3 da
+ *      fila e da consulta, mesmo `SuccessExitStatus=3` no unit. Sem ele, uma
+ *      maquina que ainda nao ligou o banco ficaria VERMELHA todo dia, e vermelho
+ *      permanente e alarme desligado.
+ *   4  PRECISA DE ACAO HUMANA. O A1 venceu, esta para vencer ou nao tem data; o
+ *      banco desligou o aviso, ou nunca houve aviso. Vermelho.
+ *   5  NAO DEU PARA PERGUNTAR. Vermelho tambem, e a razao e a mesma que faz
+ *      `nao_verificavel` nao colapsar em `ativo`: nao ter perguntado nao
+ *      autoriza dizer que esta bem. Some sozinho na proxima rodada diaria se era
+ *      a Sicoob fora do ar - e insiste, dia apos dia, se nao era.
+ *
+ * A PRECEDENCIA E 3 > 4 > 5, e ela nao e arbitraria: com o A1 vencido E a Sicoob
+ * fora do ar, o que da para fazer hoje e renovar o A1. O codigo aponta o que tem
+ * dono, nao o que apareceu primeiro.
+ */
+export type CodigoDeSaude = 0 | 3 | 4 | 5;
+
+export type Saude = {
+  codigo: CodigoDeSaude;
+  /** Uma linha, para o journal e para o `systemctl status`. */
+  resumo: string;
+};
+
+export function saudeDoCaminhoDoDinheiro(e: {
+  /** `null` quando nao ha conector de cobranca - nao ha o que conferir. */
+  certificado: NivelDoCertificado | null;
+  /** `null` pelo mesmo motivo. */
+  aviso: NivelDoAviso | null;
+}): Saude {
+  if (e.certificado === null && e.aviso === null) {
+    return { codigo: 3, resumo: 'nao ha conector de cobranca neste tenant - nada a conferir' };
+  }
+
+  const quebrado: string[] = [];
+  if (e.certificado === 'vencido') quebrado.push('o certificado A1 esta VENCIDO');
+  if (e.certificado === 'vence_em_breve') quebrado.push('o certificado A1 vence em breve');
+  if (e.aviso === 'inativado') quebrado.push('o banco DESLIGOU o aviso de pagamento');
+  if (e.aviso === 'ausente') quebrado.push('nao ha aviso de pagamento cadastrado no banco');
+  if (quebrado.length > 0) return { codigo: 4, resumo: quebrado.join('; ') };
+
+  const semSaber: string[] = [];
+  if (e.certificado === 'sem_certificado') semSaber.push('nao ha data de validade do A1 cadastrada');
+  if (e.aviso === 'nao_verificavel') semSaber.push('nao deu para perguntar ao banco sobre o aviso de pagamento');
+  if (semSaber.length > 0) return { codigo: 5, resumo: semSaber.join('; ') };
+
+  return { codigo: 0, resumo: 'o caminho do dinheiro esta de pe' };
+}

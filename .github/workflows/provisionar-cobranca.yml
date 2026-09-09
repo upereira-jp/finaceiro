@@ -68,11 +68,14 @@ jobs:
         with:
           node-version: '22'
 
+      # O `apt-get update` mora SO no script, e o motivo esta la dentro: sem
+      # restricao ele atualiza tambem as fontes de terceiro da imagem do runner,
+      # e em 09/09/2026 o indice do Google Chrome derrubou o `isolamento` inteiro
+      # sem que uma linha nossa tivesse mudado. Aqui doeria mais: este workflow
+      # GRAVA o usuario de servico da cobranca, e uma queda no passo do apt o
+      # deixaria pela metade.
       - name: cliente psql 16
-        run: |
-          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
-          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
-          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client-16
+        run: bash .github/instalar-psql.sh 16
 
       - name: instalar dependencias
         run: npm install --no-audit --no-fund

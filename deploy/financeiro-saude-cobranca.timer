@@ -1,0 +1,23 @@
+[Unit]
+Description=Confere a saude do caminho do dinheiro uma vez por dia
+Documentation=https://github.com/upereira-jp/finaceiro
+
+[Timer]
+# DIARIA, e o horario e DEPOIS da consulta ativa (06:17, ate 600 s) - ao
+# contrario da `certificado`, que rodava dez minutos ANTES.
+#
+# A ordem inverteu porque o papel inverteu. A `certificado` vinha antes para que
+# a CAUSA aparecesse no journal antes do SINTOMA: um A1 vencido explica a fila
+# enchendo de falhas. Esta aqui nao explica a rodada do dia - ela AFIRMA sobre o
+# estado em que o dia terminou, e uma afirmacao feita antes do trabalho seria
+# sobre ontem.
+#
+# 06:37 e nao 06:30 pelo mesmo motivo dos 17 minutos da consulta: sair do minuto
+# redondo que todo mundo agenda.
+OnCalendar=*-*-* 06:37:00
+Persistent=true
+AccuracySec=1min
+Unit=financeiro-saude-cobranca.service
+
+[Install]
+WantedBy=timers.target
