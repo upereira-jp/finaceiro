@@ -3,33 +3,67 @@
 | Campo | Valor |
 |---|---|
 | **Para quem** | Quem abrir a próxima sessão. **Dois minutos** |
-| **Substitui** | `RETOMADA-2026-09-09.md` para efeito de "onde estamos". O corpo dela continua correto; o que venceu é o **§0** — as três pendências foram postas ao dono e as três voltaram com resposta |
-| **O que esta leva fez** | Fechou as três decisões do §0 anterior — e, depois delas, **ligou o webhook de liquidação de ponta a ponta**: o banco validou a URL e a nossa resposta chegou lá como `200 · OK`. Ver §10 |
-| **Suíte** | sem banco: `EXIT=0`, **2.663** verificações (eram 2.619). **E o CI fechou VERDE nos cinco jobs** (run `34363949451`) — o primeiro desde 27/08. Ver §7 |
-| **Repositório** | `main` = **`d011c69`** + este registro, e `origin/main` está junto |
-| **Produção** | ✅ **sem deriva** — o `deploy-financeiro` rodou às 14:15 e o serviço subiu **14:16:09** em `4d74603`. `GET /` responde 200 e o bundle novo carrega a regra na tela |
+| **Substitui** | `RETOMADA-2026-09-09.md` para efeito de "onde estamos". O corpo dela continua correto; o que venceu é o §0 |
+| **O que esta leva fez** | Fechou as três decisões que o §0 anterior mandava decidir, consertou um CI vermelho havia 24h, e **ligou o webhook de liquidação de ponta a ponta** |
+| **Suíte** | sem banco: `EXIT=0`, **2.663** verificações (eram 2.619) |
+| **CI** | ✅ **verde nos cinco jobs** — o primeiro desde 27/08 (§7) |
+| **Repositório** | `main` = **`6426f58`**, `origin/main` junto, árvore limpa, zero arquivos `root:root` |
+| **Produção** | ⚠️ **HÁ DERIVA, e ela é nova** — o serviço é de 14:16:09, em `4d74603`. Depois disso entraram **mudanças de `src/sicoob/http.ts`** que o processo não carrega. Ver §0.1 |
 
 > ## A frase de uma linha
 >
-> **A regra "3 dias antes" nunca disse o que fazer no domingo, e a resposta do dono
-> foi «antecipar até o dia útil anterior» — que é a única das duas que respeita a
-> própria regra, porque empurrar deixaria o boleto a 1 dia da conta da Equatorial,
-> exatamente o aperto que os 3 dias existem para evitar.**
+> **O webhook de liquidação está no ar: o banco validou a URL às 15:18 e o
+> `--solicitacoes` mostra, do lado dele, a nossa própria resposta — `200 em 1s`,
+> corpo `OK`. Um boleto pago passa a avisar o sistema sozinho.**
 
 ---
 
 ## 0. O primeiro movimento da próxima sessão
 
-1. **Nada desta leva.** Push, deploy e CI estão fechados — `origin/main` = `d808fa6`,
-   serviço de 14:16:09 em `4d74603` (o `d808fa6` só toca teste e não pede deploy), e o
-   `isolamento` fechou verde nos cinco jobs;
-2. **`Q-VENC3-01` (b)** é a borda que sobrou, e ela **piorou dois dias** com a (a):
-   pelo caminho do cadastro, dia 1º com competência de junho agora vence **26/06** e
-   não 28/06, porque 28/06 é domingo. Continua estreita (só quando a conta lida não
-   traz data) e continua com o dono;
-3. **`dono_usina` foi adiada, não resolvida.** Não bloqueia faturar nem emitir boleto;
-   bloqueia o split na primeira fatura paga. O que falta é dado que só existe fora do
-   sistema — nome, PF/PJ, documento e chave Pix das 4 usinas.
+### 0.1 Rodar o `deploy-financeiro` — e é a única coisa pendente de operação
+
+O serviço em produção é de **14:16:09, no `4d74603`**. Depois dele entraram
+`cadastrarWebhook`, as duas consultas e — o que importa — **o cache de token
+chaveado por (credencial, escopos)**, em `src/sicoob/http.ts`.
+
+**Isso não está quebrado hoje e não é urgente:** os scripts carregam o código do
+disco, e foi por isso que o cadastro do webhook funcionou com o processo antigo
+no ar. O caminho de emissão do serviço continua correto com o cache antigo,
+porque ele só pede uma família de escopos. **Mas o disco e o processo divergem
+em código do caminho do dinheiro**, que é exatamente a armadilha que já custou um
+ciclo em 01/09.
+
+### 0.2 O que continua com o dono, e nada disso é código
+
+1. **`Q-VENC3-01` (b)** — a borda que sobrou, e ela **piorou dois dias** hoje: pelo
+   cadastro, dia 1º com competência de junho agora vence **26/06** e não 28/06,
+   porque 28/06 é domingo (§1);
+2. **`dono_usina`** — adiada por decisão, não resolvida. Não bloqueia faturar nem
+   emitir; bloqueia o split na primeira fatura paga (§3);
+3. **os 10 endereços** e **o tipo do originador do Rhenan**;
+4. **as quatro vermelhas do contador**, que voltam a ser bloqueio quando a F2 começar.
+
+### 0.3 As perguntas ao suporte Sicoob, agora são quatro
+
+As três do `/boletos/movimentacoes` (`PROMPT-suporte-sicoob-2026-09-08.md` §4) e
+**uma nova, que o contrato do webhook criou**: *quantas falhas de entrega bastam
+para a Sicoob inativar o webhook, e ela avisa antes?* Enquanto não houver resposta,
+`PATCH /webhooks/{id}/reativar` fica sem escrever — ver §9.
+
+---
+
+## O roteiro desta leva, em ordem
+
+| § | O quê |
+|---|---|
+| **1** | O calendário bancário — a `Q-VENC3-01` (a) decidida e construída |
+| **2** | O prazo de crédito é D+1, e a decisão inclui **não** escrever código |
+| **3** | `dono_usina` adiada, com o custo medido |
+| **4–5** | O portão do `psql` virou workflow · push e deploy |
+| **7** | O CI estava vermelho havia 24h, e ninguém tinha como ver |
+| **8** | O usuário de serviço do webhook existe |
+| **9** | Não existe cadastro de webhook «no portal» — e a suposição era nossa |
+| **10** | **O webhook está LIGADO**, provado dos dois lados |
 
 ---
 
@@ -149,8 +183,10 @@ https://financeiro.blackhaus.io/api/liquidacoes/webhook-sicoob/eac198c0-b0c1-4b1
 
 ## 5. O que falta fazer, e é operação — não decisão
 
-**✅ O push e o deploy saíram.** O serviço subiu 09/09 14:16:09 em `4d74603`, `GET /`
-responde 200 e o bundle servido já carrega a regra nova na tela.
+**✅ O push e o deploy saíram** — o serviço subiu 09/09 14:16:09 em `4d74603`, `GET /`
+responde 200 e o bundle servido já carrega a regra do calendário na tela.
+⚠️ **E um segundo deploy ficou devendo**, porque o resto da leva veio depois dele:
+ver §0.1.
 
 **✅ O `provisionar-cobranca` rodou nos dois modos, e o usuário de serviço EXISTE.**
 Ver §8.
