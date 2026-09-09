@@ -44,6 +44,7 @@ import { CobrancaSicoob, ErroDaSicoob, ESCOPOS_DE_WEBHOOK, ehUrlDeWebhook,
          TIPO_MOVIMENTO_PAGAMENTO, PERIODO_MOVIMENTO_ATUAL } from '../src/sicoob/http.ts';
 import { cofreDoVault } from '../src/sicoob/cofre.ts';
 import { urlDoWebhook } from '../src/sicoob/webhook.ts';
+import { tenantCorrente } from '../src/db/contexto.ts';
 
 const arg = (n: string) => {
   const i = process.argv.indexOf(`--${n}`);
@@ -76,7 +77,12 @@ const sessao = await a.login(AUTH);
 
 try {
   await a.withTenant(sessao, TENANT, async () => {
-    const tenant = (sessao as any).tenant_id ?? TENANT;
+    /* O tenant sai do CONTEXTO e nao da sessao. A primeira versao lia
+     * `sessao.tenant_id`, que nao existe: a URL saiu com "undefined" no lugar do
+     * uuid, no ensaio, antes de qualquer chamada. E o motivo de o ensaio ser o
+     * padrao - essa URL teria sido cadastrada no banco e nenhuma notificacao
+     * jamais chegaria, com os dois lados achando que estava certo. */
+    const tenant = tenantCorrente();
     const url = arg('url') ?? urlDoWebhook(tenant);
 
     if (!ehUrlDeWebhook(url)) {
