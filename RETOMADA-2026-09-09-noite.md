@@ -5,7 +5,7 @@
 | **Para quem** | Quem abrir a próxima sessão. **Dois minutos** |
 | **Substitui** | `RETOMADA-2026-09-09.md` para efeito de "onde estamos". O corpo dela continua correto; o que venceu é o **§0** — as três pendências foram postas ao dono e as três voltaram com resposta |
 | **O que esta leva fez** | Fechou as três decisões do §0 anterior. Uma virou código (**o calendário bancário**), uma virou registro (**D+1**), uma foi adiada com o custo medido (**`dono_usina`**). E o portão do webhook que era `psql` a mão virou workflow |
-| **Suíte** | sem banco: `EXIT=0`, **2.649** verificações (eram 2.619). **E o CI fechou VERDE nos cinco jobs** (run `34363949451`) — o primeiro desde 27/08. Ver §7 |
+| **Suíte** | sem banco: `EXIT=0`, **2.663** verificações (eram 2.619). **E o CI fechou VERDE nos cinco jobs** (run `34363949451`) — o primeiro desde 27/08. Ver §7 |
 | **Repositório** | `main` = **`d011c69`** + este registro, e `origin/main` está junto |
 | **Produção** | ✅ **sem deriva** — o `deploy-financeiro` rodou às 14:15 e o serviço subiu **14:16:09** em `4d74603`. `GET /` responde 200 e o bundle novo carrega a regra na tela |
 
@@ -316,3 +316,32 @@ Dos seis endpoints da família, dois valem construir e nenhum é bloqueio:
   **6** = erro no envio).
 
 `PATCH`, `DELETE` e `reativar` não estão no caminho da primeira notificação.
+
+### ✅ Os dois foram construídos no mesmo dia — e um deles trouxe um modo de falha novo
+
+O dono colou os dois contratos. Entraram `consultarWebhooks` e
+`solicitacoesDoWebhook`, com escopo próprio (`webhooks_consulta` — ler quais
+existem não precisa poder criar um), e o script virou três modos, com a
+**consulta como padrão** por ser a única ação que não muda nada.
+
+**A guarda existe agora:** `--cadastrar` consulta antes e **recusa** quando já há
+webhook ativo do tipo 7. O aviso em maiúsculas virou código.
+
+⚠️ **E o contrato do `GET /webhooks` respondeu uma pergunta que eu ia mandar ao
+suporte.** O modelo traz `dataHoraInativacao` e `descricaoMotivoInativacao`, e o
+exemplo do próprio banco preenche o segundo com **«Erro ao enviar notificação»**.
+Ou seja: **a Sicoob INATIVA o webhook quando a entrega falha.** Isso não é
+detalhe de campo — é um modo de falha inteiro que o projeto não conhecia, e ele é
+silencioso do nosso lado: um webhook inativo não avisa, e "nenhuma notificação" é
+indistinguível de "ninguém pagou". Por isso a consulta grita `☠️ INATIVO` com o
+motivo e a data.
+
+**Medido contra a Sicoob de produção**, e é a primeira chamada de leitura desta
+família: `GET /webhooks` respondeu — **nenhum webhook cadastrado**. Prova junto
+que `webhooks_consulta` é concedido de verdade, e não só anunciado.
+
+**Uma recusa deliberada:** «ativo» **não** se deriva de `codigoSituacao`. O
+contrato nomeia um código (3 = «Validado com sucesso») e não explica os outros;
+derivar de um enum conhecido pela metade poria uma afirmação inventada dentro da
+única ferramenta de diagnóstico do webhook. O que decide é o carimbo de
+inativação, e o código cru viaja junto em toda leitura.

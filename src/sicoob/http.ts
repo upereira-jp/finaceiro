@@ -153,6 +153,10 @@ export const ESCOPOS = [
  */
 export const ESCOPOS_DE_WEBHOOK = ['webhooks_inclusao'] as const;
 
+/** O escopo das DUAS consultas de webhook. Separado do de inclusao pela mesma
+ *  razao: ler quais webhooks existem nao precisa poder criar um. */
+export const ESCOPOS_DE_WEBHOOK_CONSULTA = ['webhooks_consulta'] as const;
+
 // ============================================================ 1. O TRANSPORTE
 
 export type PedidoHttp = {
@@ -836,11 +840,197 @@ export class CobrancaSicoob implements PortaDeCobranca {
     }
     return { idWebhook: String(id) };
   }
+
+  // ------------------------------------------------------ consultar webhooks
+
+  /**
+   * OS WEBHOOKS CADASTRADOS. `GET /webhooks`.
+   *
+   * PARA QUE ELA SERVE, e sao tres coisas distintas:
+   *
+   *   1. **nao cadastrar o segundo.** `POST /webhooks` nao e idempotente e
+   *      cadastrar duas vezes faz o banco notificar em DOBRO. Ate esta funcao
+   *      existir, isso era um aviso em maiusculas no script; agora e guarda;
+   *   2. **recuperar o `idWebhook`** de quem nao anotou - sem ele, nenhum dos
+   *      outros endpoints da familia e enderecavel;
+   *   3. **saber se ele ainda esta vivo**, e esta e a que ninguem tinha pedido.
+   *
+   * ⚠️ O CONTRATO RESPONDEU UMA PERGUNTA QUE EU IA MANDAR AO SUPORTE. O modelo
+   * traz `dataHoraInativacao` e `descricaoMotivoInativacao`, e o exemplo do
+   * proprio banco preenche o segundo com **"Erro ao enviar notificacao"**. Ou
+   * seja: **a Sicoob INATIVA o webhook quando a entrega falha**. Isso nao e
+   * detalhe de campo - e um modo de falha inteiro que o projeto nao conhecia. Um
+   * webhook inativo nao avisa, e o sistema nao tem como perceber sozinho: do
+   * nosso lado, "nenhuma notificacao" e indistinguivel de "ninguem pagou".
+   *
+   * 204 E SUCESSO E NAO ERRO, e ele nao tem corpo: "a consulta foi realizada e
+   * nao retornou registros". Devolve lista vazia. Um `JSON.parse` do corpo vazio
+   * levantaria, e o chamador leria "a consulta falhou" onde o banco disse
+   * "nao ha nenhum" - que sao respostas opostas para quem esta decidindo se
+   * cadastra.
+   */
+  async consultarWebhooks(
+    ref: CredencialRef,
+    filtro: { idWebhook?: string | number; codigoTipoMovimento?: number } = {},
+  ): Promise<WebhookCadastrado[]> {
+    const c = await this.resolver(ref);
+    const q = new URLSearchParams();
+    if (filtro.idWebhook != null) q.set('idWebhook', String(filtro.idWebhook));
+    if (filtro.codigoTipoMovimento != null) q.set('codigoTipoMovimento', String(filtro.codigoTipoMovimento));
+    const cauda = q.toString() ? `?${q}` : '';
+
+    const r = await this.chamar(ref, c, 'GET', `/webhooks${cauda}`, undefined, ESCOPOS_DE_WEBHOOK_CONSULTA);
+    if (r.status === 204) return [];
+    if (r.status < 200 || r.status >= 300) throw erroDaResposta(r);
+
+    const lista = JSON.parse(r.texto)?.resultado;
+    if (!Array.isArray(lista)) {
+      throw Object.assign(
+        new Error(`A Sicoob respondeu HTTP ${r.status} sem "resultado" em forma de lista.`),
+        { status: 502 },
+      );
+    }
+    return lista.map(webhookDoJson);
+  }
+
+  // ---------------------------------------------- solicitacoes de um webhook
+
+  /**
+   * O HISTORICO DE TENTATIVAS DE NOTIFICACAO. `GET /webhooks/{id}/solicitacoes`.
+   *
+   * E A UNICA FERRAMENTA QUE RESPONDE "O BANCO TENTOU AVISAR?". Sem ela, uma
+   * liquidacao que nao chega e silencio dos dois lados - o mesmo modo de falha
+   * do 404 generico da guarda de origem, e o mesmo que a `ADR-0006` §9.4
+   * descreve. Aqui aparece, por tentativa: a situacao (2 aguardando, 3 enviado,
+   * 6 erro), o `codigoStatusRequisicao` que o NOSSO servidor devolveu e ate o
+   * corpo da nossa resposta, em `descricaoCodigoStatusRequisicao`.
+   *
+   * `dataSolicitacao` E OBRIGATORIA e o formato e `yyyy-MM-dd` - conferido aqui
+   * porque uma data em outro formato volta como `400` de negocio, e `400` do
+   * banco no meio de um diagnostico manda investigar o lado errado.
+   *
+   * `nossoNumero` e `codigoBarras` sao filtros, e sao o que torna esta consulta
+   * util no caso concreto: "esta fatura foi paga e nao baixou - o banco chegou a
+   * tentar?" e uma pergunta sobre UM titulo, nao sobre o dia.
+   */
+  async solicitacoesDoWebhook(
+    ref: CredencialRef,
+    idWebhook: string | number,
+    p: {
+      dataSolicitacao: string;
+      pagina?: number;
+      codigoSolicitacaoSituacao?: number;
+      nossoNumero?: string | number;
+      codigoBarras?: string;
+    },
+  ): Promise<PaginaDeSolicitacoes> {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(p.dataSolicitacao ?? ''))) {
+      throw Object.assign(
+        new TypeError(
+          `dataSolicitacao invalida: ${JSON.stringify(p.dataSolicitacao)}. O formato e yyyy-MM-dd, e ` +
+          'outro formato volta como 400 de negocio do banco - que manda investigar o lado errado. ' +
+          'Nada foi consultado.'
+        ),
+        { status: 422 },
+      );
+    }
+
+    const c = await this.resolver(ref);
+    const q = new URLSearchParams({ dataSolicitacao: p.dataSolicitacao });
+    if (p.pagina != null) q.set('pagina', String(p.pagina));
+    if (p.codigoSolicitacaoSituacao != null) q.set('codigoSolicitacaoSituacao', String(p.codigoSolicitacaoSituacao));
+    if (p.nossoNumero != null) q.set('nossoNumero', String(p.nossoNumero));
+    if (p.codigoBarras) q.set('codigoBarras', p.codigoBarras);
+
+    const r = await this.chamar(
+      ref, c, 'GET', `/webhooks/${encodeURIComponent(String(idWebhook))}/solicitacoes?${q}`,
+      undefined, ESCOPOS_DE_WEBHOOK_CONSULTA);
+    if (r.status === 204) return { paginaAtual: 1, totalPaginas: 0, totalRegistros: 0, solicitacoes: [] };
+    if (r.status < 200 || r.status >= 300) throw erroDaResposta(r);
+
+    const res = JSON.parse(r.texto)?.resultado ?? {};
+    const linhas = Array.isArray(res.webhookSolicitacoes) ? res.webhookSolicitacoes : [];
+    return {
+      paginaAtual: numeroOuZero(res.paginaAtual),
+      totalPaginas: numeroOuZero(res.totalPaginas),
+      totalRegistros: numeroOuZero(res.totalRegistros),
+      solicitacoes: linhas.map(solicitacaoDoJson),
+    };
+  }
 }
+
+// ------------------------------------------------- os tipos da familia webhook
+
+export type WebhookCadastrado = {
+  idWebhook: string;
+  url: string | null;
+  email: string | null;
+  codigoTipoMovimento: number | null;
+  codigoSituacao: number | null;
+  descricaoSituacao: string | null;
+  dataHoraCadastro: string | null;
+  dataHoraUltimaAlteracao: string | null;
+  /** Preenchida quando o banco INATIVOU o webhook. Ver `consultarWebhooks`. */
+  dataHoraInativacao: string | null;
+  /** O exemplo do proprio banco traz "Erro ao enviar notificacao". */
+  descricaoMotivoInativacao: string | null;
+};
+
+export type NotificacaoEnviada = {
+  url: string | null;
+  dataHoraInicio: string | null;
+  dataHoraFim: string | null;
+  tempoComunicao: number | null;
+  /** O status que o NOSSO servidor devolveu. 200/201/204 sao os aceitos. */
+  codigoStatusRequisicao: number | null;
+  /** O CORPO da nossa resposta, como o banco o recebeu. */
+  descricaoCodigoStatusRequisicao: string | null;
+};
+
+export type SolicitacaoDeWebhook = {
+  codigoSolicitacaoSituacao: number | null;
+  descricaoSolicitacaoSituacao: string | null;
+  codigoWebhookSituacao: number | null;
+  descricaoErroProcessamento: string | null;
+  dataHoraCadastro: string | null;
+  /** `true` quando a solicitacao E a notificacao de validacao da URL. */
+  validacaoWebhook: boolean;
+  nossoNumero: string | null;
+  codigoBarras: string | null;
+  notificacoes: NotificacaoEnviada[];
+};
+
+export type PaginaDeSolicitacoes = {
+  paginaAtual: number;
+  totalPaginas: number;
+  totalRegistros: number;
+  solicitacoes: SolicitacaoDeWebhook[];
+};
+
+/** Um webhook esta INATIVO quando o banco carimbou a inativacao.
+ *
+ *  NAO se olha `codigoSituacao` para isto, e a razao e honestidade: o contrato
+ *  nomeia UM codigo (3 = "Validado com sucesso") e nao explica os outros.
+ *  Derivar "ativo" de um enum que so se conhece pela metade poria uma afirmacao
+ *  inventada no meio da unica ferramenta de diagnostico do webhook. */
+export const webhookInativo = (w: WebhookCadastrado) => w.dataHoraInativacao != null;
 
 /** `codigoTipoMovimento 7` - Pagamento (baixa operacional). O unico que
  *  `sicoob/webhook.ts` traduz em baixa. */
 export const TIPO_MOVIMENTO_PAGAMENTO = 7;
+
+/**
+ * `codigoSolicitacaoSituacao` do `GET /webhooks/{id}/solicitacoes`.
+ *
+ * SAO OS TRES QUE O CONTRATO NOMEIA, e a lista NAO e afirmada como completa: o
+ * Swagger lista 2, 3 e 6, e os buracos (1, 4, 5) nao sao explicados. Por isso o
+ * codigo cru viaja junto com a descricao em toda leitura - inventar um enum
+ * fechado aqui faria uma situacao desconhecida virar `undefined` silencioso na
+ * unica ferramenta que existe para diagnosticar notificacao perdida.
+ */
+export const SOLICITACAO_AGUARDANDO_ENVIO = 2;
+export const SOLICITACAO_ENVIADA = 3;
+export const SOLICITACAO_COM_ERRO = 6;
 
 /** `codigoPeriodoMovimento 1` - Movimento Atual (D0). */
 export const PERIODO_MOVIMENTO_ATUAL = 1;
@@ -867,6 +1057,51 @@ function desconhecido(nossoNumero: string): SituacaoDoBoleto {
   return {
     nossoNumero, situacao: 'desconhecida', valorLiquidadoCentavos: null,
     jurosCentavos: 0, multaCentavos: 0, dataLiquidacao: null, idExterno: null,
+  };
+}
+
+const textoOuNulo = (v: unknown) => (v == null ? null : String(v));
+const numeroOuNulo = (v: unknown) => (v == null || !Number.isFinite(Number(v)) ? null : Number(v));
+const numeroOuZero = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+
+/* IDENTIFICADOR SAI COMO TEXTO, sempre. `idWebhook` e `nossoNumero` chegam como
+ * numero JSON, e numero de identificador que passa por double perde digito em
+ * silencio quando cresce - a mesma razao da regra 1 para dinheiro, aplicada a
+ * identidade. Comparar `"4"` com `4` falha alto; um id truncado nao falha. */
+function webhookDoJson(w: any): WebhookCadastrado {
+  return {
+    idWebhook: String(w?.idWebhook ?? ''),
+    url: textoOuNulo(w?.url),
+    email: textoOuNulo(w?.email),
+    codigoTipoMovimento: numeroOuNulo(w?.codigoTipoMovimento),
+    codigoSituacao: numeroOuNulo(w?.codigoSituacao),
+    descricaoSituacao: textoOuNulo(w?.descricaoSituacao),
+    dataHoraCadastro: textoOuNulo(w?.dataHoraCadastro),
+    dataHoraUltimaAlteracao: textoOuNulo(w?.dataHoraUltimaAlteracao),
+    dataHoraInativacao: textoOuNulo(w?.dataHoraInativacao),
+    descricaoMotivoInativacao: textoOuNulo(w?.descricaoMotivoInativacao),
+  };
+}
+
+function solicitacaoDoJson(s: any): SolicitacaoDeWebhook {
+  const n = Array.isArray(s?.webhookNotificacoes) ? s.webhookNotificacoes : [];
+  return {
+    codigoSolicitacaoSituacao: numeroOuNulo(s?.codigoSolicitacaoSituacao),
+    descricaoSolicitacaoSituacao: textoOuNulo(s?.descricaoSolicitacaoSituacao),
+    codigoWebhookSituacao: numeroOuNulo(s?.codigoWebhookSituacao),
+    descricaoErroProcessamento: textoOuNulo(s?.descricaoErroProcessamento),
+    dataHoraCadastro: textoOuNulo(s?.dataHoraCadastro),
+    validacaoWebhook: s?.validacaoWebhook === true,
+    nossoNumero: textoOuNulo(s?.nossoNumero),
+    codigoBarras: textoOuNulo(s?.codigoBarras),
+    notificacoes: n.map((x: any) => ({
+      url: textoOuNulo(x?.url),
+      dataHoraInicio: textoOuNulo(x?.dataHoraInicio),
+      dataHoraFim: textoOuNulo(x?.dataHoraFim),
+      tempoComunicao: numeroOuNulo(x?.tempoComunicao),
+      codigoStatusRequisicao: numeroOuNulo(x?.codigoStatusRequisicao),
+      descricaoCodigoStatusRequisicao: textoOuNulo(x?.descricaoCodigoStatusRequisicao),
+    })),
   };
 }
 

@@ -24,7 +24,8 @@
 import {
   CobrancaSicoob, situacaoDoTexto, seuNumeroDe, ErroDaSicoob, pagadorSicoob,
   type Transporte, type PedidoHttp, SEU_NUMERO_MAX,
-  ehUrlDeWebhook, ESCOPOS, ESCOPOS_DE_WEBHOOK } from '../src/sicoob/http.ts';
+  ehUrlDeWebhook, ESCOPOS, ESCOPOS_DE_WEBHOOK, ESCOPOS_DE_WEBHOOK_CONSULTA,
+  webhookInativo, SOLICITACAO_COM_ERRO } from '../src/sicoob/http.ts';
 import { urlDoWebhook } from '../src/sicoob/webhook.ts';
 import { faltamNoEndereco } from '../src/sicoob/porta.ts';
 import { cofreFixo } from '../src/sicoob/cofre.ts';
@@ -553,6 +554,122 @@ const PEDIDO = {
   try { await c5.cadastrarWebhook('ref-1', P); } catch (e) { mudo = e; }
   chk('W10', mudo?.status === 502 && /confira com uma consulta/.test(String(mudo?.message)),
       '201 sem idWebhook levanta 502 e manda CONSULTAR antes de repetir - repetir criaria dois');
+}
+
+// ===========================================================================
+// WC - AS DUAS CONSULTAS DA FAMILIA WEBHOOK
+//
+// `GET /webhooks` e `GET /webhooks/{id}/solicitacoes`, com o contrato colado do
+// Swagger em 09/09/2026. A primeira e a guarda contra cadastrar dois; a segunda
+// e a UNICA ferramenta que responde "o banco tentou avisar?".
+// ===========================================================================
+{
+  /* O exemplo do PROPRIO BANCO, campo a campo - inclusive os dois que revelaram
+   * que a Sicoob INATIVA o webhook quando a entrega falha. */
+  const UM_WEBHOOK = {
+    idWebhook: 4,
+    url: 'https://webhook.com',
+    email: 'webhook@email.com',
+    codigoTipoMovimento: 7,
+    descricaoTipoMovimento: 'Pagamento (Baixa operacional)',
+    codigoPeriodoMovimento: 1,
+    codigoSituacao: 3,
+    descricaoSituacao: 'Validado com sucesso',
+    dataHoraCadastro: '2024-09-03T00:27:18.483Z',
+    dataHoraUltimaAlteracao: '2024-09-06T12:24:11.296Z',
+    dataHoraInativacao: '2024-09-05T18:50:55.099Z',
+    descricaoMotivoInativacao: 'Erro ao enviar notificação',
+  };
+
+  const { c, vistos } = adaptador([TOKEN_OK, {
+    status: 200, texto: JSON.stringify({ resultado: [UM_WEBHOOK] }),
+  }]);
+  const lista = await c.consultarWebhooks('ref-1');
+
+  chk('WC1', vistos[1]!.metodo === 'GET' && vistos[1]!.url === 'https://exemplo.invalido/v3/webhooks',
+      `sem filtro, o caminho nao ganha "?" a toa (foi ${vistos[1]!.url})`);
+  chk('WC2', new URLSearchParams(vistos[0]!.corpo!).get('scope') === ESCOPOS_DE_WEBHOOK_CONSULTA.join(' '),
+      'a consulta pede SO webhooks_consulta - ler quais existem nao precisa poder criar um');
+  chk('WC3', lista.length === 1 && lista[0]!.idWebhook === '4',
+      `o id sai como TEXTO: ${JSON.stringify(lista[0]!.idWebhook)} - identificador em double perde digito calado`);
+
+  /* ⚠️ O CAMPO QUE MUDOU O QUE O PROJETO SABIA. `descricaoMotivoInativacao` vem
+   * "Erro ao enviar notificacao" no exemplo do banco: a Sicoob INATIVA o webhook
+   * quando a entrega falha, e um webhook inativo nao avisa pagamento nenhum. */
+  chk('WC4', webhookInativo(lista[0]!) && lista[0]!.descricaoMotivoInativacao === 'Erro ao enviar notificação',
+      'a inativacao e visivel e nomeada - enquanto ele estiver assim, nenhum pagamento e avisado');
+
+  /* "ATIVO" NAO SE DERIVA DE `codigoSituacao`, e a recusa e deliberada: o
+   * contrato nomeia UM codigo (3) e nao explica os outros. */
+  chk('WC5', webhookInativo({ ...lista[0]!, dataHoraInativacao: null }) === false,
+      'sem carimbo de inativacao ele conta como ativo, mesmo com o codigoSituacao inalterado');
+
+  /* 204 E SUCESSO E NAO TEM CORPO. Um `JSON.parse` do vazio levantaria, e o
+   * chamador leria "a consulta falhou" onde o banco disse "nao ha nenhum" - que
+   * sao respostas OPOSTAS para quem esta decidindo se cadastra. */
+  const { c: c2 } = adaptador([TOKEN_OK, { status: 204, texto: '' }]);
+  chk('WC6', (await c2.consultarWebhooks('ref-1')).length === 0,
+      '204 devolve lista vazia em vez de levantar - "nao ha nenhum" nao e "falhou"');
+
+  const { c: c3, vistos: v3 } = adaptador([TOKEN_OK, { status: 200, texto: JSON.stringify({ resultado: [] }) }]);
+  await c3.consultarWebhooks('ref-1', { idWebhook: 4, codigoTipoMovimento: 7 });
+  chk('WC7', v3[1]!.url === 'https://exemplo.invalido/v3/webhooks?idWebhook=4&codigoTipoMovimento=7',
+      `os dois filtros entram na query (foi ${v3[1]!.url})`);
+
+  // ------------------------------------------------------- solicitacoes
+  const PAGINA = {
+    resultado: {
+      paginaAtual: 1, totalPaginas: 2, totalRegistros: 100,
+      webhookSolicitacoes: [{
+        codigoWebhookSituacao: 3,
+        codigoSolicitacaoSituacao: 6,
+        descricaoSolicitacaoSituacao: 'Erro no envio',
+        descricaoErroProcessamento: 'Erro ao enviar notificação',
+        dataHoraCadastro: '2024-09-04T15:43:56.000Z',
+        validacaoWebhook: false,
+        nossoNumero: 2588658,
+        codigoBarras: '07092501614004706610157633070651479470000006500',
+        webhookNotificacoes: [{
+          url: 'https://webhook.com',
+          dataHoraInicio: '2024-09-08T15:50:38.077Z',
+          dataHoraFim: '2024-09-08T15:51:38.077Z',
+          tempoComunicao: 60,
+          codigoStatusRequisicao: 200,
+          descricaoCodigoStatusRequisicao: '{"messsage":"Webhook recebido com sucesso!"}',
+        }],
+      }],
+    },
+  };
+
+  const { c: c4, vistos: v4 } = adaptador([TOKEN_OK, { status: 200, texto: JSON.stringify(PAGINA) }]);
+  const p = await c4.solicitacoesDoWebhook('ref-1', 4, {
+    dataSolicitacao: '2026-09-10', codigoSolicitacaoSituacao: SOLICITACAO_COM_ERRO, nossoNumero: 2588658,
+  });
+
+  chk('WC8', v4[1]!.url === 'https://exemplo.invalido/v3/webhooks/4/solicitacoes'
+        + '?dataSolicitacao=2026-09-10&codigoSolicitacaoSituacao=6&nossoNumero=2588658',
+      `o id vai no CAMINHO e o resto na query (foi ${v4[1]!.url})`);
+  chk('WC9', p.totalPaginas === 2 && p.totalRegistros === 100 && p.solicitacoes.length === 1,
+      'a paginacao volta inteira - 100 registros nao cabem numa pagina e quem chama precisa saber');
+
+  const s0 = p.solicitacoes[0]!;
+  chk('WC10', s0.nossoNumero === '2588658' && s0.codigoSolicitacaoSituacao === 6
+        && s0.validacaoWebhook === false,
+      'a solicitacao traz o titulo, a situacao crua e se ela era a validacao da URL');
+  chk('WC11', s0.notificacoes.length === 1 && s0.notificacoes[0]!.codigoStatusRequisicao === 200
+        && /Webhook recebido/.test(s0.notificacoes[0]!.descricaoCodigoStatusRequisicao!),
+      'e a tentativa traz o status E O CORPO que o NOSSO servidor devolveu - e a prova de que '
+      + 'respondemos, do lado de la');
+
+  /* A DATA E OBRIGATORIA E TEM FORMATO. Outro formato volta 400 de negocio, e
+   * 400 do banco no meio de um diagnostico manda investigar o lado errado. */
+  for (const [id, ruim] of [['WC12a', '10/09/2026'], ['WC12b', ''], ['WC12c', '2026-9-1']] as const) {
+    const { c: cx, vistos: vx } = adaptador([TOKEN_OK, { status: 200, texto: '{}' }]);
+    let erro: any = null;
+    try { await cx.solicitacoesDoWebhook('ref-1', 4, { dataSolicitacao: ruim }); } catch (e) { erro = e; }
+    chk(id, erro?.status === 422 && vx.length === 0,
+        `data ${JSON.stringify(ruim)} recusa 422 sem discar (${vx.length} chamada(s))`);
+  }
 }
 
 console.log(falhas === 0 ? '\nTODAS OK' : `\n${falhas} FALHA(S)`);
