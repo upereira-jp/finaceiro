@@ -33,15 +33,29 @@ find /opt/financeiro/app -user root | wc -l        # tem de dar 0
 # 2. o backend, porque `src/http/rotas.ts` mudou (o campo `sem_conector`)
 systemctl restart financeiro.service
 
-# 3. a unidade nova, que É o canal — e o `disable` da velha NÃO é opcional
-install -m 644 deploy/financeiro-*.service deploy/financeiro-*.timer /etc/systemd/system/
-systemctl disable --now financeiro-agenda-certificado.timer
-rm -f /etc/systemd/system/financeiro-agenda-certificado.{service,timer}
+# 3. a unidade nova, que É o canal. CAMINHO ABSOLUTO, e a INSTALAÇÃO PRIMEIRO:
+#    a sessão abre em /opt/financeiro e o repo é /opt/financeiro/app, então o
+#    glob relativo não casa com nada — e apagar a velha antes de instalar a nova
+#    deixa a máquina sem NENHUMA das duas
+install -m 644 /opt/financeiro/app/deploy/financeiro-*.service \
+               /opt/financeiro/app/deploy/financeiro-*.timer /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now financeiro-saude-cobranca.timer
+systemctl disable --now financeiro-agenda-certificado.timer   # pode já não existir
+rm -f /etc/systemd/system/financeiro-agenda-certificado.{service,timer}
+systemctl daemon-reload
 systemctl start financeiro-saude-cobranca.service
-systemctl status financeiro-saude-cobranca.service    # esperado: exited, status=0
+systemctl status financeiro-saude-cobranca.service      # esperado: exited, status=0
+systemctl list-timers 'financeiro*' --all | grep saude  # a PROVA de que subiu
 ```
+
+⚠️ **Rodado em 09/09 e o passo 3 falhou PELA METADE:** o `disable`/`rm` da velha
+passou (usa nome de unit) e o `install` não (caminho relativo). A máquina ficou
+**sem conferência diária nenhuma** — o pior estado intermediário possível, e o
+sintoma dele é silêncio, que é o que estas unidades existem para acabar. Daí a
+ordem invertida acima e a linha de prova: `list-timers` não mente sobre unit que
+não existe, e o `status` de uma unit inexistente é fácil de ler como "ainda não
+rodou".
 
 O bundle do frontend **já foi construído** (`npm run web:build`, nginx serve na
 hora), então a faixa nova só depende do passo 2 para ter o que ler.
