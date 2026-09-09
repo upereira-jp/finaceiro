@@ -487,6 +487,45 @@ chk('AG8c', nivelDoAviso([vivo]) === 'ativo' && nivelDoAviso([morto]) === 'inati
       + 'programacao virando "nao verificavel" e o bug se escondendo atras do proprio diagnostico');
 }
 
+// ---------------------------------------------------- AG8k a cadencia do diagnostico
+{
+  /*
+   * O DEFEITO QUE ESTA LINHA PRENDE JA EXISTIU, por algumas horas em 09/09/2026.
+   * A primeira versao do alerta ficou no caminho COMUM das duas tarefas que
+   * escrevem - e `financeiro-agenda-fila.timer` e `OnCalendar=*:02/5`, a cada
+   * cinco minutos. Seriam 288 chamadas por dia a Sicoob, cada uma com handshake
+   * mTLS e pedido de token (o script roda uma vez e sai, entao o cache morre com
+   * o processo), para observar um estado que muda talvez uma vez por ano.
+   *
+   * A assimetria com o certificado e o que decide, e ela nao e arbitraria: o A1
+   * sai nas DUAS porque quebra a EMISSAO, que e o trabalho da fila. O aviso de
+   * pagamento nao afeta emitir - afeta BAIXAR. Alertar a fila sobre ele e avisar
+   * quem nao pode fazer nada a respeito.
+   */
+  /* ANCORADO DEPOIS DE «as que escrevem», e a ancora e o proprio teste: antes
+   * dela mora a tarefa `--webhook` avulsa, que TAMBEM chama
+   * `conferirAvisoDePagamento` e nao tem nada a ver com cadencia de timer.
+   * Medir a primeira ocorrencia do arquivo mediria a tarefa errada - foi o que
+   * esta verificacao fez na primeira tentativa, e ela falhou por isso. */
+  const fonteScript = readFileSync(new URL('../scripts/agenda.ts', import.meta.url), 'utf8');
+  /* A marca da SECAO, com os tracos - `as que escrevem` cru casa antes, no
+   * comentario do cabecalho ("as duas tarefas que escrevem"), e a busca inteira
+   * sai deslocada para a metade errada do arquivo. Aconteceu aqui. */
+  const escrevem = fonteScript.indexOf('-- as que escrevem');
+  const i = fonteScript.indexOf('conferirAvisoDePagamento(a.cobranca', escrevem);
+  const guarda = fonteScript.lastIndexOf('if (consulta) {', i);
+  const cert = fonteScript.indexOf('conferirCertificado()', escrevem);
+  const roda = fonteScript.indexOf('executarFilaDeEmissao(a.cobranca');
+
+  chk('AG8k', escrevem > 0 && guarda > escrevem && guarda < i && i < roda,
+      'o alerta do aviso de pagamento roda SO na consulta diaria, dentro de `if (consulta)` - na '
+      + 'fila ele discaria a Sicoob a cada 5 minutos para observar um estado que muda uma vez por ano');
+
+  chk('AG8l', cert > escrevem && cert < guarda,
+      'e o certificado continua saindo nas DUAS, ANTES dessa guarda - ele quebra a EMISSAO, que e o '
+      + 'trabalho da fila, e a assimetria entre os dois alertas e deliberada');
+}
+
 console.log(`\n${falhas === 0 ? 'agenda (puro): todas as verificacoes passaram'
                               : `agenda (puro): ${falhas} FALHA(S)`}`);
 process.exit(falhas === 0 ? 0 : 1);

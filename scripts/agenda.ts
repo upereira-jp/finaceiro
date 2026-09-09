@@ -194,22 +194,37 @@ async function main(): Promise<void> {
    * entrega falha. Do nosso lado nao chega sinal nenhum: "nenhuma notificacao" e
    * indistinguivel de "ninguem pagou".
    *
-   * A CONSULTA ATIVA E QUEM MAIS PRECISA SABER, e por isso o alerta mora aqui:
-   * ela EXISTE para compensar webhook perdido (PRD §6). Quando o aviso cai, ela
-   * deixa de ser rede de seguranca e passa a ser a unica fonte de baixa - o
-   * dinheiro nao se perde, ele atrasa ate a proxima rodada diaria. Quem opera
-   * tem direito de saber que trocou de regime.
+   * ⚠️ SO NA CONSULTA, E NAO NA FILA - e a diferenca e de CADENCIA, medida e nao
+   * suposta. `financeiro-agenda-fila.timer` e `OnCalendar=*:02/5`: a cada CINCO
+   * MINUTOS. A primeira versao disto pendurou o diagnostico no caminho comum das
+   * duas tarefas e teria discado a Sicoob 288 vezes por dia - com handshake mTLS
+   * e pedido de token a cada uma, porque o script roda uma vez e sai e o cache de
+   * token morre com o processo - para observar um estado que muda talvez uma vez
+   * por ano.
+   *
+   * A ASSIMETRIA COM O CERTIFICADO E O QUE JUSTIFICA: o A1 sai nas DUAS porque
+   * ele quebra a EMISSAO, que e o trabalho da fila. O aviso de pagamento nao tem
+   * efeito nenhum sobre emitir - ele quebra a BAIXA. Alertar a fila sobre ele
+   * seria avisar quem nao pode fazer nada a respeito, 288 vezes por dia.
+   *
+   * E A CONSULTA E QUEM MAIS PRECISA SABER: ela EXISTE para compensar webhook
+   * perdido (PRD §6). Quando o aviso cai, ela deixa de ser rede de seguranca e
+   * passa a ser a unica fonte de baixa - o dinheiro nao se perde, ele atrasa ate
+   * a proxima rodada diaria. Quem opera tem direito de saber que trocou de
+   * regime. A cadencia dela, uma vez por dia, e a mesma do atraso que ela impoe.
    *
    * NAO INTERROMPE E NAO MUDA O CODIGO DE SAIDA. Ver `conferirAvisoDePagamento`.
    */
-  const aviso = await a.withTenant(sessao, tenantProposto, async () => {
-    const conector = await credencialDeCobranca();
-    return conector ? conferirAvisoDePagamento(a.cobranca, conector.credencial_ref) : null;
-  }) as any;
-  if (aviso && aviso.nivel !== 'ativo') {
-    console.log('');
-    for (const l of alertaDoAviso(aviso)) console.log(`  ${l}`);
-    console.log('');
+  if (consulta) {
+    const aviso = await a.withTenant(sessao, tenantProposto, async () => {
+      const conector = await credencialDeCobranca();
+      return conector ? conferirAvisoDePagamento(a.cobranca, conector.credencial_ref) : null;
+    }) as any;
+    if (aviso && aviso.nivel !== 'ativo') {
+      console.log('');
+      for (const l of alertaDoAviso(aviso)) console.log(`  ${l}`);
+      console.log('');
+    }
   }
 
   let r: ResultadoDaAgenda;
