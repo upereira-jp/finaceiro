@@ -8,7 +8,7 @@
 | **Suíte** | sem banco: `EXIT=0`, **2.663** verificações (eram 2.619) |
 | **CI** | ✅ **verde nos cinco jobs** — o primeiro desde 27/08 (§7) |
 | **Repositório** | `main` = **`6426f58`**, `origin/main` junto, árvore limpa, zero arquivos `root:root` |
-| **Produção** | ⚠️ **HÁ DERIVA, e ela é nova** — o serviço é de 14:16:09, em `4d74603`. Depois disso entraram **mudanças de `src/sicoob/http.ts`** que o processo não carrega. Ver §0.1 |
+| **Produção** | ✅ **sem deriva** — o `deploy-financeiro` rodou às 15:53 e o serviço subiu **15:54:26** em `da09600`, o mesmo do disco. `GET /` responde 200 |
 
 > ## A frase de uma linha
 >
@@ -20,18 +20,17 @@
 
 ## 0. O primeiro movimento da próxima sessão
 
-### 0.1 Rodar o `deploy-financeiro` — e é a única coisa pendente de operação
+### 0.1 ✅ Nada de operação — o deploy saiu
 
-O serviço em produção é de **14:16:09, no `4d74603`**. Depois dele entraram
-`cadastrarWebhook`, as duas consultas e — o que importa — **o cache de token
-chaveado por (credencial, escopos)**, em `src/sicoob/http.ts`.
+**Fechado às 15:54:26.** Havia deriva quando este documento foi escrito: o serviço
+era de 14:16:09 e depois dele entraram `cadastrarWebhook`, as duas consultas e o
+**cache de token chaveado por (credencial, escopos)** — código do caminho do
+dinheiro que o processo não carregava.
 
-**Isso não está quebrado hoje e não é urgente:** os scripts carregam o código do
-disco, e foi por isso que o cadastro do webhook funcionou com o processo antigo
-no ar. O caminho de emissão do serviço continua correto com o cache antigo,
-porque ele só pede uma família de escopos. **Mas o disco e o processo divergem
-em código do caminho do dinheiro**, que é exatamente a armadilha que já custou um
-ciclo em 01/09.
+O deploy subiu `da09600`, o mesmo commit do disco, e o webhook foi **remedido
+depois do restart**: a validação de um IP do banco responde `200` e o controle
+negativo responde `404`. O que estava no ar às 15:18, quando a Sicoob validou,
+continua no ar com o código novo.
 
 ### 0.2 O que continua com o dono, e nada disso é código
 
