@@ -31,7 +31,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { iniciar, encerrarApp, app } from '../src/app.ts';
 import { TETO_DO_ARQUIVO } from '../src/http/rotas.ts';
-import { iniciarServidor } from '../src/http/servidor.ts';
+import { iniciarServidor, logPadrao } from '../src/http/servidor.ts';
 import { autenticadorDoAmbiente } from '../src/auth/autenticador.ts';
 
 const raiz = path.resolve(import.meta.dirname, '..');
@@ -62,7 +62,12 @@ async function main(): Promise<void> {
     maxCorpoBytes: Math.ceil(TETO_DO_ARQUIVO * 4 / 3) + 64 * 1024,
     // O detalhe do 500 vai para o log do processo e NUNCA para a resposta -
     // src/http/erros.ts garante o outro lado.
-    log: (m, e) => console.error(m, e),
+    //
+    // ⚠️ `logPadrao` E NAO UMA LAMBDA AQUI, e a diferenca ja custou uma linha de
+    // journal mentirosa: escrito a mao, isto era `console.error(m, e)`, que
+    // imprime a palavra `undefined` quando nao ha erro para anexar — e SEIS
+    // chamadas do servidor passam `undefined` de proposito. Ver `logPadrao`.
+    log: logPadrao,
   });
 
   /*

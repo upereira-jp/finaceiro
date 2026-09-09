@@ -52,6 +52,32 @@ export type OpcoesDoServidor = {
    */
   estaticos?: string;
 };
+/**
+ * O LOG PADRAO, E ELE E EXPORTADO PORQUE TEM UM CHAMADOR DE FORA.
+ *
+ * ⚠️ `console.error(m, undefined)` IMPRIME A PALAVRA `undefined` colada no fim
+ * da linha, e SEIS chamadas deste arquivo passam `undefined` de proposito, por
+ * nao terem erro para anexar. O estrago nao e estetico: em 09/09/2026 uma
+ * notificacao real da Sicoob saiu no journal como
+ *
+ *   IGNORADO: nosso_numero 0000000026 nao pertence a este tenant undefined
+ *
+ * e quem le isso conclui que o tenant chegou vazio — um defeito de isolamento
+ * que NAO existe. O journal do webhook e a unica trilha que temos deste lado,
+ * porque a aplicacao nao loga requisicao: uma linha que mente sobre a causa
+ * custa uma investigacao inteira.
+ *
+ * ⚠️ E ELE E EXPORTADO PORQUE CONSERTAR SO O DEFAULT NAO CONSERTOU NADA — foi o
+ * que aconteceu na primeira tentativa, medida no journal depois do restart:
+ * `scripts/servir.ts` injeta o proprio `log`, entao o default deste arquivo
+ * nunca roda em producao. Duas implementacoes da mesma coisa e uma delas
+ * errada; agora e uma so, e `HL-1` prende as duas pontas.
+ */
+export const logPadrao = (mensagem: string, erro: unknown): void => {
+  if (erro === undefined) console.error(mensagem);
+  else console.error(mensagem, erro);
+};
+
 
 /** Tipos por extensao. Lista fechada: extensao desconhecida sai como octet-stream
  *  em vez de ganhar um tipo adivinhado que o browser vai interpretar. */
@@ -263,19 +289,7 @@ function responder(req: IncomingMessage, res: ServerResponse, r: Resultado): voi
 
 export function criarServidor(o: OpcoesDoServidor): http.Server {
   const max = o.maxCorpoBytes ?? 1_000_000;
-  /* O SEGUNDO ARGUMENTO SO SAI SE EXISTIR, e a diferenca aparece em producao.
-   * `console.error(m, undefined)` imprime a palavra `undefined` colada no fim da
-   * linha - e SEIS chamadas deste arquivo passam `undefined` de proposito, por
-   * nao terem erro para anexar. O estrago nao e estetico: em 09/09/2026 uma
-   * notificacao real da Sicoob saiu no journal como
-   *
-   *   IGNORADO: nosso_numero 0000000026 nao pertence a este tenant undefined
-   *
-   * e quem le isso conclui que o tenant chegou vazio - um defeito de isolamento
-   * que nao existe. O journal do webhook e a unica trilha que temos do lado de
-   * ca (a aplicacao nao loga requisicao), entao uma linha que mente sobre a
-   * causa custa uma investigacao inteira. */
-  const log = o.log ?? ((m, e) => (e === undefined ? console.error(m) : console.error(m, e)));
+  const log = o.log ?? logPadrao;
   const prefixo = o.prefixoApi ?? '/api';
   const raizEstatica = o.estaticos ? path.resolve(o.estaticos) : null;
 

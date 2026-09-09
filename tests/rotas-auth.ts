@@ -374,6 +374,64 @@ chk('SV9', /VALUES \(p_tenant, v_usuario, 'cobranca'\)/.test(sql),
 chk('SV10', !/'admin'/.test(sql.split('ETAPA 2')[1] ?? ''),
     'e nao ha `admin` nenhum na etapa do vinculo');
 
+
+// ============================================================================
+// HL — O LOG DA FRONTEIRA NAO PODE INVENTAR `undefined`
+// ============================================================================
+//
+// O DEFEITO ACONTECEU, e o conserto errou o alvo na primeira tentativa.
+//
+// Em 09/09/2026 uma notificacao real da Sicoob saiu no journal assim:
+//
+//   IGNORADO: nosso_numero 0000000026 nao pertence a este tenant undefined
+//
+// A palavra final e o segundo argumento de `console.error(m, e)` com `e`
+// ausente — e SEIS chamadas de `servidor.ts` passam `undefined` de proposito,
+// por nao terem erro para anexar. Quem le conclui que o tenant chegou vazio: um
+// defeito de ISOLAMENTO, que nao existe. E o journal do webhook e a unica trilha
+// que temos deste lado, porque a aplicacao nao loga requisicao.
+//
+// ⚠️ E A PRIMEIRA CORRECAO NAO CONSERTOU NADA: arrumei o `log` DEFAULT de
+// `servidor.ts` e declarei feito. Medido no journal depois do restart, a linha
+// continuava igual — `scripts/servir.ts` injeta o PROPRIO `log`, entao o default
+// nunca roda em producao. Duas implementacoes da mesma coisa, e a que rodava era
+// a errada. Por isso as duas verificacoes abaixo: uma mede o COMPORTAMENTO, a
+// outra mede que existe UMA implementacao so.
+
+import { logPadrao } from '../src/http/servidor.ts';
+
+{
+  const capturado: unknown[][] = [];
+  const original = console.error;
+  console.error = (...a: unknown[]) => { capturado.push(a); };
+  try {
+    logPadrao('[financeiro] linha sem erro anexado', undefined);
+    logPadrao('[financeiro] linha com erro', 'o motivo');
+  } finally {
+    console.error = original;
+  }
+
+  chk('HL-1', capturado[0]?.length === 1,
+      'sem erro para anexar, o log imprime UM argumento so - `console.error(m, undefined)` poe a '
+      + 'palavra `undefined` no fim da linha, e o journal passa a acusar um defeito que nao existe');
+
+  chk('HL-2', capturado[1]?.length === 2 && capturado[1]?.[1] === 'o motivo',
+      'e com erro ele continua imprimindo os dois: a correcao nao pode custar o detalhe do 500, '
+      + 'que e a unica coisa que o log tem e a resposta HTTP nunca tera');
+}
+
+{
+  /* A SEGUNDA METADE, e ela e a que pega o defeito de verdade: `HL-1` mediria
+   * verde com `servir.ts` mantendo a lambda propria, porque testaria uma funcao
+   * que producao nao chama. Foi exatamente o que aconteceu. */
+  const servir = readFileSync(new URL('../scripts/servir.ts', import.meta.url), 'utf8')
+    .split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+
+  chk('HL-3', /log:\s*logPadrao\b/.test(servir) && !/log:\s*\(.*\)\s*=>/.test(servir),
+      'o composition root usa `logPadrao` e NAO uma lambda propria - duas implementacoes do '
+      + 'mesmo log e uma delas errada, e a que roda em producao e a de `servir.ts`');
+}
+
 console.log();
 if (falhas > 0) { console.log(`--- rotas/auth: ${falhas} FALHA(S)`); process.exit(1); }
 console.log(`--- rotas/auth (o modo de cada rota e a origem do webhook): ${feitas} verificacoes, 0 falhas`);
