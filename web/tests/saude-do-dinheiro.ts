@@ -21,6 +21,7 @@
 //      achando que o dinheiro sumiu. Sem a frase do atraso, "o banco desligou o
 //      aviso" parece perda de dinheiro.
 
+import { readFileSync } from 'node:fs';
 import { faixasDaSaude, type NivelDoAviso } from '../src/saude-do-dinheiro.ts';
 import type { EstadoDoCertificado } from '../src/cobranca-regras.ts';
 
@@ -119,6 +120,49 @@ chk('SD-7', f('vencido', 'inativado').length === 2,
 }
 function certs2(): EstadoDoCertificado[] { return ['nao_medido', 'vencido', 'vence_em_breve']; }
 function avisos2(): NivelDoAviso[] { return ['inativado', 'ausente', 'nao_verificavel']; }
+
+// ------------------- SD-12 e SD-13 a ULTIMA ligacao: a PRIMEIRA tela monta a faixa
+{
+  /* AS DUAS PONTAS JA ESTAVAM PROVADAS E A DO MEIO NAO. `SD-*` prova as regras;
+   * `R12*` prova que `CorpoDaSaude` desenha. Nada provava que a TELA o chama —
+   * e apagar `<CorpoDaSaude />` de `prontidao.tsx` passaria nas duas suites e no
+   * `tsc`, com o sintoma sendo faixa nenhuma. Que e o mesmo sintoma de estar
+   * tudo bem.
+   *
+   * E le fonte porque a tela NAO e montavel: ela chama `useDados`, e
+   * `renderToStaticMarkup` nao roda efeito. Confere-se por mutacao. */
+  const fonte = readFileSync(new URL('../src/telas/prontidao.tsx', import.meta.url), 'utf8');
+
+  /* ⚠️ COMENTARIO SAI ANTES DE PROCURAR, e a primeira versao destas duas linhas
+   * NAO fazia isso — foi conferir por mutacao que mostrou. Comentar
+   * `{/* <SaudeDoDinheiro /> *\/}` apaga a faixa da tela e DEIXA o texto no
+   * arquivo, entao as duas passavam verdes sobre uma tela que nao mostra nada.
+   * Verificacao que le fonte mede o que RODA, nunca o que esta escrito — e este
+   * e o segundo lugar do mesmo dia onde essa armadilha apareceu (ver `CI-1` em
+   * `tests/ci-apt.ts`). */
+  const tela = fonte
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, ' ')   // {/* JSX */}
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')      // /* bloco */
+    .replace(/^\s*\/\/.*$/gm, ' ');          // // linha
+
+  const importa = /import \{ CorpoDaSaude \} from '\.\.\/saude-corpo\.tsx'/.test(tela);
+  const monta = /<CorpoDaSaude\b/.test(tela);
+  chk('SD-12', importa && monta,
+      'a tela de Pendencias — a PRIMEIRA da barra — importa e MONTA `CorpoDaSaude`. Sem esta '
+      + 'linha, apagar a faixa da tela passaria em todas as outras verificacoes, e o sintoma '
+      + 'seria silencio');
+
+  /* ACIMA DA TABELA, e nao e estetica: as camadas dizem o que falta para FATURAR
+   * este mes; a faixa diz se o que ja foi faturado consegue ser cobrado e
+   * baixado. Um mes inteiro de camadas fechadas nao vale nada com o caminho do
+   * dinheiro quebrado, e quem le de cima para baixo tem de encontrar a pergunta
+   * mais alta primeiro. */
+  const iFaixa = tela.indexOf('<SaudeDoDinheiro />');
+  const iTabela = tela.indexOf('<Tabela cabecalho=');
+  chk('SD-13', iFaixa > 0 && iTabela > iFaixa,
+      'e ela fica ACIMA da tabela das camadas — a pergunta «o dinheiro anda?» e mais alta que '
+      + '«o mes fecha?», e quem le de cima para baixo tem de topar com ela primeiro');
+}
 
 console.log(`\n${falhas === 0 ? 'saude-do-dinheiro: todas as verificacoes passaram'
                               : `saude-do-dinheiro: ${falhas} FALHA(S)`}`);

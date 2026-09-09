@@ -29,6 +29,9 @@
 
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CorpoDaAjuda } from '../src/ajuda-corpo.tsx';
+import { CorpoDaSaude } from '../src/saude-corpo.tsx';
+import type { NivelDoAviso } from '../src/saude-do-dinheiro.ts';
+import type { EstadoDoCertificado } from '../src/cobranca-regras.ts';
 import { GatilhoDeAjuda } from '../src/ajuda-gatilho.tsx';
 import { passosDoEstado, type CamadaLida } from '../src/ajuda.ts';
 
@@ -415,5 +418,69 @@ chk('R11k', !desenharGatilho({ aviso: true, aberta: true }).includes('ajuda-bala
 
 chk('R11l', desenharGatilho({ aberta: true }).includes('aria-expanded="true"'),
     'e o botao continua no DOM com o painel aberto — sumir com ele largaria o foco do teclado no nada');
+
+// ============================================================================
+// R12 — A FAIXA DO CAMINHO DO DINHEIRO APARECE DE VERDADE
+// ============================================================================
+//
+// POR QUE ESTAS LINHAS EXISTEM, e a data importa: em 09/09/2026 o dono abriu
+// Pendencias e disse *"nenhuma faixa aparece"*. A observacao era a ESPERADA — o
+// A1 tem 341 dias e o aviso esta ativo — e nao provava nada, porque **faixa
+// nenhuma e, letra por letra, o mesmo sintoma de faixa quebrada**.
+//
+// As regras ja estavam provadas em `web/tests/saude-do-dinheiro.ts` (`SD-*`, 25
+// pares por exaustao). O que nao estava provado era que a TELA MOSTRA. Um `&&`
+// mal colocado, um `length === 0` invertido: nada disso quebra o `tsc`, nada
+// disso reprova `SD-*`, e o resultado e silencio.
+//
+// E o modo de falha da regra 3 dentro do proprio alarme: um alerta que nao
+// aparece e indistinguivel de nao haver alerta.
+
+const desenharSaude = (certificado: EstadoDoCertificado, aviso: NivelDoAviso | null): string =>
+  renderToStaticMarkup(<CorpoDaSaude certificado={certificado} aviso={aviso} />);
+
+{
+  // ------------------------------------------------ o silencio, e ele e escolha
+  chk('R12a', desenharSaude('ok', 'ativo') === '',
+      'com o A1 em dia e o aviso ligado a faixa desenha NADA — e este e o estado de producao em '
+      + '09/09, entao e ele que o "nenhuma faixa aparece" do dono estava vendo');
+  chk('R12b', desenharSaude('sem_conector', null) === '',
+      'e sem conector tambem: nao ha banco ligado, entao nao ha caminho do dinheiro sobre o qual '
+      + 'alarmar');
+
+  // ------------------------------------- e o alarme, que e o que faltava provar
+  const morto = desenharSaude('ok', 'inativado');
+  const t = texto(morto);
+
+  chk('R12c', morto !== '' && morto.length > 100,
+      `com o aviso DESLIGADO a faixa monta e produz HTML (${morto.length} caracteres) — sem esta `
+      + 'linha, "nenhuma faixa" continuaria querendo dizer as duas coisas ao mesmo tempo');
+  chk('R12d', t.includes('O banco desligou o aviso de pagamento.'),
+      'e o titulo CHEGA no HTML, com as palavras que a suite pura prende');
+  chk('R12e', /dinheiro n[aã]o se perde/.test(t) && t.includes('atraso'),
+      'junto da frase que impede o panico — sem ela o alerta parece perda de dinheiro');
+  chk('R12f', morto.includes('href="/cobranca"'),
+      'e com o caminho REAL para onde se resolve: `href` de verdade, entao botao do meio e '
+      + '"copiar endereco" funcionam, como manda `rota.tsx`');
+
+  // --------------------------------- os dois tons chegam como classes distintas
+  const quebrado = desenharSaude('vencido', 'ativo');
+  const naoSei = desenharSaude('ok', 'nao_verificavel');
+  chk('R12g', quebrado !== naoSei && quebrado !== '' && naoSei !== '',
+      'o A1 vencido e o "ninguem sabe" desenham COISAS DIFERENTES — a fronteira entre "esta '
+      + 'quebrado" e "ninguem sabe" sobrevive ate o HTML, e nao morre na borda');
+
+  // ------------------------------------------- duas metades, duas faixas
+  const duas = desenharSaude('vencido', 'inativado');
+  chk('R12h', (duas.match(/O certificado do banco venceu\./g) ?? []).length === 1
+           && (duas.match(/O banco desligou o aviso de pagamento\./g) ?? []).length === 1,
+      'A1 vencido e aviso desligado desenham as DUAS faixas, cada uma uma vez: sao dois consertos '
+      + 'com dois donos, e colapsar esconderia um deles');
+
+  // ----------------------- e nada de jargao chega na tela, nem por acidente
+  for (const regra of [/\bwebhook\b/i, /\bendpoint\b/i, /\bmTLS\b/i, /\btoken\b/i, /\bAPI\b/]) {
+    chk('R12i', !regra.test(texto(duas)), `o que a pessoa le nao casa com ${regra}`);
+  }
+}
 
 export const resultado = () => ({ falhas, feitas });

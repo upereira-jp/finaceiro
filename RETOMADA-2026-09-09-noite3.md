@@ -5,7 +5,7 @@
 | **Para quem** | Quem abrir a próxima sessão. **Dois minutos** |
 | **Substitui** | `RETOMADA-2026-09-09-noite2.md` para efeito de "onde estamos". O corpo dela continua correto; o que venceu é o §0 — **as duas pendências que eram do implementador foram fechadas** |
 | **O que esta leva fez** | Fechou as duas: o alerta **ganhou canal** (pendência 1, "o maior buraco desta entrega") e o **CI parou de depender de fonte `apt` de terceiro** (pendência 6). O que sobrou do alerta é uma decisão de contratar, e ela é do dono |
-| **Suíte** | sem banco: `EXIT=0`, **2.713** verificações (eram 2.678) |
+| **Suíte** | sem banco: `EXIT=0`, **2.728** verificações (eram 2.678) |
 | **CI** | ✅ **verde nos cinco jobs, na PRIMEIRA passada** — e é a primeira vez que isso acontece com o `apt` restrito. Run `34395903575` |
 | **Repositório** | `main` = **`b92d5d6`** + esta leva, `origin/main` junto |
 | **Produção** | serviço subiu **16:49:38** em `1245149`. ⚠️ **Esta leva mexeu em `.tsx` e em `rotas.ts`** — o bundle já foi construído, o backend **não** foi reiniciado (§0.1) |
@@ -60,11 +60,24 @@ rodou".
 O bundle do frontend **já foi construído** (`npm run web:build`, nginx serve na
 hora), então a faixa nova só depende do passo 2 para ter o que ler.
 
-### 0.2 Uma coisa que se fecha em um segundo, e continua sua
+### 0.2 ✅ FECHADO — e o "nenhuma faixa" quase passou por prova sem ser uma
 
-**Abra a tela de Pendências.** Se **nenhuma faixa** aparecer no alto, está certo —
-hoje o A1 tem 341 dias e o aviso está ativo. A faixa só existe quando há o que
-dizer, e ela **substitui** o hábito de abrir Cobrança para conferir.
+**Aberto em 09/09, 21:40 UTC: nenhuma faixa aparece** — que é o certo, com o A1 em
+341 dias e o aviso ativo.
+
+⚠️ **Só que essa observação, sozinha, não provava nada:** faixa nenhuma é, letra
+por letra, o mesmo sintoma de faixa quebrada. É o modo de falha da regra 3 dentro
+do próprio alarme. Duas provas fecharam a diferença:
+
+1. **o nginx registra as duas chamadas** — `GET /api/conector-cobranca/certificado`
+   e `.../aviso-pagamento`, `200` nas duas, do Chrome do dono às 21:40:28-32, com
+   234 bytes no segundo (o payload novo, já com `sem_conector`). A tela **perguntou**
+   e escolheu não mostrar;
+2. **a faixa agora é montável num teste.** `CorpoDaSaude` saiu de dentro de
+   `prontidao.tsx` para `web/src/saude-corpo.tsx`, recebendo os dois níveis por
+   propriedade — o mesmo par de `ajuda.ts` + `ajuda-corpo.tsx`, e pelo mesmo motivo:
+   `renderToStaticMarkup` não roda efeito, então enquanto a busca e o desenho
+   estavam juntos qualquer render de prova saía vazio.
 
 ⚠️ E a §0.1 da leva anterior **continua aberta**: a rota autenticada
 `/conector-cobranca/aviso-pagamento` nunca foi medida daqui. Agora ela tem um
@@ -239,6 +252,8 @@ O que mudou é que a causa mais comum dele deixou de existir.
 | `tests/agenda.ts` | `AG9a`…`AG9p` — os 16 pares por exaustão, o contrato do unit, e o par crítico por mutação |
 | `web/tests/saude-do-dinheiro.ts` | `SD-1`…`SD-11` — os 25 pares, o jargão e a frase do atraso |
 | `tests/ci-apt.ts` | `CI-1`…`CI-8` — nenhum `apt-get update` cru volta a existir |
+| `web/src/saude-corpo.tsx` | a faixa que DESENHA, separada da que busca — para poder ser montada |
+| `web/tests/caso-render.tsx` | `R12a`…`R12i` — a faixa montada de verdade, com o texto chegando no HTML |
 | `QUESTOES.md` §2.h | as doze decisões, e a que volta para o dono |
 
 ---
@@ -252,16 +267,17 @@ O que mudou é que a causa mais comum dele deixou de existir.
 | O `apt` restrito instala de verdade | CI verde nos cinco, **primeira passada**, e o log lista as fontes que entraram: `ubuntu.sources` + `pgdg.list` |
 | Os quatro códigos não colapsam | `AG9j`: dos 16 pares, exatamente **um** sai 0 |
 | O alarme não pode ser apagado em silêncio | `AG9l`, por mutação: pôr `4` ou `5` no `SuccessExitStatus` fica vermelho |
-| A suíte | `EXIT=0`, **2.713** verificações sem banco |
+| A tela perguntou de verdade | nginx, 21:40:28-32: as duas rotas, `200`, do Chrome do dono |
+| A faixa aparece quando há o que dizer | `R12c`…`R12h`, montada com `renderToStaticMarkup`; e `SD-12`/`SD-13` prendem a tela mantendo-a montada |
+| A suíte | `EXIT=0`, **2.728** verificações sem banco |
 
-⚠️ **O que NÃO foi medido, e o §0.1 fecha:**
+✅ **E o que faltava foi medido depois**, com os três comandos do §0.1 rodados:
+a unidade está no ar (`list-timers` mostra os quatro, a nova para 10/09 06:37 UTC),
+a primeira execução saiu **`=> 0 DE PE`, `status=0/SUCCESS`**, `list-units --failed`
+está **vazio** e a `financeiro-agenda-certificado` sumiu do `list-unit-files`.
 
-1. **a unidade em `systemctl list-units --failed` de verdade** — instalá-la é
-   passo do dono, e este ambiente não instala unit;
-2. **a faixa na tela** — o backend não foi reiniciado, então o campo `sem_conector`
-   ainda não existe na resposta de produção. Isso **não quebra nada agora**:
-   `undefined` é falsy, então a tela lê `temConector = true` e mostra a faixa pelo
-   nível, que é o certo **porque produção tem conector**. O que só passa a valer
-   depois do restart é o silêncio de quem *não* tem;
-3. **a rota autenticada**, que a leva anterior já listava: cunhar um JWT local não
-   funciona aqui (`SUPABASE_JWT_SECRET` não está na env).
+⚠️ **O que continua sem medição:** a unidade **vermelha** de verdade em
+`list-units --failed` — só acontece no dia em que o A1 ou o aviso caírem. O
+`EXIT=4` está provado no shell, e o `SuccessExitStatus=3` está prendido por
+`AG9l`; o que falta é o systemd fazendo a passagem, e não há como forçá-la sem
+mentir sobre o estado do banco.

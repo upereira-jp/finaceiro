@@ -34,7 +34,8 @@ import { Ligacao } from '../rota.tsx';
 import { competenciaISO } from '../dinheiro.ts';
 import { DESTINO_DA_CAMADA, enderecoDoDestino, telaDoDestino } from '../destino-da-camada.ts';
 import { estadoDoCertificado } from '../cobranca-regras.ts';
-import { faixasDaSaude, type NivelDoAviso } from '../saude-do-dinheiro.ts';
+import { CorpoDaSaude } from '../saude-corpo.tsx';
+import type { NivelDoAviso } from '../saude-do-dinheiro.ts';
 import {
   VERBETE_DA_CAMADA, EFEITO, SITUACAO,
   agruparPorEfeito, tituloDoGrupo, subDoGrupo, contagemDaCamada,
@@ -116,21 +117,17 @@ function SaudeDoDinheiro() {
    * uma faixa que pisca vermelho durante o carregamento e ruido, e o custo de
    * esperar um segundo e zero. */
   const temConector = aviso.dado != null && !aviso.dado.sem_conector;
-  const faixas = faixasDaSaude({
-    certificado: estadoDoCertificado({ temConector, dias: cert.dado?.dias ?? null }),
-    aviso: temConector ? aviso.dado!.nivel : null,
-  });
-  if (faixas.length === 0) return null;
 
+  /* O QUE FICOU AQUI E SO A BUSCA; QUEM DESENHA E `CorpoDaSaude`, e a separacao
+   * existe para o desenho poder ser MONTADO num teste. `renderToStaticMarkup`
+   * nao roda efeito: enquanto a faixa vivia inteira aqui, qualquer render de
+   * prova saia vazio, e vazio e exatamente o sintoma do defeito que se queria
+   * pegar. Ver o cabecalho de `saude-corpo.tsx`. */
   return (
-    <>
-      {faixas.map((f) => (
-        <Aviso key={f.titulo} tipo={f.tom}>
-          <strong>{f.titulo}</strong> {f.corpo}
-          {f.destino && <> <Ligacao para={f.destino.endereco}>Abrir {f.destino.rotulo}</Ligacao></>}
-        </Aviso>
-      ))}
-    </>
+    <CorpoDaSaude
+      certificado={estadoDoCertificado({ temConector, dias: cert.dado?.dias ?? null })}
+      aviso={temConector ? aviso.dado!.nivel : null}
+    />
   );
 }
 
