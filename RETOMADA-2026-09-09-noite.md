@@ -8,7 +8,7 @@
 | **Suíte** | sem banco: `EXIT=0`, **2.663** verificações (eram 2.619) |
 | **CI** | ✅ **verde nos cinco jobs** — o primeiro desde 27/08 (§7) |
 | **Repositório** | `main` = **`6426f58`**, `origin/main` junto, árvore limpa, zero arquivos `root:root` |
-| **Produção** | ✅ **sem deriva** — o `deploy-financeiro` rodou às 15:53 e o serviço subiu **15:54:26** em `da09600`, o mesmo do disco. `GET /` responde 200 |
+| **Produção** | ✅ **sem deriva de código** — o serviço subiu **15:54:26** em `da09600`, e tudo o que veio depois é documento. `GET /` responde 200 |
 
 > ## A frase de uma linha
 >
