@@ -176,14 +176,23 @@ Três coisas que a primeira execução verde ensinou, e que estão no arquivo:
 
 1. **o runner é 24.04 e usa `sources.list.d/ubuntu.sources`** (deb822), não
    `/etc/apt/sources.list` — os dois caminhos entram, e o que não existe não casa;
-2. **`APT::Get::List-Cleanup=0` é load-bearing, não higiene.** Os três jobs que
-   pedem `postgresql-client` sem versão receberam `16.15-1.pgdg24.04+2` **sem
-   nenhuma fonte pgdg na lista** — resolveram pelo índice em cache da imagem, que
-   só continua existindo por causa dele. Funciona, e depender disso é frágil por
-   outro caminho: os curingas `*pgdg*` e `*postgresql*` entraram depois disso;
-3. **o log agora imprime as duas listas** — as que entraram e as **ignoradas**.
-   Sem a segunda, o mecanismo é invisível e quem investigar um vermelho daqui a um
-   ano não vê que havia mais.
+2. **as fontes de terceiro da imagem são exatamente duas**, e o log agora as
+   nomeia: `google-chrome.sources` e `microsoft-prod.list`. A que derrubou quatro
+   jobs em 09/09 está ali, do lado certo da linha;
+3. **o log imprime as duas listas** — as que entraram e as **ignoradas**. Sem a
+   segunda, o mecanismo é invisível: quem investigar um vermelho daqui a um ano vê
+   o que entrou e não vê que havia mais.
+
+⚠️ **Uma coisa que eu afirmei errado e a medição desmentiu**, e fica registrada
+porque a conclusão mudou: eu disse que os três jobs sem versão resolviam
+`postgresql-client` pelo **índice em cache** da imagem, e que por isso o
+`List-Cleanup=0` era load-bearing. A execução seguinte mostrou que **não há fonte
+pgdg em `sources.list.d`** — só Chrome e Microsoft —, então o cliente
+`16.15-1.pgdg24.04+2` vem do próprio `/etc/apt/sources.list`, que **está** na lista
+de permissão. Os curingas `*pgdg*` e `*postgresql*` não casaram com nada nesta
+imagem; ficam para o dia em que casarem. O `List-Cleanup=0` continua certo — ele
+impede que o update restrito apague o índice de tudo o que ficou de fora —, mas
+**não** é ele que faz estes três jobs funcionarem.
 
 **O filtro de `push` passou a `.github/**`.** Os cinco jobs dependem do script e
 ele não mora em `workflows/` — com o filtro antigo, uma mudança só nele não

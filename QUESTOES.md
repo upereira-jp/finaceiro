@@ -557,6 +557,21 @@ cinco jobs em 09/09, sem que uma linha nossa tivesse mudado.
 | 11 | **Um script só, `.github/instalar-psql.sh`** | O comando estava copiado em **seis** lugares de dois workflows. Consertar em seis lugares é, um dia, consertar em cinco |
 | 12 | **O filtro de `push` passa a `.github/**`** | Os cinco jobs dependem do script, e ele não mora em `workflows/`. Com o filtro antigo, uma mudança só nele não rodaria CI nenhum |
 
+### ⚠️ Uma afirmação minha que a medição desmentiu
+
+Ao ler o primeiro CI verde eu conclui que os três jobs sem versão resolviam
+`postgresql-client` pelo **índice em cache** da imagem, e que era o
+`APT::Get::List-Cleanup=0` que os fazia funcionar. A execução seguinte, com o log
+listando também as fontes ignoradas, mostrou que **não há fonte pgdg em
+`sources.list.d`** — só `google-chrome.sources` e `microsoft-prod.list` —, então o
+cliente vem do próprio `/etc/apt/sources.list`, que **está** na lista de permissão.
+
+O `List-Cleanup=0` continua certo pelo motivo original (o update restrito não pode
+apagar o índice do que ficou de fora), e os curingas `*pgdg*`/`*postgresql*` não
+casam com nada nesta imagem — ficam para o dia em que casarem. Fica registrado
+porque a conclusão mudou, e conclusão errada em arquivo de decisão é pior que
+nenhuma.
+
 ### ⬅️ VOLTA PARA O DONO — o terceiro canal, e é o único que **empurra**
 
 `Q-ALERTA-EMAIL-01` 🟡 — **os dois canais construídos são de PUXAR, não de

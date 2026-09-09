@@ -74,17 +74,18 @@ fi
 # nao existir simplesmente nao casa - `find` com `-exec ... +` nao executa nada
 # quando nao ha o que casar.
 #
-# OS PADROES DE POSTGRESQL ENTRAM MESMO QUANDO A VERSAO NAO E PEDIDA, e isso foi
-# MEDIDO no primeiro CI verde com este script (run 34395903575, 09/09/2026): a
-# imagem do runner ja traz uma fonte propria do PostgreSQL, com nome que NAO e
-# `pgdg.list` - os tres jobs que pedem `postgresql-client` sem versao receberam
-# `16.15-1.pgdg24.04+2` sem que nenhuma fonte pgdg estivesse na lista. Eles
-# resolveram pelo INDICE EM CACHE da imagem, que so continua existindo por causa
-# do `List-Cleanup=0` mais abaixo.
+# OS CURINGAS DE POSTGRESQL SAO PREVENCAO, E NAO CONSERTO DE ALGO MEDIDO - e vale
+# dizer qual e o estado real, porque eu errei este palpite uma vez.
 #
-# Funciona, e depender disso e frageis por outro caminho: cache envelhece e um
-# dia devolve 404. Os curingas abaixo poem a fonte do PostgreSQL da imagem na
-# lista, seja qual for o nome dela. Padrao que nao casa com nada nao custa nada.
+# Medido nos runs 34395903575 e 34396457501 (09/09/2026): em `sources.list.d` a
+# imagem do runner tem `ubuntu.sources` e mais DUAS fontes de terceiro, so duas -
+# `google-chrome.sources` e `microsoft-prod.list`. Nao ha fonte pgdg ali. Os tres
+# jobs que pedem `postgresql-client` sem versao recebem `16.15-1.pgdg24.04+2` pelo
+# proprio `/etc/apt/sources.list`, que ja esta na lista de permissao.
+#
+# Entao os curingas nao casam com nada HOJE. Ficam porque o dia em que a imagem
+# mudar de layout e o dia em que ninguem vai estar olhando para isto, e padrao que
+# nao casa com nada nao custa nada.
 NOSSAS=/etc/apt/fontes-do-financeiro.d
 sudo rm -rf "$NOSSAS"
 sudo install -d -m 755 "$NOSSAS"
