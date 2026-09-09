@@ -97,11 +97,21 @@ console.log(`\n-- fontes apt do CI (${workflows.length} workflows) --`);
 
 // ------------------------------------------- CI-6 o pgdg entra na permissao
 {
-  const iPgdg = script.indexOf('pgdg.list');
-  const iLista = script.indexOf("-name 'pgdg.list'");
-  chk('CI-6', iPgdg >= 0 && iLista > iPgdg,
-      'a fonte do PostgreSQL entra na lista de permissao - fora dela o cliente 16 nunca '
-      + 'resolveria, e o job das migrations morreria com 404 em vez de instalar');
+  /* O CHECK E SOBRE O CASAMENTO, E NAO SOBRE O LITERAL. A primeira versao disto
+   * procurava a string `-name 'pgdg.list'` e ficou vermelha assim que os padroes
+   * viraram curinga - reprovando uma mudanca que so ampliava a lista. O que
+   * importa e que o arquivo que o script ESCREVE seja alcancado por algum dos
+   * padroes que ele PROCURA, e e isso que esta medido aqui. */
+  const escrito = script.match(/> \/etc\/apt\/sources\.list\.d\/([\w.-]+)/)?.[1] ?? '';
+  const padroes = [...script.matchAll(/-name '([^']+)'/g)].map((m) => m[1]!);
+  const casa = (padrao: string, nome: string) =>
+    new RegExp(`^${padrao.split('*').map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`)
+      .test(nome);
+
+  chk('CI-6', escrito !== '' && padroes.some((p) => casa(p, escrito)),
+      `a fonte que o script escreve (${escrito || '(nenhuma)'}) e alcancada por um dos padroes da `
+      + `lista de permissao (${padroes.join(', ')}) - fora dela o cliente 16 nunca resolveria, e o `
+      + 'job das migrations morreria com 404 em vez de instalar');
 }
 
 // --------------------------------------- CI-7 o passo prova o que instalou

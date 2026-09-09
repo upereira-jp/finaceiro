@@ -73,17 +73,38 @@ fi
 # `sources.list.d/ubuntu.sources`, em deb822. Os dois caminhos entram, e o que
 # nao existir simplesmente nao casa - `find` com `-exec ... +` nao executa nada
 # quando nao ha o que casar.
+#
+# OS PADROES DE POSTGRESQL ENTRAM MESMO QUANDO A VERSAO NAO E PEDIDA, e isso foi
+# MEDIDO no primeiro CI verde com este script (run 34395903575, 09/09/2026): a
+# imagem do runner ja traz uma fonte propria do PostgreSQL, com nome que NAO e
+# `pgdg.list` - os tres jobs que pedem `postgresql-client` sem versao receberam
+# `16.15-1.pgdg24.04+2` sem que nenhuma fonte pgdg estivesse na lista. Eles
+# resolveram pelo INDICE EM CACHE da imagem, que so continua existindo por causa
+# do `List-Cleanup=0` mais abaixo.
+#
+# Funciona, e depender disso e frageis por outro caminho: cache envelhece e um
+# dia devolve 404. Os curingas abaixo poem a fonte do PostgreSQL da imagem na
+# lista, seja qual for o nome dela. Padrao que nao casa com nada nao custa nada.
 NOSSAS=/etc/apt/fontes-do-financeiro.d
 sudo rm -rf "$NOSSAS"
 sudo install -d -m 755 "$NOSSAS"
 sudo find /etc/apt/sources.list.d -maxdepth 1 -type f \
-  \( -name 'ubuntu.sources' -o -name 'ubuntu.list' -o -name 'pgdg.list' \) \
+  \( -name 'ubuntu.sources' -o -name 'ubuntu.list' \
+     -o -name '*pgdg*' -o -name '*postgresql*' \) \
   -exec cp -t "$NOSSAS" {} +
 sudo touch /etc/apt/sources.list
 
 echo "fontes que serao atualizadas (e SO elas):"
 ls -1 "$NOSSAS" | sed 's|^|  /etc/apt/fontes-do-financeiro.d/|'
 echo "  /etc/apt/sources.list"
+
+# E AS QUE FICARAM DE FORA, POR NOME. Sem esta lista, o mecanismo e invisivel no
+# log: quem investigar um vermelho daqui a um ano ve o que entrou e nao ve que
+# havia mais. E e aqui que o Google Chrome aparece - do lado certo.
+echo "fontes de terceiro IGNORADAS (nao podem mais derrubar este job):"
+comm -23 \
+  <(find /etc/apt/sources.list.d -maxdepth 1 -type f -printf '%f\n' | sort) \
+  <(ls -1 "$NOSSAS" | sort) | sed 's|^|  |'
 
 # A GUARDA EXISTE PARA A FALHA NAO CHEGAR DISFARCADA. Se um dia a imagem do
 # runner mudar de layout outra vez e a lista de permissao nao casar com nada, o
