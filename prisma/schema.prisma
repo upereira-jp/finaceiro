@@ -1138,6 +1138,23 @@ enum origem_do_campo {
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ato_externo_log {
+  id          String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id   String              @db.Uuid
+  ato         String
+  contraparte String
+  fase        String
+  usuario_id  String?             @db.Uuid
+  tier        String?
+  detalhe     Json?
+  ocorrido_em DateTime            @default(dbgenerated("clock_timestamp()")) @db.Timestamptz(6)
+  xact_id     Unsupported("xid8") @default(dbgenerated("pg_current_xact_id()"))
+
+  @@index([tenant_id, ocorrido_em(sort: Desc)], map: "ato_externo_log_tenant_idx")
+  @@index([tenant_id, ato, ocorrido_em(sort: Desc)], map: "ato_externo_log_ato_idx")
+}
+
 model cofre_acesso_log {
   id             String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenant_id      String              @db.Uuid

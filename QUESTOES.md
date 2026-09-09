@@ -637,7 +637,63 @@ alguém**. Metade.
 | 8 | **A tela espelha a guarda, com teste anti-deriva** | O `web/` é outro pacote e não alcança `src/`. `SD-14` importa as duas e exige que concordem nos quatro níveis — botão oferecido onde o servidor recusa manda apertar e ler erro; botão escondido onde ele aceitaria deixa o conserto invisível |
 | 9 | **Continua NÃO sendo automático** | A Sicoob desliga porque **o nosso** endpoint falhou. Religar sozinho sem saber o motivo é laço: religa, falha, desliga. O botão põe o gatilho na mão de quem pode olhar antes — e essa parte segue sendo decisão do dono |
 
-### ⚠️ LACUNA NOMEADA — `Q-AUDIT-EXTERNO-01` 🟡, dono: **implementador**
+### ✅ `Q-AUDIT-EXTERNO-01` — FECHADA no mesmo dia (migration 37)
+
+**A trilha existe**, e a forma dela responde ao problema que a mantinha aberta.
+
+**Tabela própria, `ato_externo_log`, e a decisão não é nova** — é a mesma que a
+migration do cofre tomou em 27/08 com as mesmas palavras: `auditoria` tem
+`operacao char(1) CHECK (operacao IN ('I','U','D'))`, e afrouxar uma constraint
+que cobre quatorze tabelas seria *"o preço errado por um campo"*. Lá o que não
+cabia era **leitura** e saiu `cofre_acesso_log`; aqui o que não cabe é **ato em
+sistema de terceiro** — `auditoria.tabela` nomeia tabelas **nossas**.
+
+**⚠️ DUAS LINHAS POR ATO, e é isto que a torna honesta.** Chamada a terceiro não
+é transacional, e não há como fingir que é:
+
+| | |
+|---|---|
+| gravar **só antes** | registraria um ato que talvez não aconteça |
+| gravar **só depois** | perde a trilha se o processo morrer no meio — e o ato já aconteceu no mundo, irreversivelmente |
+
+Por isso `fase`: **`pedido`** antes (na nossa transação — se ela falhar **nada é
+enviado**, e falhar ali é seguro porque nada aconteceu) e **`feito`/`falhou`**
+depois. Um `pedido` órfão é exatamente a pergunta que se quer poder fazer —
+*"alguém mandou religar e ninguém sabe o que aconteceu"* — e até hoje ela não
+tinha onde ser feita. **O desenho não é inventado aqui:** é o do
+`agenda_execucao`, cujo motor declara *"uma linha de registro que COMMITA antes
+do trabalho"*.
+
+**⚠️ E a falha do DESFECHO não derruba o ato**, que é o inverso do que a regra 9
+manda para leitura — de propósito. Lá, *"falha ao gravar a trilha aborta a
+leitura"* funciona porque abortar uma leitura não desfaz nada. Aqui o webhook
+**já existe no banco**: devolver erro faria a pessoa ler *"não deu"*, apertar de
+novo, e o segundo webhook faria a Sicoob notificar **em dobro** — a guarda
+inteira derrotada por um erro de log. A falha vira aviso no journal, nomeando o
+`pedido` órfão.
+
+**As três invariantes de catálogo foram atualizadas junto, e elas teriam
+reprovado** — que é o comportamento certo: `G2` (isenção de gatilho, porque
+auditar trilha com trilha é regresso infinito), `G3` (append-only por
+**privilégio**: `INSERT`, `UPDATE` e `DELETE` revogados de `app_financeiro`) e
+`inv.19` (a lista fechada de `SECURITY DEFINER`).
+
+**A conferência do workflow também entrou** (`migration-37`), e ela é a mais
+exigente das quatro: a tabela sozinha não é trilha. Sem o `REVOKE` ela nasce
+apagável por quem ela audita, e sem a função `SECURITY DEFINER` **de
+`auditor_financeiro`** ninguém escreve nela sob FORCE RLS. Confere as oito
+partes, incluindo o dono da função.
+
+#### ⚠️ A ORDEM DO DEPLOY, e uma das duas é segura
+
+**Código primeiro, migration depois.** A janela entre os dois tem falha
+**segura**: o botão erra em `trilha.registrar`, que roda **antes** da chamada ao
+banco — nada é enviado. Na ordem inversa a janela é insegura: a tabela existe sem
+o modelo no client, e **qualquer restart derruba a aplicação** com
+`ClienteGeradoDesatualizado` (o arranque enumera as tabelas de `public` e exige
+modelo para cada uma).
+
+### (registro) o que a lacuna dizia quando foi aberta
 
 **Religar o aviso não deixa trilha nossa**, e a regra 9 pede *"quem, quando, o
 quê"* para cadastro. O motivo é estrutural e foi medido, não suposto:

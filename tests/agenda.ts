@@ -666,6 +666,7 @@ import { podeReligarOAviso } from '../src/dominio/agenda.ts';
 import {
   religarAvisoDePagamento, NaoDaParaReligar, AdaptadorNaoReliga,
 } from '../src/cobranca/agenda.ts';
+import { registrarDesfecho } from '../src/repos/ato-externo.ts';
 
 console.log('\n-- AG10 religar o aviso de pagamento --');
 
@@ -701,49 +702,138 @@ chk('AG10d', podeReligarOAviso('nao_verificavel').pode === false,
     async baixar() { throw new Error('nao usado'); },
   } as any;
 
-  const porta = (avisos: any[] | null, aoReligar?: () => void) => ({
+  /* ⚠️ `registrou` E A MESMA LISTA DA TRILHA, e a primeira versao disto NAO
+   * fazia isso — a chamada ao banco nao aparecia na sequencia, entao `AG10j`
+   * media `pedido > feito` e passava verde mesmo com o `pedido` movido para
+   * DEPOIS de discar. Pegou por mutacao. Ordem so e observavel se os dois
+   * eventos caem na mesma linha do tempo. */
+  const porta = (avisos: any[] | null, aoReligar?: () => void, registrou?: string[]) => ({
     ...base,
     avisoDePagamento: async () => {
       if (avisos === null) throw new Error('a Sicoob nao respondeu');
       return avisos;
     },
-    religarAvisoDePagamento: async () => { aoReligar?.(); return { id: '999' }; },
+    religarAvisoDePagamento: async () => {
+      registrou?.push('discou');
+      aoReligar?.(); return { id: '999' };
+    },
   });
 
   const pegar = async (f: () => Promise<unknown>) => {
     try { await f(); return null; } catch (e: any) { return e; }
   };
 
+  /* A TRILHA DE MENTIRA GRAVA A ORDEM, e e por isso que ela e uma lista e nao um
+   * contador: o invariante que importa aqui nao e "gravou", e "gravou o `pedido`
+   * ANTES de discar". Ver AG10j. */
+  const trilhaFalsa = () => {
+    const linhas: string[] = [];
+    return {
+      linhas,
+      trilha: {
+        async registrar(e: any) { linhas.push(`pedido:${e.detalhe?.nivel_antes}`); return 'p1'; },
+        async desfecho(e: any) { linhas.push(`${e.fase}:${e.detalhe?.id_webhook ?? e.detalhe?.erro}`); },
+      },
+    };
+  };
+
   // um webhook morto -> religa
   {
     let chamou = false;
+    const t = trilhaFalsa();
     const r = await religarAvisoDePagamento(
-      porta([{ id: '1', url: null, inativado_em: '2026-09-09', motivo_da_inativacao: 'x' }], () => { chamou = true; }),
-      REF, P) as any;
+      porta([{ id: '1', url: null, inativado_em: '2026-09-09', motivo_da_inativacao: 'x' }],
+            () => { chamou = true; }, t.linhas),
+      REF, P, { trilha: t.trilha }) as any;
     chk('AG10f', chamou && r.id === '999' && r.nivelAntes === 'inativado',
         'com o webhook morto ele CONSULTA, decide e escreve — e devolve o nivel de ANTES, para '
         + 'quem chamou poder dizer o que foi consertado');
+
+    /* ============================================================
+     * AG10j — A ORDEM DA TRILHA, e ela e o invariante do `Q-AUDIT-EXTERNO-01`.
+     *
+     * Chamada a terceiro nao e transacional. Gravar so DEPOIS perde a trilha se
+     * o processo morrer no meio — e ai o ato ja aconteceu no mundo, de forma
+     * irreversivel, e ninguem sabe quem mandou. Por isso `pedido` ANTES e
+     * desfecho DEPOIS: um `pedido` orfao e uma pergunta que se pode fazer; um
+     * ato sem linha nenhuma nao e.
+     * ============================================================ */
+    chk('AG10j', t.linhas.join(' > ') === 'pedido:inativado > discou > feito:999',
+        'a trilha grava `pedido` ANTES de discar e o desfecho DEPOIS, nessa ordem — chamada a '
+        + 'terceiro nao e transacional, e gravar so no fim perde o rastro de quem mandou se o '
+        + `processo morrer no meio (foi: ${t.linhas.join(' > ') || '(nada)'})`);
   }
 
-  // um vivo -> recusa E NAO ESCREVE
+  // o banco recusa -> a trilha fecha com `falhou`
+  {
+    const t = trilhaFalsa();
+    const quebrada = {
+      ...porta([{ id: '1', url: null, inativado_em: '2026-09-09', motivo_da_inativacao: 'x' }]),
+      religarAvisoDePagamento: async () => { throw new Error('a Sicoob recusou'); },
+    };
+    const e = await pegar(() => religarAvisoDePagamento(quebrada as any, REF, P, { trilha: t.trilha }));
+    chk('AG10k', e?.message === 'a Sicoob recusou'
+             && t.linhas.join(' > ') === 'pedido:inativado > falhou:a Sicoob recusou',
+        'quando o banco recusa, o erro SOBE e a trilha fecha com `falhou` — um `pedido` seguido '
+        + 'de `falhou` conta uma historia fechada; um `pedido` sozinho obriga a adivinhar se '
+        + 'chegou a sair');
+  }
+
+  // a trilha do DESFECHO falha -> o ato NAO falha
+  {
+    let avisou = '';
+    const trilhaQueQuebraNoFim = {
+      async registrar() { return 'p1'; },
+      async desfecho(_e: any, aoFalhar: (m: string) => void) { aoFalhar('nao gravou'); },
+    };
+    const r = await religarAvisoDePagamento(
+      porta([{ id: '1', url: null, inativado_em: '2026-09-09', motivo_da_inativacao: 'x' }]),
+      REF, P, { trilha: trilhaQueQuebraNoFim, aoFalharATrilha: (m) => { avisou = m; } }) as any;
+    chk('AG10l', r.id === '999' && avisou === 'nao gravou',
+        'e se a trilha do DESFECHO nao gravar, o ato NAO falha — nesse ponto o webhook ja existe '
+        + 'no banco, e devolver erro faria a pessoa apertar de novo e criar o SEGUNDO. A guarda '
+        + 'inteira derrotada por um erro de log. A falha vira aviso, e nao silencio');
+  }
+
+  // um vivo -> recusa, NAO ESCREVE e NAO deixa trilha
   {
     let chamou = false;
+    const t = trilhaFalsa();
     const e = await pegar(() => religarAvisoDePagamento(
       porta([{ id: '1', url: null, inativado_em: null, motivo_da_inativacao: null }], () => { chamou = true; }),
-      REF, P));
-    chk('AG10g', e instanceof NaoDaParaReligar && e.status === 409 && !chamou,
-        'com um vivo ele recusa com 409 e — o que importa — NAO CHAMA o banco. Consultar depois '
-        + 'de escrever nao serviria de nada: o cadastro nao tem inverso');
+      REF, P, { trilha: t.trilha }));
+    chk('AG10g', e instanceof NaoDaParaReligar && e.status === 409 && !chamou && t.linhas.length === 0,
+        'com um vivo ele recusa com 409, NAO CHAMA o banco e nao deixa trilha: nada aconteceu, e '
+        + 'uma linha de `pedido` aqui poluiria a trilha com tentativas que a guarda barrou');
   }
 
   // Sicoob muda -> recusa E NAO ESCREVE
   {
     let chamou = false;
-    const e = await pegar(() => religarAvisoDePagamento(porta(null, () => { chamou = true; }), REF, P));
-    chk('AG10h', e instanceof NaoDaParaReligar && !chamou,
+    const t = trilhaFalsa();
+    const e = await pegar(() => religarAvisoDePagamento(
+      porta(null, () => { chamou = true; }), REF, P, { trilha: t.trilha }));
+    chk('AG10h', e instanceof NaoDaParaReligar && !chamou && t.linhas.length === 0,
         'e com a Sicoob fora do ar tambem NAO escreve — a consulta passa por '
         + '`conferirAvisoDePagamento`, que traduz rede caida em `nao_verificavel` em vez de '
         + 'estourar 500 no botao');
+  }
+
+  // a engolida do `registrarDesfecho`, exercitada de verdade
+  {
+    let avisou = '';
+    let subiu = false;
+    try {
+      await registrarDesfecho(
+        { ...{ ato: 'x', contraparte: 'y' }, fase: 'feito' },
+        (m) => { avisou = m; },
+        (async () => { throw new Error('banco fora'); }) as any,
+      );
+    } catch { subiu = true; }
+    chk('AG10m', !subiu && avisou.includes('banco fora') && avisou.includes('ficou sem par'),
+        '`registrarDesfecho` ENGOLE a falha e avisa — e o aviso nomeia o `pedido` orfao, que e '
+        + 'por onde se reconstroi. Deixar subir faria a rota devolver erro para um ato que deu '
+        + 'certo, e a pessoa apertaria de novo');
   }
 
   // adaptador que nao sabe -> 503 nomeado

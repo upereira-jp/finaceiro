@@ -320,7 +320,12 @@ BEGIN
     -- outras duas: ela E uma trilha, e auditar trilha com trilha e regresso
     -- infinito. A isencao so e honesta porque a G3 abaixo passou a exigir dela o
     -- append-only por privilegio - sem isso seria "chamar de trilha" e nada mais.
-    AND c.relname NOT IN ('auditoria','acesso_plataforma_log','cofre_acesso_log')
+    -- `ato_externo_log` entra em 09/09/2026 pela MESMA razao das outras tres, e
+    -- com a mesma condicao de honestidade: ela E uma trilha, e auditar trilha
+    -- com trilha e regresso infinito. A isencao so vale porque a G3 abaixo
+    -- passou a exigir dela o append-only por PRIVILEGIO no mesmo dia.
+    AND c.relname NOT IN ('auditoria','acesso_plataforma_log','cofre_acesso_log',
+                          'ato_externo_log')
     AND NOT EXISTS (SELECT 1 FROM pg_trigger t
                     WHERE t.tgrelid = c.oid AND t.tgname LIKE 'auditar_%');
   IF txt IS NULL THEN RAISE NOTICE 'ok   G2   inv.17 toda tabela de negocio ou de papel tem gatilho de auditoria';
@@ -399,7 +404,14 @@ BEGIN
      OR has_table_privilege('app_financeiro','acesso_plataforma_log','DELETE')
      OR has_table_privilege('app_financeiro','cofre_acesso_log','INSERT')
      OR has_table_privilege('app_financeiro','cofre_acesso_log','UPDATE')
-     OR has_table_privilege('app_financeiro','cofre_acesso_log','DELETE') THEN
+     OR has_table_privilege('app_financeiro','cofre_acesso_log','DELETE')
+     -- `ato_externo_log` entra em 09/09/2026 e e tao apertada quanto a do cofre:
+     -- o INSERT tambem e revogado. Quem escreve e so `app.registrar_ato_externo`,
+     -- SECURITY DEFINER. Se a aplicacao pudesse inserir ali, poderia forjar a
+     -- trilha de um ato que nunca houve — ou, pior, apagar a de um que houve.
+     OR has_table_privilege('app_financeiro','ato_externo_log','INSERT')
+     OR has_table_privilege('app_financeiro','ato_externo_log','UPDATE')
+     OR has_table_privilege('app_financeiro','ato_externo_log','DELETE') THEN
     RAISE WARNING 'FALHA G3 inv.18 log gravavel pela aplicacao'; falhas := falhas + 1;
   ELSE RAISE NOTICE 'ok   G3   inv.18 auditoria e trilha sao append-only para a aplicacao'; END IF;
 
@@ -418,9 +430,16 @@ BEGIN
     --
     -- Ela ficou FORA da lista de 27/08 ate hoje, e ninguem viu porque este teste
     -- nao rodava. A invariante fez o trabalho dela no primeiro run em que pode.
+    --
+    -- `registrar_ato_externo` entra em 09/09/2026 (`Q-AUDIT-EXTERNO-01`). Ela e
+    -- SECURITY DEFINER pelo mesmo motivo de `auditar`: a trilha e append-only
+    -- sob FORCE RLS, e sem BYPASSRLS a unica forma de escrever nela e uma funcao
+    -- que roda como `auditor_financeiro`. Ela NAO afrouxa a R2 — nao le nada, e
+    -- o tenant sai de `app.current_tenant_id()` e RECUSA fora de contexto, entao
+    -- nao ha assinatura por onde escolher em nome de quem gravar.
     AND p.proname NOT IN ('membros_do_tenant','tem_vinculo_no_tenant',
                           'resolver_login','auditar','exigir_trilha_de_plataforma',
-                          'resolver_credencial_cobranca');
+                          'resolver_credencial_cobranca','registrar_ato_externo');
   IF txt IS NULL THEN RAISE NOTICE 'ok   G4   inv.19 nenhum SECURITY DEFINER fora da lista branca';
   ELSE RAISE WARNING 'FALHA G4 inv.19 fora da lista: %', txt; falhas := falhas + 1; END IF;
 

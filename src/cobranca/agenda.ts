@@ -33,6 +33,7 @@ import { tenantCorrente, exigir } from '../db/contexto.ts';
 import { ehSqlstate, SQLSTATE } from '../db/sqlstate.ts';
 import * as boletos from '../repos/boleto.ts';
 import * as liquidacoes from '../repos/liquidacao.ts';
+import { registrarAto, registrarDesfecho } from '../repos/ato-externo.ts';
 import { CobrancaNaoConfigurada, type PortaDeCobranca, type AvisoDePagamento } from '../sicoob/porta.ts';
 import {
   decidir, nivelDoCertificado, nivelDoAviso, podeReligarOAviso, POLITICA,
@@ -548,11 +549,36 @@ export class AdaptadorNaoReliga extends Error {
  * auditoria - que e quem grava, porque `app_financeiro_login` so tem SELECT em
  * `auditoria` - nao tem o que pegar. Ver `Q-AUDIT-EXTERNO-01`.
  */
+const ATO = { ato: 'religar_aviso_de_pagamento', contraparte: 'sicoob' } as const;
+
+/**
+ * A TRILHA, INJETADA — mesma forma da porta e do `AbrirTransacao`, e pelo mesmo
+ * motivo: sem isto, verificar a ORDEM (que e o invariante que importa aqui)
+ * exigiria banco, e o que se quer provar e puro. Ver `AG10j`.
+ */
+export type TrilhaDeAtoExterno = {
+  registrar(e: { ato: string; contraparte: string; fase: 'pedido'; detalhe?: unknown }): Promise<string>;
+  desfecho(
+    e: { ato: string; contraparte: string; fase: 'feito' | 'falhou'; detalhe?: unknown },
+    aoFalhar: (m: string) => void,
+  ): Promise<void>;
+};
+
+const TRILHA_DE_VERDADE: TrilhaDeAtoExterno = { registrar: registrarAto, desfecho: registrarDesfecho };
+
 export async function religarAvisoDePagamento(
   cobranca: PortaDeCobranca,
   credencialRef: string,
   p: { url: string; email: string },
+  o: {
+    trilha?: TrilhaDeAtoExterno;
+    /** Para onde vai o aviso quando a trilha do DESFECHO nao grava. Vem de fora
+     *  porque nenhum repositorio deste projeto loga - quem loga e a fronteira. */
+    aoFalharATrilha?: (m: string) => void;
+  } = {},
 ): Promise<{ id: string; nivelAntes: NivelDoAviso }> {
+  const trilha = o.trilha ?? TRILHA_DE_VERDADE;
+  const aoFalharATrilha = o.aoFalharATrilha ?? ((m: string) => console.error(m));
   if (typeof cobranca.religarAvisoDePagamento !== 'function') throw new AdaptadorNaoReliga();
 
   /* A CONSULTA USA `conferirAvisoDePagamento` e nao a porta crua, de proposito:
@@ -564,6 +590,45 @@ export async function religarAvisoDePagamento(
   const permissao = podeReligarOAviso(antes.nivel);
   if (!permissao.pode) throw new NaoDaParaReligar(permissao.motivo);
 
-  const r = await cobranca.religarAvisoDePagamento(credencialRef, p);
+  /*
+   * O `pedido` VAI ANTES DA CHAMADA, e a ordem e a trilha (`Q-AUDIT-EXTERNO-01`).
+   *
+   * Chamada a terceiro nao e transacional: gravar so depois perde a trilha se o
+   * processo morrer no meio, e ai o ato ja aconteceu no mundo e ninguem sabe
+   * quem mandou. Aqui, se o `pedido` falhar, a excecao SOBE e nada e enviado -
+   * falhar neste ponto e seguro, porque nada aconteceu ainda.
+   *
+   * E ele grava o nivel de ANTES: e o que responde "por que alguem mandou
+   * religar?" seis meses depois.
+   */
+  const pedido = await trilha.registrar({
+    ...ATO, fase: 'pedido',
+    detalhe: { url: p.url, email: p.email, nivel_antes: antes.nivel },
+  });
+
+  let r: { id: string };
+  try {
+    r = await cobranca.religarAvisoDePagamento(credencialRef, p);
+  } catch (e: any) {
+    /* O DESFECHO DA FALHA TAMBEM E TRILHA, e e o mais informativo dos dois: um
+     * `pedido` seguido de `falhou` conta uma historia fechada; um `pedido`
+     * sozinho obriga a adivinhar se chegou a sair. */
+    await trilha.desfecho({
+      ...ATO, fase: 'falhou',
+      detalhe: { pedido_id: pedido, erro: String(e?.message ?? e) },
+    }, aoFalharATrilha);
+    throw e;
+  }
+
+  /* ⚠️ MELHOR ESFORCO, e nao e desleixo: aqui o webhook JA EXISTE no banco.
+   * Deixar a falha da trilha subir faria a rota devolver erro para uma acao que
+   * deu certo - a pessoa leria "nao deu", apertaria de novo, e o segundo webhook
+   * faria a Sicoob notificar EM DOBRO. A guarda inteira derrotada por um erro de
+   * log. Ver `registrarDesfecho`. */
+  await trilha.desfecho({
+    ...ATO, fase: 'feito',
+    detalhe: { pedido_id: pedido, id_webhook: r.id, nivel_antes: antes.nivel },
+  }, aoFalharATrilha);
+
   return { id: r.id, nivelAntes: antes.nivel };
 }

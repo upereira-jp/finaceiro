@@ -44,6 +44,7 @@ const FUNDACAO = '20260725120000_fundacao_schema';
 const MIGRATION_32 = '20260817120000_boleto_importado';
 const MIGRATION_35 = '20260827120000_cofre_e_identidade_do_cooperado';
 const MIGRATION_36 = '20260828230000_contrato_de_cobranca_e_opcional';
+const MIGRATION_37 = '20260909233000_ato_externo_log';
 
 class ConferenciaFalhou extends Error {}
 
@@ -52,6 +53,7 @@ const DIRETORIO: Record<string, string> = {
   'migration-32': MIGRATION_32,
   'migration-35': MIGRATION_35,
   'migration-36': MIGRATION_36,
+  'migration-37': MIGRATION_37,
 };
 
 /**
@@ -117,7 +119,7 @@ if (!url || !url.trim()) {
 }
 
 const modo = process.argv[2] ?? '';
-const MODOS = ['identidade', 'migration-32', 'migration-35', 'migration-36'];
+const MODOS = ['identidade', 'migration-32', 'migration-35', 'migration-36', 'migration-37'];
 if (!MODOS.includes(modo)) {
   console.error(`modo desconhecido: ${JSON.stringify(modo)}. Conheco: ${MODOS.join(', ')}.`);
   process.exit(1);
@@ -350,9 +352,65 @@ async function migration36(): Promise<void> {
   console.log('migration 36 OK — a constraint exige numero_conta_corrente e NAO exige mais numero_contrato_cobranca.');
 }
 
+/**
+ * A 37 — `Q-AUDIT-EXTERNO-01`. E a conferencia mais exigente das quatro, e o
+ * motivo e que esta migration tem QUATRO partes que so valem juntas.
+ *
+ * A tabela sozinha nao e trilha: sem o REVOKE ela nasce apagavel por quem ela
+ * audita (a pegadinha do `ALTER DEFAULT PRIVILEGES` da migration 2, que ja
+ * mordeu antes), e sem a funcao `SECURITY DEFINER` ninguem consegue escrever
+ * nela sob FORCE RLS. Conferir so a existencia da tabela diria OK sobre uma
+ * trilha que nao grava e que qualquer um apaga.
+ */
+async function migration37(): Promise<void> {
+  await migration36();
+
+  const { rows: [r] } = await cliente.query<{
+    tabela: string; rls: string; policies: string; funcao: string;
+    dono: string | null; podeInserir: string; podeApagar: string; registro: string;
+  }>(`
+    SELECT (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+             WHERE n.nspname = 'public' AND c.relname = 'ato_externo_log')          AS tabela,
+           (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+             WHERE n.nspname = 'public' AND c.relname = 'ato_externo_log'
+               AND c.relrowsecurity AND c.relforcerowsecurity)                      AS rls,
+           (SELECT count(*) FROM pg_policy p
+             WHERE p.polrelid = 'public.ato_externo_log'::regclass)                 AS policies,
+           (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+             WHERE n.nspname = 'app' AND p.proname = 'registrar_ato_externo'
+               AND p.prosecdef)                                                     AS funcao,
+           (SELECT pg_get_userbyid(p.proowner) FROM pg_proc p
+              JOIN pg_namespace n ON n.oid = p.pronamespace
+             WHERE n.nspname = 'app' AND p.proname = 'registrar_ato_externo')       AS dono,
+           has_table_privilege('app_financeiro','ato_externo_log','INSERT')::text   AS "podeInserir",
+           has_table_privilege('app_financeiro','ato_externo_log','DELETE')::text   AS "podeApagar",
+           (SELECT count(*) FROM _prisma_migrations
+             WHERE migration_name = '${MIGRATION_37}'
+               AND finished_at IS NOT NULL AND rolled_back_at IS NULL)              AS registro`);
+
+  const faltando = [
+    Number(r.tabela) === 1 ? null : 'a tabela ato_externo_log',
+    Number(r.rls) === 1 ? null : 'RLS ENABLE + FORCE em ato_externo_log (regra 3)',
+    Number(r.policies) >= 2 ? null : `as duas policies (leitura do tenant e escrita da funcao) — ha ${r.policies}`,
+    Number(r.funcao) === 1 ? null : 'a funcao app.registrar_ato_externo SECURITY DEFINER',
+    r.dono === 'auditor_financeiro' ? null
+      : `a funcao pertence a "${r.dono}" e nao a auditor_financeiro — SECURITY DEFINER com o dono errado nao escreve sob FORCE RLS`,
+    r.podeInserir === 'false' ? null : 'o REVOKE de INSERT: a aplicacao pode FORJAR linha de trilha',
+    r.podeApagar === 'false' ? null : 'o REVOKE de DELETE: a aplicacao pode APAGAR a trilha que a audita',
+    Number(r.registro) === 1 ? null : `o registro de ${MIGRATION_37} em _prisma_migrations`,
+  ].filter(Boolean);
+
+  if (faltando.length) {
+    throw new ConferenciaFalhou(`a migration 37 nao esta inteira no banco. Falta: ${faltando.join('; ')}.`);
+  }
+  console.log('migration 37 OK — ato_externo_log com RLS forcada, append-only por privilegio, '
+            + 'e app.registrar_ato_externo SECURITY DEFINER de auditor_financeiro.');
+}
+
 try {
   await cliente.connect();
   if (modo === 'identidade') await identidade();
+  else if (modo === 'migration-37') await migration37();
   else if (modo === 'migration-36') await migration36();
   else if (modo === 'migration-35') await migration35();
   else await migration32();
