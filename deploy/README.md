@@ -30,8 +30,17 @@ está no ar desde 28/07 e mexer nele é outro assunto. O texto dele está em
 
 ## Instalar ou atualizar
 
+⚠️ **Caminho ABSOLUTO, e não `deploy/…`.** A sessão do terminal abre em
+`/opt/financeiro`, e o repositório é `/opt/financeiro/**app**` — de lá o glob
+`deploy/financeiro-*` não casa com nada e o `install` falha. Foi exatamente o que
+aconteceu em 09/09/2026: o `disable` e o `rm` da unidade velha (que usam nome de
+unit, não caminho) **passaram**, o `install` **não**, e a máquina ficou sem
+conferência diária nenhuma — o pior estado intermediário possível.
+
 ```bash
-sudo install -m 644 deploy/financeiro-*.service deploy/financeiro-*.timer /etc/systemd/system/
+sudo install -m 644 /opt/financeiro/app/deploy/financeiro-*.service \
+                    /opt/financeiro/app/deploy/financeiro-*.timer \
+                    /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now financeiro-ciclo.timer
 sudo systemctl enable --now financeiro-agenda-fila.timer
@@ -44,12 +53,23 @@ sudo systemctl enable --now financeiro-saude-cobranca.timer
 outra unidade: aquela lia metade do problema e saía sempre 0, esta lê as duas
 metades e **fica vermelha**. O `install` acima não apaga a antiga, então:
 
+**Instale a nova ANTES de apagar a velha.** Na outra ordem, um `install` que falhe
+deixa a máquina sem nenhuma das duas — e o sintoma é silêncio, que é o que estas
+unidades existem para acabar.
+
 ```bash
 sudo systemctl disable --now financeiro-agenda-certificado.timer
 sudo rm -f /etc/systemd/system/financeiro-agenda-certificado.{service,timer}
 sudo systemctl daemon-reload
 sudo systemctl start financeiro-saude-cobranca.service   # a primeira leitura, agora
 systemctl status financeiro-saude-cobranca.service
+```
+
+**A conferência que prova que deu certo**, e ela é uma linha — `list-timers` não
+mente sobre unit que não existe:
+
+```bash
+systemctl list-timers 'financeiro*' --all | grep saude   # tem de aparecer
 ```
 
 Sem o `disable`, as duas rodam: a velha continua caindo no journal às 06:07 sem
