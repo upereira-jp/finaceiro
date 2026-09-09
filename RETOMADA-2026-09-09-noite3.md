@@ -221,9 +221,15 @@ imagem; ficam para o dia em que casarem. O `List-Cleanup=0` continua certo — e
 impede que o update restrito apague o índice de tudo o que ficou de fora —, mas
 **não** é ele que faz estes três jobs funcionarem.
 
-**O filtro de `push` passou a `.github/**`.** Os cinco jobs dependem do script e
-ele não mora em `workflows/` — com o filtro antigo, uma mudança só nele não
-rodaria CI nenhum, e o script é justamente o passo que já derrubou quatro jobs.
+**O filtro de `push` ganhou `.github/**` e `web/**`** — e o segundo é um buraco que
+existia **desde sempre**, achado ao ver que o commit `3cc0611` (15 verificações de
+tela novas) não disparou run nenhum. O job `tipos` roda `npm run test:web` (1.348
+verificações) e `tsc -p web --noEmit`, e mesmo assim um commit só de `web/` passava
+sem CI.
+
+O sintoma dos dois é o mesmo, e é o pior possível: **não há vermelho, não há verde,
+não há run.** O painel mostra o resultado do commit anterior, e quem olha lê como
+aprovação. `CI-8` agora exige que o filtro cubra toda pasta que os jobs executam.
 
 **A regra que continua valendo depois de todo push:**
 

@@ -121,14 +121,29 @@ console.log(`\n-- fontes apt do CI (${workflows.length} workflows) --`);
       + 'versao passaria verde e quebraria no `\\gset` do SQL, tres passos adiante');
 }
 
-// ------------------------ CI-8 o filtro de push alcanca o script
+// ------------------ CI-8 o filtro de push alcanca TUDO o que os jobs executam
 {
+  /*
+   * O FILTRO E UMA LISTA DE PERMISSAO TAMBEM, e ela ja falhou DUAS vezes em
+   * 09/09/2026 pelo mesmo motivo: uma pasta que o CI executa e que o filtro nao
+   * menciona vira codigo sem rede. `.github/` foi a primeira (o script do psql
+   * e passo dos cinco jobs e nao mora em `workflows/`); `web/` foi a segunda, e
+   * essa faltava desde sempre - o job `tipos` roda `test:web` e `tsc -p web`, e
+   * um commit so de tela nao disparava nada.
+   *
+   * O sintoma das duas e o mesmo e e o pior possivel: nao ha vermelho, nao ha
+   * verde, nao ha run. O painel fica com o resultado do commit ANTERIOR, e quem
+   * olhar le como aprovacao.
+   */
   const iso = workflows.find((w) => w.nome === 'isolamento.yml')!;
-  const linha = iso.roda.split('\n').find((l) => l.trim().startsWith('paths:')) ?? '';
-  chk('CI-8', linha.includes("'.github/**'"),
-      'o filtro de `push` do isolamento cobre `.github/**` e nao so `workflows/**` - o script '
-      + 'e passo de todos os cinco jobs e nao mora em workflows/, entao com o filtro antigo '
-      + 'uma mudanca so nele nao rodaria CI nenhum');
+  const bloco = iso.roda.slice(iso.roda.indexOf('paths:'), iso.roda.indexOf('pull_request:'));
+  const faltando = ['src/**', 'tests/**', 'web/**', 'prisma/**', 'package.json', '.github/**']
+    .filter((p) => !bloco.includes(`'${p}'`));
+
+  chk('CI-8', faltando.length === 0,
+      'o filtro de `push` do isolamento cobre TODA pasta que os jobs executam - `web/**` e '
+      + '`.github/**` inclusive, e os dois ja faltaram'
+      + `${faltando.length ? ` (fora do filtro: ${faltando.join(', ')})` : ''}`);
 }
 
 console.log(`\n${falhas === 0 ? 'ci-apt: todas as verificacoes passaram'

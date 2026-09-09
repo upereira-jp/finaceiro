@@ -6,11 +6,26 @@ name: isolamento
 
 on:
   push:
-    # `.github/**` e nao `.github/workflows/**`: desde 09/09/2026 os cinco jobs
-    # dependem de `.github/instalar-psql.sh`, que NAO esta em `workflows/`. Com o
-    # filtro antigo, uma mudanca so nele nao rodaria CI nenhum - e o script e
-    # justamente o passo que ja derrubou quatro jobs de uma vez.
-    paths: ['prisma/**', 'src/**', 'tests/**', 'spike-transacao/**', 'package.json', '.github/**']
+    # O FILTRO TEM DE COBRIR TUDO O QUE OS JOBS EXECUTAM, e duas vezes em
+    # 09/09/2026 ele nao cobria:
+    #
+    #   `.github/**` e nao `.github/workflows/**` - os cinco jobs dependem de
+    #   `.github/instalar-psql.sh`, que nao mora em `workflows/`;
+    #
+    #   `web/**`, que faltava desde sempre. O job `tipos` roda `npm run test:web`
+    #   (1.348 verificacoes) e `tsc -p web --noEmit`, e mesmo assim um commit que
+    #   so mexesse em `web/src` ou `web/tests` NAO disparava workflow nenhum.
+    #   Medido: o commit `3cc0611`, que acrescentou 15 verificacoes de tela,
+    #   passou sem CI. Regressao de tela ficava sem rede ate alguem tocar noutra
+    #   pasta por acaso.
+    paths:
+      - 'prisma/**'
+      - 'src/**'
+      - 'tests/**'
+      - 'web/**'
+      - 'spike-transacao/**'
+      - 'package.json'
+      - '.github/**'
   pull_request:
   workflow_dispatch:
 
