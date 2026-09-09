@@ -5,9 +5,9 @@
 | **Para quem** | Quem abrir a próxima sessão. **Dois minutos** |
 | **Substitui** | `RETOMADA-2026-09-09.md` para efeito de "onde estamos". O corpo dela continua correto; o que venceu é o **§0** — as três pendências foram postas ao dono e as três voltaram com resposta |
 | **O que esta leva fez** | Fechou as três decisões do §0 anterior. Uma virou código (**o calendário bancário**), uma virou registro (**D+1**), uma foi adiada com o custo medido (**`dono_usina`**). E o portão do webhook que era `psql` a mão virou workflow |
-| **Suíte** | sem banco: `EXIT=0`, **2.637** verificações (eram 2.619) |
-| **Repositório** | commit local pronto. ⚠️ **`git push` daqui é bloqueado pelo classificador** — o comando está no §5 |
-| **Produção** | serviço de 09/09 12:37 em `333ffa2`. **Passa a haver deriva** assim que o commit desta leva subir: o §5 tem a ordem |
+| **Suíte** | sem banco: `EXIT=0`, **2.637** verificações (eram 2.619). **E o CI voltou ao verde** — ver §7 |
+| **Repositório** | `main` = `4d74603` + o conserto do §7, e `origin` está junto. ⚠️ **`git push` daqui é bloqueado pelo classificador** — o dono empurra |
+| **Produção** | ✅ **sem deriva** — o `deploy-financeiro` rodou às 14:15 e o serviço subiu **14:16:09** em `4d74603`. `GET /` responde 200 e o bundle novo carrega a regra na tela |
 
 > ## A frase de uma linha
 >
@@ -147,19 +147,13 @@ https://financeiro.blackhaus.io/api/liquidacoes/webhook-sicoob/eac198c0-b0c1-4b1
 
 ## 5. O que falta fazer, e é operação — não decisão
 
-**1. O push** (bloqueado daqui pelo classificador):
+**✅ O push e o deploy saíram.** O serviço subiu 09/09 14:16:09 em `4d74603`, `GET /`
+responde 200 e o bundle servido já carrega a regra nova na tela.
 
-```
-cd /opt/financeiro/app && git push origin main
-```
-
-**2. O deploy** — workflow `deploy-financeiro`. Ele faz `git ff` + `web:build` +
-restart, e a tela mudou nesta leva, então o build importa.
-
-**3. Quando quiser ligar o webhook de ponta a ponta** — workflow
-`provisionar-cobranca`, primeiro com `confirmar = ensaio` (padrão) para ver o que
-ele faria, depois com `confirmar = aplicar`. Só então cadastrar a URL acima no
-Portal Developers.
+**Sobra um passo, e ele é o webhook de ponta a ponta:** workflow
+`provisionar-cobranca`, primeiro com `confirmar = ensaio` (o padrão) para ver o que
+ele faria, depois com `confirmar = aplicar`. Só então cadastrar a URL acima no Portal
+Developers.
 
 ---
 
@@ -178,3 +172,28 @@ Portal Developers.
 
 Onde parou é aqui; o índice vivo é `PENDENCIAS.md`; o registro com dono por entrada é
 `QUESTOES.md`.
+
+---
+
+## 7. O CI estava vermelho havia 24 horas, e ninguém tinha como ver
+
+**O push desta leva expôs o que já estava lá.** O workflow `isolamento` falhava desde
+08/09 às 22:45 — e falhou de novo em 12:44 e em 14:14, sempre no **mesmo** job
+(`repositorios`), sempre na **mesma** linha. Os outros quatro jobs estavam verdes.
+
+**O defeito era do teste, não do código, e ele é instrutivo.** Em 08/09 a
+`Q-BAIXAOPER-01` moveu o split de `baixar()` para `confirmarLiquidacao()`. O `K7a0`
+foi escrito no mesmo commit e **afirma** que `r.split` é nulo depois da baixa por
+webhook. Trinta linhas abaixo, o `K7h` continuou lendo `r.split!.contas_a_pagar` — e
+o `!` calou o compilador exatamente sobre o campo que o teste vizinho garante ser
+nulo. `TypeError: Cannot read properties of null`, em produção do CI, todo push.
+
+O conserto é uma palavra: o número sai da **confirmação**, que é quem reparte agora.
+
+⚠️ **Por que isso durou um dia inteiro sem ninguém tropeçar:** `test:repos` **não roda
+nesta VPS** (exige PostgreSQL local) e não roda no `npm test` daqui. O único lugar do
+mundo onde essa suíte executa é o Actions — então o vermelho existia num painel que
+ninguém abre depois de um push que "passou" localmente. É o mesmo modo de falha que o
+próprio `tests/run.sh` documenta duas vezes (*"em pipeline o status de saída é do
+grep"*), na camada de fora: **verde local não é verde**, quando a suíte que importa
+mora noutro lugar.

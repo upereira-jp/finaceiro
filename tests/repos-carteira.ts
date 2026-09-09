@@ -350,9 +350,21 @@ let liquidacaoJulho: string;
    * split. Afirmar constantes proprias aqui deixaria as duas metades divergirem
    * sem nenhuma delas parecer errada, que e o modo de falha da questao inteira.
    */
-  chk('K7h', r.split!.contas_a_pagar === 3,
-      `o split provisionou 3 contas a pagar na MESMA transacao - uma por item de despesa, `
-      + `e nenhuma para liquido_g3, que e receita (veio ${r.split!.contas_a_pagar})`);
+  /* ⚠️ E O NUMERO SAI DA CONFIRMACAO, NAO DA BAIXA — corrigido em 09/09/2026.
+   *
+   * Ate 08/09 o split rodava dentro de `baixar()`, entao `r.split` trazia a
+   * contagem. Naquele dia a `Q-BAIXAOPER-01` moveu o split para
+   * `confirmarLiquidacao()` e o `K7a0`, tres linhas acima, passou a AFIRMAR que
+   * `r.split` e nulo — mas esta linha continuou lendo `r.split!`, e o `!` calou o
+   * compilador sobre exatamente o campo que o teste vizinho garante ser nulo.
+   *
+   * O resultado foi `TypeError: Cannot read properties of null` no CI, e o job
+   * `repositorios` ficou vermelho de 08/09 ate aqui. Ele nao roda nesta VPS
+   * (exige PostgreSQL local), entao o unico lugar onde isso aparecia era o
+   * Actions - e vermelho constante e vermelho ignorado. */
+  chk('K7h', conf.split!.contas_a_pagar === 3,
+      `o split provisionou 3 contas a pagar na MESMA transacao da CONFIRMACAO - uma por item `
+      + `de despesa, e nenhuma para liquido_g3, que e receita (veio ${conf.split!.contas_a_pagar})`);
 
   const contas = await emA(() => contaPagar.listar({}));
   const porBenef = (t: string) => contas.find((c: any) => c.beneficiario_tipo === t)!;
