@@ -20,6 +20,11 @@ dono de usina, originador, chave Pix, conta a pagar, faturamento do mês inteiro
 carga em lote, não o único caminho.** Migration, deploy e provisionamento de
 usuário de serviço já saíram do terminal e viraram **botão no GitHub Actions**.
 
+⚠️ **Correção de 09/09, à noite:** este documento nasceu dizendo que o **A3
+estava aberto**, e ele já estava feito — eu confiei numa anotação em vez de rodar
+o `npm run origem-webhook`, que responde em segundos. Corrigido no item. Sobra
+**um** item de código, e ele também foi construído na mesma noite: o **A1**.
+
 **A metade honesta:** *"em hipótese alguma"* não é alcançável, e vale dizer por
 quê em uma linha — **o Sicoob muda o contrato da API sem perguntar** (aconteceu
 três vezes só em agosto/setembro), dependência ganha falha de segurança, e o
@@ -81,7 +86,38 @@ com cifragem antiga que o **Node recusa e o `openssl` aceita sem reclamar** — 
 isso o passo `normalizar` existe. Uma tela de upload precisa fazer isso por dentro,
 ou a renovação falha com um erro que não diz o que é.
 
-### A3 · As duas linhas do `/etc/financeiro.env` 🔴 — **abertas agora**
+### A3 · As duas linhas do `/etc/financeiro.env` — ✅ **JÁ ESTAVA FEITO**
+
+⚠️ **Erro meu, e a correção importa mais que o item.** Publiquei este plano
+dizendo que o A3 estava *"aberto agora"*. **Não estava.** Eu li a anotação de
+09/09 que dizia *"a produção hoje recusaria 9 de 9"* e não medi de novo — e a
+medição estava a um comando de distância, com ferramenta que existe justamente
+para isso:
+
+```
+npm run origem-webhook
+→ lista .................. 9 entrada(s), de WEBHOOK_IPS (ambiente)
+  WEBHOOK_MTLS_VIA_PROXY . 1 (o X-Real-IP do nginx e conferido)
+  os 9 blocos PASSAM · os 4 controles negativos RECUSAM
+  VEREDITO: ACEITA as notificacoes da Sicoob e recusa o resto.   EXIT=0
+```
+
+E havia uma segunda prova no journal, ainda mais direta: **uma notificação real
+da Sicoob chegou em 09/09 às 22h**, foi aceita pela guarda de origem e ignorada
+por conter um `nosso_numero` que não é nosso. Se as duas linhas faltassem, ela
+teria sido recusada antes disso.
+
+**A lição, e ela é do projeto e não deste item:** anotação envelhece, e a deste
+envelheceu **no mesmo dia** — o webhook foi ligado às 15:18, o que só é possível
+com as duas linhas no lugar. Quando existe comando que mede, medir custa menos
+que confiar.
+
+O texto original do item fica abaixo, porque explica *por que* as duas linhas
+importam — e a segunda continua sendo a que se esquece.
+
+---
+
+#### (registro) o que o item dizia
 
 ```
 WEBHOOK_IPS="177.53.249.0/24,…"        (9 blocos)
@@ -186,8 +222,8 @@ novo entra lendo, não perguntando.
 | Ordem | O quê | Por quê nessa ordem |
 |:--:|---|---|
 | ~~1~~ | ~~**A1** — botão de religar~~ | ✅ **feito em 09/09** |
-| **1** | **A3** — as duas linhas do `.env` | Cinco minutos, e é o único item **aberto agora** que perde dinheiro (o aviso do banco chega e é recusado em silêncio) |
-| **2** | **Bloco D itens 7, 2 e 4** | São o que trava a **primeira fatura** e o **primeiro repasse**. Nada disso é código |
+| ~~1~~ | ~~**A3** — as duas linhas do `.env`~~ | ✅ **já estava feito** — medido com `npm run origem-webhook`, veredito `ACEITA` |
+| **1** | **Bloco D itens 7, 2 e 4** | São o que trava a **primeira fatura** e o **primeiro repasse**. Nada disso é código |
 | **4** | **A2** — tela do certificado | Tem prazo (17/08/2027) e não tem pressa |
 | **5** | **D5** — o canal que empurra | Decidir se vale contratar um serviço de e-mail |
 | **6** | `destravar-uc` na tela | Exceção rara; só quando o resto estiver fechado |
