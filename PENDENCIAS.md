@@ -38,7 +38,13 @@
 >
 > | Todo bloco desta tabela: os avisos da agenda (A1 e aviso de pagamento) *"caem no journal"* e **não notificam ninguém** | 09/09 madrugada | **Os dois alertas ganharam canal.** A unidade `financeiro-saude-cobranca` fica **vermelha** em `systemctl list-units --failed` (códigos 4 e 5) e substitui a `financeiro-agenda-certificado`; e uma faixa no alto de **Pendências** — a primeira tela — diz o mesmo para quem está olhando. O que sobra é e-mail, que é contratar terceiro: `Q-ALERTA-EMAIL-01`, do dono. ⚠️ **Instalar a unidade é passo do dono** — `deploy/README`, bloco de 09/09 |
 >
-> **A suíte hoje:** `EXIT=0`, **2.713** verificações sem banco (eram 2.420 aqui).
+> **A suíte hoje:** `EXIT=0`, **2.728** verificações sem banco (eram 2.420 aqui).
+>
+> 📄 **`PLANO-sem-desenvolvedor-2026-09-09.md`** responde, em uma tela, *o que falta
+> para a operação não precisar de desenvolvedor* — e a resposta é curta: **três
+> coisas** (religar o aviso de pagamento, renovar o A1, as duas linhas do `.env`).
+> O resto do que parece pendência de código é decisão do dono ou atalho de terminal
+> que a tela já faz de outro jeito.
 
 > ## A única pendência do repositório é o certificado A1.
 >
