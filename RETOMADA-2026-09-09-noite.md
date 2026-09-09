@@ -4,7 +4,7 @@
 |---|---|
 | **Para quem** | Quem abrir a próxima sessão. **Dois minutos** |
 | **Substitui** | `RETOMADA-2026-09-09.md` para efeito de "onde estamos". O corpo dela continua correto; o que venceu é o **§0** — as três pendências foram postas ao dono e as três voltaram com resposta |
-| **O que esta leva fez** | Fechou as três decisões do §0 anterior. Uma virou código (**o calendário bancário**), uma virou registro (**D+1**), uma foi adiada com o custo medido (**`dono_usina`**). E o portão do webhook que era `psql` a mão virou workflow |
+| **O que esta leva fez** | Fechou as três decisões do §0 anterior — e, depois delas, **ligou o webhook de liquidação de ponta a ponta**: o banco validou a URL e a nossa resposta chegou lá como `200 · OK`. Ver §10 |
 | **Suíte** | sem banco: `EXIT=0`, **2.663** verificações (eram 2.619). **E o CI fechou VERDE nos cinco jobs** (run `34363949451`) — o primeiro desde 27/08. Ver §7 |
 | **Repositório** | `main` = **`d011c69`** + este registro, e `origin/main` está junto |
 | **Produção** | ✅ **sem deriva** — o `deploy-financeiro` rodou às 14:15 e o serviço subiu **14:16:09** em `4d74603`. `GET /` responde 200 e o bundle novo carrega a regra na tela |
@@ -345,3 +345,54 @@ contrato nomeia um código (3 = «Validado com sucesso») e não explica os outr
 derivar de um enum conhecido pela metade poria uma afirmação inventada dentro da
 única ferramenta de diagnóstico do webhook. O que decide é o carimbo de
 inativação, e o código cru viaja junto em toda leitura.
+
+---
+
+## 10. O webhook está LIGADO — e a prova veio dos dois lados
+
+**Cadastrado em 09/09/2026, 15:18.** `idWebhook = 13407`, tipo 7, e-mail
+`leal@g3solar.com.br`.
+
+| Lado | O que disse |
+|---|---|
+| **Nosso** (nginx) | `177.53.249.36 - POST /api/liquidacoes/webhook-sicoob/eac198c0-… 200` às 15:19:01 — e `177.53.249.0/24` é o **primeiro** dos nove blocos da lista que chegou de manhã |
+| **Do banco** (`--solicitacoes`) | `✅ VALIDACAO DA URL — Enviado com sucesso · 15:18:59` · `-> 200 em 1s` · **`nossa resposta: OK`** |
+| **Situação hoje** | `✅ ativo · id 13407 · situacao 2 (Validado com sucesso)` |
+
+**Os três portões estão abertos**, e cada um foi fechado por uma leva diferente:
+a faixa de IP mais a flag `WEBHOOK_MTLS_VIA_PROXY` (de manhã), o usuário de
+serviço (§8) e o cadastro da URL (agora).
+
+### ⚠️ O `codigoSituacao` voltou 2, e o Swagger dizia 3
+
+O exemplo do contrato mostra `codigoSituacao: 3` com a descrição *"Validado com
+sucesso"*. **A produção devolveu `2` com a MESMA descrição.**
+
+**Isso valida a recusa deliberada de algumas horas antes:** eu tinha decidido não
+derivar «ativo» de `codigoSituacao`, porque o contrato nomeia um código e não
+explica os outros. Se tivesse gravado `codigoSituacao === 3` como "validado" — que
+é exatamente o que o exemplo do banco sugeria —, **este webhook, funcionando,
+apareceria como não validado**, e alguém iria caçar defeito num caminho que está
+certo. O que decide continua sendo o carimbo de inativação, e o código cru viaja
+junto para quem quiser olhar.
+
+É a mesma lição da `Q-ESCOPO-V3-01`, na terceira vez: **o exemplo da
+documentação não é o comportamento.** Anunciar não é conceder; ilustrar não é
+especificar.
+
+### Medido de passagem, e vale registrar
+
+`GET /webhooks` **não devolve o e-mail** que foi enviado no cadastro (sai vazio).
+Não é bloqueio e não muda nada — mas quem for conferir o endereço cadastrado não
+consegue por aqui.
+
+### O que isso destrava
+
+A partir de agora, **um boleto pago avisa o sistema sozinho**. O caminho do
+dinheiro está completo até a baixa: notificação → guarda de origem → usuário de
+serviço → `traduzirEvento` → `liquidacao.baixar()` — que **não reparte**, porque o
+webhook é intenção de pagamento; quem confirma é a consulta ativa lendo
+`liquidado` (`Q-BAIXAOPER-01`).
+
+**O que ainda impede o primeiro boleto de existir não mudou:** a conta lida da
+competência e a geração. Nada disso é webhook.
