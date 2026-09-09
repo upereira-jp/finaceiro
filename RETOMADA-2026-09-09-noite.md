@@ -6,7 +6,7 @@
 | **Substitui** | `RETOMADA-2026-09-09.md` para efeito de "onde estamos". O corpo dela continua correto; o que venceu é o **§0** — as três pendências foram postas ao dono e as três voltaram com resposta |
 | **O que esta leva fez** | Fechou as três decisões do §0 anterior. Uma virou código (**o calendário bancário**), uma virou registro (**D+1**), uma foi adiada com o custo medido (**`dono_usina`**). E o portão do webhook que era `psql` a mão virou workflow |
 | **Suíte** | sem banco: `EXIT=0`, **2.637** verificações (eram 2.619). **E o CI fechou VERDE nos cinco jobs** (run `34363949451`) — o primeiro desde 27/08. Ver §7 |
-| **Repositório** | `main` = **`d808fa6`**, e `origin/main` está junto |
+| **Repositório** | `main` = **`d011c69`** + este registro, e `origin/main` está junto |
 | **Produção** | ✅ **sem deriva** — o `deploy-financeiro` rodou às 14:15 e o serviço subiu **14:16:09** em `4d74603`. `GET /` responde 200 e o bundle novo carrega a regra na tela |
 
 > ## A frase de uma linha
@@ -152,10 +152,10 @@ https://financeiro.blackhaus.io/api/liquidacoes/webhook-sicoob/eac198c0-b0c1-4b1
 **✅ O push e o deploy saíram.** O serviço subiu 09/09 14:16:09 em `4d74603`, `GET /`
 responde 200 e o bundle servido já carrega a regra nova na tela.
 
-**Sobra um passo, e ele é o webhook de ponta a ponta:** workflow
-`provisionar-cobranca`, primeiro com `confirmar = ensaio` (o padrão) para ver o que
-ele faria, depois com `confirmar = aplicar`. Só então cadastrar a URL acima no Portal
-Developers.
+**✅ O `provisionar-cobranca` rodou nos dois modos, e o usuário de serviço EXISTE.**
+Ver §8.
+
+**Sobra um passo, e ele é humano:** cadastrar a URL acima no Portal Developers.
 
 ---
 
@@ -209,3 +209,37 @@ e autenticado nesta máquina:
 ```
 gh run list --workflow=isolamento --limit 2
 ```
+
+---
+
+## 8. O usuário de serviço existe — o `503` deixou de ser o portão
+
+**Ensaio primeiro** (run `34364701262`) e **valendo depois** (run `34365052533`), os
+dois verdes, com o `APLICAR` pulado no primeiro e o `COMMIT` no segundo.
+
+| | |
+|---|---|
+| `tenant` | `eac198c0-b0c1-4b13-9b4d-6ac1a6eb011d` |
+| `auth_user_id` | `c7cd8e8f-886e-5345-99ca-28b156f8cc4a` — **derivado por UUIDv5**, nunca digitado |
+| `usuario_id` | `ce404d8b-5e56-4e3c-8cb4-055f587f6876` |
+| papel | `cobranca` — o **mínimo** que faz `escrever_carteira` passar |
+| desfecho | `== COMMIT. O usuario de servico existe e o webhook tem quem assinar a trilha. ==` |
+
+**A verificação que vale não é a linha ter entrado, e o SQL faz a certa:**
+`app.resolver_login` devolveu `tenant_id` + `papel` dentro da mesma transação — e é
+exatamente essa função que a rota do webhook chama. `admin` passaria em tudo e daria
+ao webhook escrita de cadastro que ele nunca deve ter; o job fica **vermelho** se o
+papel gravado não for `cobranca`.
+
+⚠️ **O `usuario_id` do ensaio (`957d7f92-…`) NÃO é o que ficou, e isso é esperado:**
+o ensaio deu ROLLBACK, então aquele uuid nunca existiu. O que é estável entre as duas
+passagens é o `auth_user_id`, porque ele é derivado do tenant e não sorteado. Quem
+comparar os dois logs vai ver a diferença — ela não é divergência.
+
+**E o portão de origem continua bom depois do restart**, remedido agora contra a
+produção: `npm run origem-webhook` → **`VEREDITO: ACEITA`**, as nove faixas `PASSA` e
+os quatro controles negativos recusados, `EXIT=0`.
+
+**Dos três portões do webhook, dois estão abertos e o terceiro é humano:** a URL no
+Portal Developers. Nenhum workflow tem como saber se ela foi cadastrada — as páginas
+do portal são SPA. Depois dela, a primeira notificação real é o que fecha o caminho.
