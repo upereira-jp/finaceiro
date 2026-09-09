@@ -416,6 +416,10 @@ BEGIN
   ELSE RAISE NOTICE 'ok   G3   inv.18 auditoria e trilha sao append-only para a aplicacao'; END IF;
 
   -- ======================================== Q-AUDIT-EXTERNO-01, migrations 37 e 38
+  --
+  -- G8 e nao G6: o G6 ja era da `Q-AUDIT-01`, tres blocos abaixo. Duas
+  -- verificacoes com o mesmo id passam despercebidas enquanto estao verdes e
+  -- viram ambiguidade no dia em que uma falha - "FALHA G6" nao diria qual.
   /*
    * A TRILHA DE ATO EXTERNO ESCREVE DE VERDADE? — e esta verificacao existe
    * porque a resposta foi NAO, em producao, minutos depois de aplicar a 37.
@@ -449,18 +453,18 @@ BEGIN
     SELECT count(*) INTO n FROM ato_externo_log
      WHERE tenant_id = A AND ato = 'ensaio_da_suite' AND fase = 'pedido';
     IF n = 1 THEN
-      RAISE NOTICE 'ok   G6   a trilha de ato externo ESCREVE — estrutura certa nao prova escrita possivel (42501 medido em producao com RETURNING)';
+      RAISE NOTICE 'ok   G8   a trilha de ato externo ESCREVE — estrutura certa nao prova escrita possivel (42501 medido em producao com RETURNING)';
     ELSE
-      RAISE WARNING 'FALHA G6 app.registrar_ato_externo nao gravou (linhas: %)', n; falhas := falhas + 1;
+      RAISE WARNING 'FALHA G8 app.registrar_ato_externo nao gravou (linhas: %)', n; falhas := falhas + 1;
     END IF;
 
     -- E o tenant sai do CONTEXTO, nunca de parametro: fora dele, RECUSA.
     BEGIN
       PERFORM set_config('app.tenant_id', '', true);
       PERFORM app.registrar_ato_externo('ensaio_sem_tenant', 'nenhuma', 'pedido', NULL);
-      RAISE WARNING 'FALHA G6b gravou ato externo SEM contexto de tenant'; falhas := falhas + 1;
+      RAISE WARNING 'FALHA G8b gravou ato externo SEM contexto de tenant'; falhas := falhas + 1;
     EXCEPTION WHEN others THEN
-      RAISE NOTICE 'ok   G6b  fora de contexto de tenant ela RECUSA — gravar com tenant NULL esconderia o ato de quem tem direito de ve-lo';
+      RAISE NOTICE 'ok   G8b  fora de contexto de tenant ela RECUSA — gravar com tenant NULL esconderia o ato de quem tem direito de ve-lo';
     END;
     PERFORM set_config('app.tenant_id', A::text, true);
   END;
