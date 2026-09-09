@@ -415,6 +415,56 @@ BEGIN
     RAISE WARNING 'FALHA G3 inv.18 log gravavel pela aplicacao'; falhas := falhas + 1;
   ELSE RAISE NOTICE 'ok   G3   inv.18 auditoria e trilha sao append-only para a aplicacao'; END IF;
 
+  -- ======================================== Q-AUDIT-EXTERNO-01, migrations 37 e 38
+  /*
+   * A TRILHA DE ATO EXTERNO ESCREVE DE VERDADE? — e esta verificacao existe
+   * porque a resposta foi NAO, em producao, minutos depois de aplicar a 37.
+   *
+   *   permission denied for table ato_externo_log   (42501)
+   *
+   * `INSERT ... RETURNING id` exige SELECT na coluna devolvida, e
+   * `auditor_financeiro` tem so INSERT — o aperto que impede a role de escrita
+   * ler ou forjar trilha. O gatilho `app.auditar()` nunca teve `RETURNING`, e
+   * era por isso que ele funcionava.
+   *
+   * ⚠️ O QUE ESTA LINHA ENSINA VALE MAIS QUE O CONSERTO: a conferencia de
+   * catalogo do workflow olhou OITO partes — tabela, RLS forcada, as duas
+   * policies, a funcao, o dono dela, os dois REVOKE, o registro — e passou verde
+   * sobre uma funcao que nao conseguia escrever. As oito eram de ESTRUTURA.
+   * Estrutura certa nao prova escrita possivel, e a unica prova que vale e
+   * CHAMAR.
+   *
+   * E chamar de qualquer role serve: `SECURITY DEFINER` faz o corpo rodar como
+   * `auditor_financeiro` seja quem for que chame, entao o modo de falha aparece
+   * aqui igual ao de producao.
+   */
+  BEGIN
+    PERFORM set_config('app.tenant_id',  A::text, true);
+    PERFORM set_config('app.usuario_id', uA::text, true);
+    PERFORM set_config('app.tier',       '', true);
+
+    PERFORM app.registrar_ato_externo('ensaio_da_suite', 'nenhuma', 'pedido',
+                                      '{"por_que":"provar que a funcao ESCREVE"}'::jsonb);
+
+    SELECT count(*) INTO n FROM ato_externo_log
+     WHERE tenant_id = A AND ato = 'ensaio_da_suite' AND fase = 'pedido';
+    IF n = 1 THEN
+      RAISE NOTICE 'ok   G6   a trilha de ato externo ESCREVE — estrutura certa nao prova escrita possivel (42501 medido em producao com RETURNING)';
+    ELSE
+      RAISE WARNING 'FALHA G6 app.registrar_ato_externo nao gravou (linhas: %)', n; falhas := falhas + 1;
+    END IF;
+
+    -- E o tenant sai do CONTEXTO, nunca de parametro: fora dele, RECUSA.
+    BEGIN
+      PERFORM set_config('app.tenant_id', '', true);
+      PERFORM app.registrar_ato_externo('ensaio_sem_tenant', 'nenhuma', 'pedido', NULL);
+      RAISE WARNING 'FALHA G6b gravou ato externo SEM contexto de tenant'; falhas := falhas + 1;
+    EXCEPTION WHEN others THEN
+      RAISE NOTICE 'ok   G6b  fora de contexto de tenant ela RECUSA — gravar com tenant NULL esconderia o ato de quem tem direito de ve-lo';
+    END;
+    PERFORM set_config('app.tenant_id', A::text, true);
+  END;
+
   -- 19: cada SECURITY DEFINER e leitura sem policy. A lista e fechada de
   -- proposito: a garantia de leitura da R2 depende de nao existir um segundo
   -- caminho, e disciplina nao e invariante.

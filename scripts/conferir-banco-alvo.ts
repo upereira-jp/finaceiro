@@ -45,6 +45,7 @@ const MIGRATION_32 = '20260817120000_boleto_importado';
 const MIGRATION_35 = '20260827120000_cofre_e_identidade_do_cooperado';
 const MIGRATION_36 = '20260828230000_contrato_de_cobranca_e_opcional';
 const MIGRATION_37 = '20260909233000_ato_externo_log';
+const MIGRATION_38 = '20260910001500_ato_externo_sem_returning';
 
 class ConferenciaFalhou extends Error {}
 
@@ -54,6 +55,7 @@ const DIRETORIO: Record<string, string> = {
   'migration-35': MIGRATION_35,
   'migration-36': MIGRATION_36,
   'migration-37': MIGRATION_37,
+  'migration-38': MIGRATION_38,
 };
 
 /**
@@ -119,7 +121,7 @@ if (!url || !url.trim()) {
 }
 
 const modo = process.argv[2] ?? '';
-const MODOS = ['identidade', 'migration-32', 'migration-35', 'migration-36', 'migration-37'];
+const MODOS = ['identidade', 'migration-32', 'migration-35', 'migration-36', 'migration-37', 'migration-38'];
 if (!MODOS.includes(modo)) {
   console.error(`modo desconhecido: ${JSON.stringify(modo)}. Conheco: ${MODOS.join(', ')}.`);
   process.exit(1);
@@ -407,9 +409,58 @@ async function migration37(): Promise<void> {
             + 'e app.registrar_ato_externo SECURITY DEFINER de auditor_financeiro.');
 }
 
+/**
+ * A 38 — e ela CHAMA a funcao em vez de olhar o catalogo.
+ *
+ * ⚠️ O MOTIVO E O PROPRIO FRACASSO DA 37. Aquela conferencia olhou OITO partes
+ * de estrutura e passou verde sobre uma funcao que nao conseguia escrever:
+ * `INSERT ... RETURNING id` exige SELECT, e `auditor_financeiro` so tem INSERT.
+ * O erro (42501) so apareceu num ensaio contra producao, depois do run verde.
+ *
+ * **Estrutura certa nao prova escrita possivel.** Entao esta chama de verdade,
+ * dentro de uma transacao que da ROLLBACK - a conferencia nao pode deixar linha
+ * de ensaio numa trilha append-only que ninguem consegue apagar.
+ */
+async function migration38(): Promise<void> {
+  await migration37();
+
+  const { rows: [reg] } = await cliente.query<{ registro: string }>(`
+    SELECT count(*) AS registro FROM _prisma_migrations
+     WHERE migration_name = '${MIGRATION_38}'
+       AND finished_at IS NOT NULL AND rolled_back_at IS NULL`);
+  if (Number(reg!.registro) !== 1) {
+    throw new ConferenciaFalhou(`falta o registro de ${MIGRATION_38} em _prisma_migrations.`);
+  }
+
+  /* ROLLBACK NO FIM, E ELE E OBRIGATORIO: `ato_externo_log` e append-only por
+   * privilegio - nem a aplicacao nem ninguem apaga linha de la. Uma conferencia
+   * que gravasse deixaria lixo permanente na trilha a cada run do workflow. */
+  await cliente.query('BEGIN');
+  try {
+    await cliente.query(
+      `SELECT set_config('app.tenant_id', $1, true), set_config('app.usuario_id', $1, true)`,
+      ['00000000-0000-0000-0000-000000000000'],
+    );
+    const { rows: [w] } = await cliente.query<{ id: string }>(
+      `SELECT app.registrar_ato_externo('conferencia_do_workflow','nenhuma','pedido',
+              '{"por_que":"provar que a funcao escreve; esta transacao da ROLLBACK"}'::jsonb) AS id`);
+    if (!w?.id) throw new ConferenciaFalhou('a funcao nao devolveu id.');
+
+    const { rows: [l] } = await cliente.query<{ n: string }>(
+      'SELECT count(*) AS n FROM ato_externo_log WHERE id = $1', [w.id]);
+    if (Number(l!.n) !== 1) throw new ConferenciaFalhou('a funcao devolveu id e a linha nao esta la.');
+  } finally {
+    await cliente.query('ROLLBACK');
+  }
+
+  console.log('migration 38 OK — app.registrar_ato_externo ESCREVE de verdade '
+            + '(conferido chamando, e nao so pelo catalogo; a transacao deu ROLLBACK).');
+}
+
 try {
   await cliente.connect();
   if (modo === 'identidade') await identidade();
+  else if (modo === 'migration-38') await migration38();
   else if (modo === 'migration-37') await migration37();
   else if (modo === 'migration-36') await migration36();
   else if (modo === 'migration-35') await migration35();
