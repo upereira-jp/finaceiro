@@ -38,10 +38,26 @@ import {
 } from '../unidades-regras.ts';
 import { decimalTexto } from '../dinheiro.ts';
 import { FILTROS_DA_TELA, filtroDaConsulta } from '../destino-da-camada.ts';
+import { separarEndereco, completarVazios, faltamNaProposta } from '../endereco-da-conta.ts';
 
 export function TelaUnidades() {
   const ucs = useDados<UnidadeConsumidora[]>(() => api.get('/unidades-consumidoras?limite=500'));
   const usinas = useDados<Usina[]>(() => api.get('/usinas'));
+  /*
+   * O ENDERECO QUE VEIO NA CONTA DA DISTRIBUIDORA — 10/09/2026.
+   *
+   * O leitor de visao arranca `endereco` de toda conta lida e o sistema o
+   * guardava sem nunca mostrar. Aqui ele vira OFERTA para quem preenche o
+   * endereco do pagador, que e o mesmo trabalho feito duas vezes: o dado ja
+   * entrou no sistema pela leitura da conta.
+   *
+   * Lista curta (uma linha por unidade, a competencia mais recente), buscada uma
+   * vez com a tela — nao por linha aberta. Falha em silencio de proposito: se a
+   * leitura nao voltar, a oferta simplesmente nao aparece e o formulario de
+   * sempre continua ali. Nada nesta tela depende dela para funcionar.
+   */
+  const daConta = useDados<Array<{ numero_uc: string; endereco: string; competencia: string }>>(
+    () => api.get('/faturas/unificada/enderecos'));
   const acao = useAcao();
   const [edicao, setEdicao] = useState<Record<string, string>>({});
   const [rateio, setRateio] = useState<Record<string, string>>({});
@@ -354,6 +370,7 @@ export function TelaUnidades() {
                   com a linha seguinte da tabela. */}
               <td colSpan={8} style={{ background: 'var(--fundo-recuo)' }}>
                 <EnderecoDoPagador uc={u} ocupado={acao.ocupado}
+                                   daConta={daConta.dado?.find((c) => c.numero_uc === u.numero_uc)}
                                    aoGravar={(campos) => void salvarEndereco(u, campos)} />
                 {/* O VINCULO VEM DEPOIS DO ENDERECO, e a ordem e de frequencia:
                     endereco e trabalho de cadastro que quase toda linha precisa
@@ -407,9 +424,11 @@ export function TelaUnidades() {
  * o endereço inteiro, então apagar um campo aqui tem de apagar no banco. Mandar
  * só o que mudou faria "limpar o complemento" não ter efeito, em silêncio.
  */
-function EnderecoDoPagador({ uc, ocupado, aoGravar }: {
+function EnderecoDoPagador({ uc, ocupado, daConta, aoGravar }: {
   uc: UnidadeConsumidora;
   ocupado: boolean;
+  /** O endereço que veio na conta lida desta unidade, quando existe uma. */
+  daConta?: { endereco: string; competencia: string };
   aoGravar: (campos: Record<string, string>) => void;
 }) {
   const [logradouro, setLogradouro] = useState(uc.endereco_logradouro ?? '');
@@ -426,8 +445,59 @@ function EnderecoDoPagador({ uc, ocupado, aoGravar }: {
     endereco_municipio: municipio, endereco_uf: uf, endereco_cep: cep,
   });
 
+  /*
+   * A OFERTA, e ela só aparece onde faz diferença: com o endereço já completo,
+   * um botão que "preenche" seria um botão que não faz nada — e um botão que não
+   * faz nada ensina a pessoa a não clicar em botão.
+   */
+  const atual = {
+    endereco_logradouro: logradouro, endereco_numero: numero, endereco_complemento: complemento,
+    endereco_bairro: bairro, endereco_municipio: municipio, endereco_uf: uf, endereco_cep: cep,
+  };
+  const proposta = daConta ? separarEndereco(daConta.endereco) : null;
+  const faltamNela = proposta ? faltamNaProposta(proposta) : [];
+  const ofertar = !!proposta && !enderecoEmiteBoleto(atual);
+
+  const usarADaConta = () => {
+    const j = completarVazios(atual, proposta!);
+    setLogradouro(j.endereco_logradouro); setNumero(j.endereco_numero);
+    setComplemento(j.endereco_complemento); setBairro(j.endereco_bairro);
+    setMunicipio(j.endereco_municipio); setUf(j.endereco_uf); setCep(j.endereco_cep);
+  };
+
   return (
     <div style={{ padding: '12px 4px', display: 'grid', gap: 10 }}>
+      {ofertar && (
+        <div className="cartao" style={{ margin: 0 }}>
+          <strong>A conta da distribuidora trouxe este endereço</strong>
+          <p style={{ margin: '4px 0 0' }}>
+            «{daConta!.endereco}»{' '}
+            <span className="fraco" style={{ fontSize: 12 }}>
+              — da conta de {String(daConta!.competencia).slice(0, 7).split('-').reverse().join('/')}
+            </span>
+          </p>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: 10 }}>
+            <button onClick={usarADaConta} disabled={ocupado}>
+              <Icone nome="enviar" tamanho={15} /> Preencher com este endereço
+            </button>
+            <span className="fraco" style={{ fontSize: 12.5 }}>
+              {faltamNela.length === 0
+                ? 'Preenche os cinco campos que o boleto exige — confira antes de gravar.'
+                : `Preenche o que dá para reconhecer; ainda vai faltar ${faltamNela.join(', ')}.`}
+            </span>
+          </div>
+          {/* O QUE ESTE BOTÃO NÃO FAZ, dito onde ele está: ele preenche o
+              formulário e para. Nada é gravado sem alguém apertar «Gravar
+              endereço» — e nada que já esteja escrito é substituído, porque quem
+              abre esta linha costuma já ter começado a digitar. */}
+          <p className="fraco" style={{ fontSize: 12.5, margin: '8px 0 0' }}>
+            O endereço impresso na conta é o <strong>da instalação</strong>; o do boleto é o{' '}
+            <strong>de quem paga</strong>. Quase sempre são o mesmo — por isso o sistema oferece e
+            não preenche sozinho. Nada é gravado até você conferir e apertar «Gravar endereço», e o
+            que já estiver escrito aqui não é substituído.
+          </p>
+        </div>
+      )}
       <div className="campos">
         <Campo rotulo="Logradouro" porqueDe="endereco-unidade" valor={logradouro} ao={setLogradouro} dica="Rua, avenida, quadra" />
         <Campo rotulo="Número" porqueDe="endereco-unidade" valor={numero} ao={setNumero} dica="S/N quando não há" />

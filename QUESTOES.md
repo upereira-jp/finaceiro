@@ -1018,6 +1018,70 @@ teria nascido inútil, e ninguém saberia por quê.
 
 ---
 
+## 2.n Decisão técnica de 10/09/2026, fim da tarde — o endereço vinha na conta e ia para o lixo
+
+**Dono: o implementador** (§2.b).
+
+### O que motivou, e foi uma pergunta do dono
+
+Perguntado se *"o segundo entrave pode ser resolvido pelo primeiro"* — ou seja,
+se ler as 29 contas resolveria os 10 endereços que faltam. Medido no mesmo
+minuto, e a resposta é **sim pela metade**:
+
+| | |
+|---|---|
+| A conta da Equatorial traz o endereço | ✅ |
+| O leitor de visão **já o arranca** | ✅ `endereco` é campo **obrigatório** do `SCHEMA_DA_FATURA` |
+| É gravado na conta lida | ✅ coluna `endereco` em `registro_de_fatura_unificada` |
+| **Alguém na interface lê essa coluna?** | ❌ **ninguém** — só a segunda via de UMA conta específica |
+| As 10 unidades sem endereço estão | **completamente vazias** — não parciais: nada |
+
+Ou seja: **a resposta chegava junto da conta lida, ia para uma coluna que ninguém
+abria, e alguém digitaria setenta campos à mão.** É a mesma família do achado da
+§2.m — dado gravado com cuidado e nunca lido.
+
+### As decisões
+
+| # | Decisão | Por quê |
+|:--:|---|---|
+| 1 | **A leitura PROPÕE, e nunca grava** | O endereço impresso na conta é o da **instalação**; o do boleto é o do **pagador**. Nesta carteira normalmente coincidem, e "normalmente" não é critério para escrever sozinho no que vai impresso numa cobrança |
+| 2 | **Na dúvida, campo VAZIO** | Um bairro errado num boleto é pior que um bairro em branco: o branco alguém vê e preenche; o errado vai impresso e ninguém confere um campo que parece pronto |
+| 3 | **Com dois pedaços depois do logradouro, só o bairro é preenchido** | Nada na linha diz se o segundo é bairro ou município, e trocá-los manda o boleto para a cidade errada |
+| 4 | **A proposta COMPLETA, não substitui** | Quem abre a linha para preencher endereço costuma já ter começado a digitar. Ver o próprio trabalho sumir num clique é o pior desfecho possível para um botão de ajuda |
+| 5 | **A oferta só aparece onde falta endereço** | Um botão que "preenche" o que já está completo é um botão que não faz nada — e um botão que não faz nada ensina a pessoa a não clicar em botão |
+| 6 | **A tela DIZ o que a proposta não conseguiu** | *"ainda vai faltar CEP"* em vez de prometer que resolve tudo. É o que faz a pessoa conferir em vez de confiar |
+
+### ⚠️ O limite, e ele está escrito no próprio arquivo
+
+**Esta regra nunca foi exercida contra uma conta de verdade.** Em 10/09/2026 a
+produção tinha **0 contas lidas gravadas**, então a coluna está vazia em todas as
+linhas e ninguém sabe qual string o leitor produz numa fatura real da Equatorial.
+O único endereço de exemplo do repositório é de um teste, e **não tem CEP** — que
+é um dos cinco que a Sicoob exige.
+
+Por isso as decisões 1 e 2 não são cautela decorativa: elas são o que faz o custo
+de um formato inesperado ser **um botão que não ajudou**, em vez de dez endereços
+errados dentro de boletos. Quando a primeira conta real for lida, o jeito de
+fechar é o de sempre — pegar a string que veio e acrescentar um caso à suíte.
+
+### O que ficou provado
+
+`web/tests/endereco-da-conta.ts`, **25 verificações** — e metade delas afirma um
+**vazio**, que é o que importa aqui. Dois defeitos reais caíram na primeira
+execução, os dois invisíveis por leitura:
+
+1. **`GO` dentro de `GOIANIA`** viraria UF por acidente em quase toda linha de
+   Goiás, e iria impressa no boleto. A UF só é aceita isolada;
+2. **`S/N` era partido ao meio** (a barra estava na lista de separadores) e
+   depois o `N` era comido pela regra que tira o `nº` — o resultado era
+   logradouro *"RUA DAS FLORES, S/"* com número vazio. Duas coisas erradas de uma
+   vez, num campo que vai impresso.
+
+E contra a **produção**: a consulta roda e devolve **vazio**, que é a resposta
+certa com 0 contas lidas.
+
+---
+
 ## 3. F0 — o que falta para fechar
 
 Entregas da F0 conforme `PRD-v2.2` §10:

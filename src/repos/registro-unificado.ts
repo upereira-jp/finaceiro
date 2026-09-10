@@ -273,6 +273,49 @@ export async function recentes(limite = 50) {
   });
 }
 
+/**
+ * O ENDERECO QUE VEIO NA CONTA, por unidade — e ele estava sendo jogado fora.
+ *
+ * ============================================================================
+ * POR QUE ESTA LEITURA NASCEU EM 10/09/2026
+ *
+ * A conta da distribuidora IMPRIME o endereco, e o leitor de visao ja o arranca:
+ * `endereco` e campo OBRIGATORIO do `SCHEMA_DA_FATURA`, e `registrar()` o grava
+ * na coluna de mesmo nome. Medido no mesmo dia: **nada na interface le essa
+ * coluna** — o unico caminho era a segunda via de UMA conta especifica.
+ *
+ * Ao lado disso, 10 das 28 unidades faturaveis estao com o endereco do pagador
+ * **completamente vazio** (nao parcial: nada), e sem os cinco campos que a
+ * Sicoob exige o boleto e RECUSADO com 422. Ou seja: a resposta chegava junto da
+ * conta lida e ia para uma coluna que ninguem abria, enquanto alguem digitaria
+ * setenta campos a mao.
+ *
+ * ⚠️ O QUE ELA NAO FAZ, e a fronteira e deliberada: **nao escreve na unidade.**
+ * O endereco impresso na conta e o da INSTALACAO, e o do boleto e o do PAGADOR —
+ * nos clientes desta carteira normalmente coincidem, mas "normalmente" nao e
+ * criterio para escrever sozinho no que vai impresso numa cobranca. Esta leitura
+ * PROPOE; quem grava e a pessoa, na aba Unidades consumidoras.
+ *
+ * UMA POR UNIDADE, A MAIS RECENTE: contas de meses diferentes trazem o mesmo
+ * endereco quase sempre, e oferecer tres iguais seria escolha sem diferenca. A
+ * competencia vai junto para quem quiser saber de quando e o dado.
+ */
+export async function enderecosLidos(): Promise<Array<{
+  numero_uc: string; endereco: string; competencia: string;
+}>> {
+  await exigir('ler');
+  return db().$queryRaw`
+    SELECT DISTINCT ON (numero_uc)
+           numero_uc, endereco, competencia::text AS competencia
+      FROM registro_de_fatura_unificada
+     -- SEM predicado de tenant, como a segundaVia logo abaixo: a RLS desta tabela
+     -- e FORCE, entao a consulta so enxerga este tenant. Repetir o filtro aqui
+     -- exigiria EXECUTE em app.current_tenant_id() para a role da aplicacao, uma
+     -- dependencia nova para reafirmar o que o banco ja impoe.
+     WHERE endereco IS NOT NULL AND btrim(endereco) <> ''
+     ORDER BY numero_uc, competencia DESC`;
+}
+
 export async function apagar(id: string) {
   await exigir('escrever_carteira');
   const tenant_id = tenantCorrente();

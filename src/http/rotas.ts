@@ -1877,6 +1877,26 @@ export const ROTAS: Rota[] = [
     }),
   },
   {
+    /*
+     * O ENDERECO QUE VEIO NA CONTA — 10/09/2026, e ele estava sendo jogado fora.
+     *
+     * O leitor de visao arranca `endereco` de toda conta lida (campo OBRIGATORIO
+     * do schema de extracao) e `registrar()` o grava. Medido no mesmo dia: NADA
+     * na interface lia essa coluna. Ao lado, 10 das 28 unidades faturaveis estao
+     * com o endereco do pagador VAZIO, e sem os cinco campos que a Sicoob exige
+     * o boleto e recusado com 422.
+     *
+     * A aba Unidades consumidoras usa isto para OFERECER o endereco a quem
+     * preenche - nunca para gravar sozinha. O porque da fronteira esta no
+     * repositorio: o endereco da conta e o da INSTALACAO, e o do boleto e o do
+     * PAGADOR.
+     *
+     * Caminho de RELATORIO: leitura pura sobre a tabela das contas lidas.
+     */
+    metodo: 'GET', padrao: '/faturas/unificada/enderecos',
+    handler: (req, app) => emRelatorio(app, req, async () => ok(await registro.enderecosLidos())),
+  },
+  {
     metodo: 'DELETE', padrao: '/faturas/unificada/registros/:id',
     handler: (req, app) => emTenant(app, req, async () => {
       await registro.apagar(req.params.id!);
