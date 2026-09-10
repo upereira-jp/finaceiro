@@ -6,10 +6,33 @@
 | **O que é** | O **índice único** das pendências. Consolida e substitui os dois trackers datados que existiam soltos |
 | **Substitui e apaga** | `PENDENCIAS-2026-08-05.md` e `PROXIMOS-PASSOS-2026-08-09.md` — vencidos, e agora removidos do repo |
 | **NÃO substitui** | `QUESTOES.md` (registro datado, dono por entrada — regra 10) · `RETOMADA-2026-08-30.md` (onde tudo parou — a mais nova) · os `RESUMO-SESSAO-*` (memória datada). Estes continuam sendo a fonte; aqui é o **apontador** |
-| **Data** | 14/08/2026 · rev. 17/08 · rev. 19/08 · rev. 21/08 · rev. 27/08 · rev. 28/08 · rev. 08/09 · rev. **09/09/2026** · rev. **09/09/2026, noite** · rev. **09/09/2026, madrugada** · rev. **10/09/2026** |
+| **Data** | 14/08/2026 · rev. **10/09/2026 (varredura completa)** · rev. 17/08 · rev. 19/08 · rev. 21/08 · rev. 27/08 · rev. 28/08 · rev. 08/09 · rev. **09/09/2026** · rev. **09/09/2026, noite** · rev. **09/09/2026, madrugada** · rev. **10/09/2026** |
 | ⚠️ **Leia primeiro** | Este arquivo ficou **congelado entre 28/08 e 08/09** enquanto a operação andava, e a `RETOMADA-2026-09-08` continuou mandando o leitor para cá como *"o índice único"*. O bloco **«O que mudou desde 28/08»**, logo abaixo do cabeçalho, é a correção — o corpo antigo fica intacto porque é registro datado, e reescrevê-lo falsificaria a história (mesma decisão do `PATCH-citacoes-2026-07-24`) |
 | **Estado da suíte** | Sem banco: `typecheck` + `documento` + `brcode` + `dominio` + `web` → **`EXIT=0`, 2.420 linhas `ok`** (28/08, madrugada), e desde 27/08 com as verificações de `tests/sicoob-http.ts` — hoje **63** — dentro do `test:dominio`. Fora da suíte, contra a Sicoob de verdade: `npm run ensaio-sicoob` → **6 de 6**. `test:repos` e `test:isolamento` **não rodam nesta VPS** (exigem PostgreSQL local) |
 | **Produção** | `financeiro.blackhaus.io` · **35 migrations no ar** (a 34 em 21/08, a **35 em 28/08**) · a **36 escrita e NÃO aplicada** · Pix estático e boleto importado no ar · central de ajuda em toda tela · **a conta unificada lida já vira cobrança** (migration 34) · o conector roda sozinho a cada 15 min pelo `financeiro-ciclo.timer`, e desde **28/08** a agenda de cobrança roda sozinha em três timers (`fila` 5 min · `consulta` e `certificado` diárias) |
+
+> ## 📄 10/09/2026 — A VARREDURA COMPLETA, e ela é o documento mais novo
+>
+> O dono pediu uma varredura *"em busca de possíveis erros ou furos para que possa
+> lançar para o operacional"*. Ela está inteira em **`VARREDURA-2026-09-10.md`**,
+> e o que ela achou muda esta lista em três pontos:
+>
+> | O que a varredura achou | Situação |
+> |---|---|
+> | **Cancelar a fatura deixava o boleto VIVO no banco** — a rota que cancela o título no Sicoob existia e nenhuma tela a chamava. O cliente ficava com linha digitável válida; pago depois, o dinheiro entrava e a baixa era recusada | ✅ **fechado em 10/09** |
+> | **A fila retentava para sempre, em silêncio**, o boleto de fatura vencida — sem gravar erro, contagem nem recuo | ✅ **fechado em 10/09** |
+> | **Uma unidade estava travada desde 04/09** — 519 recusas — e a saída só existia no terminal. Pior: a tela mandava corrigir "no outro sistema", e lá já estava certo | ✅ **tela feita**; a decisão sobre a unidade é do dono (varredura §4.1) |
+> | **Não havia lista de quem ficou sem boleto**, e a fatura em que ninguém pediu o boleto não está em fila nenhuma | ✅ **fechado em 10/09** |
+> | **Cadastrar usina, encerrar contrato e lançar a tarifa da distribuidora** não tinham tela | ✅ **fechados em 10/09** |
+> | **Não há backup declarado do banco** | 🔴 **do dono** — `Q-BACKUP-01` |
+> | **27 dos 29 apontamentos por rodada são a mesma pessoa** com nome curto no CRM | 🟡 **do dono** — `Q-NOMEDOVENDEDOR-01` |
+> | **O site não manda cabeçalho de segurança nenhum** (medido por `curl`) | 🟠 **do dono**, e o comando está pronto na varredura §8 |
+>
+> **E o retrato de produção, medido no dia:** 101 clientes, 51 unidades, 28
+> contratos ativos, 4 usinas, **0 donos de usina**, e **0 faturas emitidas desde
+> sempre**. O que trava a primeira continua sendo a **conta da distribuidora
+> lida** — e **julho/2026 é a competência mais perto de fechar**, porque a
+> geração dela já está lançada.
 
 > ## ⚠️ O QUE MUDOU DESDE 28/08 — leia isto antes do corpo do arquivo
 >

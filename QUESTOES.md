@@ -851,6 +851,103 @@ arquivo — mudar o timer sem mudar o alarme deixa a suíte vermelha.
 
 ---
 
+## 2.l Decisões técnicas de 10/09/2026, madrugada — a varredura completa antes de lançar
+
+**Dono destas decisões: o implementador** (§2.b), exceto as três marcadas 🟡, que
+voltam ao dono e estão nomeadas no fim.
+
+### O que motivou
+
+O dono pediu *"varredura completa no sistema em busca de possíveis erros ou furos
+para que possa lançar para o operacional"*. O método foi medição e não leitura de
+anotação: as **124 rotas** cruzadas contra o que a interface chama, as **39
+tabelas** cruzadas contra quem as lê, o **journal dos quatro serviços** dos
+últimos seis dias, o log do nginx, e o banco de produção lido pelo próprio
+código, sem escrever.
+
+O relatório inteiro, para o dono, está em **`VARREDURA-2026-09-10.md`**.
+
+### As decisões
+
+| # | Decisão | Por quê |
+|:--:|---|---|
+| 1 | **`cancelar()` RECUSA enquanto o boleto estiver registrado no banco** | Era o pior achado do dia. A rota que cancela o título no Sicoob existia e **nenhuma tela a chamava**; `cancelar()` nunca olhou para o boleto. A fatura virava `cancelada` aqui e o cliente ficava com linha digitável válida na mão — pago depois, o dinheiro entrava e a baixa era recusada, porque fatura cancelada não aceita liquidação. Dinheiro no extrato e nada aqui |
+| 2 | **A recusa é só para `registrado` de origem `api_sicoob`** | `pendente`/`erro` nunca chegaram ao banco (ou ninguém sabe) e não há o que baixar por API; o **importado** a própria `baixarNoBanco` recusa por escrito — o "nosso número" dele veio de um PDF —, então recusar também aqui deixaria a fatura sem saída nenhuma. Recusa sem saída é beco |
+| 3 | **A fila de emissão passou a aceitar só fatura `emitida`** | Ela aceitava `vencida` e `registrar()` recusa tudo que não seja `emitida`, **antes de tocar qualquer coluna**. A rodada pegava a linha a cada 5 minutos, colhia a recusa, contava um falho e **não escrevia nada** — sem escrita não há recuo, e a mesma linha voltava para sempre |
+| 4 | **O caso não some por sair da fila: vira linha com nível `parado`** | Trocar um laço invisível por uma ausência invisível teria sido o mesmo defeito com outra roupa |
+| 5 | **A lista «o que não chegou ao banco» junta duas ausências diferentes** | A fatura que a fila retenta E a fatura em que **ninguém pediu o boleto** — que não está em erro, não está atrasada e **não está em fila nenhuma**, porque `emitir()` não cria linha de boleto e a fila só enxerga linha que existe. Para quem espera o dinheiro as duas são a mesma coisa: o cliente não recebeu nada |
+| 6 | **A lista AFIRMA quando está vazia** | Mesma inversão da §2.k: o que se quer perceber é uma ausência, e uma lista vazia tem a cara da resposta boa. Ela diz *"todas as faturas emitidas já têm boleto registrado no banco"* com todas as letras |
+| 7 | **A faixa de Pendências CONTA, e não lista** | «4 faturas sem boleto, a mais antiga há 9 dias». Listar as quatro viraria a segunda tela de emissão no alto da primeira tela da barra; e a idade da mais antiga é o que faz alguém abrir a tela hoje em vez de amanhã |
+| 8 | **O destrave da unidade ganhou tela, e o processo web passou a ler o CRM** | Medido no journal: a mesma recusa a cada 15 minutos **desde 04/09 às 18h — 519 vezes**. Enquanto a saída morar em comando de terminal, "o sistema roda sozinho" é falso por aquela unidade, e ninguém sabe por quanto tempo |
+| 9 | **O pool do CRM no processo web é PREGUIÇOSO** | O servidor não pode passar a depender do outro banco para subir: hoje ele arranca e opera com o CRM fora do ar. Abre na primeira pergunta, com a guarda da regra 4 rodando uma vez, e fecha no encerramento ordenado |
+| 10 | **A leitura do CRM acontece FORA de qualquer transação nossa** | É a lição de 14/08 escrita em `rotas.ts`: `emTenant` abre transação com timeout de 15 s, e esperar um terceiro dentro dela é transação longa — com oito slots, oito esperas param o faturamento. Por isso `lerEspelho`, `lerNoCrm` e `apagarPonteiro` são três peças, costuradas pela rota |
+| 11 | **A frase de Pendências separa recusa de divergência** | Ela dizia que TODO apontamento se corrige *"no outro, que é o dono do dado"* — verdade para divergência e **falso para esta recusa**: lá o CRM já está certo, e o que está velho é o vínculo daqui. Foram seis dias sob um texto que mandava olhar para o lugar errado |
+| 12 | **Cadastrar usina, encerrar/suspender contrato e lançar a tarifa da distribuidora viraram tela** | Os três são atos de rotina que só existiam por fora do sistema. O da usina bloqueia **todas** as unidades dela; o do contrato é o que para de faturar quem saiu, e a própria tela mandava fazê-lo sem oferecer o caminho; o da tarifa tem o pior modo de falha dos três — coluna gerada, parcela ausente vale zero, e **a fatura sai menor sem erro, sem log e sem recusa** |
+| 13 | **A varredura virou suíte** | `web/tests/rotas-com-tela.ts`: toda rota de escrita tem caminho de tela ou uma **exceção com motivo escrito**. As 15 de hoje estão nomeadas uma a uma, e `RT-3` recusa motivo curto demais — pegou quatro "mesmo motivo do de cima" meus na primeira execução. Varredura manual acontece uma vez; a suíte acontece a cada push |
+
+### 🟡 `Q-EMISSAOTRAVADA-01` — a folga de 24 h, e ela é escolha minha
+
+`FOLGA_DA_EMISSAO_SEGUNDOS` = **24 h**, e vale para os dois lados da lista: a
+fatura sem boleto pedido e a que está retentando.
+
+O raciocínio, escrito para poder ser contestado: o mês inteiro é emitido de uma
+vez e os boletos são pedidos na sequência, então qualquer folga curta acusaria a
+operação normal de esquecimento no meio do próprio trabalho. Um dia inteiro sem a
+cobrança sair, por outro lado, já é um dia de atraso no dinheiro — e ninguém
+escolheu esse atraso.
+
+**Volta para o dono só se ele quiser a folga menor.** O preço de apertar é a
+faixa vermelha aparecer no meio do dia de emissão.
+
+### 🟡 `Q-NOMEDOVENDEDOR-01` — 27 alarmes falsos por rodada, e a saída é do dono
+
+Medido no journal: a cada 15 minutos, **27 das 29 divergências** são a mesma
+frase — *o contrato está com o originador "Renata Ferreira Estevam" e o crédito
+do CRM nomeia vendedor "Renata"*. O mesmo nome, escrito curto de um lado e
+completo do outro.
+
+A comparação é por nome porque **não existe chave forte para o vendedor**: o
+`originador` não guarda `crm_user_id`, e `credito-originador.ts` já dizia isso por
+escrito. Afrouxar a comparação (prefixo, primeiro nome) seria palpite, e o palpite
+aqui paga comissão para a pessoa errada — a R8 proíbe exatamente isso.
+
+Não impede nada. **O custo é de atenção:** as duas divergências que restam estão
+enterradas no meio de 27 falsas, e um painel que aponta 29 coisas todo dia é um
+painel que se aprende a não abrir.
+
+**Três saídas, e a escolha é do dono:** (a) escrever o nome completo no CRM;
+(b) usar aqui o mesmo nome curto; (c) um campo de "também chamado de" no cadastro
+do originador — isso é código, e é pequeno.
+
+### 🟡 `Q-BACKUP-01` — não há backup declarado, e essa é a única sem conserto depois
+
+A varredura não achou `pg_dump`, rotina, nem menção a backup em lugar nenhum do
+repositório. O banco é gerenciado (Supabase) e **provavelmente** tem cópia
+automática — e "provavelmente" não é uma frase aceitável para o caixa de uma
+empresa.
+
+**Do dono:** confirmar no painel qual é a política, de quanto em quanto tempo, com
+quanto tempo de retenção, e **em que prazo se restaura**. Se a resposta for
+insuficiente, aí sim vira trabalho de implementador.
+
+### Medido, e o que NÃO foi
+
+| Afirmação | Como se sabe |
+|---|---|
+| Os cinco níveis da emissão | `AG12a..AG12h` — propriedades: precedência de `parado`, monotonia no tempo, simetria da folga medida pela fronteira (não pelo número), e o lado seguro do dado ausente |
+| As frases da lista | `EM-1..EM-13`, incluindo a ligação com as duas telas |
+| A lista MOSTRA | `R14a..R14l`, montando os componentes |
+| As quatro guardas do vínculo | `V-1..V-7b` nas frases e `R15a..R15g` no painel |
+| Toda rota de escrita tem tela | `RT-0..RT-4` |
+| A ordem cancelar↔baixar, contra banco de verdade | `N4d`, `N4e`, `N4f` em `tests/repos-agenda.ts` — **só rodam no Actions**, e rodaram: run `34435585020` |
+| A fila não pega mais `vencida` | `N4b`, `N4c` — idem |
+| As verificações **falham quando devem** | Mutação: `nivelDaEmissao` que nunca acusa derruba `AG12c`/`AG12d`; apagar o painel de `faturas.tsx` derruba `EM-12` |
+| O caminho novo do vínculo, **contra a produção** | Exercitado sem escrever nada: leu o espelho, leu o CRM pela role sem `BYPASSRLS` e devolveu **guarda 3** para o caso real. Foi essa medição que mudou o texto da tela |
+| ⚠️ **NÃO medido: a lista com dados de verdade** | Produção tem **0 faturas** — a leitura roda e devolve vazio, que é a resposta certa e não exercita nenhum dos cinco níveis contra dado real |
+| ⚠️ **NÃO medido: o destrave escrevendo** | Exigiria destravar a unidade de produção, e a decisão sobre ela é do dono (§4.1 da varredura) |
+
+---
+
 ## 3. F0 — o que falta para fechar
 
 Entregas da F0 conforme `PRD-v2.2` §10:
