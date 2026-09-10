@@ -24,6 +24,14 @@ export function TelaUsinas() {
   const acao = useAcao();
   const [sel, setSel] = useState('');
   const [pct, setPct] = useState('70,00');
+  /* O CADASTRO DA USINA, que ate 10/09/2026 nao tinha tela nenhuma. A rota
+   * `POST /usinas` existe desde 27/07 e so era alcancavel por `npm run usinas`
+   * ou por fora do sistema — e a leitura do outro sistema **nao cria usina**,
+   * ela so mantem fresca a que ja existe aqui (esta escrito em
+   * `src/crm/sincronizacao.ts`). Consequencia medida na varredura: uma usina
+   * nova bloqueia TODAS as unidades dela, com a recusa «cadastre a usina e o
+   * proximo ciclo espelha o resto», e o unico caminho era o terminal. */
+  const [nova, setNova] = useState({ codigo_geradora: '', distribuidora: '', apelido: '', potencia_kwp: '' });
   const [inicio, setInicio] = useState('2026-01-01');
 
   const [busca, setBusca] = useState('');
@@ -70,12 +78,61 @@ export function TelaUsinas() {
     if (ok) { acao.anunciar('Vigência aberta — a anterior foi fechada na mesma transação.'); repasses.recarregar(); }
   }
 
+  const cadastrar = async () => {
+    const ok = await acao.executar(() => api.post('/usinas', {
+      codigo_geradora: nova.codigo_geradora.trim(),
+      distribuidora: nova.distribuidora.trim(),
+      apelido: nova.apelido.trim() || null,
+      /* Vazio vira ausente e NAO zero: potencia zero e uma afirmacao sobre a
+         usina, e "nao sei ainda" e outra coisa. O servidor aceita nulo. */
+      potencia_kwp: nova.potencia_kwp.trim() ? decimalTexto(nova.potencia_kwp, 2) : null,
+    }));
+    if (ok) {
+      acao.anunciar('Usina cadastrada. A leitura do outro sistema passa a espelhar os dados dela.');
+      setNova({ codigo_geradora: '', distribuidora: '', apelido: '', potencia_kwp: '' });
+      usinas.recarregar();
+    }
+  };
+
   return (
     <Pagina titulo="Usinas"
             sub="Espelhadas do CRM. O dono e o percentual de repasse são preenchidos aqui — e sem eles dá para cobrar o cliente, mas não dá para repartir o dinheiro que entrar.">
       {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
       {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
       {usinas.erro && <Aviso tipo="erro">{usinas.erro}</Aviso>}
+
+      {/*
+        CADASTRAR A USINA — a tela que faltava, e a falta travava a entrada de
+        cliente novo. A leitura do outro sistema espelha o que ja existe aqui e
+        NAO cria usina: enquanto a usina nova nao estiver cadastrada, todas as
+        unidades dela sao recusadas, uma a uma, a cada quinze minutos.
+      */}
+      <div className="cartao secao">
+        <div className="campos">
+          <Campo rotulo="Código da geradora" porqueDe="cadastrar-usina"
+                 valor={nova.codigo_geradora} ao={(v) => setNova({ ...nova, codigo_geradora: v })}
+                 dica="O mesmo código que o outro sistema usa" />
+          <Campo rotulo="Distribuidora" porqueDe="cadastrar-usina"
+                 valor={nova.distribuidora} ao={(v) => setNova({ ...nova, distribuidora: v })}
+                 dica="Ex. Equatorial" />
+          <Campo rotulo="Apelido" porqueDe="cadastrar-usina"
+                 valor={nova.apelido} ao={(v) => setNova({ ...nova, apelido: v })}
+                 dica="Opcional — como vocês a chamam" />
+          <Campo rotulo="Potência kWp" porqueDe="cadastrar-usina"
+                 valor={nova.potencia_kwp} ao={(v) => setNova({ ...nova, potencia_kwp: v })}
+                 dica="Opcional" />
+          <div style={{ alignSelf: 'end' }}>
+            <button className="primario" onClick={() => void cadastrar()}
+                    disabled={acao.ocupado || !nova.codigo_geradora.trim() || !nova.distribuidora.trim()}>
+              <Icone nome="acrescentar" tamanho={15} peso="bold" /> Cadastrar usina
+            </button>
+          </div>
+        </div>
+        <p className="sub" style={{ margin: 0 }}>
+          O dono e o percentual de repasse são preenchidos depois, na linha da usina — e é o
+          código da geradora que casa esta usina com o que vem do outro sistema.
+        </p>
+      </div>
 
       <Ferramentas contagem={todas.length ? `${visiveis.length} de ${todas.length}` : undefined}>
         <Busca valor={busca} ao={setBusca} dica="Buscar por código, apelido ou distribuidora…" />

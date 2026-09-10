@@ -101,6 +101,12 @@ export const PORQUE: Record<string, string> = {
     + 'a cobrança por Pix saem sem ele — quem depende é só o boleto, e ele recusa endereço pela '
     + 'metade em vez de emitir um documento que o banco devolve depois.',
 
+  'cadastrar-usina':
+    'Porque a usina é a origem do crédito: é dela que sai a energia que abastece as unidades e é '
+    + 'sobre ela que se calcula o repasse ao dono. A leitura do outro sistema NÃO cria usina — ela '
+    + 'mantém fresca a que já existe aqui —, então uma usina nova precisa ser cadastrada nesta tela '
+    + 'antes que as unidades dela consigam entrar. O código da geradora é o que casa as duas pontas.',
+
   'cadastrar-cliente':
     'Porque é o nome que sai impresso na folha que o cliente recebe e no campo do pagador da '
     + 'cobrança. Ele vem do outro sistema quando o cliente é espelhado de lá; digitado aqui, vale '

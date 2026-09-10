@@ -41,6 +41,7 @@ import { baixarCsv } from '../baixar.ts';
 import { lerBase64, mimeDo, reenviavel, naMensagem } from '../arquivo.ts';
 import {
   podeEmitirFatura, podeGerarBoleto, podeBaixarManual, podeImportarBoleto, podeBaixarNoBanco,
+  podeLancarTarifaDaDistribuidora,
   motivoDaTravaDaImportacao, podeImportarAgora, DIGITOS_DA_LINHA,
   totalEsperadoDaBaixa, tomDoStatusDaFatura, conferirTarifas,
   type MotivoDeTravaDaImportacao,
@@ -356,6 +357,12 @@ function PainelDaFatura({ f, recarregar }: { f: Fatura; recarregar: () => void }
   const [juros, setJuros] = useState('0');
   const [multa, setMulta] = useState('0');
   const [observacao, setObservacao] = useState('');
+  /* A TARIFA DA DISTRIBUIDORA, digitada — o campo que nao existia. Nasce com o
+     que a fatura ja tem: zero e um valor legitimo («este mes nao levou tarifa»),
+     e um campo vazio faria «gravar» sem digitar nada apagar a parcela sem
+     dizer. */
+  const [tarifaConc, setTarifaConc] = useState(
+    () => (f.valor_tarifas_concessionaria_centavos / 100).toFixed(2).replace('.', ','));
 
   // Centavos, inteiros. `paraCentavos` converte por TEXTO (regra 1) e levanta
   // `ValorInvalido` no que nao for valor - entao o total so e calculado quando os
@@ -364,6 +371,15 @@ function PainelDaFatura({ f, recarregar }: { f: Fatura; recarregar: () => void }
   try { jurosCent = juros.trim() ? paraCentavos(juros) : 0; } catch (e: any) { valorInvalido = e.message; }
   try { multaCent = multa.trim() ? paraCentavos(multa) : 0; } catch (e: any) { valorInvalido = e.message; }
   const totalEsperado = totalEsperadoDaBaixa(f, jurosCent, multaCent);
+
+  const lancarTarifa = async () => {
+    let centavos: number;
+    try { centavos = paraCentavos(tarifaConc); }
+    catch (e: any) { acao.anunciar(`Valor inválido: ${e.message}`); return; }
+    const ok = await acao.executar(() =>
+      api.put(`/faturas/${f.id}/tarifas-concessionaria`, { valor_centavos: centavos }));
+    if (ok) { acao.anunciar('Tarifa da distribuidora lançada.'); recarregar(); }
+  };
 
   const gerarBoleto = async () => {
     const ok = await acao.executar(() => api.post(`/faturas/${f.id}/boleto`));
@@ -441,6 +457,29 @@ function PainelDaFatura({ f, recarregar }: { f: Fatura; recarregar: () => void }
 
   return (
     <div style={{ padding: '12px 4px', display: 'grid', gap: 16 }}>
+      {/* ------------------------------------------ tarifa da distribuidora */}
+      {podeLancarTarifaDaDistribuidora(f.status) && (
+        <div>
+          <h3><Icone nome="carteira" tamanho={16} /> Tarifa da distribuidora</h3>
+          <p className="sub" style={{ marginTop: 0 }}>
+            É a parte da conta da distribuidora que entra nesta cobrança. Quando a conta é lida
+            na aba Fatura unificada, ela vem de lá e não precisa ser digitada. Só entra em
+            rascunho: depois de emitida, o valor já foi para o documento e para o boleto.
+          </p>
+          <div style={{ ...linha, gap: 8 }}>
+            <input value={tarifaConc} onChange={(e) => setTarifaConc(e.target.value)}
+                   aria-label="Tarifa da distribuidora em reais"
+                   placeholder="0,00" style={{ width: 120, textAlign: 'right' }} />
+            <button onClick={() => void lancarTarifa()} disabled={acao.ocupado}>
+              <Icone nome="confirmar" tamanho={15} /> Lançar
+            </button>
+            <span className="fraco">
+              Total da fatura hoje: <strong>{emReais(f.valor_total_centavos)}</strong>
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* ------------------------------------------------------------- boleto */}
       <div>
         <h3><Icone nome="boleto" tamanho={16} /> Boleto</h3>

@@ -39,7 +39,7 @@ import { useState } from 'react';
 import { api, type Contrato, type UnidadeConsumidora, type Originador, type Cliente } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
-  Pagina, Aviso, Tabela, Campo, ThOrd, Marca, Icone, useOrdenacao, ordenar, rotulo, Escolha,
+  Pagina, Aviso, Tabela, Campo, ThOrd, Marca, Icone, useOrdenacao, ordenar, rotulo, Escolha, linha,
 } from '../ui.tsx';
 import { Ligacao } from '../rota.tsx';
 import { paraCentavos, emReais } from '../dinheiro.ts';
@@ -206,6 +206,7 @@ export function TelaContratos() {
                 <ThOrd chave="fechamento" ordem={ordem} ao={alternar}>Fechamento</ThOrd>
                 <ThOrd chave="situacao" ordem={ordem} ao={alternar}>Situação</ThOrd>
                 <ThOrd chave="cheias" ordem={ordem} ao={alternar} num>Cheias pagas</ThOrd>
+                <th>Ações</th>
               </>}
               vazio={
                 // Os tres estados sao DIFERENTES e a frase tem que distingui-los.
@@ -216,15 +217,89 @@ export function TelaContratos() {
                 : 'Nenhum contrato — e é isso que impede a primeira fatura.'
               }>
         {linhas.map(({ ucid, k }) => (
-          <tr key={ucid}>
-            <td><strong>{numeroUc(ucid)}</strong></td>
-            <td className="fraco">{k.data_fechamento?.slice(0, 10)}</td>
-            <td><Marca tom={k.status === 'ativo' ? 'ok' : 'pendente'}>{rotulo(k.status)}</Marca></td>
-            <td className="num">{k.faturas_cheias_pagas}</td>
-          </tr>
+          <LinhaDoContrato key={ucid} k={k} uc={numeroUc(ucid)} aoMudar={() => vigentes.recarregar()} />
         ))}
       </Tabela>
     </Pagina>
+  );
+}
+
+/* ===================================================== suspender e encerrar
+ *
+ * OS DOIS ATOS QUE NAO TINHAM TELA. `POST /contratos/:id/suspender` e
+ * `/encerrar` existem desde 27/07/2026, e a varredura de 10/09 mediu: nenhuma
+ * tela os chamava. A propria tela de Contratos mandava usa-los por escrito —
+ * *"trocar depois exige encerrar e refazer o contrato"* — sem oferecer o
+ * caminho.
+ *
+ * O QUE ISSO CUSTAVA NA OPERACAO: cliente que sai, contrato assinado errado e
+ * troca do tipo de quem trouxe o cliente sao acontecimentos de rotina, e os tres
+ * exigem encerrar. Sem tela, a unidade continuava sendo faturada todo mes ate
+ * alguem com acesso ao servidor intervir.
+ *
+ * OS DOIS SAO SEPARADOS DE PROPOSITO, e a diferenca e a que o banco guarda:
+ *
+ *   suspender   para de faturar e a unidade CONTINUA OCUPADA - a R14 conta
+ *               "vigente" incluindo suspenso, entao nao da para criar outro
+ *               contrato na mesma unidade. E a pausa;
+ *   encerrar    LIBERA a unidade (a coluna gerada `uc_vigente` vira nula
+ *               sozinha), e e o que permite um contrato novo entrar. E o fim.
+ *
+ * ENCERRAR PEDE CONFIRMACAO E SUSPENDER NAO: encerrar zera o contador de faturas
+ * cheias pagas do proximo contrato e nao tem desfazer pela tela; suspender se
+ * desfaz reativando.
+ */
+function LinhaDoContrato({ k, uc, aoMudar }: { k: Contrato; uc: string; aoMudar: () => void }) {
+  const acao = useAcao();
+
+  const suspender = async () => {
+    const ok = await acao.executar(() => api.post(`/contratos/${k.id}/suspender`, {}));
+    if (ok) { acao.anunciar('Contrato suspenso. A unidade continua ocupada por ele.'); aoMudar(); }
+  };
+
+  const encerrar = async () => {
+    if (!confirm(
+      `Encerrar o contrato da unidade ${uc}?\n\n`
+      + 'A unidade fica livre para um contrato novo, e ela deixa de ser faturada por este. '
+      + 'O contador de faturas cheias pagas recomeça no contrato seguinte, e não há como '
+      + 'desfazer isto pela tela.')) return;
+    const ok = await acao.executar(() => api.post(`/contratos/${k.id}/encerrar`, {}));
+    if (ok) { acao.anunciar('Contrato encerrado. A unidade está livre para um contrato novo.'); aoMudar(); }
+  };
+
+  const reativar = async () => {
+    const ok = await acao.executar(() => api.post(`/contratos/${k.id}/ativar`, {}));
+    if (ok) { acao.anunciar('Contrato reativado.'); aoMudar(); }
+  };
+
+  return (
+    <>
+      <tr>
+        <td><strong>{uc}</strong></td>
+        <td className="fraco">{k.data_fechamento?.slice(0, 10)}</td>
+        <td><Marca tom={k.status === 'ativo' ? 'ok' : 'pendente'}>{rotulo(k.status)}</Marca></td>
+        <td className="num">{k.faturas_cheias_pagas}</td>
+        <td>
+          <div style={{ ...linha, gap: 6 }}>
+            {k.status === 'ativo' && (
+              <button onClick={() => void suspender()} disabled={acao.ocupado}>
+                <Icone nome="pendente" tamanho={14} /> Suspender
+              </button>
+            )}
+            {k.status === 'suspenso' && (
+              <button onClick={() => void reativar()} disabled={acao.ocupado}>
+                <Icone nome="confirmar" tamanho={14} /> Reativar
+              </button>
+            )}
+            <button onClick={() => void encerrar()} disabled={acao.ocupado}>
+              <Icone nome="remover" tamanho={14} /> Encerrar
+            </button>
+          </div>
+        </td>
+      </tr>
+      {acao.erro && <tr><td colSpan={5}><Aviso tipo="erro">{acao.erro}</Aviso></td></tr>}
+      {acao.sucesso && <tr><td colSpan={5}><Aviso tipo="ok">{acao.sucesso}</Aviso></td></tr>}
+    </>
   );
 }
 

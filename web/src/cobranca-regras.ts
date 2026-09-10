@@ -215,6 +215,28 @@ export const podeImportarAgora = (e: EstadoDaImportacao): boolean =>
   motivoDaTravaDaImportacao(e) === null;
 
 /**
+ * LANÇAR A TARIFA DA DISTRIBUIDORA NUMA FATURA — tela nova em 10/09/2026.
+ *
+ * `src/repos/fatura.ts` → `lancarTarifasDaConcessionaria()`: **só em rascunho**,
+ * e o motivo está escrito lá — depois de emitida, o total mudou e o boleto já foi
+ * registrado com o valor antigo.
+ *
+ * ⚠️ POR QUE A TELA FALTAVA E ISSO ERA DINHEIRO. A rota existe desde o começo e
+ * nenhuma tela a chamava: a única porta era um comando em lote. Enquanto isso, a
+ * própria aba de emissão AVISA que há rascunhos sem a tarifa da distribuidora e
+ * diz que assim eles sairiam cobrando só o crédito injetado — um aviso que
+ * apontava para um conserto que não existia na interface. `valor_total_centavos`
+ * é coluna gerada: a parcela ausente vale zero e a fatura sai menor, sem erro,
+ * sem log e sem recusa.
+ *
+ * No caminho oficial (a conta da distribuidora lida na aba de fatura unificada) o
+ * valor vem da conta e ninguém digita nada. Esta tela é para o outro caminho, o
+ * de compor pela carteira, que continua existindo e continua produzindo rascunho
+ * sem a parcela.
+ */
+export const podeLancarTarifaDaDistribuidora = (s: StatusFatura): boolean => s === 'rascunho';
+
+/**
  * CANCELAR O BOLETO NO BANCO — e ela existe desde 10/09/2026, junto com o botao.
  *
  * `src/repos/boleto.ts` → `baixarNoBanco()`: exige `nosso_numero` e RECUSA
