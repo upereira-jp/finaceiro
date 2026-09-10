@@ -336,6 +336,63 @@ Na rodada seguinte (≤ 15 min) o painel deve cair de **29 para 1**.
 
 ---
 
+## 3.d ⚠️ A ARMADILHA QUE CUSTOU UMA RODADA — e a regra nova do dono
+
+**Medido em 10/09/2026 às 15:45**, e é a coisa mais importante deste documento
+para quem editar código de servidor daqui:
+
+> **Os timers rodam da ÁRVORE DE TRABALHO, não de um artefato construído.**
+> `financeiro-ciclo`, `financeiro-agenda-fila` e `financeiro-agenda-consulta`
+> fazem `node --experimental-strip-types scripts/*.ts` a partir de
+> `/opt/financeiro/app`. **Código salvo aqui entra em produção na próxima tique
+> — 5 a 15 minutos — sem deploy nenhum.**
+
+O que aconteceu: a migration 40 foi escrita, `schema.prisma` atualizado e
+`prisma generate` rodado **antes** de a migration ser aplicada — parecia seguro
+porque o deploy ainda não tinha acontecido. O ciclo das 15:45 pegou o código novo
+e morreu com
+
+```
+P2022  The column `originador.crm_user_id` does not exist in the current database
+```
+
+**oito minutos antes** de a migration entrar. Uma rodada perdida, recomposta pela
+seguinte (o ciclo é idempotente por desenho, e o journal diz isso com todas as
+letras). ⚠️ **`prisma generate` já é "publicar"** para efeito dos timers: ele
+troca o client que eles usam.
+
+### A regra, decidida pelo dono no mesmo dia
+
+> *"sim, migration primeiro e código depois"*
+
+1. escrever a migration + `schema.prisma` + a conferência de catálogo em
+   `conferir-banco-alvo.ts` e o `default` do workflow;
+2. o dono aplica (`migrate-financeiro`, com `conferencia=migration-NN`);
+3. **confirmar a coluna no banco**;
+4. só então `prisma generate` e o código que a lê;
+5. deploy.
+
+### E a guarda que a torna mecânica, porque regra sozinha não basta
+
+`conferirClienteGerado()` conferia **tabelas** desde 30/07 — passou a conferir
+**colunas**. A direção importa e só uma é defeito:
+
+| | |
+|---|---|
+| client conhece, banco **não** tem | 🔴 `ColunaAusenteNoBanco` **no arranque**, nomeando a coluna e a ordem certa |
+| banco tem, client não conhece | ✅ passa — é o estado normal entre a migration e o `db pull` |
+
+Ela troca *"P2022 no meio de uma rodada"* por *"o serviço recusa subir e diz o que
+falta"*. Exercitada contra banco de verdade por **`npm run ensaio-guarda`**
+(`G1..G3`), que também prova que ela **não** recusa a direção inofensiva — uma
+guarda que recusasse isso derrubaria o serviço exatamente quando ele acabou de ser
+consertado.
+
+⚠️ **Esta leva NÃO subiu ainda**, e ela é segura para subir a qualquer momento:
+não introduz dependência de schema nenhuma.
+
+---
+
 ## 4. A lição desta sessão
 
 **Medir a produção ANTES de desenhar a tela mudou a tela inteira.** A pergunta

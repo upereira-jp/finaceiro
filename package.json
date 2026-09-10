@@ -45,6 +45,7 @@
     "ensaio-sicoob": "node --experimental-strip-types scripts/ensaio-sicoob.ts",
     "ensaio-cofre": "node --experimental-strip-types scripts/ensaio-do-cofre.ts",
     "ensaio-prontidao": "node --experimental-strip-types --env-file=.env scripts/ensaio-da-prontidao.ts",
+    "ensaio-guarda": "node --experimental-strip-types --env-file=.env scripts/ensaio-da-guarda-de-coluna.ts",
     "escopos": "node --experimental-strip-types scripts/escopos-sicoob.ts",
     "origem-webhook": "node --experimental-strip-types scripts/origem-do-webhook.ts"
   },

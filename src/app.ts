@@ -11,7 +11,7 @@
 // operacao de modelo lanca.
 
 import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient } from './generated/prisma/client.ts';
+import { PrismaClient, Prisma } from './generated/prisma/client.ts';
 import { criarPools, TETO_TRANSACIONAL, TETO_RELATORIO } from './db/pools.ts';
 import { encerrarPoolDoCrm } from './crm/pool-de-leitura.ts';
 import { comGuarda, type ClientTx, type Identidade } from './db/contexto.ts';
@@ -50,6 +50,68 @@ export class ClienteGeradoDesatualizado extends Error {
     );
     this.name = 'ClienteGeradoDesatualizado';
     this.tabelas = tabelas;
+  }
+}
+
+/**
+ * O CLIENT CONHECE UMA COLUNA QUE O BANCO NAO TEM — e este erro nasceu de um
+ * incidente medido, nao de uma preocupacao.
+ *
+ * ============================================================================
+ * O QUE ACONTECEU EM 10/09/2026, as 15:45
+ *
+ * A migration 40 (`originador.crm_user_id`) foi escrita, o `schema.prisma`
+ * atualizado e `prisma generate` rodado — tudo ANTES de a migration ser
+ * aplicada em producao. A ordem parecia segura porque o deploy ainda nao tinha
+ * acontecido.
+ *
+ * ⚠️ **So que os timers NAO esperam deploy.** `financeiro-ciclo`,
+ * `financeiro-agenda-fila` e `financeiro-agenda-consulta` rodam
+ * `node --experimental-strip-types scripts/*.ts` **direto de
+ * /opt/financeiro/app**, com o client que estiver no disco. O ciclo das 15:45
+ * pegou o codigo novo na primeira tique seguinte e morreu com
+ *
+ *     P2022  The column `originador.crm_user_id` does not exist in the current database
+ *
+ * no meio da rodada, oito minutos antes de a migration entrar. Uma rodada
+ * perdida — recomposta pela seguinte, porque o ciclo e idempotente por desenho.
+ *
+ * ============================================================================
+ * POR QUE ISTO E GUARDA E NAO PROCEDIMENTO
+ *
+ * A saida obvia era uma regra: "migration primeiro, codigo depois". Ela foi
+ * adotada pelo dono no mesmo dia **e nao basta sozinha** — e a regra 11 deste
+ * projeto ja disse por que: *"invariante que depende de alguem lembrar nao e
+ * invariante"*. A vizinha `ClienteGeradoDesatualizado` existe pela mesma razao,
+ * uma camada acima: ela pega TABELA faltando, e esta pega COLUNA.
+ *
+ * A DIRECAO IMPORTA, e so uma das duas e defeito:
+ *
+ *   client conhece, banco NAO tem   FATAL. Toda consulta que selecione a coluna
+ *                                   morre com P2022 no meio do trabalho;
+ *   banco tem, client NAO conhece   normal e inofensivo — e o estado de toda
+ *                                   migration aplicada antes do `db pull`. O
+ *                                   client simplesmente nao a seleciona.
+ *
+ * O QUE ELA TROCA: um P2022 no meio de uma rodada, por uma recusa no ARRANQUE
+ * que nomeia a coluna e diz qual das duas pontas esta atrasada.
+ */
+export class ColunaAusenteNoBanco extends Error {
+  readonly colunas: readonly string[];
+  constructor(colunas: readonly string[]) {
+    super(
+      `O client do Prisma conhece ${colunas.length} coluna(s) que o banco NAO tem — ` +
+      `${colunas.join(', ')}. Qualquer consulta que as selecione morre com P2022 no meio do ` +
+      'trabalho, e nao no arranque.\n\n' +
+      'A CAUSA QUASE SEMPRE E A ORDEM: o `schema.prisma` e o client andaram na frente da ' +
+      'migration. ⚠️ E os TIMERS nao esperam deploy — eles rodam os scripts direto de ' +
+      '/opt/financeiro/app, entao codigo salvo aqui entra em producao na proxima tique.\n\n' +
+      '    1. aplique a migration (workflow migrate-financeiro, com a conferencia de catalogo)\n' +
+      '    2. so entao o codigo que le a coluna\n\n' +
+      'Se a migration JA foi aplicada, o atrasado e o outro lado: `npx prisma generate`.'
+    );
+    this.name = 'ColunaAusenteNoBanco';
+    this.colunas = colunas;
   }
 }
 
@@ -152,6 +214,48 @@ export function criarApp(connectionString: string, cobranca: PortaDeCobranca = C
     const cliente = transacional as unknown as Record<string, unknown>;
     const faltando = r.map((x) => x.tabela).filter((t) => cliente[t] === undefined);
     if (faltando.length > 0) throw new ClienteGeradoDesatualizado(faltando);
+
+    /*
+     * E AGORA UM NIVEL ABAIXO: as COLUNAS. Ver `ColunaAusenteNoBanco` para o
+     * incidente que a criou.
+     *
+     * A LISTA DO CLIENT SAI DO `ScalarFieldEnum` de cada modelo, e nao do DMMF:
+     * o client gerado pelo Prisma 7 nao expoe `Prisma.dmmf`, e o enum e melhor
+     * para esta pergunta de qualquer forma — ele traz SO campo escalar, sem
+     * relacao, que e exatamente o conjunto que vira coluna no SELECT.
+     *
+     * ⚠️ E ele omite os campos `Unsupported`, o que aqui e um acerto: o
+     * `auditoria.xact_id` e `xid8`, o client nunca o seleciona, e conferi-lo
+     * seria conferir uma coluna que ninguem le.
+     *
+     * Nome do modelo -> nome do enum: primeira letra maiuscula. Modelo sem enum
+     * correspondente e pulado em silencio - a ausencia dele nao e defeito de
+     * banco, e a conferencia de TABELA acima ja cobriu o caso que importa.
+     */
+    const colunas: Array<{ tabela: string; coluna: string }> = await transacional.$queryRaw`
+      SELECT table_name AS tabela, column_name AS coluna
+        FROM information_schema.columns
+       WHERE table_schema = 'public'`;
+
+    const doBanco = new Map<string, Set<string>>();
+    for (const c of colunas) {
+      const s = doBanco.get(c.tabela) ?? new Set<string>();
+      s.add(c.coluna);
+      doBanco.set(c.tabela, s);
+    }
+
+    const enums = Prisma as unknown as Record<string, Record<string, string> | undefined>;
+    const semColuna: string[] = [];
+    for (const { tabela } of r) {
+      const e = enums[`${tabela.charAt(0).toUpperCase()}${tabela.slice(1)}ScalarFieldEnum`];
+      if (!e) continue;
+      const naTabela = doBanco.get(tabela) ?? new Set<string>();
+      for (const coluna of Object.values(e)) {
+        if (!naTabela.has(coluna)) semColuna.push(`${tabela}.${coluna}`);
+      }
+    }
+    if (semColuna.length > 0) throw new ColunaAusenteNoBanco(semColuna);
+
     return { modelos: r.length };
   }
 
