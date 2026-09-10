@@ -6,10 +6,10 @@
 | **Substitui** | O §0 da `RETOMADA-2026-09-10-varredura.md`. O corpo dela continua correto como registro |
 | **O pedido** | *"veja o arquivo de retomada e siga com ele. Objetivo: sistema funcionando completamente de forma autônoma"* |
 | **O que esta sessão fez** | Fechou o **último item de código** da lista do que ainda exigia um desenvolvedor: a trilha de auditoria tinha **21.917 linhas e nenhum leitor**. Junto, o item irmão da mesma linha: contas a pagar registrava pagamento e não mostrava nenhum |
-| **Suíte** | sem banco: `EXIT=0`, **2.957** verificações (eram 2.878) |
+| **Suíte** | sem banco: `EXIT=0`, **2.982** verificações (eram 2.878) |
 | **CI** | ✅ **verde** — run `34486930171` no `c1b176b`, incluindo os quatro jobs que só rodam lá, contra banco de verdade |
 | **Repositório** | o código desta leva é **`c1b176b`**; as retomadas vêm depois dele. `origin/main` junto, árvore limpa, zero arquivos `root:root` |
-| **Produção** | ✅ **no ar às 14:15:11**, terceiro deploy do dia. O dono disparou o workflow; os quatro sinais estão no §0.1 |
+| **Produção** | ✅ a primeira leva no ar às **14:15:11** (§0.1). ⚠️ **A segunda — `cbcef3c`, o endereço da conta — está commitada e NÃO subiu** |
 
 > ## A frase de uma linha
 >
@@ -239,6 +239,47 @@ login mexe na matriz do PRD §3: é decisão de segurança, não de implementaç
 explica em «Por que o Histórico mostra alterações de madrugada?». **O que
 custaria amanhã:** no dia em que a pergunta for jurídica ou contábil, a trilha
 aponta para uma pessoa que estava dormindo.
+
+---
+
+## 3.b O endereço vinha na conta e ia para o lixo — a segunda leva
+
+**Veio de uma pergunta do dono**, e ela era boa: *"esse segundo entrave pode ser
+resolvido pelo primeiro?"* — ler as 29 contas resolveria os 10 endereços? Medido
+no mesmo minuto, a resposta é **sim pela metade**:
+
+| | |
+|---|---|
+| A conta traz o endereço | ✅ |
+| O leitor de visão **já o arranca** | ✅ campo **obrigatório** do que ele extrai |
+| É gravado na conta lida | ✅ |
+| **Alguém na interface lia essa coluna?** | ❌ **ninguém** |
+| As 10 unidades sem endereço | **completamente vazias** — não parciais: nada |
+
+Agora, na aba Unidades consumidoras, quando a unidade não tem endereço completo e
+existe conta lida, aparece a linha que veio na conta e um botão que **preenche o
+formulário** — só os campos vazios, sem substituir o que a pessoa digitou. **Nada
+é gravado sem alguém conferir e apertar «Gravar endereço».**
+
+⚠️ **E a regra nunca foi exercida contra uma conta de verdade** — produção tem 0
+contas lidas, então ninguém sabe qual string o leitor produz numa fatura real da
+Equatorial. Por isso *"na dúvida, vazio"*: com o formato inesperado o custo é um
+botão que não ajudou, e não dez endereços errados dentro de boletos. **Quando a
+primeira conta real for lida, o passo é pegar a string que veio e acrescentar um
+caso a `web/tests/endereco-da-conta.ts`.**
+
+Dois defeitos reais caíram na primeira execução da suíte, os dois invisíveis por
+leitura: **`GO` dentro de `GOIANIA`** viraria UF em quase toda linha de Goiás; e
+**`S/N` era partido ao meio** pela barra, e depois o `N` era comido pela regra que
+tira o `nº` — logradouro *"RUA DAS FLORES, S/"* com número vazio.
+
+⚠️ **Esta leva (`cbcef3c`) NÃO subiu.** Está em `origin/main`, árvore limpa e
+`chown` feito:
+
+```
+gh workflow run deploy-financeiro.yml
+gh run list --workflow=isolamento --limit 2
+```
 
 ---
 
