@@ -15,6 +15,7 @@
 import type { App, Sessao, VinculoDaSessao, ClientTx } from '../app.ts';
 import * as cliente from '../repos/cliente.ts';
 import * as conectorExecucao from '../repos/conector-execucao.ts';
+import * as automacoes from '../repos/automacoes.ts';
 import * as uc from '../repos/unidade_consumidora.ts';
 import * as usina from '../repos/usina.ts';
 import * as originador from '../repos/originador.ts';
@@ -879,6 +880,35 @@ export const ROTAS: Rota[] = [
     metodo: 'GET', padrao: '/conector-execucao',
     handler: (req, app) => emRelatorio(app, req, async () =>
       ok(await conectorExecucao.ultimasExecucoes(numero(req.query.get('limite'), 10)))),
+  },
+  {
+    /*
+     * O SISTEMA AINDA ESTA TRABALHANDO SOZINHO? — rota nova em 10/09/2026, e ela
+     * fecha o silencio de seis semanas da tabela ao lado.
+     *
+     * A de cima diz o que o conector do CRM ACHOU. Esta diz se as tres rodadas
+     * automaticas ACONTECERAM — a consulta ativa diaria, a fila de emissao de 5
+     * em 5 minutos e o proprio ciclo do CRM. `agenda_execucao` guarda cada uma
+     * desde a migration 21 e nunca teve leitor: varredura de 10/09 achou ZERO
+     * ocorrencias dela em `rotas.ts`, em `src/repos/` e em `web/`.
+     *
+     * ⚠️ POR QUE ELA IMPORTA MAIS QUE AS DUAS VIZINHAS: a consulta ativa e a
+     * unica porta automatica de baixa enquanto o `ADR-0006` nao existir. Se o
+     * timer dela parar, boleto pago para de virar baixa e a cobranca segue
+     * acusando quem ja pagou — sem erro, sem log e sem linha em lugar nenhum. A
+     * ausencia de execucao e invisivel por construcao, e por isso ela precisa de
+     * uma rota que AFIRME, e nao de um alerta que so aparece quando algo grita.
+     *
+     * NAO RECEBE `limite` nem devolve historico: a pergunta e "esta vivo?", e
+     * uma lista de rodadas antigas seria relatorio de auditoria, que e outra
+     * ferramenta e tem outro dono. Mesma disciplina do teto baixo da vizinha.
+     *
+     * Caminho de RELATORIO: leitura pura, e nao disputa slot transacional com a
+     * emissao.
+     */
+    metodo: 'GET', padrao: '/automacoes',
+    handler: (req, app) => emRelatorio(app, req, async () =>
+      ok(await automacoes.comoVaoAsAutomacoes())),
   },
   {
     // Varredura da carteira inteira: caminho de RELATORIO, pool e timeout

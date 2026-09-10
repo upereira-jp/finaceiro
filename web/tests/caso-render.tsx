@@ -30,6 +30,8 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CorpoDaAjuda } from '../src/ajuda-corpo.tsx';
 import { CorpoDaSaude } from '../src/saude-corpo.tsx';
+import { FaixasDasAutomacoes, PainelDasAutomacoes } from '../src/automacoes-corpo.tsx';
+import type { NivelDaRodada, ChaveDaAutomacao, RodadaNaTela } from '../src/automacoes.ts';
 import type { NivelDoAviso } from '../src/saude-do-dinheiro.ts';
 import type { EstadoDoCertificado } from '../src/cobranca-regras.ts';
 import { GatilhoDeAjuda } from '../src/ajuda-gatilho.tsx';
@@ -480,6 +482,103 @@ const desenharSaude = (certificado: EstadoDoCertificado, aviso: NivelDoAviso | n
   // ----------------------- e nada de jargao chega na tela, nem por acidente
   for (const regra of [/\bwebhook\b/i, /\bendpoint\b/i, /\bmTLS\b/i, /\btoken\b/i, /\bAPI\b/]) {
     chk('R12i', !regra.test(texto(duas)), `o que a pessoa le nao casa com ${regra}`);
+  }
+}
+
+
+// ============================================================================
+// R13 — O QUE O SISTEMA FEZ SOZINHO CHEGA MESMO NA TELA
+// ============================================================================
+//
+// POR QUE ESTAS LINHAS SAO DIFERENTES DAS `R12*`, e a diferenca e o assunto.
+//
+// La, o teste dificil era provar que a faixa APARECE quando ha problema — o
+// estado normal e o silencio. Aqui e o contrario: o estado normal é FALAR, e o
+// que precisa ser provado é que o rodapé nunca fica mudo quando está tudo bem.
+//
+// Um rodapé vazio é indistinguível de um rodapé que nunca existiu, e é
+// exatamente esse o defeito que este par de componentes veio fechar: o sistema
+// pode parar de trabalhar e continuar parecendo bem. Se a prova morasse só em
+// `AU-*` (que mede as regras) e nada montasse o componente, um `&&` mal colocado
+// devolveria silêncio — e silêncio, aqui, é a cara da automação morta.
+
+const rodada = (
+  chave: ChaveDaAutomacao, nivel: NivelDaRodada, segundos: number | null = 300,
+): RodadaNaTela => ({
+  chave, nivel,
+  intervalo_segundos: chave === 'consulta_ativa' ? 86_400 : chave === 'ciclo_do_crm' ? 900 : 300,
+  ultima: segundos === null ? null : {
+    iniciado_em: '2026-09-10T06:17:00.000Z', status: nivel === 'terminou_mal' ? 'erro' : 'ok',
+    examinados: 12, feitos: 3, falhos: 0,
+  },
+  ha_quanto_tempo_segundos: segundos,
+});
+
+const TRES_EM_DIA: RodadaNaTela[] = [
+  rodada('consulta_ativa', 'em_dia', 1_200),
+  rodada('fila_de_emissao', 'em_dia', 120),
+  rodada('ciclo_do_crm', 'em_dia', 400),
+];
+
+const desenharPainel = (r: RodadaNaTela[] | null, erro: string | null = null): string =>
+  renderToStaticMarkup(<PainelDasAutomacoes rodadas={r} erro={erro} />);
+const desenharFaixas = (r: RodadaNaTela[] | null): string =>
+  renderToStaticMarkup(<FaixasDasAutomacoes rodadas={r} />);
+
+{
+  // ------------------------------------- a AFIRMACAO, que e a metade que importa
+  const bom = desenharPainel(TRES_EM_DIA);
+  chk('R13a', bom !== '' && /rodou/.test(texto(bom)) && texto(bom).includes('conferência'),
+      'com as tres em dia o rodape FALA — diz que rodaram e o que fizeram. E o unico jeito de '
+      + '"nao estou vendo aviso nenhum" voltar a significar alguma coisa nesta tela');
+
+  chk('R13b', desenharFaixas(TRES_EM_DIA) === '',
+      'e no alto da tela nao aparece nada: alarme que fala todo dia se aprende a ignorar');
+
+  const t = texto(bom);
+  chk('R13c', /12/.test(t) && /3/.test(t),
+      'e os numeros da ultima rodada chegam ao HTML — afirmacao sem fato e a mesma promessa vazia '
+      + 'que ela veio substituir');
+
+  // ------------------------------------------- o ALARME, quando ha o que gritar
+  const parada = desenharFaixas([rodada('consulta_ativa', 'atrasada', 400_000)]);
+  const tp = texto(parada);
+  chk('R13d', parada !== '' && tp.includes('parou de rodar'),
+      'a automacao parada monta faixa e o titulo chega inteiro ao HTML');
+  chk('R13e', /n[aã]o se perde/.test(tp) && /[aà] m[aã]o/.test(tp),
+      'com a frase que impede o panico e a que diz o que fazer enquanto isso');
+
+  chk('R13f', !parada.includes('systemctl') && /detalhe t[ée]cnico/.test(tp),
+      'e o comando NAO esta na superficie: ele nasce fechado dentro do `DetalheTecnico`, que e o '
+      + 'unico lugar suportado para comando de terminal na interface');
+
+  // ------------------------------------------ tres paradas, tres faixas distintas
+  const todas = desenharFaixas([
+    rodada('consulta_ativa', 'atrasada', 400_000),
+    rodada('fila_de_emissao', 'travada', 9_000),
+    rodada('ciclo_do_crm', 'nunca_rodou', null),
+  ]);
+  const tt = texto(todas);
+  chk('R13g', (tt.match(/parou de rodar/g) ?? []).length === 1
+           && (tt.match(/travou no meio/g) ?? []).length === 1
+           && (tt.match(/nunca rodou/g) ?? []).length === 1,
+      'tres automacoes paradas desenham TRES faixas, cada uma com o seu diagnostico — colapsar '
+      + 'esconderia dois consertos diferentes, como as duas metades do caminho do dinheiro');
+
+  // ----------------------------------- carregando nao pisca, e nao afirma nada
+  chk('R13h', desenharFaixas(null) === '' && desenharPainel(null) === '',
+      'enquanto a leitura nao voltou as duas metades desenham NADA: ausencia de resposta nao e '
+      + 'resposta, nem para gritar nem para tranquilizar');
+
+  // ------------------------------- e falhar a leitura NAO pode virar silencio
+  const falhou = texto(desenharPainel(null, 'a rede caiu'));
+  chk('R13i', /ningu[ée]m sabe/.test(falhou) && falhou.includes('a rede caiu'),
+      'quando a leitura falha o rodape DIZ que ninguem sabe, com o motivo — calar seria a tela '
+      + 'tendo exatamente a cara de "esta tudo bem" no unico caso em que ela nao sabe de nada');
+
+  // ------------------------ e nada de jargao chega na tela, nem por acidente
+  for (const regra of [/\btimer\b/i, /\bsystemd\b/i, /\bwebhook\b/i, /\bcron\b/i]) {
+    chk('R13j', !regra.test(tt) && !regra.test(t), `o que a pessoa le nao casa com ${regra}`);
   }
 }
 

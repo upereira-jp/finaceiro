@@ -24,7 +24,7 @@
 // a coluna diz isso em vez de desenhar um link para lugar nenhum.
 
 import { useState } from 'react';
-import { api, ErroDaApi, type Camada, type Prontidao, type ExecucaoDoConector } from '../api.ts';
+import { api, ErroDaApi, type Camada, type Prontidao, type ExecucaoDoConector, type Automacao } from '../api.ts';
 import { useDados } from '../dados.ts';
 import {
   Pagina, Aviso, Tabela, Marca, Kpi, KpiSimNao, Carregando, CampoData, AjudaDoMes, Icone,
@@ -35,6 +35,7 @@ import { competenciaISO } from '../dinheiro.ts';
 import { DESTINO_DA_CAMADA, enderecoDoDestino, telaDoDestino } from '../destino-da-camada.ts';
 import { estadoDoCertificado } from '../cobranca-regras.ts';
 import { CorpoDaSaude } from '../saude-corpo.tsx';
+import { FaixasDasAutomacoes, PainelDasAutomacoes } from '../automacoes-corpo.tsx';
 import type { NivelDoAviso } from '../saude-do-dinheiro.ts';
 import {
   VERBETE_DA_CAMADA, EFEITO, SITUACAO,
@@ -136,6 +137,19 @@ export function TelaProntidao() {
   const { dado, carregando, erro } = useDados<Prontidao>(
     () => api.get(`/faturamento/${competenciaISO(mes)}/prontidao`), [mes]);
 
+  /* AS TRES RODADAS AUTOMATICAS, LIDAS UMA VEZ SO e desenhadas em dois lugares:
+   * o alarme no alto, junto das faixas do caminho do dinheiro, e a afirmacao no
+   * rodape. Duas chamadas dariam duas respostas possiveis para a mesma pergunta
+   * na mesma tela.
+   *
+   * ELA NAO DEPENDE DO MES: as camadas dizem o que falta para ESTE mes fechar;
+   * isto diz se o sistema esta trabalhando, e trocar o mes no seletor nao muda a
+   * resposta - por isso a leitura nao tem `[mes]` nas dependencias.
+   *
+   * E NAO BLOQUEIA A TELA, pelo mesmo motivo da faixa vizinha: e `useDados`
+   * proprio, entao a tabela das camadas renderiza no tempo dela. */
+  const automacoes = useDados<Automacao[]>(() => api.get('/automacoes'));
+
   const naoMedidas = dado?.camadas.filter((c) => c.situacao === 'nao_medido').length ?? 0;
 
   return (
@@ -159,6 +173,11 @@ export function TelaProntidao() {
           cobrado e baixado. E a pergunta mais alta das duas, e um mes inteiro de
           camadas fechadas nao vale nada com o caminho do dinheiro quebrado. */}
       <SaudeDoDinheiro />
+      {/* LOGO ABAIXO DA VIZINHA, e a ordem entre as duas nao e arbitraria: a de
+          cima diz que o caminho do dinheiro esta quebrado; esta diz que o
+          sistema parou de andar por ele. Quem le de cima para baixo encontra
+          primeiro a coisa que impede, e depois a que atrasa. */}
+      <FaixasDasAutomacoes rodadas={automacoes.dado} />
       {/* "Conferindo o mês" e nao "Contando as camadas", desde 21/08/2026.
           "Camada" e o nome da estrutura interna do relatorio — a propria suite da
           ajuda o proibe no texto exibido (V4) —, e esta frase era a PRIMEIRA
@@ -293,6 +312,12 @@ export function TelaProntidao() {
           <SinaisDoConector />
         </>
       )}
+
+      {/* FORA DO `{dado && ...}` DE PROPOSITO. O painel responde "o sistema esta
+          trabalhando?", e essa resposta nao pode depender de a leitura do MES ter
+          dado certo - se a prontidao falhar, a pergunta continua valendo e a
+          resposta continua existindo. */}
+      <PainelDasAutomacoes rodadas={automacoes.dado} erro={automacoes.erro} />
     </Pagina>
   );
 }

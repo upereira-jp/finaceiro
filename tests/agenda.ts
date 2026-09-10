@@ -27,6 +27,8 @@
 import {
   POLITICA, intervaloSegundos, proximaTentativaEm, vencido,
   decidir, chaveDaConsultaAtiva, nivelDoCertificado, type Politica,
+  CADENCIA, atrasoAceitoSegundos, nivelDaRodada, pedeGente,
+  type NivelDaRodada, type RodadaVista,
 } from '../src/dominio/agenda.ts';
 import type { SituacaoDoBoleto } from '../src/sicoob/porta.ts';
 import { readFileSync, existsSync } from 'node:fs';
@@ -842,6 +844,208 @@ chk('AG10d', podeReligarOAviso('nao_verificavel').pode === false,
     chk('AG10i', e instanceof AdaptadorNaoReliga && e.status === 503,
         'e um adaptador que nao sabe religar diz isso com nome e 503, em vez de estourar '
         + '`undefined is not a function` tres camadas adiante');
+  }
+}
+
+
+// ============================================================================
+// AG11 - A RODADA ACONTECEU? o alarme sobre a AUSENCIA
+// ============================================================================
+//
+// O QUE ESTAS LINHAS PRENDEM, e o defeito nao e de calculo: e de OMISSAO, e ele
+// e o unico modo de falha deste sistema que nao produz nada. Boleto que falha
+// deixa `ultimo_erro`; webhook desligado deixa `dataHoraInativacao`; A1 vencido
+// deixa uma data no passado. **Rodada que nao acontece nao deixa coisa nenhuma**
+// - e por isso o que se afirma aqui e a forma da funcao, e nao uma tabela de
+// niveis que eu poderia ter copiado da saida do meu proprio codigo.
+//
+// As propriedades, e elas sao as mesmas cinco da progressao la de cima:
+//
+//   nunca antes da hora   em `ultima + intervalo` NAO ha alarme. Alarmar antes
+//                         de a proxima rodada vencer e alarmar sobre o relogio
+//   e sempre depois       existe um instante em que vira `atrasada`. Um limiar
+//                         inalcancavel passa em "nunca alarma antes" e nao e
+//                         limiar - o mesmo argumento do teto de `intervaloSegundos`
+//   monotonia             o tempo so PIORA o nivel. Um alarme que se apaga
+//                         sozinho com o passar das horas seria pior que nenhum
+//   precedencia           `travada` nao vira `atrasada` quando envelhece: a
+//                         linha orfa tranca o EXCLUDE, e nomear so o atraso
+//                         mandaria consertar a coisa errada
+//   o silencio autorizado `sem_conector` cala TUDO, e e o unico que cala
+
+{
+  const T0 = new Date('2026-09-10T06:17:00Z');
+  const mais = (d: Date, seg: number) => new Date(d.getTime() + seg * 1000);
+  const rodada = (status: string, iniciado: Date): RodadaVista =>
+    ({ iniciado_em: iniciado, terminado_em: status === 'em_andamento' ? null : iniciado, status });
+
+  const nivel = (e: {
+    temConector?: boolean; ultima?: RodadaVista | null; desde?: Date | null;
+    agora: Date; intervalo?: number;
+  }): NivelDaRodada => nivelDaRodada({
+    temConector: e.temConector ?? true,
+    ultima: e.ultima === undefined ? rodada('ok', T0) : e.ultima,
+    desde: e.desde === undefined ? new Date('2026-01-01T00:00:00Z') : e.desde,
+    agora: e.agora,
+    intervaloSegundos: e.intervalo ?? CADENCIA.consulta_ativa,
+  });
+
+  const CADENCIAS = [CADENCIA.fila_de_emissao, CADENCIA.consulta_ativa, CADENCIA.ciclo_do_crm];
+
+  // ------------------------------------------------- AG11a o silencio autorizado
+  {
+    const todos = [
+      nivel({ temConector: false, agora: T0 }),
+      nivel({ temConector: false, ultima: null, agora: mais(T0, 999_999) }),
+      nivel({ temConector: false, ultima: rodada('em_andamento', T0), agora: mais(T0, 999_999) }),
+    ];
+    chk('AG11a', todos.every((n) => n === 'sem_conector'),
+        'sem conector NADA vira alarme, nem a ausencia de rodada nem a rodada travada - a mesma '
+        + 'disciplina do codigo de saida 3: vermelho permanente numa instalacao que nunca ligou '
+        + 'banco e alarme desligado');
+  }
+
+  // -------------------------------------- AG11b nunca antes da hora, nas tres
+  {
+    const cedo = CADENCIAS.filter((i) => nivel({ agora: mais(T0, i), intervalo: i }) !== 'em_dia');
+    chk('AG11b', cedo.length === 0,
+        'em `ultima + intervalo` exato nao ha alarme em nenhuma das tres cadencias - a rodada '
+        + `seguinte acabou de vencer, e o systemd ainda tem a folga dele${cedo.length ? ` (falhou em ${cedo.join(', ')})` : ''}`);
+  }
+
+  // ------------------------------------------ AG11c e sempre depois: o limiar existe
+  {
+    const nunca = CADENCIAS.filter((i) => nivel({ agora: mais(T0, i * 3 + 7200), intervalo: i }) !== 'atrasada');
+    chk('AG11c', nunca.length === 0,
+        'e em tres intervalos + 2 h TODAS acusam atraso - um limiar que nunca e alcancado passaria '
+        + `no teste de cima e nao seria limiar${nunca.length ? ` (falhou em ${nunca.join(', ')})` : ''}`);
+  }
+
+  // --------------------------------------------------- AG11d monotonia no tempo
+  {
+    const ordem: Record<string, number> = { em_dia: 0, terminou_mal: 1, atrasada: 2 };
+    let regressoes = 0;
+    for (const i of CADENCIAS) {
+      let pior = 0;
+      for (let t = 0; t <= i * 4; t += Math.max(60, Math.floor(i / 20))) {
+        const n = ordem[nivel({ agora: mais(T0, t), intervalo: i })] ?? 0;
+        if (n < pior) regressoes++;
+        pior = Math.max(pior, n);
+      }
+    }
+    chk('AG11d', regressoes === 0,
+        `o tempo so PIORA o nivel de uma mesma rodada (${regressoes} regressoes) - um alarme que `
+        + 'se apaga sozinho enquanto o defeito continua e pior que alarme nenhum');
+  }
+
+  // ------------------------------------------- AG11e a precedencia da travada
+  {
+    const velha = rodada('em_andamento', T0);
+    const daqui = [1, 3, 10, 100].map((k) =>
+      nivel({ ultima: velha, agora: mais(T0, CADENCIA.consulta_ativa * k + 90_000) }));
+    chk('AG11e', daqui.every((n) => n === 'travada'),
+        'a linha `em_andamento` envelhecida sai `travada` e NUNCA `atrasada`, por mais tempo que '
+        + 'passe - e ela tranca o EXCLUDE da migration 21, entao dizer so "atrasada" mandaria '
+        + 'procurar o timer quando o conserto e encerrar a rodada orfa');
+
+    chk('AG11f', nivel({ ultima: rodada('em_andamento', T0), agora: mais(T0, 60), intervalo: 300 }) === 'em_dia',
+        'e a rodada que comecou agora NAO e travada: uma execucao em andamento e o estado normal '
+        + 'de quem acabou de ser disparado');
+  }
+
+  // ----------------------------------------- AG11g nunca rodou x recem-ligado
+  {
+    chk('AG11g', nivel({ ultima: null, desde: T0, agora: mais(T0, 600), intervalo: 86_400 }) === 'em_dia'
+              && nivel({ ultima: null, desde: T0, agora: mais(T0, 999_999), intervalo: 86_400 }) === 'nunca_rodou'
+              && nivel({ ultima: null, desde: null, agora: T0 }) === 'nunca_rodou',
+        'ligar a cobranca as 9h nao faz a tela acusar "nunca rodou" as 9h01 - o conector recem '
+        + 'cadastrado ganha a folga de uma cadencia; passada ela, a ausencia de linha e ausencia '
+        + 'mesmo, e sem data de cadastro nao ha folga a conceder');
+  }
+
+  // ---------------------------- AG11h `parcial` nao e alarme, e o desconhecido tambem nao
+  {
+    chk('AG11h', nivel({ ultima: rodada('erro', T0), agora: mais(T0, 60) }) === 'terminou_mal'
+              && nivel({ ultima: rodada('parcial', T0), agora: mais(T0, 60) }) === 'em_dia'
+              && nivel({ ultima: rodada('inventado_amanha', T0), agora: mais(T0, 60) }) === 'em_dia',
+        '`erro` acusa, `parcial` NAO (a rodada concluiu e registrou o motivo de cada item, e o que '
+        + 'falhou tem lugar proprio para aparecer) e um status que o enum ganhe amanha cai no '
+        + 'silencio em vez de virar alarme falso');
+  }
+
+  // --------------------------------------------- AG11i a folga tem forma e piso
+  {
+    const cresce = CADENCIAS.every((i) => atrasoAceitoSegundos(i) > i);
+    const piso = atrasoAceitoSegundos(60) >= 60 + 600;
+    const recusa = lancou(() => atrasoAceitoSegundos(0)) instanceof RangeError
+                && lancou(() => atrasoAceitoSegundos(-1)) instanceof RangeError;
+    chk('AG11i', cresce && piso && recusa,
+        'a folga e sempre MAIOR que a cadencia, tem piso de 10 minutos para cadencia curta (uma '
+        + 'rodada perdida entre 288 por dia nao e noticia; duas sao) e recusa cadencia <= 0 em vez '
+        + 'de devolver um numero que alarmaria para sempre');
+  }
+
+  // ------------------------------------------------- AG11j quem pede gente
+  {
+    const todos: NivelDaRodada[] =
+      ['em_dia', 'terminou_mal', 'atrasada', 'travada', 'nunca_rodou', 'sem_conector'];
+    const pedem = todos.filter(pedeGente);
+    chk('AG11j', pedem.join(',') === 'atrasada,travada,nunca_rodou',
+        `exatamente tres niveis pedem gente (${pedem.join(', ')}) - \`terminou_mal\` fica de fora `
+        + 'de proposito: a rodada aconteceu, a proxima retenta, e por a unidade em vermelho por '
+        + 'isso a deixaria vermelha por coisas que se resolvem sozinhas');
+  }
+
+  // ------------------------- AG11k a cadencia declarada bate com os timers de verdade
+  {
+    /* ⚠️ A COPIA E O RISCO, E ESTA LINHA E O QUE O PRENDE. `CADENCIA` repete, em
+     * segundos, o que o `OnCalendar` de cada unidade diz. Sem esta verificacao,
+     * mudar o timer da fila de 5 para 30 minutos deixaria o alarme calado por
+     * meia hora achando que esta tudo em dia - e o alarme mentiria com a mesma
+     * cara de estar certo, que e o formato de dano que a secao inteira combate. */
+    const ler = (u: string) => readFileSync(new URL(`../deploy/${u}`, import.meta.url), 'utf8');
+    const doCalendario = (unidade: string): number | null => {
+      const t = ler(unidade);
+      const cada = /^OnCalendar=\*:\d+\/(\d+)\s*$/m.exec(t);
+      if (cada) return Number(cada[1]) * 60;
+      if (/^OnCalendar=\*-\*-\* \d\d:\d\d:\d\d\s*$/m.test(t)) return 86_400;
+      return null;
+    };
+    const medido = {
+      fila_de_emissao: doCalendario('financeiro-agenda-fila.timer'),
+      consulta_ativa: doCalendario('financeiro-agenda-consulta.timer'),
+      ciclo_do_crm: doCalendario('financeiro-ciclo.timer'),
+    };
+    const fora = (Object.keys(medido) as Array<keyof typeof medido>)
+      .filter((k) => medido[k] !== CADENCIA[k]);
+    chk('AG11k', fora.length === 0,
+        'os tres numeros de `CADENCIA` sao os `OnCalendar` dos tres timers, lidos do arquivo'
+        + `${fora.length ? ` - DIVERGEM: ${fora.map((k) => `${k}: declarado ${CADENCIA[k]}, unidade ${medido[k]}`).join(' · ')}` : ''}`);
+  }
+
+  // ---------------- AG11l as rodadas paradas entram no codigo de saida da unidade
+  {
+    const semRodadas = saudeDoCaminhoDoDinheiro({ certificado: 'ok', aviso: 'ativo' });
+    const comRodadas = saudeDoCaminhoDoDinheiro({
+      certificado: 'ok', aviso: 'ativo',
+      rodadasParadas: ['a conferencia de pagamentos no banco nao roda ha 96 h'],
+    });
+    chk('AG11l', semRodadas.codigo === 0 && comRodadas.codigo === 4
+              && comRodadas.resumo.includes('96 h'),
+        'com o A1 valido e o aviso ligado, uma rodada parada sozinha JA poe a unidade em vermelho '
+        + '(4) e a frase inteira sai no resumo - antes de 10/09/2026 este caso saia 0, e a unidade '
+        + 'afirmava "de pe" sobre um sistema que tinha parado de buscar dinheiro');
+
+    const vazio = saudeDoCaminhoDoDinheiro({ certificado: 'ok', aviso: 'ativo', rodadasParadas: [] });
+    chk('AG11m', vazio.codigo === 0 && vazio.resumo === semRodadas.resumo,
+        'e lista vazia nao muda nada: o campo novo nao pode alterar o veredito de quem nao o passa');
+
+    const semConector = saudeDoCaminhoDoDinheiro({
+      certificado: null, aviso: null, rodadasParadas: ['seja o que for'],
+    });
+    chk('AG11n', semConector.codigo === 3,
+        'e sem conector continua 3 mesmo com rodada na lista - a precedencia 3 > 4 nao muda, e '
+        + 'sem conector nao ha rodada a esperar de qualquer forma');
   }
 }
 

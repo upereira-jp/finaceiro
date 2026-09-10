@@ -137,6 +137,7 @@ console.log(`\n-- fontes apt do CI (${workflows.length} workflows) --`);
    */
   const iso = workflows.find((w) => w.nome === 'isolamento.yml')!;
   const bloco = iso.roda.slice(iso.roda.indexOf('paths:'), iso.roda.indexOf('pull_request:'));
+  const cobre = (dir: string) => bloco.includes(`'${dir}/**'`);
   const faltando = ['src/**', 'tests/**', 'web/**', 'prisma/**', 'package.json', '.github/**']
     .filter((p) => !bloco.includes(`'${p}'`));
 
@@ -144,6 +145,47 @@ console.log(`\n-- fontes apt do CI (${workflows.length} workflows) --`);
       'o filtro de `push` do isolamento cobre TODA pasta que os jobs executam - `web/**` e '
       + '`.github/**` inclusive, e os dois ja faltaram'
       + `${faltando.length ? ` (fora do filtro: ${faltando.join(', ')})` : ''}`);
+
+  /*
+   * ⚠️ CI-9 - A LISTA ACIMA E ESCRITA A MAO, E ESSE E O PROXIMO BURACO.
+   *
+   * As duas faltas de 09/09 foram descobertas por acidente, e a linha que as
+   * prendeu prende exatamente as duas. Uma pasta NOVA que uma suite passe a ler
+   * amanha nao esta em lista nenhuma - e o sintoma continua sendo o pior de
+   * todos: nao ha vermelho, nao ha verde, nao ha run, e o painel mostra o
+   * resultado do commit anterior.
+   *
+   * ENTAO A LISTA E DERIVADA. Toda suite que le arquivo de FONTE o faz por
+   * `new URL('../<pasta>/...')`, e e isso que esta varredura procura. Em
+   * 10/09/2026, quando `AG11k` passou a conferir o `OnCalendar` dos tres timers
+   * contra a `CADENCIA` do dominio, ela acusou de imediato: `deploy/**` nao
+   * estava no filtro, e `scripts/**` tambem nao - mudar um timer sem mudar o
+   * alarme nao dispararia CI nenhum, que e o unico commit em que aquela
+   * verificacao importa.
+   *
+   * `node_modules` sai porque e artefato: `web/tests/previa.ts` ESCREVE nele.
+   */
+  const suites = [
+    ...readdirSync(new URL('tests/', raiz)).filter((n) => n.endsWith('.ts'))
+      .map((n) => ({ texto: readFileSync(new URL(`tests/${n}`, raiz), 'utf8'), base: '' })),
+    ...readdirSync(new URL('web/tests/', raiz)).filter((n) => n.endsWith('.ts') || n.endsWith('.tsx'))
+      .map((n) => ({ texto: readFileSync(new URL(`web/tests/${n}`, raiz), 'utf8'), base: 'web/' })),
+  ];
+
+  const lidas = new Set<string>();
+  for (const { texto, base } of suites) {
+    for (const m of texto.matchAll(/new URL\('\.\.(\/\.\.)?\/([a-zA-Z0-9_.-]+)\//g)) {
+      const dir = m[1] ? m[2]! : `${base}${m[2]}`;   // `../../x` sobe ate a raiz
+      if (dir !== 'node_modules' && dir !== 'web/node_modules') lidas.add(dir);
+    }
+  }
+
+  const semRede = [...lidas].filter((d) => !cobre(d) && !cobre(d.split('/')[0]!)).sort();
+  chk('CI-9', lidas.size >= 3 && semRede.length === 0,
+      `as ${lidas.size} pastas que as suites LEEM como fonte (${[...lidas].sort().join(', ')}) estao `
+      + 'todas no filtro de push - a lista e derivada da varredura e nao escrita a mao, entao a '
+      + 'pasta que uma suite passar a ler amanha ja nasce coberta'
+      + `${semRede.length ? ` - FORA DO FILTRO: ${semRede.join(', ')}` : ''}`);
 }
 
 console.log(`\n${falhas === 0 ? 'ci-apt: todas as verificacoes passaram'

@@ -782,6 +782,75 @@ futura **não** move a coluna.
 
 ---
 
+## 2.k Decisões técnicas de 10/09/2026, tarde — a automação que parava sem avisar
+
+**Dono destas decisões: o implementador** (§2.b).
+
+### O defeito, e ele era de AUSÊNCIA
+
+Este sistema tem três rodadas que acontecem sem ninguém pedir: a **consulta ativa**
+(diária), a **fila de emissão** (5 em 5 minutos) e o **ciclo do CRM** (15 em 15).
+As três gravam o que fizeram — `agenda_execucao` desde 30/07/2026 e
+`conector_execucao` desde 27/07.
+
+**A varredura de 10/09 achou ZERO leituras de `agenda_execucao`** em `src/repos/`,
+em `rotas.ts` e em `web/`. O próprio `scripts/agenda.ts` tinha escrito por que a
+tabela existia: *"sem esse registro, «a agenda não roda desde o dia 3» volta a ser
+impossível de perguntar"*. Escrevia-se a resposta e nunca se perguntava.
+
+⚠️ **E a consulta ativa é a única porta automática de baixa** enquanto o
+`ADR-0006` não existir. Parada, boleto pago não vira baixa e a cobrança segue
+acusando quem já pagou — **sem erro, sem log e sem linha**, porque ausência de
+execução não produz nenhuma das três coisas. Era o único modo de falha do sistema
+que não deixava rastro em lugar nenhum.
+
+### As decisões
+
+| # | Decisão | Por quê |
+|:--:|---|---|
+| 1 | **A afirmação aparece SEMPRE, e não só o alarme** | É a inversão da regra da faixa vizinha, e ela é o coração desta leva. Em `saude-do-dinheiro.ts` o silêncio é a resposta boa (`SD-1`). Aqui o silêncio **é o defeito**: "nenhum alerta" é letra por letra a cara de "o alarme também parou". O rodapé de Pendências diz *"rodou há 4 minutos, 12 conferidos, 3 baixados"* mesmo com tudo em dia — a mesma razão pela qual a unidade `financeiro-saude-cobranca` **afirma** em vez de calar |
+| 2 | **O nível é calculado no SERVIDOR** | "Há 4 dias" é afirmação sobre o sistema, e não pode depender do relógio da máquina de quem abriu a tela — que erra minutos, horas e às vezes o fuso inteiro |
+| 3 | **`travada` é nível próprio, e vem antes de `atrasada`** | Uma linha `em_andamento` órfã está atrasada também — mas o conserto é outro: enquanto ela existir, o EXCLUDE `agenda_uma_execucao_por_tarefa` recusa **toda** rodada nova. Dizer só "atrasada" manda procurar o timer quando o conserto é encerrar a rodada parada. A migration 21 previu o caso por escrito e nenhum código olhava |
+| 4 | **`sem_conector` não gera alarme, e `nunca_rodou` respeita o cadastro** | O mesmo silêncio autorizado do código de saída 3: vermelho permanente numa instalação que ainda não ligou banco é alarme desligado. E ligar a cobrança às 9h não pode fazer a tela acusar "nunca rodou" às 9h01 — o conector recém-cadastrado ganha a folga de uma cadência |
+| 5 | **`parcial` NÃO é alarme; `erro` é, em âmbar** | `parcial` quer dizer que a rodada concluiu e registrou o motivo de cada item — o que falhou tem lugar próprio para aparecer. Chamar isso de quebrado esconderia a diferença entre "o sistema parou" e "o banco recusou três boletos" |
+| 6 | **As rodadas entram no código de saída da `financeiro-saude-cobranca`** | A retomada de 10/09 registrou que aquela unidade *"não cobre isto"*. Ela cabe: a afirmação que a unidade faz é "o caminho do dinheiro está de pé", e uma consulta ativa parada quebra esse caminho tão literalmente quanto um A1 vencido. **Só a fila e a consulta entram** — o ciclo do CRM atrasa cadastro, não dinheiro, e por ele o vermelho passaria a querer dizer duas coisas |
+| 7 | **O comando de terminal fica atrás do `<DetalheTecnico>`** | Quem abre a tela não tem terminal, e mandar rodar comando como próximo passo é um beco (`T4`). Quem administra o servidor tem — e para essa pessoa o ponteiro vale a sessão inteira |
+
+### 🟡 `Q-RODADA-01` — a folga antes de acusar atraso, e ela é escolha minha
+
+`atrasoAceitoSegundos` devolve **`intervalo + max(intervalo/4, 10 min)`**:
+15 minutos para a fila, 25 para o ciclo, **30 horas** para a consulta diária.
+
+As duas metades têm razão: o intervalo, porque uma rodada que acabou de acontecer
+não está atrasada até a próxima vencer; a folga, porque `AccuracySec` e a fila do
+systemd atrasam a rodada em segundos a minutos, e alarme que dispara na borda
+exata toca todo dia sem nada estar errado. O piso de 10 minutos existe porque, na
+fila, um quarto seriam 75 segundos — e uma rodada perdida entre 288 por dia não é
+notícia; duas seguidas são.
+
+⚠️ **O custo está declarado: a rodada perdida das 06:17 só vira alarme por volta
+do meio-dia do dia seguinte.** É deliberado — `Persistent=true` já recupera a
+rodada sozinho quando a máquina reinicia fora de hora, e um alarme mais apertado
+tocaria justamente aí, sem motivo.
+
+**Volta para o dono só se ele quiser a folga menor**, sabendo que o preço é falso
+positivo em dia de reinício. `AG11k` prende o outro lado do risco: os três números
+de `CADENCIA` são conferidos contra o `OnCalendar` dos três timers, lidos do
+arquivo — mudar o timer sem mudar o alarme deixa a suíte vermelha.
+
+### Medido, e o que NÃO foi
+
+| Afirmação | Como se sabe |
+|---|---|
+| As regras da tela | `AU-1..AU-17`, com os 18 pares (3 automações × 6 níveis) por exaustão |
+| A tela MOSTRA | `R13a..R13j`, montando os dois componentes com `renderToStaticMarkup` — e `AU-16`/`AU-17` leem a fonte da tela (com comentário removido antes, a armadilha do `SD-12`) |
+| O domínio | `AG11a..AG11n` — propriedades da fronteira, não uma tabela de níveis copiada da saída |
+| As três verificações **falham quando devem** | Mutação: comentar `<PainelDasAutomacoes />` derruba `AU-16`/`AU-17`; `nivelDaRodada` que nunca acusa atraso derruba `AG11c`; painel devolvendo lista vazia derruba `AU-1`, `R13a` e `R13c` |
+| A leitura funciona pela role sem `BYPASSRLS` | `N16a..N16f` em `tests/repos-agenda.ts` — **só roda no Actions** |
+| ⚠️ **NÃO medido: a faixa vermelha contra produção** | Exigiria uma automação realmente parada. O que se mediu foi o caminho contrário — as três em dia produzindo a afirmação |
+
+---
+
 ## 3. F0 — o que falta para fechar
 
 Entregas da F0 conforme `PRD-v2.2` §10:

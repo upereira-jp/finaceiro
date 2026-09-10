@@ -43,6 +43,7 @@ import * as contrato from '../src/repos/contrato.ts';
 import * as regras from '../src/repos/regras.ts';
 import * as fatura from '../src/repos/fatura.ts';
 import * as boleto from '../src/repos/boleto.ts';
+import { comoVaoAsAutomacoes } from '../src/repos/automacoes.ts';
 import * as donoUsina from '../src/repos/dono_usina.ts';
 import {
   executarFilaDeEmissao, executarConsultaAtiva, conferirCertificado,
@@ -531,6 +532,82 @@ let fFalha: string; let fPaga: string; let fCancelada: string; let fB: string;
       'sem conector ativo a agenda RECUSA com 412 nomeado em vez de rodar em vazio e reportar '
       + '"nada a fazer" - as duas coisas tem a mesma cara em log, e so uma delas e verdade');
   await emA(() => db().$executeRawUnsafe(`UPDATE conector_cobranca SET ativo = true`));
+}
+
+
+// ---------------------------------------------- N16 as automacoes sao LIDAS
+//
+// ⚠️ ESTE BLOCO EXISTE PELA LICAO DE 10/09/2026, e ela e do dia anterior: "a
+// conferencia de ESTRUTURA nao prova COMPORTAMENTO". O modo `migration-37`
+// conferiu oito partes e passou verde sobre uma funcao que nao escrevia, porque
+// o `RETURNING` pedia um `SELECT` que a role nao tinha. Aqui o risco e o mesmo,
+// invertido: `comoVaoAsAutomacoes` LE tres tabelas por uma role sem BYPASSRLS, e
+// uma policy ausente devolveria LISTA VAZIA - que a tela desenharia como "nunca
+// rodou", ou seja, um alarme falso permanente sobre um sistema saudavel.
+//
+// Nada disso aparece na suite pura: la o repositorio nao existe.
+{
+  const lidas = await emA(() => comoVaoAsAutomacoes());
+  const porChave = Object.fromEntries(lidas.map((x) => [x.chave, x]));
+
+  chk('N16a', lidas.map((x) => x.chave).join(',') === 'consulta_ativa,fila_de_emissao,ciclo_do_crm',
+      'a leitura devolve as TRES automacoes, na ordem de consequencia - a consulta ativa primeiro '
+      + 'porque e a unica porta automatica de baixa');
+
+  const fila = porChave.fila_de_emissao!;
+  chk('N16b', fila.ultima !== null && fila.nivel === 'em_dia'
+           && (fila.ha_quanto_tempo_segundos ?? 1e9) < 3_600,
+      'a rodada que ACABOU de acontecer neste teste e lida de volta pela role sem BYPASSRLS, com '
+      + 'a idade em segundos - se a policy nao deixasse ler, isto viria vazio e a tela diria '
+      + '"nunca rodou" sobre uma agenda que rodou ha um minuto');
+
+  chk('N16c', (fila.ultima?.feitos ?? 0) >= 1 && (fila.ultima?.examinados ?? 0) >= 1,
+      'e os contadores chegam TRADUZIDOS - `registrados` da fila vira `feitos`, que e o que a '
+      + 'tela conta. A traducao mora no repositorio de proposito: ela e diferente em cada '
+      + 'automacao, e a tela nao pode ser o lugar onde alguem lembra disso');
+
+  // ------------------------------------------------ a linha orfa VIRA `travada`
+  {
+    const conectorId: any[] = await emA(() => db().$queryRawUnsafe(
+      `SELECT id FROM conector_cobranca WHERE ativo LIMIT 1`));
+    await emA(() => db().$executeRawUnsafe(
+      `INSERT INTO agenda_execucao (tenant_id, conector_id, tarefa, ciclo_id, iniciado_em)
+       VALUES ($1::uuid, $2::uuid, 'consulta_ativa', gen_random_uuid(), now() - interval '2 days')`,
+      A, conectorId[0].id));
+
+    const comOrfa = await emA(() => comoVaoAsAutomacoes());
+    const consulta = comOrfa.find((x) => x.chave === 'consulta_ativa')!;
+    chk('N16d', consulta.nivel === 'travada',
+        'uma execucao aberta ha dois dias e lida como TRAVADA e nao como atrasada - e a diferenca '
+        + 'e o conserto: enquanto essa linha existir, o EXCLUDE recusa toda rodada nova, e '
+        + 'procurar o timer nao resolve. E o caso que a migration 21 previu por escrito e que '
+        + 'nenhum codigo olhava');
+
+    await emA(() => db().$executeRawUnsafe(
+      `UPDATE agenda_execucao SET status='erro', terminado_em=now() WHERE status='em_andamento'`));
+  }
+
+  // ------------------------------------------- o isolamento, na mesma consulta
+  {
+    const doB = await emB(() => comoVaoAsAutomacoes());
+    const filaB = doB.find((x) => x.chave === 'fila_de_emissao')!;
+    chk('N16e', filaB.ultima === null && fila.ultima !== null,
+        'a MESMA leitura, em dois contextos: o A ve a rodada da fila dele e o B nao ve nenhuma. '
+        + 'Sem policy isto nao daria erro - daria a rodada do vizinho, e o B concluiria que a '
+        + 'agenda dele esta saudavel olhando o trabalho de outra empresa');
+  }
+
+  // ------------------------------ sem conector nao ha rodada a esperar (nem alarme)
+  {
+    await emA(() => db().$executeRawUnsafe(`UPDATE conector_cobranca SET ativo = false`));
+    const semConector = await emA(() => comoVaoAsAutomacoes());
+    const duas = semConector.filter((x) => x.chave !== 'ciclo_do_crm');
+    chk('N16f', duas.every((x) => x.nivel === 'sem_conector'),
+        'com o conector desligado as duas rodadas de cobranca saem `sem_conector` e nao '
+        + '`nunca_rodou` - uma instalacao que ainda nao ligou banco nenhum veria alarme vermelho '
+        + 'todo dia, e vermelho permanente e alarme desligado');
+    await emA(() => db().$executeRawUnsafe(`UPDATE conector_cobranca SET ativo = true`));
+  }
 }
 
 console.log(`\n${falhas === 0 ? 'agenda (banco): todas as verificacoes passaram'

@@ -18,11 +18,20 @@ on:
     #   Medido: o commit `3cc0611`, que acrescentou 15 verificacoes de tela,
     #   passou sem CI. Regressao de tela ficava sem rede ate alguem tocar noutra
     #   pasta por acaso.
+    #   `deploy/**` e `scripts/**`, a TERCEIRA falta - achada em 10/09/2026 pela
+    #   propria `CI-9`, que derivou a lista em vez de repetir a de cima. As
+    #   suites LEEM as duas pastas: `AG9k`/`AG9o` conferem o `ExecStart` das
+    #   unidades e o `process.exit` do script, e `AG11k` confere o `OnCalendar`
+    #   dos tres timers contra a `CADENCIA` do dominio. Sem estas duas linhas,
+    #   mudar um timer sem mudar o alarme nao dispara CI nenhum - que e
+    #   exatamente o commit em que aquela verificacao existe para falar.
     paths:
       - 'prisma/**'
       - 'src/**'
       - 'tests/**'
       - 'web/**'
+      - 'deploy/**'
+      - 'scripts/**'
       - 'spike-transacao/**'
       - 'package.json'
       - '.github/**'

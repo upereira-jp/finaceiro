@@ -334,6 +334,28 @@ export function saudeDoCaminhoDoDinheiro(e: {
   certificado: NivelDoCertificado | null;
   /** `null` pelo mesmo motivo. */
   aviso: NivelDoAviso | null;
+  /**
+   * AS RODADAS QUE PARARAM, ja em uma frase cada - entrou em 10/09/2026.
+   *
+   * POR QUE ELAS CABEM NESTA UNIDADE, e a pergunta e legitima: ate hoje ela
+   * afirmava sobre o A1 e sobre o aviso, e a retomada de 10/09 registrou que
+   * ela **nao** cobria a rodada ter acontecido. Cabem porque a afirmacao que
+   * esta unidade faz e "o caminho do dinheiro esta de pe", e uma consulta ativa
+   * parada quebra esse caminho tao literalmente quanto um A1 vencido: com ela
+   * parada, boleto pago nao vira baixa. A unidade nao ganhou assunto novo -
+   * ela deixou de ter um buraco no assunto que ja tinha.
+   *
+   * E O QUE FICOU DE FORA E DELIBERADO: so a fila de emissao e a consulta ativa
+   * entram. O ciclo do CRM tambem para em silencio, e a tela o mostra - mas o
+   * espelho velho atrasa CADASTRO, nao dinheiro, e por uma unidade chamada
+   * "saude do caminho do dinheiro" em `failed` por causa dele o vermelho
+   * comecaria a querer dizer duas coisas.
+   *
+   * A frase vem pronta de quem chamou porque ela precisa dizer HA QUANTO TEMPO,
+   * e isso e leitura de banco - que nao entra neste arquivo (regra 8: o que
+   * decide tem de ser observavel sem esperar um dia para observar).
+   */
+  rodadasParadas?: readonly string[];
 }): Saude {
   if (e.certificado === null && e.aviso === null) {
     return { codigo: 3, resumo: 'nao ha conector de cobranca neste tenant - nada a conferir' };
@@ -344,6 +366,7 @@ export function saudeDoCaminhoDoDinheiro(e: {
   if (e.certificado === 'vence_em_breve') quebrado.push('o certificado A1 vence em breve');
   if (e.aviso === 'inativado') quebrado.push('o banco DESLIGOU o aviso de pagamento');
   if (e.aviso === 'ausente') quebrado.push('nao ha aviso de pagamento cadastrado no banco');
+  for (const r of e.rodadasParadas ?? []) quebrado.push(r);
   if (quebrado.length > 0) return { codigo: 4, resumo: quebrado.join('; ') };
 
   const semSaber: string[] = [];
@@ -408,4 +431,204 @@ export function podeReligarOAviso(nivel: NivelDoAviso): PermissaoDeReligar {
           + 'cria a notificacao em dobro, que nao se desfaz. Tente de novo em alguns minutos.',
       };
   }
+}
+
+// ============================================================================
+// A RODADA ACONTECEU? - o modo de falha que nao produz erro nenhum
+// ============================================================================
+
+/**
+ * O QUE ESTA SECAO FECHA, e ela e a irma mais velha de tudo o que esta acima.
+ *
+ * As duas secoes anteriores alarmam sobre o A1 e sobre o aviso de pagamento -
+ * duas coisas que quebram enquanto o sistema TRABALHA. Esta alarma sobre o
+ * sistema ter PARADO DE TRABALHAR, que e uma camada acima: um timer desabilitado
+ * por engano, uma maquina que reiniciou sem o servico, uma rodada que morreu no
+ * meio e deixou a proxima trancada.
+ *
+ * ⚠️ O DADO SEMPRE EXISTIU E NUNCA FOI LIDO. `agenda_execucao` esta no banco
+ * desde a migration 21 (30/07/2026) e recebe uma linha por rodada; o proprio
+ * `scripts/agenda.ts` escreveu por que ela existe: *"sem esse registro, «a agenda
+ * nao roda desde o dia 3» volta a ser impossivel de perguntar"*. Varredura de
+ * 10/09/2026: ZERO leituras em `src/repos/`, em `rotas.ts` e em `web/`. A
+ * resposta era escrita todo dia e a pergunta nunca era feita.
+ *
+ * POR QUE ELE E O MAIS PERIGOSO DOS TRES ALARMES: a consulta ativa e a UNICA
+ * porta automatica de baixa enquanto o `ADR-0006` nao existir (`PRD` §6). Se ela
+ * parar, boleto pago para de virar baixa - e o sintoma e a inadimplencia
+ * acusando quem ja pagou, sem um erro em lugar nenhum. A ausencia de execucao
+ * nao produz excecao, nao produz log e nao produz linha: ela e invisivel por
+ * construcao, e por isso precisa de uma AFIRMACAO para ser vista.
+ *
+ * E A DIFERENCA COM A FAIXA DO CAMINHO DO DINHEIRO E JUSTAMENTE ESSA. La, o
+ * silencio e a resposta boa - `faixasDaSaude` devolve vazio quando esta tudo de
+ * pe, e a tela nao ganha um verde a mais para conferir todo dia. Aqui o silencio
+ * E O DEFEITO: "nao ha alerta" e exatamente a cara de "o alarme tambem parou".
+ * Por isso a tela mostra a rodada mesmo quando ela esta em dia - o que se exibe
+ * nao e um alerta, e uma afirmacao, pelo mesmo motivo que a unidade
+ * `financeiro-saude-cobranca` afirma em vez de calar.
+ */
+
+export type NivelDaRodada =
+  /** Nao ha atraso a apontar. NAO quer dizer "rodou": uma automacao recem-ligada,
+   *  que ainda nao teve a primeira rodada, tambem cai aqui - quem diz "nunca
+   *  rodou ainda" e a ausencia de `ultima`, e nao o nivel. */
+  | 'em_dia'
+  /** A ultima rodada terminou com `erro`. Ela ACONTECEU - o alarme e sobre o
+   *  desfecho, nao sobre a ausencia. */
+  | 'terminou_mal'
+  /** Passou da hora e a rodada nao veio. E o alarme principal desta secao. */
+  | 'atrasada'
+  /** A ultima linha ficou `em_andamento` alem do aceitavel: a rodada morreu no
+   *  meio. ⚠️ Isto nao e so uma rodada perdida - o EXCLUDE
+   *  `agenda_uma_execucao_por_tarefa` (migration 21) recusa TODA rodada seguinte
+   *  enquanto a linha orfa existir. A automacao esta trancada, e nada a destranca
+   *  sozinho. O proprio comentario da migration previu o caso e nenhum codigo
+   *  olhava para ele. */
+  | 'travada'
+  /** Nao ha uma linha sequer, e ja deu tempo de haver. O timer nunca foi ligado,
+   *  ou foi desligado ha muito. */
+  | 'nunca_rodou'
+  /** Nao ha conector, entao nao ha rodada a esperar. NAO e alarme, e a mesma
+   *  disciplina do codigo de saida 3 e do `sem_conector` da faixa: vermelho
+   *  permanente numa instalacao que nunca ligou banco nenhum e alarme
+   *  desligado. */
+  | 'sem_conector';
+
+/** So o que o nivel le de uma rodada. Estrutural de proposito, como `Aviso`
+ *  acima: o dominio nao importa repositorio nem cliente de banco. */
+export type RodadaVista = {
+  iniciado_em: Date;
+  terminado_em: Date | null;
+  /** `em_andamento` | `ok` | `parcial` | `erro` - o enum `execucao_status`. Texto
+   *  e nao uniao fechada porque quem le vem do banco, e um valor novo la nao
+   *  pode quebrar a leitura aqui: ele cai no `default` e nao vira alarme falso. */
+  status: string;
+};
+
+/**
+ * QUANTO ATRASO E ATRASO, e o numero nao e gosto: ele e derivado da cadencia.
+ *
+ * `intervalo + max(intervalo/4, 10 min)`, e as duas metades tem razao propria:
+ *
+ *   o intervalo    porque uma rodada que acabou de acontecer nao esta atrasada
+ *                  ate a PROXIMA vencer. Alarmar antes disso e alarmar sobre o
+ *                  relogio, nao sobre o sistema;
+ *   o quarto       porque `AccuracySec` e a fila do systemd atrasam a rodada em
+ *                  segundos a minutos, e um alarme que dispara na borda exata
+ *                  toca todo dia sem nada estar errado;
+ *   o piso de 10   porque em cadencia curta (a fila e de 5 minutos) um quarto
+ *   minutos        seriam 75 segundos, e uma rodada perdida no meio de 288 por
+ *                  dia nao e noticia. Duas seguidas ja sao.
+ *
+ * O QUE ISSO CUSTA, e o custo esta declarado: a consulta ativa e DIARIA, entao
+ * o atraso so vira alarme 30 horas depois da ultima rodada - a rodada perdida
+ * das 06:17 aparece por volta do meio-dia do dia seguinte. E deliberado. Um
+ * alarme mais apertado dispararia toda vez que a maquina reiniciasse fora de
+ * hora, e `Persistent=true` ja recupera a rodada sozinho nesse caso. Alarme que
+ * toca sem motivo e alarme que se aprende a ignorar - a mesma razao pela qual
+ * `sem_conector` nao gera faixa.
+ *
+ * Registrado como `Q-RODADA-01` para o dono confirmar a folga; a decisao tecnica
+ * e de quem escreve o codigo, e o numero esta aqui e nao espalhado.
+ */
+export function atrasoAceitoSegundos(intervaloSegundos: number): number {
+  if (!Number.isFinite(intervaloSegundos) || intervaloSegundos <= 0) {
+    throw new RangeError(
+      `atrasoAceitoSegundos espera a cadencia em segundos (> 0), recebeu ${intervaloSegundos}`,
+    );
+  }
+  return intervaloSegundos + Math.max(intervaloSegundos / 4, 600);
+}
+
+/**
+ * A CADENCIA DE CADA AUTOMACAO, em segundos - e ela E COPIA DOS TIMERS.
+ *
+ * ⚠️ A copia e o risco, e ele esta prendido: `AG11k` le os tres arquivos de
+ * `deploy/` e exige que estes tres numeros concordem com o `OnCalendar` de cada
+ * um. Sem essa linha, mudar o timer de 5 para 30 minutos deixaria o alarme
+ * calado por meia hora achando que esta tudo em dia - o alarme mentiria com a
+ * mesma cara de estar certo, que e o formato de dano que esta secao inteira
+ * existe para fechar.
+ *
+ * O `ciclo_do_crm` nao e da agenda de cobranca e mora aqui do mesmo jeito: a
+ * pergunta "o sistema esta trabalhando sozinho?" nao se divide por qual tabela
+ * guarda a resposta, e quem opera nao sabe que sao dois motores.
+ */
+export const CADENCIA = {
+  /** `deploy/financeiro-agenda-fila.timer`: `OnCalendar=*:02/5`. */
+  fila_de_emissao: 300,
+  /** `deploy/financeiro-agenda-consulta.timer`: `OnCalendar=*-*-* 06:17:00`. */
+  consulta_ativa: 86_400,
+  /** `deploy/financeiro-ciclo.timer`: `OnCalendar=*:0/15`. */
+  ciclo_do_crm: 900,
+} as const;
+
+/**
+ * O nivel de UMA automacao.
+ *
+ * A PRECEDENCIA E `sem_conector` > `nunca_rodou` > `travada` > `atrasada` >
+ * `terminou_mal` > `em_dia`, e ela e a mesma disciplina do `3 > 4 > 5` de
+ * `saudeDoCaminhoDoDinheiro`: o nivel aponta o que TEM DONO, e nao o que
+ * apareceu primeiro.
+ *
+ *   `travada` antes de `atrasada` porque uma linha orfa esta atrasada TAMBEM, e
+ *   dizer so "atrasada" mandaria a pessoa procurar o timer - quando o conserto e
+ *   fechar a linha que tranca o EXCLUDE. Nomear o atraso sem nomear a tranca
+ *   manda consertar a coisa errada;
+ *
+ *   `atrasada` antes de `terminou_mal` porque uma rodada que errou ontem e nao
+ *   voltou hoje tem duas noticias, e "parou de rodar" e a maior das duas: a
+ *   falha de uma rodada se resolve na proxima, e a proxima nao veio.
+ *
+ * `desde` E A DATA A PARTIR DA QUAL FAZ SENTIDO ESPERAR RODADA - o cadastro do
+ * conector, quando o banco a guarda. Sem ela, ligar a cobranca as 09h faria a
+ * tela acusar `nunca_rodou` as 09h01 sobre uma automacao que ainda nao teve a
+ * primeira vez. `null` quer dizer "nao da para saber", e ai a ausencia de linha
+ * e tratada como ausencia mesmo.
+ */
+export function nivelDaRodada(e: {
+  /** `false` quando nao ha conector - nao ha rodada a esperar. */
+  temConector: boolean;
+  /** A rodada mais recente desta automacao, ou `null` se nao ha nenhuma. */
+  ultima: RodadaVista | null;
+  desde: Date | null;
+  agora: Date;
+  intervaloSegundos: number;
+}): NivelDaRodada {
+  if (!e.temConector) return 'sem_conector';
+
+  const folgaMs = atrasoAceitoSegundos(e.intervaloSegundos) * 1000;
+  const agoraMs = e.agora.getTime();
+
+  if (e.ultima === null) {
+    // Recem-ligado ainda nao deve rodada a ninguem.
+    if (e.desde !== null && agoraMs - e.desde.getTime() <= folgaMs) return 'em_dia';
+    return 'nunca_rodou';
+  }
+
+  const desdeAUltima = agoraMs - e.ultima.iniciado_em.getTime();
+
+  if (e.ultima.status === 'em_andamento') {
+    /* Uma rodada em andamento AGORA e o estado normal de quem foi disparado
+     * neste minuto - so vira `travada` depois da folga. E ela nao e "atrasada"
+     * nunca: a linha existe, e o que ela tranca e o futuro. */
+    return desdeAUltima > folgaMs ? 'travada' : 'em_dia';
+  }
+
+  if (desdeAUltima > folgaMs) return 'atrasada';
+  if (e.ultima.status === 'erro') return 'terminou_mal';
+  /* `parcial` NAO e alarme desta secao, e a distincao vem do motor: parcial quer
+   * dizer que a rodada CONCLUIU e registrou o motivo de cada item que nao passou
+   * - o que falhou tem lugar proprio para aparecer (o erro por fatura), e
+   * chamar a rodada de quebrada esconderia a diferenca entre "o sistema parou" e
+   * "o banco recusou tres boletos". */
+  return 'em_dia';
+}
+
+/** As tres que precisam de gente. Existe para a tela e a unidade do systemd nao
+ *  reimplementarem a mesma lista - e uma lista repetida em dois lugares e uma
+ *  lista que diverge. */
+export function pedeGente(nivel: NivelDaRodada): boolean {
+  return nivel === 'atrasada' || nivel === 'travada' || nivel === 'nunca_rodou';
 }

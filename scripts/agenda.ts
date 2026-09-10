@@ -42,7 +42,41 @@ import {
   type AbrirTransacao, type ResultadoDaAgenda,
 } from '../src/cobranca/agenda.ts';
 import { credencialDeCobranca } from '../src/repos/boleto.ts';
-import { POLITICA, saudeDoCaminhoDoDinheiro } from '../src/dominio/agenda.ts';
+import { comoVaoAsAutomacoes, type Automacao } from '../src/repos/automacoes.ts';
+import { POLITICA, saudeDoCaminhoDoDinheiro, pedeGente } from '../src/dominio/agenda.ts';
+
+/**
+ * A FRASE DE UMA RODADA PARADA - para o journal e para a ultima linha do
+ * `systemctl status`.
+ *
+ * ⚠️ SO A FILA E A CONSULTA ENTRAM NO CODIGO DE SAIDA. O ciclo do CRM tambem
+ * para em silencio e a tela de Pendencias o mostra, mas o espelho velho atrasa
+ * CADASTRO e nao dinheiro - por uma unidade chamada "saude do caminho do
+ * dinheiro" ficar vermelha por causa dele, o vermelho passaria a querer dizer
+ * duas coisas. Ver o comentario de `saudeDoCaminhoDoDinheiro`.
+ *
+ * AS PALAVRAS SAO AS DA TELA, na medida do possivel: quem le o journal depois de
+ * ver a faixa em Pendencias tem de reconhecer o mesmo texto. Mesma razao de
+ * `alertaDoAviso` existir.
+ */
+const NOME_DA_RODADA: Record<string, string> = {
+  consulta_ativa: 'a conferencia de pagamentos no banco (consulta ativa)',
+  fila_de_emissao: 'o envio de boletos ao banco (fila de emissao)',
+  ciclo_do_crm: 'a leitura do outro sistema (ciclo do CRM)',
+};
+
+const horas = (s: number | null) => (s === null ? '?' : `${Math.round(s / 3600)} h`);
+
+function fraseDaRodadaParada(a: Automacao): string {
+  const nome = NOME_DA_RODADA[a.chave] ?? a.chave;
+  switch (a.nivel) {
+    case 'nunca_rodou': return `${nome} NUNCA rodou`;
+    case 'travada':     return `${nome} TRAVOU numa rodada aberta ha ${horas(a.ha_quanto_tempo_segundos)} - `
+                              + 'enquanto ela nao for encerrada, nenhuma nova acontece';
+    case 'atrasada':    return `${nome} nao roda ha ${horas(a.ha_quanto_tempo_segundos)}`;
+    default:            return `${nome}: ${a.nivel}`;
+  }
+}
 
 class RollbackDoEnsaio extends Error {
   readonly valor: unknown;
@@ -94,8 +128,9 @@ async function main(): Promise<void> {
     console.error('  --consulta    pergunta ao banco a situacao dos boletos em aberto (PRD §6)');
     console.error('  --certificado so le a data de expiracao do A1 e classifica');
     console.error('  --webhook     so pergunta ao banco se o aviso de pagamento ainda esta ligado');
-    console.error('  --saude       os dois acima juntos, e SAI COM CODIGO: 0 de pe, 3 sem conector,');
-    console.error('                4 precisa de acao humana, 5 nao deu para perguntar');
+    console.error('  --saude       os dois acima juntos MAIS as rodadas terem acontecido, e SAI COM');
+    console.error('                CODIGO: 0 de pe, 3 sem conector, 4 precisa de acao humana,');
+    console.error('                5 nao deu para perguntar');
     process.exit(2);
   }
 
@@ -159,8 +194,15 @@ async function main(): Promise<void> {
 
   /*
    * ======================================================================
-   * --saude: OS DOIS ALERTAS JUNTOS, E O UNICO QUE SAI COM CODIGO
+   * --saude: OS DOIS ALERTAS E AS DUAS RODADAS, E O UNICO QUE SAI COM CODIGO
    * ======================================================================
+   *
+   * ⚠️ AS RODADAS ENTRARAM EM 10/09/2026, e a falta estava escrita: a retomada
+   * daquele dia registrou que esta unidade *"afirma sobre o A1 e o aviso, nao
+   * sobre a rodada ter acontecido"* - e a rodada que nao acontece e a mais
+   * silenciosa das tres coisas, porque nao produz erro, nem log, nem linha.
+   * Agora a afirmacao e completa: o A1 esta valido, o banco avisa quando ha
+   * pagamento, E o sistema esta indo buscar.
    *
    * ELE E O CANAL, e ate 09/09/2026 nao havia canal nenhum. Os dois alertas
    * desta agenda chegavam ao journal e a uma tela, e NENHUM DOS DOIS PROCURA
@@ -193,9 +235,26 @@ async function main(): Promise<void> {
       return { cert, aviso };
     }) as any;
 
+    /*
+     * AS RODADAS, E ELAS SAO LEITURA DO NOSSO BANCO - nao discam a Sicoob.
+     *
+     * ⚠️ TRANSACAO SEPARADA da de cima, e de proposito: se a Sicoob estiver fora
+     * do ar, `conferirAvisoDePagamento` ja resolveu isso devolvendo
+     * `nao_verificavel` - mas qualquer surpresa naquele bloco nao pode levar
+     * junto a unica pergunta desta unidade que NAO depende de rede. "Nao deu
+     * para falar com o banco" e "a consulta ativa parou ha 4 dias" sao
+     * independentes, e a segunda e a mais grave das duas.
+     */
+    const rodadas: Automacao[] = await a.withTenant(sessao, tenantProposto,
+      async () => comoVaoAsAutomacoes()) as any;
+    const paradas = rodadas
+      .filter((r) => r.chave !== 'ciclo_do_crm' && pedeGente(r.nivel))
+      .map(fraseDaRodadaParada);
+
     const veredito = saudeDoCaminhoDoDinheiro({
       certificado: e ? e.cert.nivel : null,
       aviso: e ? e.aviso.nivel : null,
+      rodadasParadas: paradas,
     });
 
     console.log('\n--- saude do caminho do dinheiro ---');
@@ -203,6 +262,14 @@ async function main(): Promise<void> {
       console.log(`  certificado A1 ....... ${e.cert.nivel}` +
                   (e.cert.dias === null ? '' : ` (${e.cert.dias} dia(s))`));
       console.log(`  aviso de pagamento ... ${e.aviso.nivel}`);
+    }
+    /* AS TRES SAO IMPRESSAS SEMPRE, inclusive as que estao em dia - e o mesmo
+     * motivo do painel no rodape da tela: a rodada que nao aconteceu nao produz
+     * linha nenhuma, entao um journal silencioso sobre elas tem a mesma cara de
+     * um journal que diz que esta tudo bem. */
+    for (const r of rodadas) {
+      const q = r.ha_quanto_tempo_segundos === null ? 'nunca' : `ha ${horas(r.ha_quanto_tempo_segundos)}`;
+      console.log(`  ${r.chave.padEnd(16)} ... ${String(r.nivel).padEnd(13)} (ultima: ${q})`);
     }
 
     /* AS FRASES SAO AS MESMAS DA TELA E DO `--webhook`, e de proposito: quem le

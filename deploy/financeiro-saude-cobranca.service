@@ -35,8 +35,9 @@
 #      fila e da consulta. Sem o `SuccessExitStatus=3` abaixo, uma maquina que
 #      ainda nao ligou o banco ficaria vermelha todo dia, e vermelho permanente
 #      e alarme desligado
-#   4  precisa de acao humana: A1 vencido / vencendo / sem data, ou o banco
-#      desligou o aviso, ou nunca houve aviso.  VERMELHO
+#   4  precisa de acao humana: A1 vencido / vencendo / sem data, o banco desligou
+#      o aviso, nunca houve aviso, OU uma das duas rodadas de dinheiro parou de
+#      acontecer (acrescentado em 10/09/2026 - ver abaixo).  VERMELHO
 #   5  nao deu para perguntar ao banco.  VERMELHO, e pelo mesmo motivo que
 #      `nao_verificavel` nao vira `ativo`: nao ter perguntado nao autoriza dizer
 #      que esta bem. Some sozinho na proxima rodada se era a Sicoob fora do ar;
@@ -55,12 +56,25 @@
 # `openssl` do sistema abre sem reclamar. `npm run certificado -- normalizar`
 # antes de subir ao cofre.
 #
+# AS RODADAS ENTRARAM EM 10/09/2026, e ate esse dia esta unidade tinha um buraco
+# no proprio assunto: ela afirmava que o A1 esta valido e que o banco avisa quando
+# ha pagamento, e NAO afirmava que o sistema esta indo buscar. A consulta ativa e
+# a unica porta automatica de baixa enquanto o `ADR-0006` nao existir - com o
+# timer dela parado, boleto pago para de virar baixa, a cobranca segue acusando
+# quem ja pagou, e a ausencia de execucao nao produz erro, nem log, nem linha.
+# `agenda_execucao` guardava a resposta desde 30/07/2026 e ninguem a lia.
+#
+# SO A FILA E A CONSULTA ENTRAM NO CODIGO DE SAIDA. O ciclo do CRM tambem para em
+# silencio e a tela de Pendencias passou a mostra-lo no mesmo dia, mas o espelho
+# velho atrasa CADASTRO e nao dinheiro: por ele, o vermelho desta unidade passaria
+# a querer dizer duas coisas.
+#
 # O QUE ELA AINDA NAO FAZ: nao manda e-mail. Nao ha MTA nesta maquina e um relay
 # e contrato com terceiro - decisao do dono, registrada em `QUESTOES.md` §2.h.
 # O que existe hoje sao dois canais, e eles se completam: esta unidade, para
 # quando ninguem esta olhando, e a faixa no alto da tela de Pendencias, para
 # quando alguem esta.
-Description=Financeiro G3 - confere se o caminho do dinheiro esta de pe (A1 + aviso de pagamento)
+Description=Financeiro G3 - confere se o caminho do dinheiro esta de pe (A1 + aviso + as rodadas)
 Documentation=https://github.com/upereira-jp/finaceiro
 After=network-online.target financeiro.service
 Wants=network-online.target

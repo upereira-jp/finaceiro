@@ -711,6 +711,23 @@ export type ExecucaoDoConector = {
   views_ausentes: string[];
 };
 
+/** Uma das tres rodadas que acontecem sem ninguem pedir, e o estado dela. Ver
+ *  `src/repos/automacoes.ts` — `agenda_execucao` estava no banco desde
+ *  30/07/2026 e nao tinha leitor em lugar nenhum ate 10/09, o que fazia "a
+ *  agenda nao roda desde o dia 3" ser uma pergunta impossivel de fazer pela
+ *  interface. O nivel vem PRONTO do servidor: quem decide se ha atraso e
+ *  `nivelDaRodada` no dominio, e nao o relogio da maquina de quem abriu a tela. */
+export type Automacao = {
+  chave: 'consulta_ativa' | 'fila_de_emissao' | 'ciclo_do_crm';
+  nivel: 'em_dia' | 'terminou_mal' | 'atrasada' | 'travada' | 'nunca_rodou' | 'sem_conector';
+  intervalo_segundos: number;
+  ultima: {
+    iniciado_em: string; terminado_em: string | null; status: string;
+    examinados: number; feitos: number; falhos: number;
+  } | null;
+  ha_quanto_tempo_segundos: number | null;
+};
+
 /** O conector de cobranca COMO ESTA GRAVADO. Sem segredo: `credencial_ref` e a
  *  referencia opaca que a regra 5 manda circular no lugar dele. */
 export type ConectorCobranca = {
