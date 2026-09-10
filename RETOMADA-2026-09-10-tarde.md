@@ -37,11 +37,10 @@ deduzido:
 | **O bundle é o novo** | `web/dist/assets/historico-9wvdob6T.js` (novo) e `contas-a-pagar-DKoZ82hH.js` reconstruído, os dois às **14:15** |
 | A SPA responde | `GET /` → **200** |
 
-⚠️ **O que NÃO foi visto por olho humano:** a aba **Histórico** e o recibo em
-Contas a pagar. É a mesma pendência que a sessão anterior deixou, e ela agora
-cobre duas levas — vale abrir as duas abas antes de considerar a leva fechada.
-Foi exatamente assim que a oitava mudança de 10/09 apareceu: o dono abriu a tela
-depois do deploy.
+✅ **VISTAS.** O dono conferiu no fim de 10/09 — *«tudo ok nas telas»* — e com
+isso o item mais antigo do §0 fecha. Ele cobria quatro levas: Histórico, o recibo
+em Contas a pagar, a oferta de endereço em Unidades e o painel «Quem é quem no
+outro sistema» em Contratos.
 
 **Nada disto foi migration** — a leva é inteira de leitura e de tela, e as 39
 migrations continuam as mesmas.
@@ -207,7 +206,7 @@ Três decisões, e a terceira é a que não é óbvia:
 
 1. ✅ ~~A tela em produção~~ — **subiu às 14:15:11**, com os quatro sinais do §0.1;
 2. ✅ ~~O CI desta leva~~ — **verde**, run `34486930171` (§0.1-b);
-3. 🔴 **As telas com olho humano** — nem esta leva nem a anterior, e agora são três telas: Histórico, o recibo em Contas a pagar e a oferta de endereço em Unidades consumidoras. **É a ÚNICA coisa que sobra do §0**;
+3. ✅ ~~As telas com olho humano~~ — **o dono conferiu no fim de 10/09: «tudo ok nas telas»**. Fecha o item mais antigo do §0, que cobria quatro levas;
 4. **A trilha com uma fatura de verdade** — produção tem 0 faturas, então
    `fatura`, `boleto` e `liquidacao` não têm uma linha sequer na trilha. Os
    rótulos das três existem e nunca foram exercidos contra dado real.
