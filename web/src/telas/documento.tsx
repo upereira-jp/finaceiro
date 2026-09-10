@@ -36,6 +36,7 @@ import { paraCentavos, emReais } from '../dinheiro.ts';
 import { mover, paraEnvio, type CampoConfigurado } from '../cobranca-regras.ts';
 import { ladoDoQr } from '../layout-regras.ts';
 import { FaturaUnificada } from './fatura-unificada.tsx';
+import { FaixaDoPasso } from '../roteiro-corpo.tsx';
 
 /** Os 16 do enum `campo_de_fatura` (migration 19). A tela nao inventa nome de
  *  campo: o banco recusaria, e o erro sairia do lado errado. */
@@ -212,9 +213,18 @@ export function TelaDocumento() {
 
   const semIdentidade = !ident.carregando && !ident.erro && ident.dado == null;
 
+  /*
+   * A LEGENDA DIZIA O CONTRARIO DO QUE A TELA FAZ, e dizia desde 21/08/2026.
+   * Ela afirmava «Nao cria fatura nem cobra — isso e Faturamento e Faturas», e
+   * isso deixou de ser verdade no dia em que «gerar cobranca» entrou aqui: a
+   * cobranca do mes NASCE nesta tela. Pior que estar velha, ela mandava para a
+   * aba **Faturamento**, que e o caminho aposentado — a legenda da tela certa
+   * apontando para a errada. Corrigido em 10/09/2026.
+   */
   return (
     <Pagina titulo="Fatura unificada"
-            sub="Sobe a fatura da Equatorial, confere os dados e emite a folha que o cliente recebe. Não cria fatura nem cobra — isso é Faturamento e Faturas. É a mesma rota que o CRM vai consumir.">
+            sub="Onde a cobrança do mês nasce: sobe a conta da distribuidora, confere os dados, gera a cobrança e imprime a folha que o cliente recebe.">
+      <FaixaDoPasso rota="/documento" />
 
       {/*
         ====================================================================

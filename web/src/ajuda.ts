@@ -818,16 +818,23 @@ export const TOPICOS: readonly Topico[] = [
     pergunta: 'Um cliente ficou de fora do faturamento. Por quê?',
     resposta: 'O ensaio diz o motivo de cada recusa, linha por linha. Quase sempre é um cadastro '
       + 'faltando — e o mesmo motivo aparece contado na aba Pendências.',
+    /* OS PASSOS MUDARAM EM 10/09/2026 e passaram a ensinar o caminho OFICIAL.
+     * Até aqui a resposta começava por «Abra a aba Faturamento», que é o caminho
+     * aposentado — e a pergunta «um cliente ficou de fora» é das mais comuns de
+     * quem está fechando o mês. A tela em lote continua no fim, como segunda
+     * opção nomeada, porque quem já compôs por ela precisa saber ler a recusa. */
     passos: [
-      'Abra a aba Faturamento e clique em «Simular, sem cobrar ninguém».',
-      'Leia o motivo escrito na linha de quem ficou de fora.',
-      'Abra a aba Pendências: o botão de cada linha leva à tela onde aquilo se preenche.',
-      'Resolva e rode o ensaio de novo.',
+      'Abra a aba Fatura unificada e vá à lista «Contas registradas».',
+      'Clique em «conferir antes» na linha do cliente: ele responde se aquela conta viraria '
+        + 'cobrança, e por que não, sem gravar nada.',
+      'Abra a aba Pendências: o roteiro do mês, no alto, diz em qual passo o mês parou, e o botão '
+        + 'de cada pendência leva à tela onde aquilo se preenche.',
+      'Resolva e clique «conferir antes» de novo.',
     ],
-    caminhos: [ir('/carteira', 'Abrir Faturamento'), ir('/pendencias', 'Ver o que falta no mês'),
+    caminhos: [ir('/documento', 'Abrir Fatura unificada'), ir('/pendencias', 'Ver o que falta no mês'),
                noCrm('/rateio', 'Conferir a situação no outro sistema')],
     camada: null,
-    telas: ['/carteira'],
+    telas: ['/documento', '/pendencias'],
     termos: ['ficou de fora', 'recusado', 'nao entrou', 'faltou cliente no lote', 'motivo da recusa',
              'por que recusou', 'nao foi faturado', 'cliente fora do mes'],
   },
@@ -838,10 +845,16 @@ export const TOPICOS: readonly Topico[] = [
       + 'depois, cada um no seu botão.',
     passos: [
       'Abra a aba Emissão e cobrança e escolha o mês.',
-      'Use «Emitir em lote» para fechar todos os rascunhos de uma vez, ou emita linha por linha.',
+      /* O BOTÃO NÃO SE CHAMA «Emitir em lote», e nunca se chamou nesta tela: o
+       * rótulo é «Emitir as N em rascunho», com o número dentro. Instrução que
+       * nomeia botão inexistente faz a pessoa duvidar de si — a mesma regra que
+       * `RM13` prende no roteiro do mês. Corrigido em 10/09/2026. */
+      'Clique em «Emitir as N em rascunho» para fechar todos os rascunhos de uma vez, ou emita '
+        + 'linha por linha.',
       'Depois de emitida, a fatura ganha os botões de boleto e de baixa.',
     ],
-    caminhos: [ir('/faturas', 'Abrir Emissão e cobrança'), ver('/carteira', 'Antes: gerar o mês')],
+    caminhos: [ir('/faturas', 'Abrir Emissão e cobrança'),
+               ir('/documento', 'Antes: gerar as cobranças em Fatura unificada')],
     camada: null,
     telas: ['/faturas'],
     /* «como emito» SOZINHO saiu: ele casava frase inteira com «como emito
@@ -1317,12 +1330,29 @@ export const PALAVRAS_DA_TELA: Record<string, readonly string[]> = {
   '/contratos': ['contrato', 'contratos'],
   '/usinas': ['usina', 'usinas', 'geradora', 'geracao', 'energia gerada', 'producao'],
   '/donos': ['dono', 'donos', 'donos de usina', 'proprietario', 'chave pix do dono'],
-  '/carteira': ['faturamento', 'faturar', 'gerar o mes', 'ensaio', 'compor', 'fechar o mes'],
+  /*
+   * ⚠️ ESTA LINHA MANDAVA A PERGUNTA CERTA PARA A TELA ERRADA — corrigido em
+   * 10/09/2026, e é a correção de mais consequência desta lista.
+   *
+   * «faturar», «gerar o mes» e «fechar o mes» são as palavras de quem quer fazer
+   * o mês acontecer, e elas apontavam para `/carteira` — o caminho APOSENTADO
+   * desde 21/08. Num sistema sem divisão de suporte, a Central de Ajuda é a
+   * primeira coisa que a pessoa abre quando trava: ela estava respondendo com o
+   * caminho que TRAVA a unidade no caminho oficial (`uc_ja_faturada`).
+   *
+   * As três foram para `/documento`, que é onde a cobrança nasce. O que SOBROU
+   * aqui é o vocabulário do lote, e só ele: quem digita «ensaio» ou «compor»
+   * está falando dos botões desta tela, e quem digita «faturamento» está lendo o
+   * rótulo dela na barra.
+   */
+  '/carteira': ['faturamento', 'ensaio', 'compor', 'lote', 'caminho antigo'],
   '/faturas': ['fatura', 'faturas', 'emissao e cobranca', 'boleto', 'cobranca do cliente', 'baixa',
                'emitir'],
   '/cobranca': ['sicoob', 'conector', 'banco', 'certificado', 'credencial do banco'],
+  /* As três que vieram de `/carteira` em 10/09 entram aqui: é nesta tela que a
+     cobrança do mês nasce, desde 21/08. Ver o comentário na linha da carteira. */
   '/documento': ['fatura unificada', 'folha', 'documento do cliente', 'imprimir', 'logotipo',
-                 'papel do cliente'],
+                 'papel do cliente', 'faturar', 'gerar o mes', 'fechar o mes'],
   '/contas-a-pagar': ['contas a pagar', 'a pagar', 'despesa', 'o que a empresa deve', 'pagar'],
   /* «historico» SAIU DAQUI EM 10/09/2026, e a troca e o proprio ponto: ate essa
      data a palavra caia em Relatorios por falta de destino melhor. Agora ha uma

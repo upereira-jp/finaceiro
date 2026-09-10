@@ -52,6 +52,22 @@ export type Tela = {
   titulo: string;
   icone: NomeDeIcone;
   grupo: GrupoDeTela;
+  /**
+   * A TELA QUE AINDA FUNCIONA E NÃO DEVE SER USADA — entrou em 10/09/2026, e o
+   * texto é o que a barra imprime ao lado do rótulo.
+   *
+   * POR QUE VIROU DADO, e não uma linha solta no `app.tsx`: é a mesma razão de
+   * este arquivo existir. O `.tsx` não é verificável pelo runner do `web/`, e o
+   * que este campo carrega tem consequência em dinheiro — a suíte `interface.ts`
+   * exige que EXATAMENTE uma tela esteja marcada, e que ela seja a que o
+   * roteiro do mês manda evitar. Duas listas discordando dariam uma aba
+   * aposentada sem aviso, que é o estado de onde viemos.
+   *
+   * ⚠️ O AVISO NÃO SUBSTITUI A TELA. `telas/carteira.tsx` continua abrindo com a
+   * faixa que explica o custo — este campo existe para a pessoa saber ANTES de
+   * clicar, e não depois.
+   */
+  aposentada?: string;
 };
 
 export const TELAS: readonly Tela[] = [
@@ -100,7 +116,23 @@ export const TELAS: readonly Tela[] = [
    * E O PAR COM "Faturas" E A ORDEM DO TRABALHO, nao uma repeticao:
    * **Faturamento** gera o lote -> **Faturas** emite, cobra e da baixa.
    */
-  { rota: '/carteira',   titulo: 'Faturamento', icone: 'carteira',  grupo: 'dinheiro' },
+  /*
+   * ⚠️ MARCADA COMO ANTIGA EM 10/09/2026, e o rótulo NÃO mudou.
+   *
+   * O problema medido: esta é a aba de nome mais óbvio da barra para quem
+   * procura «onde eu faturo o mês», e é o caminho APOSENTADO desde 21/08. Quem
+   * segue o nome não recebe erro — recebe um mês composto pelo caminho velho, e
+   * uma cobrança composta aqui TRAVA a mesma unidade no caminho oficial
+   * (`uc_ja_faturada`), com desfazer sendo cancelar uma a uma.
+   *
+   * POR QUE MARCAR E NÃO RENOMEAR. O rótulo `Faturamento` é decisão do dono de
+   * 17/08, tomada para o nome dizer o que o servidor chama (regra 7), e trocá-lo
+   * de novo criaria o terceiro nome para a mesma tela em três semanas. A palavra
+   * ao lado resolve o que estava errado — a pessoa saber ANTES de clicar — sem
+   * desfazer a decisão de quem nomeou.
+   */
+  { rota: '/carteira',   titulo: 'Faturamento', icone: 'carteira',  grupo: 'dinheiro',
+    aposentada: 'caminho antigo' },
   /*
    * "FATURAS" E "FATURA UNIFICADA" LADO A LADO NAO SE DISTINGUIAM, e o dono
    * disse isso duas vezes: primeiro *"qual a diferenca entre a aba Faturas e a

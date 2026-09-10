@@ -49,6 +49,7 @@ import {
 import { ICONE_DO_STATUS_DA_FATURA } from '../iconografia.ts';
 import { PainelDaEmissao } from '../emissao-travada-corpo.tsx';
 import type { EmissaoTravadaNaTela } from '../emissao-travada.ts';
+import { FaixaDoPasso } from '../roteiro-corpo.tsx';
 
 export function TelaFaturas() {
   const [mes, setMes] = useState(() => new Date().toISOString().slice(0, 7));
@@ -175,6 +176,11 @@ export function TelaFaturas() {
   return (
     <Pagina titulo="Emissão e cobrança"
             sub="O mês de referência inteiro, linha por linha. Emitir fecha o valor, o boleto vem depois, e dar baixa é o que dispara a divisão do dinheiro. A folha que o cliente recebe se monta na aba Fatura unificada.">
+      {/* ONDE ESTA TELA FICA NO MÊS — 10/09/2026. Quem chega aqui vindo de fora
+          do roteiro não sabia que existem dois passos antes deste, nem que há um
+          depois. A faixa é derivada do mesmo `MOLDES` que monta o roteiro em
+          Pendências, então as duas não têm como discordar. */}
+      <FaixaDoPasso rota="/faturas" />
       <div className="cartao secao">
         <div style={{ ...linha, gap: 12 }}>
           <div>

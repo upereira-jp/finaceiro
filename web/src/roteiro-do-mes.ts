@@ -372,3 +372,65 @@ export function travasDe(
 export function passoDeAgora(passos: readonly PassoDoMes[]): PassoDoMes | null {
   return passos.find((x) => x.estado === 'agora' || x.estado === 'travado') ?? null;
 }
+
+/* ==========================================================================
+ * ONDE ESTOU, dentro da tela de trabalho
+ * ==========================================================================
+ *
+ * O roteiro completo mora em Pendências. Só que o trabalho não: ele acontece em
+ * «Fatura unificada» e em «Emissão e cobrança», e quem está lá dentro perdeu o
+ * mapa — a tela não diz em que parte do mês ela é, nem para onde se vai depois.
+ * Foi assim que o caminho aposentado conseguiu parecer o caminho: nenhuma tela
+ * dizia o que vinha antes nem depois dela.
+ *
+ * ⚠️ ESTA LEITURA NÃO É AO VIVO, E É DE PROPÓSITO. Ela responde «que parte do
+ * mês é esta tela», que é uma verdade do DESENHO e não do estado — e por isso
+ * não precisa de rede, não pode ficar velha e não pode discordar de Pendências.
+ * O estado ao vivo («você está no 1 de 5») tem UM lugar, e repetir estado em
+ * três telas é criar três lugares para discordarem. O link volta para lá.
+ */
+
+export type PassoNoMapa = {
+  numero: number;
+  titulo: string;
+  /** Onde ele acontece. Serve para a frase poder dizer «em «Emissão e cobrança»». */
+  destino: { rotulo: string; endereco: string } | null;
+};
+
+export type OndeEstouNoMes = {
+  /** Os passos que acontecem NESTA tela, na ordem do mês. Nunca vazio. */
+  aqui: readonly PassoNoMapa[];
+  /** Quantos passos o mês tem, para a frase poder dizer «de 5». */
+  total: number;
+  /** O passo imediatamente antes do primeiro daqui. `null` quando esta tela abre o mês. */
+  antes: PassoNoMapa | null;
+  /** O seguinte ao último daqui. `null` quando esta tela fecha o mês. */
+  depois: PassoNoMapa | null;
+};
+
+const noMapa = (i: number): PassoNoMapa => ({
+  numero: i + 1, titulo: MOLDES[i]!.titulo, destino: MOLDES[i]!.destino,
+});
+
+/**
+ * Que parte do mês é esta tela.
+ *
+ * `null` para tela que não hospeda passo nenhum — e aí a faixa não desenha, que
+ * é o certo: uma faixa dizendo «esta tela não é passo nenhum» é ruído em toda
+ * tela de cadastro do sistema.
+ */
+export function ondeEstouNoMes(rota: string): OndeEstouNoMes | null {
+  const indices = MOLDES
+    .map((m, i) => (m.destino?.endereco === rota ? i : -1))
+    .filter((i) => i >= 0);
+  if (indices.length === 0) return null;
+
+  const primeiro = indices[0]!;
+  const ultimo = indices[indices.length - 1]!;
+  return {
+    aqui: indices.map(noMapa),
+    total: MOLDES.length,
+    antes: primeiro > 0 ? noMapa(primeiro - 1) : null,
+    depois: ultimo < MOLDES.length - 1 ? noMapa(ultimo + 1) : null,
+  };
+}

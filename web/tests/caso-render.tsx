@@ -30,7 +30,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CorpoDaAjuda } from '../src/ajuda-corpo.tsx';
 import { CorpoDaSaude } from '../src/saude-corpo.tsx';
-import { CorpoDoRoteiro } from '../src/roteiro-corpo.tsx';
+import { CorpoDoRoteiro, FaixaDoPasso } from '../src/roteiro-corpo.tsx';
 import { FaixasDasAutomacoes, PainelDasAutomacoes } from '../src/automacoes-corpo.tsx';
 import { FaixaDaEmissao, PainelDaEmissao } from '../src/emissao-travada-corpo.tsx';
 import { PainelDoVinculo } from '../src/vinculo-do-crm-corpo.tsx';
@@ -864,6 +864,48 @@ const desenharRoteiro = (leitura: Parameters<typeof CorpoDoRoteiro>[0]): string 
   for (const regra of [/\bcamada\b/i, /\bwebhook\b/i, /\bendpoint\b/i, /\bQ-[A-Z]/, /npm run/]) {
     chk('R16i', !regra.test(t) && !regra.test(tt), `o que a pessoa le nao casa com ${regra}`);
   }
+}
+
+// ============================================================================
+// R17 — A FAIXA DE ORIENTAÇÃO, dentro da tela de trabalho
+// ============================================================================
+//
+// O roteiro inteiro mora em Pendências; o trabalho mora nas outras duas telas —
+// e quem está lá dentro perdeu o mapa. Foi assim que a aba aposentada conseguiu
+// parecer o caminho: nenhuma tela dizia o que vinha antes nem depois dela.
+//
+// O modo de falha aqui é o silêncio: `ondeEstouNoMes` devolve `null` para tela
+// sem passo, e um `!onde` invertido apagaria a faixa das duas telas que a
+// precisam sem quebrar `tsc` nem reprovar `RM*`.
+
+{
+  const fu = renderToStaticMarkup(<FaixaDoPasso rota="/documento" />);
+  const ec = renderToStaticMarkup(<FaixaDoPasso rota="/faturas" />);
+
+  chk('R17a', /Passos 1 e 2 de 5 do mês/.test(texto(fu)),
+      'a tela onde a cobrança nasce diz que ela é os passos 1 e 2 dos 5 - quem chega nela de fora '
+      + 'do roteiro não tinha como saber que parte do mês estava fazendo');
+
+  chk('R17b', /Passos 3 e 4 de 5 do mês/.test(texto(ec)) && /Antes daqui: 2/.test(texto(ec)),
+      'e a de emitir diz que é a 3 e a 4, e que há um passo 2 antes dela');
+
+  chk('R17c', ec.includes('href="/documento"') && fu.includes('href="/faturas"'),
+      'cada uma aponta a vizinha pelo endereço real - a faixa é o corrimão entre as duas telas, e '
+      + 'corrimão que não leva a lugar nenhum não é corrimão');
+
+  chk('R17d', fu.includes('href="/pendencias"') && ec.includes('href="/pendencias"'),
+      'e as duas voltam para o roteiro completo: o estado ao vivo tem UM lugar, e repeti-lo aqui '
+      + 'criaria três lugares para discordarem');
+
+  chk('R17e', !/Antes daqui/.test(texto(fu)) && /Depois daqui: 3/.test(texto(fu)),
+      'a tela que ABRE o mês não inventa um passo anterior, e diz qual é o próximo');
+
+  // -------------------------- a tela sem passo desenha NADA, e é o certo
+  const cadastro = ['/clientes', '/unidades', '/contratos', '/usinas', '/donos', '/carteira']
+    .map((r) => renderToStaticMarkup(<FaixaDoPasso rota={r} />));
+  chk('R17f', cadastro.every((h) => h === ''),
+      'e nenhuma tela de cadastro ganha faixa - inclusive a APOSENTADA, porque uma faixa de '
+      + '«passo do mês» nela seria o sistema convidando de volta para o caminho que trava a unidade');
 }
 
 export const resultado = () => ({ falhas, feitas });

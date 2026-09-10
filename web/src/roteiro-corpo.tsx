@@ -30,7 +30,10 @@
 import type { ReactNode } from 'react';
 import { Ligacao } from './rota.tsx';
 import { Icone } from './ui.tsx';
-import { roteiroDoMes, passoDeAgora, type LeituraDoMes, type PassoDoMes } from './roteiro-do-mes.ts';
+import {
+  roteiroDoMes, passoDeAgora, ondeEstouNoMes,
+  type LeituraDoMes, type PassoDoMes, type PassoNoMapa,
+} from './roteiro-do-mes.ts';
 
 /** O ponto de cada passo: número dentro de um círculo que muda de cor. Ele
  *  carrega o estado sem depender de cor sozinha — o «✓» e o «!» são forma. */
@@ -195,5 +198,66 @@ export function CorpoDoRoteiro({ competencia, ...leitura }: CorpoDoRoteiro) {
         não chegaram a atrapalhar nenhum passo.
       </p>
     </section>
+  );
+}
+
+/* ==========================================================================
+ * A FAIXA DE ORIENTAÇÃO, dentro da tela de trabalho
+ * ==========================================================================
+ *
+ * O roteiro inteiro mora em Pendências; o TRABALHO mora aqui. Quem está dentro
+ * de «Fatura unificada» ou de «Emissão e cobrança» perdeu o mapa: a tela não
+ * dizia que parte do mês ela é, nem para onde se vai quando ela acaba. Foi
+ * assim que a aba aposentada conseguiu parecer o caminho — nenhuma tela dizia o
+ * que vinha antes ou depois dela.
+ *
+ * UMA LINHA, E NÃO UM SEGUNDO ROTEIRO. Ela diz três coisas e para: que passos
+ * são estes, o que vem antes, o que vem depois. O estado ao vivo («você está no
+ * 1 de 5») fica em Pendências, a um clique — repetir estado em três telas seria
+ * criar três lugares para discordarem.
+ */
+
+const nomes = (ps: readonly PassoNoMapa[]): string =>
+  ps.map((p) => `${p.numero} · ${p.titulo}`).join('   ');
+
+/** O rótulo da tela onde um passo vizinho acontece, quando não é esta mesma. */
+function Vizinho({ passo, rotulo }: { passo: PassoNoMapa; rotulo: string }) {
+  return (
+    <>
+      {rotulo} <strong>{passo.numero} · {passo.titulo}</strong>
+      {passo.destino && <>, em <Ligacao para={passo.destino.endereco}>{passo.destino.rotulo}</Ligacao></>}.
+    </>
+  );
+}
+
+/** Desenha `null` para tela que não hospeda passo nenhum — e `null` é a resposta:
+ *  uma faixa dizendo «esta tela não é passo nenhum» seria ruído em toda tela de
+ *  cadastro do sistema. */
+export function FaixaDoPasso({ rota }: { rota: string }) {
+  const onde = ondeEstouNoMes(rota);
+  if (!onde) return null;
+
+  const varios = onde.aqui.length > 1;
+
+  return (
+    <div className="cartao" style={{ padding: '10px 14px', marginBottom: 14, fontSize: 13.5, lineHeight: 1.65 }}>
+      <div>
+        <Icone nome="prontidao" tamanho={14} />{' '}
+        <strong>
+          {varios ? 'Passos' : 'Passo'}{' '}
+          {onde.aqui.map((p) => p.numero).join(' e ')} de {onde.total} do mês
+        </strong>
+        <span className="fraco"> — {nomes(onde.aqui)}</span>
+      </div>
+
+      {(onde.antes || onde.depois) && (
+        <div className="fraco" style={{ marginTop: 4 }}>
+          {onde.antes && <Vizinho passo={onde.antes} rotulo="Antes daqui:" />}
+          {onde.antes && onde.depois && ' '}
+          {onde.depois && <Vizinho passo={onde.depois} rotulo="Depois daqui:" />}
+          {' '}<Ligacao para="/pendencias">Ver o mês inteiro</Ligacao>
+        </div>
+      )}
+    </div>
   );
 }

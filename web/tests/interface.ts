@@ -725,6 +725,37 @@ chk('I9f', abaVigente(ABA_OCULTA, ordemDasAbas(true)) === ABA_OCULTA
 chk('I9g', ordemDasAbas(true).every((a) => (ROTULO_DA_ABA[a] ?? '').trim() !== ''),
     'toda aba, inclusive a oculta, tem rotulo — uma aba sem nome na barra e um botao mudo');
 
+// ============================================================================
+// I10 — A ABA APOSENTADA, marcada na barra
+// ============================================================================
+//
+// Ela funciona, tem o nome mais óbvio da barra para quem procura «onde eu faturo
+// o mês», e é o caminho aposentado desde 21/08/2026. Quem segue o nome não
+// recebe erro: recebe um mês composto pelo caminho velho, e uma cobrança
+// composta ali TRAVA a mesma unidade no caminho oficial.
+//
+// AS DUAS METADES QUE ESTAS LINHAS PRENDEM: que a marca não SOME (a aba volta a
+// atrair o clique errado) e que ela não se ESPALHE (marca em toda aba é marca
+// em nenhuma).
+{
+  const marcadas = TELAS.filter((t) => t.aposentada !== undefined);
+
+  chk('I10a', marcadas.length === 1 && marcadas[0]!.rota === '/carteira',
+      'exatamente UMA tela é marcada como caminho antigo, e é a de faturamento em lote'
+      + `${marcadas.length !== 1 ? ` (marcadas: ${marcadas.map((t) => t.rota).join(', ') || 'nenhuma'})` : ''}`
+      + ' — marca em todas seria marca em nenhuma, e marca em nenhuma é de onde viemos');
+
+  chk('I10b', (marcadas[0]?.aposentada ?? '').trim().length > 0
+              && (marcadas[0]?.aposentada ?? '').length <= 20,
+      'a marca tem texto e é curta o bastante para caber ao lado do rótulo sem quebrar a barra — '
+      + 'aviso que estoura a linha vira aviso que se esconde');
+
+  chk('I10c', marcadas[0]!.titulo === 'Faturamento',
+      'e o RÓTULO não mudou: `Faturamento` é decisão do dono de 17/08 para o nome dizer o que o '
+      + 'servidor chama, e trocá-lo de novo daria o terceiro nome da mesma tela em três semanas. '
+      + 'A palavra ao lado resolve o que estava errado sem desfazer quem nomeou');
+}
+
 console.log();
 if (falhas > 0) { console.log(`--- interface: ${falhas} FALHA(S)`); process.exit(1); }
 console.log(`--- interface (estilo, movimento e navegacao): ${feitas} verificacoes, 0 falhas`);

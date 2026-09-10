@@ -16,7 +16,7 @@
 //                    o «como» não pode nomear tela que não existe.
 
 import {
-  roteiroDoMes, passoDeAgora, travasDe, MOLDES,
+  roteiroDoMes, passoDeAgora, travasDe, ondeEstouNoMes, MOLDES,
   type CamadaDoRoteiro, type LeituraDoMes, type PosicaoDoMes,
 } from '../src/roteiro-do-mes.ts';
 import { TELAS } from '../src/navegacao.ts';
@@ -286,6 +286,63 @@ chk('RM2', agoraDe({ camadas: comTudoLido(), posicao: posicao(29, 29, 29), semCo
   chk('RM18', /7 sem boleto/.test(comAtrasoDeOutroMes.find((p) => p.chave === 'cobrar')!.contagem ?? ''),
       'e cobrança sem boleto de mês anterior aparece assim mesmo, dizendo que conta todos os meses '
       + '- «uma fatura de MAI que nunca virou boleto continua sendo dinheiro parado em SET»');
+}
+
+/* ==========================================================================
+ * RM19..RM23 — «que parte do mês é esta tela»
+ * ========================================================================== */
+
+// --------------------------- RM19 as duas telas de trabalho se reconhecem
+{
+  const fu = ondeEstouNoMes('/documento');
+  const ec = ondeEstouNoMes('/faturas');
+
+  chk('RM19', fu !== null && ec !== null
+              && fu!.aqui.map((p) => p.numero).join(',') === '1,2'
+              && ec!.aqui.map((p) => p.numero).join(',') === '3,4',
+      'Fatura unificada hospeda os passos 1 e 2 do mês e Emissão e cobrança os passos 3 e 4 - a '
+      + 'faixa de cada tela sai da MESMA lista que monta o roteiro, então as duas não têm como '
+      + 'discordar');
+}
+
+// ----------------------------- RM20 o antes e o depois apontam a tela vizinha
+{
+  const ec = ondeEstouNoMes('/faturas')!;
+  chk('RM20', ec.antes?.numero === 2 && ec.antes?.destino?.endereco === '/documento'
+              && ec.depois?.numero === 5,
+      'quem está em Emissão e cobrança vê que o passo 2 acontece em Fatura unificada e que ainda '
+      + 'há um 5 depois - sem isso, quem chega aqui de fora do roteiro não sabe que existem dois '
+      + 'passos antes deste');
+}
+
+// ---------------------- RM21 a tela que abre o mês não inventa um passo anterior
+{
+  const fu = ondeEstouNoMes('/documento')!;
+  chk('RM21', fu.antes === null && fu.depois?.numero === 3,
+      'e a tela que ABRE o mês não tem «antes daqui» - inventar um passo zero seria mandar a '
+      + 'pessoa procurar trabalho que não existe');
+}
+
+// ------------------ RM22 tela que não hospeda passo nenhum não ganha faixa
+{
+  const semPasso = ['/clientes', '/unidades', '/contratos', '/usinas', '/donos', '/cobranca',
+                    '/historico', '/relatorios', '/carteira'];
+  const inventadas = semPasso.filter((r) => ondeEstouNoMes(r) !== null);
+  chk('RM22', inventadas.length === 0,
+      `nenhuma tela de cadastro ganha faixa de passo${inventadas.length ? ` (ganharam: ${inventadas.join(', ')})` : ''}`
+      + ' - e a APOSENTADA está nessa lista: dar a ela uma faixa de «passo do mês» seria o '
+      + 'sistema convidando de volta para o caminho que trava a unidade');
+}
+
+// ----------------------------- RM23 todo passo do mês tem onde acontecer
+{
+  const orfaos = MOLDES.filter((m) => m.destino === null);
+  const cobertos = new Set(
+    MOLDES.flatMap((m) => (m.destino ? ondeEstouNoMes(m.destino.endereco)?.aqui.map((p) => p.numero) ?? [] : [])),
+  );
+  chk('RM23', orfaos.length === 0 && cobertos.size === MOLDES.length,
+      'os cinco passos têm tela, e cada um é alcançado pela faixa de alguma delas - um passo sem '
+      + 'destino seria uma instrução sem lugar para acontecer');
 }
 
 console.log(`\n${falhas === 0 ? 'roteiro-do-mes: todas as verificacoes passaram'
