@@ -229,8 +229,15 @@ novo entra lendo, não perguntando.
 | **3** | **D5** — o canal que empurra | Decidir se vale contratar um serviço de e-mail |
 | **4** | `destravar-uc` na tela | Exceção rara; só quando o resto estiver fechado |
 
-**Não sobrou pendência de código nesta linha.** Os três itens do Bloco A estão
-fechados; o que resta é insumo da operação e decisão com dono.
+**Os três itens do Bloco A estão fechados.**
+
+⚠️ **E a pergunta ficou maior depois deste documento.** Em 10/09/2026 o dono
+perguntou *"o que falta para rodar sozinho, tudo pela interface?"* — que não é a
+mesma pergunta que este plano respondeu. Este mediu **o que exige terminal**;
+aquela mede **o que ainda exige um técnico, em qualquer situação**. O
+levantamento está em **`RETOMADA-2026-09-10.md` §5**, e ele achou **uma pendência
+de código que este documento não via**: a interface não sabe dizer se a
+automação parou de rodar (`agenda_execucao` é escrita e nunca lida).
 
 **Custo dos três de código (A1, A2, `destravar-uc`):** são telas pequenas sobre
 lógica que **já existe e já está testada** — o trabalho é a rota e o formulário,
