@@ -46,6 +46,8 @@ import {
   type MotivoDeTravaDaImportacao,
 } from '../cobranca-regras.ts';
 import { ICONE_DO_STATUS_DA_FATURA } from '../iconografia.ts';
+import { PainelDaEmissao } from '../emissao-travada-corpo.tsx';
+import type { EmissaoTravadaNaTela } from '../emissao-travada.ts';
 
 export function TelaFaturas() {
   const [mes, setMes] = useState(() => new Date().toISOString().slice(0, 7));
@@ -54,6 +56,24 @@ export function TelaFaturas() {
   const { ordem, alternar } = useOrdenacao('vencimento');
 
   const faturas = useDados<Fatura[]>(() => api.get(`/faturamento/${competenciaISO(mes)}`), [mes]);
+
+  /*
+   * O QUE NAO CHEGOU AO BANCO — e ela NAO depende do mes do seletor, de
+   * proposito. A tabela abaixo e o mes; esta lista e a carteira: uma fatura de
+   * MAI que nunca virou boleto continua sendo dinheiro parado em SET, e amarra-la
+   * ao seletor faria a lista sumir quando alguem trocasse o mes para conferir
+   * outra coisa — que e a maneira mais silenciosa de perder justamente o caso
+   * antigo.
+   */
+  const emissao = useDados<EmissaoTravadaNaTela>(() => api.get('/emissao/travada'));
+
+  /* O MESMO caminho de escrita do painel de uma fatura (`POST .../boleto`), e a
+   * repeticao aqui e so o gatilho: `registrar()` reaproveita a linha que existe
+   * e conta a tentativa, entao pedir daqui e pedir de la. */
+  const pedirBoleto = async (faturaId: string) => {
+    const ok = await acao.executar(() => api.post(`/faturas/${faturaId}/boleto`));
+    if (ok) { acao.anunciar('Boleto registrado.'); emissao.recarregar(); faturas.recarregar(); }
+  };
   const ucs = useDados<UnidadeConsumidora[]>(() => api.get('/unidades-consumidoras?limite=500'));
 
   // O NUMERO DA UC NAO VEM NA FATURA, e ele e a unica coluna que quem opera
@@ -203,6 +223,16 @@ export function TelaFaturas() {
           </Aviso>
         )}
       </div>
+
+      {/*
+        A LISTA VEM ANTES DA TABELA DO MES, e a ordem e de consequencia: a tabela
+        abaixo mostra o que este mes tem; esta lista mostra quem, em qualquer
+        mes, ficou sem receber cobranca. A segunda pergunta e mais alta — uma
+        fatura emitida que nunca virou boleto e um cliente que nao recebeu nada,
+        e ela nao aparece em nenhuma coluna da tabela.
+      */}
+      <PainelDaEmissao dados={emissao.dado} erro={emissao.erro}
+                       pedirBoleto={(id) => void pedirBoleto(id)} ocupado={acao.ocupado} />
 
       {/*
         OS TRES ESTADOS DO VAZIO, distinguidos. E a licao da tela de Contratos

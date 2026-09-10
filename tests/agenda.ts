@@ -28,6 +28,8 @@ import {
   POLITICA, intervaloSegundos, proximaTentativaEm, vencido,
   decidir, chaveDaConsultaAtiva, nivelDoCertificado, type Politica,
   CADENCIA, atrasoAceitoSegundos, nivelDaRodada, pedeGente,
+  nivelDaEmissao, emissaoPedeGente, FOLGA_DA_EMISSAO_SEGUNDOS,
+  type NivelDaEmissao,
   type NivelDaRodada, type RodadaVista,
 } from '../src/dominio/agenda.ts';
 import type { SituacaoDoBoleto } from '../src/sicoob/porta.ts';
@@ -1046,6 +1048,126 @@ chk('AG10d', podeReligarOAviso('nao_verificavel').pode === false,
     chk('AG11n', semConector.codigo === 3,
         'e sem conector continua 3 mesmo com rodada na lista - a precedencia 3 > 4 nao muda, e '
         + 'sem conector nao ha rodada a esperar de qualquer forma');
+  }
+}
+
+// ============================================================================
+// AG12 — A COBRANCA QUE NAO CHEGOU AO BANCO
+// ============================================================================
+//
+// COMO ESTAS SE VERIFICAM, e a disciplina e a mesma do resto do arquivo: nada
+// aqui compara contra uma tabela copiada da minha propria saida. O que se afirma
+// sao PROPRIEDADES da fronteira - precedencia, monotonia no tempo, simetria da
+// folga entre os dois lados da lista, e o lado seguro do dado ausente.
+
+{
+  const T0 = new Date('2026-09-10T12:00:00Z');
+  const antes = (segundos: number) => new Date(T0.getTime() - segundos * 1000);
+  const FOLGA = FOLGA_DA_EMISSAO_SEGUNDOS;
+
+  const semBoleto = (statusDaFatura: string, emitidaHa: number | null) => nivelDaEmissao({
+    statusDaFatura, emitidaEm: emitidaHa === null ? null : antes(emitidaHa),
+    boleto: null, agora: T0,
+  });
+  const comBoleto = (statusDaFatura: string, tentandoHa: number, tentativas = 1) => nivelDaEmissao({
+    statusDaFatura, emitidaEm: antes(tentandoHa + 60),
+    boleto: { status: 'erro', tentativas, criado_em: antes(tentandoHa) },
+    agora: T0,
+  });
+
+  // ------------------------------------------- AG12a a precedencia de `parado`
+  {
+    /* `parado` VEM ANTES DE TUDO porque quem escreve o boleto exige `emitida`:
+     * qualquer outro estado e uma linha que ninguem vai tentar de novo sozinho,
+     * e o que ela tem de boleto (ou de idade) nao muda isso. Se esta ordem
+     * inverter, a tela passa a mandar esperar uma fila que nao vai pegar. */
+    const outros = ['vencida', 'paga', 'cancelada', 'rascunho', 'algo_novo_do_banco'];
+    const todos = outros.flatMap((st) => [
+      semBoleto(st, 10), semBoleto(st, FOLGA * 9), semBoleto(st, null),
+      comBoleto(st, 10), comBoleto(st, FOLGA * 9, 40),
+    ]);
+    chk('AG12a', todos.every((n) => n === 'parado'),
+        'qualquer estado de fatura que nao seja `emitida` sai `parado`, com boleto ou sem, novo ou '
+        + `velho - ${todos.length} combinacoes, e a precedencia vem antes de olhar idade`);
+  }
+
+  // ------------------------------------------- AG12b os dois lados da ausencia
+  {
+    chk('AG12b', semBoleto('emitida', 60) === 'nao_pedido'
+              && comBoleto('emitida', 60) === 'esperando',
+        'recem-emitida sem boleto e `nao_pedido`; recem-tentada e `esperando` - os dois estados '
+        + 'normais de quem esta trabalhando, e nenhum dos dois pede gente');
+
+    chk('AG12c', semBoleto('emitida', FOLGA * 3) === 'esquecido'
+              && comBoleto('emitida', FOLGA * 3) === 'insistindo',
+        'passada a folga, os mesmos dois viram `esquecido` e `insistindo` - a distincao que '
+        + 'sobrevive e QUEM vai agir, e nao quanto tempo passou');
+  }
+
+  // ---------------------------------------- AG12d a folga e a MESMA dos dois lados
+  {
+    /* A pergunta que a folga responde e uma so - "faz tempo demais que este
+     * cliente esta sem cobranca?" -, e dois numeros diferentes para a mesma
+     * pergunta seriam duas respostas para explicar a quem opera. Isto mede a
+     * simetria pela FRONTEIRA, e nao pelo numero: procura, em cada lado, o
+     * segundo exato em que o nivel vira, e exige que sejam o mesmo segundo. */
+    const virada = (f: (ha: number) => NivelDaEmissao, calmo: NivelDaEmissao): number => {
+      let s = 1;
+      while (s < 60 * 60 * 24 * 30 && f(s) === calmo) s += 1;
+      return s;
+    };
+    const viradaSem = virada((ha) => semBoleto('emitida', ha), 'nao_pedido');
+    const viradaCom = virada((ha) => comBoleto('emitida', ha), 'esperando');
+    chk('AG12d', viradaSem === viradaCom && viradaSem === FOLGA + 1,
+        `os dois lados viram no mesmo segundo (${viradaSem}), e ele e o primeiro DEPOIS da folga - `
+        + 'a folga inteira ainda e silencio, e o segundo seguinte ja fala');
+  }
+
+  // ------------------------------------------------ AG12e monotonia no tempo
+  {
+    /* O nivel nunca melhora sozinho com o relogio. Um estado que oscilasse -
+     * grave as 9h, calmo as 10h, grave de novo as 11h - poria a faixa piscando
+     * sobre uma fatura parada, e alarme que pisca e alarme que se ignora. */
+    const passos = [1, 60, 3_600, FOLGA - 1, FOLGA, FOLGA + 1, FOLGA * 2, FOLGA * 30];
+    const gravidade: Record<NivelDaEmissao, number> = {
+      nao_pedido: 0, esperando: 0, esquecido: 1, insistindo: 1, parado: 2,
+    };
+    const naoRetrocede = (f: (ha: number) => NivelDaEmissao) =>
+      passos.every((ha, i) => i === 0 || gravidade[f(ha)] >= gravidade[f(passos[i - 1]!)]);
+    chk('AG12e', naoRetrocede((ha) => semBoleto('emitida', ha))
+              && naoRetrocede((ha) => comBoleto('emitida', ha)),
+        'quanto mais tempo passa, mais grave (ou igual) - nunca menos, nos dois lados e em oito '
+        + 'pontos do tempo, incluindo os dois vizinhos da fronteira');
+  }
+
+  // -------------------------------------- AG12f o dado ausente cai no lado seguro
+  {
+    chk('AG12f', semBoleto('emitida', null) === 'nao_pedido',
+        'fatura emitida SEM carimbo de emissao nao vira `esquecido` - sem saber ha quanto tempo, '
+        + 'acusar seria transformar dado estranho em alarme, e alarme por dado estranho e alarme '
+        + 'que se aprende a ignorar');
+  }
+
+  // ------------------------------- AG12g a contagem de tentativas nao decide nada
+  {
+    /* A fila desacelera, e nao desiste: uma linha com 40 tentativas em duas horas
+     * e uma indisponibilidade do banco; uma com 2 tentativas em cinco dias e uma
+     * causa que ninguem olhou. Quem separa e o TEMPO, e nao o contador - se o
+     * contador entrasse, o segundo caso ficaria calado para sempre. */
+    chk('AG12g', comBoleto('emitida', 3_600, 40) === 'esperando'
+              && comBoleto('emitida', FOLGA * 5, 2) === 'insistindo',
+        '40 tentativas em uma hora ainda e `esperando`, e 2 tentativas em cinco dias ja e '
+        + '`insistindo` - o relogio decide, e nao o contador');
+  }
+
+  // ------------------------------------------- AG12h quem pede gente, e so eles
+  {
+    const todos: NivelDaEmissao[] = ['nao_pedido', 'esquecido', 'esperando', 'insistindo', 'parado'];
+    const pedem = todos.filter(emissaoPedeGente);
+    chk('AG12h', pedem.length === 3
+              && pedem.includes('esquecido') && pedem.includes('insistindo') && pedem.includes('parado'),
+        `pedem gente exatamente tres: ${pedem.join(', ')} - os outros dois se resolvem sozinhos, e `
+        + 'poe-los na faixa faria o alarme tocar todo dia de trabalho normal');
   }
 }
 

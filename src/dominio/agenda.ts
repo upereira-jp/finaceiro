@@ -632,3 +632,141 @@ export function nivelDaRodada(e: {
 export function pedeGente(nivel: NivelDaRodada): boolean {
   return nivel === 'atrasada' || nivel === 'travada' || nivel === 'nunca_rodou';
 }
+
+// ============================================================================
+// 6. A COBRANCA QUE NAO CHEGOU AO BANCO
+// ============================================================================
+//
+// A secao 5 pergunta se a RODADA aconteceu. Esta pergunta o degrau seguinte, e
+// ele e o que o cliente sente: **a rodada pode estar em dia e a cobranca nao
+// sair mesmo assim**. Um boleto recusado pelo banco fica na fila retentando,
+// desacelerando ate 6 h entre tentativas, e - por decisao registrada no
+// cabecalho deste arquivo - a fila NUNCA DESISTE SOZINHA. Isso e o certo: sair
+// da fila por contagem seria parar de cobrar sem ninguem ter decidido parar.
+//
+// So que "fica na fila para sempre" tem um preco que ate 10/09/2026 ninguem
+// pagava conscientemente: **nada olhava para a fila.** O erro existia por
+// fatura, uma de cada vez, dentro do painel que abre na aba de emissao - com 29
+// unidades, descobrir que 4 estao retentando exigia abrir 29 paineis. O
+// levantamento de 10/09 escreveu a frase: *"um boleto pode retentar por semanas
+// sem ninguem notar"*.
+//
+// ⚠️ E HA UM CASO PIOR QUE O DA FILA, e ele foi achado ao medir para escrever
+// isto: a fatura EMITIDA cujo boleto nunca foi pedido. `emitir()` nao cria linha
+// de boleto - esta escrito la, e e deliberado ("emitir e reservar o numero da
+// cobranca sao atos separaveis"). Quem cria a linha e `registrar()`, chamado
+// pelo botao de uma fatura. E `filaDeEmissao` so enxerga linha que EXISTE.
+// Entao a fatura emitida que ninguem clicou nao esta atrasada, nao esta em erro
+// e **nao esta em fila nenhuma**: ela simplesmente nao vira cobranca, e o unico
+// sinal disso e um painel fechado numa linha de tabela.
+//
+// As duas ausencias tem a mesma cara para quem opera - o cliente nao recebeu
+// nada - e por isso as duas entram na MESMA lista, com niveis diferentes. Uma
+// lista que so mostrasse a fila esconderia justamente o caso que a fila nao
+// cobre.
+
+/**
+ * ONDE ESTA A COBRANCA DESTA FATURA, do ponto de vista de quem espera o dinheiro.
+ *
+ * A ordem dos cinco e de CONSEQUENCIA, e ela e a ordem em que a tela mostra:
+ * quanto mais alto, mais tempo o cliente esta sem receber nada.
+ */
+export type NivelDaEmissao =
+  /** Fatura emitida agora ha pouco, boleto ainda nao pedido. NAO e alarme: e o
+   *  estado normal de quem acabou de emitir o mes e ainda esta trabalhando. */
+  | 'nao_pedido'
+  /** Ninguem pediu o boleto e ja passou a folga. Ninguem vai pedir sozinho -
+   *  nao ha linha para a fila enxergar. E o caso invisivel por construcao. */
+  | 'esquecido'
+  /** Pedido, falhou, e a fila retenta sozinha. Aparece na lista sem gritar: o
+   *  desfecho normal de uma falha de transporte e a proxima tentativa dar certo. */
+  | 'esperando'
+  /** Retentando ha mais de um dia. A fila continua tentando e vai continuar para
+   *  sempre - o que esta dito aqui e que a CAUSA nao passou sozinha, e nao vai. */
+  | 'insistindo'
+  /** A fila nao pega mais esta linha, e ninguem vai tentar de novo sem uma
+   *  pessoa. Hoje ha um caminho para ca: a fatura deixou de estar `emitida`
+   *  depois de o boleto falhar - `registrar()` recusa qualquer outro estado. */
+  | 'parado';
+
+/**
+ * A FOLGA ANTES DE COBRAR GENTE, e ela e uma escolha - Q-EMISSAOTRAVADA-01.
+ *
+ * 24 h, e o raciocinio fica escrito para poder ser contestado: o mes inteiro e
+ * emitido de uma vez e os boletos sao pedidos na sequencia, entao qualquer folga
+ * curta acusaria a operacao normal de esquecimento no meio do proprio trabalho.
+ * Um dia inteiro sem a cobranca sair, por outro lado, ja e um dia de atraso no
+ * dinheiro - e ninguem escolheu esse atraso.
+ *
+ * A mesma folga vale para os dois lados da lista (o nao pedido e o que retenta),
+ * de proposito: a pergunta que ela responde e uma so - *"faz tempo demais que
+ * este cliente esta sem cobranca?"* -, e dois numeros diferentes para a mesma
+ * pergunta seriam duas respostas para explicar a quem opera.
+ */
+export const FOLGA_DA_EMISSAO_SEGUNDOS = 24 * 60 * 60;
+
+/** So o que o nivel le. Estrutural, como `RodadaVista`: o dominio nao importa
+ *  repositorio nem cliente de banco. */
+export type EmissaoVista = {
+  /**
+   * O status da fatura, como texto - `emitida` | `vencida` | ... Texto e nao
+   * uniao fechada pela mesma razao de `RodadaVista.status`: um valor novo no
+   * banco nao pode quebrar a leitura aqui.
+   */
+  statusDaFatura: string;
+  /** Quando a fatura foi emitida. E o relogio do `nao_pedido`, e nao ha outro:
+   *  antes de existir linha de boleto, nao ha nada mais recente a contar. */
+  emitidaEm: Date | null;
+  /** `null` quando NINGUEM PEDIU o boleto - a linha nao existe. */
+  boleto: {
+    /** `pendente` | `erro`. Os outros nao entram na lista: ver o repositorio. */
+    status: string;
+    tentativas: number;
+    /** Nasce imediatamente antes da PRIMEIRA chamada ao banco (ver
+     *  `repos/boleto.ts`), entao ele e a hora da primeira tentativa. */
+    criado_em: Date;
+  } | null;
+  agora: Date;
+};
+
+/**
+ * ⚠️ `parado` VEM ANTES DE TUDO, e a precedencia e a parte pensada.
+ *
+ * `filaDeEmissao` aceita fatura `emitida` OU `vencida`, e `registrar()` recusa
+ * tudo que nao seja `emitida` - as duas frases estao a 200 linhas uma da outra e
+ * discordam. O efeito, medido em 10/09/2026: a fila pega a linha a cada 5
+ * minutos, `registrar` levanta `FaturaSemBoleto` antes de tocar qualquer coluna,
+ * o motor conta um falho e **nada e escrito** - nem `ultimo_erro`, nem
+ * `tentativas`, nem `proxima_tentativa_em`. Sem escrita nao ha recuo: a mesma
+ * linha volta na rodada seguinte, para sempre, sem nunca acumular a memoria que
+ * faria a espera crescer.
+ *
+ * A fila deixou de aceitar `vencida` no mesmo dia - alinhada com quem escreve -,
+ * e e por isso que o nivel existe: sair da fila em silencio seria trocar um laco
+ * invisivel por uma ausencia invisivel. O caso agora SAI da fila e VIRA LINHA.
+ */
+export function nivelDaEmissao(e: EmissaoVista): NivelDaEmissao {
+  const folgaMs = FOLGA_DA_EMISSAO_SEGUNDOS * 1000;
+  const agoraMs = e.agora.getTime();
+
+  /* Quem escreve o boleto exige `emitida`. Qualquer outro estado e uma linha que
+   * ninguem vai tentar de novo sozinho - inclusive a que ainda esta na fila
+   * porque a fila foi consertada depois dela. */
+  if (e.statusDaFatura !== 'emitida') return 'parado';
+
+  if (e.boleto === null) {
+    /* Sem `emitida_em` nao da para saber ha quanto tempo, e o lado seguro e o
+     * que NAO acusa: uma fatura sem carimbo e um dado estranho, e transformar
+     * dado estranho em alarme treina a ignorar o alarme. */
+    if (e.emitidaEm === null) return 'nao_pedido';
+    return agoraMs - e.emitidaEm.getTime() > folgaMs ? 'esquecido' : 'nao_pedido';
+  }
+
+  return agoraMs - e.boleto.criado_em.getTime() > folgaMs ? 'insistindo' : 'esperando';
+}
+
+/** Os tres que precisam de gente. Existe pela mesma razao de `pedeGente`: uma
+ *  lista repetida na tela e no alarme e uma lista que diverge. */
+export function emissaoPedeGente(nivel: NivelDaEmissao): boolean {
+  return nivel === 'esquecido' || nivel === 'insistindo' || nivel === 'parado';
+}

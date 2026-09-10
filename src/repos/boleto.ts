@@ -718,7 +718,22 @@ export async function filaDeEmissao(agora: Date, limite: number) {
          -- So fatura emitida ganha boleto - FaturaSemBoleto. Sem este filtro a
          -- fila retentaria eternamente o boleto de uma fatura CANCELADA, e cada
          -- rodada gastaria uma chamada para receber o mesmo 409.
-         AND f.status IN ('emitida','vencida')
+         --
+         -- ATENCAO: 'vencida' SAIU DAQUI EM 10/09/2026, e o filtro estava
+         -- discordando do proprio comentario acima: registrar() recusa TUDO que
+         -- nao seja 'emitida' (a guarda esta 300 linhas acima, e levanta antes de
+         -- tocar qualquer coluna). O efeito era um laco silencioso -- a fila
+         -- pegava a linha a cada 5 minutos, FaturaSemBoleto subia, o motor
+         -- contava um falho e NADA era escrito: nem ultimo_erro, nem tentativas,
+         -- nem proxima_tentativa_em. Sem escrita nao ha recuo, entao a mesma
+         -- linha voltava na rodada seguinte para sempre, gastando um dos 200
+         -- lugares da rodada e somando um falho a cada 5 minutos.
+         --
+         -- O caso nao some por sair da fila: ele VIRA LINHA em repos/emissao.ts
+         -- com o nivel 'parado', que existe exatamente para isto. Trocar um laco
+         -- invisivel por uma ausencia invisivel teria sido o mesmo defeito com
+         -- outra roupa.
+         AND f.status = 'emitida'
        ORDER BY b.proxima_tentativa_em ASC NULLS FIRST, b.vencimento ASC
        LIMIT ${Math.max(1, Math.min(limite, 500))}`;
   return r;
@@ -735,7 +750,10 @@ export async function tamanhoDaFila(agora: Date): Promise<number> {
       JOIN fatura f ON f.tenant_id = b.tenant_id AND f.id = b.fatura_id
      WHERE b.status IN ('pendente','erro')
        AND (b.proxima_tentativa_em IS NULL OR b.proxima_tentativa_em <= ${agora})
-       AND f.status IN ('emitida','vencida')`;
+       -- Mesmo filtro de filaDeEmissao, e a igualdade e o contrato: este
+       -- numero e o "deixados para tras" da rodada. Dois filtros diferentes
+       -- fariam a rodada afirmar que deixou linhas que ela nunca pegaria.
+       AND f.status = 'emitida'`;
   return Number(r[0]?.n ?? 0);
 }
 

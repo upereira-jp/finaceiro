@@ -16,6 +16,7 @@ import type { App, Sessao, VinculoDaSessao, ClientTx } from '../app.ts';
 import * as cliente from '../repos/cliente.ts';
 import * as conectorExecucao from '../repos/conector-execucao.ts';
 import * as automacoes from '../repos/automacoes.ts';
+import * as emissao from '../repos/emissao.ts';
 import * as uc from '../repos/unidade_consumidora.ts';
 import * as usina from '../repos/usina.ts';
 import * as originador from '../repos/originador.ts';
@@ -1154,6 +1155,31 @@ export const ROTAS: Rota[] = [
     // liquidacao cujo webhook falhou. Leitura de todos os abertos: relatorio.
     metodo: 'GET', padrao: '/boletos/situacao',
     handler: (req, app) => emRelatorio(app, req, async () => ok(await boleto.situacaoDosEmAberto(app.cobranca, limite(req.query)))),
+  },
+  {
+    /*
+     * O QUE NAO CHEGOU AO BANCO — rota nova em 10/09/2026, e ela fecha o §5.2 do
+     * levantamento *"o que falta para rodar sozinho"*: **nao havia lista de
+     * boletos travados.** O erro existia por fatura, dentro do painel que abre
+     * numa linha de tabela; com 29 unidades, saber que 4 estao retentando
+     * exigia abrir 29 paineis, e a fila — que por decisao registrada NUNCA
+     * DESISTE SOZINHA — podia retentar por semanas sem ninguem notar.
+     *
+     * ⚠️ E ELA E MAIOR QUE A FILA, o que so apareceu ao medir: `emitir()` nao
+     * cria linha de boleto e `filaDeEmissao` so enxerga linha que existe, entao
+     * a fatura emitida em que ninguem clicou NAO ESTA EM FILA NENHUMA. As duas
+     * ausencias tem a mesma cara para quem espera o dinheiro, e por isso saem
+     * na mesma lista, com niveis diferentes. Ver `repos/emissao.ts`.
+     *
+     * NAO RECEBE `limite`: o teto e do repositorio e a resposta DIZ quando
+     * truncou (`total` a parte de `linhas`). Deixar o teto no chamador faria a
+     * tela poder pedir uma varredura da carteira inteira sem saber o que pediu.
+     *
+     * Caminho de RELATORIO: leitura pura, e nao disputa slot transacional com a
+     * emissao.
+     */
+    metodo: 'GET', padrao: '/emissao/travada',
+    handler: (req, app) => emRelatorio(app, req, async () => ok(await emissao.emissaoTravada())),
   },
 
   // ------------------------------------------------------------- liquidacoes

@@ -36,6 +36,8 @@ import { DESTINO_DA_CAMADA, enderecoDoDestino, telaDoDestino } from '../destino-
 import { estadoDoCertificado } from '../cobranca-regras.ts';
 import { CorpoDaSaude } from '../saude-corpo.tsx';
 import { FaixasDasAutomacoes, PainelDasAutomacoes } from '../automacoes-corpo.tsx';
+import { FaixaDaEmissao } from '../emissao-travada-corpo.tsx';
+import type { EmissaoTravadaNaTela } from '../emissao-travada.ts';
 import type { NivelDoAviso } from '../saude-do-dinheiro.ts';
 import {
   VERBETE_DA_CAMADA, EFEITO, SITUACAO,
@@ -150,6 +152,16 @@ export function TelaProntidao() {
    * proprio, entao a tabela das camadas renderiza no tempo dela. */
   const automacoes = useDados<Automacao[]>(() => api.get('/automacoes'));
 
+  /* O QUE NAO CHEGOU AO BANCO — a mesma disciplina da leitura acima: nao depende
+   * do mes do seletor. A pergunta e "ha cliente sem boleto?", e ela vale para a
+   * carteira inteira: uma fatura de MAI que nunca virou boleto continua sendo
+   * dinheiro parado em SET, e trocar o mes aqui a esconderia.
+   *
+   * A FAIXA CONTA E NAO LISTA. A lista mora na aba de emissao e cobranca, que e
+   * onde se age sobre ela; esta faixa existe para ninguem precisar abrir aquela
+   * tela para descobrir que precisa abri-la. */
+  const emissao = useDados<EmissaoTravadaNaTela>(() => api.get('/emissao/travada'));
+
   const naoMedidas = dado?.camadas.filter((c) => c.situacao === 'nao_medido').length ?? 0;
 
   return (
@@ -178,6 +190,12 @@ export function TelaProntidao() {
           sistema parou de andar por ele. Quem le de cima para baixo encontra
           primeiro a coisa que impede, e depois a que atrasa. */}
       <FaixasDasAutomacoes rodadas={automacoes.dado} />
+      {/* A TERCEIRA FAIXA, e a ordem continua sendo de consequencia: a primeira
+          diz que o caminho do dinheiro esta quebrado, a segunda que o sistema
+          parou de andar por ele, e esta diz que o caminho esta de pe, o sistema
+          esta andando — e mesmo assim ha cliente sem boleto. E a mais especifica
+          das tres, e por isso vem por ultimo. */}
+      <FaixaDaEmissao dados={emissao.dado} />
       {/* "Conferindo o mês" e nao "Contando as camadas", desde 21/08/2026.
           "Camada" e o nome da estrutura interna do relatorio — a propria suite da
           ajuda o proibe no texto exibido (V4) —, e esta frase era a PRIMEIRA

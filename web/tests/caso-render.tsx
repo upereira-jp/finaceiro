@@ -31,6 +31,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { CorpoDaAjuda } from '../src/ajuda-corpo.tsx';
 import { CorpoDaSaude } from '../src/saude-corpo.tsx';
 import { FaixasDasAutomacoes, PainelDasAutomacoes } from '../src/automacoes-corpo.tsx';
+import { FaixaDaEmissao, PainelDaEmissao } from '../src/emissao-travada-corpo.tsx';
+import type { LinhaNaTela, NivelDaEmissao, EmissaoTravadaNaTela } from '../src/emissao-travada.ts';
 import type { NivelDaRodada, ChaveDaAutomacao, RodadaNaTela } from '../src/automacoes.ts';
 import type { NivelDoAviso } from '../src/saude-do-dinheiro.ts';
 import type { EstadoDoCertificado } from '../src/cobranca-regras.ts';
@@ -601,6 +603,119 @@ const desenharFaixas = (r: RodadaNaTela[] | null): string =>
       'o painel desenha sobre a superficie da casa (`cartao secao`), e nao como texto solto no pe '
       + 'da pagina - foi assim que ele chegou em producao na primeira vez, e o dono viu antes de '
       + 'qualquer suite');
+}
+
+// ============================================================================
+// R14 — O QUE NAO CHEGOU AO BANCO CHEGA MESMO NA TELA
+// ============================================================================
+//
+// Mesma natureza das `R13*`, uma camada adiante: aqui tambem o estado normal e
+// FALAR. A lista existe para responder «quais clientes ainda nao receberam
+// cobranca», e uma lista vazia por defeito de montagem tem exatamente a cara da
+// resposta boa. `EM-*` mede as frases; estas montam os componentes.
+
+const linhaDaEmissao = (nivel: NivelDaEmissao, extra: Partial<LinhaNaTela> = {}): LinhaNaTela => ({
+  fatura_id: `fat-${nivel}`,
+  unidade: '000401269001287',
+  cliente: 'Cliente de Ensaio',
+  competencia: '2026-08-01',
+  vencimento: '2026-09-20',
+  valor_total_centavos: 45_678,
+  status_fatura: nivel === 'parado' ? 'vencida' : 'emitida',
+  nivel,
+  pede_gente: nivel === 'esquecido' || nivel === 'insistindo' || nivel === 'parado',
+  ha_quanto_tempo_segundos: 3 * 86_400,
+  boleto: nivel === 'nao_pedido' || nivel === 'esquecido' ? null : {
+    status: 'erro', tentativas: 4,
+    ultimo_erro: 'documento do pagador invalido',
+    ultima_tentativa_em: '2026-09-10T09:00:00Z',
+    proxima_tentativa_em: '2026-09-10T15:00:00Z',
+  },
+  ...extra,
+});
+
+const conjuntoDaEmissao = (linhas: LinhaNaTela[], total = linhas.length): EmissaoTravadaNaTela => ({
+  linhas, total, pedem_gente: linhas.filter((l) => l.pede_gente).length,
+});
+
+const desenharLista = (d: EmissaoTravadaNaTela | null, erro: string | null = null): string =>
+  renderToStaticMarkup(<PainelDaEmissao dados={d} erro={erro} pedirBoleto={() => {}} />);
+const desenharFaixaDaEmissao = (d: EmissaoTravadaNaTela | null): string =>
+  renderToStaticMarkup(<FaixaDaEmissao dados={d} />);
+
+{
+  // ---------------------------------------------- o vazio FALA, e nao fica mudo
+  const vazio = desenharLista(conjuntoDaEmissao([]));
+  chk('R14a', vazio !== '' && /j[aá] t[eê]m boleto/i.test(texto(vazio)),
+      'sem nenhuma pendencia a lista AFIRMA que todas as faturas emitidas tem boleto no banco - '
+      + 'uma lista que some quando esta tudo certo e indistinguivel de uma lista que quebrou');
+
+  chk('R14b', desenharFaixaDaEmissao(conjuntoDaEmissao([])) === '',
+      'e a faixa de alarme NAO aparece nesse mesmo estado: o par «cala o alarme, fala o painel» e '
+      + 'a divisao inteira dos dois componentes');
+
+  // ------------------------------------------------ as cinco linhas desenham
+  const todas = desenharLista(conjuntoDaEmissao([
+    linhaDaEmissao('esquecido'), linhaDaEmissao('insistindo'), linhaDaEmissao('esperando'),
+    linhaDaEmissao('nao_pedido'), linhaDaEmissao('parado'),
+  ]));
+  const t = texto(todas);
+  chk('R14c', /ningu[eé]m pediu/i.test(t) && /banco recusou/i.test(t)
+           && /parou de tentar/i.test(t) && t.includes('000401269001287'),
+      'os cinco niveis montam e cada um chega com a SUA frase - o `.map` que renderiza um estado '
+      + 'so passaria no `tsc` e mostraria a mesma linha cinco vezes');
+
+  chk('R14d', t.includes('R$') && /vence 20\/09\/2026/.test(t),
+      'a linha carrega valor e vencimento em portugues - sem eles, quem le sabe que falta cobrar '
+      + 'e nao sabe quanto nem para quando');
+
+  chk('R14e', t.includes('documento do pagador invalido'),
+      'o que o banco respondeu aparece na propria linha - era isso que exigia abrir 29 paineis, '
+      + 'um de cada vez, para descobrir');
+
+  // ------------------------------------------- o botao existe, e nao no `parado`
+  const so = (n: NivelDaEmissao) => desenharLista(conjuntoDaEmissao([linhaDaEmissao(n)]));
+  const botoes = (html: string) => (html.match(/<button/g) ?? []).length;
+  chk('R14f', botoes(so('esquecido')) === 1 && botoes(so('nao_pedido')) === 1
+           && botoes(so('parado')) === 0,
+      'quem pode ser pedido ganha botao e o `parado` NAO ganha - oferecer o clique que o servidor '
+      + 'ja recusa e mandar a pessoa colher um erro que a tela ja sabia');
+
+  chk('R14g', renderToStaticMarkup(<PainelDaEmissao dados={conjuntoDaEmissao([linhaDaEmissao('esquecido')])} />)
+        .includes('<button') === false,
+      'e sem o `pedirBoleto` o botao nao e desenhado: botao que existe sem efeito e pior que '
+      + 'botao nenhum');
+
+  // ------------------------------------------------- a faixa conta e nao lista
+  const faixa = texto(desenharFaixaDaEmissao(conjuntoDaEmissao([
+    linhaDaEmissao('esquecido', { ha_quanto_tempo_segundos: 9 * 86_400 }),
+    linhaDaEmissao('insistindo'),
+  ])));
+  chk('R14h', /2 faturas/.test(faixa) && /9 dias/.test(faixa) && !faixa.includes('000401269001287'),
+      'a faixa de Pendencias conta duas e da a idade da mais antiga, sem listar unidade nenhuma - '
+      + 'listar viraria a segunda tela de emissao no alto da primeira tela da barra');
+
+  // ------------------------------------------------- a leitura que falhou fala
+  const falhou = texto(desenharLista(null, 'a rede caiu'));
+  chk('R14i', /ningu[eé]m sabe/.test(falhou) && falhou.includes('a rede caiu'),
+      'quando a leitura falha, a lista diz que NAO SABE, com o motivo - calar seria a mesma cara '
+      + 'de dizer que esta tudo em dia');
+
+  chk('R14j', desenharLista(null) === '' && desenharFaixaDaEmissao(null) === '',
+      'e enquanto a resposta nao voltou nenhum dos dois desenha nada: ausencia de resposta nao e '
+      + 'resposta');
+
+  // ------------------------------------------------------------- a superficie
+  /* A licao do `R13k`, aplicada antes de o dono precisar ver: nesta casa dado
+   * mora sobre superficie, e uma lista de estado desenhada como paragrafo le
+   * como legenda de rodape. */
+  chk('R14k', vazio.includes('class="cartao secao"') && todas.includes('class="cartao secao"'),
+      'a lista desenha sobre a superficie da casa (`cartao secao`), cheia ou vazia');
+
+  // ------------------------------- nenhuma palavra proibida chega ao HTML final
+  for (const regra of [/npm run/, /\bQ-[A-Z]/, /snake_case/, /\bUC\b/]) {
+    chk('R14l', !regra.test(t) && !regra.test(faixa), `o que a pessoa le nao casa com ${regra}`);
+  }
 }
 
 export const resultado = () => ({ falhas, feitas });
