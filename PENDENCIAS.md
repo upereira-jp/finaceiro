@@ -6,7 +6,7 @@
 | **O que é** | O **índice único** das pendências. Consolida e substitui os dois trackers datados que existiam soltos |
 | **Substitui e apaga** | `PENDENCIAS-2026-08-05.md` e `PROXIMOS-PASSOS-2026-08-09.md` — vencidos, e agora removidos do repo |
 | **NÃO substitui** | `QUESTOES.md` (registro datado, dono por entrada — regra 10) · `RETOMADA-2026-08-30.md` (onde tudo parou — a mais nova) · os `RESUMO-SESSAO-*` (memória datada). Estes continuam sendo a fonte; aqui é o **apontador** |
-| **Data** | 14/08/2026 · rev. 17/08 · rev. 19/08 · rev. 21/08 · rev. 27/08 · rev. 28/08 · rev. 08/09 · rev. **09/09/2026** · rev. **09/09/2026, noite** · rev. **09/09/2026, madrugada** |
+| **Data** | 14/08/2026 · rev. 17/08 · rev. 19/08 · rev. 21/08 · rev. 27/08 · rev. 28/08 · rev. 08/09 · rev. **09/09/2026** · rev. **09/09/2026, noite** · rev. **09/09/2026, madrugada** · rev. **10/09/2026** |
 | ⚠️ **Leia primeiro** | Este arquivo ficou **congelado entre 28/08 e 08/09** enquanto a operação andava, e a `RETOMADA-2026-09-08` continuou mandando o leitor para cá como *"o índice único"*. O bloco **«O que mudou desde 28/08»**, logo abaixo do cabeçalho, é a correção — o corpo antigo fica intacto porque é registro datado, e reescrevê-lo falsificaria a história (mesma decisão do `PATCH-citacoes-2026-07-24`) |
 | **Estado da suíte** | Sem banco: `typecheck` + `documento` + `brcode` + `dominio` + `web` → **`EXIT=0`, 2.420 linhas `ok`** (28/08, madrugada), e desde 27/08 com as verificações de `tests/sicoob-http.ts` — hoje **63** — dentro do `test:dominio`. Fora da suíte, contra a Sicoob de verdade: `npm run ensaio-sicoob` → **6 de 6**. `test:repos` e `test:isolamento` **não rodam nesta VPS** (exigem PostgreSQL local) |
 | **Produção** | `financeiro.blackhaus.io` · **35 migrations no ar** (a 34 em 21/08, a **35 em 28/08**) · a **36 escrita e NÃO aplicada** · Pix estático e boleto importado no ar · central de ajuda em toda tela · **a conta unificada lida já vira cobrança** (migration 34) · o conector roda sozinho a cada 15 min pelo `financeiro-ciclo.timer`, e desde **28/08** a agenda de cobrança roda sozinha em três timers (`fila` 5 min · `consulta` e `certificado` diárias) |
@@ -38,7 +38,10 @@
 >
 > | Todo bloco desta tabela: os avisos da agenda (A1 e aviso de pagamento) *"caem no journal"* e **não notificam ninguém** | 09/09 madrugada | **Os dois alertas ganharam canal.** A unidade `financeiro-saude-cobranca` fica **vermelha** em `systemctl list-units --failed` (códigos 4 e 5) e substitui a `financeiro-agenda-certificado`; e uma faixa no alto de **Pendências** — a primeira tela — diz o mesmo para quem está olhando. O que sobra é e-mail, que é contratar terceiro: `Q-ALERTA-EMAIL-01`, do dono. ⚠️ **Instalar a unidade é passo do dono** — `deploy/README`, bloco de 09/09 |
 >
-> **A suíte hoje:** `EXIT=0`, **2.728** verificações sem banco (eram 2.420 aqui).
+> **A suíte hoje:** `EXIT=0`, **2.746** verificações sem banco (eram 2.420 aqui).
+>
+> 📄 **A retomada corrente é `RETOMADA-2026-09-10.md`** — e nela os TRÊS itens que
+> impediam a operação de trabalhar sem desenvolvedor aparecem fechados.
 >
 > 📄 **`PLANO-sem-desenvolvedor-2026-09-09.md`** responde, em uma tela, *o que falta
 > para a operação não precisar de desenvolvedor* — e a resposta é curta: **três

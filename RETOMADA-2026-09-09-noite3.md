@@ -2,6 +2,7 @@
 
 | Campo | Valor |
 |---|---|
+| ⚠️ **VENCIDA** | **A retomada corrente é `RETOMADA-2026-09-10.md`.** Esta cobre só o começo daquela sessão; o corpo continua correto, mas o §0 dela lista como abertas coisas que fecharam no mesmo dia — o botão de religar, a trilha de ato externo e o certificado |
 | **Para quem** | Quem abrir a próxima sessão. **Dois minutos** |
 | **Substitui** | `RETOMADA-2026-09-09-noite2.md` para efeito de "onde estamos". O corpo dela continua correto; o que venceu é o §0 — **as duas pendências que eram do implementador foram fechadas** |
 | **O que esta leva fez** | Fechou as duas: o alerta **ganhou canal** (pendência 1, "o maior buraco desta entrega") e o **CI parou de depender de fonte `apt` de terceiro** (pendência 6). O que sobrou do alerta é uma decisão de contratar, e ela é do dono |
