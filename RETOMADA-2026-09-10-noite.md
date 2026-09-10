@@ -8,7 +8,7 @@
 | **Suíte** | sem banco: `EXIT=0`, **2.791** verificações (eram 2.746) |
 | **Migrations** | **39**, nenhuma nova — a mudança inteira é de leitura |
 | **CI** | ✅ verde · ⚠️ **vermelho na primeira passada, e a culpa era do teste** (§3) |
-| **Repositório** | `main` = **`3672cde`**, `origin/main` junto, árvore limpa |
+| **Repositório** | último commit de **código**: **`3672cde`** (o que veio depois é documentação). `origin/main` junto, árvore limpa, zero arquivos `root:root` |
 | **Produção** | ✅ **no ar** desde 02:43:29 UTC — deploy `34430521100`, bundle novo, `GET /api/automacoes` respondendo |
 
 > ## A frase de uma linha
