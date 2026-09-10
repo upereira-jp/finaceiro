@@ -26,8 +26,9 @@
 //   as ROTAS          `/carteira`, `/cobranca` e `/documento` continuam iguais.
 //                     `/documento#cadastro` está citado na `PENDENCIAS` e é o
 //                     único caminho de tela para o emissor;
-//   os NOMES DE       `carteira.tsx`, `cobranca.tsx`, `documento.tsx`, os
-//   DOMÍNIO           repositórios e as tabelas. Rótulo é o que a pessoa lê;
+//   os NOMES DE       `carteira.tsx` (removido em 10/09 — ver a nota no lugar
+//   DOMÍNIO           dela, abaixo), `cobranca.tsx`, `documento.tsx`, os
+//                     repositórios e as tabelas. Rótulo é o que a pessoa lê;
 //                     domínio é o que o sistema é. Foi assim que "Prontidão"
 //                     virou "Pendências" em 30/07 sem mover uma linha de
 //                     `repos/prontidao.ts`;
@@ -52,22 +53,6 @@ export type Tela = {
   titulo: string;
   icone: NomeDeIcone;
   grupo: GrupoDeTela;
-  /**
-   * A TELA QUE AINDA FUNCIONA E NÃO DEVE SER USADA — entrou em 10/09/2026, e o
-   * texto é o que a barra imprime ao lado do rótulo.
-   *
-   * POR QUE VIROU DADO, e não uma linha solta no `app.tsx`: é a mesma razão de
-   * este arquivo existir. O `.tsx` não é verificável pelo runner do `web/`, e o
-   * que este campo carrega tem consequência em dinheiro — a suíte `interface.ts`
-   * exige que EXATAMENTE uma tela esteja marcada, e que ela seja a que o
-   * roteiro do mês manda evitar. Duas listas discordando dariam uma aba
-   * aposentada sem aviso, que é o estado de onde viemos.
-   *
-   * ⚠️ O AVISO NÃO SUBSTITUI A TELA. `telas/carteira.tsx` continua abrindo com a
-   * faixa que explica o custo — este campo existe para a pessoa saber ANTES de
-   * clicar, e não depois.
-   */
-  aposentada?: string;
 };
 
 export const TELAS: readonly Tela[] = [
@@ -117,22 +102,30 @@ export const TELAS: readonly Tela[] = [
    * **Faturamento** gera o lote -> **Faturas** emite, cobra e da baixa.
    */
   /*
-   * ⚠️ MARCADA COMO ANTIGA EM 10/09/2026, e o rótulo NÃO mudou.
+   * ⚠️ A ABA «Faturamento» (`/carteira`) SAIU EM 10/09/2026, e o registro fica
+   * aqui porque quem procurar por ela vai procurar nesta lista.
    *
-   * O problema medido: esta é a aba de nome mais óbvio da barra para quem
-   * procura «onde eu faturo o mês», e é o caminho APOSENTADO desde 21/08. Quem
-   * segue o nome não recebe erro — recebe um mês composto pelo caminho velho, e
-   * uma cobrança composta aqui TRAVA a mesma unidade no caminho oficial
-   * (`uc_ja_faturada`), com desfazer sendo cancelar uma a uma.
+   * Ela era o caminho APOSENTADO desde 21/08, quando o dono decidiu a
+   * `Q-CICLO-01` (*"vamos com o caminho da fatura unificada"*), e tinha o nome
+   * mais óbvio da barra para quem procura «onde eu faturo o mês». Seguir o nome
+   * não dava erro: dava um mês composto pelo caminho velho — e uma cobrança
+   * composta por lá TRAVA a mesma unidade no caminho oficial (`uc_ja_faturada`),
+   * com desfazer sendo cancelar uma a uma.
    *
-   * POR QUE MARCAR E NÃO RENOMEAR. O rótulo `Faturamento` é decisão do dono de
-   * 17/08, tomada para o nome dizer o que o servidor chama (regra 7), e trocá-lo
-   * de novo criaria o terceiro nome para a mesma tela em três semanas. A palavra
-   * ao lado resolve o que estava errado — a pessoa saber ANTES de clicar — sem
-   * desfazer a decisão de quem nomeou.
+   * EM 10/09 ELA GANHOU A MARCA «(caminho antigo)», e no mesmo dia o dono
+   * perguntou o que ela ainda fazia ali. A resposta medida: nada que se perca.
+   * As faturas compostas por ela sempre apareceram em «Emissão e cobrança», e em
+   * produção nunca houve uma — zero faturas desde sempre. O que ela tinha de
+   * único eram os quatro números do mês (faturado, recebido, a receber, vencidas
+   * em aberto), e eles foram para «Emissão e cobrança», onde seguem o seletor de
+   * mês em vez de mostrar sempre a competência mais nova.
+   *
+   * O QUE NÃO SAIU: `POST /faturamento/:competencia/ensaio` e `/compor` seguem
+   * no servidor, e `npm run faturar` continua alcançando `comporLote`. Tirar a
+   * tela fecha a porta de quem não pediu esse caminho; apagar o motor seria
+   * outra decisão, e ela tem dono (`Q-CICLO-02`, o aval fiscal).
    */
-  { rota: '/carteira',   titulo: 'Faturamento', icone: 'carteira',  grupo: 'dinheiro',
-    aposentada: 'caminho antigo' },
+
   /*
    * "FATURAS" E "FATURA UNIFICADA" LADO A LADO NAO SE DISTINGUIAM, e o dono
    * disse isso duas vezes: primeiro *"qual a diferenca entre a aba Faturas e a

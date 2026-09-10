@@ -62,7 +62,6 @@ const TelaUnidades = lazy(() => import('./telas/unidades.tsx').then((m) => ({ de
 const TelaContratos = lazy(() => import('./telas/contratos.tsx').then((m) => ({ default: m.TelaContratos })));
 const TelaDonos = lazy(() => import('./telas/donos.tsx').then((m) => ({ default: m.TelaDonos })));
 const TelaUsinas = lazy(() => import('./telas/usinas.tsx').then((m) => ({ default: m.TelaUsinas })));
-const TelaCarteira = lazy(() => import('./telas/carteira.tsx').then((m) => ({ default: m.TelaCarteira })));
 const TelaFaturas = lazy(() => import('./telas/faturas.tsx').then((m) => ({ default: m.TelaFaturas })));
 const TelaCobranca = lazy(() => import('./telas/cobranca.tsx').then((m) => ({ default: m.TelaCobranca })));
 const TelaRelatorios = lazy(() => import('./telas/relatorios.tsx').then((m) => ({ default: m.TelaRelatorios })));
@@ -120,7 +119,6 @@ const RENDER: Record<string, () => ReactElement> = {
   '/contratos': () => <TelaContratos />,
   '/usinas': () => <TelaUsinas />,
   '/donos': () => <TelaDonos />,
-  '/carteira': () => <TelaCarteira />,
   '/faturas': () => <TelaFaturas />,
   '/cobranca': () => <TelaCobranca />,
   '/documento': () => <TelaDocumento />,
@@ -238,18 +236,6 @@ export function App() {
                        className={ativo ? 'ativo' : undefined}>
                 <Icone nome={t.icone} tamanho={17} peso={ativo ? 'fill' : 'regular'} />
                 {t.titulo}
-                {/* A MARCA DA ABA APOSENTADA — 10/09/2026.
-                    Ela fica DEPOIS do rótulo e menor de propósito: o nome
-                    continua sendo o nome, e a palavra ao lado é a informação que
-                    faltava para a pessoa decidir antes do clique. Sem ela, a aba
-                    de nome mais óbvio da barra levava ao caminho que trava o mês
-                    — e o aviso só aparecia depois, dentro da tela.
-                    O que marcar mora em `navegacao.ts`; aqui só se desenha. */}
-                {t.aposentada && (
-                  <span className="sub" style={{ fontSize: 11, opacity: 0.75, whiteSpace: 'nowrap' }}>
-                    {' '}({t.aposentada})
-                  </span>
-                )}
               </Ligacao>
             );
             // A divisoria entre cadastro e dinheiro. O indice vem calculado de

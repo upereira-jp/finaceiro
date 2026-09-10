@@ -264,10 +264,18 @@ chk('I3e', /animation-delay:\s*0s?\s*!important/.test(bloqueio)
  * coluna da UC (migration 30), porque a granularidade real e por cliente e nao
  * por distribuidora - medido: 35 UCs a 1,130000, 4 a 1,16 e 2 a 1,180000.
  *
+ * DOZE DE NOVO em 10/09/2026 - "Faturamento" SAIU, por decisao do dono no mesmo
+ * dia em que ela ganhou a marca «(caminho antigo)»: *"a aba faturamento do
+ * caminho antigo pode deixar de existir? nao vejo sentido nela"*. Era o caminho
+ * aposentado desde a `Q-CICLO-01` (21/08), e o que ela tinha de unico - os
+ * quatro numeros do mes - foi para «Emissao e cobranca», onde agora seguem o
+ * seletor de mes.
+ *
  * O numero e literal de proposito: uma tela a mais e decisao de produto, e uma
  * contagem que se atualiza sozinha (`TELAS.length === TELAS.length`) nao
- * acusaria uma tela acrescentada por engano num merge. */
-chk('I4', TELAS.length === 13, `sao 13 telas (contadas: ${TELAS.length})`);
+ * acusaria uma tela acrescentada por engano num merge. Esta linha ficou vermelha
+ * na remocao acima, que e exatamente o trabalho dela. */
+chk('I4', TELAS.length === 12, `sao 12 telas (contadas: ${TELAS.length})`);
 chk('I4b', new Set(TELAS.map((t) => t.rota)).size === TELAS.length,
     'nenhuma rota repetida — rota repetida faz a segunda tela ser inalcancavel');
 chk('I4c', new Set(TELAS.map((t) => t.titulo)).size === TELAS.length,
@@ -726,34 +734,34 @@ chk('I9g', ordemDasAbas(true).every((a) => (ROTULO_DA_ABA[a] ?? '').trim() !== '
     'toda aba, inclusive a oculta, tem rotulo — uma aba sem nome na barra e um botao mudo');
 
 // ============================================================================
-// I10 — A ABA APOSENTADA, marcada na barra
+// I10 — A ABA DO CAMINHO APOSENTADO NÃO EXISTE MAIS
 // ============================================================================
 //
-// Ela funciona, tem o nome mais óbvio da barra para quem procura «onde eu faturo
-// o mês», e é o caminho aposentado desde 21/08/2026. Quem segue o nome não
-// recebe erro: recebe um mês composto pelo caminho velho, e uma cobrança
-// composta ali TRAVA a mesma unidade no caminho oficial.
+// Ela teve, por três semanas, o nome mais óbvio da barra para quem procura «onde
+// eu faturo o mês» — e era o caminho aposentado desde 21/08/2026, em que uma
+// cobrança composta TRAVA a mesma unidade no caminho oficial (`uc_ja_faturada`).
+// Em 10/09 ganhou a marca «(caminho antigo)» e, no mesmo dia, saiu.
 //
-// AS DUAS METADES QUE ESTAS LINHAS PRENDEM: que a marca não SOME (a aba volta a
-// atrair o clique errado) e que ela não se ESPALHE (marca em toda aba é marca
-// em nenhuma).
+// ESTAS LINHAS PRENDEM O QUE A REMOÇÃO COMPROU. Uma tela removida volta fácil:
+// basta alguém acrescentar a linha na lista achando que faltava. O que a suíte
+// afirma é que a barra não a oferece de novo, e que ninguém aponta para um
+// endereço que não desenha mais nada.
 {
-  const marcadas = TELAS.filter((t) => t.aposentada !== undefined);
+  chk('I10a', !TELAS.some((t) => t.rota === '/carteira'),
+      'a aba do faturamento em lote não está na barra — quem seguisse o nome dela não recebia '
+      + 'erro, recebia um mês composto pelo caminho velho');
 
-  chk('I10a', marcadas.length === 1 && marcadas[0]!.rota === '/carteira',
-      'exatamente UMA tela é marcada como caminho antigo, e é a de faturamento em lote'
-      + `${marcadas.length !== 1 ? ` (marcadas: ${marcadas.map((t) => t.rota).join(', ') || 'nenhuma'})` : ''}`
-      + ' — marca em todas seria marca em nenhuma, e marca em nenhuma é de onde viemos');
+  /* O `telaDoCaminho` cai na PRIMEIRA tela para caminho desconhecido, de
+   * propósito (é o que faz `/prontidao` continuar abrindo Pendências). Aqui isso
+   * é a garantia de que um link velho para `/carteira`, guardado por alguém nos
+   * favoritos, abre a primeira tela em vez de uma página em branco. */
+  chk('I10b', telaDoCaminho('/carteira').rota === TELAS[0]!.rota,
+      'e um link antigo para ela cai em Pendências, que é a primeira tela — favorito velho não '
+      + 'vira tela em branco');
 
-  chk('I10b', (marcadas[0]?.aposentada ?? '').trim().length > 0
-              && (marcadas[0]?.aposentada ?? '').length <= 20,
-      'a marca tem texto e é curta o bastante para caber ao lado do rótulo sem quebrar a barra — '
-      + 'aviso que estoura a linha vira aviso que se esconde');
-
-  chk('I10c', marcadas[0]!.titulo === 'Faturamento',
-      'e o RÓTULO não mudou: `Faturamento` é decisão do dono de 17/08 para o nome dizer o que o '
-      + 'servidor chama, e trocá-lo de novo daria o terceiro nome da mesma tela em três semanas. '
-      + 'A palavra ao lado resolve o que estava errado sem desfazer quem nomeou');
+  chk('I10c', TELAS.every((t) => t.titulo.trim() !== '' && t.rota.startsWith('/')),
+      'e as que ficaram continuam todas com rótulo e rota — a remoção tirou uma linha da lista '
+      + 'sem deixar buraco nas vizinhas');
 }
 
 console.log();

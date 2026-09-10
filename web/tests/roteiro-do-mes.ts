@@ -232,14 +232,19 @@ chk('RM2', agoraDe({ camadas: comTudoLido(), posicao: posicao(29, 29, 29), semCo
       + 'procurar a aba errada');
 }
 
-// --------------------- RM14 o passo de gerar avisa sobre a tela aposentada
+// ------------------ RM14 o roteiro não manda procurar a aba que foi removida
 {
-  const gerar = MOLDES.find((m) => m.chave === 'gerar')!;
-  const aposentada = TELAS.find((t) => t.rota === '/carteira')!;
-  chk('RM14', gerar.comoFazer.some((l) => l.includes(aposentada.titulo)),
-      `o passo de gerar nomeia «${aposentada.titulo}» para dizer que NÃO é ali - é a tela de nome `
-      + 'mais óbvio da barra e é o caminho aposentado desde 21/08/2026, e uma cobrança composta '
-      + 'por lá TRAVA a mesma unidade no caminho oficial');
+  /* ATÉ 10/09/2026 ESTA LINHA AFIRMAVA O CONTRÁRIO: que o passo 2 tinha de
+   * NOMEAR a aba «Faturamento» para dizer que não era ali. No mesmo dia o dono
+   * removeu a aba, e o aviso virou o problema — mandar alguém não usar uma porta
+   * que não existe é mandar procurá-la. A verificação inverteu junto. */
+  const citada = MOLDES.filter((m) => m.comoFazer.some((l) => l.includes('«Faturamento»')));
+  const naBarra = TELAS.some((t) => t.titulo === 'Faturamento');
+
+  chk('RM14', citada.length === 0 && !naBarra,
+      'nenhum passo cita a aba «Faturamento» - ela saiu da barra em 10/09/2026, e instrução que '
+      + 'nomeia aba inexistente faz a pessoa procurar na barra inteira antes de duvidar do texto'
+      + `${citada.length ? ` (citam: ${citada.map((m) => m.chave).join(', ')})` : ''}`);
 }
 
 // ------------------- RM15 a trava fala português de quem opera, e não nome de coluna

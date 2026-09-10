@@ -167,8 +167,10 @@ export const MOLDES: readonly Molde[] = [
       'Clique «conferir antes» na linha. Ele diz, sem gravar nada, se falta alguma coisa para '
       + 'aquela conta virar cobrança.',
       'Estando certo, clique «gerar cobrança» e confirme. A linha passa a dizer «cobrança gerada».',
-      '⚠️ A aba «Faturamento» NÃO é este passo. Ela é o caminho antigo, de antes de a cobrança '
-      + 'nascer da conta da distribuidora, e não deve ser usada.',
+      /* A QUARTA LINHA SAIU EM 10/09/2026, com a aba que ela mandava evitar.
+       * Ela dizia «A aba Faturamento NÃO é este passo», e o dono removeu a aba
+       * no mesmo dia — um aviso sobre uma porta que não existe mais é uma porta
+       * que a pessoa vai procurar. `RM14` prende que ela não volte. */
     ],
     destino: FATURA_UNIFICADA,
     trava: 'bloqueia_fatura',

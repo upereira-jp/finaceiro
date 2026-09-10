@@ -380,13 +380,19 @@ export const GLOSSARIO: readonly TermoDoGlossario[] = [
   },
   {
     termo: 'Ensaio',
-    texto: 'A simulação do faturamento: mostra quem entraria no mês e quem ficaria de fora, com o '
-      + 'motivo de cada recusa, e não grava nada. Na aba Faturamento é o botão «Simular, sem '
-      + 'cobrar ninguém» — clicar quantas vezes quiser não cobra ninguém.',
-    /* «ensaio» continua na busca embora tenha saído do botão: quem ouviu a
-     * palavra numa conversa vai digitá-la, e é para isso que o verbete serve. */
-    busca: ['ensaio', 'simular', 'simulacao', 'teste', 'ensaiar', 'sem gravar', 'sem valer'],
-    caminhos: [{ rota: '/carteira', rotulo: 'Abrir Faturamento', tipo: 'resolver' }],
+    /* O TEXTO MUDOU EM 10/09/2026, com a saída da aba Faturamento: ele descrevia
+     * o botão «Simular, sem cobrar ninguém» daquela tela, que não existe mais. O
+     * ato continua existindo, com outro nome e no caminho oficial — «conferir
+     * antes», por conta, na lista de contas registradas. */
+    texto: 'Conferir sem gravar: o sistema responde se aquela conta viraria cobrança, e por que '
+      + 'não, sem mexer em nada. Na aba Fatura unificada é o botão «conferir antes», na lista de '
+      + 'contas registradas — clicar quantas vezes quiser não cobra ninguém.',
+    /* «ensaio» continua na busca embora não seja o rótulo de botão nenhum: quem
+     * ouviu a palavra numa conversa vai digitá-la, e é para isso que o verbete
+     * serve. */
+    busca: ['ensaio', 'simular', 'simulacao', 'teste', 'ensaiar', 'sem gravar', 'sem valer',
+            'conferir antes'],
+    caminhos: [{ rota: '/documento', rotulo: 'Abrir Fatura unificada', tipo: 'resolver' }],
   },
   {
     termo: 'Baixa',

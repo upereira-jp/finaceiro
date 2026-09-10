@@ -69,17 +69,28 @@ const EXCECOES: Record<string, string> = {
   'POST /liquidacoes/webhook-sicoob/:tenant':
     'quem chama e o banco, nao a tela. E a unica rota com autenticacao de webhook.',
 
+  /* AS DUAS PERDERAM A TELA EM 10/09/2026, e a perda foi o conserto.
+   *
+   * Ate esse dia o motivo desta excecao era "a tela CHAMA, montando o caminho
+   * por pedaco - a busca por texto nao alcanca", e a tela era `carteira.tsx`.
+   * Ela foi REMOVIDA: era o caminho aposentado desde 21/08, tinha o nome mais
+   * obvio da barra, e compor por ela TRAVA a unidade no caminho oficial
+   * (`uc_ja_faturada`).
+   *
+   * O MOTOR FICOU DE PROPOSITO, e por isso as rotas continuam existindo:
+   * `npm run faturar` alcanca `comporLote` pelo terminal, e apagar o motor e
+   * outra decisao, com dono - a `Q-CICLO-02`, o aval fiscal. O que se afirma
+   * aqui e o contrario da afirmacao antiga: **a operacao NAO deve chegar a
+   * estas rotas pela tela**, e nao ha tela mesmo. */
   'POST /faturamento/:competencia/ensaio':
-    'a tela CHAMA, montando o caminho por pedaco (`${competencia}/${modo}`, com modo ensaio ou '
-    + 'compor) - a busca por texto nao alcanca. Ver `telas/carteira.tsx`.',
-  /* O IRMAO DA DE CIMA, e ele FALTAVA. Ate 10/09/2026 a busca nao ancorava o fim
-   * do caminho, entao `POST /faturamento/:competencia/compor` casava com o texto
-   * de `/faturamento/${...}/emitir` que existe em `telas/faturas.tsx` - passava
-   * por PREFIXO, e nao por ter tela. Ancorado o fim, a falta apareceu. Mesmo
-   * motivo, mesma tela, mesma linha de codigo: `${competencia}/${modo}`. */
+    'NAO deve ter tela: e o caminho de faturamento aposentado (`Q-CICLO-01` decidiu pelo da conta '
+    + 'da distribuidora em 21/08/2026). O ensaio equivalente do caminho oficial e o botao '
+    + '«conferir antes», por conta registrada, na aba Fatura unificada. O motor segue alcancavel '
+    + 'por `npm run faturar`.',
   'POST /faturamento/:competencia/compor':
-    'a tela CHAMA, montando o caminho por pedaco (`${competencia}/${modo}`, com modo ensaio ou '
-    + 'compor) - a busca por texto nao alcanca. Ver `telas/carteira.tsx`.',
+    'NAO deve ter tela, pelo mesmo motivo do irmao acima - e neste o custo de um clique curioso e '
+    + 'maior: a cobranca composta aqui TRAVA a mesma unidade no caminho oficial com '
+    + '`uc_ja_faturada`, e desfazer e cancelar uma a uma.',
 
   'POST /carteira/marcar-vencidas':
     'o status `vencida` e registro do ATO, e a leitura do fato e a view '

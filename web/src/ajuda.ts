@@ -379,7 +379,7 @@ export const TOPICOS: readonly Topico[] = [
       'Escolha o mês da energia que está sendo cobrada.',
       'Em Relatórios, deixar o campo vazio mostra o histórico inteiro em vez de um mês só.',
     ],
-    caminhos: [ir('/pendencias', 'Conferir o mês em Pendências'), ver('/carteira', 'Ver o mês em Faturamento')],
+    caminhos: [ir('/pendencias', 'Conferir o mês em Pendências'), ver('/faturas', 'Ver o mês em Emissão e cobrança')],
     camada: null,
     telas: [],
     termos: ['mes', 'mes de referencia', 'competencia', 'trocar o mes', 'mudar o mes', 'mes errado',
@@ -788,7 +788,7 @@ export const TOPICOS: readonly Topico[] = [
       ver('/faturas', 'Depois: emitir e cobrar'),
     ],
     camada: null,
-    telas: ['/documento', '/carteira'],
+    telas: ['/documento'],
     comum: true,
     termos: ['gerar fatura', 'fechar o mes', 'faturar o mes', 'rodar o faturamento', 'lote',
              'gerar cobranca', 'carteira', 'faturamento', 'como faturo', 'faturar', 'cobrar',
@@ -807,9 +807,9 @@ export const TOPICOS: readonly Topico[] = [
         + '«Simular, sem cobrar ninguém» quantas vezes quiser.',
       'Só «gerar cobrança» e «Gerar as cobranças» gravam alguma coisa.',
     ],
-    caminhos: [ir('/documento', 'Abrir Fatura unificada'), ver('/carteira', 'O caminho em lote')],
+    caminhos: [ir('/documento', 'Abrir Fatura unificada'), ver('/faturas', 'Ver as cobranças do mês')],
     camada: null,
-    telas: ['/documento', '/carteira'],
+    telas: ['/documento'],
     termos: ['ensaio', 'simular', 'teste', 'sem gravar', 'vai cobrar', 'e seguro', 'ensaiar',
              'da para desfazer', 'sem risco'],
   },
@@ -949,7 +949,7 @@ export const TOPICOS: readonly Topico[] = [
     caminhos: [
       ir('/unidades', 'Conferir preço do kWh e fatia'),
       ver('/usinas', 'Conferir a energia do mês'),
-      ver('/carteira', 'Gerar o mês de novo'),
+      ver('/documento', 'Gerar a cobrança de novo'),
     ],
     camada: null,
     telas: ['/faturas'],
@@ -1046,7 +1046,7 @@ export const TOPICOS: readonly Topico[] = [
       'Deixe o mês vazio para ver tudo, ou escolha um mês para recortar.',
       'Os números do mês corrente também aparecem no alto da aba Faturamento.',
     ],
-    caminhos: [ir('/relatorios', 'Abrir Relatórios'), ver('/carteira', 'Ver o resumo do mês')],
+    caminhos: [ir('/relatorios', 'Abrir Relatórios'), ver('/faturas', 'Ver o resumo do mês')],
     camada: null,
     telas: ['/relatorios'],
     comum: true,
@@ -1331,28 +1331,27 @@ export const PALAVRAS_DA_TELA: Record<string, readonly string[]> = {
   '/usinas': ['usina', 'usinas', 'geradora', 'geracao', 'energia gerada', 'producao'],
   '/donos': ['dono', 'donos', 'donos de usina', 'proprietario', 'chave pix do dono'],
   /*
-   * ⚠️ ESTA LINHA MANDAVA A PERGUNTA CERTA PARA A TELA ERRADA — corrigido em
-   * 10/09/2026, e é a correção de mais consequência desta lista.
+   * ⚠️ A LINHA DA `/carteira` SAIU EM 10/09/2026, junto com a tela.
    *
-   * «faturar», «gerar o mes» e «fechar o mes» são as palavras de quem quer fazer
-   * o mês acontecer, e elas apontavam para `/carteira` — o caminho APOSENTADO
-   * desde 21/08. Num sistema sem divisão de suporte, a Central de Ajuda é a
-   * primeira coisa que a pessoa abre quando trava: ela estava respondendo com o
-   * caminho que TRAVA a unidade no caminho oficial (`uc_ja_faturada`).
+   * Ela mandava a pergunta CERTA para a tela ERRADA: «faturar», «gerar o mes» e
+   * «fechar o mes» são as palavras de quem quer fazer o mês acontecer, e
+   * apontavam para o caminho aposentado. Num sistema sem divisão de suporte, a
+   * Central de Ajuda é a primeira coisa que se abre ao travar — ela respondia
+   * com o caminho que TRAVA a unidade no caminho oficial.
    *
-   * As três foram para `/documento`, que é onde a cobrança nasce. O que SOBROU
-   * aqui é o vocabulário do lote, e só ele: quem digita «ensaio» ou «compor»
-   * está falando dos botões desta tela, e quem digita «faturamento» está lendo o
-   * rótulo dela na barra.
+   * As palavras não sumiram: as três de fazer o mês foram para `/documento`,
+   * onde a cobrança nasce; «faturamento» ficou lá também, porque é o que a
+   * pessoa chama o ato. `A9` exige que esta lista tenha exatamente as telas da
+   * barra, então a linha não podia ficar órfã aqui.
    */
-  '/carteira': ['faturamento', 'ensaio', 'compor', 'lote', 'caminho antigo'],
   '/faturas': ['fatura', 'faturas', 'emissao e cobranca', 'boleto', 'cobranca do cliente', 'baixa',
                'emitir'],
   '/cobranca': ['sicoob', 'conector', 'banco', 'certificado', 'credencial do banco'],
   /* As três que vieram de `/carteira` em 10/09 entram aqui: é nesta tela que a
      cobrança do mês nasce, desde 21/08. Ver o comentário na linha da carteira. */
   '/documento': ['fatura unificada', 'folha', 'documento do cliente', 'imprimir', 'logotipo',
-                 'papel do cliente', 'faturar', 'gerar o mes', 'fechar o mes'],
+                 'papel do cliente', 'faturar', 'faturamento', 'gerar o mes', 'fechar o mes',
+                 'gerar cobranca'],
   '/contas-a-pagar': ['contas a pagar', 'a pagar', 'despesa', 'o que a empresa deve', 'pagar'],
   /* «historico» SAIU DAQUI EM 10/09/2026, e a troca e o proprio ponto: ate essa
      data a palavra caia em Relatorios por falta de destino melhor. Agora ha uma

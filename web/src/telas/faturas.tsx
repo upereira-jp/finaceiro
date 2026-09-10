@@ -28,12 +28,12 @@
 
 import { useState } from 'react';
 import {
-  api, type Fatura, type Boleto, type UnidadeConsumidora,
+  api, type Fatura, type Boleto, type UnidadeConsumidora, type PosicaoDaCarteira,
   type BoletoLido, type ConferenciaDoBoletoImportado,
 } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
-  Pagina, Aviso, Tabela, Marca, rotulo, linha, useOrdenacao, ordenar, ThOrd,
+  Pagina, Aviso, Tabela, Marca, rotulo, linha, useOrdenacao, ordenar, ThOrd, Kpi,
   Icone, CampoData, Carregando, AjudaDoMes, DetalheTecnico } from '../ui.tsx';
 import { competenciaISO, emReais, paraCentavos } from '../dinheiro.ts';
 import { paraCsv, reaisParaPlanilha, nomeDoArquivo } from '../csv.ts';
@@ -68,6 +68,24 @@ export function TelaFaturas() {
    * antigo.
    */
   const emissao = useDados<EmissaoTravadaNaTela>(() => api.get('/emissao/travada'));
+
+  /*
+   * OS QUATRO NUMEROS DO MES — quanto foi faturado, quanto entrou, quanto falta
+   * entrar e quanto venceu sem pagar.
+   *
+   * VIERAM DA ABA «Faturamento» EM 10/09/2026, quando ela foi removida. Eram a
+   * unica coisa util daquela tela: o resto era o caminho aposentado de compor em
+   * lote. Nao existiam em nenhum outro lugar do sistema, e some-los junto com a
+   * tela teria trocado um problema por outro.
+   *
+   * E AQUI ELES SEGUEM O SELETOR, o que la nao acontecia: a tela antiga lia
+   * `/carteira` inteira e mostrava a competencia mais recente, entao os numeros
+   * do topo podiam falar de um mes e a tabela de baixo de outro. Aqui os dois
+   * respondem a mesma pergunta sobre o mesmo mes.
+   */
+  const carteira = useDados<PosicaoDaCarteira[]>(
+    () => api.get(`/carteira?competencia=${competenciaISO(mes)}`), [mes]);
+  const posicaoDoMes = carteira.dado?.[0] ?? null;
 
   /* O MESMO caminho de escrita do painel de uma fatura (`POST .../boleto`), e a
    * repeticao aqui e so o gatilho: `registrar()` reaproveita a linha que existe
@@ -181,6 +199,21 @@ export function TelaFaturas() {
           depois. A faixa é derivada do mesmo `MOLDES` que monta o roteiro em
           Pendências, então as duas não têm como discordar. */}
       <FaixaDoPasso rota="/faturas" />
+
+      {/* SO DESENHA COM LINHA NO BANCO. Um mes sem fatura nenhuma nao tem linha
+          na `posicao_da_carteira`, e quatro zeros seriam uma afirmacao sobre um
+          mes que ainda nao comecou — a tabela logo abaixo ja diz que ele esta
+          vazio, com as palavras certas. */}
+      {posicaoDoMes && (
+        <div className="kpis">
+          <Kpi nome="Faturado" icone="faturado" valor={emReais(posicaoDoMes.faturado_centavos)} />
+          <Kpi nome="Recebido" icone="recebido" valor={emReais(posicaoDoMes.recebido_centavos)} />
+          <Kpi nome="A receber" icone="a_receber" valor={emReais(posicaoDoMes.a_receber_centavos)} />
+          <Kpi nome="Vencidas em aberto" icone="vencidas" valor={posicaoDoMes.vencidas_em_aberto}
+               tom={posicaoDoMes.vencidas_em_aberto ? 'erro' : undefined} />
+        </div>
+      )}
+
       <div className="cartao secao">
         <div style={{ ...linha, gap: 12 }}>
           <div>
