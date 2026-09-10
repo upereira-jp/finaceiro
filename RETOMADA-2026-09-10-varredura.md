@@ -10,7 +10,7 @@
 | **CI** | ✅ **verde nos cinco jobs** — run `34435585020`, incluindo as que só rodam lá (`N4b`..`N4f`, contra banco de verdade) |
 | **Migrations** | **39**, nenhuma nova — a leva inteira é de leitura e de tela |
 | **Repositório** | `main` em **`c82d777`**, `origin/main` junto |
-| **Produção** | ⚠️ **NÃO subiu ainda** — ver §0 |
+| **Produção** | ✅ **no ar às 13:09:13 UTC** de 10/09 — run `34480800363`, os quatro passos `success` conferidos por step |
 
 > ## A frase de uma linha
 >
@@ -24,7 +24,24 @@
 
 ## 0. O primeiro movimento da próxima sessão
 
-### 0.1 ⚠️ O código está no `main` e NÃO está no ar
+### 0.1 ✅ Já subiu — e o que falta é UM olhar humano nas telas
+
+O dono rodou o `chown` (61 arquivos `root:root`) e o `deploy-financeiro` subiu na
+sequência. Medido, e não deduzido:
+
+| O quê | Como se sabe |
+|---|---|
+| O deploy passou | run `34480800363`, os quatro passos `success` — conferidos por **step**, não pelo tique |
+| O processo é o novo | journal 13:09:13 → *"client gerado cobre as 39 tabelas"*, *"ouvindo em 127.0.0.1:3000"* |
+| As rotas novas EXISTEM | `GET /api/emissao/travada` → **401** e `GET /api/unidades-consumidoras/…/vinculo` → **401**, contra **404** de uma rota inventada. Código velho daria 404 nas duas |
+| O bundle é o novo | `web/dist/assets/emissao-travada-corpo-BgNYVA4l.js`, e `faturas`, `contratos`, `usinas` e `prontidao` reconstruídos às 13:09 |
+
+⚠️ **O que NÃO foi visto por olho humano:** as sete telas novas. É a lição de
+ontem — o painel das automações funcionava, chegava na tela e chegava como texto
+solto. Vale abrir as quatro abas (Emissão e cobrança, Pendências, Unidades
+consumidoras, Contratos, Usinas) antes de considerar a leva fechada.
+
+### 0.1-b (registro) o que era preciso para subir
 
 Quatro commits entraram hoje e o CI está verde nos cinco jobs. Falta subir, e a
 ordem é a de sempre — a armadilha de ownership continua valendo:
