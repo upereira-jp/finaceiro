@@ -771,7 +771,8 @@ export const TOPICOS: readonly Topico[] = [
      * caminho oficial com «esta unidade ja tem fatura». */
     resposta: 'Da conta da distribuidora, na aba Fatura unificada: você sobe o PDF (pode subir '
       + 'vários de uma vez), confere o que foi lido, registra, e então clica em «gerar cobrança». '
-      + 'A aba Faturamento é o caminho antigo, em lote — e usá-lo trava a unidade neste.',
+      + 'Não há outro caminho: a aba de faturamento em lote, que existia até 10/09/2026, foi '
+      + 'removida justamente porque gerar por lá travava a unidade neste.',
     passos: [
       'Confira antes a aba Pendências: o que estiver faltando lá vira recusa aqui.',
       'Abra a aba Fatura unificada, em «1 · Leitura e cálculo».',
@@ -803,9 +804,13 @@ export const TOPICOS: readonly Topico[] = [
       'No caminho oficial: na lista de contas registradas da aba Fatura unificada, clique em '
         + '«conferir antes». Ele responde se aquela conta viraria cobrança, e por que não, '
         + 'sem gravar nada.',
-      'No caminho antigo, em lote: abra a aba Faturamento, escolha o mês e clique em '
-        + '«Simular, sem cobrar ninguém» quantas vezes quiser.',
-      'Só «gerar cobrança» e «Gerar as cobranças» gravam alguma coisa.',
+      /* A SEGUNDA LINHA ENSINAVA O BOTÃO DE UMA ABA QUE SAIU EM 10/09/2026
+       * («Simular, sem cobrar ninguém», na aba Faturamento). Ensinar a clicar
+       * onde não há o que clicar é pior do que não ensinar: quem procura varre a
+       * barra inteira antes de duvidar do texto. */
+      'Clicar quantas vezes quiser não cobra ninguém — «conferir antes» só lê.',
+      'Só «gerar cobrança» grava alguma coisa, e ela ainda nasce como rascunho: emitir é um '
+        + 'segundo ato, na aba Emissão e cobrança.',
     ],
     caminhos: [ir('/documento', 'Abrir Fatura unificada'), ver('/faturas', 'Ver as cobranças do mês')],
     camada: null,
@@ -944,7 +949,11 @@ export const TOPICOS: readonly Topico[] = [
       'Confira o preço do kWh na linha da unidade, na aba Unidades consumidoras.',
       'Confira a fatia em percentual da mesma unidade.',
       'Confira a energia gerada do mês na aba Usinas — ela vem do CRM.',
-      'Corrigido o cadastro, gere o mês de novo na aba Faturamento.',
+      /* «gere o mês de novo na aba Faturamento» saiu em 10/09/2026 com a aba. E
+       * o conserto real nunca foi «gerar de novo»: a cobrança já existe, e o
+       * caminho é cancelá-la para a conta lida voltar a ser faturável. */
+      'Corrigido o cadastro, cancele a cobrança errada na aba Emissão e cobrança — a conta lida '
+        + 'volta a ser faturável — e gere de novo na aba Fatura unificada.',
     ],
     caminhos: [
       ir('/unidades', 'Conferir preço do kWh e fatia'),
@@ -1044,7 +1053,11 @@ export const TOPICOS: readonly Topico[] = [
     passos: [
       'Abra a aba Relatórios.',
       'Deixe o mês vazio para ver tudo, ou escolha um mês para recortar.',
-      'Os números do mês corrente também aparecem no alto da aba Faturamento.',
+      /* O ENDEREÇO MUDOU EM 10/09/2026: os quatro números viviam no alto da aba
+       * Faturamento, que saiu. Foram para Emissão e cobrança, e lá seguem o
+       * seletor de mês em vez de mostrar sempre a competência mais nova. */
+      'Faturado, recebido, a receber e vencidas em aberto aparecem no alto da aba Emissão e '
+        + 'cobrança, para o mês que estiver escolhido ali.',
     ],
     caminhos: [ir('/relatorios', 'Abrir Relatórios'), ver('/faturas', 'Ver o resumo do mês')],
     camada: null,

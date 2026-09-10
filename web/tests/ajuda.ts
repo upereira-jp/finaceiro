@@ -639,7 +639,56 @@ for (const g of GLOSSARIO) {
 
 chk('A9', Object.keys(PALAVRAS_DA_TELA).every((r) => TELAS.some((t) => t.rota === r))
        && TELAS.every((t) => t.rota in PALAVRAS_DA_TELA),
-    'as doze telas tem apelido, e nenhum apelido aponta para tela que nao existe');
+    'as telas da barra tem apelido, e nenhum apelido aponta para tela que nao existe');
+
+// ============ A9b o texto NAO manda abrir aba que nao existe — entrou em 10/09/2026
+//
+// POR QUE ESTA LINHA EXISTE, e o defeito e recente e foi meu: ao remover a aba
+// «Faturamento» eu reapontei os `caminhos` e as `telas` de cada assunto — que
+// sao DADO e o `tsc` nao cobre —, e deixei TRES textos mandando abrir a aba que
+// tinha acabado de sair. Um deles ensinava a clicar num botao dela.
+//
+// A ASSIMETRIA E O PONTO: `A8`/`A9` conferem os PONTEIROS, que sao estrutura. A
+// frase que a pessoa LE e string livre, e era a unica parte da ajuda sem
+// nenhuma amarra ao mundo real. Num sistema sem divisao de suporte, mandar
+// procurar uma aba inexistente faz a pessoa varrer a barra inteira antes de
+// duvidar do texto.
+{
+  const titulos = TELAS.map((t) => t.titulo);
+
+  /* «aba X», onde X comeca com maiuscula. As abas INTERNAS da fatura unificada
+   * («1 · Leitura e calculo») nao casam de proposito: comecam com digito. */
+  const citacao = /\baba ([A-ZÀ-Ú][A-Za-zÀ-ÿ]*(?: [a-zà-ÿ]+)*)/g;
+
+  /*
+   * PREFIXO NOS DOIS SENTIDOS, e a primeira versao desta linha errou por nao ter
+   * isso: a captura engole a prosa depois do nome («aba Pendências e confira o
+   * mês…»), e o texto tambem abrevia («aba Conector», quando a barra diz
+   * «Conector Sicoob»). Exigir igualdade exata acusaria vinte frases corretas e
+   * escondia o unico fantasma de verdade no meio delas — que e o modo de falha
+   * classico de uma verificacao barulhenta.
+   */
+  const conhecida = (nome: string): boolean => titulos.some((t) =>
+    t === nome || nome.startsWith(`${t} `) || t.startsWith(`${nome} `));
+
+  const texto: string[] = [
+    ...TOPICOS.flatMap((a) => [a.pergunta, a.resposta, ...a.passos]),
+    ...GLOSSARIO.map((g) => g.texto),
+  ];
+
+  const fantasmas = new Set<string>();
+  for (const t of texto) {
+    for (const [, nome] of t.matchAll(citacao)) {
+      if (!conhecida(nome!)) fantasmas.add(nome!);
+    }
+  }
+
+  chk('A9z', fantasmas.size === 0,
+      'nenhum texto da ajuda manda abrir uma aba que nao esta na barra'
+      + `${fantasmas.size ? ` (fantasmas: ${[...fantasmas].join(', ')})` : ''} - quem procura uma `
+      + 'aba que nao existe varre a barra inteira antes de duvidar do texto, e nao ha a quem '
+      + 'perguntar');
+}
 
 {
   const casos: Array<[string, string]> = [
