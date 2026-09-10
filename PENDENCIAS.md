@@ -11,6 +11,22 @@
 | **Estado da suíte** | Sem banco: `typecheck` + `documento` + `brcode` + `dominio` + `web` → **`EXIT=0`, 2.420 linhas `ok`** (28/08, madrugada), e desde 27/08 com as verificações de `tests/sicoob-http.ts` — hoje **63** — dentro do `test:dominio`. Fora da suíte, contra a Sicoob de verdade: `npm run ensaio-sicoob` → **6 de 6**. `test:repos` e `test:isolamento` **não rodam nesta VPS** (exigem PostgreSQL local) |
 | **Produção** | `financeiro.blackhaus.io` · **35 migrations no ar** (a 34 em 21/08, a **35 em 28/08**) · a **36 escrita e NÃO aplicada** · Pix estático e boleto importado no ar · central de ajuda em toda tela · **a conta unificada lida já vira cobrança** (migration 34) · o conector roda sozinho a cada 15 min pelo `financeiro-ciclo.timer`, e desde **28/08** a agenda de cobrança roda sozinha em três timers (`fila` 5 min · `consulta` e `certificado` diárias) |
 
+> ## 🆕 10/09/2026, tarde — O ÚLTIMO ITEM DE CÓDIGO DA LISTA «SEM DESENVOLVEDOR»
+>
+> O item 10 da `RETOMADA-2026-09-10-varredura.md` §0.3 — *"a trilha de auditoria
+> não tem leitor (21.317 linhas) e pagamentos de contas a pagar não são
+> listados"* — era o único de implementador que sobrava. **Fechado.**
+>
+> | O quê | Situação |
+> |---|---|
+> | **A aba «Histórico»**, a 13ª da barra: quem criou, alterou ou apagou o quê, com o antes e o depois campo a campo | ✅ **feito**, e **NÃO subiu** — ver `RETOMADA-2026-09-10-tarde.md` §0.1 |
+> | O **recibo** de cada conta a pagar, e a conta paga passando a abrir | ✅ **feito**, mesmo deploy pendente |
+> | 🟡 **`Q-TRILHAQUEM-01`** — 21.868 das 21.917 linhas da trilha estão assinadas pelo dono, porque as três rotinas automáticas rodam com o `--auth-user` dele | **do dono** — `QUESTOES.md` §2.m |
+>
+> ⚠️ **O deploy desta leva não saiu**: `gh` e `systemctl` foram recusados pelo
+> classificador na sessão. O commit está em `origin/main` (`c1b176b`) e o
+> comando está pronto no §0.1 da retomada da tarde.
+
 > ## 📄 10/09/2026 — A VARREDURA COMPLETA, e ela é o documento mais novo
 >
 > O dono pediu uma varredura *"em busca de possíveis erros ou furos para que possa
