@@ -97,19 +97,45 @@ export function PainelDasAutomacoes({ rodadas, erro }: CorpoDasAutomacoes) {
         desta tela. Elas aparecem aqui mesmo estando em dia porque parar é uma ausência: sem esta
         lista, «não estou vendo aviso nenhum» significaria as duas coisas ao mesmo tempo.
       </p>
-      <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0 16px', display: 'grid', gap: 8 }}>
-        {linhas.map((l) => (
-          <li key={l.chave} style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-            {/* O ícone é o SEGUNDO sinal, e não a informação: quem não distingue
-                a cor lê a mesma frase inteira. Restrição 3 do tema. */}
-            <Icone nome={l.saudavel ? 'ok' : 'pendente'} tamanho={15} peso="bold" />
-            <span>
-              <strong>{l.nome}</strong> {l.quando}
-              {l.fez && <span className="fraco"> — {l.fez}</span>}
-            </span>
-          </li>
-        ))}
-      </ul>
+      {/*
+        ⚠️ A SUPERFICIE NAO E ENFEITE, e ela foi paga com o dono abrindo a tela em
+        10/09/2026: *"está apenas com o texto solto embaixo das pendências, mas
+        existe"*. As duas metades da frase importam — o caminho inteiro
+        funcionava, e o que chegava era prosa.
+
+        NESTA TELA, DADO MORA SOBRE SUPERFICIE. Os cartões de cima, a tabela das
+        camadas e a do conector têm borda, fundo e sombra; o único texto solto é
+        o «Como ler esta tela», que é PROSA e se comporta como tal. Uma lista de
+        estado desenhada como parágrafo lê como rodapé explicativo — e o painel
+        que existe para ser conferido todo dia passa a parecer legenda.
+
+        `.cartao secao` é a superfície da casa: oito telas a usam, e o ritmo
+        entre seções sai do token em vez de um `marginBottom` escrito à mão (o
+        comentário de `estilo.ts` conta que esse literal já apareceu dezessete
+        vezes em dez telas antes de virar classe).
+      */}
+      <div className="cartao secao">
+        <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 12 }}>
+          {linhas.map((l, i) => (
+            <li key={l.chave}
+                style={{
+                  display: 'flex', gap: 9, alignItems: 'baseline',
+                  /* A régua separa as três sem desenhar grade — a mesma decisão
+                     da tabela da casa, que só tem linha horizontal. */
+                  borderTop: i === 0 ? undefined : '1px solid var(--borda-suave)',
+                  paddingTop: i === 0 ? 0 : 12,
+                }}>
+              {/* O ícone é o SEGUNDO sinal, e não a informação: quem não distingue
+                  a cor lê a mesma frase inteira. Restrição 3 do tema. */}
+              <Icone nome={l.saudavel ? 'ok' : 'pendente'} tamanho={15} peso="bold" />
+              <span style={{ lineHeight: 1.55 }}>
+                <strong>{l.nome}</strong> {l.quando}
+                {l.fez && <span className="fraco"> — {l.fez}</span>}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
     </>
   );
 }

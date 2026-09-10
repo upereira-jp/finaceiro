@@ -580,6 +580,27 @@ const desenharFaixas = (r: RodadaNaTela[] | null): string =>
   for (const regra of [/\btimer\b/i, /\bsystemd\b/i, /\bwebhook\b/i, /\bcron\b/i]) {
     chk('R13j', !regra.test(tt) && !regra.test(t), `o que a pessoa le nao casa com ${regra}`);
   }
+
+  /* ⚠️ R13k — A SUPERFICIE, e ela foi paga com o dono abrindo a tela.
+   *
+   * Em 10/09/2026, com o painel ja em producao, veio: *"está apenas com o texto
+   * solto embaixo das pendências, mas existe"*. As duas metades importam — o
+   * caminho inteiro funcionava (rota, leitura, montagem) e o que chegava na
+   * tela era PROSA.
+   *
+   * Nesta tela, dado mora sobre superficie: os cartoes de cima, a tabela das
+   * camadas e a do conector tem borda, fundo e sombra. O unico texto solto e o
+   * «Como ler esta tela», que e prosa de verdade. Uma lista de ESTADO desenhada
+   * como paragrafo le como legenda de rodape - e o painel que existe para ser
+   * conferido todo dia vira nota de rodape.
+   *
+   * Nenhuma outra verificacao pegaria: `AU-*` mede as frases, `R13a` mede que o
+   * texto chega, e os dois passam verdes sobre um painel que ninguem enxerga
+   * como painel. */
+  chk('R13k', bom.includes('class="cartao secao"'),
+      'o painel desenha sobre a superficie da casa (`cartao secao`), e nao como texto solto no pe '
+      + 'da pagina - foi assim que ele chegou em producao na primeira vez, e o dono viu antes de '
+      + 'qualquer suite');
 }
 
 export const resultado = () => ({ falhas, feitas });

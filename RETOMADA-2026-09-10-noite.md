@@ -5,7 +5,7 @@
 | **Para quem** | Quem abrir a próxima sessão. **Dois minutos** |
 | **Substitui** | `RETOMADA-2026-09-10.md` no §0 e no §5.1. O corpo dela continua correto e vale como registro: o que venceu é **a pendência de código**, que fechou |
 | **O que esta sessão fez** | Fechou o **§5.1** — a única coisa de código que a retomada da manhã deixou aberta: *"ninguém vê se a automação parou de rodar"*. E achou, fechando, **um buraco no filtro do CI** que deixava dois diretórios sem rede |
-| **Suíte** | sem banco: `EXIT=0`, **2.791** verificações (eram 2.746) |
+| **Suíte** | sem banco: `EXIT=0`, **2.792** verificações (eram 2.746) |
 | **Migrations** | **39**, nenhuma nova — a mudança inteira é de leitura |
 | **CI** | ✅ verde · ⚠️ **vermelho na primeira passada, e a culpa era do teste** (§3) |
 | **Repositório** | último commit de **código**: **`3672cde`** (o que veio depois é documentação). `origin/main` junto, árvore limpa, zero arquivos `root:root` |
@@ -34,10 +34,33 @@ O dono rodou o `chown` (57 arquivos `root:root`, a armadilha de 01/09) e o
 | A rota EXISTE | `GET /api/automacoes` → **401** (*"sem header Authorization"* no journal), igual à vizinha `/conector-execucao`. Código velho daria 404 |
 | O bundle é o novo | «O que o sistema fez sozinho» está em `web/dist/assets/prontidao-XOivZWeU.js` |
 
-⚠️ **O que ninguém conferiu ainda: a tela com olho humano.** Abrir **Pendências**
-e ver o rodapé com as três linhas. O payload autenticado não foi lido daqui —
-cunhar JWT local não funciona nesta VPS (`SUPABASE_JWT_SECRET` não está na env,
-§4.3 da retomada da manhã).
+### ✅ O olho humano conferiu — e achou o que nenhuma suíte acharia
+
+O dono abriu a tela e trouxe a frase que fecha e abre ao mesmo tempo:
+
+> *"tela está apenas com o texto solto embaixo das pendências, **mas existe**"*
+
+**As duas metades importam.** «Existe» é o caminho inteiro provado por fora — a
+rota autenticada responde, a leitura volta, o componente monta e o texto chega.
+Nada disso era mensurável daqui: cunhar JWT local não funciona nesta VPS
+(`SUPABASE_JWT_SECRET` não está na env, §4.3 da retomada da manhã).
+
+«Texto solto» é um **defeito de desenho, e ele era meu**: nesta tela **dado mora
+sobre superfície** — os cartões do topo, a tabela das camadas e a do conector têm
+borda, fundo e sombra. O único texto solto legítimo é o «Como ler esta tela», que
+é prosa e se comporta como prosa. Uma lista de **estado** desenhada como parágrafo
+lê como legenda de rodapé, e o painel que existe para ser conferido todo dia vira
+nota de rodapé.
+
+**Consertado no mesmo dia:** o painel passou a desenhar sobre `.cartao secao` — a
+superfície que oito telas já usam —, com régua fina entre as três linhas e o
+ritmo saindo do token em vez de um `marginBottom` escrito à mão.
+
+⚠️ **E ficou prendido em `R13k`**, porque nenhuma outra verificação pegaria isso:
+`AU-*` mede as frases, `R13a` mede que o texto chega ao HTML, e **as duas passam
+verdes sobre um painel que ninguém enxerga como painel**. A lição é a mesma da
+sessão inteira, um degrau adiante: *funcionar* e *ser visto* são coisas
+diferentes, e só a segunda vale para quem opera.
 
 ### 0.2 O que continua aberto, e nada disto é código novo obrigatório
 
@@ -155,6 +178,7 @@ execução**.
 | O domínio | `AG11a..AG11n` — **propriedades** da fronteira (nunca antes da hora, sempre depois, monotonia, precedência), não uma tabela copiada da minha própria saída |
 | As verificações **falham quando devem** | Por mutação: comentar `<PainelDasAutomacoes />` derruba `AU-16/17`; `nivelDaRodada` que nunca acusa atraso derruba `AG11c`; painel devolvendo vazio derruba `AU-1`, `R13a` e `R13c` |
 | A leitura pela role **sem `BYPASSRLS`** | `N16a..N16f` — e elas **só rodam no Actions** |
+| A tela **desenha como painel**, e não como prosa | `R13k` — a superfície `cartao secao` no HTML. Nasceu do que o dono viu, não de auditoria |
 
 ⚠️ **O que NÃO foi medido:**
 
@@ -163,9 +187,10 @@ execução**.
    afirmação;
 2. **O código de saída 4 por rodada parada, na máquina** — provado na suíte
    (`AG11l`), não no `systemctl`;
-3. **A tela com olho humano** — o bundle subiu e a rota responde (§0.1), mas
-   ninguém abriu Pendências para ver o rodapé desenhado. O payload autenticado
-   também não foi lido: cunhar JWT local não funciona nesta VPS.
+3. **O conserto do desenho, em produção** — o `.cartao secao` está no `main` e
+   provado na suíte, mas **não subiu**: falta o `chown` e o `deploy-financeiro`.
+   Até subir, a tela no ar continua com o painel em texto solto — ele funciona e
+   está feio.
 
 ### A lição desta sessão, e ela é do teste e não do código
 
