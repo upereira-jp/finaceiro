@@ -46,6 +46,7 @@ const MIGRATION_35 = '20260827120000_cofre_e_identidade_do_cooperado';
 const MIGRATION_36 = '20260828230000_contrato_de_cobranca_e_opcional';
 const MIGRATION_37 = '20260909233000_ato_externo_log';
 const MIGRATION_38 = '20260910001500_ato_externo_sem_returning';
+const MIGRATION_39 = '20260910010000_limpar_ensaio_da_trilha';
 
 class ConferenciaFalhou extends Error {}
 
@@ -56,6 +57,7 @@ const DIRETORIO: Record<string, string> = {
   'migration-36': MIGRATION_36,
   'migration-37': MIGRATION_37,
   'migration-38': MIGRATION_38,
+  'migration-39': MIGRATION_39,
 };
 
 /**
@@ -121,7 +123,7 @@ if (!url || !url.trim()) {
 }
 
 const modo = process.argv[2] ?? '';
-const MODOS = ['identidade', 'migration-32', 'migration-35', 'migration-36', 'migration-37', 'migration-38'];
+const MODOS = ['identidade', 'migration-32', 'migration-35', 'migration-36', 'migration-37', 'migration-38', 'migration-39'];
 if (!MODOS.includes(modo)) {
   console.error(`modo desconhecido: ${JSON.stringify(modo)}. Conheco: ${MODOS.join(', ')}.`);
   process.exit(1);
@@ -457,9 +459,32 @@ async function migration38(): Promise<void> {
             + '(conferido chamando, e nao so pelo catalogo; a transacao deu ROLLBACK).');
 }
 
+/** A 39 — a limpeza do ensaio. Confere as duas metades: que a linha de ensaio
+ *  sumiu, e que a FUNCAO continua escrevendo (a 38 nao pode ter sido desfeita
+ *  junto). */
+async function migration39(): Promise<void> {
+  await migration38();
+
+  const { rows: [r] } = await cliente.query<{ ensaios: string; registro: string }>(`
+    SELECT (SELECT count(*) FROM ato_externo_log
+             WHERE ato IN ('ensaio_da_trilha','ensaio_da_suite'))                   AS ensaios,
+           (SELECT count(*) FROM _prisma_migrations
+             WHERE migration_name = '${MIGRATION_39}'
+               AND finished_at IS NOT NULL AND rolled_back_at IS NULL)              AS registro`);
+
+  const faltando = [
+    Number(r!.ensaios) === 0 ? null : `${r!.ensaios} linha(s) de ensaio ainda em ato_externo_log`,
+    Number(r!.registro) === 1 ? null : `o registro de ${MIGRATION_39} em _prisma_migrations`,
+  ].filter(Boolean);
+
+  if (faltando.length) throw new ConferenciaFalhou(`a migration 39 nao esta no banco. Falta: ${faltando.join('; ')}.`);
+  console.log('migration 39 OK — a linha de ensaio saiu, e a funcao continua escrevendo (a 38 foi reconferida).');
+}
+
 try {
   await cliente.connect();
   if (modo === 'identidade') await identidade();
+  else if (modo === 'migration-39') await migration39();
   else if (modo === 'migration-38') await migration38();
   else if (modo === 'migration-37') await migration37();
   else if (modo === 'migration-36') await migration36();

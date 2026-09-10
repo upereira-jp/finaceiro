@@ -53,7 +53,7 @@ on:
         # preso numa migration antiga confere uma que ja esta aplicada e diz OK
         # sobre o run inteiro — foi o que aconteceu em 28/08/2026, quando ele
         # olhou a 32 e a 34 tinha acabado de entrar.
-        default: 'migration-38'
+        default: 'migration-39'
 
 concurrency:
   group: vps-financeiro          # nunca roda junto com o deploy nem com o recon
