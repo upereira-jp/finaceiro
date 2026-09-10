@@ -9,7 +9,7 @@
 | **Migrations** | **39**, nenhuma nova — a mudança inteira é de leitura |
 | **CI** | ✅ verde · ⚠️ **vermelho na primeira passada, e a culpa era do teste** (§3) |
 | **Repositório** | último commit de **código**: **`3672cde`** (o que veio depois é documentação). `origin/main` junto, árvore limpa, zero arquivos `root:root` |
-| **Produção** | ✅ **no ar** desde 02:43:29 UTC — deploy `34430521100`, bundle novo, `GET /api/automacoes` respondendo |
+| **Produção** | ✅ **no ar** — funcionalidade às 02:43:29 UTC (`34430521100`), o conserto do desenho às 03:01:43 (bundle `prontidao-BUoQIaIs.js`) |
 
 > ## A frase de uma linha
 >
@@ -52,9 +52,11 @@ borda, fundo e sombra. O único texto solto legítimo é o «Como ler esta tela�
 lê como legenda de rodapé, e o painel que existe para ser conferido todo dia vira
 nota de rodapé.
 
-**Consertado no mesmo dia:** o painel passou a desenhar sobre `.cartao secao` — a
-superfície que oito telas já usam —, com régua fina entre as três linhas e o
-ritmo saindo do token em vez de um `marginBottom` escrito à mão.
+**Consertado no mesmo dia, e já no ar:** o painel passou a desenhar sobre
+`.cartao secao` — a superfície que oito telas já usam —, com régua fina entre as
+três linhas e o ritmo saindo do token em vez de um `marginBottom` escrito à mão.
+Deploy às **03:01:43 UTC**, bundle `prontidao-BUoQIaIs.js`, os quatro passos
+`success` conferidos por step e o restart no journal.
 
 ⚠️ **E ficou prendido em `R13k`**, porque nenhuma outra verificação pegaria isso:
 `AU-*` mede as frases, `R13a` mede que o texto chega ao HTML, e **as duas passam
@@ -187,10 +189,11 @@ execução**.
    afirmação;
 2. **O código de saída 4 por rodada parada, na máquina** — provado na suíte
    (`AG11l`), não no `systemctl`;
-3. **O conserto do desenho, em produção** — o `.cartao secao` está no `main` e
-   provado na suíte, mas **não subiu**: falta o `chown` e o `deploy-financeiro`.
-   Até subir, a tela no ar continua com o painel em texto solto — ele funciona e
-   está feio.
+3. **O painel novo com olho humano** — o de antes foi conferido pelo dono e
+   rendeu o `R13k`; o desenho corrigido subiu depois disso e **ninguém abriu a
+   tela desde então**. O HTML tem a superfície (provado em suíte) e o bundle no
+   ar a carrega (provado por `grep`), mas *parecer certo* é a metade que só um
+   olho fecha — foi essa a lição do dia.
 
 ### A lição desta sessão, e ela é do teste e não do código
 
