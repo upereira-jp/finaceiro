@@ -9,7 +9,7 @@
 | **Suíte** | sem banco: `EXIT=0`, **2.873** verificações (eram 2.792) |
 | **CI** | ✅ **verde nos cinco jobs** — run `34435585020`, incluindo as que só rodam lá (`N4b`..`N4f`, contra banco de verdade) |
 | **Migrations** | **39**, nenhuma nova — a leva inteira é de leitura e de tela |
-| **Repositório** | `main` em **`c82d777`**, `origin/main` junto |
+| **Repositório** | `main` em **`1adda69`**, `origin/main` junto, árvore limpa, zero arquivos `root:root` |
 | **Produção** | ✅ **no ar às 13:09:13 UTC** de 10/09 — run `34480800363`, os quatro passos `success` conferidos por step |
 
 > ## A frase de uma linha
@@ -43,8 +43,8 @@ consumidoras, Contratos, Usinas) antes de considerar a leva fechada.
 
 ### 0.1-b (registro) o que era preciso para subir
 
-Quatro commits entraram hoje e o CI está verde nos cinco jobs. Falta subir, e a
-ordem é a de sempre — a armadilha de ownership continua valendo:
+Fica aqui porque é a ordem de todo deploy desta casa, e a armadilha de ownership
+continua valendo para a próxima sessão:
 
 ```
 # 1. do DONO, porque o classificador bloqueia daqui:
@@ -60,10 +60,11 @@ gh workflow run deploy-financeiro.yml
 gh run view <id> --json jobs -q '.jobs[].steps[]|"\(.conclusion) \(.name)"'
 ```
 
-**Medido agora: 59 arquivos `root:root`.** O build morre em `EACCES` sem o passo
-1 — o `vite` limpa o `dist` e apagar arquivo exige escrita no diretório.
+**Eram 61 arquivos `root:root` quando esta sessão terminou de commitar**, e o
+build morre em `EACCES` sem o passo 1 — o `vite` limpa o `dist`, e apagar arquivo
+exige escrita no diretório. Depois do `chown` do dono: zero.
 
-### 0.2 O que subir vai colocar no ar
+### 0.2 O que subiu, e onde olhar
 
 | O quê | Onde aparece |
 |---|---|
@@ -75,9 +76,7 @@ gh run view <id> --json jobs -q '.jobs[].steps[]|"\(.conclusion) \(.name)"'
 | **Suspender / Reativar / Encerrar** contrato | coluna nova na aba **Contratos** |
 | **Tarifa da distribuidora** | painel da fatura, enquanto ela é rascunho |
 
-⚠️ **Nada disso foi visto por olho humano ainda.** A lição de ontem foi essa: o
-painel das automações funcionava e chegava como texto solto. Vale abrir as quatro
-telas depois do deploy.
+⚠️ **Nada disso foi visto por olho humano ainda** — é o item que sobra do §0.1.
 
 ### 0.3 O que ficou aberto, e de quem é
 
