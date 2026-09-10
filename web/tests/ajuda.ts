@@ -37,6 +37,7 @@ import {
 } from '../src/ajuda.ts';
 import { VERBETE_DA_CAMADA, EFEITO, SITUACAO, GLOSSARIO,
          ORDEM_DOS_GRUPOS, agruparPorEfeito, tituloDoGrupo, subDoGrupo, contagemDaCamada,
+         aindaEmAberto, jaFechadas,
          mesPorExtenso } from '../src/vocabulario.ts';
 import { DESTINO_DA_CAMADA, enderecoDoDestino } from '../src/destino-da-camada.ts';
 import { CRM, usinaNoCrm } from '../src/crm.ts';
@@ -345,6 +346,60 @@ chk('A5g', ORDEM_DOS_GRUPOS.length === Object.keys(EFEITO).length
 
   chk('A5k', agruparPorEfeito(camadas.filter((c) => c.efeito === 'bloqueia_fatura')).length === 1,
       'grupo vazio nao aparece — um titulo sem linha embaixo prometeria conteudo que nao existe');
+
+  /* ========================================================================
+   * A5u a A5x — A TELA DE PENDENCIAS MOSTRA PENDENCIA
+   *
+   * Decisao do dono em 10/09/2026: *"na area de pendencias deixe as pendencias
+   * que nao foram resolvidas apenas"*. Eram catorze conferencias na mesma lista,
+   * NOVE delas fechadas.
+   *
+   * ⚠️ O QUE ESTAS QUATRO PRENDEM nao e o filtro - e a DEFINICAO de resolvido. A
+   * tentacao obvia e "mostrar so o que esta pendente", e ela esconderia
+   * `nao_medido`, que a propria tela define como NAO sendo o mesmo que pronto. O
+   * cartao do topo ja cometeu esse erro uma vez, em 24/08/2026.
+   * ====================================================================== */
+  {
+    const todas = [
+      { camada: 'a', situacao: 'ok' },
+      { camada: 'b', situacao: 'pendente' },
+      { camada: 'c', situacao: 'nao_medido' },
+      { camada: 'd', situacao: 'ok' },
+    ];
+    const abertas = aindaEmAberto(todas);
+    const fechadas = jaFechadas(todas);
+
+    chk('A5u', abertas.map((c) => c.camada).join(',') === 'b,c',
+        'em aberto sao a pendente E a nao medida - "ainda nao da para conferir" nao e pronto, e '
+        + 'trata-la como resolvida esconderia o estado que esta tela existe para nao deixar '
+        + 'implicito');
+
+    chk('A5v', fechadas.map((c) => c.camada).join(',') === 'a,d',
+        'e fechada e so `ok` - a lista de baixo, a que fica atras do clique, so tem trabalho '
+        + 'realmente feito');
+
+    chk('A5w', abertas.length + fechadas.length === todas.length
+            && abertas.every((c) => !fechadas.includes(c)),
+        'as duas listas somam o total e nao se cruzam: nada some da tela por cair fora das duas, '
+        + 'e nada e desenhado duas vezes quando as fechadas sao abertas');
+
+    chk('A5x', aindaEmAberto([{ camada: 'x', situacao: 'situacao_nova_do_servidor' }]).length === 1,
+        'uma situacao que o servidor ganhe amanha entra como EM ABERTO, e nao some como resolvida '
+        + '- o lado seguro do desconhecido e aparecer, e nao sumir');
+
+    /* A ULTIMA LIGACAO. A regra pode estar certa e a tela continuar desenhando
+       as catorze - foi assim que o painel das automacoes passou verde sobre uma
+       tela que nao o montava. Comentario sai antes de procurar (`SD-12`). */
+    const tela = readFileSync(new URL('../src/telas/prontidao.tsx', import.meta.url), 'utf8')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, ' ')
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .replace(/^\s*\/\/.*$/gm, ' ');
+    chk('A5y', /aindaEmAberto\(/.test(tela) && /jaFechadas\(/.test(tela)
+            && /agruparPorEfeito\(verFechadas \? dado\.camadas : emAberto\)/.test(tela),
+        'e a PRIMEIRA tela da barra usa as duas: a tabela recebe so o que esta em aberto, e as '
+        + 'fechadas so entram quando alguem pede - sem esta linha, a regra existiria e a tela '
+        + 'continuaria mostrando tudo');
+  }
 }
 
 // A5l O TITULO NOMEIA O MES, e sem `new Date`. `new Date('2026-07-01')` e

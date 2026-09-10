@@ -526,6 +526,36 @@ export function agruparPorEfeito<T extends { efeito: string }>(
 }
 
 /**
+ * O QUE AINDA ESTÁ EM ABERTO — e a definição é a decisão.
+ *
+ * Decidido pelo dono em 10/09/2026, ao abrir a tela com a leva nova no ar:
+ * *"na área de pendências deixe as pendências que não foram resolvidas apenas"*.
+ * Eram catorze conferências na mesma lista, **nove delas fechadas** — dois terços
+ * da tabela eram trabalho já feito, e as cinco que importam ficavam espalhadas no
+ * meio delas.
+ *
+ * ⚠️ `nao_medido` CONTA COMO EM ABERTO, e é por isso que esta função existe em
+ * vez de um `filter` escrito na tela. A própria tela define, no «Como ler esta
+ * tela», que *"ainda não dá para conferir"* **não é o mesmo que pronto**: é uma
+ * conferência que depende de algo de uma linha acima, que ainda está vazio.
+ * Tratá-la como resolvida esconderia justamente o estado que esta tela inteira
+ * existe para não deixar implícito — e o cartão do topo já tinha cometido esse
+ * erro uma vez, em 24/08/2026, contando `nao_medido` como pronta.
+ *
+ * O que sai daqui é só `ok`. E o que fica de fora não some da tela: fica atrás
+ * de um clique, com a contagem sempre visível.
+ */
+export function aindaEmAberto<T extends { situacao: string }>(camadas: readonly T[]): T[] {
+  return camadas.filter((c) => c.situacao !== 'ok');
+}
+
+/** O complemento, e ele existe pelo mesmo motivo: duas listas escritas à mão
+ *  divergem no dia em que aparecer uma terceira situação. */
+export function jaFechadas<T extends { situacao: string }>(camadas: readonly T[]): T[] {
+  return camadas.filter((c) => c.situacao === 'ok');
+}
+
+/**
  * O SUBSTANTIVO que vai depois de «X de Y» na coluna «Quantos».
  *
  * Vazio quando a camada não tem verbete — a suíte impede que isso chegue à tela

@@ -41,7 +41,7 @@ import type { EmissaoTravadaNaTela } from '../emissao-travada.ts';
 import type { NivelDoAviso } from '../saude-do-dinheiro.ts';
 import {
   VERBETE_DA_CAMADA, EFEITO, SITUACAO,
-  agruparPorEfeito, tituloDoGrupo, subDoGrupo, contagemDaCamada,
+  agruparPorEfeito, tituloDoGrupo, subDoGrupo, contagemDaCamada, aindaEmAberto, jaFechadas,
 } from '../vocabulario.ts';
 
 const mesAtual = () => new Date().toISOString().slice(0, 7);
@@ -164,6 +164,34 @@ export function TelaProntidao() {
 
   const naoMedidas = dado?.camadas.filter((c) => c.situacao === 'nao_medido').length ?? 0;
 
+  /*
+   * ============================================================================
+   * A TELA DE PENDENCIAS MOSTRA PENDENCIA. Decisao do dono em 10/09/2026, depois
+   * de abrir a tela com a leva nova no ar: *"deixe as pendencias que nao foram
+   * resolvidas apenas"*.
+   *
+   * O QUE ELA MOSTRAVA: as catorze conferencias, fechadas e abertas na mesma
+   * lista. Hoje sao NOVE fechadas para cinco abertas - dois tercos da tabela
+   * eram trabalho que ja tinha sido feito, e as cinco que importam ficavam
+   * espalhadas no meio delas. Uma tela chamada "Pendencias" que lista sobretudo
+   * o que nao e pendencia treina a percorrer a tabela inteira para achar as
+   * linhas que valem.
+   *
+   * ⚠️ E O QUE FICA FECHADO NAO SOME, e essa e a metade que nao pode ser perdida:
+   * "0 de 29" numa conferencia fechada e PROVA de que ela foi medida, e esta
+   * casa trata "medido e certo" e "nunca medido" como coisas diferentes desde
+   * sempre. Por isso as fechadas ficam a UM clique, com a contagem sempre visivel
+   * - o mesmo desenho dos apontamentos do conector, logo abaixo nesta tela.
+   *
+   * `nao_medido` CONTINUA NA LISTA DE CIMA, e nao entra nas fechadas: a propria
+   * tela define, no "Como ler esta tela", que "ainda nao da para conferir" NAO e
+   * o mesmo que pronto. Ela e pendencia de outra natureza, e nao ausencia de
+   * pendencia.
+   */
+  const [verFechadas, setVerFechadas] = useState(false);
+  const fechadas = jaFechadas(dado?.camadas ?? []);
+  const emAberto = aindaEmAberto(dado?.camadas ?? []);
+
   return (
     /*
       O TÍTULO ERA "Prontidão para faturar" e a aba se chama "Pendências" desde
@@ -285,8 +313,16 @@ export function TelaProntidao() {
             desalinhariam «Quantos» entre os grupos, que é a coluna que a pessoa
             compara de relance.
           */}
-          <Tabela cabecalho={<><th>O que falta</th><th>Situação</th><th className="num">Quantos</th><th>Efeito</th><th>Onde resolver</th></>}>
-            {agruparPorEfeito(dado.camadas).flatMap((g) => [
+          <Tabela cabecalho={<><th>O que falta</th><th>Situação</th><th className="num">Quantos</th><th>Efeito</th><th>Onde resolver</th></>}
+                  vazio={
+                    /* A LISTA VAZIA AQUI E BOA NOTICIA, e por isso ela FALA. Uma
+                       tabela que some quando tudo fecha tem a mesma cara de uma
+                       tabela que quebrou - a licao que esta tela ja aprendeu no
+                       rodape das automacoes. */
+                    <>Nada falta para este mês: as <strong>{fechadas.length}</strong> conferências
+                    fecharam. A cobrança depende agora só de emitir.</>
+                  }>
+            {agruparPorEfeito(verFechadas ? dado.camadas : emAberto).flatMap((g) => [
               <tr key={`grupo:${g.chave}`}>
                 <td colSpan={5} style={{ paddingTop: 22, borderBottom: 'none' }}>
                   <h3 style={{ margin: 0, fontSize: 15 }}>{tituloDoGrupo(g.chave, dado.competencia)}</h3>
@@ -318,6 +354,21 @@ export function TelaProntidao() {
               )),
             ])}
           </Tabela>
+
+          {fechadas.length > 0 && (
+            /* A CONTAGEM E SEMPRE VISIVEL, e so o detalhe e que fica atras do
+               clique: "9 ja fechadas" e a afirmacao de que o trabalho aconteceu,
+               e escondê-la junto com as linhas transformaria a tela num lugar
+               onde so ha problema - o que e outra forma de mentir. */
+            <p className="sub" style={{ marginTop: 12 }}>
+              <strong>{fechadas.length}</strong>{' '}
+              {fechadas.length === 1 ? 'conferência já fechada' : 'conferências já fechadas'}{' '}
+              neste mês{emAberto.length === 0 ? '' : ', e elas não aparecem na lista acima'}.{' '}
+              <button type="button" onClick={() => setVerFechadas(!verFechadas)}>
+                {verFechadas ? 'esconder as fechadas' : 'ver quais'}
+              </button>
+            </p>
+          )}
 
           <h2>Como ler esta tela</h2>
           <ul className="fraco" style={{ fontSize: 14, lineHeight: 1.7, paddingLeft: 18 }}>
