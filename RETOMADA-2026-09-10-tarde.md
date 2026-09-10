@@ -9,7 +9,7 @@
 | **Suíte** | sem banco: `EXIT=0`, **2.982** verificações (eram 2.878) |
 | **CI** | ✅ **verde** — run `34486930171` no `c1b176b`, incluindo os quatro jobs que só rodam lá, contra banco de verdade |
 | **Repositório** | o código desta leva é **`c1b176b`**; as retomadas vêm depois dele. `origin/main` junto, árvore limpa, zero arquivos `root:root` |
-| **Produção** | ✅ a primeira leva no ar às **14:15:11** (§0.1). ⚠️ **A segunda — `cbcef3c`, o endereço da conta — está commitada e NÃO subiu** |
+| **Produção** | ✅ **as duas levas no ar**: a trilha às **14:15:11** e o endereço da conta às **15:15:15**. Quatro sinais medidos em cada — §0.1 e §3.b |
 
 > ## A frase de uma linha
 >
@@ -273,13 +273,17 @@ leitura: **`GO` dentro de `GOIANIA`** viraria UF em quase toda linha de Goiás; 
 **`S/N` era partido ao meio** pela barra, e depois o `N` era comido pela regra que
 tira o `nº` — logradouro *"RUA DAS FLORES, S/"* com número vazio.
 
-⚠️ **Esta leva (`cbcef3c`) NÃO subiu.** Está em `origin/main`, árvore limpa e
-`chown` feito:
+✅ **No ar às 15:15:15**, quarto deploy do dia. Medido daqui:
 
-```
-gh workflow run deploy-financeiro.yml
-gh run list --workflow=isolamento --limit 2
-```
+| O quê | Como se sabe |
+|---|---|
+| O processo é o novo | `ActiveEnterTimestamp` = **15:15:15**, contra 14:15:11 da leva anterior |
+| **A rota nova existe** | `GET /api/faturas/unificada/enderecos` → **401**, contra **404** de uma rota inventada no mesmo caminho |
+| **O bundle é o novo** | `unidades-MfLhB9pW.js` às **15:15** — é a tela que ganhou a oferta |
+| A SPA responde | `GET /` → **200** |
+
+⚠️ **O CI desta leva não foi conferido** — o `gh run list` continua recusado
+dentro da sessão. `gh run list --workflow=isolamento --limit 2`.
 
 ---
 
