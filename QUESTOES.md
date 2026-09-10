@@ -948,6 +948,76 @@ insuficiente, aí sim vira trabalho de implementador.
 
 ---
 
+## 2.m Decisões técnicas de 10/09/2026, tarde — a trilha de auditoria ganha leitor, e o pagamento ganha recibo
+
+**Dono destas decisões: o implementador** (§2.b), exceto a marcada 🟡, que volta
+ao dono e está no fim.
+
+### O que motivou
+
+O pedido do dono foi *"sistema funcionando completamente de forma autônoma"*, e a
+lista do que ainda exigia um desenvolvedor tinha **um item de código só**: a
+`RETOMADA-2026-09-10-varredura.md` §0.3, item 10 — *"a trilha de auditoria não
+tem leitor (21.317 linhas) e pagamentos de contas a pagar não são listados"*.
+
+Os dois são a mesma família de furo, e é a família que este projeto persegue: **o
+dado existe, foi gravado com cuidado, e não há como olhar para ele.** A trilha
+respondia "quem cancelou esta fatura?" desde a primeira semana do projeto, e a
+resposta só saía por `psql`.
+
+### A medição que mudou o desenho, e ela é a decisão mais importante do dia
+
+Antes de desenhar a tela, a trilha de produção foi medida por dentro. O retrato,
+com 21.917 linhas visíveis neste tenant:
+
+| Tabela | Linhas | O que é |
+|---|--:|---|
+| `conector_execucao` | 14.054 | a rodada do CRM, de 15 em 15 minutos |
+| `agenda_execucao` | 5.048 | a fila de boleto, de 5 em 5 minutos |
+| `conector_crm` | 1.991 | a mesma rodada carimbando a própria linha |
+| **as três** | **21.093 = 96%** | **o batimento da máquina** |
+| **tudo o que pessoas fizeram** | **~840, em 45 dias** | cliente, unidade, contrato, usina… |
+
+As três crescem **1.440 linhas por dia**; o resto do sistema produz cerca de 20.
+Uma tela que abrisse "pelas mais recentes" mostraria **cem linhas de rodada**, e
+a alteração de cadastro mais nova estaria a milhares de linhas do topo. A tela
+teria nascido inútil, e ninguém saberia por quê.
+
+### As decisões
+
+| # | Decisão | Por quê |
+|:--:|---|---|
+| 1 | **A tela abre com «o que as pessoas fizeram»**, e o batimento da máquina fica atrás de um interruptor | Ver a medição acima. Esconder não é esconder nada: "a fila rodou às 13:47" já tem leitor **melhor** — `repos/automacoes.ts` lê a tabela na FONTE, com nível e intervalo, em vez de ler a sombra dela na auditoria |
+| 2 | **Pedir uma tabela escondida PELO NOME vence a lista** | Quem filtra por «ligação com o outro sistema» para ver quem mudou a configuração está perguntando justamente por ela. Devolver vazio seria a tela ignorando em silêncio o que a pessoa pediu |
+| 3 | **A rota devolve DIFERENÇA, e não a linha crua** | `antes`/`depois` são a linha inteira em JSON, e a maior medida em produção tem **11.676 bytes** (`conector_execucao`). Duzentas linhas com dois blocos desses seria uma resposta de megabytes para mostrar "o vencimento mudou de 10 para 15" |
+| 4 | **Todo valor é cortado em 200 caracteres, e o corte é DECLARADO** | Cabe nome, documento, chave Pix e motivo de cancelamento inteiros; não cabe o desenho da fatura nem a conta lida. A tela avisa que cortou, em vez de fingir que o texto acabou ali |
+| 5 | **Só três colunas ficam de fora da diferença** (`tenant_id`, `id`, `criado_em`), e nenhuma delas muda | Uma coluna alterada que não aparece é uma trilha que mente com cara de trilha — e nenhuma suíte de tipo pegaria. `T5` prende isso: seis colunas alteradas produzem seis linhas, inclusive as de nome feio |
+| 6 | **Quem lê é `ler_corporativo`**, e não `ler` | A trilha atravessa todas as tabelas auditadas, e quatro são da coluna Corporativo do PRD §3. O papel `cobrança` tem traço nessa coluna; exigir `ler` devolveria a ele, pela porta dos fundos em `antes`/`depois`, o dado que a matriz separou. `ler_corporativo` é exatamente o conjunto que já pode ler tudo |
+| 7 | **Nenhuma escrita neste repositório, nunca** | E não é disciplina: a migration 6 fez `REVOKE ALL` e devolveu só `SELECT`. Quem escreve é o gatilho, como `auditor_financeiro`. Uma escrita acrescentada aqui falha no banco, que é onde a regra mora |
+| 8 | **Os rótulos das tabelas são conferidos contra as MIGRATIONS** | `H1` lê os gatilhos `auditar_*` do próprio `prisma/migrations` e exige rótulo em português para cada tabela auditada — 37 achadas. Uma migration nova que audite uma tabela sem rótulo **derruba a suíte**, que é o único jeito de uma lista dessas não envelhecer |
+| 9 | **A tradução não pode ESCONDER** | Nenhuma coluna é omitida por ser feia, e o que não tem tradução aparece com o nome que tem. Uma trilha que decide sozinha o que merece ser vista é uma trilha em que a alteração inconveniente é a que some |
+| 10 | **Os pagamentos vêm junto da lista de contas a pagar**, e não numa segunda chamada por conta | São uma ou duas linhas por conta, e uma leitura por linha aberta transformaria a tela num enxame de requisições |
+| 11 | **A conta PAGA também abre**, e o botão troca de rótulo | É nela que a pergunta «isto já foi pago mesmo, e quando?» aparece. «Pagar» numa conta quitada seria a oferta de refazer o que já foi feito |
+| 12 | **Saldo pago sem pagamento registrado é ACUSADO** | `valor_pago_centavos` é mantido por gatilho a partir da tabela de pagamentos: os dois só divergem se alguém escrever no banco por fora. Somar em silêncio seria a tela afirmando uma quitação que não tem recibo (`C8d`) |
+
+### O que ficou provado, e onde
+
+| O quê | Como |
+|---|---|
+| A diferença é fiel | `tests/trilha.ts`, `T1..T9` — 20 verificações, incluindo o `UPDATE` que não mudou nada e o campo que foi esvaziado |
+| Os rótulos cobrem o que existe | `web/tests/historico.ts`, `H1..H8` — 40 verificações, com as 37 tabelas auditadas lidas das migrations |
+| As duas listas de rodadas concordam | `H2` compara a da tela com a do servidor, lendo o arquivo do servidor |
+| O recibo do pagamento | `web/tests/contas.ts`, `C8a..C8f` |
+| **Contra a PRODUÇÃO, sem escrever nada** | Os dois repositórios exercitados com a env real: 11 de 11 — o padrão sem batimento, o interruptor ligando, o filtro por tabela vencendo a lista, o teto, a data, a operação, e a linha de 11.676 bytes cabendo cortada |
+
+### 🟡 O que a trilha MOSTROU e não conserta — volta para o dono
+
+| ID | Nível | Pergunta | Quem |
+|---|:--:|---|---|
+| **Q-TRILHAQUEM-01** | 🟡 | **A trilha diz que o dono mexeu no sistema de cinco em cinco minutos, todas as noites — e isso é exatamente o que o `ADR-0006` Decisão 3 existe para impedir.** Medido em 10/09/2026: das 21.917 linhas, **21.868 estão assinadas por «Vinicius Leal»**, porque as três unidades de tempo (`financeiro-ciclo`, `financeiro-agenda-fila`, `financeiro-agenda-consulta`) rodam com `--auth-user 35f4dda9-…`, que é a conta do dono. O ADR escreveu, sobre reusar a conta de uma pessoa: *"a trilha passaria a dizer que o dono baixou uma fatura às 3h da manhã, e estaria MENTINDO"* — e escolheu **usuário de serviço por tenant**. O usuário de serviço EXISTE (`Conector de cobranca Sicoob`, papel `cobranca`) e é usado só pelo webhook. **Por que não foi consertado aqui:** o papel `cobranca` tem `escrever_carteira` e **não** tem `escrever_cadastro`, e o ciclo do CRM escreve `cliente`, `unidade_consumidora` e `contrato` — ou seja, o conserto exige **um segundo usuário de serviço com papel `admin`**, e dar `admin` a uma conta sem caminho de login é decisão de segurança, não de implementação (mexe na matriz do PRD §3). **O que custa hoje:** a tela de Histórico é honesta sobre isso — a ajuda explica em «Por que o Histórico mostra alterações de madrugada?» —, mas «quem fez» só distingue pessoas enquanto ninguém precisar provar nada. **O que custaria amanhã:** no dia em que a pergunta for jurídica ou contábil, a trilha aponta para uma pessoa que estava dormindo | Vinicius |
+
+---
+
 ## 3. F0 — o que falta para fechar
 
 Entregas da F0 conforme `PRD-v2.2` §10:

@@ -38,6 +38,19 @@ export type ContaAPagar = {
   vencimento: string;
   status: 'aberta' | 'parcial' | 'paga' | 'cancelada';
   origem_split_item_id: string | null;
+  /** O que JA foi pago nesta conta. Chega junto da lista desde 10/09/2026 —
+   *  antes dela, pagar era um ato sem recibo dentro do proprio sistema. */
+  pagamento?: readonly PagamentoDaConta[];
+};
+
+/** Um pagamento registrado. Espelha `pagamento` do banco. */
+export type PagamentoDaConta = {
+  id: string;
+  data_pagamento: string;
+  valor_centavos: number;
+  forma: FormaDePagamento;
+  referencia_externa: string | null;
+  observacao: string | null;
 };
 
 export type FormaDePagamento = 'pix' | 'ted' | 'doc' | 'boleto' | 'dinheiro' | 'compensacao';
@@ -153,6 +166,44 @@ export const ROTULO_DA_FORMA: Record<FormaDePagamento, string> = {
    * conciliacao bancaria nunca fechar. */
   compensacao: 'Compensação (encontro de contas)',
 };
+
+/**
+ * O RECIBO DA CONTA — o que foi pago, quando, e se ainda falta.
+ *
+ * POR QUE ISTO E UMA FUNCAO E NAO UMA CONTAGEM NA TELA: a frase muda com o
+ * ESTADO, e cada estado significa uma coisa diferente para quem opera.
+ *
+ *   nunca pago       "nada pago ainda" — e nao "0 pagamentos", que soa a defeito;
+ *   pago em uma vez  a data resolve a pergunta inteira, sem abrir nada;
+ *   pago em partes   a contagem e o que importa, e o resto esta na lista;
+ *   pago sem recibo  ⚠️ o saldo diz que foi pago e nao ha pagamento registrado.
+ *
+ * O ULTIMO CASO E O QUE JUSTIFICA A FUNCAO. `valor_pago_centavos` e mantido por
+ * gatilho a partir da tabela de pagamentos, entao os dois so divergem se alguem
+ * mexer no banco por fora — e quando isso acontece, o numero que a tela mostra
+ * deixa de ter historia por tras. Dizer isso e melhor que somar em silencio.
+ */
+export function recibo(c: ContaAPagar): { frase: string; alerta: boolean } {
+  const ps = c.pagamento ?? [];
+  if (ps.length === 0) {
+    if (c.valor_pago_centavos > 0) {
+      return {
+        frase: `${emReais(c.valor_pago_centavos)} constam como pagos, sem nenhum pagamento registrado`,
+        alerta: true,
+      };
+    }
+    return { frase: 'nada pago ainda', alerta: false };
+  }
+  if (ps.length === 1) {
+    return { frase: `pago em ${emBr(ps[0]!.data_pagamento)}`, alerta: false };
+  }
+  return { frase: `${ps.length} pagamentos, o último em ${emBr(ps[ps.length - 1]!.data_pagamento)}`, alerta: false };
+}
+
+/** Data ISO do banco na forma brasileira. O `slice` antes do corte existe porque
+ *  a coluna e `date` mas o JSON pode trazer o horario junto. */
+export const emBr = (iso: string): string =>
+  String(iso).slice(0, 10).split('-').reverse().join('/');
 
 export const ROTULO_DO_BENEFICIARIO: Record<ContaAPagar['beneficiario_tipo'], string> = {
   dono_usina: 'Dono de usina',

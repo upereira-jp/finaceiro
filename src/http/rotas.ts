@@ -16,6 +16,7 @@ import type { App, Sessao, VinculoDaSessao, ClientTx } from '../app.ts';
 import * as cliente from '../repos/cliente.ts';
 import * as conectorExecucao from '../repos/conector-execucao.ts';
 import * as automacoes from '../repos/automacoes.ts';
+import * as auditoria from '../repos/auditoria.ts';
 import * as emissao from '../repos/emissao.ts';
 import * as destrave from '../repos/destrave.ts';
 import * as uc from '../repos/unidade_consumidora.ts';
@@ -1003,6 +1004,53 @@ export const ROTAS: Rota[] = [
     metodo: 'GET', padrao: '/automacoes',
     handler: (req, app) => emRelatorio(app, req, async () =>
       ok(await automacoes.comoVaoAsAutomacoes())),
+  },
+  {
+    /*
+     * A TRILHA DE AUDITORIA GANHA LEITOR — 10/09/2026, e a tabela tinha 21.317
+     * linhas gravadas e ZERO leituras desde a migration 3.
+     *
+     * A rota de cima diz se o sistema esta trabalhando. Esta diz o que foi
+     * FEITO, por quem e quando: e a resposta para "quem cancelou esta fatura?",
+     * "quando esta chave Pix mudou, e para qual?" e "o que a rodada do outro
+     * sistema alterou de madrugada?". Ate hoje as tres exigiam `psql`, ou seja,
+     * exigiam um desenvolvedor - o ultimo item de codigo da lista do
+     * `PLANO-sem-desenvolvedor`.
+     *
+     * DEVOLVE DIFERENCA, E NAO A LINHA CRUA. `antes`/`depois` sao a linha
+     * inteira em JSON, e ha tabelas cuja linha e grande. O porque do corte, e o
+     * que ele NAO corta, esta em `src/dominio/trilha.ts`.
+     *
+     * `?tabela=` e `?registro=` juntos sao a historia de UM registro, que e a
+     * pergunta que mais se faz - e o indice `auditoria_registro_idx` e
+     * exatamente `(tabela, registro_id)`.
+     *
+     * Caminho de RELATORIO: leitura pura sobre a maior tabela do banco, e nao
+     * disputa slot transacional com a emissao.
+     */
+    metodo: 'GET', padrao: '/auditoria',
+    handler: (req, app) => emRelatorio(app, req, async () => {
+      const desde = req.query.get('desde') ? data(req.query.get('desde'), 'desde') : undefined;
+      const [linhas, tabelas] = await Promise.all([
+        auditoria.trilha({
+          tabela: req.query.get('tabela') ?? undefined,
+          registro_id: req.query.get('registro') ?? undefined,
+          operacao: (req.query.get('operacao') as any) ?? undefined,
+          desde,
+          ate: req.query.get('ate') ? data(req.query.get('ate'), 'ate') : undefined,
+          limite: limite(req.query),
+          /* O BATIMENTO DA MAQUINA FICA DE FORA POR PADRAO, e a razao esta
+           * medida em `repos/auditoria.ts`: 96% da trilha sao as tres tabelas
+           * de rodada, e sem isto a tela abriria mostrando so elas. */
+          incluir_rodadas: req.query.get('rodadas') === '1',
+        }),
+        auditoria.tabelasDaTrilha(desde),
+      ]);
+      /* O TETO VAI JUNTO DA RESPOSTA porque a tela precisa poder dizer "sao as
+       * 100 mais recentes, e ha mais" em vez de deixar quem le achar que acabou.
+       * Mesma disciplina da resposta que DIZ quando cortou, em `boleto.ts`. */
+      return ok({ linhas, tabelas, teto: auditoria.TETO });
+    }),
   },
   {
     // Varredura da carteira inteira: caminho de RELATORIO, pool e timeout

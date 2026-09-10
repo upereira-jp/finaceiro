@@ -34,6 +34,7 @@ import { Receipt } from '@phosphor-icons/react/Receipt';
 import { Bank } from '@phosphor-icons/react/Bank';
 import { FileText } from '@phosphor-icons/react/FileText';
 import { ChartLineUp } from '@phosphor-icons/react/ChartLineUp';
+import { ClockCounterClockwise } from '@phosphor-icons/react/ClockCounterClockwise';
 import { Check } from '@phosphor-icons/react/Check';
 import { X } from '@phosphor-icons/react/X';
 import { Question } from '@phosphor-icons/react/Question';
@@ -119,6 +120,11 @@ const DESENHO: Record<NomeDeIcone, Icon> = {
    * um desenho; o que a iconografia proibe e o contrario - uma tela escolher
    * desenho. */
   contas_a_pagar: HandCoins,
+
+  /* O RELOGIO ANDANDO PARA TRAS, e ele e o unico desenho do conjunto que fala de
+   * TEMPO PASSADO. `Clock` sozinho ja e "a receber" — o que ainda vai vencer —, e
+   * a trilha e o contrario disso: o que ja aconteceu e nao muda mais. */
+  historico: ClockCounterClockwise,
 
   // os três estados da prontidão — glifo nu, porque a pílula já é a moldura
   ok: Check,

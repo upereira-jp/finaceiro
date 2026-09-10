@@ -11,10 +11,10 @@
 // quando deve -, e a linha do servidor que ela espelha esta nomeada no texto.
 
 import {
-  saldoCentavos, nomeDoBeneficiario, estaAtrasada, diaISO,
+  saldoCentavos, nomeDoBeneficiario, estaAtrasada, diaISO, recibo, emBr,
   podePagar, podeCancelar, podeCriar,
   ROTULO_DO_STATUS, ROTULO_DA_FORMA, ROTULO_DO_BENEFICIARIO,
-  type ContaAPagar,
+  type ContaAPagar, type PagamentoDaConta,
 } from '../src/contas-regras.ts';
 
 let falhas = 0;
@@ -169,6 +169,54 @@ const conta = (o: Partial<ContaAPagar> = {}): ContaAPagar => ({
   chk('C7b', /Compensa/.test(ROTULO_DA_FORMA.compensacao) && /encontro de contas/.test(ROTULO_DA_FORMA.compensacao),
       'e `compensacao` NAO se chama "outro": e encontro de contas, dinheiro nenhum saiu, e '
       + 'registra-lo como Pix faria a conciliacao bancaria nunca fechar');
+}
+
+// ------------------------------------------- C8 o recibo, que ate 10/09 nao existia
+//
+// A TELA REGISTRAVA PAGAMENTO E NAO MOSTRAVA NENHUM. Depois de pagar, a unica
+// coisa que mudava era o saldo - e numa conta paga em duas vezes ninguem
+// respondia "quando foi a primeira, e por qual chave?" sem abrir o banco. A
+// razao pela qual esta tela existe (`Q-PAGAMENTO-01`) e justamente que o sistema
+// sabia o QUANTO e nao sabia o SE.
+{
+  const pgto = (o: Partial<PagamentoDaConta> = {}): PagamentoDaConta => ({
+    id: 'p1', data_pagamento: '2026-09-03', valor_centavos: 50_000,
+    forma: 'pix', referencia_externa: null, observacao: null, ...o,
+  });
+
+  chk('C8a', recibo(conta()).frase === 'nada pago ainda' && recibo(conta()).alerta === false,
+      'conta nunca paga DIZ isso - "0 pagamentos" soaria a defeito, e nao a estado normal');
+
+  chk('C8b', recibo(conta({ pagamento: [pgto()], valor_pago_centavos: 50_000 })).frase === 'pago em 03/09/2026',
+      'pago de uma vez: a data resolve a pergunta inteira, sem ninguem abrir nada');
+
+  {
+    const r = recibo(conta({
+      valor_pago_centavos: 100_000,
+      pagamento: [pgto(), pgto({ id: 'p2', data_pagamento: '2026-09-09' })],
+    }));
+    chk('C8c', r.frase.startsWith('2 pagamentos') && r.frase.includes('09/09/2026') && !r.alerta,
+        `pago em partes: a contagem e a ultima data (veio "${r.frase}")`);
+  }
+
+  /*
+   * C8d E A VERIFICACAO QUE JUSTIFICA A FUNCAO EXISTIR. `valor_pago_centavos` e
+   * mantido por gatilho a partir da tabela de pagamentos: os dois so divergem se
+   * alguem escrever no banco por fora. Quando isso acontece, o numero da tela
+   * deixa de ter historia por tras - e somar em silencio seria a tela afirmando
+   * uma quitacao que nao tem recibo.
+   */
+  {
+    const r = recibo(conta({ valor_pago_centavos: 70_000, pagamento: [] }));
+    chk('C8d', r.alerta === true && r.frase.includes('sem nenhum pagamento registrado'),
+        'saldo que diz "pago" sem pagamento registrado e ACUSADO, e nao somado em silencio');
+  }
+
+  chk('C8e', recibo(conta({ pagamento: undefined })).frase === 'nada pago ainda',
+      'e uma resposta antiga, sem a lista, nao quebra a tela - ela le como "nada pago"');
+
+  chk('C8f', emBr('2026-09-03') === '03/09/2026' && emBr('2026-09-03T00:00:00.000Z') === '03/09/2026',
+      'a data sai brasileira venha ela como `date` puro ou com horario junto');
 }
 
 console.log(`\n${falhas === 0 ? 'TODAS PASSARAM' : `${falhas} FALHA(S)`}`);

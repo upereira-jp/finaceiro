@@ -160,6 +160,18 @@ export const TELAS: readonly Tela[] = [
    * primeira fatura ser liquidada - o split as provisiona. */
   { rota: '/contas-a-pagar', titulo: 'Contas a pagar', icone: 'contas_a_pagar', grupo: 'dinheiro' },
   { rota: '/relatorios', titulo: 'Relatórios', icone: 'relatorios', grupo: 'dinheiro' },
+  /*
+   * A ULTIMA DE TODAS, e a posicao e o proprio significado dela: as treze acima
+   * sao onde o trabalho ACONTECE; esta e onde se pergunta o que aconteceu. Ela
+   * nao pertence a nenhum dos dois grupos por assunto - a trilha atravessa
+   * cadastro e dinheiro igualmente -, e fica em `dinheiro` porque e la que a
+   * pergunta "quem mexeu nisto?" custa caro o suficiente para alguem procurar.
+   *
+   * ENTROU EM 10/09/2026, e o que ela fecha nao e uma tela faltando: e a ultima
+   * pergunta de rotina que so tinha resposta pelo banco. O dado estava gravado
+   * desde a primeira semana do projeto - 21.917 registros - e nao havia leitor.
+   */
+  { rota: '/historico',  titulo: 'Histórico',  icone: 'historico', grupo: 'dinheiro' },
 ] as const;
 
 /** A tela de um caminho. Caminho desconhecido — inclusive `/` — cai na primeira,

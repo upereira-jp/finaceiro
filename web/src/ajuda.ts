@@ -1128,6 +1128,41 @@ export const TOPICOS: readonly Topico[] = [
     termos: ['desconectou', 'caiu a sessao', 'pede login', 'expirou', 'credencial invalida',
              'sair e entrar', 'senha', 'nao consigo entrar', 'deslogou'],
   },
+
+  // ======================================================= o que ja aconteceu
+  {
+    id: 'quem-alterou',
+    pergunta: 'Quem alterou este dado, e quando?',
+    resposta: 'A aba Histórico guarda tudo o que foi criado, alterado ou apagado desde o primeiro '
+      + 'dia — com o nome de quem fez, a hora e os valores de antes e de depois.',
+    passos: [
+      'Abra a aba Histórico.',
+      'Use «O que» para escolher o tipo de cadastro, ou «Desde» para começar numa data.',
+      'Clique na seta ao fim da linha para ver campo a campo o que mudou.',
+    ],
+    caminhos: [ir('/historico', 'Abrir Histórico')],
+    camada: null,
+    telas: ['/historico'],
+    termos: ['quem alterou', 'quem mudou', 'quem fez', 'quem cancelou', 'quem apagou',
+             'o que mudou', 'historico', 'trilha', 'auditoria', 'quando mudou',
+             'valor mudou sozinho', 'alguem mexeu'],
+  },
+  {
+    id: 'alteracoes-de-madrugada',
+    pergunta: 'Por que o Histórico mostra alterações de madrugada?',
+    resposta: 'As rotinas que rodam sozinhas — a que busca cadastro novo e a que envia boleto ao '
+      + 'banco — trabalham de hora em hora, inclusive de noite, e ficam registradas no nome do '
+      + 'acesso que o servidor usa para rodá-las. Não é alguém mexendo no sistema à noite.',
+    passos: [
+      'Se o interruptor «Mostrar também as rotinas automáticas» estiver ligado, desligue: o que sobra é o que pessoas fizeram.',
+      'Para saber se essas rotinas estão funcionando, olhe o rodapé da aba Pendências — é lá que elas se explicam.',
+    ],
+    caminhos: [ir('/historico', 'Abrir Histórico'), ver('/pendencias', 'Ver se as rotinas estão rodando')],
+    camada: null,
+    telas: ['/historico'],
+    termos: ['alteracao de madrugada', 'mexeu de noite', 'rotina automatica', 'sozinho',
+             'de hora em hora', 'muita coisa no historico', 'lista enorme'],
+  },
 ];
 
 // ============================================================================
@@ -1289,7 +1324,15 @@ export const PALAVRAS_DA_TELA: Record<string, readonly string[]> = {
   '/documento': ['fatura unificada', 'folha', 'documento do cliente', 'imprimir', 'logotipo',
                  'papel do cliente'],
   '/contas-a-pagar': ['contas a pagar', 'a pagar', 'despesa', 'o que a empresa deve', 'pagar'],
-  '/relatorios': ['relatorio', 'relatorios', 'numeros', 'planilha', 'exportar', 'historico'],
+  /* «historico» SAIU DAQUI EM 10/09/2026, e a troca e o proprio ponto: ate essa
+     data a palavra caia em Relatorios por falta de destino melhor. Agora ha uma
+     tela que E o historico, e deixar o apelido nas duas mandaria metade das
+     perguntas para o lugar errado — que e exatamente o beco que esta lista
+     existe para evitar. Relatorios fica com o que ela de fato faz: numeros do
+     mes, em tabela e em planilha. */
+  '/relatorios': ['relatorio', 'relatorios', 'numeros', 'planilha', 'exportar'],
+  '/historico': ['historico', 'trilha', 'auditoria', 'quem alterou', 'quem mudou', 'quem fez',
+                 'o que mudou', 'quem cancelou', 'quem apagou', 'log'],
 };
 
 /** O nome da tela como a barra de navegação a chama. Sem ele o botão diria

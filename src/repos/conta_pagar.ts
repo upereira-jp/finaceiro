@@ -323,6 +323,29 @@ export async function listar(opcoes: {
       dono_usina: { select: { nome: true } },
       originador: { select: { nome: true } },
       categoria: { select: { nome: true } },
+      /*
+       * OS PAGAMENTOS VEM JUNTO desde 10/09/2026, e a ausencia deles era um furo
+       * de operacao e nao um detalhe de tela.
+       *
+       * A tela de Contas a pagar REGISTRA pagamento (`POST .../pagamentos`) e
+       * nao mostrava nenhum: depois de pagar, a unica coisa visivel era o saldo
+       * mudar. Numa conta paga em duas vezes ninguem conseguia responder "quando
+       * foi a primeira, e por qual chave?" sem abrir o banco - e a razao pela
+       * qual esta tela existe (`Q-PAGAMENTO-01`) e justamente que o sistema
+       * sabia o quanto e nao sabia o SE.
+       *
+       * VEM NA LISTA e nao numa segunda chamada por conta: sao poucas linhas por
+       * conta (uma ou duas), e uma leitura por linha aberta transformaria a tela
+       * num enxame de requisicoes. O teto de 2.000 contas da propria funcao e o
+       * que limita o peso.
+       */
+      pagamento: {
+        select: {
+          id: true, data_pagamento: true, valor_centavos: true,
+          forma: true, referencia_externa: true, observacao: true,
+        },
+        orderBy: [{ data_pagamento: 'asc' }],
+      },
     },
     orderBy: [{ vencimento: 'asc' }, { criado_em: 'asc' }],
     take: Math.min(opcoes.limite ?? 500, 2000),

@@ -22,9 +22,10 @@
  *  `confirmar`, não `check-circle`. Trocar o desenho de um nome é um `Record` em
  *  `icones.tsx`; trocar o desenho de trinta chamadas espalhadas é um mutirão. */
 export type NomeDeIcone =
-  // as treze telas — a ordem é a de `navegacao.ts`
+  // as catorze telas — a ordem é a de `navegacao.ts`
   | 'prontidao' | 'clientes' | 'unidades' | 'contratos' | 'usinas' | 'donos' | 'vigencia'
   | 'carteira' | 'faturas' | 'cobranca' | 'documento' | 'relatorios' | 'contas_a_pagar'
+  | 'historico'
   // os três estados da prontidão
   | 'ok' | 'pendente' | 'nao_medido'
   // os três avisos

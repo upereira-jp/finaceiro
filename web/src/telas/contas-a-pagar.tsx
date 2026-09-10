@@ -30,10 +30,10 @@ import {
 } from '../ui.tsx';
 import { emReais, paraCentavos, competenciaISO } from '../dinheiro.ts';
 import {
-  saldoCentavos, nomeDoBeneficiario, estaAtrasada,
+  saldoCentavos, nomeDoBeneficiario, estaAtrasada, recibo, emBr,
   podePagar, podeCancelar, podeCriar,
   ROTULO_DO_STATUS, ROTULO_DA_FORMA, ROTULO_DO_BENEFICIARIO,
-  type ContaAPagar, type FormaDePagamento,
+  type ContaAPagar, type FormaDePagamento, type PagamentoDaConta,
 } from '../contas-regras.ts';
 import {
   motivoDaEspera, podeRepartirAgora, ordenarPelaEspera, resumoDaEspera, totalCentavos,
@@ -298,6 +298,9 @@ function LinhaDeConta(p: {
   const c = p.conta;
   const atrasada = estaAtrasada(c, p.hoje);
   const cancelar = podeCancelar(c);
+  const r = recibo(c);
+  const pagamentos = c.pagamento ?? [];
+  const aceitaPagamento = c.status !== 'paga' && c.status !== 'cancelada';
 
   async function confirmarCancelamento() {
     const ok = await p.acao.executar(() => api.post(`/contas-a-pagar/${c.id}/cancelar`, {}));
@@ -323,7 +326,16 @@ function LinhaDeConta(p: {
           <div className="nota">{c.origem_split_item_id ? 'nascida do split' : 'lançada à mão'}</div>
         </td>
         <td className="num">{emReais(c.valor_centavos)}</td>
-        <td className="num"><strong>{emReais(saldoCentavos(c))}</strong></td>
+        <td className="num">
+          <strong>{emReais(saldoCentavos(c))}</strong>
+          {/* O RECIBO EM UMA LINHA, e ele é a metade que faltava: até 10/09/2026
+              esta tela registrava pagamento e não mostrava nenhum, então depois
+              de pagar a única coisa que mudava era este número. Numa conta paga
+              em duas vezes, «quando foi a primeira?» não tinha resposta aqui. */}
+          <div className={r.alerta ? '' : 'fraco'} style={{ fontSize: 11.5, fontWeight: 400 }}>
+            {r.alerta && <><Icone nome="aviso_alerta" tamanho={12} /> </>}{r.frase}
+          </div>
+        </td>
         <td><Marca tom={TOM[c.status]}
                      icone={c.status === 'paga' ? 'aviso_ok'
                             : c.status === 'cancelada' ? 'nao' : 'aviso_alerta'}>
@@ -331,9 +343,15 @@ function LinhaDeConta(p: {
         </Marca></td>
         <td>
           <div style={{ display: 'flex', gap: 6 }}>
-            <button disabled={c.status === 'paga' || c.status === 'cancelada'}
+            {/* A CONTA PAGA TAMBÉM ABRE, e é o caso que mais se quer olhar: é
+                nela que a pergunta «isto já foi pago mesmo, e quando?» aparece.
+                O rótulo muda junto — «Pagar» numa conta quitada seria a oferta
+                de fazer de novo o que já foi feito. */}
+            <button disabled={!aceitaPagamento && pagamentos.length === 0}
+                    aria-expanded={abrindo}
                     onClick={() => setAbrindo(!abrindo)}>
-              <Icone nome="confirmar" tamanho={15} /> Pagar
+              <Icone nome={aceitaPagamento ? 'confirmar' : 'buscar'} tamanho={15} />{' '}
+              {aceitaPagamento ? 'Pagar' : 'Ver pagamentos'}
             </button>
             <button disabled={!cancelar.pode} title={cancelar.pode ? undefined : cancelar.porque}
                     onClick={confirmarCancelamento}>
@@ -345,12 +363,57 @@ function LinhaDeConta(p: {
       {abrindo && (
         <tr>
           <td colSpan={7}>
-            <FormularioDePagamento conta={c} acao={p.acao}
-                                   aoPagar={() => { setAbrindo(false); p.aoMudar(); }} />
+            {pagamentos.length > 0 && <PagamentosDaConta pagamentos={pagamentos} />}
+            {aceitaPagamento && (
+              <FormularioDePagamento conta={c} acao={p.acao}
+                                     aoPagar={() => { setAbrindo(false); p.aoMudar(); }} />
+            )}
           </td>
         </tr>
       )}
     </>
+  );
+}
+
+// ---------------------------------------------------- o que ja foi pago
+
+/**
+ * OS PAGAMENTOS JÁ REGISTRADOS.
+ *
+ * A REFERÊNCIA TEM COLUNA PRÓPRIA, e não é enfeite: é o número do comprovante —
+ * o end-to-end do Pix, o documento da TED — e é por ele que alguém confere esta
+ * linha contra o extrato do banco. Sem ela, «pago em 03/09» é uma afirmação que
+ * não dá para checar em lugar nenhum.
+ */
+function PagamentosDaConta({ pagamentos }: { pagamentos: readonly PagamentoDaConta[] }) {
+  const total = pagamentos.reduce((s, x) => s + x.valor_centavos, 0);
+  return (
+    <div className="cartao" style={{ margin: '0 0 12px' }}>
+      <h4 style={{ marginTop: 0 }}>
+        Já pago — {emReais(total)} em {pagamentos.length}{' '}
+        {pagamentos.length === 1 ? 'vez' : 'vezes'}
+      </h4>
+      <div className="rolagem">
+        <table>
+          <thead>
+            <tr>
+              <th>Data</th><th>Valor</th><th>Forma</th><th>Comprovante</th><th>Observação</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pagamentos.map((x) => (
+              <tr key={x.id}>
+                <td>{emBr(x.data_pagamento)}</td>
+                <td className="num"><strong>{emReais(x.valor_centavos)}</strong></td>
+                <td>{ROTULO_DA_FORMA[x.forma] ?? x.forma}</td>
+                <td>{x.referencia_externa || <span className="fraco">—</span>}</td>
+                <td>{x.observacao || <span className="fraco">—</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 

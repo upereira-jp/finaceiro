@@ -68,6 +68,7 @@ const TelaCobranca = lazy(() => import('./telas/cobranca.tsx').then((m) => ({ de
 const TelaRelatorios = lazy(() => import('./telas/relatorios.tsx').then((m) => ({ default: m.TelaRelatorios })));
 const TelaDocumento = lazy(() => import('./telas/documento.tsx').then((m) => ({ default: m.TelaDocumento })));
 const TelaContasAPagar = lazy(() => import('./telas/contas-a-pagar.tsx').then((m) => ({ default: m.TelaContasAPagar })));
+const TelaHistorico = lazy(() => import('./telas/historico.tsx').then((m) => ({ default: m.TelaHistorico })));
 
 /*
  * A AJUDA TAMBEM CHEGA SOB DEMANDA, e pela mesma razao das telas: ela carrega a
@@ -124,6 +125,7 @@ const RENDER: Record<string, () => ReactElement> = {
   '/cobranca': () => <TelaCobranca />,
   '/documento': () => <TelaDocumento />,
   '/contas-a-pagar': () => <TelaContasAPagar />,
+  '/historico': () => <TelaHistorico />,
   '/relatorios': () => <TelaRelatorios />,
 };
 

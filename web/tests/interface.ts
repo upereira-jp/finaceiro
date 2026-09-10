@@ -253,15 +253,21 @@ chk('I3e', /animation-delay:\s*0s?\s*!important/.test(bloqueio)
 
 // ------------------------------------------------------- I4 a barra de navegacao
 
-/* DOZE desde 14/08/2026 - "Tarifas" SAIU, por decisao do dono ("ela ja nao
- * possui finalidade e apenas gera redundancia"). A tarifa passou a ser coluna da
- * UC (migration 30), porque a granularidade real e por cliente e nao por
- * distribuidora - medido: 35 UCs a 1,130000, 4 a 1,16 e 2 a 1,180000.
+/* TREZE desde 10/09/2026 - entrou "Historico", a leitura da trilha de auditoria.
+ * O dado ja existia desde a primeira semana do projeto (21.917 registros em
+ * producao no dia) e nao tinha leitor nenhum: "quem cancelou esta fatura?" so
+ * tinha resposta pelo banco, ou seja, exigia um desenvolvedor. Foi o ultimo item
+ * de codigo da lista do `PLANO-sem-desenvolvedor`.
+ *
+ * DOZE entre 14/08 e 10/09/2026 - "Tarifas" SAIU, por decisao do dono ("ela ja
+ * nao possui finalidade e apenas gera redundancia"). A tarifa passou a ser
+ * coluna da UC (migration 30), porque a granularidade real e por cliente e nao
+ * por distribuidora - medido: 35 UCs a 1,130000, 4 a 1,16 e 2 a 1,180000.
  *
  * O numero e literal de proposito: uma tela a mais e decisao de produto, e uma
  * contagem que se atualiza sozinha (`TELAS.length === TELAS.length`) nao
  * acusaria uma tela acrescentada por engano num merge. */
-chk('I4', TELAS.length === 12, `sao 12 telas (contadas: ${TELAS.length})`);
+chk('I4', TELAS.length === 13, `sao 13 telas (contadas: ${TELAS.length})`);
 chk('I4b', new Set(TELAS.map((t) => t.rota)).size === TELAS.length,
     'nenhuma rota repetida — rota repetida faz a segunda tela ser inalcancavel');
 chk('I4c', new Set(TELAS.map((t) => t.titulo)).size === TELAS.length,
