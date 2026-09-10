@@ -17,6 +17,7 @@ import * as cliente from '../repos/cliente.ts';
 import * as conectorExecucao from '../repos/conector-execucao.ts';
 import * as automacoes from '../repos/automacoes.ts';
 import * as emissao from '../repos/emissao.ts';
+import * as destrave from '../repos/destrave.ts';
 import * as uc from '../repos/unidade_consumidora.ts';
 import * as usina from '../repos/usina.ts';
 import * as originador from '../repos/originador.ts';
@@ -433,6 +434,34 @@ const comPermissaoDeLer = async (app: App, req: Requisicao, f: () => Promise<Res
   return f();
 };
 
+/**
+ * O VINCULO DE UMA UC, CONFERIDO — e ela existe para a leitura do OUTRO banco
+ * acontecer fora de qualquer transacao nossa.
+ *
+ * E a mesma disciplina de `comPermissaoDeLer`, pelo mesmo motivo escrito acima:
+ * `emTenant` abre transacao com timeout de 15 s, e esperar um terceiro dentro
+ * dela e transacao longa. O CRM e outro banco, com outra rede e com latencia que
+ * nao e nossa.
+ *
+ * A costura fica aqui, na rota, e nao no repositorio: e a rota que conhece os
+ * dois contextos (leitura e escrita), e um repositorio que os abrisse sozinho
+ * esconderia justamente a fronteira que este comentario existe para marcar.
+ */
+const conferirOVinculo = async (app: App, req: Requisicao, ucId: string) => {
+  const espelho = (await emRelatorio(app, req, async () =>
+    ok(await destrave.lerEspelho(ucId)))).corpo as Awaited<ReturnType<typeof destrave.lerEspelho>>;
+
+  // FORA de transacao: e o outro banco.
+  const crm = await destrave.lerNoCrm(espelho.crm_tenant_id, espelho.numero_uc, espelho.contrato_no_espelho);
+
+  const presa = crm.por_uc
+    ? (await emRelatorio(app, req, async () =>
+        ok(await destrave.lerUcPresaAo(crm.por_uc!.contrato_id)))).corpo as string | null
+    : null;
+
+  return destrave.montarConferencia(espelho, { ...crm, uc_presa_ao_substituto: presa });
+};
+
 /** Caminho de relatorio: pool e timeout proprios. Leitura pesada nao disputa
  *  slot com o caminho transacional - o motivo esta em src/db/pools.ts. */
 const emRelatorio = (app: App, req: Requisicao, f: (tx: ClientTx, v: VinculoDaSessao) => Promise<Resultado>) =>
@@ -602,6 +631,70 @@ export const ROTAS: Rota[] = [
       await rateio.removerDoRateio(req.params.id);
       return semConteudo();
     }),
+  },
+  {
+    /*
+     * O VINCULO COM O OUTRO SISTEMA, CONFERIDO — `Q-UCMUDOU-01`, e a rota nasceu
+     * em 10/09/2026 por medicao e nao por pedido.
+     *
+     * A SPEC-002 R23 manda o conector RECUSAR quando um contrato de rateio muda
+     * de UC no outro sistema: das duas leituras uma esta errada, e escolher
+     * seria palpite. A recusa esta certa. O que faltava era a SAIDA — quem opera
+     * adjudica (diz qual leitura vale) e o ponteiro velho e apagado, deixando o
+     * conector gravar o vinculo novo pelo caminho normal.
+     *
+     * ⚠️ A saida existia so como `npm run destravar-uc`, no terminal. E o journal
+     * mediu o preco: a UC 000091762801211 esta sendo recusada a cada 15 minutos
+     * DESDE 04/09 as 18h — 519 vezes, seis dias fora do espelho. O que fica fora
+     * do espelho fica fora do faturamento.
+     *
+     * ELA LE O OUTRO BANCO, e e a primeira rota que faz isso. O pool e
+     * preguicoso (`crm/pool-de-leitura.ts`): quem nunca perguntar pelo vinculo
+     * nunca abre conexao, e o servidor continua subindo com o CRM fora do ar.
+     *
+     * Caminho de RELATORIO: leitura pura, e ainda por cima leitura de OUTRO
+     * banco - nao pode disputar slot transacional com a emissao.
+     */
+    metodo: 'GET', padrao: '/unidades-consumidoras/:id/vinculo',
+    handler: (req, app) => conferirOVinculo(app, req, req.params.id).then(ok),
+  },
+  {
+    /*
+     * A ADJUDICACAO, e ela e a UNICA escrita: `crm_usina_cliente_id` vira NULL.
+     *
+     * Nao escreve o vinculo novo - quem escreve campo espelhado e o conector
+     * (R6), e este ato existe para destrava-lo. As quatro guardas rodam DE NOVO
+     * aqui dentro, sobre leitura fresca: entre conferir e destravar passa tempo,
+     * e aceitar a decisao que a tela viu seria deixar o mundo ser afirmado por
+     * quem ja nao o esta olhando.
+     *
+     * `emTenant` e nao `emRelatorio`: aqui ha escrita, e ela precisa do contexto
+     * transacional onde o gatilho de auditoria da invariante 17 grava
+     * quem/quando/antes/depois.
+     */
+    metodo: 'POST', padrao: '/unidades-consumidoras/:id/destravar-vinculo',
+    handler: async (req, app) => {
+      /* CONFERE FORA, ESCREVE DENTRO. A conferencia toca o outro banco; a escrita
+       * e uma coluna. Junta-las numa transacao so poria a latencia do CRM dentro
+       * do slot transacional - o erro que `comPermissaoDeLer` existe para nao
+       * repetir. */
+      const antes = await conferirOVinculo(app, req, req.params.id);
+      await emTenant(app, req, async () => {
+        await destrave.apagarPonteiro(req.params.id, antes.decisao);
+        return ok(null);
+      });
+      /* Devolve o estado NOVO do nosso lado, com o que o CRM disse HA POUCO - e
+       * nao uma segunda ida ao outro banco. O que mudou foi o nosso ponteiro; o
+       * outro lado e o mesmo do instante em que a decisao foi tomada, e reler
+       * daria uma terceira versao da mesma historia. */
+      const espelho = (await emRelatorio(app, req, async () =>
+        ok(await destrave.lerEspelho(req.params.id)))).corpo as Awaited<ReturnType<typeof destrave.lerEspelho>>;
+      return ok(destrave.montarConferencia(espelho, {
+        por_contrato: antes.por_contrato,
+        por_uc: antes.por_uc,
+        uc_presa_ao_substituto: antes.uc_presa_ao_substituto,
+      }));
+    },
   },
   {
     metodo: 'GET', padrao: '/usinas/:id/rateio',

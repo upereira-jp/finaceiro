@@ -13,6 +13,7 @@
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from './generated/prisma/client.ts';
 import { criarPools, TETO_TRANSACIONAL, TETO_RELATORIO } from './db/pools.ts';
+import { encerrarPoolDoCrm } from './crm/pool-de-leitura.ts';
 import { comGuarda, type ClientTx, type Identidade } from './db/contexto.ts';
 import {
   resolverLogin, abrirUnidadeDeTrabalho, abrirRelatorio, abrirComoPlataforma,
@@ -186,6 +187,11 @@ export function criarApp(connectionString: string, cobranca: PortaDeCobranca = C
     async encerrar(): Promise<void> {
       await Promise.all([transacional.$disconnect(), relatorio.$disconnect()]);
       await Promise.all([pools.transacional.end(), pools.relatorio.end()]);
+      /* O do CRM entra aqui e nao no arranque: ele e PREGUICOSO (so abre se
+       * alguem perguntar pelo vinculo de uma UC), mas quem abre tem de fechar -
+       * e este e o unico encerramento ordenado do processo. Ver
+       * `crm/pool-de-leitura.ts`. */
+      await encerrarPoolDoCrm();
     },
   };
 }

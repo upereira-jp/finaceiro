@@ -22,6 +22,8 @@
 
 import { Fragment, useState } from 'react';
 import { api, type UnidadeConsumidora, type Usina } from '../api.ts';
+import { PainelDoVinculo } from '../vinculo-do-crm-corpo.tsx';
+import type { VinculoNaTela } from '../vinculo-do-crm.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
   Pagina, Aviso, Tabela, Busca, Campo, Ferramentas, Filtro, ThOrd, Marca, BotaoDeIcone,
@@ -353,6 +355,14 @@ export function TelaUnidades() {
               <td colSpan={8} style={{ background: 'var(--fundo-recuo)' }}>
                 <EnderecoDoPagador uc={u} ocupado={acao.ocupado}
                                    aoGravar={(campos) => void salvarEndereco(u, campos)} />
+                {/* O VINCULO VEM DEPOIS DO ENDERECO, e a ordem e de frequencia:
+                    endereco e trabalho de cadastro que quase toda linha precisa
+                    uma vez; o vinculo e a pergunta que se faz sobre UMA linha,
+                    quando o aviso de Pendencias a nomeia. Poe-lo em cima faria a
+                    leitura do outro banco acontecer toda vez que alguem abrisse
+                    uma linha para digitar um CEP. */}
+                <hr style={{ border: 0, borderTop: '1px solid var(--borda-suave)', margin: '14px 0' }} />
+                <VinculoComOutroSistema ucId={u.id} aoDestravar={() => ucs.recarregar()} />
               </td>
             </tr>
           )}
@@ -452,5 +462,45 @@ function EnderecoDoPagador({ uc, ocupado, aoGravar }: {
         </DetalheTecnico>
       </span>
     </div>
+  );
+}
+
+/**
+ * O VÍNCULO COM O OUTRO SISTEMA — a leitura acontece quando a linha abre.
+ *
+ * ⚠️ ESTA É A ÚNICA TELA QUE FAZ O SERVIDOR LER O OUTRO BANCO. Por isso ela é
+ * preguiçosa duas vezes: só busca quando a linha está aberta, e o servidor só
+ * abre conexão com o outro banco quando alguém pergunta. O sistema continua
+ * subindo e operando com aquele banco fora do ar.
+ *
+ * A RECARGA DEPOIS DE DESTRAVAR NÃO MOSTRA O VÍNCULO NOVO, e a tela diz isso: o
+ * botão solta o vínculo velho, e quem escreve o novo é a leitura automática, no
+ * próximo ciclo. Uma tela que prometesse o resultado final aqui estaria
+ * prometendo o trabalho de outro processo.
+ */
+function VinculoComOutroSistema({ ucId, aoDestravar }: { ucId: string; aoDestravar: () => void }) {
+  const acao = useAcao();
+  const vinculo = useDados<VinculoNaTela>(() => api.get(`/unidades-consumidoras/${ucId}/vinculo`), [ucId]);
+
+  const destravar = async () => {
+    if (!confirm(
+      'Soltar o vínculo velho desta unidade?\n\n'
+      + 'Isto registra que você decidiu qual leitura vale. A leitura automática do outro sistema '
+      + 'grava o vínculo novo no próximo ciclo, em até 15 minutos.')) return;
+    const ok = await acao.executar(() => api.post(`/unidades-consumidoras/${ucId}/destravar-vinculo`));
+    if (ok) {
+      acao.anunciar('Vínculo solto. A leitura automática grava o novo no próximo ciclo.');
+      vinculo.recarregar();
+      aoDestravar();
+    }
+  };
+
+  return (
+    <>
+      {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
+      {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
+      <PainelDoVinculo dados={vinculo.dado} carregando={vinculo.carregando} erro={vinculo.erro}
+                       destravar={() => void destravar()} ocupado={acao.ocupado} />
+    </>
   );
 }

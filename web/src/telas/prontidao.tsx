@@ -539,9 +539,33 @@ function SinaisDoConector() {
         <>
           <p className="sub">
             <strong>{sinais.length}</strong>{' '}
-            {sinais.length === 1 ? 'apontamento' : 'apontamentos'} na última leitura. Eles não
-            impedem nada sozinhos — são coisas que os dois sistemas dizem diferente, e a correção
-            é feita no outro, que é o dono do dado.
+            {sinais.length === 1 ? 'apontamento' : 'apontamentos'} na última leitura.{' '}
+            {/*
+              ⚠️ A FRASE ANTERIOR DIZIA «eles não impedem nada sozinhos» PARA OS
+              TRÊS TIPOS, e isso é verdade para divergência e FALSO para recusa:
+              recusa quer dizer que nada foi gravado naquela linha — o que mudou
+              do outro lado não chegou aqui, e não vai chegar sozinho.
+
+              O preço da frase única foi medido em 10/09/2026: uma unidade estava
+              sendo recusada a cada 15 minutos DESDE O DIA 4 — 519 vezes, seis
+              dias fora do espelho —, sob um texto que mandava corrigir «no
+              outro, que é o dono do dado». Naquele caso o outro sistema já
+              estava certo: o que estava velho era o vínculo daqui, e a saída é
+              nesta casa, na linha da unidade.
+            */}
+            {ultima.recusados > 0 ? (
+              <>
+                As <strong>recusas</strong> impedem: a linha recusada <strong>não foi gravada</strong>,
+                e o que mudou do outro lado não chega aqui enquanto durar. Quando a recusa for de
+                unidade que trocou de contrato, ela se resolve <strong>aqui</strong> — abra a linha
+                daquela unidade na aba Unidades consumidoras e confira o vínculo. As{' '}
+                <strong>divergências</strong> não impedem nada: são coisas que os dois sistemas
+                dizem diferente, e a correção é feita no outro, que é o dono do dado.
+              </>
+            ) : (
+              <>Eles não impedem nada sozinhos — são coisas que os dois sistemas dizem diferente,
+                e a correção é feita no outro, que é o dono do dado.</>
+            )}
             {' '}
             <button type="button" onClick={() => setAberto(!aberto)}>
               {aberto ? 'esconder' : 'ver quais'}

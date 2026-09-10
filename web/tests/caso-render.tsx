@@ -32,6 +32,8 @@ import { CorpoDaAjuda } from '../src/ajuda-corpo.tsx';
 import { CorpoDaSaude } from '../src/saude-corpo.tsx';
 import { FaixasDasAutomacoes, PainelDasAutomacoes } from '../src/automacoes-corpo.tsx';
 import { FaixaDaEmissao, PainelDaEmissao } from '../src/emissao-travada-corpo.tsx';
+import { PainelDoVinculo } from '../src/vinculo-do-crm-corpo.tsx';
+import type { VinculoNaTela } from '../src/vinculo-do-crm.ts';
 import type { LinhaNaTela, NivelDaEmissao, EmissaoTravadaNaTela } from '../src/emissao-travada.ts';
 import type { NivelDaRodada, ChaveDaAutomacao, RodadaNaTela } from '../src/automacoes.ts';
 import type { NivelDoAviso } from '../src/saude-do-dinheiro.ts';
@@ -715,6 +717,66 @@ const desenharFaixaDaEmissao = (d: EmissaoTravadaNaTela | null): string =>
   // ------------------------------- nenhuma palavra proibida chega ao HTML final
   for (const regra of [/npm run/, /\bQ-[A-Z]/, /snake_case/, /\bUC\b/]) {
     chk('R14l', !regra.test(t) && !regra.test(faixa), `o que a pessoa le nao casa com ${regra}`);
+  }
+}
+
+// ============================================================================
+// R15 — O VINCULO COM O OUTRO SISTEMA MONTA, E O BOTAO SO APARECE ONDE PODE
+// ============================================================================
+//
+// O caso e o de producao: a unidade recusada 519 vezes desde 04/09/2026. O que
+// estas linhas provam e o que `V-*` nao alcanca - que o componente MONTA e que o
+// botao existe exatamente onde as quatro guardas deixam.
+
+const vinculoTravado: VinculoNaTela = {
+  numero_uc: '000091762801211',
+  cliente: 'Cliente do caso real',
+  contrato_no_espelho: 'd7d1758d-e60b-4124-8720-6bc6e0171535',
+  crm_por_contrato: { uc: '000000100076075', contrato_id: 'd7d1758d-e60b-4124-8720-6bc6e0171535',
+                      lead_codigo: 'LEAD-1', cliente: 'Cliente A' },
+  crm_por_uc: { uc: '000091762801211', contrato_id: 'aaaa1111-2222-3333-4444-555566667777',
+                lead_codigo: 'LEAD-2', cliente: 'Cliente B' },
+  uc_presa_ao_substituto: null,
+  decisao: { pode: true, contratoASoltar: 'd7d1758d-e60b-4124-8720-6bc6e0171535',
+             ucQueVaiNascer: '000000100076075',
+             contratoQueVaiEntrar: 'aaaa1111-2222-3333-4444-555566667777' },
+};
+
+{
+  const travado = renderToStaticMarkup(
+    <PainelDoVinculo dados={vinculoTravado} destravar={() => {}} />);
+  const t = texto(travado);
+  chk('R15a', /travada/i.test(t) && t.includes('000000100076075') && travado.includes('<button'),
+      'o caso travado monta, nomeia a unidade para onde o contrato foi e oferece o botao');
+
+  const semAcao = renderToStaticMarkup(<PainelDoVinculo dados={vinculoTravado} />);
+  chk('R15b', !semAcao.includes('<button') || !/Soltar o v/i.test(texto(semAcao)),
+      'sem a acao, o botao de soltar nao e desenhado - botao que existe sem efeito e pior que '
+      + 'botao nenhum (o «ver detalhe tecnico» continua sendo um botao legitimo)');
+
+  const recusado = renderToStaticMarkup(<PainelDoVinculo destravar={() => {}} dados={{
+    ...vinculoTravado, decisao: { pode: false, guarda: 3, motivo: 'tecnico' }, crm_por_uc: null,
+  }} />);
+  chk('R15c', !/Soltar o v[ií]nculo velho/i.test(texto(recusado))
+           && /[oó]rf[aã]|nenhum contrato serve/i.test(texto(recusado)),
+      'e a guarda 3 monta a explicacao SEM o botao - oferecer o clique que o servidor recusa e '
+      + 'mandar a pessoa colher um erro que a tela ja sabia');
+
+  const falhou = texto(renderToStaticMarkup(
+    <PainelDoVinculo dados={null} erro="a outra base nao respondeu" />));
+  chk('R15d', /ningu[eé]m sabe/.test(falhou) && falhou.includes('a outra base nao respondeu'),
+      'leitura falhada DIZ que ninguem sabe, com o motivo - e nao finge que o vinculo esta certo');
+
+  chk('R15e', renderToStaticMarkup(<PainelDoVinculo dados={null} />) === '',
+      'e enquanto a resposta nao voltou nao desenha nada');
+
+  const carregando = texto(renderToStaticMarkup(<PainelDoVinculo dados={null} carregando />));
+  chk('R15f', /conferindo/i.test(carregando),
+      'durante a leitura a tela DIZ que esta conferindo - esta e a unica leitura do sistema que '
+      + 'sai para outro banco, e ela demora o que aquele banco demorar');
+
+  for (const regra of [/npm run/, /\bQ-[A-Z]/, /rateio_clientes/, /crm_usina_cliente_id/]) {
+    chk('R15g', !regra.test(t), `o que a pessoa le, fora do detalhe tecnico, nao casa com ${regra}`);
   }
 }
 
