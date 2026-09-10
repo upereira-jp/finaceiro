@@ -7,7 +7,7 @@
 // para errar, e o botao de valendo pede confirmacao explicita.
 
 import { useState } from 'react';
-import { api } from '../api.ts';
+import { api, type PosicaoDaCarteira } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
   Pagina, Aviso, Tabela, rotulo, linha, Kpi, Marca, Icone, CampoData, AjudaDoMes, DetalheTecnico} from '../ui.tsx';
@@ -18,10 +18,9 @@ type Resumo = {
   recusas: Record<string, number>; alertas: Record<string, number>;
   detalhe: Array<{ numero_uc: string; motivo: string; explicacao: string }>;
 };
-type Posicao = {
-  competencia: string; faturas: number; emitidas: number; liquidadas: number;
-  vencidas_em_aberto: number; faturado_centavos: number; recebido_centavos: number; a_receber_centavos: number;
-};
+/** O formato vive em `api.ts` desde 10/09/2026 — a tela de Pendências lê a
+ *  mesma resposta para montar o roteiro do mês, e duas cópias discordariam. */
+type Posicao = PosicaoDaCarteira;
 
 export function TelaCarteira() {
   const [mes, setMes] = useState(() => new Date().toISOString().slice(0, 7));

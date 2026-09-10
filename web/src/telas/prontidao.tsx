@@ -24,7 +24,10 @@
 // a coluna diz isso em vez de desenhar um link para lugar nenhum.
 
 import { useState } from 'react';
-import { api, ErroDaApi, type Camada, type Prontidao, type ExecucaoDoConector, type Automacao } from '../api.ts';
+import {
+  api, ErroDaApi,
+  type Camada, type Prontidao, type ExecucaoDoConector, type Automacao, type PosicaoDaCarteira,
+} from '../api.ts';
 import { useDados } from '../dados.ts';
 import {
   Pagina, Aviso, Tabela, Marca, Kpi, KpiSimNao, Carregando, CampoData, AjudaDoMes, Icone,
@@ -42,7 +45,9 @@ import type { NivelDoAviso } from '../saude-do-dinheiro.ts';
 import {
   VERBETE_DA_CAMADA, EFEITO, SITUACAO,
   agruparPorEfeito, tituloDoGrupo, subDoGrupo, contagemDaCamada, aindaEmAberto, jaFechadas,
+  mesPorExtenso,
 } from '../vocabulario.ts';
+import { CorpoDoRoteiro } from '../roteiro-corpo.tsx';
 
 const mesAtual = () => new Date().toISOString().slice(0, 7);
 
@@ -162,6 +167,17 @@ export function TelaProntidao() {
    * tela para descobrir que precisa abri-la. */
   const emissao = useDados<EmissaoTravadaNaTela>(() => api.get('/emissao/travada'));
 
+  /* A POSICAO DO MES, para o roteiro poder dizer QUANTAS ja foram geradas,
+   * emitidas e pagas. Ela DEPENDE do mes, ao contrario das duas leituras acima:
+   * a pergunta e sobre esta competencia, e so sobre ela.
+   *
+   * `/carteira` devolve uma LISTA (ate 12 competencias); com o filtro ela volta
+   * com zero ou uma linha, e zero e a resposta legitima do mes em que nada foi
+   * gerado ainda. `?? null` deixa o roteiro dizer "esperando" em vez de "feito"
+   * enquanto a leitura nao chega — nada e afirmado sem medida. */
+  const carteira = useDados<PosicaoDaCarteira[]>(
+    () => api.get(`/carteira?competencia=${competenciaISO(mes)}`), [mes]);
+
   const naoMedidas = dado?.camadas.filter((c) => c.situacao === 'nao_medido').length ?? 0;
 
   /*
@@ -233,6 +249,33 @@ export function TelaProntidao() {
 
       {dado && (
         <>
+          {/*
+            O ROTEIRO VEM ANTES DE TUDO O QUE ESTA TELA JA MOSTRAVA, e a razao e a
+            pergunta que ele responde.
+
+            As faixas acima dizem se o caminho do dinheiro esta de pe. Os cartoes
+            e a tabela abaixo dizem O QUE FALTA. Nenhum dos dois responde **«o que
+            eu faco agora, e como»** — que e a pergunta de quem abriu o sistema
+            para trabalhar, e a unica que a operacao faz todo dia.
+
+            Medido em 10/09/2026: o caminho real de um mes atravessa DUAS telas
+            cujos nomes nao o anunciam, em seis atos com nomes diferentes dos das
+            abas — e a tela de nome mais obvio da barra, «Faturamento», e o
+            caminho APOSENTADO. Nada nesta tela dizia isso.
+
+            A LOGICA E `roteiro-do-mes.ts`, `.ts` puro com suite propria (regra 8),
+            e quem desenha e `roteiro-corpo.tsx`, que recebe tudo por propriedade —
+            mesmo par de `saude-do-dinheiro.ts` + `saude-corpo.tsx`, e pelo mesmo
+            motivo: `renderToStaticMarkup` nao roda efeito, entao um componente que
+            busca sozinho renderiza vazio e o teste mede o nada.
+          */}
+          <CorpoDoRoteiro
+            competencia={mesPorExtenso(dado.competencia) || mes}
+            camadas={dado.camadas}
+            posicao={carteira.dado?.[0] ?? null}
+            semCobranca={emissao.dado ? emissao.dado.total : null}
+          />
+
           {/*
             OS TRES PRIMEIROS CARTOES SAO AS TRES RESPOSTAS DE CONSEQUENCIA, e por
             isso sao os unicos com icone grande de sim/nao: "pode faturar" decide

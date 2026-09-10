@@ -289,6 +289,20 @@ export type Fatura = {
   emitida_em: string | null; cancelada_em: string | null; motivo_cancelamento: string | null;
 };
 
+/**
+ * Uma linha de `GET /carteira` — a posição de UMA competência.
+ *
+ * SUBIU PARA CÁ EM 10/09/2026, de dentro de `telas/carteira.tsx`, quando a tela
+ * de Pendências passou a precisar dela para o roteiro do mês. Duas cópias do
+ * mesmo formato de resposta é a forma mais barata de as duas telas discordarem
+ * sobre o que o servidor mandou.
+ */
+export type PosicaoDaCarteira = {
+  competencia: string; faturas: number; emitidas: number; liquidadas: number;
+  vencidas_em_aberto: number;
+  faturado_centavos: number; recebido_centavos: number; a_receber_centavos: number;
+};
+
 export type Boleto = {
   id: string; fatura_id: string;
   nosso_numero: string | null; linha_digitavel: string | null; codigo_barras: string | null;

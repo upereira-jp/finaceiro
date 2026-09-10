@@ -30,6 +30,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CorpoDaAjuda } from '../src/ajuda-corpo.tsx';
 import { CorpoDaSaude } from '../src/saude-corpo.tsx';
+import { CorpoDoRoteiro } from '../src/roteiro-corpo.tsx';
 import { FaixasDasAutomacoes, PainelDasAutomacoes } from '../src/automacoes-corpo.tsx';
 import { FaixaDaEmissao, PainelDaEmissao } from '../src/emissao-travada-corpo.tsx';
 import { PainelDoVinculo } from '../src/vinculo-do-crm-corpo.tsx';
@@ -777,6 +778,91 @@ const vinculoTravado: VinculoNaTela = {
 
   for (const regra of [/npm run/, /\bQ-[A-Z]/, /rateio_clientes/, /crm_usina_cliente_id/]) {
     chk('R15g', !regra.test(t), `o que a pessoa le, fora do detalhe tecnico, nao casa com ${regra}`);
+  }
+}
+
+// ============================================================================
+// R16 — O ROTEIRO DO MÊS CHEGA NA TELA, e com UMA instrução por vez
+// ============================================================================
+//
+// A suíte pura (`web/tests/roteiro-do-mes.ts`, `RM*`) já prova a máquina de
+// estados: um só «agora», nada afirmado sem medida, travar consome o «agora».
+// O que ela NÃO prova é que a caixa monta e que o texto sai — e aqui o modo de
+// falha é pior do que o da faixa da saúde, porque este componente é a primeira
+// coisa que a operação lê na primeira tela do sistema.
+//
+// A DIFERENÇA PARA AS `R12*`: lá o estado normal era o silêncio, e provar que a
+// faixa APARECE era o difícil. Aqui o componente nunca cala — então o difícil é
+// provar que ele mostra **um** passo aberto, e não cinco.
+
+const desenharRoteiro = (leitura: Parameters<typeof CorpoDoRoteiro>[0]): string =>
+  renderToStaticMarkup(<CorpoDoRoteiro {...leitura} />);
+
+{
+  const camadas = [
+    { camada: 'conta_lida_da_competencia', situacao: 'pendente' as const, faltam: 29, total: 29, efeito: 'bloqueia_fatura' as const },
+    { camada: 'contrato_ativo', situacao: 'ok' as const, faltam: 0, total: 29, efeito: 'bloqueia_fatura' as const },
+  ];
+
+  const html = desenharRoteiro({
+    competencia: 'julho de 2026', camadas, posicao: null, semCobranca: null,
+  });
+  const t = texto(html);
+
+  chk('R16a', html.length > 300 && t.includes('O mês de julho de 2026, passo a passo'),
+      `a caixa monta (${html.length} caracteres) e o título nomeia o mês por extenso - «a `
+      + 'competência 2026-07-01» é o nome que o banco dá, e não o que a pessoa fala');
+
+  chk('R16b', t.includes('Ler as contas de luz do mês') && t.includes('você está no 1 de 5'),
+      'com o mês zerado, o passo aberto é o primeiro - e a caixa DIZ em qual dos cinco a pessoa '
+      + 'está, que é a frase que ela guarda de um dia para o outro');
+
+  chk('R16c', t.includes('Como fazer') && /Baixe do portal da distribuidora/.test(t),
+      'e o «como fazer» sai inteiro no HTML, começando por onde o arquivo vem - sem isso a caixa '
+      + 'diria o que fazer e não como, que é a metade que a operação não tem');
+
+  chk('R16d', (html.match(/Como fazer/g) ?? []).length === 1,
+      'UMA instrução por vez: só o passo aberto traz o «como fazer», e os outros quatro ficam em '
+      + 'uma linha cada - cinco instruções ao mesmo tempo é o mesmo que nenhuma');
+
+  chk('R16e', html.includes('href="/documento"'),
+      'e o botão leva ao endereço REAL da tela onde o passo acontece (`href` de verdade, como '
+      + 'manda `rota.tsx`) - não a uma explicação de onde clicar');
+
+  // ------------------------------------------------ o passo travado, que é o difícil
+  const travado = desenharRoteiro({
+    competencia: 'julho de 2026',
+    camadas: [
+      { camada: 'conta_lida_da_competencia', situacao: 'ok', faltam: 0, total: 29, efeito: 'bloqueia_fatura' },
+      { camada: 'contrato_ativo', situacao: 'pendente', faltam: 11, total: 29, efeito: 'bloqueia_fatura' },
+    ],
+    posicao: { faturas: 0, emitidas: 0, liquidadas: 0, vencidas_em_aberto: 0 },
+    semCobranca: 0,
+  });
+  const tt = texto(travado);
+
+  chk('R16f', /Antes disso, falta uma coisa/.test(tt) && tt.includes('contrato'),
+      'o passo travado mostra O QUE fecha a porta, antes do passo a passo - seguir a instrução '
+      + 'com uma porta fechada na frente termina numa recusa do servidor depois de cinco cliques');
+
+  chk('R16g', travado.includes('href="/contratos"'),
+      'e a trava carrega o link de onde ela se resolve, que vem de `destino-da-camada.ts` - o mapa '
+      + 'não é reescrito no roteiro');
+
+  // ------------------------------------------------- o mês fechado FALA
+  const fechado = desenharRoteiro({
+    competencia: 'julho de 2026',
+    camadas: [{ camada: 'conta_lida_da_competencia', situacao: 'ok', faltam: 0, total: 29, efeito: 'bloqueia_fatura' }],
+    posicao: { faturas: 29, emitidas: 29, liquidadas: 29, vencidas_em_aberto: 0 },
+    semCobranca: 0,
+  });
+  chk('R16h', fechado !== '' && /os cinco passos fecharam/.test(texto(fechado)),
+      'e com o mês inteiro fechado a caixa NÃO some: ela diz que fechou - caixa que some tem a '
+      + 'mesma cara de caixa que quebrou, a lição que a tabela das camadas já tinha aprendido');
+
+  // ------------------------------------- nada de jargão chega em quem lê
+  for (const regra of [/\bcamada\b/i, /\bwebhook\b/i, /\bendpoint\b/i, /\bQ-[A-Z]/, /npm run/]) {
+    chk('R16i', !regra.test(t) && !regra.test(tt), `o que a pessoa le nao casa com ${regra}`);
   }
 }
 
