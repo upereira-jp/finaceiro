@@ -7,6 +7,7 @@
 | **O pedido** | *"veja o arquivo de retomada e siga com ele. Objetivo: sistema funcionando completamente de forma autônoma"* |
 | **O que esta sessão fez** | Fechou o **último item de código** da lista do que ainda exigia um desenvolvedor: a trilha de auditoria tinha **21.917 linhas e nenhum leitor**. Junto, o item irmão da mesma linha: contas a pagar registrava pagamento e não mostrava nenhum |
 | **Suíte** | sem banco: `EXIT=0`, **2.957** verificações (eram 2.878) |
+| **CI** | ✅ **verde** — run `34486930171` no `c1b176b`, incluindo os quatro jobs que só rodam lá, contra banco de verdade |
 | **Repositório** | o código desta leva é **`c1b176b`**; as retomadas vêm depois dele. `origin/main` junto, árvore limpa, zero arquivos `root:root` |
 | **Produção** | ✅ **no ar às 14:15:11**, terceiro deploy do dia. O dono disparou o workflow; os quatro sinais estão no §0.1 |
 
@@ -58,16 +59,17 @@ termina em `push`, e o `gh workflow run` vai para o dono.**
 com uma API velha — a aba aparece e responde 404. Ou o deploy inteiro, ou nenhum
 passo dele.
 
-### 0.1-b O CI desta leva NÃO foi conferido
+### 0.1-b ✅ O CI desta leva está VERDE
 
-O push foi aceito (`53c1e3b..c1b176b`), e o `gh run list` que confirmaria o
-`isolamento` foi recusado junto com o resto. **Conferir antes de considerar a
-leva fechada** — a regra de sempre, e a razão dela também: `test:repos`,
-`test:isolamento`, `test:middleware` e `test:sessao` **só executam no Actions**.
+Run **`34486930171`**, `success`, 1m14s, no commit do código (`c1b176b`). O
+`gh run list` também tinha sido recusado dentro da sessão; o dono rodou.
 
-```
-gh run list --workflow=isolamento --limit 2
-```
+Isso é o que fecha a leva de verdade, e não a suíte local: `test:repos`,
+`test:isolamento`, `test:middleware` e `test:sessao` **só executam no Actions**
+— exigem PostgreSQL, e esta VPS não tem um. Verde local nunca foi verde.
+
+*(As duas retomadas commitadas depois disto são só documento e não tocam suíte
+nenhuma.)*
 
 ### 0.2 O que passou a existir, e onde olhar
 
@@ -203,8 +205,8 @@ Três decisões, e a terceira é a que não é óbvia:
 **O que NÃO foi medido:**
 
 1. ✅ ~~A tela em produção~~ — **subiu às 14:15:11**, com os quatro sinais do §0.1;
-2. 🔴 **O CI desta leva** — o `gh run list` foi recusado junto (§0.1-b);
-3. **As telas com olho humano** — nem esta leva nem a anterior;
+2. ✅ ~~O CI desta leva~~ — **verde**, run `34486930171` (§0.1-b);
+3. 🔴 **As telas com olho humano** — nem esta leva nem a anterior. É a ÚNICA coisa que sobra do §0;
 4. **A trilha com uma fatura de verdade** — produção tem 0 faturas, então
    `fatura`, `boleto` e `liquidacao` não têm uma linha sequer na trilha. Os
    rótulos das três existem e nunca foram exercidos contra dado real.
