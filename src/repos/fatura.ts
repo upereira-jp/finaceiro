@@ -32,6 +32,35 @@ export class FaturaNaoEncontrada extends Error {
   constructor() { super('Fatura nao encontrada.'); this.name = 'FaturaNaoEncontrada'; }
 }
 
+/**
+ * O BOLETO CONTINUA VIVO NO BANCO, e cancelar a fatura sem baixa-lo la e o
+ * caminho mais curto para dinheiro sem titulo.
+ *
+ * MEDIDO EM 10/09/2026, e o buraco era exatamente este: `cancelar()` nao olhava
+ * para o boleto, e nao ha (nem havia) tela que baixe o boleto no banco. Uma
+ * fatura cancelada aqui deixava no Sicoob um titulo REGISTRADO, com linha
+ * digitavel na mao do cliente. Se ele pagasse, o dinheiro entraria e a baixa
+ * seria RECUSADA - `baixar()` exige fatura `emitida` ou `vencida` -, entao o
+ * pagamento existiria no extrato e nao existiria em lugar nenhum aqui.
+ *
+ * A ORDEM CERTA E A INVERSA, e ela e uma frase: baixa-se o titulo no banco e
+ * depois cancela-se a fatura. Esta recusa existe para tornar a ordem errada
+ * impossivel, e ela NOMEIA o botao que resolve - uma recusa que nao diz o
+ * proximo passo so move o beco de lugar.
+ */
+export class BoletoVivoNoBanco extends Error {
+  readonly status = 409;
+  constructor() {
+    super(
+      'Esta fatura tem boleto REGISTRADO no banco, e cancelar a fatura nao o cancela la. ' +
+      'O cliente continua com uma linha digitavel valida na mao, e um pagamento que chegasse ' +
+      'depois nao teria como virar baixa aqui. Cancele o boleto no banco primeiro - o botao ' +
+      '"Cancelar o boleto no banco" faz isso - e cancele a fatura em seguida.'
+    );
+    this.name = 'BoletoVivoNoBanco';
+  }
+}
+
 export class TransicaoDeFaturaInvalida extends Error {
   readonly status = 409;
   constructor(de: string, para: string, motivo: string) {
@@ -312,6 +341,30 @@ export async function cancelar(id: string, motivo: string) {
   await exigir('escrever_carteira');
   const texto = motivo?.trim();
   if (!texto) throw Object.assign(new TypeError('motivo do cancelamento e obrigatorio'), { status: 422 });
+
+  /*
+   * O BOLETO VEM ANTES DA LIQUIDACAO na ordem das guardas, e a ordem nao e
+   * gosto: a liquidacao ja aconteceu (dinheiro entrou), o boleto vivo e o que
+   * AINDA pode acontecer. Recusar primeiro o que se pode evitar deixa a segunda
+   * recusa para o que ja e irreversivel.
+   *
+   * SO `registrado` E SO `api_sicoob`:
+   *
+   *   `pendente`/`erro`  nunca chegou a existir la, ou ninguem sabe - e nao ha
+   *                      o que baixar por API. A tela avisa; a recusa aqui
+   *                      travaria o cancelamento para sempre;
+   *   `importado`        emitido a mao no portal. `baixarNoBanco` recusa esse
+   *                      caso por escrito (o "nosso numero" veio de um PDF),
+   *                      entao recusar aqui deixaria a fatura sem saida nenhuma
+   *                      - a baixa daquele titulo e no portal onde ele nasceu;
+   *   `liquidado`/       o titulo ja teve desfecho no banco. Nao ha o que baixar.
+   *   `baixado`/`cancelado`
+   */
+  const vivo = await dbt().boleto.findFirst({
+    where: { fatura_id: id, status: 'registrado', origem: 'api_sicoob' },
+    select: { id: true },
+  });
+  if (vivo) throw new BoletoVivoNoBanco();
 
   const liquidada = await dbt().liquidacao.findFirst({ where: { fatura_id: id } });
   if (liquidada) {

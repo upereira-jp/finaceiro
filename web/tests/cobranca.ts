@@ -18,6 +18,7 @@
 // A conta do `totalEsperadoDaBaixa` e a unica que mexe com dinheiro, e ela e
 // soma de inteiros em centavos de proposito (regra 1).
 
+import { readFileSync } from 'node:fs';
 import {
   mover, paraEnvio, type CampoConfigurado,
   sinalDeSegredo, motivoDaTravaDoConector, podeSalvarConector,
@@ -25,11 +26,14 @@ import {
   podeEmitirFatura, podeGerarBoleto, podeBaixarManual,
   totalEsperadoDaBaixa, tomDoStatusDaFatura, conferirTarifas,
   podeImportarBoleto, motivoDaTravaDaImportacao, podeImportarAgora, DIGITOS_DA_LINHA,
+  podeBaixarNoBanco,
   type EstadoDoConector, type StatusFatura, type FaturaConferivel,
 } from '../src/cobranca-regras.ts';
 
 let falhas = 0;
+let feitas = 0;
 const chk = (id: string, cond: boolean, d: string) => {
+  feitas++;
   if (!cond) falhas++;
   console.log(`${cond ? 'ok   ' : 'FALHA'} ${id.padEnd(5)} ${d}`);
 };
@@ -291,6 +295,46 @@ const chk = (id: string, cond: boolean, d: string) => {
       'os 47 digitos crus e a linha impressa com ponto e espaco valem o mesmo');
 }
 
+// ============================================================================
+// B13 — CANCELAR O BOLETO NO BANCO, e o botao que nao existia
+// ============================================================================
+//
+// ⚠️ O QUE ISTO PRENDE: a rota `POST /faturas/:id/boleto/baixar` existia desde
+// sempre e NENHUMA tela a chamava - varredura de 10/09/2026. Sem ela, cancelar
+// a fatura deixava no banco um titulo REGISTRADO, com linha digitavel valida na
+// mao do cliente, e um pagamento que chegasse depois nao teria como virar baixa.
+// Desde 10/09 o servidor RECUSA cancelar a fatura nesse estado - e a recusa so
+// e cumprivel porque o botao passou a existir.
+{
+  chk('B13a', podeBaixarNoBanco('registrado', 'api_sicoob') === true,
+      'o titulo que NOS registramos e cancelavel no banco por aqui');
+
+  chk('B13b', podeBaixarNoBanco('registrado', 'importado') === false,
+      'o IMPORTADO nao - `baixarNoBanco()` recusa por escrito: o "nosso numero" dele foi '
+      + 'transcrito de um PDF, e mandar a Sicoob baixar por ele ou nao acha titulo nenhum ou acha '
+      + 'o ERRADO. Baixa-se no portal onde ele nasceu');
+
+  for (const s of ['pendente', 'erro', 'liquidado', 'baixado', 'cancelado'] as const) {
+    chk('B13c', podeBaixarNoBanco(s, 'api_sicoob') === false,
+        `boleto em "${s}" nao oferece o botao - ou nunca chegou ao banco, ou ja teve desfecho la`);
+  }
+
+  chk('B13d', podeBaixarNoBanco(null, null) === false,
+      'e fatura sem boleto nenhum tambem nao - oferecer o cancelamento de um titulo que nao '
+      + 'existe e mandar a pessoa colher um 404');
+
+  /* A ULTIMA LIGACAO, e ela e a que faltava de verdade: a regra podia estar certa
+     e nenhuma tela chamar a rota - que foi exatamente o estado do sistema por
+     seis semanas. Comentario sai antes de procurar (a armadilha do `SD-12`). */
+  const tela = readFileSync(new URL('../src/telas/faturas.tsx', import.meta.url), 'utf8')
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, ' ')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/^\s*\/\/.*$/gm, ' ');
+  chk('B13e', /podeBaixarNoBanco\(/.test(tela) && /boleto\/baixar/.test(tela),
+      'e a tela de emissao USA a regra e CHAMA a rota - sem esta linha, a rota volta a existir '
+      + 'sem nenhum caminho de tela, que e como ela passou seis semanas');
+}
+
 console.log();
 if (falhas > 0) { console.log(`--- cobranca: ${falhas} FALHA(S)`); process.exit(1); }
-console.log('--- cobranca (regras da tela): 54 verificacoes, 0 falhas');
+console.log(`--- cobranca (regras da tela): ${feitas} verificacoes, 0 falhas`);

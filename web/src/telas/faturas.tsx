@@ -40,7 +40,7 @@ import { paraCsv, reaisParaPlanilha, nomeDoArquivo } from '../csv.ts';
 import { baixarCsv } from '../baixar.ts';
 import { lerBase64, mimeDo, reenviavel, naMensagem } from '../arquivo.ts';
 import {
-  podeEmitirFatura, podeGerarBoleto, podeBaixarManual, podeImportarBoleto,
+  podeEmitirFatura, podeGerarBoleto, podeBaixarManual, podeImportarBoleto, podeBaixarNoBanco,
   motivoDaTravaDaImportacao, podeImportarAgora, DIGITOS_DA_LINHA,
   totalEsperadoDaBaixa, tomDoStatusDaFatura, conferirTarifas,
   type MotivoDeTravaDaImportacao,
@@ -370,6 +370,31 @@ function PainelDaFatura({ f, recarregar }: { f: Fatura; recarregar: () => void }
     if (ok) { acao.anunciar('Boleto registrado.'); boleto.recarregar(); recarregar(); }
   };
 
+  /*
+   * CANCELAR O BOLETO NO BANCO — o botao que faltava, e a falta era dinheiro.
+   *
+   * A rota existia desde sempre e nenhuma tela a chamava: medido em 10/09/2026,
+   * `POST /faturas/:id/boleto/baixar` era alcancavel so por fora do sistema. O
+   * efeito pratico: cancelar a fatura por aqui deixava no banco um titulo
+   * REGISTRADO, com linha digitavel valida na mao do cliente - e um pagamento
+   * que chegasse depois nao teria como virar baixa, porque a fatura cancelada
+   * nao aceita liquidacao. Dinheiro no extrato e nada aqui.
+   *
+   * O MOTIVO E OBRIGATORIO no servidor, e a tela pede em vez de inventar um: e a
+   * mesma disciplina do cancelamento da fatura, e a trilha de auditoria responde
+   * "o que" com o que a pessoa escreveu.
+   */
+  const cancelarNoBanco = async () => {
+    const motivo = prompt(
+      'Cancelar este boleto no banco?\n\n'
+      + 'O cliente deixa de conseguir pagar por esta linha digitável. Escreva o motivo — ele fica '
+      + 'registrado com o seu nome.');
+    if (motivo === null) return;
+    if (!motivo.trim()) { acao.anunciar('Cancelamento não feito: o motivo é obrigatório.'); return; }
+    const ok = await acao.executar(() => api.post(`/faturas/${f.id}/boleto/baixar`, { motivo: motivo.trim() }));
+    if (ok) { acao.anunciar('Boleto cancelado no banco.'); boleto.recarregar(); recarregar(); }
+  };
+
   const baixar = async () => {
     if (!confirm(
       `Registrar o pagamento de ${emReais(totalEsperado)} nesta cobrança?\n\n` +
@@ -497,6 +522,27 @@ function PainelDaFatura({ f, recarregar }: { f: Fatura; recarregar: () => void }
               : <Icone nome="boleto" tamanho={15} peso="bold" />}
             Gerar boleto
           </button>
+        )}
+        {/* CANCELAR O TITULO NO BANCO. Sem `primario`: e o ato que desfaz, como
+            o cancelamento da fatura. Aparece so onde o servidor aceita - boleto
+            `registrado` que NOS registramos; o importado se baixa no portal onde
+            foi emitido, e o proprio servidor recusa por escrito. */}
+        {podeBaixarNoBanco(boleto.dado?.status ?? null, boleto.dado?.origem ?? null) && (
+          <button style={{ marginTop: 8, marginLeft: 8 }}
+                  onClick={() => void cancelarNoBanco()} disabled={acao.ocupado}>
+            <Icone nome="remover" tamanho={15} /> Cancelar o boleto no banco
+          </button>
+        )}
+        {/* A ORDEM DOS DOIS ATOS, dita ANTES de alguem tentar a errada: desde
+            10/09/2026 o servidor RECUSA cancelar a fatura enquanto o titulo
+            estiver vivo no banco, e uma recusa que chega sem aviso parece
+            defeito. Aqui ela chega como instrucao. */}
+        {podeBaixarNoBanco(boleto.dado?.status ?? null, boleto.dado?.origem ?? null) && (
+          <p className="sub" style={{ marginTop: 8, marginBottom: 0 }}>
+            Para cancelar esta fatura, cancele o boleto no banco primeiro. Enquanto o título
+            estiver registrado, o cliente ainda consegue pagar por ele — e um pagamento que
+            chegasse depois do cancelamento não teria como ser registrado aqui.
+          </p>
         )}
       </div>
 

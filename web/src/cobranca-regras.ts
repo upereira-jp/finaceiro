@@ -214,6 +214,26 @@ export function motivoDaTravaDaImportacao(e: EstadoDaImportacao): MotivoDeTravaD
 export const podeImportarAgora = (e: EstadoDaImportacao): boolean =>
   motivoDaTravaDaImportacao(e) === null;
 
+/**
+ * CANCELAR O BOLETO NO BANCO — e ela existe desde 10/09/2026, junto com o botao.
+ *
+ * `src/repos/boleto.ts` → `baixarNoBanco()`: exige `nosso_numero` e RECUSA
+ * `origem === 'importado'` por escrito (o "nosso numero" do importado foi
+ * transcrito de um PDF, e mandar a Sicoob baixar por ele ou nao acha titulo
+ * nenhum ou acha o ERRADO). Aqui a tela evita oferecer o que o servidor recusa.
+ *
+ * ⚠️ POR QUE ISTO PASSOU A IMPORTAR. Ate 10/09 cancelar a fatura NAO olhava para
+ * o boleto: a fatura virava `cancelada` aqui e o titulo continuava REGISTRADO no
+ * banco, com linha digitavel valida na mao do cliente. Pago depois disso, o
+ * dinheiro entrava e a baixa era recusada - o pagamento existia no extrato e nao
+ * existia aqui. `cancelar()` passou a recusar esse caso, e a recusa so e
+ * cumprivel porque este botao existe.
+ */
+export const podeBaixarNoBanco = (
+  boleto: StatusBoleto | null,
+  origem: 'api_sicoob' | 'importado' | null,
+): boolean => boleto === 'registrado' && origem !== 'importado';
+
 /** `src/repos/liquidacao.ts` → `baixar()`: `if (f.status !== 'emitida' && f.status
  *  !== 'vencida') throw FaturaNaoLiquidavel`. */
 export const podeBaixarManual = (s: StatusFatura): boolean => s === 'emitida' || s === 'vencida';

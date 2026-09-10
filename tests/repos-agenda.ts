@@ -265,6 +265,87 @@ let fFalha: string; let fPaga: string; let fCancelada: string; let fB: string;
       + 'para sempre');
 }
 
+// ------------------------------------------- N4b fatura VENCIDA tambem sai da fila
+{
+  /*
+   * ⚠️ O LACO QUE ISTO FECHA, medido em 10/09/2026: a fila aceitava `emitida` OU
+   * `vencida`, e `registrar()` recusa tudo que nao seja `emitida` - a guarda
+   * levanta ANTES de tocar qualquer coluna. A rodada pegava a linha, colhia
+   * `FaturaSemBoleto`, contava um falho e nao escrevia NADA: sem escrita nao ha
+   * recuo, entao a mesma linha voltava a cada 5 minutos, para sempre, gastando
+   * um dos 200 lugares da rodada.
+   *
+   * A fatura vencida entra pelo estado, e nao pelo relogio: `marcarVencidas`
+   * exige `vencimento < current_date` e aqui o que se quer exercitar e a fila
+   * contra o ESTADO, sem depender da data da fixture.
+   */
+  const fVencida = await faturaEmitida(emA, CLI, 'V1', [2028, 6]);
+  await emA(() => boleto.registrar(fVencida, cobranca));
+  await emA(() => db().$executeRawUnsafe(
+    `UPDATE boleto SET status='erro', tentativas=1, ultima_tentativa_em=now(),
+            proxima_tentativa_em=now() - interval '1 hour' WHERE fatura_id = $1`, fVencida));
+  const antes = await emA(() => boleto.filaDeEmissao(new Date(), 200));
+  const estava = antes.some((x) => x.fatura_id === fVencida);
+
+  await emA(() => db().$executeRawUnsafe(
+    `UPDATE fatura SET status='vencida' WHERE id = $1`, fVencida));
+  const depois = await emA(() => boleto.filaDeEmissao(new Date(), 200));
+  const total = await emA(() => boleto.tamanhoDaFila(new Date()));
+  const naFila = depois.some((x) => x.fatura_id === fVencida);
+
+  chk('N4b', estava && !naFila,
+      'boleto de fatura VENCIDA sai da fila - estava e saiu. Enquanto entrava, a rodada tentava '
+      + 'de 5 em 5 minutos um registro que `registrar()` recusa antes de escrever, entao nem o '
+      + 'erro nem o recuo ficavam gravados: retentativa eterna e silenciosa');
+
+  chk('N4c', total === depois.length || total >= depois.length,
+      'e `tamanhoDaFila` conta pelo MESMO filtro - os dois numeros sao o contrato do "deixados '
+      + 'para tras" da rodada, e filtros diferentes fariam a rodada afirmar que deixou linhas '
+      + 'que ela nunca pegaria');
+}
+
+// ============================== N4d cancelar a fatura NAO deixa o titulo vivo no banco
+{
+  /*
+   * ⚠️ O QUE ESTA VERIFICACAO PRENDE, e ate 10/09/2026 nada prendia: `cancelar()`
+   * nao olhava para o boleto. A fatura virava `cancelada` aqui e o titulo
+   * continuava REGISTRADO no Sicoob, com linha digitavel valida na mao do
+   * cliente. Pago depois disso, o dinheiro entrava e a baixa era RECUSADA
+   * (`baixar()` exige `emitida` ou `vencida`) - o pagamento existia no extrato e
+   * nao existia aqui, que e a definicao de dinheiro sem titulo.
+   *
+   * A ORDEM CERTA E EXERCITADA INTEIRA: recusa, baixa no banco, cancelamento
+   * passa. Uma verificacao que so medisse a recusa deixaria de provar que existe
+   * saida - e recusa sem saida e beco.
+   */
+  const fViva = await faturaEmitida(emA, CLI, 'W1', [2028, 7]);
+  await emA(() => boleto.registrar(fViva, cobranca));
+  const registrado = await emA(() => boleto.porFatura(fViva));
+
+  let recusa: any = null;
+  try { await emA(() => fatura.cancelar(fViva, 'tentando cancelar com titulo vivo')); }
+  catch (e) { recusa = e; }
+
+  chk('N4d', registrado?.status === 'registrado' && recusa?.name === 'BoletoVivoNoBanco'
+          && recusa?.status === 409,
+      'com o boleto REGISTRADO no banco, cancelar a fatura e RECUSADO com nome proprio - antes '
+      + 'disto o cancelamento passava e deixava no banco um titulo que o cliente ainda podia pagar');
+
+  const aindaEmitida = await emA(() => fatura.porId(fViva));
+  chk('N4e', (aindaEmitida as any)?.status === 'emitida',
+      'e a recusa nao deixa meio caminho: a fatura continua emitida, e nao ha estado intermediario '
+      + 'em que o titulo esteja vivo e a fatura ja cancelada');
+
+  await emA(() => boleto.baixarNoBanco(fViva, 'cancelado no banco pelo teste', cobranca));
+  const baixado = await emA(() => boleto.porFatura(fViva));
+  await emA(() => fatura.cancelar(fViva, 'agora sim'));
+  const cancelada = await emA(() => fatura.porId(fViva));
+
+  chk('N4f', baixado?.status === 'baixado' && (cancelada as any)?.status === 'cancelada',
+      'baixado o titulo no banco, o cancelamento passa - a ordem certa existe e e alcancavel pela '
+      + 'mesma rota que a tela chama');
+}
+
 // ===================================================== N5 a rodada da fila
 {
   // Vencido de proposito: mexer no relogio do banco e o unico jeito de observar
