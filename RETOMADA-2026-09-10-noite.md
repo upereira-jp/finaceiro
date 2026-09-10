@@ -9,7 +9,7 @@
 | **Migrations** | **39**, nenhuma nova — a mudança inteira é de leitura |
 | **CI** | ✅ verde · ⚠️ **vermelho na primeira passada, e a culpa era do teste** (§3) |
 | **Repositório** | `main` = **`3672cde`**, `origin/main` junto, árvore limpa |
-| **Produção** | ⚠️ **não deployada ainda** — falta o `chown` e o `deploy-financeiro`. É o §0.1 |
+| **Produção** | ✅ **no ar** desde 02:43:29 UTC — deploy `34430521100`, bundle novo, `GET /api/automacoes` respondendo |
 
 > ## A frase de uma linha
 >
@@ -22,24 +22,22 @@
 
 ## 0. O primeiro movimento da próxima sessão
 
-### 0.1 ⚠️ Dois comandos que são do dono — o código está no `main` e NÃO está no ar
+### 0.1 ✅ Já está no ar — e o que falta é UM olhar humano na tela
 
-O `deploy-financeiro` roda como usuário `financeiro` e o build morre em `EACCES`
-se houver arquivo `root:root` (armadilha medida em 01/09). Esta sessão criou
-quatro arquivos novos como root.
+O dono rodou o `chown` (57 arquivos `root:root`, a armadilha de 01/09) e o
+`deploy-financeiro` subiu na sequência. Medido, e não deduzido:
 
-```bash
-# 1. devolver a posse (o chown é bloqueado pelo classificador daqui)
-chown -R financeiro:financeiro /opt/financeiro/app
-find /opt/financeiro/app -user root -not -path '*/node_modules/*' -not -path '*/.git/*' | wc -l   # tem de dar 0
+| O quê | Como se sabe |
+|---|---|
+| O deploy passou | run `34430521100`, os quatro passos `success` — conferidos por **step**, não pelo tique |
+| O processo é o novo | journal 02:43:29 → *"client gerado cobre as 39 tabelas"*, *"ouvindo em 127.0.0.1:3000"* |
+| A rota EXISTE | `GET /api/automacoes` → **401** (*"sem header Authorization"* no journal), igual à vizinha `/conector-execucao`. Código velho daria 404 |
+| O bundle é o novo | «O que o sistema fez sozinho» está em `web/dist/assets/prontidao-XOivZWeU.js` |
 
-# 2. subir (não há migration nesta leva; a ordem migrate→deploy não se aplica)
-gh workflow run deploy-financeiro.yml
-```
-
-Depois, conferir na tela de **Pendências**: o rodapé tem de mostrar
-**«O que o sistema fez sozinho»** com as três linhas. Se ele não aparecer, o
-bundle é o velho — o `PainelDasAutomacoes` não tem estado invisível.
+⚠️ **O que ninguém conferiu ainda: a tela com olho humano.** Abrir **Pendências**
+e ver o rodapé com as três linhas. O payload autenticado não foi lido daqui —
+cunhar JWT local não funciona nesta VPS (`SUPABASE_JWT_SECRET` não está na env,
+§4.3 da retomada da manhã).
 
 ### 0.2 O que continua aberto, e nada disto é código novo obrigatório
 
@@ -165,7 +163,9 @@ execução**.
    afirmação;
 2. **O código de saída 4 por rodada parada, na máquina** — provado na suíte
    (`AG11l`), não no `systemctl`;
-3. **A tela em produção** — o bundle ainda não subiu (§0.1).
+3. **A tela com olho humano** — o bundle subiu e a rota responde (§0.1), mas
+   ninguém abriu Pendências para ver o rodapé desenhado. O payload autenticado
+   também não foi lido: cunhar JWT local não funciona nesta VPS.
 
 ### A lição desta sessão, e ela é do teste e não do código
 
