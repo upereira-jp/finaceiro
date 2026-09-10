@@ -1803,7 +1803,7 @@ async function conferirCredito(
           where: { status: { in: ['rascunho', 'ativo', 'suspenso'] } },
           select: {
             status: true,
-            originador: { select: { nome: true, crm_partner_id: true } },
+            originador: { select: { nome: true, crm_partner_id: true, crm_user_id: true } },
           },
         },
       },
@@ -1824,6 +1824,7 @@ async function conferirCredito(
           status: c.status,
           originadorNome: c.originador?.nome ?? null,
           originadorCrmPartnerId: c.originador?.crm_partner_id ?? null,
+          originadorCrmUserId: c.originador?.crm_user_id ?? null,
         } : null,
       };
     }),

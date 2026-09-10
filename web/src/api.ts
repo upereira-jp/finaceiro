@@ -248,7 +248,17 @@ export type Contrato = {
   faturas_cheias_pagas: number;
 };
 
-export type Originador = { id: string; nome: string; tipo: string; ativo: boolean };
+export type Originador = {
+  id: string; nome: string; tipo: string; ativo: boolean;
+  /** Regra 6: o id desta pessoa no OUTRO sistema. `null` enquanto ninguém casou
+   *  os dois cadastros — e nesse estado a conferência do crédito volta a
+   *  comparar por nome, que era o que produzia 28 alarmes falsos por rodada. */
+  crm_user_id?: string | null;
+};
+
+/** Quem vende do lado do CRM, para a tela oferecer nomes em vez de pedir um
+ *  identificador colado. */
+export type VendedorDoCrm = { vendedor: string; crm_user_id: string; creditos: number };
 
 export type RegraRepasse = {
   id: string; usina_id: string; percentual: string;

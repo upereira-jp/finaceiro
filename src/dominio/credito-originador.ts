@@ -47,6 +47,16 @@ export type CreditoDoCrm = {
   uc: string | null;
   lead_codigo: string | null;
   vendedor: string | null;
+  /**
+   * A CHAVE FORTE DO VENDEDOR, e ela sempre existiu na view — so nao chegava
+   * ate aqui. `financeiro.vendas_creditadas` expoe `vendedor_user_id` desde que
+   * o dev do CRM criou a view, e lido em 10/09/2026 ele e limpo: cada nome tem
+   * exatamente UM id (Renata 41 creditos, Out Sales 13, Kallina Tandara 6).
+   *
+   * ⚠️ `crm_user_id` do NOSSO lado, `vendedor_user_id` do lado deles, e nenhum
+   * dos dois se chama `user_id`: regra 6.
+   */
+  vendedor_user_id: string | null;
   parceiro_id: string | null;
   parceiro_nome: string | null;
   parceria_tipo: string | null;
@@ -74,6 +84,9 @@ export type UcConferida = {
     originadorNome: string | null;
     /** `originador.crm_partner_id`. Quando existe, e chave FORTE - ver `mesmoOriginador`. */
     originadorCrmPartnerId: string | null;
+    /** `originador.crm_user_id`, desde 10/09/2026. A chave forte do VENDEDOR, que
+     *  ate entao nao existia e obrigava a comparacao por nome. */
+    originadorCrmUserId: string | null;
   } | null;
 };
 
@@ -127,10 +140,24 @@ export function ladoQueCasa(
   contrato: NonNullable<UcConferida['contrato']>,
   c: CreditoDoCrm,
 ): 'vendedor' | 'parceiro' | null {
-  // Chave FORTE primeiro. `crm_partner_id` e `parceiro_id` sao o mesmo UUID do
-  // CRM, entao aqui nao ha palpite de nome nenhum.
+  // Chave FORTE primeiro, nas DUAS pontas. `crm_partner_id` x `parceiro_id` e
+  // `crm_user_id` x `vendedor_user_id` sao o mesmo UUID do CRM dos dois lados,
+  // entao aqui nao ha palpite de nome nenhum.
   if (contrato.originadorCrmPartnerId && c.parceiro_id
       && contrato.originadorCrmPartnerId === c.parceiro_id) return 'parceiro';
+  if (contrato.originadorCrmUserId && c.vendedor_user_id
+      && contrato.originadorCrmUserId === c.vendedor_user_id) return 'vendedor';
+
+  /*
+   * ⚠️ A CHAVE QUE EXISTE E NAO CASA E UMA RESPOSTA, e nao um motivo para
+   * tentar o nome em seguida.
+   *
+   * Quando os dois lados tem a chave do vendedor e elas DIFEREM, isso significa
+   * que sao pessoas diferentes — e cair no nome depois disso deixaria dois
+   * homonimos passarem como o mesmo, que e exatamente o modo de falha que a
+   * chave existe para fechar. O nome so vale onde a chave falta.
+   */
+  if (contrato.originadorCrmUserId && c.vendedor_user_id) return null;
 
   const digitado = normalizarNome(contrato.originadorNome);
   if (!digitado) return null;

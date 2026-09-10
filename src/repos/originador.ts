@@ -12,6 +12,7 @@
 // tipo e obrigatorio na assinatura.
 
 import { dbt } from '../db/tipado.ts';
+import { poolDoCrm } from '../crm/pool-de-leitura.ts';
 import { tenantCorrente, exigir } from '../db/contexto.ts';
 import { classificar, type OrigemDocumento } from '../dominio/documento.ts';
 import type {
@@ -36,11 +37,13 @@ export type NovoOriginador = DadosDeRepasse & {
   documento_bruto: string;
   documento_origem?: OrigemDocumento;
   crm_partner_id?: string | null;
+  /** Regra 6: o id do VENDEDOR no CRM. Ver `casarComOVendedorDoCrm`. */
+  crm_user_id?: string | null;
   telefone?: string | null;
   email?: string | null;
 };
 
-export type EdicaoOriginador = Partial<Omit<NovoOriginador, 'crm_partner_id'>>;
+export type EdicaoOriginador = Partial<Omit<NovoOriginador, 'crm_partner_id' | 'crm_user_id'>>;
 
 export class DocumentoObrigatorio extends Error {
   readonly status = 422;
@@ -89,6 +92,7 @@ export async function criar(e: NovoOriginador) {
         natureza: e.natureza,
         tipo: e.tipo,
         crm_partner_id: e.crm_partner_id ?? null,
+        crm_user_id: uuidOuNull(e.crm_user_id, 'crm_user_id'),
         documento: d.documento,
         documento_tipo: d.documento_tipo,
         documento_validado: d.documento_validado,   // R8: semente do CRM entra FALSE
@@ -164,6 +168,111 @@ export async function editar(id: string, e: EdicaoOriginador) {
 
 /** Baixa logica. Nunca DELETE: contrato aponta para ca e a comissao historica
  *  precisa continuar resolvendo o nome de quem recebeu. */
+/* ==========================================================================
+ * QUEM E QUEM NO OUTRO SISTEMA — 10/09/2026
+ * ==========================================================================
+ *
+ * O QUE ISTO FECHA. `credito-originador.ts` confere o originador do contrato
+ * contra o credito congelado do CRM, e ate hoje a unica comparacao possivel para
+ * o VENDEDOR era por NOME - o proprio arquivo dizia por escrito que a chave
+ * faltava. O preco estava medido em producao: 29 divergencias por rodada, de 15
+ * em 15 minutos, das quais **28 eram a mesma pessoa com dois nomes**:
+ *
+ *     26 x  aqui "Renata Ferreira Estevam"  x  la "Renata"
+ *      2 x  aqui "Alice Ribeiro Franca"     x  la "Out Sales"
+ *
+ * A migration 40 criou `originador.crm_user_id`, e estas duas funcoes sao a
+ * porta pela qual alguem que NAO tem terminal faz o casamento.
+ *
+ * ⚠️ POR QUE `crm_user_id` E EDITAVEL E `crm_partner_id` NAO. O do parceiro
+ * chega pelo proprio conector, que ja sabe o id quando cria; este ninguem
+ * descobre sozinho - e um julgamento humano ("a Renata do CRM e esta pessoa
+ * daqui"), e as duas linhas que ele resolve sao de originadores que **ja
+ * existiam** antes da coluna. Sem edicao, a coluna nasceria util so para quem
+ * fosse cadastrado depois dela.
+ */
+
+/** UUID, ou `null`. Recusa o resto com o nome do campo - um id malformado aqui
+ *  viraria uma comparacao que nunca casa, e o sintoma seria a divergencia
+ *  continuar aparecendo sem ninguem entender por que. */
+function uuidOuNull(v: string | null | undefined, campo: string): string | null {
+  if (v == null || String(v).trim() === '') return null;
+  const t = String(v).trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(t)) {
+    throw Object.assign(new TypeError(`${campo} deve ser identificador do outro sistema, recebeu "${t}".`),
+                        { status: 422 });
+  }
+  return t;
+}
+
+/**
+ * Casa (ou descasa) este originador com uma pessoa do CRM.
+ *
+ * `null` DESFAZ, e isso e proposital: casar errado e um erro que alguem comete e
+ * precisa poder desfazer sem chamar ninguem. Desfeito, a conferencia volta a
+ * comparar por nome - que e o comportamento de antes, e nao um buraco novo.
+ */
+export async function casarComOVendedorDoCrm(id: string, crmUserId: string | null) {
+  await exigir('escrever_cadastro');
+  const r = await dbt().originador.updateMany({
+    where: { id },
+    data: { crm_user_id: uuidOuNull(crmUserId, 'crm_user_id') },
+  });
+  if (r.count === 0) throw Object.assign(new Error('Originador nao encontrado.'), { status: 404 });
+}
+
+export type VendedorDoCrm = {
+  vendedor: string;
+  crm_user_id: string;
+  /** Quantos creditos VIGENTES essa pessoa tem. E o que separa quem vende de
+   *  quem aparece uma vez, e a tela ordena por ele. */
+  creditos: number;
+};
+
+/**
+ * QUEM VENDE, DO LADO DE LA — para a tela poder oferecer uma LISTA.
+ *
+ * ⚠️ A ALTERNATIVA ERA PEDIR O IDENTIFICADOR COLADO, e ela nao serve. Quem opera
+ * nao tem como descobrir um uuid do CRM, e um campo assim seria "um campo que so
+ * o psql alcanca" com outra roupa - exatamente o defeito historico que este
+ * projeto passou o dia fechando. Oferecer os nomes que EXISTEM la, com quantos
+ * creditos cada um tem, transforma o casamento num clique.
+ *
+ * LE O OUTRO BANCO, pela role sem BYPASSRLS e sempre FORA de transacao - a mesma
+ * disciplina de `destrave.lerNoCrm`, que foi a primeira rota a fazer isso. O
+ * pool e preguicoso: quem nunca abrir esta tela nunca abre conexao.
+ *
+ * REGRA 4: SELECT, e so. Nada aqui escreve no CRM, em nenhuma circunstancia.
+ *
+ * ⚠️ NAO CHAMA `exigir` AQUI, e a ausencia e obrigatoria e nao esquecimento:
+ * `exigir` resolve o papel dentro da unidade de trabalho, e esta funcao roda
+ * FORA dela por construcao. Quem confere o papel e a leitura que vem antes -
+ * `crmTenantIdDoConector`, dentro do contexto - e sem ela nao ha `crmTenantId`
+ * para chegar aqui. Mesma divisao de `destrave.lerNoCrm`, que tambem le o outro
+ * banco depois de uma leitura nossa ter autorizado.
+ */
+export async function vendedoresDoCrm(crmTenantId: string): Promise<VendedorDoCrm[]> {
+  const pool = await poolDoCrm();
+  const r = await pool.query(
+    `select vendedor, vendedor_user_id, count(*)::int as creditos
+       from financeiro.vendas_creditadas
+      where crm_tenant_id = $1 and vigente and vendedor_user_id is not null
+      group by vendedor, vendedor_user_id
+      order by creditos desc, vendedor`,
+    [crmTenantId]);
+  return (r.rows as Array<{ vendedor: string | null; vendedor_user_id: string; creditos: number }>)
+    .map((x) => ({ vendedor: x.vendedor ?? '(sem nome no outro sistema)', crm_user_id: x.vendedor_user_id, creditos: x.creditos }));
+}
+
+/** O `crm_tenant_id` do conector deste tenant. Sai daqui porque a leitura acima
+ *  precisa dele e ele NAO e o nosso `tenant_id` - regra 6, e o modo de falha de
+ *  trocar um pelo outro e devolver zero linhas sem erro. */
+export async function crmTenantIdDoConector(): Promise<string | null> {
+  await exigir('ler');
+  const c = await dbt().conector_crm.findFirst({ select: { crm_tenant_id: true } });
+  return c?.crm_tenant_id ?? null;
+}
+
 export async function desativar(id: string) {
   await exigir('escrever_cadastro');
   const r = await dbt().originador.updateMany({ where: { id }, data: { ativo: false } });

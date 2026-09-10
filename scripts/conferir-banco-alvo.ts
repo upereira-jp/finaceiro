@@ -47,6 +47,7 @@ const MIGRATION_36 = '20260828230000_contrato_de_cobranca_e_opcional';
 const MIGRATION_37 = '20260909233000_ato_externo_log';
 const MIGRATION_38 = '20260910001500_ato_externo_sem_returning';
 const MIGRATION_39 = '20260910010000_limpar_ensaio_da_trilha';
+const MIGRATION_40 = '20260910160000_chave_do_vendedor_no_crm';
 
 class ConferenciaFalhou extends Error {}
 
@@ -58,6 +59,7 @@ const DIRETORIO: Record<string, string> = {
   'migration-37': MIGRATION_37,
   'migration-38': MIGRATION_38,
   'migration-39': MIGRATION_39,
+  'migration-40': MIGRATION_40,
 };
 
 /**
@@ -123,7 +125,7 @@ if (!url || !url.trim()) {
 }
 
 const modo = process.argv[2] ?? '';
-const MODOS = ['identidade', 'migration-32', 'migration-35', 'migration-36', 'migration-37', 'migration-38', 'migration-39'];
+const MODOS = ['identidade', 'migration-32', 'migration-35', 'migration-36', 'migration-37', 'migration-38', 'migration-39', 'migration-40'];
 if (!MODOS.includes(modo)) {
   console.error(`modo desconhecido: ${JSON.stringify(modo)}. Conheco: ${MODOS.join(', ')}.`);
   process.exit(1);
@@ -481,9 +483,47 @@ async function migration39(): Promise<void> {
   console.log('migration 39 OK — a linha de ensaio saiu, e a funcao continua escrevendo (a 38 foi reconferida).');
 }
 
+/**
+ * A 40 CONFERE COLUNA E INDICE, e nao a linha em `_prisma_migrations`.
+ *
+ * A linha do registro tambem e conferida - ela e o que separa "aplicada" de
+ * "alguem criou a coluna a mao" -, mas o que a operacao depende e do PAR:
+ * `originador.crm_user_id` para a conferencia do credito parar de comparar por
+ * nome, e o indice unico para dois originadores nao poderem reivindicar a mesma
+ * pessoa do CRM (ambiguidade paga comissao para quem nao vendeu).
+ *
+ * ⚠️ `information_schema` E NAO `pg_attribute` de proposito: coluna DROPADA
+ * continua em `pg_attribute` com `attisdropped`, e uma conferencia ingenua ali
+ * diria OK sobre uma coluna que nao existe mais.
+ */
+async function migration40(): Promise<void> {
+  await migration39();
+
+  const { rows: [r] } = await cliente.query<{ coluna: string; indice: string; registro: string }>(`
+    SELECT (SELECT count(*) FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'originador'
+               AND column_name = 'crm_user_id' AND data_type = 'uuid')            AS coluna,
+           (SELECT count(*) FROM pg_indexes
+             WHERE schemaname = 'public' AND tablename = 'originador'
+               AND indexname = 'originador_crm_user_unico')                       AS indice,
+           (SELECT count(*) FROM _prisma_migrations
+             WHERE migration_name = '${MIGRATION_40}'
+               AND finished_at IS NOT NULL AND rolled_back_at IS NULL)            AS registro`);
+
+  const faltando = [
+    Number(r!.coluna) === 1 ? null : 'a coluna originador.crm_user_id (uuid)',
+    Number(r!.indice) === 1 ? null : 'o indice unico originador_crm_user_unico',
+    Number(r!.registro) === 1 ? null : `o registro de ${MIGRATION_40} em _prisma_migrations`,
+  ].filter(Boolean);
+
+  if (faltando.length) throw new ConferenciaFalhou(`a migration 40 nao esta no banco. Falta: ${faltando.join('; ')}.`);
+  console.log('migration 40 OK — o originador ganhou a chave do vendedor no CRM, e ela e unica por tenant.');
+}
+
 try {
   await cliente.connect();
   if (modo === 'identidade') await identidade();
+  else if (modo === 'migration-40') await migration40();
   else if (modo === 'migration-39') await migration39();
   else if (modo === 'migration-38') await migration38();
   else if (modo === 'migration-37') await migration37();

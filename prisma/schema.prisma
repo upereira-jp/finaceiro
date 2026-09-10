@@ -526,6 +526,7 @@ model originador {
   natureza           natureza_pessoa
   tipo               originador_tipo
   crm_partner_id     String?              @db.Uuid
+  crm_user_id        String?              @db.Uuid
   documento          String
   documento_tipo     documento_tipo
   documento_validado Boolean              @default(false)
@@ -543,6 +544,7 @@ model originador {
   tenant             tenant               @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   split_item         split_item[]
 
+  @@unique([tenant_id, crm_user_id], map: "originador_crm_user_unico")
   @@unique([tenant_id, documento], map: "originador_documento_unico")
   @@unique([tenant_id, id], map: "originador_id_tenant")
 }

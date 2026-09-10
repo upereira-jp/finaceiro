@@ -792,6 +792,49 @@ export const ROTAS: Rota[] = [
     }),
   },
   {
+    /*
+     * QUEM E QUEM NO OUTRO SISTEMA — 10/09/2026, e e a porta da
+     * `Q-NOMEDOVENDEDOR-01`.
+     *
+     * A conferencia do credito congelado comparava o VENDEDOR por NOME, porque a
+     * chave nao existia do nosso lado. Medido em producao: 29 divergencias por
+     * rodada, de 15 em 15 minutos, e **28 eram a mesma pessoa com dois nomes**.
+     * A migration 40 criou `originador.crm_user_id`; esta rota grava.
+     *
+     * `null` DESFAZ, e nao ha rota separada para isso: casar errado e um erro
+     * que alguem comete e precisa desfazer sem chamar ninguem.
+     *
+     * `emTenant` e nao `emRelatorio`: ha escrita, e ela precisa do contexto onde
+     * o gatilho de auditoria grava quem/quando/antes/depois (regra 9).
+     */
+    metodo: 'PUT', padrao: '/originadores/:id/vendedor-do-crm',
+    handler: (req, app) => emTenant(app, req, async () => {
+      await originador.casarComOVendedorDoCrm(req.params.id, req.corpo?.crm_user_id ?? null);
+      return ok(await originador.porId(req.params.id));
+    }),
+  },
+  {
+    /*
+     * A LISTA DE QUEM VENDE NO OUTRO SISTEMA, para a tela oferecer nomes em vez
+     * de pedir um identificador colado — que seria "um campo que so o psql
+     * alcanca" com outra roupa.
+     *
+     * LE O OUTRO BANCO. Caminho de RELATORIO, e a leitura do CRM acontece FORA
+     * da transacao, como em `/unidades-consumidoras/:id/vinculo`: a latencia do
+     * outro banco nao entra no slot transacional.
+     *
+     * SEM CONECTOR, LISTA VAZIA e nao erro: uma instalacao que ainda nao ligou o
+     * CRM nao tem o que oferecer, e isso nao e defeito.
+     */
+    metodo: 'GET', padrao: '/crm/vendedores',
+    handler: async (req, app) => {
+      const crmTenantId = (await emRelatorio(app, req, async () =>
+        ok(await originador.crmTenantIdDoConector()))).corpo as string | null;
+      if (!crmTenantId) return ok([]);
+      return ok(await originador.vendedoresDoCrm(crmTenantId));
+    },
+  },
+  {
     metodo: 'DELETE', padrao: '/originadores/:id',
     handler: (req, app) => emTenant(app, req, async () => {
       await originador.desativar(req.params.id);

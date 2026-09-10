@@ -1082,6 +1082,85 @@ certa com 0 contas lidas.
 
 ---
 
+## 2.o Decisão técnica de 10/09/2026, fim do dia — o vendedor ganha CHAVE, e a `Q-NOMEDOVENDEDOR-01` fecha
+
+**Dono: o implementador** (§2.b), sobre a identidade que o dono respondeu.
+
+### A resposta do dono, e o que ela destravou
+
+> *"Renata == Renata Ferreira Estevam; Alice == OutSales"*
+
+Com isso, as 29 divergências por rodada foram agrupadas e medidas em produção:
+
+| Quantas | O contrato diz | O CRM diz |
+|--:|---|---|
+| **26** | `Renata Ferreira Estevam` | vendedor `Renata` |
+| **2** | `Alice Ribeiro Franca` | vendedor `Out Sales` |
+| **1** | *(a UC renumerada, sem crédito vigente)* | — a **única de verdade** |
+
+**28 das 29 eram a mesma pessoa com dois nomes**, e a real estava enterrada no meio delas.
+
+### A decisão: chave forte, e não apelido
+
+A questão listava três saídas — (a) escrever o nome completo no CRM, (b) usar
+aqui o nome curto, (c) um campo de «também chamado de». **Nenhuma das três foi
+escolhida**, e o motivo é uma medição: a view `financeiro.vendas_creditadas`
+**já expõe `vendedor_user_id`**, e ele é limpo — cada nome tem exatamente um id:
+
+| vendedor no CRM | créditos vigentes | `vendedor_user_id` |
+|---|--:|---|
+| Renata | 41 | `e7ba0a64-…` |
+| Out Sales | 13 | `d39e3453-…` |
+| **Kallina Tandara** | **6** | `bca737f7-…` |
+
+As três saídas consertavam a **frase**; a chave conserta a **comparação**. E ela
+é o que o próprio código pedia por escrito, em `credito-originador.ts`:
+*"o `originador` não guarda `crm_user_id`, e criá-la seria migration com dono."*
+
+| # | Decisão | Por quê |
+|:--:|---|---|
+| 1 | **`originador.crm_user_id`** (migration 40), irmão de `crm_partner_id` | Renomear de qualquer lado deixa de produzir alarme, e a comparação passa a ser de identidade |
+| 2 | **Único por tenant** | Dois originadores apontando para a mesma pessoa do CRM tornariam a conferência ambígua — e ambiguidade aqui paga comissão para quem não vendeu (R8) |
+| 3 | **Chave que existe e NÃO casa é resposta, não motivo para tentar o nome** | Cair no nome depois disso deixaria dois homônimos passarem como o mesmo — o modo de falha que a chave existe para fechar (`X13c`) |
+| 4 | **Sem chave, o nome continua valendo** | A chave AUMENTA a conferência, não troca o que funcionava (`X13d`, `X13e`) |
+| 5 | **`crm_user_id` é EDITÁVEL, e `crm_partner_id` não** | O do parceiro chega pelo próprio conector; este é julgamento humano, e as duas linhas que ele resolve são de originadores que **já existiam** antes da coluna |
+| 6 | **A tela oferece uma LISTA de quem vende lá, não um campo para colar identificador** | Quem opera não tem como descobrir um identificador do CRM. Um campo assim seria «um campo que só o terminal alcança» com outra roupa |
+| 7 | **A migration NÃO preenche nada** | O vínculo é fato de negócio, e uma migration que gravasse dois identificadores de UM tenant mentiria sobre ser schema |
+
+### 🆕 O que a medição achou de quebra
+
+**Existe um TERCEIRO vendedor no CRM — «Kallina Tandara», com 6 créditos
+vigentes — e ele não tem originador cadastrado aqui.** Não aparece nas
+divergências porque nenhuma das 29 faturáveis é dele. **Do dono:** se alguma
+venda dele entrar na carteira, o contrato não fecha — é a mesma parede que a UC
+do Rhenan encontrou.
+
+### ⚠️ E a UC do Rhenan tem saída agora
+
+`000406456101252` é **a única faturável sem contrato ativo** (medido hoje: 0
+contratos, rateio ativado). Ela travava porque «Out Sales» não existia como
+originador — e agora se sabe que **Out Sales é a Alice Ribeiro Franca, que já
+está cadastrada** (`vendedor_g3`, PF). O contrato pode ser criado pela tela de
+Contratos, com ela como quem trouxe o cliente. **É operação, não código** — e
+leva `contrato_ativo` de 28 para 29 de 29.
+
+### O que ficou provado
+
+`tests/credito-originador.ts`, `X13a..X14` — o nome curto casando pela chave, o
+nome que **não é abreviação** casando também, a chave diferente **não** casando
+mesmo com o nome parecendo bater, e a rodada inteira deixando de gritar.
+
+### 🔧 Um defeito da própria suíte, achado no caminho
+
+`web/tests/rotas-com-tela.ts` casava por **prefixo**: o coringa de parâmetro
+aceitava `/` e a busca não ancorava o fim. Consequência — `POST
+/faturamento/:competencia/compor` passava por causa do texto de
+`/faturamento/${…}/emitir` que existe em outra tela, e **uma rota curta herdava a
+tela de qualquer rota longa que começasse com ela**. Ancorado, a falta apareceu e
+virou exceção declarada, ao lado da irmã que já estava lá.
+
+---
+
 ## 3. F0 — o que falta para fechar
 
 Entregas da F0 conforme `PRD-v2.2` §10:

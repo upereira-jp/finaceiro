@@ -72,6 +72,14 @@ const EXCECOES: Record<string, string> = {
   'POST /faturamento/:competencia/ensaio':
     'a tela CHAMA, montando o caminho por pedaco (`${competencia}/${modo}`, com modo ensaio ou '
     + 'compor) - a busca por texto nao alcanca. Ver `telas/carteira.tsx`.',
+  /* O IRMAO DA DE CIMA, e ele FALTAVA. Ate 10/09/2026 a busca nao ancorava o fim
+   * do caminho, entao `POST /faturamento/:competencia/compor` casava com o texto
+   * de `/faturamento/${...}/emitir` que existe em `telas/faturas.tsx` - passava
+   * por PREFIXO, e nao por ter tela. Ancorado o fim, a falta apareceu. Mesmo
+   * motivo, mesma tela, mesma linha de codigo: `${competencia}/${modo}`. */
+  'POST /faturamento/:competencia/compor':
+    'a tela CHAMA, montando o caminho por pedaco (`${competencia}/${modo}`, com modo ensaio ou '
+    + 'compor) - a busca por texto nao alcanca. Ver `telas/carteira.tsx`.',
 
   'POST /carteira/marcar-vencidas':
     'o status `vencida` e registro do ATO, e a leitura do fato e a view '
@@ -160,10 +168,28 @@ chk('RT-0', declaradas.length >= 100,
 const escritas = declaradas.filter((r) => r.metodo !== 'GET');
 
 const temCaminho = (padrao: string): boolean => {
+  /*
+   * ⚠️ DUAS CORRECOES DE 10/09/2026, e as duas vieram de um FALSO POSITIVO real.
+   *
+   * A tela de Contratos ganhou `PUT /originadores/:id/vendedor-do-crm`, e a
+   * suite passou a dizer que `PATCH /originadores/:id` e `DELETE
+   * /originadores/:id` "ganharam tela" (RT-2). Nao ganharam: a string nova
+   * apenas COMECA igual. Duas frouxidoes somadas produziam isso:
+   *
+   *   1. o coringa do parametro aceitava `/`, entao `:id` engolia
+   *      `${o.id}/vendedor-do-crm` inteiro. Parametro e UM segmento de caminho;
+   *   2. a busca nao ancorava o FIM, entao qualquer rota era prefixo de si
+   *      mesma seguida de mais coisa.
+   *
+   * O terminador aceita o que de fato fecha uma URL no codigo: aspas, crase,
+   * `?` de query string, ou o fim do texto. Sem ele, uma rota curta herdaria a
+   * tela de toda rota longa que comece com ela - e o furo que esta suite existe
+   * para achar passaria calado exatamente nas familias mais populosas.
+   */
   const rx = padrao.replace(/^\//, '').split('/')
-    .map((p) => (p.startsWith(':') ? '[^\'"`\\s]*' : p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+    .map((p) => (p.startsWith(':') ? '[^\'"`\\s/]*' : p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
     .map((p) => `/${p}`).join('');
-  return new RegExp(rx).test(web);
+  return new RegExp(`${rx}(?=['"\`?]|$)`).test(web);
 };
 
 const orfas = escritas

@@ -41,7 +41,7 @@ const chk = (id: string, cond: boolean, d: string) => {
 // das 48, `parceria_tipo = 'indicador'` nas tres do Edimar, e as revogadas com
 // `revogado_motivo` preenchido.
 const credito = (o: Partial<CreditoDoCrm> & { uc: string }): CreditoDoCrm => ({
-  lead_codigo: 'G3-0001', vendedor: 'Renata',
+  lead_codigo: 'G3-0001', vendedor: 'Renata', vendedor_user_id: null,
   parceiro_id: null, parceiro_nome: null, parceria_tipo: null,
   vigente: true, revogado_motivo: null, ...o,
 });
@@ -50,12 +50,22 @@ const situacao = (o: Partial<SituacaoDoRateio> & { uc: string }): SituacaoDoRate
 });
 const uc = (numeroUc: string, contrato: UcConferida['contrato'] = null): UcConferida =>
   ({ numeroUc, contrato });
-const comContrato = (nome: string | null, status = 'ativo', partner: string | null = null) =>
-  ({ status, originadorNome: nome, originadorCrmPartnerId: partner });
+const comContrato = (
+  nome: string | null, status = 'ativo',
+  partner: string | null = null, crmUser: string | null = null,
+) => ({
+  status, originadorNome: nome,
+  originadorCrmPartnerId: partner, originadorCrmUserId: crmUser,
+});
 
 const UC1 = '000041446801282';
 const UC2 = '000241968901278';
 const PARCEIRO = 'aaaa1111-0000-4000-8000-0000000000e1';
+/** Os dois ids REAIS do CRM, lidos de `financeiro.vendas_creditadas` em
+ *  10/09/2026 - "Renata" e "Out Sales". Ficam com o valor de producao porque a
+ *  forma do dado e o que estas verificacoes prendem. */
+const CRM_RENATA = 'e7ba0a64-12ac-4b66-9c0a-fe73da0871c1';
+const CRM_OUTSALES = 'd39e3453-303c-4c11-a2b6-1c0bd742e639';
 
 console.log('== SPEC-002 R26: o credito congelado conferido contra o originador digitado ==\n');
 
@@ -313,6 +323,74 @@ console.log('== SPEC-002 R26: o credito congelado conferido contra o originador 
   });
   chk('X12', r.conferido && r.sinais.length === 0,
       `credito com uc NULA e ignorado sem virar sinal, e a conferencia roda (${r.sinais.length})`);
+}
+
+// ---- X13: A CHAVE DO VENDEDOR, e ela e o conserto da Q-NOMEDOVENDEDOR-01.
+//
+// O QUE ELA CUSTAVA, medido em producao em 10/09/2026: a cada 15 minutos a
+// rodada produzia 29 divergencias, e agrupadas elas eram
+//
+//     26 x  contrato "Renata Ferreira Estevam"  x  CRM diz vendedor "Renata"
+//      2 x  contrato "Alice Ribeiro Franca"     x  CRM diz vendedor "Out Sales"
+//      1 x  a UC renumerada, que e a unica DE VERDADE
+//
+// 28 das 29 eram a mesma pessoa com dois nomes, e a real estava enterrada no
+// meio delas.
+{
+  chk('X13a', ladoQueCasa(
+        comContrato('Renata Ferreira Estevam', 'ativo', null, CRM_RENATA),
+        credito({ uc: UC1, vendedor: 'Renata', vendedor_user_id: CRM_RENATA })) === 'vendedor',
+      'o NOME CURTO do CRM contra o nome completo daqui casa pela CHAVE - sao 26 das 29 '
+      + 'divergencias por rodada, e nenhuma delas era um problema');
+
+  chk('X13b', ladoQueCasa(
+        comContrato('Alice Ribeiro Franca', 'ativo', null, CRM_OUTSALES),
+        credito({ uc: UC1, vendedor: 'Out Sales', vendedor_user_id: CRM_OUTSALES })) === 'vendedor',
+      'e um nome que nao e nem abreviacao do outro tambem casa - "Alice Ribeiro Franca" aqui '
+      + 'e "Out Sales" la sao a mesma pessoa, e so a chave sabia disso');
+
+  /* ⚠️ A VERIFICACAO QUE IMPEDE A CHAVE DE VIRAR UM CARIMBO. */
+  chk('X13c', ladoQueCasa(
+        comContrato('Renata Ferreira Estevam', 'ativo', null, CRM_RENATA),
+        credito({ uc: UC1, vendedor: 'Renata', vendedor_user_id: CRM_OUTSALES })) === null,
+      'chave DIFERENTE nao casa mesmo com o nome parecendo bater - e este e o caso que a '
+      + 'comparacao por nome errava calada, pagando comissao para o homonimo');
+
+  chk('X13d', ladoQueCasa(
+        comContrato('Renata Ferreira Estevam', 'ativo'),
+        credito({ uc: UC1, vendedor: 'Renata Ferreira Estevam' })) === 'vendedor',
+      'sem chave dos dois lados, o nome continua valendo - a chave AUMENTA a conferencia, '
+      + 'e nao troca o que funcionava');
+
+  chk('X13e', ladoQueCasa(
+        comContrato('Renata Ferreira Estevam', 'ativo', null, CRM_RENATA),
+        credito({ uc: UC1, vendedor: 'Renata Ferreira Estevam' })) === 'vendedor',
+      'chave so de um lado tambem cai no nome - um originador ja casado contra um credito '
+      + 'antigo sem id nao pode virar divergencia nova');
+
+  /* O parceiro continua primeiro, e a ordem importa: um credito com as duas
+   * chaves e uma parceria, e chama-lo de venda direta trocaria o beneficiario. */
+  chk('X13f', ladoQueCasa(
+        { status: 'ativo', originadorNome: 'X', originadorCrmPartnerId: PARCEIRO, originadorCrmUserId: CRM_RENATA },
+        credito({ uc: UC1, parceiro_id: PARCEIRO, parceiro_nome: 'P', vendedor_user_id: CRM_RENATA })) === 'parceiro',
+      'com as duas chaves batendo, o PARCEIRO vence - e a ordem que ja existia');
+}
+
+// ---- X14: a rodada inteira para de gritar, e a que sobra continua gritando.
+{
+  const r = conferirCreditoDeOriginador({
+    ucs: [
+      uc(UC1, comContrato('Renata Ferreira Estevam', 'ativo', null, CRM_RENATA)),
+      uc(UC2, comContrato('Alice Ribeiro Franca', 'ativo', null, CRM_OUTSALES)),
+    ],
+    creditos: [
+      credito({ uc: UC1, vendedor: 'Renata', vendedor_user_id: CRM_RENATA }),
+      credito({ uc: UC2, vendedor: 'Out Sales', vendedor_user_id: CRM_OUTSALES }),
+    ],
+    situacoes: [situacao({ uc: UC1 }), situacao({ uc: UC2 })],
+  });
+  chk('X14', r.conferido && r.sinais.length === 0,
+      `as duas formas de divergencia por nome que a producao tinha somem juntas (${r.sinais.length} sinais)`);
 }
 
 console.log(`\n${falhas === 0 ? 'TODAS PASSARAM' : `${falhas} FALHA(S)`}`);

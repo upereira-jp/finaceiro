@@ -36,7 +36,8 @@
 // `rascunhar`, porque a R20-b congela o tier no fechamento.
 
 import { useState } from 'react';
-import { api, type Contrato, type UnidadeConsumidora, type Originador, type Cliente } from '../api.ts';
+import { api, type Contrato, type UnidadeConsumidora, type Originador, type Cliente,
+  type VendedorDoCrm } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
   Pagina, Aviso, Tabela, Campo, ThOrd, Marca, Icone, useOrdenacao, ordenar, rotulo, Escolha, linha,
@@ -190,6 +191,7 @@ export function TelaContratos() {
           </Aviso>
         )}
         <NovoOriginador aoCriar={() => origs.recarregar()} />
+        <QuemEQuemNoOutroSistema originadores={origs.dado ?? []} aoCasar={() => origs.recarregar()} />
         {trava === 'sem_originador' && (origs.dado ?? []).length > 0 && (
           <Aviso tipo="alerta">
             Escolha quem trouxe o cliente. Isso não pode ser corrigido depois, e sem essa
@@ -300,6 +302,122 @@ function LinhaDoContrato({ k, uc, aoMudar }: { k: Contrato; uc: string; aoMudar:
       {acao.erro && <tr><td colSpan={5}><Aviso tipo="erro">{acao.erro}</Aviso></td></tr>}
       {acao.sucesso && <tr><td colSpan={5}><Aviso tipo="ok">{acao.sucesso}</Aviso></td></tr>}
     </>
+  );
+}
+
+/* ============================================ quem e quem no outro sistema
+ *
+ * POR QUE ESTE PAINEL EXISTE, e o custo dele estava medido no relógio.
+ *
+ * A cada 15 minutos o sistema confere quem trouxe cada cliente contra o que o
+ * outro sistema registrou, e comparava por NOME — porque não havia outro jeito.
+ * Em 10/09/2026 isso produzia **29 avisos por rodada**, e agrupados eles eram:
+ *
+ *     26 x  aqui «Renata Ferreira Estevam»  ·  lá «Renata»
+ *      2 x  aqui «Alice Ribeiro Franca»     ·  lá «Out Sales»
+ *      1 x  uma divergência de verdade, enterrada no meio das outras
+ *
+ * **28 dos 29 eram a mesma pessoa com dois nomes.** Um painel que aponta 29
+ * coisas todo dia é um painel que se aprende a não abrir — e a que importava era
+ * a de baixo.
+ *
+ * ⚠️ POR QUE UMA LISTA E NÃO UM CAMPO PARA COLAR O IDENTIFICADOR: quem opera não
+ * tem como descobrir o identificador de alguém no outro sistema. Um campo assim
+ * seria «um campo que só o terminal alcança» com outra roupa, que é exatamente o
+ * defeito que este projeto passou o dia fechando. Aqui a pessoa escolhe um nome
+ * que existe lá, com quantas vendas cada um tem ao lado.
+ *
+ * E ELE MORA AQUI pela mesma razão que o cadastro de originador mora: não há aba
+ * própria na barra, e é nesta tela que quem trouxe o cliente importa.
+ */
+function QuemEQuemNoOutroSistema({ originadores, aoCasar }: {
+  originadores: readonly Originador[];
+  aoCasar: () => void;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const acao = useAcao();
+  /* Só busca o outro sistema quando alguém abre — a leitura atravessa a rede até
+     outro banco, e a maioria das visitas a esta tela é para criar contrato. */
+  const vendedores = useDados<VendedorDoCrm[]>(
+    () => (aberto ? api.get('/crm/vendedores') : Promise.resolve([])), [aberto]);
+
+  const casar = async (o: Originador, crmUserId: string) => {
+    const ok = await acao.executar(() => api.put(`/originadores/${o.id}/vendedor-do-crm`,
+      { crm_user_id: crmUserId || null }));
+    if (ok) {
+      acao.anunciar(crmUserId
+        ? `${o.nome} passou a ser reconhecido pelo cadastro, e não pelo nome.`
+        : `${o.nome} voltou a ser conferido pelo nome.`);
+      aoCasar();
+    }
+  };
+
+  const semCasar = originadores.filter((o) => !o.crm_user_id).length;
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <button type="button" onClick={() => setAberto(!aberto)}>
+        <Icone nome={aberto ? 'ordem_crescente' : 'ordem_decrescente'} tamanho={15} />{' '}
+        Quem é quem no outro sistema
+        {semCasar > 0 && originadores.length > 0 && (
+          <> — <strong>{semCasar}</strong> ainda conferido{semCasar === 1 ? '' : 's'} por nome</>
+        )}
+      </button>
+
+      {aberto && (
+        <div className="cartao secao" style={{ marginTop: 8 }}>
+          <p className="sub" style={{ marginTop: 0 }}>
+            O sistema confere de hora em hora quem trouxe cada cliente contra o que está
+            registrado do outro lado. Enquanto a ligação não é feita, ele compara pelo{' '}
+            <strong>nome escrito</strong> — e o mesmo nome escrito de dois jeitos vira um aviso
+            falso que reaparece o dia inteiro. Ligados, os dois cadastros passam a ser a mesma
+            pessoa mesmo que um deles seja renomeado.
+          </p>
+
+          {vendedores.erro && (
+            <Aviso tipo="alerta">
+              Não deu para perguntar ao outro sistema quem vende por lá: {vendedores.erro}
+            </Aviso>
+          )}
+
+          <Tabela vazio="Ninguém cadastrado ainda como quem traz clientes."
+                  cabecalho={<><th>Aqui</th><th>É quem, no outro sistema</th></>}>
+            {originadores.map((o) => (
+              <tr key={o.id}>
+                <td>
+                  <strong>{o.nome}</strong>
+                  {!o.crm_user_id && (
+                    <div className="fraco" style={{ fontSize: 12 }}>conferido pelo nome</div>
+                  )}
+                </td>
+                <td>
+                  <Campo rotulo="" valor={o.crm_user_id ?? ''}
+                         ao={(v) => void casar(o, v)}
+                         opcoes={[
+                           { valor: '', texto: '— ninguém ainda —' },
+                           ...(vendedores.dado ?? []).map((v) => ({
+                             valor: v.crm_user_id,
+                             texto: `${v.vendedor} (${v.creditos} venda${v.creditos === 1 ? '' : 's'})`,
+                           })),
+                           /* O ESCOLHIDO SOBREVIVE À LISTA. Se quem já foi
+                              ligado parar de aparecer do outro lado, a opção
+                              some e o `<select>` cairia em "ninguém" sozinho —
+                              desfazendo uma ligação que ninguém desfez. */
+                           ...(o.crm_user_id
+                               && !(vendedores.dado ?? []).some((v) => v.crm_user_id === o.crm_user_id)
+                             ? [{ valor: o.crm_user_id, texto: 'ligado a alguém que não aparece mais lá' }]
+                             : []),
+                         ]} />
+                </td>
+              </tr>
+            ))}
+          </Tabela>
+
+          {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
+          {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
+        </div>
+      )}
+    </div>
   );
 }
 
