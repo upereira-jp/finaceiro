@@ -6,10 +6,11 @@
 | **Substitui** | O §0 da `RETOMADA-2026-09-10-varredura.md`. O corpo dela continua correto como registro |
 | **O pedido** | *"veja o arquivo de retomada e siga com ele. Objetivo: sistema funcionando completamente de forma autônoma"* |
 | **O que esta sessão fez** | Fechou o **último item de código** da lista do que ainda exigia um desenvolvedor: a trilha de auditoria tinha **21.917 linhas e nenhum leitor**. Junto, o item irmão da mesma linha: contas a pagar registrava pagamento e não mostrava nenhum |
-| **Suíte** | sem banco: `EXIT=0`, **2.982** verificações (eram 2.878) |
+| **Suíte** | sem banco: `EXIT=0`, **2.989** verificações (eram 2.878) |
+| **Migrations** | **40** — a 40 (`chave_do_vendedor_no_crm`) entrou hoje, e é a primeira desde 10/09 de madrugada |
 | **CI** | ✅ **verde nas duas levas** — `34486930171` no `c1b176b` e `34491199200` no `cbcef3c`, incluindo os quatro jobs que só rodam lá, contra banco de verdade |
 | **Repositório** | o código desta leva é **`c1b176b`**; as retomadas vêm depois dele. `origin/main` junto, árvore limpa, zero arquivos `root:root` |
-| **Produção** | ✅ **as duas levas no ar**: a trilha às **14:15:11** e o endereço da conta às **15:15:15**. Quatro sinais medidos em cada — §0.1 e §3.b |
+| **Produção** | ✅ **três levas no ar**: a trilha às **14:15:11**, o endereço da conta às **15:15:15** e a chave do vendedor às **15:51:02** — esta última com a **migration 40** aplicada antes, conferida no catálogo |
 
 > ## A frase de uma linha
 >
@@ -285,6 +286,53 @@ tira o `nº` — logradouro *"RUA DAS FLORES, S/"* com número vazio.
 ✅ **E o CI desta leva também está verde** — run `34491199200`, `success`, 1m26s,
 no `cbcef3c`. É o que fecha a leva de verdade: os quatro jobs contra PostgreSQL
 só executam lá.
+
+---
+
+## 3.c A terceira leva — 28 dos 29 avisos por rodada eram a mesma pessoa
+
+**Veio de duas linhas do dono:** *"Renata == Renata Ferreira Estevam; Alice ==
+OutSales"*. Medidas as 29 divergências que o conector produzia a cada 15 minutos:
+
+| Quantas | O contrato diz | O CRM diz |
+|--:|---|---|
+| **26** | `Renata Ferreira Estevam` | vendedor `Renata` |
+| **2** | `Alice Ribeiro Franca` | vendedor `Out Sales` |
+| **1** | *(a UC renumerada)* | — a **única de verdade** |
+
+A `Q-NOMEDOVENDEDOR-01` previa três saídas e **nenhuma foi escolhida**: a view
+`financeiro.vendas_creditadas` **já expõe `vendedor_user_id`**, e ele é limpo —
+cada nome tem exatamente um id. As três saídas consertavam a **frase**; a chave
+conserta a **comparação**. É o que o próprio `credito-originador.ts` pedia por
+escrito.
+
+**Migration 40** criou `originador.crm_user_id` (irmão de `crm_partner_id`,
+único por tenant), e a aba Contratos ganhou **«Quem é quem no outro sistema»** —
+uma lista dos vendedores que existem lá, com quantas vendas cada um tem. Não um
+campo para colar identificador, que seria terminal com outra roupa.
+
+### ⚠️ O QUE FALTA, e é operação de dois cliques
+
+**Ninguém ligou os dois cadastros ainda.** Enquanto isso não for feito, a
+conferência continua caindo no nome e os 28 avisos continuam aparecendo — o
+código está pronto e a decisão é um clique:
+
+> aba **Contratos** → «Quem é quem no outro sistema» → ligar
+> **Renata Ferreira Estevam** a `Renata (41 vendas)` e
+> **Alice Ribeiro Franca** a `Out Sales (13 vendas)`.
+
+Na rodada seguinte (≤ 15 min) o painel deve cair de **29 para 1**.
+
+### 🆕 Duas coisas que a medição achou de quebra
+
+1. **Existe um TERCEIRO vendedor no CRM** — «Kallina Tandara», 6 créditos
+   vigentes — **sem originador cadastrado aqui**. Não aparece nas divergências
+   porque nenhuma das 29 faturáveis é dele; a primeira que for não fecha
+   contrato;
+2. **A UC do Rhenan tem saída.** `000406456101252` é a única faturável sem
+   contrato ativo, e travava porque «Out Sales» não existia como originador —
+   agora se sabe que **Out Sales é a Alice, que já está cadastrada**. O contrato
+   sai pela tela e leva `contrato_ativo` de **28 para 29 de 29**. É operação.
 
 ---
 
