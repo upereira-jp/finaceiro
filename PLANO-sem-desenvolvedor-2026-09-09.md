@@ -221,12 +221,16 @@ novo entra lendo, não perguntando.
 
 | Ordem | O quê | Por quê nessa ordem |
 |:--:|---|---|
-| ~~1~~ | ~~**A1** — botão de religar~~ | ✅ **feito em 09/09** |
-| ~~1~~ | ~~**A3** — as duas linhas do `.env`~~ | ✅ **já estava feito** — medido com `npm run origem-webhook`, veredito `ACEITA` |
-| **1** | **Bloco D itens 7, 2 e 4** | São o que trava a **primeira fatura** e o **primeiro repasse**. Nada disso é código |
-| **4** | **A2** — tela do certificado | Tem prazo (17/08/2027) e não tem pressa |
-| **5** | **D5** — o canal que empurra | Decidir se vale contratar um serviço de e-mail |
-| **6** | `destravar-uc` na tela | Exceção rara; só quando o resto estiver fechado |
+| ~~—~~ | ~~**A1** — botão de religar~~ | ✅ **feito em 09/09** |
+| ~~—~~ | ~~**A3** — as duas linhas do `.env`~~ | ✅ **já estava feito** — medido com `npm run origem-webhook`, veredito `ACEITA` |
+| ~~—~~ | ~~**A2** — o certificado~~ | ✅ **10/09, e sem tela** — fechou um defeito no lugar (`QUESTOES.md` §2.j) |
+| **1** | **Bloco D itens 7, 2 e 4** | São o que trava a **primeira fatura** e o **primeiro repasse**. **Nada disso é código** |
+| **2** | **Passo 0 do runbook do A1** | Cinco minutos de botão, e descobre hoje o que morderia em 2027 |
+| **3** | **D5** — o canal que empurra | Decidir se vale contratar um serviço de e-mail |
+| **4** | `destravar-uc` na tela | Exceção rara; só quando o resto estiver fechado |
+
+**Não sobrou pendência de código nesta linha.** Os três itens do Bloco A estão
+fechados; o que resta é insumo da operação e decisão com dono.
 
 **Custo dos três de código (A1, A2, `destravar-uc`):** são telas pequenas sobre
 lógica que **já existe e já está testada** — o trabalho é a rota e o formulário,
