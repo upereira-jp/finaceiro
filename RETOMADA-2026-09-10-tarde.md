@@ -7,7 +7,7 @@
 | **O pedido** | *"veja o arquivo de retomada e siga com ele. Objetivo: sistema funcionando completamente de forma autônoma"* |
 | **O que esta sessão fez** | Fechou o **último item de código** da lista do que ainda exigia um desenvolvedor: a trilha de auditoria tinha **21.917 linhas e nenhum leitor**. Junto, o item irmão da mesma linha: contas a pagar registrava pagamento e não mostrava nenhum |
 | **Suíte** | sem banco: `EXIT=0`, **2.982** verificações (eram 2.878) |
-| **CI** | ✅ **verde** — run `34486930171` no `c1b176b`, incluindo os quatro jobs que só rodam lá, contra banco de verdade |
+| **CI** | ✅ **verde nas duas levas** — `34486930171` no `c1b176b` e `34491199200` no `cbcef3c`, incluindo os quatro jobs que só rodam lá, contra banco de verdade |
 | **Repositório** | o código desta leva é **`c1b176b`**; as retomadas vêm depois dele. `origin/main` junto, árvore limpa, zero arquivos `root:root` |
 | **Produção** | ✅ **as duas levas no ar**: a trilha às **14:15:11** e o endereço da conta às **15:15:15**. Quatro sinais medidos em cada — §0.1 e §3.b |
 
@@ -206,7 +206,7 @@ Três decisões, e a terceira é a que não é óbvia:
 
 1. ✅ ~~A tela em produção~~ — **subiu às 14:15:11**, com os quatro sinais do §0.1;
 2. ✅ ~~O CI desta leva~~ — **verde**, run `34486930171` (§0.1-b);
-3. 🔴 **As telas com olho humano** — nem esta leva nem a anterior. É a ÚNICA coisa que sobra do §0;
+3. 🔴 **As telas com olho humano** — nem esta leva nem a anterior, e agora são três telas: Histórico, o recibo em Contas a pagar e a oferta de endereço em Unidades consumidoras. **É a ÚNICA coisa que sobra do §0**;
 4. **A trilha com uma fatura de verdade** — produção tem 0 faturas, então
    `fatura`, `boleto` e `liquidacao` não têm uma linha sequer na trilha. Os
    rótulos das três existem e nunca foram exercidos contra dado real.
@@ -282,8 +282,9 @@ tira o `nº` — logradouro *"RUA DAS FLORES, S/"* com número vazio.
 | **O bundle é o novo** | `unidades-MfLhB9pW.js` às **15:15** — é a tela que ganhou a oferta |
 | A SPA responde | `GET /` → **200** |
 
-⚠️ **O CI desta leva não foi conferido** — o `gh run list` continua recusado
-dentro da sessão. `gh run list --workflow=isolamento --limit 2`.
+✅ **E o CI desta leva também está verde** — run `34491199200`, `success`, 1m26s,
+no `cbcef3c`. É o que fecha a leva de verdade: os quatro jobs contra PostgreSQL
+só executam lá.
 
 ---
 
