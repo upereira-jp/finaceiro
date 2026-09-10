@@ -4,13 +4,13 @@
 |---|---|
 | **Para quem** | Quem abrir a próxima sessão. **Dois minutos** |
 | **Substitui** | `RETOMADA-2026-09-10-noite.md` no §0. O corpo dela continua correto como registro |
-| **O que esta sessão fez** | A **varredura completa** que o dono pediu antes de lançar a operação — e ela achou **sete atos de rotina que só existiam por fora da interface**, um deles deixando o boleto vivo no banco depois de a fatura ser cancelada. Os sete foram fechados |
+| **O que esta sessão fez** | A **varredura completa** que o dono pediu antes de lançar a operação — e ela achou **sete atos de rotina que só existiam por fora da interface**, um deles deixando o boleto vivo no banco depois de a fatura ser cancelada. Os sete foram fechados. Depois do deploy, o dono abriu a tela e pediu a oitava: **Pendências mostrava nove conferências já fechadas** |
 | **O relatório para o dono** | 📄 **`VARREDURA-2026-09-10.md`** — retrato da produção, o que foi consertado, o que falta para a primeira fatura, e a ordem recomendada |
-| **Suíte** | sem banco: `EXIT=0`, **2.873** verificações (eram 2.792) |
-| **CI** | ✅ **verde nos cinco jobs** — run `34435585020`, incluindo as que só rodam lá (`N4b`..`N4f`, contra banco de verdade) |
+| **Suíte** | sem banco: `EXIT=0`, **2.878** verificações (eram 2.792) |
+| **CI** | ✅ **verde nos cinco jobs**, duas vezes — runs `34435585020` e o de `d39a8c9`, incluindo as que só rodam lá (`N4b`..`N4f`, contra banco de verdade) |
 | **Migrations** | **39**, nenhuma nova — a leva inteira é de leitura e de tela |
-| **Repositório** | `main` em **`1adda69`**, `origin/main` junto, árvore limpa, zero arquivos `root:root` |
-| **Produção** | ✅ **no ar às 13:09:13 UTC** de 10/09 — run `34480800363`, os quatro passos `success` conferidos por step |
+| **Repositório** | `main` em **`d39a8c9`**, `origin/main` junto, árvore limpa, zero arquivos `root:root` |
+| **Produção** | ✅ **no ar** — dois deploys em 10/09: `34480800363` às **13:09:13** (a varredura) e `34482396944` às **13:24:40** (a tela de Pendências). Os quatro passos `success` nos dois, conferidos por step |
 
 > ## A frase de uma linha
 >
@@ -36,10 +36,15 @@ sequência. Medido, e não deduzido:
 | As rotas novas EXISTEM | `GET /api/emissao/travada` → **401** e `GET /api/unidades-consumidoras/…/vinculo` → **401**, contra **404** de uma rota inventada. Código velho daria 404 nas duas |
 | O bundle é o novo | `web/dist/assets/emissao-travada-corpo-BgNYVA4l.js`, e `faturas`, `contratos`, `usinas` e `prontidao` reconstruídos às 13:09 |
 
-⚠️ **O que NÃO foi visto por olho humano:** as sete telas novas. É a lição de
-ontem — o painel das automações funcionava, chegava na tela e chegava como texto
-solto. Vale abrir as quatro abas (Emissão e cobrança, Pendências, Unidades
-consumidoras, Contratos, Usinas) antes de considerar a leva fechada.
+⚠️ **O que NÃO foi visto por olho humano:** as telas novas. É a lição de ontem —
+o painel das automações funcionava, chegava na tela e chegava como texto solto.
+Vale abrir as cinco abas (Emissão e cobrança, Pendências, Unidades consumidoras,
+Contratos, Usinas) antes de considerar a leva fechada.
+
+**E o dono já abriu uma delas, o que produziu a oitava mudança do dia** — ver
+§1.5. O **segundo deploy** (`34482396944`, serviço reiniciado às **13:24:40**,
+bundle `prontidao-tXgGijq1.js`) subiu essa correção, e ela também não foi vista
+por olho humano ainda.
 
 ### 0.1-b (registro) o que era preciso para subir
 
@@ -75,6 +80,7 @@ exige escrita no diretório. Depois do `chown` do dono: zero.
 | **Cadastrar usina** | topo da aba **Usinas** |
 | **Suspender / Reativar / Encerrar** contrato | coluna nova na aba **Contratos** |
 | **Tarifa da distribuidora** | painel da fatura, enquanto ela é rascunho |
+| **Só o que falta**, na tabela de Pendências | as conferências já fechadas saíram da lista e ficaram a um clique |
 
 ⚠️ **Nada disso foi visto por olho humano ainda** — é o item que sobra do §0.1.
 
@@ -107,7 +113,7 @@ gh run view <id> --json jobs -q '.jobs[].steps[]|"\(.conclusion) \(.name)"'
 
 ---
 
-## 1. Os quatro commits, e o que cada um custava
+## 1. Os cinco commits de código, e o que cada um custava
 
 ### 1.1 `f93bf5c` — a lista de quem ficou sem boleto
 
@@ -157,6 +163,36 @@ sem log e sem recusa**).
 E `web/tests/rotas-com-tela.ts`: toda rota de escrita tem tela ou **exceção com
 motivo escrito**. `RT-3` recusa motivo curto demais — pegou quatro «mesmo motivo
 do de cima» meus na primeira execução.
+
+### 1.5 `d39a8c9` — a tela de Pendências mostrava o que não era pendência
+
+**A oitava veio do dono abrindo a tela depois do deploy**, e é a prova de que o
+§0.1 não é formalidade: *"na área de pendências deixe as pendências que não foram
+resolvidas apenas"*.
+
+Eram **catorze conferências na mesma lista e nove delas fechadas** — dois terços
+da tabela eram trabalho já feito, e as cinco que importam ficavam espalhadas no
+meio. Para julho, a tela passou a abrir com **sete linhas** (cinco pendentes e
+duas ainda sem conferir) em vez de catorze, e a de cima é a conta da
+distribuidora.
+
+⚠️ **A decisão que não é óbvia:** `nao_medido` conta como **em aberto**, e não
+como resolvido. A própria tela define, três parágrafos abaixo da tabela, que
+*"ainda não dá para conferir"* **não é o mesmo que pronto** — e o cartão do topo
+já cometeu esse erro uma vez, em 24/08/2026, contando as não medidas como
+prontas. `A5u` prende isso, e `A5x` prende o irmão: uma situação que o servidor
+ganhe amanhã entra como em aberto, e não some como resolvida.
+
+**O que fica fechado não some:** a contagem («9 conferências já fechadas neste
+mês») é sempre visível e as linhas ficam a um clique. *"0 de 29"* numa
+conferência fechada é **prova de que ela foi medida**, e esta casa trata "medido e
+certo" e "nunca medido" como coisas diferentes. E a tabela vazia **afirma** —
+*"Nada falta para este mês: as 14 conferências fecharam"* — em vez de sumir, que
+é a mesma lição do rodapé das automações.
+
+A regra é pura (`aindaEmAberto` / `jaFechadas`, em `vocabulario.ts`), com
+`A5u`..`A5x` na regra e `A5y` na ligação com a tela. Provado por mutação: a
+tabela voltando a receber a lista inteira derruba o `A5y`.
 
 ---
 

@@ -6,7 +6,7 @@
 | **Data** | 10/09/2026 (madrugada e manhã) |
 | **O pedido** | *"varredura completa no sistema em busca de possíveis erros ou furos para que possa lançar para o operacional"* |
 | **Método** | Medição, não leitura de anotação: as **124 rotas** cruzadas contra o que a interface chama, as **39 tabelas** cruzadas contra quem as lê, o **journal dos quatro serviços** dos últimos seis dias, o **log do nginx**, e o **banco de produção** lido por dentro do próprio código |
-| **Suíte** | **2.873** verificações locais (eram 2.792) · CI verde nos cinco jobs (run `34435585020`) |
+| **Suíte** | **2.878** verificações locais (eram 2.792) · CI verde nos cinco jobs |
 
 > ## A frase de uma linha
 >
@@ -151,6 +151,24 @@ classificação opcional que nenhum relatório lê…), e a suíte recusa motivo
 demais — pegou quatro «mesmo motivo do de cima» na primeira execução.
 
 **Varredura manual acontece uma vez. Esta suíte acontece a cada push.**
+
+### 🟡 2.9 · A tela de Pendências mostrava o que não era pendência
+
+**Esta não veio da varredura: veio de você abrir a tela depois do deploy.** Ela
+listava as **catorze conferências na mesma tabela, nove delas já fechadas** — dois
+terços do que se lia era trabalho já feito, e as cinco que importam ficavam
+espalhadas no meio delas.
+
+**Agora:** a tabela mostra só o que está em aberto. As fechadas ficam a um clique,
+com a contagem sempre visível — *"0 de 29"* numa conferência fechada é prova de
+que ela foi medida, e isso não se joga fora. E quando tudo fechar, a tabela vazia
+**afirma** («Nada falta para este mês») em vez de sumir.
+
+Para julho, ela passou a abrir com **sete linhas** em vez de catorze, e a de cima
+é a conta da distribuidora.
+
+⚠️ **«Ainda não dá para conferir» continua na lista de cima**, e não entra nas
+fechadas: a própria tela define que isso **não é o mesmo que pronto**.
 
 ---
 
