@@ -568,8 +568,26 @@ let fFalha: string; let fPaga: string; let fCancelada: string; let fB: string;
 
   // ------------------------------------------------ a linha orfa VIRA `travada`
   {
+    /*
+     * ⚠️ AS OUTRAS LINHAS RECUAM ANTES, E ISSO NAO E ARRUMACAO DE TESTE - e o
+     * unico jeito de o cenario ser POSSIVEL.
+     *
+     * A primeira versao deste bloco inseria a orfa com `iniciado_em` de dois
+     * dias atras e deixava as rodadas dos testes anteriores (de agora) no lugar.
+     * O CI acusou na hora: a leitura pega a rodada mais RECENTE, que era uma
+     * fechada, e o nivel saia `em_dia`.
+     *
+     * E o teste e que estava errado, nao o codigo: com o EXCLUDE
+     * `agenda_uma_execucao_por_tarefa`, uma linha `em_andamento` IMPEDE que
+     * qualquer rodada nova daquela tarefa comece - entao, na producao, a orfa e
+     * sempre a mais nova. Um estado que o banco recusa produzir nao e cenario;
+     * e um teste medindo uma coisa que nao existe.
+     */
     const conectorId: any[] = await emA(() => db().$queryRawUnsafe(
       `SELECT id FROM conector_cobranca WHERE ativo LIMIT 1`));
+    await emA(() => db().$executeRawUnsafe(
+      `UPDATE agenda_execucao SET iniciado_em = iniciado_em - interval '5 days'
+        WHERE tarefa = 'consulta_ativa'`));
     await emA(() => db().$executeRawUnsafe(
       `INSERT INTO agenda_execucao (tenant_id, conector_id, tarefa, ciclo_id, iniciado_em)
        VALUES ($1::uuid, $2::uuid, 'consulta_ativa', gen_random_uuid(), now() - interval '2 days')`,
