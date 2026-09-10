@@ -247,7 +247,6 @@ export async function cadastrarConector(e: {
   codigo_modalidade?: number | string | null;
   numero_contrato_cobranca?: number | string | null;
   numero_conta_corrente?: number | string | null;
-  certificado_expira_em?: Date | null;
   sandbox?: boolean;
   ativo?: boolean;
 }) {
@@ -263,10 +262,32 @@ export async function cadastrarConector(e: {
     codigo_modalidade: inteiroPositivoOuNull(e.codigo_modalidade, 'codigoModalidade'),
     numero_contrato_cobranca: inteiroPositivoOuNull(e.numero_contrato_cobranca, 'numeroContratoCobranca'),
     numero_conta_corrente: inteiroPositivoOuNull(e.numero_conta_corrente, 'numeroContaCorrente'),
-    certificado_expira_em: e.certificado_expira_em ?? null,
     sandbox: e.sandbox ?? true,
     ativo: e.ativo ?? false,
   };
+  /*
+   * ⚠️ `certificado_expira_em` NAO ENTRA AQUI, e a ausencia e a correcao de um
+   * defeito medido em 10/09/2026.
+   *
+   * Ate entao esta funcao aceitava a data por parametro e a tela tinha campo
+   * para ela — e e ESSA coluna que o alarme le (`certificadoVenceEm`, e dai o
+   * codigo 4 da `financeiro-saude-cobranca`). O resultado: quem visse a faixa
+   * «o certificado do banco venceu» podia digitar uma data nova, salvar, e a
+   * faixa sumia. **O alarme se calava sem que nada tivesse sido renovado.** E o
+   * pior formato de defeito que este projeto persegue: nao produz erro, produz
+   * silencio - e silencio aqui e a emissao parando "sem erro obvio" (PRD §6)
+   * daqui a um ano.
+   *
+   * A VALIDADE E FATO DENTRO DO CERTIFICADO, e fato nao se digita. Quem escreve
+   * esta coluna e `scripts/certificado.ts`, que le o `notAfter` do proprio
+   * `.pfx` — no `guardar` (renovacao) e no `validade` (reconciliacao, sem
+   * arquivo). Os dois exigem a conexao de DONO, que a aplicacao nao tem.
+   *
+   * NO `upsert` ELA FICA DE FORA DOS DOIS LADOS: no `update` porque nao se
+   * sobrescreve o que veio do certificado, e no `create` porque um conector
+   * nasce sem certificado conferido — `nivelDoCertificado(null)` responde
+   * `sem_certificado`, que e "ninguem sabe" e nao "esta bem".
+   */
   return dbt().conector_cobranca.upsert({
     where: { tenant_id }, create: { tenant_id, provedor: 'sicoob', ...dados }, update: dados,
   });

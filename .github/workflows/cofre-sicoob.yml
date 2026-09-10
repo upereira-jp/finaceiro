@@ -52,6 +52,12 @@ on:
         description: 'O nome do segredo no cofre.'
         required: true
         default: 'sicoob-g3-a1'
+      validade:
+        description: 'A data de vencimento do A1 na tela vem DAQUI. "conferir" so compara e imprime; "carimbar" grava. Use na renovacao ou quando a data divergir.'
+        required: false
+        type: choice
+        options: ['nao mexer', 'conferir', 'carimbar']
+        default: 'nao mexer'
 
 concurrency:
   # O mesmo grupo do migrate e do deploy. Este workflow nao toca a VPS, mas
@@ -147,6 +153,36 @@ jobs:
       - name: GRAVAR o client_id no cofre
         if: ${{ inputs.client_id != '' }}
         run: npm run certificado -- client-id "$REF" "$CLIENT_ID_LIMPO"
+
+      # ======================================================================
+      # A VALIDADE DO A1, LIDA DO PROPRIO CERTIFICADO
+      #
+      # POR QUE ELA MORA AQUI E NAO NUMA TELA: ler o certificado exige alcançar
+      # o `vault`, e a role de runtime NAO alcanca — de proposito (`ADR-0005`
+      # opcao A). A conexao de dono nao existe na VPS; existe aqui, como secret.
+      #
+      # E POR QUE ELA PRECISA EXISTIR: `conector_cobranca.certificado_expira_em`
+      # e a coluna que o alarme le, e ate 10/09/2026 ela era DIGITAVEL na aba
+      # Cobranca. Quem visse «o certificado do banco venceu» podia digitar uma
+      # data nova e a faixa sumia — com o certificado igual. A aplicacao perdeu
+      # esse poder; sobraram `guardar` (na renovacao) e este passo (para
+      # reconciliar, sem precisar do arquivo).
+      #
+      # `conferir` E O PADRAO DA ESCOLHA porque comparar nao custa nada e
+      # carimbar e escrita.
+      - name: A VALIDADE do A1, lida do certificado no cofre
+        if: ${{ inputs.validade != 'nao mexer' }}
+        run: |
+          set -uo pipefail
+          if [ "${{ inputs.validade }}" = "carimbar" ]; then
+            npm run certificado -- validade "$REF" --valendo 2>&1 | tee /tmp/validade.log
+          else
+            npm run certificado -- validade "$REF" 2>&1 | tee /tmp/validade.log
+          fi
+          rc=${PIPESTATUS[0]}
+          { echo '## Validade do A1'; echo; echo '```'; cat /tmp/validade.log; echo '```'; } \
+            >> "$GITHUB_STEP_SUMMARY"
+          exit $rc
 
       # ======================================================================
       # READ-ONLY. Nao emite boleto, nao escreve no banco e nao escreve no cofre:

@@ -8,6 +8,8 @@
 //   normalizar   re-exporta o .pfx com cifragem moderna, quando o Node recusa a
 //                antiga
 //   guardar      poe o .pfx no cofre (Supabase Vault) e liga a credencial_ref
+//   validade     le o certificado QUE JA ESTA no cofre e carimba a data de
+//                vencimento na coluna que o alarme le. Sem arquivo, sem senha
 //
 // ============================================================================
 // POR QUE `normalizar` EXISTE, e a medicao que a criou (27/08/2026)
@@ -432,16 +434,125 @@ const USO = `
   npm run certificado -- normalizar  <entrada.pfx> <saida.pfx>
   npm run certificado -- guardar     <arquivo.pfx> [credencial_ref] [client_id]
   npm run certificado -- client-id   <credencial_ref> <client_id>
+  npm run certificado -- validade    [credencial_ref] [--valendo]
 
   A senha e pedida no terminal, sem eco. Nunca passe senha por argumento:
   a linha de comando de qualquer processo e visivel para o sistema inteiro.
 `;
 
-if (!comando || !resto[0]) { console.log(USO); process.exit(comando ? 1 : 0); }
+// `validade` aceita ref vazia (o default): nao entra na exigencia de argumento.
+if (!comando || (!resto[0] && comando !== 'validade')) { console.log(USO); process.exit(comando ? 1 : 0); }
 
 // `client-id` nao toca no certificado: nao pede arquivo e nao pede senha. Pedir
 // a senha de um .pfx que talvez ja tenha ido para o shred seria pedir o que nao
 // existe mais.
+/**
+ * `validade` — LE O CERTIFICADO QUE JA ESTA NO COFRE e carimba a validade na
+ * coluna que o alarme le. Nao pede arquivo e nao pede senha: as duas coisas
+ * vivem dentro do proprio segredo.
+ *
+ * ============================================================================
+ * POR QUE ELE EXISTE, e o defeito que ele fecha e de 10/09/2026
+ *
+ * `conector_cobranca.certificado_expira_em` e a coluna que `conferirCertificado`
+ * le, e dela sai o codigo 4 da `financeiro-saude-cobranca` e a faixa vermelha da
+ * tela. Ate hoje ela era DIGITAVEL: a aba Cobranca tinha um campo de data, e
+ * quem visse «o certificado do banco venceu» podia digitar uma data nova e a
+ * faixa sumia — com o certificado exatamente igual. **Silencio comprado por
+ * digitacao**, e a conta chega um ano depois com a emissao parando sem erro
+ * obvio (PRD 6).
+ *
+ * A aplicacao perdeu esse poder. Sobrou este comando e o `guardar`, e os dois
+ * leem o `notAfter` do PROPRIO arquivo: a data deixa de ser opiniao.
+ *
+ * SEM ARQUIVO, e e essa a diferenca para o `guardar`: na renovacao de
+ * 17/08/2027 o `.pfx` novo entra pelo `guardar` e a data vem junto. Este aqui e
+ * para RECONCILIAR — coluna vazia, data errada, banco restaurado de backup — sem
+ * exigir que alguem ache de novo um arquivo que ja foi para o `shred`.
+ *
+ * `--ensaio` E O PADRAO. Ele compara e IMPRIME, sem escrever. Escrever exige
+ * `--valendo`, como em toda tarefa deste projeto que grava.
+ */
+async function validade(ref: string, valendo: boolean) {
+  const url = process.env.COFRE_DATABASE_URL;
+  if (!url) morrer('Falta COFRE_DATABASE_URL - a conexao de DONO. A de runtime nao escreve no cofre nem nesta coluna.');
+
+  const { default: pg } = await import('pg');
+  const cliente = new pg.Client({ connectionString: url });
+  await cliente.connect();
+  const tmp = mkdtempSync(join('/dev/shm', 'a1-'));
+  try {
+    const r = await cliente.query<{ decrypted_secret: string }>(
+      'SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = $1', [ref]);
+    if (!r.rowCount) morrer(`Nao ha credencial "${ref}" no cofre.`);
+
+    let segredo: { pfx_base64?: string; senha?: string };
+    try { segredo = JSON.parse(r.rows[0]!.decrypted_secret); }
+    catch { morrer('O segredo guardado nao e um JSON valido.'); }
+    if (!segredo.pfx_base64 || !segredo.senha) morrer('O segredo guardado nao tem certificado dentro.');
+
+    const pfx = Buffer.from(segredo.pfx_base64, 'base64');
+
+    /* O INTERMEDIARIO VAI PARA /dev/shm — tmpfs, RAM e nao disco —, modo 600 e
+     * apagado no `finally`. Mesma decisao do `normalizar`, e pelo mesmo motivo:
+     * o `openssl pkcs12` exige arquivo BUSCAVEL na entrada (medido: por pipe ele
+     * recusa com "Could not read any certificates"), e o `ADR-0005` D recusou
+     * certificado em DISCO no VPS. RAM por um segundo nao e isso. */
+    const arq = join(tmp, 'a1.pfx');
+    writeFileSync(arq, pfx, { mode: 0o600 });
+
+    const pem = lerPfx(arq, segredo.senha, ['-nokeys']);
+    const info = openssl(['x509', '-noout', '-subject', '-dates'], segredo.senha, pem.saida);
+    if (!info.ok) morrer(`Certificado ilegivel dentro do cofre: ${info.erro.slice(0, 200)}`);
+    const texto = info.saida.toString('utf8');
+    const linha = (p: string) => texto.split('\n').find((l) => l.startsWith(p))?.slice(p.length).trim() ?? '';
+
+    const notAfter = linha('notAfter=');
+    const vence = new Date(notAfter);
+    if (Number.isNaN(vence.getTime())) morrer(`notAfter ilegivel: ${JSON.stringify(notAfter)}`);
+    const dias = Math.floor((vence.getTime() - Date.now()) / 86_400_000);
+    const abre = nodeAbre(pfx, segredo.senha);
+
+    const atual = await cliente.query<{ tenant_id: string; certificado_expira_em: Date | null }>(
+      'SELECT tenant_id, certificado_expira_em FROM conector_cobranca WHERE credencial_ref = $1', [ref]);
+
+    const iso = (d: Date | null | undefined) => (d ? new Date(d).toISOString().slice(0, 10) : '(vazia)');
+    const noBanco = atual.rows[0]?.certificado_expira_em ?? null;
+    const igual = iso(noBanco) === iso(vence);
+
+    console.log(`
+  A VALIDADE, LIDA DO CERTIFICADO QUE ESTA NO COFRE — "${ref}"
+
+    titular ............ ${titularDoSubject(linha('subject=')).nome}
+    vence em ........... ${iso(vence)}   (${dias} dia(s))
+    o Node abre? ....... ${abre.ok ? 'sim' : `NAO (${abre.causa}) - rode \`normalizar\``}
+    na coluna do banco . ${iso(noBanco)}${igual ? '   <- ja bate' : '   <- DIVERGE'}
+    conector(es) ....... ${atual.rowCount}`);
+
+    if (igual) { console.log('\n  Nada a fazer: a coluna ja diz o que o certificado diz.\n'); return; }
+    if (!atual.rowCount) { console.log('\n  Nenhum conector aponta para esta referencia - nada a carimbar.\n'); return; }
+
+    if (!valendo) {
+      console.log('\n  ENSAIO: nada foi gravado. Para carimbar:  --valendo\n');
+      return;
+    }
+    await cliente.query(
+      'UPDATE conector_cobranca SET certificado_expira_em = $2 WHERE credencial_ref = $1',
+      [ref, vence]);
+    console.log(`\n  CARIMBADO: ${iso(noBanco)} -> ${iso(vence)}.
+  E a coluna que o alarme le: a \`financeiro-saude-cobranca\` volta a dizer a verdade
+  na proxima rodada, e a faixa da tela junto.\n`);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+    await cliente.end().catch(() => {});
+  }
+}
+
+if (comando === 'validade') {
+  await validade(resto[0] ?? 'sicoob-g3-a1', process.argv.includes('--valendo'));
+  process.exit(0);
+}
+
 if (comando === 'client-id') {
   if (!resto[1]) morrer('Uso: npm run certificado -- client-id <credencial_ref> <client_id>');
   await definirClientId(resto[0], resto[1]);

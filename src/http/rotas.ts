@@ -931,7 +931,14 @@ export const ROTAS: Rota[] = [
     metodo: 'POST', padrao: '/conector-cobranca',
     handler: (req, app) => emTenant(app, req, async () => criado(await boleto.cadastrarConector({
       ...req.corpo,
-      certificado_expira_em: dataOuNull(req.corpo?.certificado_expira_em, 'certificado_expira_em'),
+      /* `certificado_expira_em` NAO E LIDO DO CORPO, e isso e guarda e nao
+       * esquecimento: e a coluna que o alarme le, e ate 10/09/2026 dava para
+       * calar a faixa «o certificado venceu» digitando uma data nova. A
+       * validade e fato dentro do `.pfx`; quem a escreve e
+       * `scripts/certificado.ts`, com a conexao de dono. Um corpo que a mande
+       * e IGNORADO em silencio de proposito - recusar com 4xx quebraria
+       * clientes antigos por um campo que nunca deveria ter existido, e o
+       * efeito util (a data nao muda) e o mesmo. */
     }))),
   },
   {

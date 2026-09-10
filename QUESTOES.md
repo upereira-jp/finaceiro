@@ -728,6 +728,60 @@ a guarda e o botão.
 
 ---
 
+## 2.j Decisões técnicas de 10/09/2026 — o alarme do A1 deixa de ser calável
+
+**Dono destas decisões: o implementador** (§2.b).
+
+### O defeito, e ele estava no ar
+
+`conector_cobranca.certificado_expira_em` é a coluna que `conferirCertificado`
+lê — dela saem o **código 4** da `financeiro-saude-cobranca` e a faixa vermelha
+de Pendências. E ela era **digitável**: a aba Cobrança tinha um campo de data.
+
+**Quem visse a faixa «o certificado do banco venceu» podia digitar uma data nova,
+salvar, e a faixa sumia — com o certificado exatamente igual.** Silêncio comprado
+por digitação, e a conta chega um ano depois: A1 vencido **para a emissão sem
+erro óbvio** (`PRD` §6).
+
+É o formato de dano que este projeto persegue desde a regra 3, agora **dentro do
+alarme construído ontem** — e foi achado escopando o A2, não auditando.
+
+### As decisões
+
+| # | Decisão | Por quê |
+|:--:|---|---|
+| 1 | **A validade sai do `cadastrarConector`** | Fato dentro do certificado não se digita. Fora do `update` (não se sobrescreve o que veio do arquivo) **e** do `create` (conector novo não tem certificado conferido — `sem_certificado` é "ninguém sabe", não "está bem") |
+| 2 | **A rota IGNORA o campo em vez de recusar** | Recusar com 4xx quebraria cliente antigo por um campo que nunca deveria ter existido, e o efeito útil — a data não muda — é o mesmo |
+| 3 | **A tela mostra e não deixa editar** | Com a explicação do porquê: *"se desse para escrever a data aqui, dava para calar o aviso sem ter renovado nada"* |
+| 4 | **Entra `certificado -- validade`** | O escritor que faltava: lê o `notAfter` do certificado **que já está no cofre**, sem arquivo e sem senha. O `guardar` cobre a renovação; este cobre reconciliação (coluna vazia, data errada, restauração de backup) sem exigir um `.pfx` que já foi para o `shred`. **`--ensaio` é o padrão** |
+| 5 | **Ele mora no workflow `cofre-sicoob`, não numa tela** | Ler o certificado exige alcançar o `vault`, e a role de runtime **não alcança, de propósito** (`ADR-0005` A). A conexão de dono **não existe na VPS** — medido: `/etc/financeiro.env` tem `DATABASE_URL` e não tem `DIRECT_URL` |
+
+### ⬅️ E a decisão de NÃO construir, que é a mais importante
+
+**Não haverá tela de upload de certificado**, e isso é escolha registrada e não
+pendência esquecida. Ela exigiria dar à aplicação um caminho de **escrita no
+cofre** — a superfície mais sensível do sistema, que o `ADR-0005` recusou — para
+economizar **dois comandos uma vez por ano**. E não fecharia o problema: o passo
+de subir a chave pública no **Portal Developers** é do banco e continuaria
+humano.
+
+Se um dia a renovação passar a ser frequente (mais tenants com certificado
+próprio), a conta muda e a decisão se reabre — com ADR, porque é o `ADR-0005`
+que estaria sendo emendado.
+
+### O que fica no lugar
+
+**`RUNBOOK-renovacao-do-A1.md`**, com os cinco passos, a armadilha da cifragem
+antiga (o Node recusa, o `openssl` do sistema aceita — *o certificado "funciona"
+em todo teste manual e falha exatamente no processo que emite boleto*) e um
+**passo 0 que ensaia tudo hoje**, com o certificado atual: workflow
+`cofre-sicoob` com `validade = conferir`, que lê e não escreve.
+
+`N14c` em `tests/repos-agenda.ts` prende o conserto: salvar o conector com data
+futura **não** move a coluna.
+
+---
+
 ## 3. F0 — o que falta para fechar
 
 Entregas da F0 conforme `PRD-v2.2` §10:

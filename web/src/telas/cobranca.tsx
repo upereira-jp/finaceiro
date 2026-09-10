@@ -22,7 +22,6 @@ import { useEffect, useState } from 'react';
 import { api, ErroDaApi, type ConectorCobranca } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import { Pagina, Aviso, Campo, Marca, linha, Interruptor, Icone, DetalheTecnico } from '../ui.tsx';
-import { dataOuNull } from '../dinheiro.ts';
 import { podeReligarNaTela } from '../saude-do-dinheiro.ts';
 import {
   motivoDaTravaDoConector, podeSalvarConector, sinalDeSegredo,
@@ -164,7 +163,6 @@ export function TelaCobranca() {
       codigo_modalidade: codigoModalidade.trim() || null,
       numero_contrato_cobranca: numeroContratoCobranca.trim() || null,
       numero_conta_corrente: numeroContaCorrente.trim() || null,
-      certificado_expira_em: dataOuNull(expiraEm),
       sandbox,
       ativo,
     }));
@@ -344,7 +342,29 @@ export function TelaCobranca() {
           <Campo rotulo="Conta" porqueDe="banco" valor={conta} ao={setConta} />
           <Campo rotulo="Número do contrato" porqueDe="banco" valor={numeroContrato} ao={setNumeroContrato} />
           <Campo rotulo="Número do convênio" porqueDe="banco" valor={numeroConvenio} ao={setNumeroConvenio} />
-          <Campo rotulo="Certificado A1 vence em" porqueDe="banco" valor={expiraEm} ao={setExpiraEm} tipo="date" />
+          {/* ⚠️ MOSTRA E NAO DEIXA EDITAR, desde 10/09/2026, e isto conserta um
+              defeito e nao remove uma funcionalidade.
+              Esta e a data que o ALARME le. Enquanto ela era um campo, quem
+              visse a faixa «o certificado do banco venceu» podia digitar uma
+              data nova, salvar, e a faixa sumia — com o certificado exatamente
+              igual. Silencio comprado por digitacao, e a conta chega um ano
+              depois, com a emissao parando sem erro obvio.
+              A validade e fato DENTRO do certificado. Quem a escreve e o
+              `certificado -- guardar` / `-- validade`, lendo o `notAfter` do
+              proprio arquivo. */}
+          <div>
+            <label>Certificado A1 vence em</label>
+            <div style={{ padding: '8px 0' }}>
+              {expiraEm
+                ? <strong>{expiraEm.split('-').reverse().join('/')}</strong>
+                : <span className="fraco">— ainda não conferido</span>}
+            </div>
+            <div className="sub" style={{ marginTop: -4 }}>
+              Vem de dentro do certificado, e por isso não se digita: se desse para
+              escrever a data aqui, dava para <strong>calar o aviso de vencimento</strong> sem
+              ter renovado nada. Ela muda quando o certificado novo é guardado no cofre.
+            </div>
+          </div>
         </div>
 
         {/*

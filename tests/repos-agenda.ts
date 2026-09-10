@@ -478,17 +478,48 @@ let fFalha: string; let fPaga: string; let fCancelada: string; let fB: string;
       + 'seria garantir o que ele nao sabe');
 
   await emA(() => boleto.cadastrarConector({
-    credencial_ref: 'vault://sicoob/agenda', ativo: true, numero_cliente: 99999, codigo_modalidade: 1, numero_conta_corrente: 88888,
-    certificado_expira_em: new Date(Date.now() - 86_400_000),
+    credencial_ref: 'vault://sicoob/agenda', ativo: true, numero_cliente: 99999,
+    codigo_modalidade: 1, numero_conta_corrente: 88888,
   }));
+
+  /* A DATA ENTRA POR SQL DIRETO, e nao por `cadastrarConector`, desde 10/09/2026.
+   * Nao e atalho de teste: e o teste imitando o UNICO escritor que sobrou —
+   * `scripts/certificado.ts`, que le o `notAfter` do proprio `.pfx` e grava com
+   * a conexao de dono. A aplicacao deixou de poder escrever esta coluna. */
+  await emA(() => db().$executeRawUnsafe(
+    `UPDATE conector_cobranca SET certificado_expira_em = now() - interval '1 day'`));
   const vencido = await emA(() => conferirCertificado());
   chk('N14b', vencido.nivel === 'vencido',
       'A1 com data no passado e "vencido" - PRD 6: vencido, a emissao para SEM erro obvio, e este '
       + 'e o erro obvio');
 
+  /* ============================================================
+   * N14c — O ALARME NAO PODE SER CALADO PELA TELA.
+   *
+   * O DEFEITO EXISTIU, e ate 10/09/2026: `cadastrarConector` aceitava
+   * `certificado_expira_em` e a aba Cobranca tinha campo para ela. Como e essa
+   * coluna que o alarme le, quem visse a faixa «o certificado do banco venceu»
+   * podia digitar uma data nova, salvar, e a faixa sumia — com o certificado
+   * exatamente igual. Silencio comprado por digitacao, e a consequencia chega um
+   * ano depois, com a emissao parando sem erro obvio.
+   *
+   * Salvar o conector agora NAO move a data, e e isso que esta linha prende.
+   * ============================================================ */
   await emA(() => boleto.cadastrarConector({
-    credencial_ref: 'vault://sicoob/agenda', ativo: true, numero_cliente: 99999, codigo_modalidade: 1, numero_conta_corrente: 88888, certificado_expira_em: null,
+    credencial_ref: 'vault://sicoob/agenda', ativo: true, numero_cliente: 99999,
+    codigo_modalidade: 1, numero_conta_corrente: 88888,
+    // @ts-expect-error de proposito: o campo saiu do tipo, e um cliente antigo
+    // que ainda o mande tem de ser IGNORADO em vez de conseguir escrever.
+    certificado_expira_em: new Date(Date.now() + 400 * 86_400_000),
   }));
+  const aindaVencido = await emA(() => conferirCertificado());
+  chk('N14c', aindaVencido.nivel === 'vencido',
+      'salvar o conector com uma data futura NAO cala o alarme: a validade e fato dentro do '
+      + 'certificado e a aplicacao nao a escreve. Quem escreve e `certificado -- guardar` / '
+      + '`-- validade`, lendo o notAfter do proprio .pfx com a conexao de dono');
+
+  await emA(() => db().$executeRawUnsafe(
+    `UPDATE conector_cobranca SET certificado_expira_em = NULL`));
 }
 
 // ---------------------------------------------------- N15 sem conector nao ha agenda
