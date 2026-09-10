@@ -27,10 +27,10 @@
 
 import type { EstadoDoCertificado } from './cobranca-regras.ts';
 
-/** O espelho de `NivelDoAviso` do servidor (`src/dominio/agenda.ts`). Os quatro
+/** O espelho de `NivelDoAviso` do servidor (`src/dominio/agenda.ts`). Os cinco
  *  chegam inteiros ate aqui: colapsar `nao_verificavel` em `ativo` na borda
  *  seria a tela afirmando o que o sistema nao sabe. */
-export type NivelDoAviso = 'ativo' | 'inativado' | 'ausente' | 'nao_verificavel';
+export type NivelDoAviso = 'ativo' | 'url_divergente' | 'inativado' | 'ausente' | 'nao_verificavel';
 
 export type FaixaDaSaude = {
   /** `erro` quando ha uma acao a tomar; `alerta` quando o que ha e ignorancia.
@@ -131,6 +131,20 @@ export function faixasDaSaude(e: {
         titulo: 'Não deu para perguntar ao banco se o aviso de pagamento está ligado.',
         corpo: 'Isso não quer dizer que está tudo bem: quer dizer que ninguém sabe. '
              + 'A consulta diária continua dando baixa de qualquer forma.',
+        destino: COBRANCA,
+      });
+      break;
+    /* `erro` E NAO `alerta`, porque aqui não há ignorância nenhuma: o canal
+     * existe, está vivo, e leva o aviso para outro lugar. Tem dono e conserto. */
+    case 'url_divergente':
+      f.push({
+        tom: 'erro',
+        titulo: 'O aviso de pagamento do banco aponta para outro endereço.',
+        corpo: 'O banco avisa quando um boleto é pago — só que não avisa este sistema. '
+             + 'Do lado de quem opera é idêntico a ninguém ter pagado. '
+             + 'O dinheiro não se perde: a consulta diária continua dando baixa, então o que muda '
+             + 'é o atraso, de minutos para até um dia. '
+             + 'O conserto tem ordem: apagar o aviso errado no banco antes de religar aqui.',
         destino: COBRANCA,
       });
       break;

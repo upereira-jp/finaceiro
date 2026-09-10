@@ -426,6 +426,16 @@ export type ConferenciaDoAviso = {
    *  preenchido SEMPRE nesse caso: "nao sei" sem motivo e indistinguivel de
    *  "esqueci de olhar". */
   motivo: string | null;
+  /**
+   * O endereco contra o qual os avisos do banco foram comparados - entrou em
+   * 10/09/2026 com o nivel `url_divergente`.
+   *
+   * SAI NA RESPOSTA porque a tela e o terminal precisam poder mostrar OS DOIS
+   * lados: "o banco avisa X, e este sistema atende Y". Dizer so "divergente"
+   * manda a pessoa procurar o que diverge, e o que ela procuraria e justamente
+   * o valor que quem acusou ja tinha em maos.
+   */
+  url_esperada: string;
 };
 
 /**
@@ -458,20 +468,31 @@ export type ConferenciaDoAviso = {
 export async function conferirAvisoDePagamento(
   cobranca: PortaDeCobranca,
   credencialRef: string,
+  /**
+   * O endereco que ESTE sistema serve para este tenant. Quem chama monta com
+   * `urlDoWebhook(tenantCorrente())` - a MESMA expressao que a rota de religar
+   * usa para cadastrar (`http/rotas.ts`), e essa igualdade e o ponto: comparar
+   * contra outra fonte seria conferir o cadastro contra um palpite.
+   *
+   * PARAMETRO E NAO LEITURA DE CONTEXTO AQUI DENTRO, apesar de este modulo ja
+   * importar `tenantCorrente`: assim a funcao continua exercitavel sem abrir
+   * transacao, que e como `tests/agenda.ts` a chama hoje.
+   */
+  urlEsperada: string,
 ): Promise<ConferenciaDoAviso> {
   if (typeof cobranca.avisoDePagamento !== 'function') {
     return {
-      nivel: nivelDoAviso(null), avisos: [],
+      nivel: nivelDoAviso(null, urlEsperada), avisos: [], url_esperada: urlEsperada,
       motivo: 'este adaptador de cobranca nao sabe perguntar ao banco quais avisos existem',
     };
   }
   try {
     const avisos = await cobranca.avisoDePagamento(credencialRef);
-    return { nivel: nivelDoAviso(avisos), avisos, motivo: null };
+    return { nivel: nivelDoAviso(avisos, urlEsperada), avisos, motivo: null, url_esperada: urlEsperada };
   } catch (e: any) {
     if (e instanceof TypeError || e instanceof RangeError) throw e;
     return {
-      nivel: nivelDoAviso(null), avisos: [],
+      nivel: nivelDoAviso(null, urlEsperada), avisos: [], url_esperada: urlEsperada,
       motivo: `a leitura falhou: ${String(e?.message ?? e)}`,
     };
   }
@@ -503,6 +524,18 @@ export function alertaDoAviso(c: ConferenciaDoAviso): string[] {
         `O aviso de pagamento NAO foi verificado nesta rodada (${c.motivo ?? 'sem motivo'}).`,
         'Isto NAO quer dizer que esta tudo bem - quer dizer que ninguem sabe.',
       ];
+    /* OS DOIS LADOS, SEMPRE. A frase util aqui nao e "divergente" - e o par de
+     * enderecos, porque so ele deixa quem le decidir se o errado e um host
+     * velho, um tenant trocado ou um ensaio que ficou. */
+    case 'url_divergente': {
+      const l = ['O AVISO DE PAGAMENTO APONTA PARA OUTRO ENDERECO. O banco avisa, e nao e aqui.'];
+      for (const a of c.avisos) l.push(`  id ${a.id} avisa: ${a.url ?? '(sem url na resposta)'}`);
+      l.push(`  este sistema atende: ${c.url_esperada}`);
+      l.push('Enquanto durar, so a consulta ativa diaria baixa - o dinheiro ATRASA, nao se perde.');
+      l.push('O conserto tem ordem: apague o aviso errado NO BANCO, e so entao religue - cadastrar');
+      l.push('por cima deixa dois vivos, e a Sicoob passa a notificar em dobro.');
+      return l;
+    }
   }
 }
 
@@ -585,8 +618,14 @@ export async function religarAvisoDePagamento(
    * ela ja traduz falha de rede em `nao_verificavel` em vez de excecao - e
    * `nao_verificavel` e um dos dois motivos de RECUSA aqui. Chamando a porta
    * direta, a Sicoob fora do ar viraria erro 500 no botao em vez da frase que
-   * explica por que nao da para agir sem saber. */
-  const antes = await conferirAvisoDePagamento(cobranca, credencialRef);
+   * explica por que nao da para agir sem saber.
+   *
+   * A URL ESPERADA E `p.url`, e nao ha escolha melhor: e literalmente o endereco
+   * que esta chamada vai cadastrar. Comparar o que ja existe contra o que se
+   * quer cadastrar e a pergunta exata que a guarda precisa fazer - e e o que faz
+   * `url_divergente` chegar em `podeReligarOAviso` como RECUSA na linha
+   * seguinte, em vez de deixar nascer o segundo webhook vivo. */
+  const antes = await conferirAvisoDePagamento(cobranca, credencialRef, p.url);
   const permissao = podeReligarOAviso(antes.nivel);
   if (!permissao.pode) throw new NaoDaParaReligar(permissao.motivo);
 

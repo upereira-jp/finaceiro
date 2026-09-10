@@ -20,6 +20,7 @@
 
 import { dbt } from '../db/tipado.ts';
 import { tenantCorrente, exigir } from '../db/contexto.ts';
+import { emSerie } from '../db/em-serie.ts';
 import { emReais } from '../dominio/centavos.ts';
 import {
   conferirBoleto, linhaDigitavelFormatada, explicarDivergencia,
@@ -772,8 +773,13 @@ export async function paraFatura(faturaId: string, opcoes: OpcoesDoDocumento = {
   const f = await dbt().fatura.findFirst({ where: { id: faturaId } });
   if (!f) throw new FaturaSemDocumento(faturaId);
 
-  const [uc, chaveDaFatura, ident, cfg, bol, modelo, usina] = await Promise.all([
-    dbt().unidade_consumidora.findFirst({ where: { id: f.unidade_consumidora_id }, include: { cliente: true } }),
+  /* AS SETE, UMA DEPOIS DA OUTRA - ver `db/em-serie.ts`. Elas ja eram seriais
+   * antes de 10/09/2026: transacao interativa e UMA conexao, e o `pg` enfileira
+   * o que chega junto. O que muda aqui e o codigo passar a dizer o que sempre
+   * aconteceu, e parar de emitir o aviso de descontinuacao que o `pg@9` vira
+   * excecao. */
+  const [uc, chaveDaFatura, ident, cfg, bol, modelo, usina] = await emSerie(
+    () => dbt().unidade_consumidora.findFirst({ where: { id: f.unidade_consumidora_id }, include: { cliente: true } }),
     /* A CHAVE VEM DA FATURA, e nao da identidade. A identidade so guarda o
       * PADRAO, e o padrao pode ter mudado desde que esta fatura foi emitida -
       * ler dela faria a segunda via sair com destino diferente da primeira, que
@@ -782,24 +788,27 @@ export async function paraFatura(faturaId: string, opcoes: OpcoesDoDocumento = {
     /* Sem chave nao ha consulta a fazer, e o `?? ''` que estava aqui era um
      * defeito meu: string vazia nao e uuid e o Postgres levanta 22P02 - a
      * fatura sem chave (legitima) derrubava o documento inteiro. */
-    f.chave_pix_id
+    () => (f.chave_pix_id
       ? dbt().chave_pix.findFirst({ where: { tenant_id, id: f.chave_pix_id } })
-      : Promise.resolve(null),
+      : Promise.resolve(null)),
     /* A identidade continua sendo lida, e agora SO pela logo - ela deixou de ser
      * a fonte da chave na migration 25. Sao duas leituras porque sao duas
      * perguntas: "de quem e este documento" e "para onde ESTA fatura cobra". */
-    dbt().identidade_de_cobranca.findFirst({ where: { tenant_id } }),
-    campos(),
-    dbt().boleto.findFirst({ where: { fatura_id: faturaId } }),
+    () => dbt().identidade_de_cobranca.findFirst({ where: { tenant_id } }),
+    () => campos(),
+    () => dbt().boleto.findFirst({ where: { fatura_id: faturaId } }),
     /* OS TEXTOS DO MODELO (migration 28). A previa em lote imprimia a assinatura
      * do topo, o aviso e o rodape legal do BANCO como literais - e as duas
      * ultimas linhas nomeavam uma cooperativa especifica com o codigo dela. */
-    modeloVigente(),
-    /* A USINA ESTAVA FORA DO `Promise.all` SEM MOTIVO, e ela depende so de `f`,
-     * que ja esta em maos desde a linha do `findFirst` acima. Custava uma viagem
-     * SEQUENCIAL por documento - e o lote de uma competencia paga isso N vezes. */
-    f.usina_id ? dbt().usina.findFirst({ where: { id: f.usina_id } }) : Promise.resolve(null),
-  ]);
+    () => modeloVigente(),
+    /* A USINA ENTROU NESTA LISTA em 2026 vinda de um `await` solto mais abaixo, e
+     * a justificativa escrita entao - "custava uma viagem SEQUENCIAL por
+     * documento" - estava ERRADA, o que so ficou visivel em 10/09/2026: dentro de
+     * uma transacao interativa nao ha viagem paralela a ganhar, porque a conexao
+     * e uma so. O que a mudanca deu foi legibilidade (as sete perguntas juntas,
+     * cada uma com o seu porque ao lado), e isso continua valendo. */
+    () => (f.usina_id ? dbt().usina.findFirst({ where: { id: f.usina_id } }) : Promise.resolve(null)),
+  );
   /*
    * A LOGO SO E LIDA QUANDO PEDIDA, e a ordem importa: a leitura acima nao a
    * arrasta, que e a razao de ela viver em outra tabela. Pedir o embutido paga o
@@ -1091,10 +1100,10 @@ export async function modeloPadraoId(): Promise<string> {
 export async function modelos() {
   await exigir('ler');
   const tenant_id = tenantCorrente();
-  const [lista, ident] = await Promise.all([
-    dbt().modelo_de_fatura.findMany({ where: { tenant_id }, orderBy: [{ nome: 'asc' }] }),
-    dbt().identidade_de_cobranca.findFirst({ where: { tenant_id } }),
-  ]);
+  const [lista, ident] = await emSerie(
+    () => dbt().modelo_de_fatura.findMany({ where: { tenant_id }, orderBy: [{ nome: 'asc' }] }),
+    () => dbt().identidade_de_cobranca.findFirst({ where: { tenant_id } }),
+  );
   return lista.map((m) => ({ ...m, padrao: m.id === ident?.modelo_padrao_id }));
 }
 

@@ -31,13 +31,17 @@ import {
 
 type Certificado = { dias: number | null; expira_em: string | null };
 
-/** O espelho de `ConferenciaDoAviso` do servidor. Os quatro niveis chegam
+/** O espelho de `ConferenciaDoAviso` do servidor. Os cinco niveis chegam
  *  inteiros ate aqui de proposito: colapsar `nao_verificavel` em `ativo` na
  *  borda seria a tela afirmando o que o sistema nao sabe. */
 type AvisoDePagamento = {
-  nivel: 'ativo' | 'inativado' | 'ausente' | 'nao_verificavel';
+  nivel: 'ativo' | 'url_divergente' | 'inativado' | 'ausente' | 'nao_verificavel';
   avisos: Array<{ id: string; url: string | null; inativado_em: string | null; motivo_da_inativacao: string | null }>;
   motivo: string | null;
+  /** Contra o que os avisos do banco foram comparados. A tela mostra OS DOIS
+   *  lados em `url_divergente` - "divergente" sozinho manda a pessoa procurar
+   *  o valor que quem acusou ja tinha em maos. */
+  url_esperada?: string;
 };
 
 /** O 412 do servidor significa "nao ha conector", e e RESPOSTA - nao falha de
@@ -242,6 +246,26 @@ export function TelaCobranca() {
             <strong>Não deu para perguntar ao banco</strong> se o aviso de pagamento está ligado.
             Isso <em>não</em> quer dizer que está tudo bem: quer dizer que ninguém sabe.
             {aviso.dado.motivo && <> <span className="sub">({aviso.dado.motivo})</span></>}
+          </>)}
+          {/* OS DOIS ENDEREÇOS, LADO A LADO. Sem eles a faixa diz "divergente" e
+            * manda procurar; com eles, quem lê reconhece na hora se o cadastro
+            * ficou num host antigo, num tenant trocado ou num ensaio. */}
+          {aviso.dado.nivel === 'url_divergente' && (<>
+            <strong>O aviso de pagamento aponta para outro endereço.</strong> O banco avisa quando um
+            boleto é pago — só que <strong>não avisa este sistema</strong>. Do lado de quem opera é
+            idêntico a ninguém ter pagado.
+            <div style={{ marginTop: 8, fontFamily: 'ui-monospace, monospace', fontSize: '0.9em' }}>
+              {aviso.dado.avisos.map((w) => (
+                <div key={w.id}>o banco avisa: {w.url ?? '(sem url na resposta)'}</div>
+              ))}
+              {aviso.dado.url_esperada && <div>este sistema atende: {aviso.dado.url_esperada}</div>}
+            </div>
+            <div style={{ marginTop: 8 }}>
+              <strong>O dinheiro não se perde:</strong> a consulta diária ao banco continua dando
+              baixa, então o que muda é o atraso — de minutos para até um dia. O conserto tem ordem:
+              <strong> apagar o aviso errado no banco</strong> antes de religar aqui, porque cadastrar
+              por cima deixaria dois vivos e a Sicoob passaria a notificar em dobro.
+            </div>
           </>)}
 
           {/* ================================================== O BOTÃO DE RELIGAR

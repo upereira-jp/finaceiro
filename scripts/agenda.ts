@@ -44,6 +44,10 @@ import {
 import { credencialDeCobranca } from '../src/repos/boleto.ts';
 import { comoVaoAsAutomacoes, type Automacao } from '../src/repos/automacoes.ts';
 import { POLITICA, saudeDoCaminhoDoDinheiro, pedeGente } from '../src/dominio/agenda.ts';
+/* O endereco que este sistema atende, para conferir contra o que o banco tem
+ * cadastrado. Mesma funcao que a rota de religar usa para CADASTRAR. */
+import { urlDoWebhook } from '../src/sicoob/webhook.ts';
+import { tenantCorrente } from '../src/db/contexto.ts';
 
 /**
  * A FRASE DE UMA RODADA PARADA - para o journal e para a ultima linha do
@@ -170,7 +174,7 @@ async function main(): Promise<void> {
     const c = await a.withTenant(sessao, tenantProposto, async () => {
       const conector = await credencialDeCobranca();
       if (!conector) return null;
-      return conferirAvisoDePagamento(a.cobranca, conector.credencial_ref);
+      return conferirAvisoDePagamento(a.cobranca, conector.credencial_ref, urlDoWebhook(tenantCorrente()));
     }) as any;
 
     console.log('\n--- aviso de pagamento (o webhook de liquidacao) ---');
@@ -230,7 +234,7 @@ async function main(): Promise<void> {
       if (!conector) return null;
       const [cert, aviso] = [
         await conferirCertificado(),
-        await conferirAvisoDePagamento(a.cobranca, conector.credencial_ref),
+        await conferirAvisoDePagamento(a.cobranca, conector.credencial_ref, urlDoWebhook(tenantCorrente())),
       ];
       return { cert, aviso };
     }) as any;
@@ -358,7 +362,9 @@ async function main(): Promise<void> {
   if (consulta) {
     const aviso = await a.withTenant(sessao, tenantProposto, async () => {
       const conector = await credencialDeCobranca();
-      return conector ? conferirAvisoDePagamento(a.cobranca, conector.credencial_ref) : null;
+      return conector
+        ? conferirAvisoDePagamento(a.cobranca, conector.credencial_ref, urlDoWebhook(tenantCorrente()))
+        : null;
     }) as any;
     if (aviso && aviso.nivel !== 'ativo') {
       console.log('');

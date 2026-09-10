@@ -407,22 +407,35 @@ const fonteAgenda = readFileSync(new URL('../src/cobranca/agenda.ts', import.met
 //   nao silenciar  todo nivel que nao seja `ativo` produz texto. Nivel novo sem
 //                  frase e alerta que nao alerta
 
-import { nivelDoAviso } from '../src/dominio/agenda.ts';
+/* `podeReligarOAviso` NAO entra aqui: a secao da guarda de religar, mais abaixo
+ * neste mesmo arquivo, ja a importa. Duas importacoes do mesmo nome no mesmo
+ * modulo e erro de compilacao, e a de la e a que tem o contexto. */
+import { nivelDoAviso, mesmaUrlDeWebhook } from '../src/dominio/agenda.ts';
 import { conferirAvisoDePagamento, alertaDoAviso } from '../src/cobranca/agenda.ts';
+/* A URL DA COMPARACAO SAI DO PRODUTOR DE VERDADE, e nao de um literal escrito
+ * aqui: e `urlDoWebhook` que a rota de religar usa para CADASTRAR, entao um
+ * teste que a copiasse a mao continuaria verde no dia em que o caminho mudasse
+ * de forma - exatamente o dia em que ele precisa ficar vermelho. */
+import { urlDoWebhook } from '../src/sicoob/webhook.ts';
+
+const TENANT_DO_ENSAIO = 'eac198c0-b0c1-4b13-9b4d-6ac1a6eb011d';
+const URL_DAQUI = urlDoWebhook(TENANT_DO_ENSAIO);
+const URL_DE_OUTRO = urlDoWebhook('00000000-0000-4000-8000-000000000000');
 
 const vivo = { inativado_em: null };
 const morto = { inativado_em: '2026-09-20T10:00:00' };
 
 // ---------------------------------------------------- AG8a os tres "nao sei" nao viram "ok"
-chk('AG8a', nivelDoAviso(null) === 'nao_verificavel' && nivelDoAviso(undefined) === 'nao_verificavel',
+chk('AG8a', nivelDoAviso(null, URL_DAQUI) === 'nao_verificavel'
+            && nivelDoAviso(undefined, URL_DAQUI) === 'nao_verificavel',
     'nao ter perguntado devolve `nao_verificavel`, e nao `ativo` - a mesma distincao do '
     + '`sem_certificado` do vizinho: o sistema nao afirma o que nao sabe');
 
-chk('AG8b', nivelDoAviso([]) === 'ausente',
+chk('AG8b', nivelDoAviso([], URL_DAQUI) === 'ausente',
     'lista vazia e `ausente` e nao `inativado` - nunca ter cadastrado e ter sido DESLIGADO pelo '
     + 'banco pedem a mesma acao e contam historias opostas sobre o que aconteceu');
 
-chk('AG8c', nivelDoAviso([vivo]) === 'ativo' && nivelDoAviso([morto]) === 'inativado',
+chk('AG8c', nivelDoAviso([vivo], URL_DAQUI) === 'ativo' && nivelDoAviso([morto], URL_DAQUI) === 'inativado',
     'o carimbo de inativacao e o que decide, e so ele');
 
 // ---------------------------------------------------- AG8d contaminacao, por exaustao
@@ -432,7 +445,7 @@ chk('AG8c', nivelDoAviso([vivo]) === 'ativo' && nivelDoAviso([morto]) === 'inati
     for (let mascara = 0; mascara < (1 << n); mascara++) {
       const lista = Array.from({ length: n }, (_, i) => ((mascara >> i) & 1 ? morto : vivo));
       const temMorto = lista.some((a) => a.inativado_em !== null);
-      const nivel = nivelDoAviso(lista);
+      const nivel = nivelDoAviso(lista, URL_DAQUI);
       listas++;
       if (nivel !== (temMorto ? 'inativado' : 'ativo')) erradas++;
     }
@@ -445,13 +458,19 @@ chk('AG8c', nivelDoAviso([vivo]) === 'ativo' && nivelDoAviso([morto]) === 'inati
 
 // ---------------------------------------------------- AG8e nenhum nivel fica calado, exceto o bom
 {
-  const niveis = ['ativo', 'inativado', 'ausente', 'nao_verificavel'] as const;
+  /* `url_divergente` VAI NO FIM DA LISTA de proposito: AG8f e AG8g indexam por
+   * posicao, e inserir no meio moveria o alvo delas em silencio. */
+  const niveis = ['ativo', 'inativado', 'ausente', 'nao_verificavel', 'url_divergente'] as const;
   const linhas = niveis.map((nivel) => alertaDoAviso({
-    nivel, avisos: nivel === 'inativado' ? [{ id: '1', url: null, inativado_em: 'x', motivo_da_inativacao: null }] : [],
+    nivel,
+    avisos: nivel === 'inativado' ? [{ id: '1', url: null, inativado_em: 'x', motivo_da_inativacao: null }]
+          : nivel === 'url_divergente' ? [{ id: '1', url: URL_DE_OUTRO, inativado_em: null, motivo_da_inativacao: null }]
+          : [],
     motivo: nivel === 'nao_verificavel' ? 'a rede caiu' : null,
+    url_esperada: URL_DAQUI,
   }));
   chk('AG8e', linhas[0]!.length === 0 && linhas.slice(1).every((l) => l.length > 0),
-      '`ativo` nao imprime nada e os outros TRES imprimem - inclusive `nao_verificavel`, que e o '
+      '`ativo` nao imprime nada e os outros QUATRO imprimem - inclusive `nao_verificavel`, que e o '
       + 'que separa "olhei e esta bem" de "nao olhei"');
 
   chk('AG8f', linhas[3]!.join(' ').toLowerCase().includes('nao quer dizer que esta tudo bem'),
@@ -461,6 +480,68 @@ chk('AG8c', nivelDoAviso([vivo]) === 'ativo' && nivelDoAviso([morto]) === 'inati
   chk('AG8g', linhas[1]!.some((l) => l.includes('consulta ativa')),
       'o alerta de desligado nomeia a consulta ativa: o dinheiro nao se perde, ele ATRASA ate a '
       + 'rodada diaria - sem isso o alerta parece perda de dinheiro e vira panico');
+
+  /* OS DOIS ENDERECOS NO TEXTO. "Divergente" sozinho manda quem le procurar o
+   * valor que quem acusou ja tinha em maos. */
+  chk('AG8g2', linhas[4]!.join(' ').includes(URL_DE_OUTRO) && linhas[4]!.join(' ').includes(URL_DAQUI),
+      'o alerta de url divergente imprime O QUE O BANCO TEM e O QUE ESTE SISTEMA ATENDE, os dois, '
+      + 'porque so o par deixa reconhecer se sobrou host velho, tenant trocado ou ensaio');
+
+  chk('AG8g3', linhas[4]!.some((l) => l.toLowerCase().includes('apague o aviso errado')
+                                   || l.toLowerCase().includes('apagar o aviso errado')),
+      'e ele ensina a ORDEM do conserto - cadastrar por cima deixaria dois vivos e a Sicoob '
+      + 'notificaria em dobro, que e pior de diagnosticar do que o problema original');
+}
+
+// ------------------------------- AG8u..AG8z o endereco do aviso, que ate 10/09/2026 ninguem lia
+{
+  const vivoDaqui = { inativado_em: null, url: URL_DAQUI };
+  const vivoDeOutro = { inativado_em: null, url: URL_DE_OUTRO };
+  const vivoSemUrl = { inativado_em: null, url: null };
+
+  chk('AG8u', nivelDoAviso([vivoDaqui], URL_DAQUI) === 'ativo'
+              && nivelDoAviso([vivoDeOutro], URL_DAQUI) === 'url_divergente',
+      'um aviso VIVO apontando para outro endereco nao e `ativo`: o banco notifica, e nao e aqui. '
+      + 'Ate 10/09/2026 os dois davam `ativo`, e todo alarme do sistema dizia "de pe" sobre um '
+      + 'canal que nao chegava');
+
+  chk('AG8v', nivelDoAviso([vivoSemUrl], URL_DAQUI) === 'ativo'
+              && nivelDoAviso([vivoSemUrl, vivoSemUrl], URL_DAQUI) === 'ativo',
+      'aviso sem url na resposta do banco NAO vira acusacao - nao dar para comparar nao e o mesmo '
+      + 'que comparar e discordar, e alarme por falta de dado e alarme que se aprende a ignorar');
+
+  chk('AG8w', nivelDoAviso([vivoDeOutro, vivoDaqui], URL_DAQUI) === 'ativo'
+              && nivelDoAviso([vivoSemUrl, vivoDeOutro], URL_DAQUI) === 'url_divergente',
+      'BASTA UM CERTO, o oposto da contaminacao do inativo: se um dos vivos aponta para ca, a '
+      + 'notificacao chega e o canal esta de pe');
+
+  chk('AG8x', nivelDoAviso([{ inativado_em: 'x', url: URL_DAQUI }, vivoDeOutro], URL_DAQUI) === 'inativado',
+      '`inativado` vem ANTES de `url_divergente`: com um desligado na lista, "o banco desligou" e '
+      + 'a noticia maior - ela ja diz que a notificacao parou de sair');
+
+  const permissao = podeReligarOAviso('url_divergente');
+  chk('AG8y', permissao.pode === false && permissao.motivo.includes('dois'),
+      'e religar continua RECUSADO com url divergente, pelo mesmo motivo de `ativo`: o que esta la '
+      + 'em pe conta como duplicata para o banco, e o `POST /webhooks` nao tem inverso aqui');
+
+  // ------------------------------------------------ AG8z a normalizacao, caso a caso
+  const casos: Array<[string, string, boolean, string]> = [
+    [URL_DAQUI, URL_DAQUI + '/', true, 'barra final sobrando e a mesma rota'],
+    ['https://FINANCEIRO.blackhaus.io/api/x', 'https://financeiro.blackhaus.io/api/x', true,
+     'host e caso-insensivel por DNS'],
+    ['https://financeiro.blackhaus.io/api/liquidacoes/webhook-sicoob/ABC',
+     'https://financeiro.blackhaus.io/api/liquidacoes/webhook-sicoob/abc', false,
+     'o CAMINHO e caso-sensivel: ele carrega o uuid do tenant e o roteador casa por igualdade, '
+     + 'entao maiuscula ali responderia 404 a toda notificacao'],
+    ['http://financeiro.blackhaus.io/api/x', 'https://financeiro.blackhaus.io/api/x', false,
+     'esquema diferente e destino diferente'],
+    ['nao-e-url', URL_DAQUI, false, 'o que nao parseia e divergente, e nao "nao sei"'],
+  ];
+  const erradas = casos.filter(([a, b, esperado]) => mesmaUrlDeWebhook(a, b) !== esperado);
+  chk('AG8z', erradas.length === 0,
+      `as ${casos.length} formas de duas urls serem (ou nao) o mesmo destino: `
+      + casos.map(([, , , porque]) => porque).join(' · ')
+      + (erradas.length ? ` — ERRARAM: ${erradas.map(([a, b]) => `${a} x ${b}`).join(', ')}` : ''));
 }
 
 // ---------------------------------------------------- AG8h o diagnostico nao pode derrubar a rodada
@@ -471,8 +552,8 @@ chk('AG8c', nivelDoAviso([vivo]) === 'ativo' && nivelDoAviso([morto]) === 'inati
     async avisoDePagamento() { throw Object.assign(new Error('ECONNRESET'), { status: 502 }); },
   } as any;
 
-  const semSuporte = await conferirAvisoDePagamento(portaSemAviso, 'ref');
-  const comFalha = await conferirAvisoDePagamento(portaQueExplode, 'ref');
+  const semSuporte = await conferirAvisoDePagamento(portaSemAviso, 'ref', URL_DAQUI);
+  const comFalha = await conferirAvisoDePagamento(portaQueExplode, 'ref', URL_DAQUI);
 
   chk('AG8h', semSuporte.nivel === 'nao_verificavel' && comFalha.nivel === 'nao_verificavel',
       'adaptador que nao sabe perguntar e Sicoob fora do ar dao os DOIS em `nao_verificavel`, sem '
@@ -485,7 +566,7 @@ chk('AG8c', nivelDoAviso([vivo]) === 'ativo' && nivelDoAviso([morto]) === 'inati
 
   let vazou: unknown = null;
   const portaComBug = { ...portaSemAviso, async avisoDePagamento() { throw new TypeError('bug meu'); } } as any;
-  try { await conferirAvisoDePagamento(portaComBug, 'ref'); } catch (e) { vazou = e; }
+  try { await conferirAvisoDePagamento(portaComBug, 'ref', URL_DAQUI); } catch (e) { vazou = e; }
   chk('AG8j', vazou instanceof TypeError,
       'TypeError e RangeError PASSAM por cima do catch, como no laco da rodada: defeito de '
       + 'programacao virando "nao verificavel" e o bug se escondendo atras do proprio diagnostico');
@@ -586,7 +667,7 @@ chk('AG9i', cod('vencido', 'nao_verificavel') === 4,
 // ------------------------------------------- AG9j a exaustao dos 16 pares
 {
   const certs: NivelDoCertificado[] = ['ok', 'sem_certificado', 'vencido', 'vence_em_breve'];
-  const avisos: NivelDoAvisoDominio[] = ['ativo', 'inativado', 'ausente', 'nao_verificavel'];
+  const avisos: NivelDoAvisoDominio[] = ['ativo', 'url_divergente', 'inativado', 'ausente', 'nao_verificavel'];
   let verdes = 0, todosConhecidos = true;
   for (const c of certs) {
     for (const a of avisos) {
@@ -596,10 +677,13 @@ chk('AG9i', cod('vencido', 'nao_verificavel') === 4,
     }
   }
   /* POR EXAUSTAO E NAO POR EXEMPLO ESCOLHIDO A MAO: a unica combinacao verde dos
-   * dezesseis pares e `ok` + `ativo`. Um `if` a mais em qualquer um dos dois
-   * `switch` faria um estado ruim sair 0, e nenhum caso avulso pegaria isso. */
+   * vinte pares e `ok` + `ativo`. Um `if` a mais em qualquer um dos dois
+   * `switch` faria um estado ruim sair 0, e nenhum caso avulso pegaria isso.
+   *
+   * Eram DEZESSEIS ate 10/09/2026, quando `url_divergente` entrou como quinto
+   * nivel do aviso. O numero cresceu e a resposta nao: o verde continua sendo um. */
   chk('AG9j', verdes === 1 && todosConhecidos,
-      `dos 16 pares possiveis, exatamente UM sai 0 (achados ${verdes}), e nenhum sai codigo `
+      `dos 20 pares possiveis, exatamente UM sai 0 (achados ${verdes}), e nenhum sai codigo `
       + 'fora de {0,4,5}');
 }
 

@@ -232,7 +232,8 @@ export function nivelDoCertificado(dias: number | null, p: Politica = POLITICA):
 // ====================================================== o aviso de pagamento
 
 export type NivelDoAviso =
-  | 'ativo'           // ha aviso e o banco nao o desligou
+  | 'ativo'           // ha aviso, o banco nao o desligou, e ele aponta para CA
+  | 'url_divergente'  // ha aviso vivo, e ele avisa OUTRO endereco. Ver abaixo
   | 'inativado'       // o banco DESLIGOU. Nenhum pagamento e avisado
   | 'ausente'         // o banco respondeu, e nao ha aviso nenhum cadastrado
   | 'nao_verificavel'; // ninguem perguntou, ou o adaptador nao sabe perguntar
@@ -266,16 +267,89 @@ export type NivelDoAviso =
  * UM SO INATIVO CONTAMINA A LISTA. Se ha dois avisos do mesmo tipo e um esta
  * desligado, o nivel e `inativado`: nao da para saber qual dos dois o banco
  * usaria, e a resposta otimista seria uma aposta sobre dinheiro.
+ *
+ * ============================================================================
+ * `url_divergente` ENTROU EM 10/09/2026, e ele fecha um VERDE QUE NAO PROVAVA
+ * NADA — achado ao varrer o sistema ponta a ponta, e nao por defeito relatado.
+ *
+ * Ate hoje esta funcao lia UM campo do que o banco devolve: `inativado_em`. O
+ * `url` vinha na mesma resposta (`AvisoDePagamento.url`, `sicoob/porta.ts`) e
+ * era jogado fora. A consequencia, escrita como quem opera a sentiria:
+ *
+ *   a Sicoob tem um aviso ATIVO apontando para um endereco que nao e este
+ *   sistema - um host antigo, um caminho com o tenant errado, um cadastro de
+ *   ensaio que ficou. O banco notifica, e notifica pontualmente, para lugar
+ *   nenhum. Aqui dentro: `saude-cobranca` verde, `origem-do-webhook` dizendo
+ *   ACEITA, a tela de Cobranca sem faixa - e boleto pago que so vira baixa na
+ *   consulta ativa do dia seguinte. Todo alarme deste sistema estaria dizendo
+ *   "de pe" sobre um canal que nao chega aqui.
+ *
+ * A COMPARACAO SO ACONTECE COM O QUE DA PARA COMPARAR, e essa e a linha que
+ * impede o alarme de gritar por falta de dado: aviso sem `url` (o banco pode
+ * omitir, e o tipo ja diz `string | null`) nao entra na conta. Se NENHUM dos
+ * vivos declara url, o nivel continua `ativo` - nao saber nao vira acusacao,
+ * pela mesma disciplina que faz `nao_verificavel` nao virar `ativo`.
+ *
+ * BASTA UM CERTO, e aqui a regra e o OPOSTO da contaminacao acima: se um dos
+ * avisos vivos aponta para ca, a notificacao CHEGA e o canal esta de pe. Um
+ * segundo aviso para outro endereco e problema de quem o cadastrou, e nao um
+ * buraco no caminho do dinheiro daqui.
+ *
+ * DEPOIS DE `inativado`, E DE PROPOSITO. Com um desligado na lista, "o banco
+ * desligou" e a noticia maior - ela ja diz que a notificacao parou de sair, e o
+ * endereco de um canal morto e detalhe.
  */
-export function nivelDoAviso(avisos: readonly Aviso[] | null | undefined): NivelDoAviso {
+export function nivelDoAviso(
+  avisos: readonly Aviso[] | null | undefined,
+  /**
+   * O endereco que ESTE sistema serve para este tenant - `urlDoWebhook`, de
+   * `sicoob/webhook.ts`, a mesma funcao que o religar usa para CADASTRAR.
+   * OBRIGATORIO de proposito: opcional, ele seria esquecido em uma das quatro
+   * chamadas, e o verde falso voltaria por ela, calado.
+   */
+  urlEsperada: string,
+): NivelDoAviso {
   if (avisos == null) return 'nao_verificavel';
   if (avisos.length === 0) return 'ausente';
-  return avisos.some((a) => a.inativado_em != null) ? 'inativado' : 'ativo';
+  if (avisos.some((a) => a.inativado_em != null)) return 'inativado';
+
+  const declaradas = avisos
+    .map((a) => a.url)
+    .filter((u): u is string => typeof u === 'string' && u.trim() !== '');
+  if (declaradas.length === 0) return 'ativo';
+  return declaradas.some((u) => mesmaUrlDeWebhook(u, urlEsperada)) ? 'ativo' : 'url_divergente';
+}
+
+/**
+ * DUAS URLS SAO O MESMO DESTINO?
+ *
+ * Compara esquema, host e caminho, e mais nada. As duas frouxidoes sao as que
+ * NAO mudam para onde o POST chega: host e caso-insensivel por DNS, e barra
+ * final sobrando e a mesma rota.
+ *
+ * O CAMINHO E CASO-SENSIVEL, e isto e o contrario de frouxidao: ele carrega o
+ * uuid do tenant, e o roteador deste sistema casa rota por igualdade. Um
+ * cadastro com o uuid em maiuscula responderia 404 a toda notificacao -
+ * divergente, e "divergente" e exatamente a palavra certa para ele.
+ *
+ * O QUE NAO PARSEIA E DIVERGENTE, e nao "nao sei": o banco so aceita url valida
+ * no cadastro (`ehUrlDeWebhook`), entao lixo aqui e sinal de que a resposta nao
+ * e a que se espera - e o lado seguro de um canal de dinheiro e acusar.
+ */
+export function mesmaUrlDeWebhook(a: string, b: string): boolean {
+  const normalizar = (bruta: string): string | null => {
+    let u: URL;
+    try { u = new URL(bruta); } catch { return null; }
+    return `${u.protocol.toLowerCase()}//${u.host.toLowerCase()}${u.pathname.replace(/\/+$/, '')}`;
+  };
+  const x = normalizar(a);
+  const y = normalizar(b);
+  return x !== null && y !== null && x === y;
 }
 
 /** So o que o nivel le. Estrutural de proposito: o dominio nao importa a porta,
- *  e um tipo com um campo nao merece uma dependencia de modulo. */
-type Aviso = { inativado_em: string | null };
+ *  e um tipo com dois campos nao merece uma dependencia de modulo. */
+type Aviso = { inativado_em: string | null; url?: string | null };
 
 // ============================================================================
 // A SAUDE DO CAMINHO DO DINHEIRO, num numero que o systemd entende
@@ -366,6 +440,12 @@ export function saudeDoCaminhoDoDinheiro(e: {
   if (e.certificado === 'vence_em_breve') quebrado.push('o certificado A1 vence em breve');
   if (e.aviso === 'inativado') quebrado.push('o banco DESLIGOU o aviso de pagamento');
   if (e.aviso === 'ausente') quebrado.push('nao ha aviso de pagamento cadastrado no banco');
+  /* QUEBRADO E NAO "sem saber", e a diferenca importa para o codigo de saida: o
+   * canal existe, esta vivo, e leva o aviso para outro lugar. Nao ha ignorancia
+   * nenhuma aqui - ha um destino errado, e ele tem dono e conserto. */
+  if (e.aviso === 'url_divergente') {
+    quebrado.push('o aviso de pagamento do banco aponta para OUTRO endereco, e nao para este sistema');
+  }
   for (const r of e.rodadasParadas ?? []) quebrado.push(r);
   if (quebrado.length > 0) return { codigo: 4, resumo: quebrado.join('; ') };
 
@@ -429,6 +509,30 @@ export function podeReligarOAviso(nivel: NivelDoAviso): PermissaoDeReligar {
           'nao deu para perguntar ao banco quais avisos existem, entao nao da para saber se '
           + 'cadastrar criaria um segundo. Nao saber NAO autoriza agir: a aposta otimista aqui '
           + 'cria a notificacao em dobro, que nao se desfaz. Tente de novo em alguns minutos.',
+      };
+    /*
+     * A QUINTA RESPOSTA, e ela e a mais contraintuitiva das cinco: o aviso
+     * aponta para o lugar errado, o botao existe para consertar aviso, e ainda
+     * assim a resposta e NAO.
+     *
+     * O motivo e o mesmo de `ativo`, e nao um motivo novo: o que esta la EM PE
+     * conta como duplicata para o banco. Cadastrar o certo por cima deixaria
+     * DOIS webhooks vivos, e a Sicoob passaria a notificar o mesmo pagamento
+     * duas vezes - so que agora um dos dois chegando aqui, o que e pior de
+     * diagnosticar do que o problema original. O `POST /webhooks` nao tem
+     * inverso neste sistema (`ADR-0006`), entao o desfazer seria a mao, no banco.
+     *
+     * A ORDEM DO CONSERTO E: apagar o errado no banco, e so entao religar. E o
+     * texto diz isso, porque uma recusa que nao ensina a saida vira chamado.
+     */
+    case 'url_divergente':
+      return {
+        pode: false,
+        motivo:
+          'ja ha um aviso de pagamento ATIVO no banco, e ele aponta para outro endereco. '
+          + 'Cadastrar o certo por cima NAO substitui o errado: ficariam dois vivos, e a Sicoob '
+          + 'notificaria em dobro. Primeiro apague o aviso errado no banco, depois religue aqui. '
+          + 'Nada foi enviado.',
       };
   }
 }

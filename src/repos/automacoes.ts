@@ -46,6 +46,7 @@
 
 import { dbt } from '../db/tipado.ts';
 import { exigir } from '../db/contexto.ts';
+import { emSerie } from '../db/em-serie.ts';
 import { CADENCIA, nivelDaRodada, type NivelDaRodada } from '../dominio/agenda.ts';
 
 /** As tres, e a chave e a mesma que a tela usa para escolher a frase. */
@@ -117,10 +118,10 @@ export async function comoVaoAsAutomacoes(agora: Date = new Date()): Promise<Aut
    * `sem_conector` da faixa do caminho do dinheiro, pelo mesmo motivo: vermelho
    * permanente e alarme desligado.
    */
-  const [cobranca, crm] = await Promise.all([
-    db.conector_cobranca.findFirst({ where: { ativo: true }, select: { criado_em: true } }),
-    db.conector_crm.findFirst({ where: { ativo: true }, select: { id: true } }),
-  ]);
+  const [cobranca, crm] = await emSerie(
+    () => db.conector_cobranca.findFirst({ where: { ativo: true }, select: { criado_em: true } }),
+    () => db.conector_crm.findFirst({ where: { ativo: true }, select: { id: true } }),
+  );
 
   const ultimaDaTarefa = (tarefa: 'fila_de_emissao' | 'consulta_ativa') =>
     db.agenda_execucao.findFirst({
@@ -132,17 +133,17 @@ export async function comoVaoAsAutomacoes(agora: Date = new Date()): Promise<Aut
       },
     });
 
-  const [consulta, fila, ciclo] = await Promise.all([
-    ultimaDaTarefa('consulta_ativa'),
-    ultimaDaTarefa('fila_de_emissao'),
-    db.conector_execucao.findFirst({
+  const [consulta, fila, ciclo] = await emSerie(
+    () => ultimaDaTarefa('consulta_ativa'),
+    () => ultimaDaTarefa('fila_de_emissao'),
+    () => db.conector_execucao.findFirst({
       orderBy: [{ iniciado_em: 'desc' }],
       select: {
         iniciado_em: true, terminado_em: true, status: true,
         lidos: true, criados: true, atualizados: true, recusados: true,
       },
     }),
-  ]);
+  );
 
   const montar = (
     chave: ChaveDaAutomacao,

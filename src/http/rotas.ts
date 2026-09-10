@@ -13,6 +13,7 @@
 // foi resolvida aqui - alterar a matriz e decisao normativa, nao de implementacao.
 
 import type { App, Sessao, VinculoDaSessao, ClientTx } from '../app.ts';
+import { emSerie } from '../db/em-serie.ts';
 import * as cliente from '../repos/cliente.ts';
 import * as conectorExecucao from '../repos/conector-execucao.ts';
 import * as automacoes from '../repos/automacoes.ts';
@@ -1074,8 +1075,11 @@ export const ROTAS: Rota[] = [
     metodo: 'GET', padrao: '/auditoria',
     handler: (req, app) => emRelatorio(app, req, async () => {
       const desde = req.query.get('desde') ? data(req.query.get('desde'), 'desde') : undefined;
-      const [linhas, tabelas] = await Promise.all([
-        auditoria.trilha({
+      /* AS DUAS EM SERIE - `db/em-serie.ts`. Foi ESTA rota, aberta pela aba
+       * «Historico» as 17:39:59 de 10/09/2026, que fez o `pg` gravar em producao
+       * o aviso de que duas consultas dividiam a mesma conexao. */
+      const [linhas, tabelas] = await emSerie(
+        () => auditoria.trilha({
           tabela: req.query.get('tabela') ?? undefined,
           registro_id: req.query.get('registro') ?? undefined,
           operacao: (req.query.get('operacao') as any) ?? undefined,
@@ -1087,8 +1091,8 @@ export const ROTAS: Rota[] = [
            * de rodada, e sem isto a tela abriria mostrando so elas. */
           incluir_rodadas: req.query.get('rodadas') === '1',
         }),
-        auditoria.tabelasDaTrilha(desde),
-      ]);
+        () => auditoria.tabelasDaTrilha(desde),
+      );
       /* O TETO VAI JUNTO DA RESPOSTA porque a tela precisa poder dizer "sao as
        * 100 mais recentes, e ha mais" em vez de deixar quem le achar que acabou.
        * Mesma disciplina da resposta que DIZ quando cortou, em `boleto.ts`. */
@@ -1209,9 +1213,13 @@ export const ROTAS: Rota[] = [
         return ok({
           sem_conector: true, nivel: 'nao_verificavel', avisos: [],
           motivo: 'nao ha conector de cobranca cadastrado',
+          url_esperada: urlDoWebhook(tenantCorrente()),
         });
       }
-      return ok({ sem_conector: false, ...await conferirAvisoDePagamento(app.cobranca, c.credencial_ref) });
+      return ok({
+        sem_conector: false,
+        ...await conferirAvisoDePagamento(app.cobranca, c.credencial_ref, urlDoWebhook(tenantCorrente())),
+      });
     }),
   },
   {
@@ -1679,7 +1687,7 @@ export const ROTAS: Rota[] = [
   {
     metodo: 'GET', padrao: '/cobranca/logo',
     handler: (req, app) => emTenant(app, req, async () => {
-      const [l, id] = await Promise.all([documento.logo(), documento.identidade()]);
+      const [l, id] = await emSerie(() => documento.logo(), () => documento.identidade());
       if (!l || !id?.logo_mime) {
         return { status: 404, corpo: { erro: 'NaoEncontrado', mensagem: 'Este tenant nao tem logo.' } };
       }
@@ -1811,11 +1819,11 @@ export const ROTAS: Rota[] = [
        * 400 ms de digitacao - encadea-las custaria seis viagens sequenciais por
        * tecla parada.
        */
-      const [ident, modelo, campos_personalizados] = await Promise.all([
-        documento.identidade(),
-        documento.modeloVigente(),
-        documento.camposPersonalizadosResolvidos(personalizados),
-      ]);
+      const [ident, modelo, campos_personalizados] = await emSerie(
+        () => documento.identidade(),
+        () => documento.modeloVigente(),
+        () => documento.camposPersonalizadosResolvidos(personalizados),
+      );
 
       /*
        * OS PARAMETROS PADRAO SAO DO MODELO, e nao mais constantes do codigo.

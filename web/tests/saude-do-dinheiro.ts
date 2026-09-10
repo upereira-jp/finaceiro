@@ -91,7 +91,8 @@ chk('SD-7', f('vencido', 'inativado').length === 2,
 // ------------------------- SD-10 a exaustao: todo estado ruim gera exatamente uma
 {
   const certs: EstadoDoCertificado[] = ['ok', 'sem_conector', 'nao_medido', 'vencido', 'vence_em_breve'];
-  const avisos: (NivelDoAviso | null)[] = ['ativo', 'inativado', 'ausente', 'nao_verificavel', null];
+  const avisos: (NivelDoAviso | null)[] =
+    ['ativo', 'url_divergente', 'inativado', 'ausente', 'nao_verificavel', null];
   let mudos = 0, semTitulo = 0;
   for (const c of certs) {
     for (const a of avisos) {
@@ -108,7 +109,7 @@ chk('SD-7', f('vencido', 'inativado').length === 2,
     }
   }
   chk('SD-10', mudos === 0 && semTitulo === 0,
-      `os 25 pares dao a contagem esperada de faixas (${mudos} fora) e nenhuma faixa sai sem `
+      `os 30 pares dao a contagem esperada de faixas (${mudos} fora) e nenhuma faixa sai sem `
       + `titulo ou sem corpo (${semTitulo})`);
 }
 
@@ -120,7 +121,7 @@ chk('SD-7', f('vencido', 'inativado').length === 2,
       + 'coluna «Onde resolver» da prontidao ja segue');
 }
 function certs2(): EstadoDoCertificado[] { return ['nao_medido', 'vencido', 'vence_em_breve']; }
-function avisos2(): NivelDoAviso[] { return ['inativado', 'ausente', 'nao_verificavel']; }
+function avisos2(): NivelDoAviso[] { return ['url_divergente', 'inativado', 'ausente', 'nao_verificavel']; }
 
 // ------------------- SD-12 e SD-13 a ULTIMA ligacao: a PRIMEIRA tela monta a faixa
 {
@@ -176,12 +177,12 @@ function avisos2(): NivelDoAviso[] { return ['inativado', 'ausente', 'nao_verifi
    * servidor recusa manda a pessoa apertar e ler um erro; um botao ESCONDIDO
    * onde o servidor aceitaria deixa o aviso de pagamento morto na tela, com o
    * conserto existindo e invisivel. */
-  const niveis: NivelDoAviso[] = ['ativo', 'inativado', 'ausente', 'nao_verificavel'];
+  const niveis: NivelDoAviso[] = ['ativo', 'url_divergente', 'inativado', 'ausente', 'nao_verificavel'];
   const divergem = niveis.filter((n) => podeReligarNaTela(n) !== podeReligarOAviso(n).pode);
 
   chk('SD-14', divergem.length === 0,
       'o botao de religar aparece exatamente nos niveis em que o servidor deixa religar, nos '
-      + `quatro${divergem.length ? ` (divergem: ${divergem.join(', ')})` : ''} - a tela nao oferece `
+      + `cinco${divergem.length ? ` (divergem: ${divergem.join(', ')})` : ''} - a tela nao oferece `
       + 'o que vai ser negado, nem esconde o conserto de quem precisa dele');
 
   chk('SD-15', podeReligarNaTela(null) === false,

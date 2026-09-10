@@ -39,6 +39,7 @@
 
 import { dbt } from '../db/tipado.ts';
 import { exigir } from '../db/contexto.ts';
+import { emSerie } from '../db/em-serie.ts';
 import { nivelDaEmissao, emissaoPedeGente, type NivelDaEmissao } from '../dominio/agenda.ts';
 
 /**
@@ -121,9 +122,9 @@ export async function emissaoTravada(agora: Date = new Date()): Promise<EmissaoT
     ],
   };
 
-  const [total, linhas] = await Promise.all([
-    db.fatura.count({ where: onde as any }),
-    db.fatura.findMany({
+  const [total, linhas] = await emSerie(
+    () => db.fatura.count({ where: onde as any }),
+    () => db.fatura.findMany({
       where: onde as any,
       /* A ORDEM E A DO DINHEIRO PARADO: o vencimento mais antigo primeiro, que e
        * o cliente ha mais tempo sem receber cobranca. Ordenar por nivel poria em
@@ -142,7 +143,7 @@ export async function emissaoTravada(agora: Date = new Date()): Promise<EmissaoT
         },
       },
     }),
-  ]);
+  );
 
   const montadas = linhas.map((f): LinhaDaEmissao => {
     const b = f.boleto;
