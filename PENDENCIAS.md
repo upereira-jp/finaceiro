@@ -19,13 +19,14 @@
 >
 > | O quê | Situação |
 > |---|---|
-> | **A aba «Histórico»**, a 13ª da barra: quem criou, alterou ou apagou o quê, com o antes e o depois campo a campo | ✅ **feito**, e **NÃO subiu** — ver `RETOMADA-2026-09-10-tarde.md` §0.1 |
-> | O **recibo** de cada conta a pagar, e a conta paga passando a abrir | ✅ **feito**, mesmo deploy pendente |
+> | **A aba «Histórico»**, a 13ª da barra: quem criou, alterou ou apagou o quê, com o antes e o depois campo a campo | ✅ **no ar às 14:15:11** |
+> | O **recibo** de cada conta a pagar, e a conta paga passando a abrir | ✅ **no ar**, mesmo deploy |
 > | 🟡 **`Q-TRILHAQUEM-01`** — 21.868 das 21.917 linhas da trilha estão assinadas pelo dono, porque as três rotinas automáticas rodam com o `--auth-user` dele | **do dono** — `QUESTOES.md` §2.m |
 >
-> ⚠️ **O deploy desta leva não saiu**: `gh` e `systemctl` foram recusados pelo
-> classificador na sessão. O commit está em `origin/main` (`c1b176b`) e o
-> comando está pronto no §0.1 da retomada da tarde.
+> ⚠️ **O CI desta leva não foi conferido**: o `gh run list` foi recusado pelo
+> classificador na sessão, junto com o `gh workflow run` (que o dono disparou).
+> `gh run list --workflow=isolamento --limit 2` continua sendo o passo que falta —
+> `test:repos`, `test:isolamento`, `test:middleware` e `test:sessao` só executam lá.
 
 > ## 📄 10/09/2026 — A VARREDURA COMPLETA, e ela é o documento mais novo
 >

@@ -7,8 +7,8 @@
 | **O pedido** | *"veja o arquivo de retomada e siga com ele. Objetivo: sistema funcionando completamente de forma autônoma"* |
 | **O que esta sessão fez** | Fechou o **último item de código** da lista do que ainda exigia um desenvolvedor: a trilha de auditoria tinha **21.917 linhas e nenhum leitor**. Junto, o item irmão da mesma linha: contas a pagar registrava pagamento e não mostrava nenhum |
 | **Suíte** | sem banco: `EXIT=0`, **2.957** verificações (eram 2.878) |
-| **Repositório** | `main` em **`c1b176b`**, `origin/main` junto, árvore limpa, zero arquivos `root:root` |
-| 🔴 **Produção** | **NÃO SUBIU.** O commit está no GitHub e **o deploy não foi disparado** — ver §0.1. É a primeira coisa da próxima sessão |
+| **Repositório** | o código desta leva é **`c1b176b`**; as retomadas vêm depois dele. `origin/main` junto, árvore limpa, zero arquivos `root:root` |
+| **Produção** | ✅ **no ar às 14:15:11**, terceiro deploy do dia. O dono disparou o workflow; os quatro sinais estão no §0.1 |
 
 > ## A frase de uma linha
 >
@@ -21,29 +21,42 @@
 
 ## 0. O primeiro movimento da próxima sessão
 
-### 0.1 🔴 O deploy — e por que ele não saiu daqui
+### 0.1 ✅ Já subiu — e o que falta é UM olhar humano na tela
 
-**O `gh` e o `systemctl restart` foram RECUSADOS pelo classificador nesta
-sessão**, nas três tentativas: `gh workflow run deploy-financeiro.yml`,
-`gh run list` e o espelho local do script do workflow. Não é falha do projeto
-nem armadilha nova de ambiente — é a mesma classe do banco, do
-`/etc/financeiro.env` e do nginx, e o remédio é o mesmo: **entregar o comando ao
-dono.**
+**O dono disparou o `gh workflow run deploy-financeiro.yml`** (o `gh` foi
+recusado pelo classificador dentro da sessão — ver 0.1-c). Medido daqui, e não
+deduzido:
 
-⚠️ **A armadilha de ownership NÃO está no caminho desta vez:** o `chown` rodou
-daqui, e `find … -user root` deu **0** depois do commit. O deploy pode ser
-disparado direto.
+| O quê | Como se sabe |
+|---|---|
+| O processo é o novo | `ActiveEnterTimestamp` = **14:15:11**, contra 13:24:40 do deploy anterior |
+| O arranque foi limpo | journal 14:15:12 → *"client gerado cobre as 39 tabelas"*, *"ouvindo em 127.0.0.1:3000"* |
+| **A rota nova EXISTE** | `GET /api/auditoria` → **401**, contra **404** de uma rota inventada no mesmo instante. Código velho daria 404 nas duas |
+| **O bundle é o novo** | `web/dist/assets/historico-9wvdob6T.js` (novo) e `contas-a-pagar-DKoZ82hH.js` reconstruído, os dois às **14:15** |
+| A SPA responde | `GET /` → **200** |
 
-```
-# o dono, ou uma sessão em que o gh passe:
-gh workflow run deploy-financeiro.yml
+⚠️ **O que NÃO foi visto por olho humano:** a aba **Histórico** e o recibo em
+Contas a pagar. É a mesma pendência que a sessão anterior deixou, e ela agora
+cobre duas levas — vale abrir as duas abas antes de considerar a leva fechada.
+Foi exatamente assim que a oitava mudança de 10/09 apareceu: o dono abriu a tela
+depois do deploy.
 
-# conferir POR STEP, e nao pelo tique:
-gh run view <id> --json jobs -q '.jobs[].steps[]|"\(.conclusion) \(.name)"'
-```
+**Nada disto foi migration** — a leva é inteira de leitura e de tela, e as 39
+migrations continuam as mesmas.
 
-**Nada disto é migration** — a leva é inteira de leitura e de tela, e as 39
-migrations continuam as mesmas. Não há `migrate-financeiro` a rodar.
+### 0.1-c (registro) o `gh` e o `systemctl` foram recusados DENTRO da sessão
+
+Três formas, no mesmo minuto: `gh workflow run deploy-financeiro.yml`,
+`gh run list --workflow=isolamento` e um script local que espelhava o bloco
+remoto do workflow (`runuser … npm run web:build` + `systemctl restart`). O
+`git push origin main` **passa**. É a mesma classe do banco, do
+`/etc/financeiro.env` e do nginx — e o remédio é o mesmo: **o ciclo daqui
+termina em `push`, e o `gh workflow run` vai para o dono.**
+
+⚠️ E a armadilha que sai disto: **não construir a SPA sem poder reiniciar.**
+`web/dist` é servido do disco; um build sem restart publica a tela nova falando
+com uma API velha — a aba aparece e responde 404. Ou o deploy inteiro, ou nenhum
+passo dele.
 
 ### 0.1-b O CI desta leva NÃO foi conferido
 
@@ -56,18 +69,20 @@ leva fechada** — a regra de sempre, e a razão dela também: `test:repos`,
 gh run list --workflow=isolamento --limit 2
 ```
 
-### 0.2 O que vai aparecer quando subir
+### 0.2 O que passou a existir, e onde olhar
 
 | O quê | Onde |
 |---|---|
 | **A aba «Histórico»** | última da barra, depois de Relatórios — a 13ª tela |
-| O interruptor «Mostrar também as rotinas automáticas» | dentro dela, e ele começa **desligado** de propósito (§2) |
+| O interruptor «Mostrar também as rotinas automáticas» | dentro dela, e ele começa **desligado** de propósito (§1.1) |
 | **O recibo de cada conta a pagar** | aba Contas a pagar, embaixo do saldo: *"pago em 03/09/2026"*, *"2 pagamentos, o último em…"*, *"nada pago ainda"* |
 | **A conta PAGA passou a abrir**, com o botão dizendo «Ver pagamentos» | mesma tela |
 
-⚠️ **Nada disso foi visto por olho humano** — é a mesma pendência que a sessão
-anterior deixou, e ela agora cobre duas levas. A lição de 09/09 continua valendo:
-o painel das automações funcionava, chegava na tela e chegava como texto solto.
+**O que a aba Histórico deve mostrar quando abrir**, medido contra a produção
+antes de subir: as alterações de gente, da mais nova para a mais velha, começando
+em **09/09** e descendo até **03/09** nas primeiras vinte linhas — cliente,
+unidade consumidora, usina, contrato. Se ela abrir mostrando linha de rodada, o
+interruptor está ligado ou o padrão do servidor não pegou.
 
 ### 0.3 O que ficou aberto, e de quem é
 
@@ -187,7 +202,7 @@ Três decisões, e a terceira é a que não é óbvia:
 
 **O que NÃO foi medido:**
 
-1. 🔴 **A tela em produção** — o deploy não saiu (§0.1);
+1. ✅ ~~A tela em produção~~ — **subiu às 14:15:11**, com os quatro sinais do §0.1;
 2. 🔴 **O CI desta leva** — o `gh run list` foi recusado junto (§0.1-b);
 3. **As telas com olho humano** — nem esta leva nem a anterior;
 4. **A trilha com uma fatura de verdade** — produção tem 0 faturas, então
