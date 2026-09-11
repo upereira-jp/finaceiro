@@ -6,10 +6,25 @@
 | **O que é** | O **índice único** das pendências. Consolida e substitui os dois trackers datados que existiam soltos |
 | **Substitui e apaga** | `PENDENCIAS-2026-08-05.md` e `PROXIMOS-PASSOS-2026-08-09.md` — vencidos, e agora removidos do repo |
 | **NÃO substitui** | `QUESTOES.md` (registro datado, dono por entrada — regra 10) · `RETOMADA-2026-08-30.md` (onde tudo parou — a mais nova) · os `RESUMO-SESSAO-*` (memória datada). Estes continuam sendo a fonte; aqui é o **apontador** |
-| **Data** | 14/08/2026 · rev. **10/09/2026 (varredura completa)** · rev. 17/08 · rev. 19/08 · rev. 21/08 · rev. 27/08 · rev. 28/08 · rev. 08/09 · rev. **09/09/2026** · rev. **09/09/2026, noite** · rev. **09/09/2026, madrugada** · rev. **10/09/2026** |
+| **Data** | 14/08/2026 · rev. **10/09/2026 (varredura completa)** · rev. 17/08 · rev. 19/08 · rev. 21/08 · rev. 27/08 · rev. 28/08 · rev. 08/09 · rev. **09/09/2026** · rev. **09/09/2026, noite** · rev. **09/09/2026, madrugada** · rev. **10/09/2026** · rev. **11/09/2026 (conferência de produção)** |
 | ⚠️ **Leia primeiro** | Este arquivo ficou **congelado entre 28/08 e 08/09** enquanto a operação andava, e a `RETOMADA-2026-09-08` continuou mandando o leitor para cá como *"o índice único"*. O bloco **«O que mudou desde 28/08»**, logo abaixo do cabeçalho, é a correção — o corpo antigo fica intacto porque é registro datado, e reescrevê-lo falsificaria a história (mesma decisão do `PATCH-citacoes-2026-07-24`) |
 | **Estado da suíte** | Sem banco: `typecheck` + `documento` + `brcode` + `dominio` + `web` → **`EXIT=0`, 2.420 linhas `ok`** (28/08, madrugada), e desde 27/08 com as verificações de `tests/sicoob-http.ts` — hoje **63** — dentro do `test:dominio`. Fora da suíte, contra a Sicoob de verdade: `npm run ensaio-sicoob` → **6 de 6**. `test:repos` e `test:isolamento` **não rodam nesta VPS** (exigem PostgreSQL local) |
 | **Produção** | `financeiro.blackhaus.io` · **35 migrations no ar** (a 34 em 21/08, a **35 em 28/08**) · a **36 escrita e NÃO aplicada** · Pix estático e boleto importado no ar · central de ajuda em toda tela · **a conta unificada lida já vira cobrança** (migration 34) · o conector roda sozinho a cada 15 min pelo `financeiro-ciclo.timer`, e desde **28/08** a agenda de cobrança roda sozinha em três timers (`fila` 5 min · `consulta` e `certificado` diárias) |
+
+> ## 🆕 11/09/2026 — CONFERÊNCIA DE PRODUÇÃO, e ela reabre um item que estava fechado
+>
+> Sessão sem código: processo, bundle, CI, timers, journal, nginx e suíte medidos
+> por dentro. O retrato inteiro é `RETOMADA-2026-09-11.md`. Três linhas mudam aqui:
+>
+> | O que se sabia | O que foi medido em 11/09 |
+> |---|---|
+> | O aviso do `pg` (`client.query()` na conexão ocupada) foi **consertado** em 10/09, com `emSerie` e a guarda `tests/consulta-em-serie.ts` | 🔴 **Ele VOLTOU.** Três vezes em 10/09 — uma por processo, a última **21:48:39, já no processo do deploy das 21:46** — e nas três no segundo em que a tela «Contas a pagar» carrega (4 requisições simultâneas). Não há mais `Promise.all` nos três diretórios e os quatro handlers são seriais: **a sobra está entre requisições, não dentro de um handler**. É o **único item de implementador aberto**, e no `pg@9` o aviso vira exceção |
+> | O `url_divergente` (10/09) *"tem a primeira comparação de verdade no `saude-cobranca` das 06:37"* | ✅ **Rodou em 11/09 06:37 e não acusou divergência** (`aviso de pagamento ... ativo`, `=> 0 DE PE`, A1 com 339 dias). ⚠️ Com uma ressalva de desenho: `nivelDoAviso` devolve `ativo` **também** quando nenhum aviso vivo declarou URL — os dois caminhos saem iguais no journal. Separar exige `webhook-sicoob` em consulta (comando do dono) |
+> | A UC renumerada é *"decisão do dono, e é barata"* | 🟠 **E ela custa uma recusa a cada 15 minutos**: o `financeiro-ciclo` fecha em `parcial` com `recusados 1` desde 04/09 — permanente. Enquanto for permanente, ninguém nota o dia em que **outra** coisa for recusada |
+>
+> **Suíte sem banco:** `EXIT=0`, **3.044** verificações (eram 2.989 em 10/09). **CI**
+> verde nos cinco jobs no HEAD (`7eefa4c`). **Cabeçalhos de segurança do nginx:
+> ainda nenhum** — conferido por `curl`.
 
 > ## 🆕 10/09/2026, tarde — O ÚLTIMO ITEM DE CÓDIGO DA LISTA «SEM DESENVOLVEDOR»
 >
@@ -80,8 +95,12 @@
 >
 > **A suíte hoje:** `EXIT=0`, **2.746** verificações sem banco (eram 2.420 aqui).
 >
-> 📄 **A retomada corrente é `RETOMADA-2026-09-10.md`** — e nela os TRÊS itens que
-> impediam a operação de trabalhar sem desenvolvedor aparecem fechados.
+> 📄 **A retomada corrente é `RETOMADA-2026-09-11.md`** — conferência de produção,
+> sem código, e nela os dois fatos que este arquivo ainda não sabia: o aviso do
+> `pg` **voltou depois do conserto** (único item de implementador aberto) e o
+> `url_divergente` passou pela primeira comparação de verdade em 11/09 06:37.
+> A `RETOMADA-2026-09-10.md` continua correta como registro — e nela os TRÊS
+> itens que impediam a operação de trabalhar sem desenvolvedor aparecem fechados.
 >
 > 📄 **`PLANO-sem-desenvolvedor-2026-09-09.md`** responde, em uma tela, *o que falta
 > para a operação não precisar de desenvolvedor* — e a resposta é curta: **três
