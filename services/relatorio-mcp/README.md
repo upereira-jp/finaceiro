@@ -108,6 +108,7 @@ sql/02-espelho-cadastro.sql    views de cadastro
 sql/03-espelho-movimento.sql   views de movimento e operação
 sql/04-agregados-e-ficha.sql   agregados, cobertura_dados, fn_ficha_cliente
 sql/05-grants-e-conferencia.sql grants + conferência de catálogo (rode por último)
+sql/06-conferir.sql             conferência que DEVOLVE LINHAS (o painel engole `RAISE NOTICE`)
 ```
 
 Tudo é idempotente (`create or replace`, `if not exists`) e transacional —
