@@ -11,6 +11,21 @@ em `/opt/intreply-wt-reporting-mcp`). Mesmo desenho, outro banco, outro usuário
 outro ciclo de vida — **de propósito**: `pm2 restart all` de quem mantém o CRM
 não pode derrubar isto, e vice-versa.
 
+## Estado (21/09/2026)
+
+**No ar.** Schema `relatorio` aplicado no projeto do financeiro, role `relatorio_ai` com
+senha, serviço ativo em `127.0.0.1:8788` (systemd, `enable`d), vhost
+`relatorio-financeiro.blackhaus.io` com certificado Let's Encrypt e descoberta OAuth
+respondendo. Arranque conferido: 43 views legíveis, identidade `dono` → 1 tenant (G3 Solar).
+
+Falta só cadastrar o connector no claude.ai (Settings → Connectors → Add custom
+connector → `https://relatorio-financeiro.blackhaus.io/mcp`).
+
+O DDL foi aplicado por um servidor MCP **local** do Claude Code
+(`claude mcp add supabase-financeiro ... --project-ref=jblijwhayqphcrlmnmiw`), porque o
+conector Supabase do claude.ai só alcança a org BlackHaus e este banco está em outra
+conta. O PAT usado ali é credencial de conta inteira: use e revogue.
+
 ## 0. O que este serviço NÃO resolve (de propósito)
 
 - **Não escreve.** A role é read-only por privilégio *e* por
