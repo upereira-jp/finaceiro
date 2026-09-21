@@ -469,7 +469,10 @@ async function contar(p: Record<string, any>, id: Identity, escopo: string[]): P
   const started = Date.now();
   const t = tabelaOuErro(p.tabela);
   const tenant = p.tenant_id as string | undefined;
-  if (tenant && !escopo.includes(tenant)) throw new Error(`Tenant '${tenant}' fora do escopo desta identidade.`);
+  if (tenant && !escopo.includes(tenant)) {
+    audit({ evento: "negado_escopo_tenant", identidade: id.label, relatorio: "contar", tabela: t.publico, tenant });
+    throw new Error(`Tenant '${tenant}' fora do escopo desta identidade.`);
+  }
 
   const grupos: string[] = (p.agrupar_por ?? []).slice(0, 4);
   if (!grupos.length) throw new Error("agrupar_por e obrigatorio (ate 4 colunas). Para linhas cruas use 'consultar'.");
@@ -623,7 +626,14 @@ const TOOLS: Record<string, ToolDef> = {
     },
     pii: true,
     run: async (p, id, escopo) => {
-      if (!escopo.includes(p.tenant_id)) throw new Error(`Tenant '${p.tenant_id}' fora do escopo desta identidade.`);
+      // A negacao tambem entra na trilha, e aqui ela importa mais que o acerto:
+      // "quem tentou abrir ficha de tenant que nao e dele" e exatamente o que se
+      // procura depois de um incidente. Sem esta linha, so o sucesso deixava rastro.
+      if (!escopo.includes(p.tenant_id)) {
+        audit({ evento: "negado_escopo_PII", identidade: id.label, relatorio: "ficha_cliente",
+                tenant: p.tenant_id, cliente_id: p.cliente_id });
+        throw new Error(`Tenant '${p.tenant_id}' fora do escopo desta identidade.`);
+      }
       const res = await pool.query(`select relatorio.fn_ficha_cliente($1::uuid, $2::uuid) as ficha`, [p.tenant_id, p.cliente_id]);
       const ficha = res.rows[0]?.ficha ?? null;
       audit({ evento: "PII_ficha_cliente", identidade: id.label, tenant: p.tenant_id, cliente_id: p.cliente_id,
@@ -760,12 +770,25 @@ function instalarRotasProtegidas() {
       await transport.handleRequest(req, res, req.body);
       return;
     }
-    res.status(400).json({ jsonrpc: "2.0", error: { code: -32000, message: "Sessao invalida" }, id: null });
+    // SESSAO DESCONHECIDA -> 404, nao 400. A diferenca nao e cosmetica: pela
+    // spec do Streamable HTTP, 404 e o sinal de "essa sessao nao existe mais,
+    // abra outra", e o cliente re-inicializa sozinho. Com 400 ele trata como
+    // erro de protocolo e a integracao fica morta ate alguem reconectar na mao
+    // -- medido em 21/09: um `systemctl restart` derrubou o connector e toda
+    // chamada seguinte respondia "Sessao invalida" sem se recuperar. As sessoes
+    // vivem em memoria, entao TODO restart cai neste caminho.
+    if (sid) {
+      res.status(404).json({ jsonrpc: "2.0", error: { code: -32001, message: "Sessao expirada -- reinicialize" }, id: null });
+      return;
+    }
+    res.status(400).json({ jsonrpc: "2.0", error: { code: -32000, message: "Requisicao sem sessao e sem initialize" }, id: null });
   });
 
   const streamOrClose = async (req: Request, res: Response) => {
     const sid = req.headers["mcp-session-id"] as string | undefined;
-    if (!sid || !transports[sid]) { res.status(400).send("Sessao invalida"); return; }
+    // Mesmo motivo do POST: sessao inexistente e 404 (o cliente reabre), nao 400.
+    if (!sid) { res.status(400).send("Falta o cabecalho mcp-session-id"); return; }
+    if (!transports[sid]) { res.status(404).send("Sessao expirada -- reinicialize"); return; }
     const identity = res.locals.identity as Identity;
     if (sessionIdentity[sid] !== identity.token) { res.status(401).send("identidade nao confere com a sessao"); return; }
     await transports[sid].handleRequest(req, res);
