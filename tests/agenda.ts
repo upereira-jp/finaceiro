@@ -27,7 +27,7 @@
 import {
   POLITICA, intervaloSegundos, proximaTentativaEm, vencido,
   decidir, chaveDaConsultaAtiva, nivelDoCertificado, type Politica,
-  CADENCIA, atrasoAceitoSegundos, nivelDaRodada, pedeGente,
+  CADENCIA, atrasoAceitoSegundos, nivelDaRodada, pedeGente, rodadaFoiInterrompida,
   nivelDaEmissao, emissaoPedeGente, FOLGA_DA_EMISSAO_SEGUNDOS,
   type NivelDaEmissao,
   type NivelDaRodada, type RodadaVista,
@@ -963,7 +963,12 @@ chk('AG10d', podeReligarOAviso('nao_verificavel').pode === false,
   const T0 = new Date('2026-09-10T06:17:00Z');
   const mais = (d: Date, seg: number) => new Date(d.getTime() + seg * 1000);
   const rodada = (status: string, iniciado: Date): RodadaVista =>
-    ({ iniciado_em: iniciado, terminado_em: status === 'em_andamento' ? null : iniciado, status });
+    ({ iniciado_em: iniciado, terminado_em: status === 'em_andamento' ? null : iniciado, status,
+       interrompida: false });
+  /** A rodada que ABORTOU. O `status` e parametro porque o ponto todo e que ele
+   *  pode ser `parcial` — ver `RodadaVista.interrompida`. */
+  const abortada = (status: string, iniciado: Date): RodadaVista =>
+    ({ ...rodada(status, iniciado), interrompida: true });
 
   const nivel = (e: {
     temConector?: boolean; ultima?: RodadaVista | null; desde?: Date | null;
@@ -1054,9 +1059,51 @@ chk('AG10d', podeReligarOAviso('nao_verificavel').pode === false,
     chk('AG11h', nivel({ ultima: rodada('erro', T0), agora: mais(T0, 60) }) === 'terminou_mal'
               && nivel({ ultima: rodada('parcial', T0), agora: mais(T0, 60) }) === 'em_dia'
               && nivel({ ultima: rodada('inventado_amanha', T0), agora: mais(T0, 60) }) === 'em_dia',
-        '`erro` acusa, `parcial` NAO (a rodada concluiu e registrou o motivo de cada item, e o que '
-        + 'falhou tem lugar proprio para aparecer) e um status que o enum ganhe amanha cai no '
+        '`erro` acusa, `parcial` QUE CONCLUIU nao (a rodada registrou o motivo de cada item, e o '
+        + 'que falhou tem lugar proprio para aparecer) e um status que o enum ganhe amanha cai no '
         + 'silencio em vez de virar alarme falso');
+  }
+
+  // ------------------- AG11h-2 a rodada ABORTADA acusa, e `parcial` nao a esconde
+  {
+    /*
+     * O DEFEITO QUE ISTO FECHA FOI MEDIDO, e nao imaginado: em 21/09/2026 o
+     * `financeiro-ciclo` estava falhando a cada 15 minutos desde o dia 16, e o
+     * `financeiro-saude-cobranca` imprimia `ciclo_do_crm ... em_dia`. O motor
+     * grava `parcial` quando morre DEPOIS de commitar um lote
+     * (`src/crm/sincronizacao.ts:784`), e a versao anterior desta verificacao
+     * afirmava — com todas as letras — que `parcial` nunca acusa.
+     *
+     * A linha que separa os dois `parcial` e `detalhe.erro`, e por isso ela e
+     * verificacao propria: quem "consertar por simetria" um dia vai encontrar
+     * AG11h dizendo que `parcial` cala e AG11h-2 dizendo que aborto acusa, e as
+     * duas estao certas porque falam de coisas diferentes.
+     */
+    const casos: NivelDaRodada[] = [
+      nivel({ ultima: abortada('parcial', T0), agora: mais(T0, 60) }),
+      nivel({ ultima: abortada('erro', T0), agora: mais(T0, 60) }),
+      nivel({ ultima: abortada('ok', T0), agora: mais(T0, 60) }),
+    ];
+    chk('AG11h-2', casos.every((n) => n === 'terminou_mal'),
+        'rodada que ABORTOU acusa em qualquer status, `parcial` inclusive - foi exatamente o '
+        + '`parcial` de um ciclo morto que manteve a unidade de saude verde por cinco dias '
+        + `(saiu ${casos.join(', ')})`);
+  }
+
+  // --------------------- AG11o a regra que le o `detalhe`, e ela nao pode quebrar
+  {
+    const acusa = [
+      { erro: 'ciclo interrompido: DriverAdapterError: R11: rateio da usina soma 104.7800' },
+      { erro: 'x', recusas: [], commitado_por_lote: true },
+    ];
+    const cala: unknown[] = [
+      null, undefined, {}, { recusas: [{ codigo: '1' }] }, { erro: '' }, { erro: '   ' },
+      { erro: null }, { erro: 123 }, [{ erro: 'lista nao conta' }], 'texto solto', 7,
+    ];
+    chk('AG11o', acusa.every(rodadaFoiInterrompida) && !cala.some(rodadaFoiInterrompida),
+        '`detalhe.erro` com texto E aborto; ausente, vazio, so-espaco, de outro tipo, dentro de '
+        + 'lista ou `detalhe` que nem objeto e NAO sao - e nenhum deles levanta excecao, porque '
+        + 'alarme que quebra lendo dado estranho e pior que alarme nenhum');
   }
 
   // --------------------------------------------- AG11i a folga tem forma e piso

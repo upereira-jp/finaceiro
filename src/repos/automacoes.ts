@@ -47,7 +47,7 @@
 import { dbt } from '../db/tipado.ts';
 import { exigir } from '../db/contexto.ts';
 import { emSerie } from '../db/em-serie.ts';
-import { CADENCIA, nivelDaRodada, type NivelDaRodada } from '../dominio/agenda.ts';
+import { CADENCIA, nivelDaRodada, rodadaFoiInterrompida, type NivelDaRodada } from '../dominio/agenda.ts';
 
 /** As tres, e a chave e a mesma que a tela usa para escolher a frase. */
 export type ChaveDaAutomacao = keyof typeof CADENCIA;
@@ -128,7 +128,7 @@ export async function comoVaoAsAutomacoes(agora: Date = new Date()): Promise<Aut
       where: { tarefa },
       orderBy: [{ iniciado_em: 'desc' }],
       select: {
-        iniciado_em: true, terminado_em: true, status: true,
+        iniciado_em: true, terminado_em: true, status: true, detalhe: true,
         examinados: true, registrados: true, falhos: true, liquidados: true, divergentes: true,
       },
     });
@@ -139,7 +139,7 @@ export async function comoVaoAsAutomacoes(agora: Date = new Date()): Promise<Aut
     () => db.conector_execucao.findFirst({
       orderBy: [{ iniciado_em: 'desc' }],
       select: {
-        iniciado_em: true, terminado_em: true, status: true,
+        iniciado_em: true, terminado_em: true, status: true, detalhe: true,
         lidos: true, criados: true, atualizados: true, recusados: true,
       },
     }),
@@ -149,7 +149,12 @@ export async function comoVaoAsAutomacoes(agora: Date = new Date()): Promise<Aut
     chave: ChaveDaAutomacao,
     temConector: boolean,
     desde: Date | null,
-    linha: { iniciado_em: Date; terminado_em: Date | null; status: string } | null,
+    linha: {
+      iniciado_em: Date; terminado_em: Date | null; status: string;
+      /* `Json?` nos dois motores, entao `unknown` aqui e a regra que o le mora no
+       * dominio (`rodadaFoiInterrompida`) - nao neste arquivo. */
+      detalhe: unknown;
+    } | null,
     numeros: { examinados: number; feitos: number; falhos: number } | null,
   ): Automacao => {
     const intervalo = CADENCIA[chave];
@@ -160,6 +165,7 @@ export async function comoVaoAsAutomacoes(agora: Date = new Date()): Promise<Aut
         temConector,
         ultima: linha && {
           iniciado_em: linha.iniciado_em, terminado_em: linha.terminado_em, status: String(linha.status),
+          interrompida: rodadaFoiInterrompida(linha.detalhe),
         },
         desde,
         agora,

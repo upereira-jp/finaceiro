@@ -608,7 +608,48 @@ export type RodadaVista = {
    *  e nao uniao fechada porque quem le vem do banco, e um valor novo la nao
    *  pode quebrar a leitura aqui: ele cai no `default` e nao vira alarme falso. */
   status: string;
+  /**
+   * A RODADA MORREU NO MEIO — e o `status` SOZINHO NAO CONTA ISSO.
+   *
+   * Medido em producao em 21/09/2026, com o `financeiro-ciclo` falhando ha cinco
+   * dias e a unidade de saude imprimindo `ciclo_do_crm ... em_dia`. A causa esta
+   * em `src/crm/sincronizacao.ts:784`, e ela e deliberada:
+   *
+   *     const houveTrabalho = r.criados + r.atualizados + r.desativados > 0;
+   *     r.status = houveTrabalho ? 'parcial' : 'erro';
+   *
+   * Um ciclo que commitou um lote e DEPOIS morreu grava `parcial` — o mesmo
+   * valor de um ciclo que chegou ao fim recusando tres itens. Os dois casos sao
+   * opostos ("o sistema parou" contra "o banco recusou tres") e saiam com a
+   * mesma cor. O que os separa e este campo: os dois motores so escrevem
+   * `detalhe.erro` quando ABORTAM (`sincronizacao.ts:788` e `:841`,
+   * `cobranca/agenda.ts:208,229,385,399`), nunca numa rodada que concluiu.
+   *
+   * Derivado por quem le o banco, com `rodadaFoiInterrompida` — o dominio nao
+   * abre JSON de coluna, pela mesma razao de `status` ser texto aqui.
+   */
+  interrompida: boolean;
 };
+
+/**
+ * `detalhe.erro` preenchido quer dizer RODADA ABORTADA. Regra e nao condicao
+ * solta porque e regra de negocio, e regra sem teste e comentario (regra 8) —
+ * ver `AG11h-2` e `AG11o` em `tests/agenda.ts`.
+ *
+ * Recebe `unknown` de proposito: a coluna e `Json?` nos dois motores
+ * (`agenda_execucao.detalhe` e `conector_execucao.detalhe`), entao vem `null`,
+ * objeto, e em tese qualquer coisa. Nada disso pode virar excecao dentro de um
+ * alarme — um alarme que quebra ao ler dado estranho e pior que alarme nenhum.
+ *
+ * ⚠️ ARRAY NAO CONTA, mesmo tendo `.erro` possivel em teoria: `[]['erro']` e
+ * `undefined` e o `typeof` ja barraria, mas a exclusao e explicita porque um
+ * `detalhe` que virasse lista um dia nao deve estrear como alarme.
+ */
+export function rodadaFoiInterrompida(detalhe: unknown): boolean {
+  if (typeof detalhe !== 'object' || detalhe === null || Array.isArray(detalhe)) return false;
+  const erro = (detalhe as Record<string, unknown>).erro;
+  return typeof erro === 'string' && erro.trim() !== '';
+}
 
 /**
  * QUANTO ATRASO E ATRASO, e o numero nao e gosto: ele e derivado da cadencia.
@@ -685,6 +726,11 @@ export const CADENCIA = {
  *   voltou hoje tem duas noticias, e "parou de rodar" e a maior das duas: a
  *   falha de uma rodada se resolve na proxima, e a proxima nao veio.
  *
+ * `terminou_mal` COBRE DOIS CASOS desde 21/09/2026, e o segundo e o que faltava:
+ * a rodada que gravou `status = 'erro'`, e a rodada que ABORTOU tendo gravado
+ * `parcial` porque ja commitara um lote. Ver `RodadaVista.interrompida` — o
+ * defeito que isso fecha ficou cinco dias no ar sem mudar a cor de nada.
+ *
  * `desde` E A DATA A PARTIR DA QUAL FAZ SENTIDO ESPERAR RODADA - o cadastro do
  * conector, quando o banco a guarda. Sem ela, ligar a cobranca as 09h faria a
  * tela acusar `nunca_rodou` as 09h01 sobre uma automacao que ainda nao teve a
@@ -721,12 +767,16 @@ export function nivelDaRodada(e: {
   }
 
   if (desdeAUltima > folgaMs) return 'atrasada';
-  if (e.ultima.status === 'erro') return 'terminou_mal';
-  /* `parcial` NAO e alarme desta secao, e a distincao vem do motor: parcial quer
-   * dizer que a rodada CONCLUIU e registrou o motivo de cada item que nao passou
-   * - o que falhou tem lugar proprio para aparecer (o erro por fatura), e
-   * chamar a rodada de quebrada esconderia a diferenca entre "o sistema parou" e
-   * "o banco recusou tres boletos". */
+  /* A RODADA ABORTADA ACUSA, tenha ela gravado `erro` ou `parcial`. O `status`
+   * sozinho nao separa os dois: o motor escreve `parcial` quando morreu DEPOIS
+   * de commitar um lote (`sincronizacao.ts:784`), e ai ele e igual ao `parcial`
+   * de quem chegou ao fim. Ver `RodadaVista.interrompida`. */
+  if (e.ultima.interrompida || e.ultima.status === 'erro') return 'terminou_mal';
+  /* `parcial` SEM interrupcao NAO e alarme desta secao, e a distincao vem do
+   * motor: parcial assim quer dizer que a rodada CONCLUIU e registrou o motivo
+   * de cada item que nao passou - o que falhou tem lugar proprio para aparecer
+   * (o erro por fatura), e chamar a rodada de quebrada esconderia a diferenca
+   * entre "o sistema parou" e "o banco recusou tres boletos". */
   return 'em_dia';
 }
 
