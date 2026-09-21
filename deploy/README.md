@@ -18,11 +18,18 @@ Estes arquivos são a fonte; `/etc` é a cópia.
 | `financeiro-agenda-consulta.timer` | dispara a consulta **uma vez por dia**, 06:17 UTC |
 | `financeiro-saude-cobranca.service` | confere se o caminho do dinheiro está de pé — o A1 **e** o aviso de pagamento. **Não escreve nada**, e é a única que **fica vermelha** |
 | `financeiro-saude-cobranca.timer` | dispara a conferência **uma vez por dia**, 06:37 UTC |
+| `financeiro-relatorio-mcp.service` | camada de **leitura para IA** (MCP + REST) em `127.0.0.1:8788`. Serviço contínuo, não é timer — código e SQL em `services/relatorio-mcp/` |
 
 As três da agenda entraram em **28/08/2026**. O motor delas existe desde 30/07
 (`Q-AGENDA-01`) e até essa data **nada o chamava** — o `PRD` §3 deixou a escolha
 do host em aberto, e pela regra 10 quem implementa não escolhe por quem decide. O
 dono escolheu: o host é este systemd.
+
+O `financeiro-relatorio-mcp.service` entrou em **21/09/2026**. É a única unidade
+daqui que **não** é disparada por timer: ela fica no ar. Também é a única com
+`EnvironmentFile` próprio (`services/relatorio-mcp/.env`, fora do git) — a
+credencial dela é a role `relatorio_ai`, que só lê o schema `relatorio` e não é a
+role do app. Instalar e operar: `services/relatorio-mcp/README.md`.
 
 O `financeiro.service` (API + SPA, porta 3000) ainda não foi trazido para cá — ele
 está no ar desde 28/07 e mexer nele é outro assunto. O texto dele está em

@@ -1,0 +1,46 @@
+[Unit]
+# Camada de relatorio do Financeiro para IA (MCP + REST).
+#
+# NAO E PM2, pelo mesmo motivo do financeiro.service: o CRM ao lado roda
+# inteiro no PM2 como root, e um "pm2 restart all" de quem mantem o CRM nao
+# pode derrubar isto. O conector do CRM (intreply-reporting-mcp) e que vive la;
+# este vive aqui, com o usuario e o ciclo de vida do financeiro.
+Description=Financeiro G3 - relatorio para IA (MCP)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=financeiro
+Group=financeiro
+WorkingDirectory=/opt/financeiro/app/services/relatorio-mcp
+
+# Node 22 proprio do financeiro, caminho absoluto, sem npm no meio.
+ExecStart=/opt/financeiro/node/bin/node dist/index.js
+
+EnvironmentFile=/opt/financeiro/app/services/relatorio-mcp/.env
+
+# O arranque CONFERE a role antes de escutar (sem superuser, sem bypassrls,
+# sem escrita, nada fora do schema relatorio) e recusa subir se algo mudou.
+# Banco fora do ar = processo sai com 1 e o systemd tenta de novo: preferimos
+# nao atender a atender sem saber com que credencial conectamos.
+Restart=always
+RestartSec=10
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+# O store do OAuth precisa ser gravavel (clients e tokens sobrevivem a restart).
+ReadWritePaths=/opt/financeiro/app/services/relatorio-mcp
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=financeiro-relatorio-mcp
+
+[Install]
+WantedBy=multi-user.target
