@@ -1194,6 +1194,20 @@ virou exceção declarada, ao lado da irmã que já estava lá.
 
 **Enquanto espera:** fluxo de caixa derivado (liquidações × pagamentos), paginação no servidor e a migração das listagens de leitura para o pool de relatório não dependem de nenhuma das quatro — `REVISAO-dois-funis-2026-09-22.md` §6.
 
+### O planejamento do resto da Empresa (mesma data, à noite)
+
+O dono pediu *"um planejamento do que mais deve e pode ser adicionado em empresa como: cartões de crédito e gastos; funcionários e salários"*. Está em **`PLANO-financeiro-empresa-2026-09-22.md`**: quatro ondas (o chão: plano de contas, bancos, caixa, recorrentes, pendências da empresa · gastos: fornecedores, compras, **cartões** · pessoas: **funcionários e folha importada** · controle: conciliação, DRE, projeção, aprovação, impostos, pacote do contador), com modelo de dados, telas, tamanho e dependências. **Ele PROPÕE a ordem que a `Q-CORPORATIVO-01` deixou em aberto** — inverte cartão e folha com a conciliação, porque a conciliação depende de um insumo externo que ainda não veio — e abre estas, todas com o dono ou o contador:
+
+| ID | Nível | Pergunta |
+|---|:-:|---|
+| `Q-PLANO-CONTAS-01` | 🟢 | aprovar ou substituir o plano de contas inicial (§7 do plano) |
+| `Q-CARTOES-01` | 🟢 | lista dos cartões (banco, final, fechamento, vencimento, conta de débito, portador) e um extrato real em CSV/OFX |
+| `Q-FOLHA-01` | 🟡 | regime das pessoas (CLT/PJ/pró-labore), quem calcula a folha, formato da planilha do contador, datas de pagamento, benefícios |
+| `Q-FOLHA-RBAC-01` | 🟡 | quem vê salário nome a nome — só `admin`, ou também o analista |
+| `Q-ALCADA-01` | 🟢 | acima de que valor a conta a pagar exige aprovação do dono; conta nascida do split exige? |
+| `Q-CONTADOR-FORMATO-01` | 🟢 | o que o contador quer receber todo mês, e em que formato |
+| `Q-ANEXO-01` | técnica | comprovantes em Supabase Storage e não em `bytea` — decisão do implementador, vira ADR na onda 2 |
+
 ---
 
 ## 3. F0 — o que falta para fechar
