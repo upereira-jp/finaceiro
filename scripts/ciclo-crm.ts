@@ -35,7 +35,7 @@
 import { iniciar, encerrarApp } from '../src/app.ts';
 import { crmDoAmbiente, conferirRoleDeLeitura } from '../src/crm/conexao.ts';
 import { criarLeitorCrm } from '../src/crm/leitura.ts';
-import { executarCiclo, TAMANHO_DO_LOTE, type AbrirLote } from '../src/crm/sincronizacao.ts';
+import { executarCiclo, CicloJaEmAndamento, TAMANHO_DO_LOTE, type AbrirLote } from '../src/crm/sincronizacao.ts';
 
 /** Sai da transacao do lote por excecao: e o unico ROLLBACK que o Prisma expoe. */
 class RollbackDoEnsaio extends Error {
@@ -162,6 +162,14 @@ async function main(): Promise<void> {
   try {
     resultado = await executarCiclo(leitor, ensaio ? ensaioLote : valendoLote);
   } catch (e) {
+    /* Dois disparadores desde 22/09/2026 (o timer e o `escuta-crm`): encontrar o
+     * outro rodando NAO e falha - o banco recusou o segundo pelo EXCLUDE, e o
+     * primeiro esta fazendo o trabalho. Sai com 75 (EX_TEMPFAIL): o ouvinte tenta
+     * de novo, e a unidade do timer declara 75 como sucesso. */
+    if (e instanceof CicloJaEmAndamento) {
+      console.log('\nOutro ciclo deste conector ja esta em andamento. Nada a fazer agora.');
+      await poolCrm.end(); await encerrarApp(); process.exit(75);
+    }
     console.error('\nCICLO FALHOU:', e);
     console.error('\nO registro em conector_execucao foi fechado com o que ja havia sido');
     console.error('commitado por lote (SPEC-002 §7). O proximo ciclo e idempotente e recompoe.');

@@ -12,6 +12,7 @@ Estes arquivos são a fonte; `/etc` é a cópia.
 |---|---|
 | `financeiro-ciclo.service` | roda **uma** passada do conector com o CRM |
 | `financeiro-ciclo.timer` | dispara o serviço acima a cada 15 minutos |
+| `financeiro-escuta-crm.service` | **ouvinte do CRM** (desde 22/09/2026): `LISTEN financeiro_crm` permanente e, a cada aviso do gatilho do CRM, a mesma passada do conector. O timer acima fica como rede. `KillMode=mixed` é obrigatório — ver `ADR-0008` |
 | `financeiro-agenda-fila.service` | roda **uma** passada da fila de emissão de boleto (retentativa) |
 | `financeiro-agenda-fila.timer` | dispara a fila a cada **5 minutos**, em `:02/5` |
 | `financeiro-agenda-consulta.service` | roda **uma** consulta ativa da situação dos boletos |
@@ -50,6 +51,7 @@ sudo install -m 644 /opt/financeiro/app/deploy/financeiro-*.service \
                     /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now financeiro-ciclo.timer
+sudo systemctl enable --now financeiro-escuta-crm.service   # ADR-0008
 sudo systemctl enable --now financeiro-agenda-fila.timer
 sudo systemctl enable --now financeiro-agenda-consulta.timer
 sudo systemctl enable --now financeiro-saude-cobranca.timer

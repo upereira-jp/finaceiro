@@ -43,6 +43,12 @@ EnvironmentFile=/etc/financeiro.env
 # O ciclo leva ~10s medidos. 5 minutos e folga para o CRM lento, nao expectativa.
 TimeoutStartSec=300
 
+# 75 = outro ciclo ja estava rodando (CicloJaEmAndamento). Desde 22/09/2026 ha
+# dois disparadores - este timer e o financeiro-escuta-crm -, e o EXCLUDE recusar
+# o segundo e o desenho funcionando, nao falha. Sem esta linha a unidade ficaria
+# `failed` a cada encontro, e `failed` e o que se aprende a ignorar.
+SuccessExitStatus=75
+
 # O MESMO endurecimento do servico principal. Ele nao escreve arquivo nenhum -
 # so banco -, entao `ProtectSystem=strict` nao o incomoda.
 NoNewPrivileges=true

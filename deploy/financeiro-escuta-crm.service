@@ -1,0 +1,51 @@
+[Unit]
+# O OUVINTE DO CRM - a comunicacao com o CRM em tempo real. ADR-0008.
+#
+# Mantem um LISTEN no banco do CRM e, a cada aviso do gatilho de la, roda o MESMO
+# ciclo do financeiro-ciclo.service, com os mesmos argumentos. O timer de 15 min
+# continua como rede: aviso emitido com este servico fora do ar se perde.
+Description=Financeiro G3 - ouvinte do CRM (ciclo em tempo real)
+Documentation=https://github.com/upereira-jp/finaceiro
+After=network-online.target financeiro.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=financeiro
+Group=financeiro
+WorkingDirectory=/opt/financeiro/app
+
+# Os mesmos --auth-user e --tenant do financeiro-ciclo.service - e o teste
+# tests/escuta-crm.ts confere que continuam iguais.
+ExecStart=/opt/financeiro/node/bin/node --experimental-strip-types scripts/escuta-crm.ts \
+  --auth-user 35f4dda9-5265-434e-8097-5d41c384a9ba \
+  --tenant eac198c0-b0c1-4b13-9b4d-6ac1a6eb011d
+
+EnvironmentFile=/etc/financeiro.env
+Restart=always
+RestartSec=5
+
+# KillMode=mixed E OBRIGATORIO, e o motivo e dinheiro parado: com o default
+# (control-group) o SIGTERM mataria o ciclo filho no meio, a linha de
+# conector_execucao ficaria em_andamento e o EXCLUDE travaria o conector
+# (Q-CICLO-ORFAO-01). Com mixed, so o processo principal recebe o SIGTERM, espera
+# o filho terminar, e o SIGKILL no grupo so vem depois do TimeoutStopSec - que e
+# o mesmo teto do TimeoutStartSec do ciclo.
+KillMode=mixed
+TimeoutStopSec=300
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=financeiro-escuta-crm
+
+[Install]
+WantedBy=multi-user.target
