@@ -32,6 +32,7 @@ import * as boleto from '../repos/boleto.ts';
 import * as liquidacao from '../repos/liquidacao.ts';
 import * as split from '../repos/split.ts';
 import * as contaPagar from '../repos/conta_pagar.ts';
+import * as contaReceber from '../repos/conta_receber.ts';
 import * as documento from '../repos/documento.ts';
 import * as registro from '../repos/registro-unificado.ts';
 import * as faturaDoRegistro from '../repos/fatura-do-registro.ts';
@@ -1534,6 +1535,24 @@ export const ROTAS: Rota[] = [
     metodo: 'GET', padrao: '/comissoes',
     handler: (req, app) => emRelatorio(app, req, async () => ok(await split.comissoesPorOriginador(
       req.query.get('competencia') ? data(req.query.get('competencia'), 'competencia') : undefined))),
+  },
+  // ------------------------------------ contas a receber (PRD 4.4 · dois funis)
+  {
+    /*
+     * A PONTE ENTRE OS DOIS FUNIS (22/09/2026). A vertente da empresa pergunta
+     * «quanto vai entrar, e quanto ja venceu?» sobre a carteira INTEIRA, por
+     * vencimento - e ate esta data so havia resposta por mes
+     * (`GET /faturamento/:competencia`, `GET /carteira`). Uma fatura de maio que
+     * nunca foi paga continua sendo dinheiro parado em setembro, e para ve-la era
+     * preciso lembrar de voltar o seletor.
+     *
+     * SO LEITURA, pelo caminho de RELATORIO: e uma varredura da carteira e nao
+     * disputa slot com a emissao. Cobrar (emitir, boleto, baixa) continua sendo
+     * ato do Rateio, nas rotas de `/faturas/:id/...` - um segundo caminho de baixa
+     * aqui seria a mesma regra em dois lugares.
+     */
+    metodo: 'GET', padrao: '/contas-a-receber',
+    handler: (req, app) => emRelatorio(app, req, async () => ok(await contaReceber.contasAReceber())),
   },
   // ------------------------------------ contas a pagar (PRD 4.4 · Q-PAGAMENTO-01)
   /*

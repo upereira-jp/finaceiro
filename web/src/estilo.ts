@@ -91,7 +91,7 @@ export const ESTILO = `
      zonas de peso - a faixa escura, que diz ONDE VOCE ESTA, e o creme, onde o
      trabalho acontece. */
   .barra {
-    display: flex; align-items: center; gap: 14px;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap; row-gap: 6px;
     padding: 9px 20px; background: var(--topo); color: var(--topo-texto);
     border-bottom: 1px solid var(--topo-veu);
   }
@@ -121,6 +121,24 @@ export const ESTILO = `
     font-weight: 680; font-size: 15.5px; letter-spacing: -0.02em;
   }
   .marca-app .logotipo { flex: none; }
+  /* O SELETOR DE FUNIL (22/09/2026). Duas pilulas ao lado da marca: «Rateio» e
+     «Empresa». A ativa e o Orange SOLIDO com o texto no Navy — o inverso da aba
+     ativa da barra de baixo (Orange sobre Navy), de proposito: sao dois niveis, e
+     o de cima precisa pesar mais. O contraste e o mesmo par de tokens da T6c,
+     5,93:1, que vale nos dois sentidos. Nenhum token novo: o veu do topo e a
+     calha, o acento e a pilula. */
+  .funis {
+    display: inline-flex; align-items: center; gap: 2px; padding: 3px; flex: none;
+    background: var(--topo-veu); border-radius: var(--raio-pequeno);
+  }
+  .funis a {
+    display: inline-flex; align-items: center; padding: 4px 13px; white-space: nowrap;
+    text-decoration: none; color: var(--topo-fraco); font-size: 13px; font-weight: 600;
+    letter-spacing: .01em; border-radius: var(--raio-pequeno);
+    transition: color .16s ease, background-color .16s ease;
+  }
+  .funis a:hover { color: var(--topo-texto); background: var(--topo-veu-forte); }
+  .funis a.ativo, .funis a.ativo:hover { background: var(--acento); color: var(--topo); }
   .sessao { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 13px; }
   .sessao .campo-caixa select { width: auto; max-width: 260px; padding: 5px 30px 5px 10px; }
   /* O nome de quem esta logado sai em tela estreita: o icone do menu continua
@@ -157,8 +175,9 @@ export const ESTILO = `
     background: var(--topo-ativo);
   }
   .barra-nav a.ativo .ic { color: var(--acento); }
-  /* A divisoria entre cadastro e dinheiro. A fronteira e dado ('grupo', em
-     navegacao.ts) e ate 29/07 era invisivel: doze abas iguais em fila. */
+  /* A divisoria onde o grupo muda dentro do funil (cadastro | dinheiro no Rateio,
+     dinheiro | apoio na Empresa). A fronteira e dado ('grupo', em navegacao.ts) e
+     ate 29/07 era invisivel: doze abas iguais em fila. */
   .barra-nav .divisor { width: 1px; background: var(--topo-veu-forte); margin: 9px 9px; flex: none; }
 
   /* -------------------------------------------------- o menu suspenso

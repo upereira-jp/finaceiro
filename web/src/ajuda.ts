@@ -984,6 +984,58 @@ export const TOPICOS: readonly Topico[] = [
              'quitar o repasse', 'o que a empresa deve', 'saida de dinheiro', 'pagar'],
   },
   {
+    /*
+     * OS DOIS FUNIS (22/09/2026). E a primeira pergunta de quem abriu o sistema
+     * depois da reorganizacao e nao achou a aba onde ela estava: a barra de baixo
+     * mostra so as telas do lado escolhido no alto.
+     */
+    id: 'dois-funis',
+    pergunta: 'O que são «Rateio» e «Empresa» no alto da tela?',
+    resposta: 'São as duas metades do sistema, e a barra de abas muda conforme a metade escolhida. '
+      + 'Rateio é o dinheiro que entra dos clientes: usinas, unidades, contratos, a conta lida, a '
+      + 'fatura, o boleto e a cobrança. Empresa é o caixa da G3: o que há para receber, o que há '
+      + 'para pagar, o banco e o histórico. Nenhuma aba sumiu — ela está do outro lado.',
+    passos: [
+      'Clique em «Rateio» ou «Empresa», ao lado do nome do sistema, no alto.',
+      'A barra de abas logo abaixo passa a mostrar as telas daquela metade.',
+      'Se não achar uma aba, troque de metade: Contas a pagar, Conector Sicoob e Histórico ficam '
+        + 'na Empresa; todo o cadastro e a cobrança ficam no Rateio.',
+    ],
+    caminhos: [ver('/pendencias', 'Abrir o Rateio'), ver('/contas-a-receber', 'Abrir a Empresa')],
+    camada: null,
+    telas: [],
+    comum: true,
+    /* Sem a palavra «trocar» de proposito: «trocar de empresa» e o topico do seletor
+       de tenant (`trocar-empresa`), e duas palavras casadas bastam para a busca. */
+    termos: ['financeiro rateio', 'financeiro empresa', 'aba rateio', 'aba empresa', 'as duas metades',
+             'o outro lado', 'onde foi a aba', 'sumiu a aba', 'nao acho a aba', 'barra mudou',
+             'funil', 'funis'],
+  },
+  {
+    id: 'contas-a-receber',
+    pergunta: 'Onde vejo quem está devendo, e quanto?',
+    resposta: 'Na aba Contas a receber, na metade Empresa. Ela lista todo título emitido e ainda '
+      + 'não pago, de qualquer mês, com os dias de atraso e se o boleto chegou ao banco. Cobrar '
+      + '— emitir, pedir o boleto, dar baixa — continua sendo na aba Emissão e cobrança.',
+    porque: 'Emissão e cobrança responde por MÊS, e uma fatura antiga some atrás do mês corrente. '
+      + 'Contas a receber olha a carteira inteira por vencimento: é onde se vê o que venceu há 90 '
+      + 'dias sem ninguém precisar lembrar de voltar o seletor.',
+    passos: [
+      'Abra a metade Empresa, no alto da tela.',
+      'Abra a aba Contas a receber.',
+      'Use «Por tempo de atraso» para ver o que venceu e há quanto tempo, e «Quem mais deve» '
+        + 'para ver por cliente.',
+      'Para agir sobre uma fatura, use «Ver na emissão»: ele abre Emissão e cobrança já no mês '
+        + 'certo.',
+    ],
+    caminhos: [ir('/contas-a-receber', 'Abrir Contas a receber'), ver('/faturas', 'Cobrar: Emissão e cobrança')],
+    camada: null,
+    telas: ['/contas-a-receber', '/faturas'],
+    termos: ['contas a receber', 'a receber', 'quem deve', 'quem esta devendo', 'inadimplencia',
+             'inadimplente', 'atrasados', 'vencidas', 'devedores', 'quanto falta entrar',
+             'titulos em aberto', 'carteira em aberto'],
+  },
+  {
     id: 'despesa-avulsa',
     pergunta: 'Como lanço uma despesa da empresa?',
     resposta: 'Na aba Contas a pagar tem um cadastro de conta avulsa, para o que não nasce de uma '
@@ -1365,6 +1417,12 @@ export const PALAVRAS_DA_TELA: Record<string, readonly string[]> = {
   '/documento': ['fatura unificada', 'folha', 'documento do cliente', 'imprimir', 'logotipo',
                  'papel do cliente', 'faturar', 'faturamento', 'gerar o mes', 'fechar o mes',
                  'gerar cobranca'],
+  /* A PONTE ENTRE OS DOIS FUNIS (22/09/2026): a carteira inteira em aberto, por
+     vencimento. E para ca que vai quem pergunta «quem esta devendo» - antes a
+     pergunta caia em Emissao e cobranca, que responde por MES. */
+  '/contas-a-receber': ['contas a receber', 'a receber', 'quem deve', 'quem esta devendo', 'devedores',
+                        'inadimplencia', 'inadimplente', 'atrasados', 'em atraso', 'vencidas', 'vencido',
+                        'quanto falta entrar', 'caixa a entrar', 'o que vai entrar'],
   '/contas-a-pagar': ['contas a pagar', 'a pagar', 'despesa', 'o que a empresa deve', 'pagar'],
   /* «historico» SAIU DAQUI EM 10/09/2026, e a troca e o proprio ponto: ate essa
      data a palavra caia em Relatorios por falta de destino melhor. Agora ha uma

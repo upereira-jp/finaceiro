@@ -35,7 +35,7 @@ import { useAcao, useDados } from '../dados.ts';
 import {
   Pagina, Aviso, Tabela, Marca, rotulo, linha, useOrdenacao, ordenar, ThOrd, Kpi,
   Icone, CampoData, Carregando, AjudaDoMes, DetalheTecnico } from '../ui.tsx';
-import { competenciaISO, emReais, paraCentavos } from '../dinheiro.ts';
+import { competenciaISO, emReais, paraCentavos, mesDaQuery } from '../dinheiro.ts';
 import { paraCsv, reaisParaPlanilha, nomeDoArquivo } from '../csv.ts';
 import { baixarCsv } from '../baixar.ts';
 import { lerBase64, mimeDo, reenviavel, naMensagem } from '../arquivo.ts';
@@ -52,7 +52,10 @@ import type { EmissaoTravadaNaTela } from '../emissao-travada.ts';
 import { FaixaDoPasso } from '../roteiro-corpo.tsx';
 
 export function TelaFaturas() {
-  const [mes, setMes] = useState(() => new Date().toISOString().slice(0, 7));
+  /* O MES VEM DO ENDERECO QUANDO ALGUEM O PEDIU (`?mes=2026-08`) — e o que faz
+   * «Ver na emissao», em Contas a receber, abrir ESTA tela ja no mes da fatura,
+   * e nao no mes corrente. Sem pedido, o mes corrente, como sempre. */
+  const [mes, setMes] = useState(() => mesDaQuery(location.search) ?? new Date().toISOString().slice(0, 7));
   const [aberta, setAberta] = useState<string | null>(null);
   const acao = useAcao();
   const { ordem, alternar } = useOrdenacao('vencimento');

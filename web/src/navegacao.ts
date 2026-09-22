@@ -1,54 +1,80 @@
-// A NAVEGAÇÃO COMO DADO PURO: rota, título, ícone e grupo. Sem JSX.
+// A NAVEGAÇÃO COMO DADO PURO: funil, rota, título, ícone e grupo. Sem JSX.
 //
-// POR QUE ELA SAIU DO `app.tsx` EM 30/07/2026. A lista de telas carregava três
-// decisões documentadas — a ORDEM (que é a ordem das camadas da prontidão,
-// depois a ordem dos atos do dinheiro), o RÓTULO e agora o ÍCONE — e vivia dentro
-// de um `.tsx`, junto do `render`. O runner do `web/` não lê JSX (é
-// `node --experimental-strip-types`), então nada ali podia ser verificado: era o
-// mesmo motivo de `contrato-regras.ts` e `cobranca-regras.ts` existirem fora das
-// telas. Regra 8.
+// ============================================================================
+// DOIS FUNIS DESDE 22/09/2026, e a divisão é a do NEGÓCIO, não a do código
 //
-// O `render` FICOU no `app.tsx`, e é a divisão certa: aqui está o que a
-// navegação É, lá está o que ela MOSTRA. Quem acrescenta uma tela acrescenta uma
-// linha aqui e um caso lá, e o `tsc` recusa se esquecer o segundo (`Record`
-// exaustivo em `app.tsx`) — não é disciplina de quem escreve, é o compilador.
+// Até essa data a barra tinha doze abas em fila, separadas por uma divisória
+// fina entre «cadastro» e «dinheiro». Era a ordem do TRABALHO de um mês — e
+// estava certa para quem já sabia o caminho —, mas misturava duas perguntas que
+// um analista financeiro faz em momentos diferentes:
 //
-// OS RÓTULOS FORAM REVISTOS EM 17/08/2026, a pedido do dono, e o critério foi um
-// só: **o rótulo descreve a tela, não a intenção de quem a escreveu.** Cinco
-// mudaram — `Unidades consumidoras`, `Donos de usina`, `Faturamento`,
-// `Conector Sicoob` e `Fatura unificada` —, cada um com o motivo na própria
-// linha. No mesmo dia entrou um SEXTO, e ele corrige o quinto: `Faturas` virou
-// `Emissão e cobrança` porque o rótulo novo da vizinha a deixou começando pela
-// mesma palavra. O motivo está na linha de `/faturas`.
+//   «o que os clientes devem e por quê?»      usinas, unidades, contratos, a conta
+//                                              lida, a fatura, o boleto, a cobrança;
+//   «como está o caixa da empresa?»            o que há para receber, o que há para
+//                                              pagar, o banco, quem mexeu no quê.
 //
-// Três coisas NÃO mudaram junto, e as três de propósito:
+// A primeira é o **Financeiro Rateio**; a segunda, o **Financeiro Empresa**. A
+// receita nasce no primeiro e vira caixa no segundo — «Contas a receber» é a
+// ponte, e é a única tela que lê o funil 1 para servir o funil 2.
 //
-//   as ROTAS          `/carteira`, `/cobranca` e `/documento` continuam iguais.
-//                     `/documento#cadastro` está citado na `PENDENCIAS` e é o
-//                     único caminho de tela para o emissor;
-//   os NOMES DE       `carteira.tsx` (removido em 10/09 — ver a nota no lugar
-//   DOMÍNIO           dela, abaixo), `cobranca.tsx`, `documento.tsx`, os
-//                     repositórios e as tabelas. Rótulo é o que a pessoa lê;
-//                     domínio é o que o sistema é. Foi assim que "Prontidão"
-//                     virou "Pendências" em 30/07 sem mover uma linha de
-//                     `repos/prontidao.ts`;
-//   "Pendências"      decisão registrada do dono, e não se desfaz sozinha.
+// O QUE ISSO MUDA NA TELA: o topo ganhou um seletor de funil ao lado da marca, e
+// a barra de baixo mostra só as telas do funil escolhido. Nove abas viraram
+// nove, e quatro viraram quatro — ninguém mais lê treze.
 //
-// A ORDEM NÃO É ALFABÉTICA NEM DE IMPORTÂNCIA, e isso é deliberado: quem abre o
-// sistema hoje precisa fechar quatro camadas de cadastro para a primeira fatura
-// existir, e a barra é a ordem em que o trabalho destrava o próximo passo.
-// Depois do cadastro vem o dinheiro, na ordem dos ATOS: compor (Carteira),
-// emitir e cobrar (Faturas), configurar o banco (Cobrança), o documento que o
-// cliente recebe (Documento), conferir (Relatórios).
+// O QUE NÃO MUDOU, de propósito: as ROTAS (todo favorito e todo link da ajuda
+// continuam valendo), os RÓTULOS (o roteiro do mês exige que o nome no botão
+// seja letra por letra o da barra — `RM13`) e os NOMES DE DOMÍNIO. Um caminho
+// desconhecido continua caindo em Pendências.
+//
+// ============================================================================
+// POR QUE ESTE ARQUIVO É DADO E NÃO JSX (30/07/2026)
+//
+// O runner do `web/` é `node --experimental-strip-types`, que não lê JSX. O que
+// precisa de teste sai do `.tsx` — regra 8. O `render` ficou no `app.tsx`, e o
+// `Record` exaustivo de lá recusa compilar uma tela sem componente.
+//
+// A ORDEM DENTRO DE CADA FUNIL NÃO É ALFABÉTICA, e isso é deliberado. No Rateio,
+// primeiro o cadastro na ordem em que uma camada destrava a próxima, depois o
+// dinheiro na ordem dos ATOS do mês: ler a conta e gerar a cobrança (Fatura
+// unificada) → emitir, boleto e baixa (Emissão e cobrança) → conferir
+// (Relatórios). Na Empresa: o que entra, o que sai, o banco, o histórico.
 
 import type { NomeDeIcone } from './iconografia.ts';
 
-/** Os dois grupos existem para a barra poder SEPARAR cadastro de dinheiro com
- *  uma divisória fina em vez de doze abas iguais em fila. É a mesma fronteira
- *  que o comentário acima descreve — só passou a ser visível. */
-export type GrupoDeTela = 'cadastro' | 'dinheiro';
+export type ChaveDoFunil = 'rateio' | 'empresa';
+
+export type Funil = {
+  chave: ChaveDoFunil;
+  /** O que a barra mostra — curto, porque fica ao lado da marca «Financeiro G3». */
+  rotulo: string;
+  /** O nome inteiro, para leitor de tela, título de página e ajuda. */
+  nome: string;
+  /** Uma frase: o que este funil controla. */
+  descricao: string;
+};
+
+export const FUNIS: readonly Funil[] = [
+  {
+    chave: 'rateio', rotulo: 'Rateio', nome: 'Financeiro Rateio',
+    descricao: 'O dinheiro que entra dos clientes: usinas, unidades, contratos, a conta lida, '
+             + 'a fatura, o boleto e a cobrança.',
+  },
+  {
+    chave: 'empresa', rotulo: 'Empresa', nome: 'Financeiro Empresa',
+    descricao: 'O caixa da empresa: o que há para receber, o que há para pagar, o banco e o '
+             + 'histórico do que foi feito.',
+  },
+] as const;
+
+/**
+ * O grupo separa, DENTRO de um funil, blocos que a barra desenha com uma
+ * divisória fina. No Rateio é cadastro ‖ dinheiro; na Empresa é dinheiro ‖ apoio
+ * (o banco e o histórico não são atos de caixa — são o que sustenta os atos).
+ */
+export type GrupoDeTela = 'cadastro' | 'dinheiro' | 'apoio';
 
 export type Tela = {
+  funil: ChaveDoFunil;
   rota: string;
   titulo: string;
   icone: NomeDeIcone;
@@ -56,156 +82,109 @@ export type Tela = {
 };
 
 export const TELAS: readonly Tela[] = [
+  // ======================================================= FINANCEIRO RATEIO
   /*
-   * "Pendências", e não "Prontidão" — decisão do dono em 30/07/2026, depois de
-   * abrir o sistema pela primeira vez: *"mude o nome, é pouco claro"*.
-   *
-   * O RÓTULO e a ROTA mudaram; o domínio NÃO. `src/repos/prontidao.ts`,
-   * `prontidao()` e as dez camadas seguem com o nome antigo, porque aí
-   * "prontidão" nomeia um CÁLCULO ("o quanto esta competência está pronta") e
-   * não um item de lista. `/prontidao` continua funcionando por acidente feliz do
+   * "Pendências", e não "Prontidão" — decisão do dono em 30/07/2026 (*"mude o
+   * nome, é pouco claro"*). O domínio NÃO mudou: `src/repos/prontidao.ts` segue
+   * nomeando o CÁLCULO. `/prontidao` continua funcionando por acidente feliz do
    * `telaDoCaminho`: caminho desconhecido cai na primeira tela, que é esta.
    */
-  { rota: '/pendencias', titulo: 'Pendências', icone: 'prontidao', grupo: 'cadastro' },
-  { rota: '/clientes',   titulo: 'Clientes',   icone: 'clientes',  grupo: 'cadastro' },
+  { funil: 'rateio', rota: '/pendencias', titulo: 'Pendências', icone: 'prontidao', grupo: 'cadastro' },
+  { funil: 'rateio', rota: '/clientes',   titulo: 'Clientes',   icone: 'clientes',  grupo: 'cadastro' },
   /* "Unidades" sozinho, ao lado de "Usinas", troca o PONTO DE CONSUMO pelo
-   * GERADOR - as duas primeiras letras coincidem e as duas telas sao vizinhas na
-   * barra. O termo do `GLOSSARIO` e "UC / unidade consumidora", e o titulo da
-   * pagina ja dizia o nome inteiro: o rotulo e que estava abreviado. */
-  { rota: '/unidades',   titulo: 'Unidades consumidoras', icone: 'unidades', grupo: 'cadastro' },
-  { rota: '/contratos',  titulo: 'Contratos',  icone: 'contratos', grupo: 'cadastro' },
-  { rota: '/usinas',     titulo: 'Usinas',     icone: 'usinas',    grupo: 'cadastro' },
-  /* "Donos" nao diz de QUE. E o cadastro de quem recebe o repasse - o maior
-   * fluxo de dinheiro do sistema -, e "dono de usina" e o termo do `GLOSSARIO`. */
-  { rota: '/donos',      titulo: 'Donos de usina', icone: 'donos', grupo: 'cadastro' },
+   * GERADOR. O termo do `GLOSSARIO` é "UC / unidade consumidora". */
+  { funil: 'rateio', rota: '/unidades',   titulo: 'Unidades consumidoras', icone: 'unidades', grupo: 'cadastro' },
+  { funil: 'rateio', rota: '/contratos',  titulo: 'Contratos',  icone: 'contratos', grupo: 'cadastro' },
+  { funil: 'rateio', rota: '/usinas',     titulo: 'Usinas',     icone: 'usinas',    grupo: 'cadastro' },
+  /* "Donos" não diz de QUE. É o cadastro de quem recebe o repasse — o maior
+   * fluxo de dinheiro do sistema —, e "dono de usina" é o termo do `GLOSSARIO`. */
+  { funil: 'rateio', rota: '/donos',      titulo: 'Donos de usina', icone: 'donos', grupo: 'cadastro' },
   /*
-   * A ABA TARIFAS SAIU EM 14/08/2026, por decisao do dono: *"remova
-   * definitivamente a aba Tarifas, pois ela ja nao possui finalidade e apenas
-   * gera redundancia."*
+   * A ABA «Tarifas» SAIU EM 14/08/2026 (a tarifa virou coluna da unidade,
+   * migration 30) e a ABA «Faturamento» (`/carteira`) SAIU EM 10/09/2026 — era o
+   * caminho aposentado desde a `Q-CICLO-01`, e compor por ela TRAVAVA a unidade
+   * no caminho oficial (`uc_ja_faturada`). Os quatro números do mês que só ela
+   * tinha foram para «Emissão e cobrança». O motor (`POST
+   * /faturamento/:competencia/compor`) segue no servidor sem tela, e apagá-lo
+   * tem dono (`Q-CICLO-02`).
    *
-   * O QUE A SUBSTITUI, e a medicao que decidiu: a tarifa e R$/kWh de CADA UC e
-   * se preenche na aba Unidades (migration 30). A aba servia uma tabela com UMA
-   * linha - Equatorial, R$ 1,130000 - contra os R$ 1,185396 medidos na fatura
-   * real, e ninguem percebeu porque zero faturas foram emitidas. A granularidade
-   * real e por cliente: 35 UCs a 1,130000, 4 a 1,16 e 2 a 1,180000.
+   * ⚠️ A ORDEM ENTRE AS DUAS ABAIXO INVERTEU EM 22/09/2026, e é a ordem do mês:
+   * a cobrança NASCE na Fatura unificada (ler a conta, conferir, gerar) e só
+   * depois se emite, se pede o boleto e se dá baixa. Até então a barra dizia o
+   * contrário — resto da época em que quem gerava era a «Carteira».
    */
   /*
-   * "CARTEIRA" ERA JARGAO BANCARIO PARA O ATO DE GERAR, e escondia o unico
-   * lugar onde a fatura do mes NASCE: ensaiar a triagem e compor os rascunhos.
-   * Quem procurasse "onde eu faturo o mes" nao tinha por que abrir "Carteira".
-   *
-   * `Faturamento` nao e palavra nova: e a que o sistema ja usa em
-   * `src/dominio/faturamento.ts` e nas rotas `/faturamento/:competencia/compor`
-   * e `/emitir`. O rotulo passou a dizer o que o servidor sempre chamou (regra 7).
-   *
-   * E O PAR COM "Faturas" E A ORDEM DO TRABALHO, nao uma repeticao:
-   * **Faturamento** gera o lote -> **Faturas** emite, cobra e da baixa.
+   * "DOCUMENTO" NÃO DIZIA QUAL. `Fatura unificada` é como o projeto inteiro já a
+   * chama (`fatura-unificada.tsx`, `dominio/fatura-unificada.ts`, a tabela
+   * `registro_de_fatura_unificada`). A ROTA NÃO MUDA: `/documento#cadastro` é o
+   * único caminho de tela para o emissor.
    */
+  { funil: 'rateio', rota: '/documento',  titulo: 'Fatura unificada', icone: 'documento', grupo: 'dinheiro' },
   /*
-   * ⚠️ A ABA «Faturamento» (`/carteira`) SAIU EM 10/09/2026, e o registro fica
-   * aqui porque quem procurar por ela vai procurar nesta lista.
-   *
-   * Ela era o caminho APOSENTADO desde 21/08, quando o dono decidiu a
-   * `Q-CICLO-01` (*"vamos com o caminho da fatura unificada"*), e tinha o nome
-   * mais óbvio da barra para quem procura «onde eu faturo o mês». Seguir o nome
-   * não dava erro: dava um mês composto pelo caminho velho — e uma cobrança
-   * composta por lá TRAVA a mesma unidade no caminho oficial (`uc_ja_faturada`),
-   * com desfazer sendo cancelar uma a uma.
-   *
-   * EM 10/09 ELA GANHOU A MARCA «(caminho antigo)», e no mesmo dia o dono
-   * perguntou o que ela ainda fazia ali. A resposta medida: nada que se perca.
-   * As faturas compostas por ela sempre apareceram em «Emissão e cobrança», e em
-   * produção nunca houve uma — zero faturas desde sempre. O que ela tinha de
-   * único eram os quatro números do mês (faturado, recebido, a receber, vencidas
-   * em aberto), e eles foram para «Emissão e cobrança», onde seguem o seletor de
-   * mês em vez de mostrar sempre a competência mais nova.
-   *
-   * O QUE NÃO SAIU: `POST /faturamento/:competencia/ensaio` e `/compor` seguem
-   * no servidor, e `npm run faturar` continua alcançando `comporLote`. Tirar a
-   * tela fecha a porta de quem não pediu esse caminho; apagar o motor seria
-   * outra decisão, e ela tem dono (`Q-CICLO-02`, o aval fiscal).
+   * "FATURAS" e "FATURA UNIFICADA" lado a lado não se distinguiam, e o dono disse
+   * isso duas vezes (17/08). `Emissão e cobrança` são os ATOS da tela — os três
+   * botões que ela tem: emitir, pedir ou importar o boleto, dar baixa. NÃO virou
+   * "Cobrança" sozinho: a rota `/cobranca` é OUTRA tela (Conector Sicoob).
    */
+  { funil: 'rateio', rota: '/faturas',    titulo: 'Emissão e cobrança', icone: 'faturas', grupo: 'dinheiro' },
+  /* Repasse por dono, comissão por originador e uso da usina: é a APURAÇÃO do
+   * rateio, e por isso fecha este funil. O que a empresa DEVE por causa deles
+   * aparece do outro lado, em Contas a pagar — provisionado pela divisão do
+   * dinheiro, nunca digitado. */
+  { funil: 'rateio', rota: '/relatorios', titulo: 'Relatórios', icone: 'relatorios', grupo: 'dinheiro' },
 
+  // ====================================================== FINANCEIRO EMPRESA
   /*
-   * "FATURAS" E "FATURA UNIFICADA" LADO A LADO NAO SE DISTINGUIAM, e o dono
-   * disse isso duas vezes: primeiro *"qual a diferenca entre a aba Faturas e a
-   * aba Documento?"* — que motivou o rotulo `Fatura unificada` em 17/08 —, e
-   * depois *"o nome faturas e fatura unificada esta causando confusao"*. A
-   * segunda frase mede a primeira correcao: trocar `Documento` por
-   * `Fatura unificada` deixou as DUAS comecando pela mesma palavra, e vizinhas.
-   *
-   * QUAL DOS DOIS CEDE, e por que este. `Fatura unificada` e nome de
-   * funcionalidade dado pelo dono e esta em quatro arquivos e numa tabela
-   * (`fatura-unificada.tsx`, `dominio/fatura-unificada.ts`, `abas-da-fatura.ts`,
-   * `registro_de_fatura_unificada`) — mudar o rotulo dele criaria sinonimo, que
-   * e divida de leitura (regra 7). `Faturas` nao nomeia nada: era so o plural da
-   * entidade, e a entidade aparece em TODAS as telas do grupo.
-   *
-   * `Emissao e cobranca` sao os ATOS da tela, e sao os tres botoes que ela tem:
-   * emitir a fatura, pedir ou importar o boleto, dar baixa. E o par com a
-   * vizinha da esquerda continua legivel na ordem do trabalho:
-   * **Faturamento** gera o lote -> **Emissao e cobranca** emite, cobra e baixa.
-   *
-   * NAO VIROU "Cobranca" SOZINHO de proposito: a rota `/cobranca` e OUTRA tela
-   * (Conector Sicoob). Um rotulo `Cobranca` apontando para `/faturas` poria as
-   * duas em desacordo para quem le o codigo.
+   * A PONTE ENTRE OS DOIS FUNIS, e a primeira tela da Empresa de propósito: quem
+   * abre este lado quer saber quanto vai entrar. Lê toda fatura emitida e ainda
+   * não paga, de qualquer mês, com os dias de atraso e a situação do boleto. Não
+   * tem botão de cobrar — cobrar é ato do Rateio, e a tela aponta para lá.
+   * Entrou em 22/09/2026 junto com os funis.
    */
-  { rota: '/faturas',    titulo: 'Emissão e cobrança', icone: 'faturas', grupo: 'dinheiro' },
+  { funil: 'empresa', rota: '/contas-a-receber', titulo: 'Contas a receber', icone: 'contas_a_receber', grupo: 'dinheiro' },
+  /* Só tem linha depois de a primeira fatura ser liquidada — a divisão do
+   * dinheiro as provisiona. O vazio aqui tem significado, e a tela o diz. */
+  { funil: 'empresa', rota: '/contas-a-pagar',   titulo: 'Contas a pagar', icone: 'contas_a_pagar', grupo: 'dinheiro' },
   /*
-   * "COBRANCA" DIZIA O CONTRARIO DO QUE A TELA FAZ. Cobrar acontece na aba ao
-   * lado — `Emissao e cobranca`, a antiga `Faturas`;
-   * aqui se cadastra a CREDENCIAL do banco - agencia, conta, convenio, validade
-   * do A1 e a `credencial_ref`. Quem abrisse "Cobranca" para cobrar um cliente
-   * encontrava um formulario de credencial, que e o oposto do que procurava.
-   *
-   * O nome do banco entra no rotulo pela mesma razao que o campo `provedor` nao
-   * e escolha na tela: enquanto for um, ela nao finge que ha opcao.
+   * "COBRANÇA" DIZIA O CONTRÁRIO DO QUE A TELA FAZ: aqui se cadastra a CREDENCIAL
+   * do banco — agência, conta, convênio, validade do A1 e a `credencial_ref`. O
+   * nome do banco entra no rótulo porque, enquanto for um, a tela não finge que
+   * há opção. É configuração da empresa, e por isso mora deste lado.
    */
-  { rota: '/cobranca',   titulo: 'Conector Sicoob', icone: 'cobranca', grupo: 'dinheiro' },
+  { funil: 'empresa', rota: '/cobranca',         titulo: 'Conector Sicoob', icone: 'cobranca', grupo: 'apoio' },
   /*
-   * "DOCUMENTO" NAO DIZIA QUAL, e havia dois candidatos na mesma barra: a fatura
-   * que o sistema calcula (Faturas) e a folha que o cliente recebe. A pergunta
-   * "qual a diferenca entre a aba Faturas e a aba Documento?" foi feita, e uma
-   * barra que precisa de explicacao ja respondeu.
-   *
-   * `Fatura unificada` e como o projeto INTEIRO ja a chama - `fatura-unificada.tsx`,
-   * `dominio/fatura-unificada.ts`, a tabela `registro_de_fatura_unificada` e o
-   * `REFERENCIA-fatura-unificada-2026-08-13.md`. So a barra dizia outra coisa, e
-   * sinonimo e divida de leitura (regra 7).
-   *
-   * A ROTA NAO MUDA. `/documento#cadastro` esta citado na `PENDENCIAS` §2.a item
-   * 5 e e o unico caminho de tela para o emissor; trocar o endereco quebraria o
-   * apontador sem ganhar nada.
+   * A ÚLTIMA DE TODAS: as doze acima são onde o trabalho ACONTECE; esta é onde se
+   * pergunta o que aconteceu. A trilha atravessa os dois funis igualmente, e fica
+   * na Empresa porque é aqui que "quem mexeu nisto?" custa caro o suficiente para
+   * alguém procurar. Entrou em 10/09/2026: o dado existia desde a primeira semana
+   * (21.917 registros) e não havia leitor.
    */
-  { rota: '/documento',  titulo: 'Fatura unificada', icone: 'documento', grupo: 'dinheiro' },
-  /* A ULTIMA DO GRUPO DINHEIRO, e a posicao e a mesma decisao de ordem que o
-   * cabecalho descreve: a vertente do CLIENTE (compor, emitir, cobrar,
-   * documentar) vem antes da vertente da EMPRESA, porque e o dinheiro que
-   * entra que produz o que sai. Contas a pagar so tem linha depois de a
-   * primeira fatura ser liquidada - o split as provisiona. */
-  { rota: '/contas-a-pagar', titulo: 'Contas a pagar', icone: 'contas_a_pagar', grupo: 'dinheiro' },
-  { rota: '/relatorios', titulo: 'Relatórios', icone: 'relatorios', grupo: 'dinheiro' },
-  /*
-   * A ULTIMA DE TODAS, e a posicao e o proprio significado dela: as treze acima
-   * sao onde o trabalho ACONTECE; esta e onde se pergunta o que aconteceu. Ela
-   * nao pertence a nenhum dos dois grupos por assunto - a trilha atravessa
-   * cadastro e dinheiro igualmente -, e fica em `dinheiro` porque e la que a
-   * pergunta "quem mexeu nisto?" custa caro o suficiente para alguem procurar.
-   *
-   * ENTROU EM 10/09/2026, e o que ela fecha nao e uma tela faltando: e a ultima
-   * pergunta de rotina que so tinha resposta pelo banco. O dado estava gravado
-   * desde a primeira semana do projeto - 21.917 registros - e nao havia leitor.
-   */
-  { rota: '/historico',  titulo: 'Histórico',  icone: 'historico', grupo: 'dinheiro' },
+  { funil: 'empresa', rota: '/historico',        titulo: 'Histórico', icone: 'historico', grupo: 'apoio' },
 ] as const;
 
 /** A tela de um caminho. Caminho desconhecido — inclusive `/` — cai na primeira,
  *  que é Pendências: a tela que diz o que falta é o lugar certo para se perder.
  *  E é o que faz o `/prontidao` antigo continuar levando ao lugar certo. */
 export const telaDoCaminho = (caminho: string): Tela =>
-  TELAS.find((t) => t.rota === caminho) ?? TELAS[0];
+  TELAS.find((t) => t.rota === caminho) ?? TELAS[0]!;
 
-/** Onde a divisória entre cadastro e dinheiro cai — o índice da primeira tela do
- *  segundo grupo. Calculado, não escrito: reordenar as telas acima move a
- *  divisória junto, e uma constante `7` não moveria. */
-export const inicioDoGrupoDinheiro = TELAS.findIndex((t) => t.grupo === 'dinheiro');
+/** As telas de um funil, na ordem da barra. */
+export const telasDoFunil = (funil: ChaveDoFunil): readonly Tela[] =>
+  TELAS.filter((t) => t.funil === funil);
+
+/** A primeira tela de um funil — para onde o seletor leva ao trocar de lado. */
+export const primeiraTelaDoFunil = (funil: ChaveDoFunil): Tela => telasDoFunil(funil)[0]!;
+
+/** O funil em que um caminho está. Derivado da tela, e não guardado em estado:
+ *  o endereço já diz de que lado a pessoa está, e dois lugares para a mesma
+ *  verdade é como eles passam a discordar. */
+export const funilDoCaminho = (caminho: string): Funil =>
+  FUNIS.find((f) => f.chave === telaDoCaminho(caminho).funil)!;
+
+/**
+ * Onde a barra desenha divisória: os índices, DENTRO da lista dada, em que o
+ * grupo muda em relação ao vizinho da esquerda. Calculado, não escrito —
+ * reordenar as telas move a divisória junto, e uma constante `7` não moveria.
+ */
+export const divisoriasDe = (telas: readonly Tela[]): readonly number[] =>
+  telas.flatMap((t, i) => (i > 0 && t.grupo !== telas[i - 1]!.grupo ? [i] : []));

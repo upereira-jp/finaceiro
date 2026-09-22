@@ -303,6 +303,42 @@ export type PosicaoDaCarteira = {
   faturado_centavos: number; recebido_centavos: number; a_receber_centavos: number;
 };
 
+/**
+ * `GET /contas-a-receber` — o retrato do caixa a ENTRAR, para a vertente da
+ * empresa. Espelho de `ContasAReceber` em `src/repos/conta_receber.ts`.
+ *
+ * `hoje` VEM DO SERVIDOR, e toda conta de atraso na tela parte dele: «3 dias de
+ * atraso» é afirmação sobre o sistema, e não pode depender do relógio da máquina
+ * de quem abriu a tela (a mesma regra de `ha_quanto_tempo_segundos`).
+ */
+export type TituloAReceber = {
+  fatura_id: string;
+  unidade: string;
+  cliente: string;
+  cliente_id: string;
+  competencia: string;
+  vencimento: string;
+  emitida_em: string | null;
+  valor_total_centavos: number | null;
+  status_fatura: string;
+  boleto: { status: string; origem: string; nosso_numero: string | null } | null;
+};
+export type FaixaAReceber = { titulos: number; centavos: number };
+export type ResumoAReceber = {
+  em_aberto: FaixaAReceber;
+  vencido: FaixaAReceber;
+  vence_em_7_dias: FaixaAReceber;
+  vence_em_30_dias: FaixaAReceber;
+  recebido_em_30_dias: FaixaAReceber;
+};
+export type ContasAReceber = {
+  hoje: string;
+  resumo: ResumoAReceber;
+  linhas: TituloAReceber[];
+  /** Quantos títulos há ao todo — `linhas.length` quando não truncou. */
+  total: number;
+};
+
 export type Boleto = {
   id: string; fatura_id: string;
   nosso_numero: string | null; linha_digitavel: string | null; codigo_barras: string | null;

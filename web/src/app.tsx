@@ -11,16 +11,17 @@
 // mesma que existe entre `cobranca-regras.ts` e a tela de Cobrança: o que precisa
 // de teste sai do `.tsx`, porque o runner do `web/` não lê JSX.
 //
-// AS TELAS SAO A ORDEM DAS CAMADAS DA PRONTIDAO, e isso e deliberado: quem abre
-// o sistema hoje precisa fechar quatro camadas de cadastro para a primeira
-// fatura existir, e a barra de navegacao e a ordem em que o trabalho destrava o
-// proximo passo. A ordem mora em `navegacao.ts`, e agora a barra MOSTRA a
-// fronteira entre cadastro e dinheiro com uma divisoria.
+// DOIS FUNIS DESDE 22/09/2026 — «Rateio» e «Empresa» —, e o topo passou a ter
+// dois niveis: o seletor de funil na faixa de cima, ao lado da marca, e na faixa
+// de baixo SO as telas do funil escolhido. A divisao e a do negocio (o dinheiro
+// que entra dos clientes; o caixa da empresa), e mora em `navegacao.ts` como
+// dado — aqui so se desenha. O funil ativo e DERIVADO do caminho, nunca guardado
+// em estado: o endereco ja diz de que lado a pessoa esta.
 //
 // O TOPO TEM DUAS FAIXAS DESDE 30/07. Doze telas mais o bloco do usuario numa
 // faixa unica dependiam de `flex-wrap` para caber, e o resultado era duas linhas
-// irregulares em tela media. Agora: identidade e sessao em cima, navegacao
-// embaixo, com rolagem horizontal quando nao couber.
+// irregulares em tela media. Agora: identidade, funil e sessao em cima,
+// navegacao embaixo, com rolagem horizontal quando nao couber.
 
 import { lazy, Suspense, useState, type ReactElement } from 'react';
 import { useSessao } from './sessao.tsx';
@@ -28,7 +29,9 @@ import {
   Aviso, Logotipo, Icone, Menu, ItensDeTema, Escolha, Carregando, ESTILO,
 } from './ui.tsx';
 import { useCaminho, Ligacao } from './rota.tsx';
-import { TELAS, telaDoCaminho, inicioDoGrupoDinheiro } from './navegacao.ts';
+import {
+  FUNIS, telaDoCaminho, telasDoFunil, primeiraTelaDoFunil, funilDoCaminho, divisoriasDe,
+} from './navegacao.ts';
 import { GatilhoDeAjuda } from './ajuda-gatilho.tsx';
 import { Login } from './telas/login.tsx';
 /*
@@ -66,6 +69,7 @@ const TelaFaturas = lazy(() => import('./telas/faturas.tsx').then((m) => ({ defa
 const TelaCobranca = lazy(() => import('./telas/cobranca.tsx').then((m) => ({ default: m.TelaCobranca })));
 const TelaRelatorios = lazy(() => import('./telas/relatorios.tsx').then((m) => ({ default: m.TelaRelatorios })));
 const TelaDocumento = lazy(() => import('./telas/documento.tsx').then((m) => ({ default: m.TelaDocumento })));
+const TelaContasAReceber = lazy(() => import('./telas/contas-a-receber.tsx').then((m) => ({ default: m.TelaContasAReceber })));
 const TelaContasAPagar = lazy(() => import('./telas/contas-a-pagar.tsx').then((m) => ({ default: m.TelaContasAPagar })));
 const TelaHistorico = lazy(() => import('./telas/historico.tsx').then((m) => ({ default: m.TelaHistorico })));
 
@@ -122,6 +126,7 @@ const RENDER: Record<string, () => ReactElement> = {
   '/faturas': () => <TelaFaturas />,
   '/cobranca': () => <TelaCobranca />,
   '/documento': () => <TelaDocumento />,
+  '/contas-a-receber': () => <TelaContasAReceber />,
   '/contas-a-pagar': () => <TelaContasAPagar />,
   '/historico': () => <TelaHistorico />,
   '/relatorios': () => <TelaRelatorios />,
@@ -164,6 +169,9 @@ export function App() {
   // Caminho desconhecido (inclusive `/`) cai na primeira tela, que é a
   // Pendências — a tela que diz o que falta é o lugar certo para se perder.
   const tela = telaDoCaminho(caminho);
+  const funil = funilDoCaminho(caminho);
+  const telasDaBarra = telasDoFunil(funil.chave);
+  const divisorias = new Set(divisoriasDe(telasDaBarra));
   const vinculo = s.sessao?.tenants.find((t) => t.tenantId === s.tenantId);
   const varios = Boolean(s.sessao && s.sessao.tenants.length > 1);
 
@@ -175,6 +183,26 @@ export function App() {
 
         <div className="barra">
           <span className="marca-app"><Logotipo tamanho={22} /> Financeiro G3</span>
+
+          {/*
+            O SELETOR DE FUNIL. Duas pilulas, e a ativa e derivada do caminho —
+            nao ha estado proprio para ela desincronizar. Trocar de funil leva a
+            PRIMEIRA tela do outro lado: Pendencias no Rateio (a tela que diz o
+            que falta) e Contas a receber na Empresa (a tela que diz quanto vai
+            entrar). E uma ancora de verdade, entao botao do meio e "copiar
+            endereco" funcionam.
+          */}
+          <nav className="funis" aria-label="Funis">
+            {FUNIS.map((f) => {
+              const ativo = f.chave === funil.chave;
+              return (
+                <Ligacao key={f.chave} para={primeiraTelaDoFunil(f.chave).rota} atual={ativo}
+                         className={ativo ? 'ativo' : undefined} rotulo={f.nome}>
+                  {f.rotulo}
+                </Ligacao>
+              );
+            })}
+          </nav>
 
           <div className="sessao">
             {/*
@@ -224,12 +252,12 @@ export function App() {
           </div>
         </div>
 
-        <nav className="barra-nav" aria-label="Telas">
+        <nav className="barra-nav" aria-label={funil.nome}>
           {/* `flatMap` e nao `map` com fragmento: a divisoria e um IRMAO dos
               links, nao um filho. Envolver o par num fragmento por item faria o
               `gap` do flex contar o par como um elemento so, e a divisoria
               grudaria no link seguinte. */}
-          {TELAS.flatMap((t, i) => {
+          {telasDaBarra.flatMap((t, i) => {
             const ativo = t.rota === tela.rota;
             const link = (
               <Ligacao key={t.rota} para={t.rota} atual={ativo}
@@ -238,10 +266,11 @@ export function App() {
                 {t.titulo}
               </Ligacao>
             );
-            // A divisoria entre cadastro e dinheiro. O indice vem calculado de
+            // A divisoria onde o GRUPO muda (cadastro ‖ dinheiro no Rateio,
+            // dinheiro ‖ apoio na Empresa). Os indices vem calculados de
             // `navegacao.ts`: reordenar as telas move a divisoria junto.
-            return i === inicioDoGrupoDinheiro
-              ? [<span key="divisor" className="divisor" aria-hidden="true" />, link]
+            return divisorias.has(i)
+              ? [<span key={`divisor-${i}`} className="divisor" aria-hidden="true" />, link]
               : [link];
           })}
         </nav>

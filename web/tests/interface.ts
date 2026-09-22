@@ -24,7 +24,9 @@ import { VARIAVEIS_CSS } from '../src/tema.ts';
 import {
   ICONES_QUE_SE_MOVEM, ICONE_DO_ESTADO, ICONE_DO_AVISO, ICONE_DO_STATUS_DA_FATURA,
 } from '../src/iconografia.ts';
-import { TELAS, telaDoCaminho, inicioDoGrupoDinheiro } from '../src/navegacao.ts';
+import {
+  TELAS, FUNIS, telaDoCaminho, telasDoFunil, primeiraTelaDoFunil, funilDoCaminho, divisoriasDe,
+} from '../src/navegacao.ts';
 import {
   ABAS_VISIVEIS, ABA_OCULTA, ROTULO_DA_ABA, FRAGMENTO_DA_ABA_OCULTA,
   ordemDasAbas, revelaAbaOculta, abaVigente,
@@ -275,7 +277,11 @@ chk('I3e', /animation-delay:\s*0s?\s*!important/.test(bloqueio)
  * contagem que se atualiza sozinha (`TELAS.length === TELAS.length`) nao
  * acusaria uma tela acrescentada por engano num merge. Esta linha ficou vermelha
  * na remocao acima, que e exatamente o trabalho dela. */
-chk('I4', TELAS.length === 12, `sao 12 telas (contadas: ${TELAS.length})`);
+/* TREZE desde 22/09/2026 - entrou "Contas a receber", a ponte entre os dois
+ * funis: a carteira INTEIRA em aberto, por vencimento, para a vertente da
+ * empresa. Ate entao «quanto os clientes devem ao todo» so tinha resposta por
+ * mes, e a fatura antiga sumia atras do mes corrente. */
+chk('I4', TELAS.length === 13, `sao 13 telas (contadas: ${TELAS.length})`);
 chk('I4b', new Set(TELAS.map((t) => t.rota)).size === TELAS.length,
     'nenhuma rota repetida — rota repetida faz a segunda tela ser inalcancavel');
 chk('I4c', new Set(TELAS.map((t) => t.titulo)).size === TELAS.length,
@@ -285,22 +291,52 @@ chk('I4d', new Set(TELAS.map((t) => t.icone)).size === TELAS.length,
 chk('I4e', TELAS.every((t) => t.rota.startsWith('/') && !t.rota.includes(' ')),
     'toda rota comeca com / e nao tem espaco');
 
-// A ORDEM E DECISAO DOCUMENTADA, nao gosto: cadastro primeiro, na ordem em que
-// uma camada destrava a proxima; dinheiro depois, na ordem dos ATOS. Este teste
-// prende a FORMA da decisao — os dois grupos sao contiguos, e a tela que diz o
-// que falta e a primeira.
-//
-// A ROTA MUDOU EM 30/07 (`/prontidao` -> `/pendencias`, decisao do dono: o nome
-// era pouco claro). O teste afirma a POSICAO e o GRUPO, e nao o nome — se
-// afirmasse o nome, ele quebraria a cada troca de rotulo sem que nada de fato
-// tivesse mudado, e teste que quebra por cosmetica treina o time a ignora-lo.
-chk('I4f', TELAS[0]!.grupo === 'cadastro' && TELAS[0]!.rota === '/pendencias',
-    'a primeira tela e a que diz o que falta — e onde cai quem se perde');
-chk('I4g', TELAS.slice(0, inicioDoGrupoDinheiro).every((t) => t.grupo === 'cadastro')
-        && TELAS.slice(inicioDoGrupoDinheiro).every((t) => t.grupo === 'dinheiro'),
-    'os dois grupos sao contiguos — a divisoria da barra e um lugar so, nao dois');
-chk('I4h', inicioDoGrupoDinheiro > 0 && inicioDoGrupoDinheiro < TELAS.length,
-    'e a divisoria cai DENTRO da lista: nem no inicio nem depois do fim');
+// A ORDEM E DECISAO DOCUMENTADA, nao gosto. DOIS FUNIS desde 22/09/2026 -
+// Rateio (o dinheiro que entra dos clientes) e Empresa (o caixa) -, cada um
+// contiguo na lista e na ordem em que `FUNIS` os declara; DENTRO de cada funil,
+// os grupos sao contiguos (cadastro | dinheiro no Rateio, dinheiro | apoio na
+// Empresa), e a divisoria da barra cai onde o grupo muda. Este teste prende a
+// FORMA da decisao, nao os nomes: teste que quebra por cosmetica treina o time a
+// ignora-lo.
+chk('I4f', TELAS[0]!.funil === 'rateio' && TELAS[0]!.grupo === 'cadastro' && TELAS[0]!.rota === '/pendencias',
+    'a primeira tela e a que diz o que falta - e onde cai quem se perde, e ela abre o Rateio');
+
+{
+  // Cada funil ocupa uma faixa contigua de TELAS, e as faixas vem na ordem de FUNIS.
+  const primeiroIndice = FUNIS.map((f) => TELAS.findIndex((t) => t.funil === f.chave));
+  const contiguos = FUNIS.every((f) => {
+    const idx = TELAS.flatMap((t, i) => (t.funil === f.chave ? [i] : []));
+    return idx.length > 0 && idx[idx.length - 1]! - idx[0]! === idx.length - 1;
+  });
+  chk('I4g', contiguos && primeiroIndice.every((v, i) => i === 0 || v > primeiroIndice[i - 1]!),
+      'os funis sao contiguos e vem na ordem declarada - o seletor de cima e a barra de baixo '
+      + 'contam a mesma historia');
+  chk('I4g2', TELAS.every((t) => FUNIS.some((f) => f.chave === t.funil)),
+      'toda tela pertence a um funil declarado');
+  chk('I4g3', new Set(FUNIS.map((f) => f.rotulo)).size === FUNIS.length
+           && FUNIS.every((f) => f.rotulo.length <= 10 && f.nome.startsWith('Financeiro ')),
+      'os rotulos dos funis sao unicos e curtos, e o nome inteiro comeca por "Financeiro"');
+}
+
+for (const f of FUNIS) {
+  const telas = telasDoFunil(f.chave);
+  const div = divisoriasDe(telas);
+  // Grupo contiguo: o numero de divisorias e o numero de grupos distintos menos um.
+  const grupos = new Set(telas.map((t) => t.grupo)).size;
+  chk('I4h', div.length === grupos - 1 && div.every((i) => i > 0 && i < telas.length),
+      `${f.nome}: ${grupos} grupo(s) contiguo(s), e a divisoria cai DENTRO da lista`);
+  chk('I4h2', div.length >= 1,
+      `${f.nome}: tem ao menos uma divisoria - um funil sem fronteira interna e uma fila de abas iguais de novo`);
+}
+
+chk('I4l', primeiraTelaDoFunil('rateio').rota === '/pendencias'
+        && primeiraTelaDoFunil('empresa').rota === '/contas-a-receber',
+    'trocar de funil leva a tela que abre cada lado: o que falta (Rateio) e o que vai entrar (Empresa)');
+chk('I4m', funilDoCaminho('/faturas').chave === 'rateio'
+        && funilDoCaminho('/contas-a-pagar').chave === 'empresa'
+        && funilDoCaminho('/nao-existe').chave === 'rateio'
+        && funilDoCaminho('/').chave === 'rateio',
+    'o funil e derivado do caminho, e caminho desconhecido cai no Rateio junto com a primeira tela');
 
 // Caminho desconhecido cai na primeira tela. E o comportamento que o `app.tsx`
 // documenta desde 29/07 e que nunca teve teste.
@@ -352,12 +388,35 @@ const cabecaDo = (titulo: string): string =>
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/s$/, '');
 
+/*
+ * O PAR DECLARADO, e por que ele nao e a colisao que este teste persegue.
+ *
+ * «Contas a receber» e «Contas a pagar» (22/09/2026) comecam pela mesma palavra e
+ * sao vizinhas na barra da Empresa. Mas a cabeca SEMANTICA do par e o verbo, nao
+ * o substantivo: e o nome que todo plano de contas, todo banco e todo analista
+ * financeiro usam, e foi o nome que o dono deu as duas ("Contas a pagar",
+ * "Contas a receber - que vem de origem do funil 1"). Rebatizar uma delas para
+ * escapar da regra criaria um sinonimo do termo canonico — divida de leitura
+ * (regra 7) para resolver um problema que, neste par, nao existe: ninguem confunde
+ * receber com pagar.
+ *
+ * A excecao e NOMINAL e de um par so. Uma terceira aba comecando por "Contas"
+ * volta a reprovar.
+ */
+const PARES_DECLARADOS: ReadonlyArray<readonly [string, string]> = [
+  ['Contas a receber', 'Contas a pagar'],
+];
+const ehParDeclarado = (ts: string[]): boolean =>
+  ts.length === 2 && PARES_DECLARADOS.some(([a, b]) => ts.includes(a) && ts.includes(b));
+
 const porCabeca = new Map<string, string[]>();
 for (const t of TELAS) {
   const c = cabecaDo(t.titulo);
   porCabeca.set(c, [...(porCabeca.get(c) ?? []), t.titulo]);
 }
-const colididos = [...porCabeca.values()].filter((ts) => ts.length > 1);
+const colididos = [...porCabeca.values()].filter((ts) => ts.length > 1 && !ehParDeclarado(ts));
+chk('I4k0', PARES_DECLARADOS.every(([a, b]) => TELAS.some((t) => t.titulo === a) && TELAS.some((t) => t.titulo === b)),
+    'todo par declarado aponta para duas abas que existem — excecao para aba que sumiu e lista envelhecendo calada');
 
 chk('I4k', colididos.length === 0,
     'nenhum par de abas se apresenta pelo mesmo substantivo-cabeca'

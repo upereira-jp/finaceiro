@@ -45,6 +45,7 @@ import { CheckCircle } from '@phosphor-icons/react/CheckCircle';
 import { Warning } from '@phosphor-icons/react/Warning';
 import { Checks } from '@phosphor-icons/react/Checks';
 import { HandCoins } from '@phosphor-icons/react/HandCoins';
+import { HandArrowDown } from '@phosphor-icons/react/HandArrowDown';
 import { CurrencyCircleDollar } from '@phosphor-icons/react/CurrencyCircleDollar';
 import { ArrowCircleDown } from '@phosphor-icons/react/ArrowCircleDown';
 import { Clock } from '@phosphor-icons/react/Clock';
@@ -119,6 +120,9 @@ const DESENHO: Record<NomeDeIcone, Icon> = {
    * da usina, e esta tela e onde ele sai. Dois nomes semanticos podem partilhar
    * um desenho; o que a iconografia proibe e o contrario - uma tela escolher
    * desenho. */
+  /* O PAR DA EMPRESA: a mão que ENTREGA moedas (a pagar) e a mão que RECEBE (a
+   * receber). Mesma família de desenho para as duas telas que se olham. */
+  contas_a_receber: HandArrowDown,
   contas_a_pagar: HandCoins,
 
   /* O RELOGIO ANDANDO PARA TRAS, e ele e o unico desenho do conjunto que fala de

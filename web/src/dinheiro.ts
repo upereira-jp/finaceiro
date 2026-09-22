@@ -116,3 +116,16 @@ export const dataOuNull = (v: string): string | null => (v.trim() ? v.trim() : n
 /** "2026-07" -> "2026-07-01". A competencia e o MES, e o primeiro dia o
  *  representa - o servidor recusa qualquer outro dia. */
 export const competenciaISO = (mes: string): string => (/^\d{4}-\d{2}$/.test(mes) ? `${mes}-01` : mes);
+
+/**
+ * O MÊS PEDIDO PELO ENDEREÇO: `?mes=2026-08` -> `2026-08`, e `null` para tudo o
+ * mais. Entrou em 22/09/2026 para que Contas a receber (na Empresa) abra Emissão
+ * e cobrança (no Rateio) já no mês da fatura — sem isso a pessoa cai no mês
+ * corrente e precisa lembrar de voltar o seletor, que é como o título antigo
+ * some. Só o formato do `<input type="month">` passa; qualquer outra coisa é
+ * ignorada em vez de virar um mês inválido no seletor.
+ */
+export function mesDaQuery(search: string): string | null {
+  const m = new URLSearchParams(search).get('mes');
+  return m && /^\d{4}-(0[1-9]|1[0-2])$/.test(m) ? m : null;
+}

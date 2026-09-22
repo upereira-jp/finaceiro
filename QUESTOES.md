@@ -1161,6 +1161,41 @@ virou exceção declarada, ao lado da irmã que já estava lá.
 
 ---
 
+## 2.p Decisões técnicas de 22/09/2026 — o sistema em DOIS FUNIS, e as quatro referências que ficam com o dono
+
+> **O pedido do dono, em 22/09/2026:** *"revisão e otimização do sistema financeiro
+> para aplicar a uma grande empresa que irá escalar rapidamente no ramo de consórcio
+> de energia solar, controlado por um analista financeiro"*, organizado como dois
+> funis — **Financeiro Rateio** (usinas, clientes, recebíveis, projeção, fatura,
+> boleto, tarifas mínimas da Equatorial, cobrança, inadimplência) e **Financeiro
+> Empresa** (contas a pagar, conciliação bancária Sicoob, contas a receber vindas do
+> funil 1). *"Quero deixar o mais clean possível, caso precise de referências me
+> avise de antemão."* O registro completo é `REVISAO-dois-funis-2026-09-22.md`.
+
+### O que foi decidido e construído nesta data (delegação de 08/09)
+
+| # | A lacuna | A decisão | Onde está |
+|:--:|---|---|---|
+| 1 | Doze abas em fila misturavam a pergunta do Rateio com a da Empresa | **Dois funis na navegação**, como dado: seletor «Rateio \| Empresa» ao lado da marca, barra de baixo só com as telas do funil. O funil é **derivado do caminho**, nunca guardado em estado. Rotas, rótulos e domínio não mudaram; a ordem Fatura unificada → Emissão e cobrança passou a ser a do mês | `web/src/navegacao.ts` · `web/src/app.tsx` · `web/tests/interface.ts` (`I4f`…`I4m`) |
+| 2 | «Quanto os clientes devem ao todo» só tinha resposta POR MÊS | **`Contas a receber`**, primeira tela da Empresa: carteira inteira em aberto por vencimento, faixas 30/60/90, quem mais deve por cliente, situação do boleto em seis estados legíveis, recebido em 30 dias. Só leitura, pool de relatório, UMA consulta com `FILTER` para o resumo. **«Vencido» é a data, não o status** — a mesma decisão da `posicao_da_carteira` | `src/repos/conta_receber.ts` · `GET /contas-a-receber` · `web/src/receber-regras.ts` (46 verificações) · `web/src/telas/contas-a-receber.tsx` |
+| 3 | Relatórios: Rateio ou Empresa? | **Rateio.** Repasse e comissão são a apuração do rateio; o que a empresa deve por causa deles já aparece em Contas a pagar, provisionado. Duas telas para a mesma pergunta em dois funis fariam os números discordar | `navegacao.ts` |
+| 4 | Histórico e Conector Sicoob não são atos de caixa | Grupo **`apoio`** dentro da Empresa, com a mesma divisória fina que o Rateio usa entre cadastro e dinheiro | `navegacao.ts` (`GrupoDeTela`) |
+| 5 | `I4k` (substantivo-cabeça) reprovava «Contas a receber / Contas a pagar» | **Exceção nominal, de um par só**, com o motivo no teste: a cabeça semântica do par é o verbo, e é o nome que o dono deu às duas. Rebatizar criaria sinônimo do termo canônico (regra 7) | `web/tests/interface.ts` (`PARES_DECLARADOS`, `I4k0`) |
+| 6 | Contas a receber apontava para Emissão e cobrança, que abria no mês CORRENTE | **`?mes=AAAA-MM` no endereço**: «Ver na emissão» abre a outra tela já no mês da fatura. Formato fora do do seletor é ignorado, não corrigido | `web/src/dinheiro.ts` (`mesDaQuery`) · `telas/faturas.tsx` |
+
+### O que a delegação **não** cobre — as quatro referências pedidas ao dono
+
+| Questão | Nível | Por que é do dono, e o que destrava |
+|---|:-:|---|
+| **`Q-PROJECAO-01`** — projeção de recebíveis | 🟡 | O dono prometeu **um áudio**. Sem ele há duas telas possíveis — por **vencimento** (caixa: o que entra em cada dia/semana) ou por **competência futura** (receita esperada dos contratos vigentes × geração × tarifa) — e escolher errado é jogar a tela fora. A base das duas já existe (`vence_em_7_dias`/`vence_em_30_dias` no resumo; o cálculo do `ensaio`) |
+| **`Q-TARIFA-MINIMA-01`** — controle de pagamentos das tarifas mínimas da Equatorial | 🟡 | **Não existe nada** no sistema: a fatura unificada lê o não compensado + iluminação + bandeira da conta do CLIENTE, mas não há registro de custo de disponibilidade por unidade, de quem o paga nem de se foi pago. Preciso de **(a)** uma conta real com a linha; **(b)** **quem paga** — o cliente paga a própria mínima e a G3 só acompanha, ou a G3 paga a das geradoras, ou ambos; **(c)** onde é controlado hoje. Com isso o modelo é técnico (unidade × competência, devido/pago/comprovado, camada na Pendências) |
+| **`Q-EXTRATO-01`** — conciliação bancária Sicoob | 🟡 | Há uma rota de baixa «por conciliação» sem tela (caminho de reserva declarado em `rotas-com-tela.ts`), nenhuma importação de extrato, nenhuma tabela `extrato_importado`/`conciliacao`, e **os escopos contratados são só de boleto** (`boletos_*`, medidos em 28/08). Preciso de **um extrato OFX (ou CSV) de um mês real** do internet banking PJ — o formato decide o importador. Se a preferência for API (PRD §4.4 a chama de primária), o gerente precisa incluir escopos de conta corrente no aplicativo, e essa conversa é do dono |
+| **`Q-INADIMPLENCIA-01`** (já aberta desde 30/07, agora com tela para receber o registro) | 🟡 | A **visão** está construída (faixas de atraso e devedores em Contas a receber). O **registro de tratativas** precisa da **régua de cobrança** que a G3 pratica: em que dia avisa, por qual canal, quando manda segunda via, se e quando sinaliza corte de rateio (o CRM é só leitura — seria sinalização, não ação) |
+
+**Enquanto espera:** fluxo de caixa derivado (liquidações × pagamentos), paginação no servidor e a migração das listagens de leitura para o pool de relatório não dependem de nenhuma das quatro — `REVISAO-dois-funis-2026-09-22.md` §6.
+
+---
+
 ## 3. F0 — o que falta para fechar
 
 Entregas da F0 conforme `PRD-v2.2` §10:
