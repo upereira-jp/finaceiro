@@ -76,6 +76,19 @@ const lancou = async (f: () => Promise<unknown>): Promise<any> => {
   try { await f(); return null; } catch (e) { return e; }
 };
 
+/*
+ * OS SINAIS DA R27 (22/09/2026) FICAM FORA DAS CONTAGENS DE OUTRAS REGRAS.
+ *
+ * As secoes desta suite dividem o banco e a usina GER-CRM-01, e cada ciclo so
+ * passa as UCs da propria secao. Desde a R27 a UC de uma secao anterior que nao
+ * aparece na leitura SAI do rateio - e o conector anuncia. Isso e o comportamento
+ * certo, e nao o que N51, N52, N55 e N57 medem: eles contam os sinais de
+ * distribuidora, vencimento e credito. Filtrar pela R27 mantem cada um medindo o
+ * que sempre mediu; a R27 tem as proprias verificacoes (N63-N68).
+ */
+const semSaidas = <T extends { sinal: string }>(ds: T[]): T[] =>
+  ds.filter((d) => !/saiu do rateio no CRM/.test(d.sinal));
+
 // ------------------------------------------------------------- fixtures
 const venda = (o: Partial<VendaGanha> & { lead_id: string }): VendaGanha => ({
   crm_tenant_id: CRM_TENANT,
@@ -761,8 +774,8 @@ const L3 = 'aaaa3333-0000-4000-8000-00000000cc03';
       [usinaCrm({ usina_id: 'dddd1111-0000-4000-8000-00000000aa01', codigo_geradora: 'GER-CRM-01' })], [],
       [rateioCliCrm({ contrato_id: CT1, uc: UC_A, cliente: 'Fulano do Rateio' })],
       [rateioCreCrm({ contrato_id: CT1, lead_id: LR1 })]), loteEmA());
-    chk('N51', semDiv.divergencias.length === 0,
-        `Q-UC-DISTRIB-01 UC e usina na mesma distribuidora: zero sinais (${semDiv.divergencias.length})`);
+    chk('N51', semSaidas(semDiv.divergencias).length === 0,
+        `Q-UC-DISTRIB-01 UC e usina na mesma distribuidora: zero sinais (${semSaidas(semDiv.divergencias).length})`);
 
     // Agora a edicao humana: alguem troca a distribuidora da UC no cadastro local.
     // O `Equatorial` existe na tabela de referencia, entao a FK aceita - e e por
@@ -779,11 +792,11 @@ const L3 = 'aaaa3333-0000-4000-8000-00000000cc03';
                                  WHERE tenant_id=$1::uuid AND numero_uc=$2`, A, UC_A);
     const [linha] = await sql(`SELECT detalhe FROM conector_execucao WHERE tenant_id=$1::uuid AND ciclo_id=$2::uuid`,
                               A, comDiv.cicloId);
-    const d = comDiv.divergencias[0];
-    chk('N52', comDiv.divergencias.length === 1 && d?.entidade === 'unidade_consumidora'
+    const d = semSaidas(comDiv.divergencias)[0];
+    chk('N52', semSaidas(comDiv.divergencias).length === 1 && d?.entidade === 'unidade_consumidora'
          && d?.chave === UC_A && /Q-UC-DISTRIB-01/.test(d?.sinal ?? '')
          && /divergencias/.test(JSON.stringify(linha?.detalhe ?? {})),
-        `Q-UC-DISTRIB-01 divergencia entre UC e usina vira SINAL em conector_execucao (${comDiv.divergencias.length})`);
+        `Q-UC-DISTRIB-01 divergencia entre UC e usina vira SINAL em conector_execucao (${semSaidas(comDiv.divergencias).length})`);
 
     // As duas metades que separam sinal de recusa e de sobrescrita:
     chk('N53', depois?.distribuidora === 'Equatorial' && comDiv.porEntidade.unidade_consumidora.recusados === 0
@@ -858,9 +871,9 @@ const L3 = 'aaaa3333-0000-4000-8000-00000000cc03';
 
     const [dep] = await sql(`SELECT data_vencimento FROM unidade_consumidora
                               WHERE tenant_id=$1::uuid AND numero_uc=$2`, A, UC_A);
-    chk('N55', dia10(dep?.data_vencimento) === '2026-08-10' && r.divergencias.length === 0,
+    chk('N55', dia10(dep?.data_vencimento) === '2026-08-10' && semSaidas(r.divergencias).length === 0,
         `SPEC-002 R25 o vencimento preenchido pelo financeiro SOBREVIVE ao ciclo com CRM vazio `
-        + `(ficou=${dia10(dep?.data_vencimento) ?? 'NULL'}, div=${r.divergencias.length})`);
+        + `(ficou=${dia10(dep?.data_vencimento) ?? 'NULL'}, div=${semSaidas(r.divergencias).length})`);
 
     // Agora o CRM manda um valor, e DIFERENTE. Campo local: o usuario vence (R5),
     // e a divergencia vira SINAL - mesma forma da R21-b, e pelo mesmo motivo:
@@ -932,10 +945,10 @@ const L3 = 'aaaa3333-0000-4000-8000-00000000cc03';
     {
       const r = await executarCiclo(cenario(), loteEmA());
       const det = await detalheDe(r.cicloId);
-      chk('N57', r.creditoConferido === false && r.divergencias.length === 0
+      chk('N57', r.creditoConferido === false && semSaidas(r.divergencias).length === 0
            && det.credito_conferido === false && typeof det.nota_credito === 'string',
           `R26 vendas_creditadas vazia: NAO acusa nenhuma UC e o detalhe DIZ que nao rodou `
-          + `(conferido=${r.creditoConferido}, div=${r.divergencias.length})`);
+          + `(conferido=${r.creditoConferido}, div=${semSaidas(r.divergencias).length})`);
     }
 
     /*
@@ -1241,6 +1254,100 @@ const L3 = 'aaaa3333-0000-4000-8000-00000000cc03';
       `inv.1 escrita no CRM falha (${String(eEscrita?.message ?? 'NAO falhou').slice(0, 40)})`);
 
   await poolCrm.end();
+}
+
+// ============ N63-N68: a UC que SAI do rateio no CRM (SPEC-002 R27, 22/09/2026)
+//
+// O caso real, reproduzido: em 16/09/2026 tres UCs sairam da usina 0001 no CRM e
+// dois rateios novos entraram na mesma usina. O conector nao tinha caminho de
+// saida, o espelho passou a somar 104,78%, e a trava R11 - constraint DEFERIDA -
+// derrubou o COMMIT de todas as rodadas por seis dias.
+//
+// Aqui com numeros redondos: X 50% e Y 30% entram; depois o CRM tira Y e poe Z
+// 25%. Sem a R27, o espelho somaria 50 + 30 + 25 = 105 e o ciclo morreria. Os
+// numeros foram escolhidos para que SO a saida de Y faca a conta caber.
+//
+// Usina propria (GER-CRM-27), para que as UCs das secoes anteriores - que nao
+// aparecem nestas leituras - caiam no freio 1 ("a usina nao falou") e nao sejam
+// soltas por estes ciclos. As contagens abaixo filtram pela chave da UC.
+{
+  const USINA_27 = 'dddd2727-0000-4000-8000-00000000aa27';
+  await sql(`INSERT INTO usina (id, tenant_id, codigo_geradora, distribuidora, apelido)
+             VALUES ($1::uuid,$2::uuid,'GER-CRM-27','Equatorial GO','Usina da R27')`, USINA_27, A);
+  const LX = 'aaaa2701-0000-4000-8000-0000000027a1';
+  const LY = 'aaaa2702-0000-4000-8000-0000000027a2';
+  const LZ = 'aaaa2703-0000-4000-8000-0000000027a3';
+  const CX = 'bbbb2701-0000-4000-8000-0000000027b1';
+  const CY = 'bbbb2702-0000-4000-8000-0000000027b2';
+  const CZ = 'bbbb2703-0000-4000-8000-0000000027b3';
+  const CY2 = 'bbbb2704-0000-4000-8000-0000000027b4';
+  const UX = '000000000002701', UY = '000000000002702', UZ = '000000000002703';
+
+  const linha = (contrato: string, uc: string, pct: string) =>
+    rateioCliCrm({ contrato_id: contrato, uc, codigo_geradora: 'GER-CRM-27', percentual_rateio: pct });
+  const credito = (contrato: string, lead: string, pct: string) =>
+    rateioCreCrm({ contrato_id: contrato, lead_id: lead, percentual_rateio: pct });
+  const ciclo = (cli: RateioCliente[], cre: RateioCredito[]) =>
+    executarCiclo(porta([venda({ lead_id: L1 })], [], [], true,
+      [usinaCrm({ usina_id: 'dddd1111-0000-4000-8000-00000000aa27', codigo_geradora: 'GER-CRM-27' })], [],
+      cli, cre), loteEmA());
+  const ucDe = async (numero: string) => (await sql(
+    `SELECT u.usina_id, u.percentual_rateio::text AS pct, u.crm_usina_cliente_id, u.rateio_situacao,
+            e.tem_rateio_ativo
+       FROM unidade_consumidora u
+       LEFT JOIN cliente_estado_crm e ON e.cliente_id = u.cliente_id AND e.tenant_id = u.tenant_id
+      WHERE u.tenant_id=$1::uuid AND u.numero_uc=$2`, A, numero))[0];
+  const somaDaUsina = async () => (await sql(
+    `SELECT coalesce(sum(percentual_rateio),0)::text AS s FROM unidade_consumidora
+      WHERE tenant_id=$1::uuid AND usina_id=$2::uuid AND status <> 'cancelada'`, A, USINA_27))[0].s;
+  const saidasDe = (r: { divergencias: { chave: string; sinal: string }[] }, uc: string) =>
+    r.divergencias.filter((d) => d.chave === uc && /saiu do rateio no CRM/.test(d.sinal));
+
+  // Estado inicial: X e Y na usina, 80%.
+  await ciclo([linha(CX, UX, '50.0000'), linha(CY, UY, '30.0000')],
+              [credito(CX, LX, '50.0000'), credito(CY, LY, '30.0000')]);
+  const antes = await ucDe(UY);
+
+  // ---- N63: o CRM tira Y e poe Z. O ciclo CHEGA AO FIM, e a conta fecha em 75.
+  const r = await ciclo([linha(CX, UX, '50.0000'), linha(CZ, UZ, '25.0000')],
+                        [credito(CX, LX, '50.0000'), credito(CZ, LZ, '25.0000')]);
+  const [exec] = await sql(`SELECT status, detalhe FROM conector_execucao WHERE tenant_id=$1::uuid AND ciclo_id=$2::uuid`,
+                           A, r.cicloId);
+  const soma = await somaDaUsina();
+  chk('N63', antes?.usina_id === USINA_27 && r.status !== 'erro' && !exec?.detalhe?.erro
+       && Number(soma) === 75 && (await ucDe(UZ))?.usina_id === USINA_27,
+      `R27 o caso de 16/09: Y sai, Z entra, o ciclo termina sem erro e a usina soma ${soma}% (sem a R27 seria 105 e o COMMIT cairia)`);
+
+  // ---- N64: o que saiu e o que ficou na UC solta.
+  const y = await ucDe(UY);
+  chk('N64', y?.usina_id === null && y?.pct === null && y?.crm_usina_cliente_id === CY && y?.rateio_situacao === null,
+      `R27 Y perde usina, percentual e situacao, e GUARDA o contrato como rastro (usina=${y?.usina_id}, pct=${y?.pct}, contrato=${y?.crm_usina_cliente_id === CY ? 'guardado' : y?.crm_usina_cliente_id})`);
+
+  // ---- N65: a saida e SINAL com o antes, e nao recusa.
+  const sy = saidasDe(r, UY);
+  chk('N65', sy.length === 1 && /SOLTO/.test(sy[0].sinal) && /GER-CRM-27/.test(sy[0].sinal) && /30/.test(sy[0].sinal)
+       && r.porEntidade.unidade_consumidora.recusados === 0
+       && new RegExp(UY).test(JSON.stringify(exec?.detalhe?.divergencias ?? [])),
+      `R27 a saida aparece em conector_execucao.detalhe com a usina e o percentual de antes, e nao conta como recusa (${sy.length} sinal)`);
+
+  // ---- N66: R3. A segunda passada nao solta de novo nem anuncia de novo.
+  const r2 = await ciclo([linha(CX, UX, '50.0000'), linha(CZ, UZ, '25.0000')],
+                         [credito(CX, LX, '50.0000'), credito(CZ, LZ, '25.0000')]);
+  chk('N66', saidasDe(r2, UY).length === 0 && r2.porEntidade.unidade_consumidora.atualizados === 0,
+      `R3 segunda passada: zero saidas anunciadas e zero UCs atualizadas (a=${r2.porEntidade.unidade_consumidora.atualizados})`);
+
+  // ---- N67: R7/R24. O cliente que ficou sem UC vinculada perde tem_rateio_ativo.
+  chk('N67', antes?.tem_rateio_ativo === true && y?.tem_rateio_ativo === false,
+      `R24 tem_rateio_ativo do cliente de Y: ${antes?.tem_rateio_ativo} antes, ${y?.tem_rateio_ativo} depois da saida`);
+
+  // ---- N68: foi engano. O CRM recadastra Y com contrato novo, e o proximo ciclo
+  // religa sozinho - sem destrave e sem mao de ninguem aqui.
+  await ciclo([linha(CX, UX, '50.0000'), linha(CZ, UZ, '25.0000'), linha(CY2, UY, '20.0000')],
+              [credito(CX, LX, '50.0000'), credito(CZ, LZ, '25.0000'), credito(CY2, LY, '20.0000')]);
+  const volta = await ucDe(UY);
+  chk('N68', volta?.usina_id === USINA_27 && Number(volta?.pct) === 20 && volta?.crm_usina_cliente_id === CY2
+       && volta?.tem_rateio_ativo === true && Number(await somaDaUsina()) === 95,
+      `R27 recadastro no CRM religa a UC no ciclo seguinte (usina=${volta?.usina_id === USINA_27 ? 'GER-CRM-27' : volta?.usina_id}, pct=${volta?.pct}, rateio_ativo=${volta?.tem_rateio_ativo})`);
 }
 
 await verificador.end();

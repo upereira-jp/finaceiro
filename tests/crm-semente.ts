@@ -59,6 +59,15 @@ chk('S1g', sementeDeDocumento(null) === null && sementeDeDocumento('') === null
 chk('S1h', sementeDeDocumento('---.---.---/--') === null,
     'so pontuacao nao vira semente');
 
+/* 22/09/2026, G3-0575: o CPF MASCARADO. Tem 11 posicoes, entao o comprimento
+ * dizia "cpf" - e a constraint do banco recusava, derrubando o lote inteiro. */
+chk('S1i', sementeDeDocumento('726XXXXXX15') === null,
+    'CPF mascarado (11 posicoes com letra) NAO vira semente - o banco o recusaria');
+chk('S1j', sementeDeDocumento('12ABC34501DE3X') === null,
+    'CNPJ com letra nos digitos verificadores NAO vira semente');
+chk('S1k', sementeDeDocumento('12ABC34501DE35')?.documento_tipo === 'cnpj',
+    'caso mudo do S1j: letra so nas 12 primeiras posicoes continua valendo');
+
 /* O tipo e RECALCULADO daqui, nunca copiado: um `documento_tipo` que discorde do
  * proprio `documento` nao tem como existir. */
 const tipoMentiroso = sementeDeDocumento('52998224725', 'cnpj');

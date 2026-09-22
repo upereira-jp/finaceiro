@@ -3,8 +3,8 @@
 | Campo | Valor |
 |---|---|
 | **Status** | Rascunho — **aguarda aceite do autor.** Reconciliada com o medido em 27/07 (v1.3); o aceite em si é decisão do dono, não de quem implementou |
-| **Versão** | 1.6 |
-| **Data** | 26/07/2026 · rev. 1.6 em 03/08/2026 |
+| **Versão** | 1.7 |
+| **Data** | 26/07/2026 · rev. 1.7 em 22/09/2026 |
 | **Autor** | Vinicius Leal |
 | **Fase** | **F1.** Resolvido em 27/07 pela `Q-FASE-01`: o `PRD-v2.2` §10 vence, porque a hierarquia do `CLAUDE.md` põe o PRD acima das SPECs. O cabeçalho anterior dizia *"F2 (parcial em F1)"* e era ele que divergia |
 | **Depende de** | `SPEC-001` v2.3 (schema, isolamento, middleware) · `ADR-0001` · `ADR-0003` r2 |
@@ -165,6 +165,20 @@ conector_execucao   id · tenant_id · ciclo_id · iniciado_em · terminado_em
 >
 > A decisão inteira é **pura** e mora em `src/dominio/credito-originador.ts` — 27 verificações sem banco em `tests/credito-originador.ts`, cada regra com o seu caso mudo ao lado do caso falante. Testes `N57`–`N62` com banco.
 
+> **R27 (nova, 22/09/2026).** **UC que sai do rateio no CRM perde o vínculo com a usina aqui, e a saída é sinal nomeado — nunca um estado que mata o ciclo.**
+>
+> **O defeito, medido.** O conector só criava e atualizava UC; não havia caminho de saída. Em 16/09/2026 a operação tirou três UCs da usina 0001 no CRM (Ramon, NI3, NII3 — 7,30%) e pôs dois rateios novos na mesma usina. O espelho passou a somar 97,48 + 7,30 = **104,78%**, a trava R11 da `SPEC-001` (constraint **deferida**) derrubou o COMMIT, e **590 rodadas seguidas morreram** até 22/09 — nenhuma completa. Três linhas paravam o espelho inteiro, e os cinco rateios novos daquela rodada não chegavam ao financeiro.
+>
+> **A decisão é do dono (22/09/2026): seguir o CRM.** Usina e percentual são campo espelho (R5) e só o CRM valida o teto (R11 desta spec). Saiu = o contrato da UC não está em `financeiro.rateio_clientes` **e** o número dela também não. O conector grava `usina_id`, `percentual_rateio` e a situação do rateio como nulos, **guarda** `crm_usina_cliente_id` como rastro e não toca cliente, contrato nem campo local. O cliente que fica sem nenhuma UC vinculada perde `tem_rateio_ativo` (R24). A saída vai para `conector_execucao.detalhe` com a usina e o percentual de antes e se há contrato ativo — ela **não é recusa**: foi gravada.
+>
+> **A ordem é parte da regra:** a saída roda **antes** da entrada, em transação própria. Com a trava deferida, soltar e ligar no mesmo lote não adianta — a soma é conferida no COMMIT.
+>
+> **Os dois freios**, porque soltar tira a UC do faturamento e uma view quebrada não pode fazer isso em massa: (1) só sai UC de usina que tem **ao menos uma linha** na leitura — usina ausente é silêncio, não prova; (2) acima de **max(3, 25%)** das UCs vinculadas numa mesma leitura, **nenhuma** é solta e todas viram sinal. O que o freio retém não é recusa: é sinal com o motivo.
+>
+> **Se foi engano no CRM, recadastrar lá religa sozinho** no ciclo seguinte: o espelho acha a UC pelo número, e a UC solta não tem vínculo que atrapalhe.
+>
+> A decisão é pura e mora em `src/dominio/saida-do-rateio.ts` (12 verificações em `tests/saida-do-rateio.ts`, cada freio com o seu caso mudo). Com banco: `N63`–`N68`. **O `N63` reproduz o 16/09 e, com a chamada desligada, o ciclo morre com `R11: rateio da usina soma 105.0000` — o registro executável do defeito.**
+
 ## 4. Regras de negócio
 
 > **R1.** O conector le **exclusivamente** as views `financeiro.*`. Nenhuma tabela base do CRM e consultada, nem para conferencia.
@@ -273,6 +287,7 @@ os dois caminhos de delete fisico, que sao raros - em vez de tudo que sai da vie
 12. Vitima de merge **funde**, nao apenas desativa (R18).
 13. **Suposição não confirmada que o conector propaga vira sinal registrado, nunca silêncio** (R21-b). Divergência entre campo derivado e campo local aparece em `conector_execucao.detalhe` — e **não** é contada como recusa, porque a linha foi gravada.
 14. **O conector nunca escreve o originador de um contrato** (R26). O crédito congelado do CRM é lido e conferido; `contrato.originador_id` e `originador_tipo_no_fechamento` não são tocados por nenhum caminho desta spec, e divergência vira sinal. Escrever ali seria decidir sozinho quanto alguém recebe, sobre um campo que a R20-b congela sem caminho de edição.
+15. **Uma linha inconsistente não derruba o ciclo inteiro** (R27). UC que saiu do rateio no CRM é solta e sinalizada, e documento sem forma de CPF/CNPJ não é semeado — nos dois casos a rodada chega ao fim e o problema aparece em `conector_execucao.detalhe`.
 
 ## 6. Interfaces
 
@@ -344,6 +359,7 @@ os dois caminhos de delete fisico, que sao raros - em vez de tudo que sai da vie
 | `test_ordem_de_classificacao_de_ausencia` | R18 — `N6` |
 | `test_credito_de_originador_nao_e_escrito` | **Inv. 14 · R26 — `N61`/`N62`**. O contrato é plantado com o originador **errado de propósito** e a afirmação é que ele continua errado depois do ciclo: originador, tipo congelado, status e a UC inteiros. O modo de falha é silencioso — um conector que "corrigisse" pagaria outra pessoa sem erro e sem log |
 | `test_divergencia_de_credito_vira_sinal` | **R26 — `N57`–`N60`** com banco, mais as **27 puras** de `tests/credito-originador.ts`. O `N57` fixa que a view vazia **não acusa ninguém** e declara que não rodou; o `N58` é o caminho limpo, sem o qual o `N59` poderia estar acusando qualquer coisa; o `N60` prova que a situação do rateio entra como **contagem das espelhadas**, não como sinal por UC. Nas puras, cada uma das cinco condições tem o seu **caso mudo** ao lado do falante, com um campo de diferença |
+| `test_saida_do_rateio_solta_e_sinaliza` | **Inv. 15 · R27 — `N63`–`N68`** com banco (o 16/09 reproduzido, o que fica na UC solta, o sinal, R3, R24 e a volta por recadastro) mais as **12 puras** de `tests/saida-do-rateio.ts` (os dois freios, cada um com o caso mudo). Plantio: sem a chamada, o ciclo morre na R11 |
 | `test_divergencia_de_distribuidora_vira_sinal` | Inv. 13 · R21-b — **`N51`–`N54`**. O `N51` fixa o caminho limpo (sem ele o `N52` poderia estar acusando qualquer coisa); o `N53` separa sinal de recusa e de sobrescrita; o `N54` cobre o `fechar()` do caminho de **erro**, que é outro trecho de código e levava `recusas` sem levar `divergencias`. Os dois sentidos verificados por plantio |
 
 ## 10. Questões abertas
@@ -358,7 +374,7 @@ os dois caminhos de delete fisico, que sao raros - em vez de tudo que sai da vie
 | **F-01b** | O gatilho de faturamento nao e evento do CRM. Nenhuma etapa do funil marca o cliente pagante | `em_carteira` e inicio de faturamento | Vinicius + operacao |
 | **ARQ-01** | **Aceito:** view `financeiro.leads_arquivados` (arquivados e mesclados, com a tag) para distinguir "sumiu da view mas existe marcado" de "sumiu de verdade". E o que reduz a fila de revisao da 4.3 ao genuinamente ambiguo | 4.3 sai de fila cheia para fila minima | dev do CRM - **pedido feito** |
 | **F-04** | Conector le participacao no funil ou etapa dentro dele? | `cliente_estado_crm` | Vinicius |
-| **AUD-11** | Sync de 30 min e requisito ou pode relaxar? | agendamento | Vinicius |
+| **AUD-11** | Sync de 30 min e requisito ou pode relaxar? | agendamento | Vinicius — **respondida em 22/09/2026: tempo real.** Ver `ADR-0008` |
 | **C1-crm** | Par de funil `Vendas-Integracao -> Donos de Usina` ainda nao existe | leitura de dono de usina | dev do CRM |
 | **Q-ESCOPO-01** | 🔴 **O conector entrega 1 das 4 entidades que a §2 declara.** A §2 "Entra" diz *"upsert idempotente em `cliente`, `unidade_consumidora`, `usina`, `usina_geracao`"*. Medido em 27/07: **só `cliente`** (mais `cliente_estado_crm`). Das 8 views que `leitura.ts` sabe ler, o motor chama **3** — `vendas_ganhas`, `leads_arquivados`, `lead_merges`; `usinas`, `rateio_clientes`, `rateio_creditos`, `geracao_mensal` e `parceiros` existem e nunca são consultadas. Consequências em cadeia: a R16 (originador por `partner_id`) não tem onde acontecer porque o conector não cria `contrato`, e o `test_atribuicao_por_partner_id` da §9 não é teste faltando, é **funcionalidade faltando**. **E isto é o que bloqueia a F2 de verdade:** sem espelho de usina e de geração não há base de faturamento. Decidir: (a) completar o escopo declarado antes de abrir a F2; (b) reduzir a §2 ao que existe e mover o resto para uma spec própria, com o custo declarado | **faturamento (F2)** | **Vinicius** |
 | **Q-CICLO-ORFAO-01** | 🟡 Ciclo morto por `kill` deixa `conector_execucao` em `em_andamento` e o `EXCLUDE` trava o conector. Nasce da R13, que exige que a abertura commite antes dos lotes. Caminho normal coberto; morte fora do `catch` não. Três opções em `QUESTOES.md` — não improvisar prazo de expiração | agendamento não assistido | Vinicius |
@@ -378,6 +394,7 @@ os dois caminhos de delete fisico, que sao raros - em vez de tudo que sai da vie
 
 | Versão | Data | O que mudou |
 |---|---|---|
+| **1.7** | **22/09/2026** | **O conector ganha caminho de saída, e uma linha ruim deixa de parar o espelho.** Nova **R27** e novo **invariante 15**. Origem: 590 rodadas mortas entre 16/09 e 22/09 porque três UCs saíram do rateio no CRM e o espelho não sabia tirá-las — a soma da usina 0001 chegou a 104,78% e a trava deferida derrubava o COMMIT. Decisão do dono no dia: **seguir o CRM**, com dois freios contra view quebrada. **No mesmo dia apareceu o segundo caso da mesma classe:** às 17:24 o card `G3-0575`, com o CPF **mascarado** `726XXXXXX15` desde 20/08, foi dado como ganho; o comprimento dizia “cpf”, a constraint `cliente_documento_formato` recusava, e o lote de clientes caía inteiro. `sementeDeDocumento` passa a exigir a **mesma forma da constraint** e o card vira sinal (`S1i`–`S1k` em `tests/crm-semente.ts`). Com as duas correções, o ensaio contra produção terminou em `parcial` só pelas três recusas R23 já conhecidas |
 | **1.6** | **03/08/2026** | **A lista fechada de views passa de oito para dez, e o eixo do originador deixa de sair de documento.** Nova **R26** e novo **invariante 14**: o conector lê `financeiro.vendas_creditadas` e `financeiro.rateio_situacao`, confere o crédito congelado contra o originador digitado, e **não escreve nem um campo**. Cinco condições de sinal, **todas medidas contra o CRM real antes de escritas e todas mudas hoje** — o critério de ruído da R25 aplicado por construção. `N57`–`N62` mais 27 verificações puras. **A parte que ensina não é a regra, é como as views foram descobertas:** elas existiam desde 01/08 e a resposta do dev dizia que não; nada deste lado comparava o que o CRM expõe contra a nossa lista fechada, então "views legíveis: 10" era impresso e ninguém conferia contra o 8. `conferirRoleDeLeitura` passa a devolver `viewsNovasNoCrm` e `viewsAusentes`, e o script grita as duas. Contagem que ninguém confere não é medição |
 | **1.5** | **03/08/2026** | **`data_vencimento` era espelho e virou campo local — e a correção é de defeito, não de estilo.** Nova **R25**: o conector não escreve `data_vencimento` em nenhum caminho, e divergência vira sinal. O código anterior a levava no `updateMany`, e o CRM a tem **vazia em 41 de 41 linhas** (medido no dia): preencher o vencimento das 39 UCs e rodar o ciclo **apagaria os 39**, sem erro, sem log e sem recusa. Duas linhas novas na §7 e os testes `N55`/`N56` — o `N55` **falha contra o código anterior**, e é o registro executável do defeito. Achado ao construir o importador de vencimento, não por auditoria: a pergunta era *"onde o valor vai ser gravado"* e a resposta foi *"e quem o apaga depois"* |
 | **1.4** | **28/07/2026** | **A suposição da R21 deixou de esperar confirmação e virou sinal.** Nova **R21-b**: divergência entre a `distribuidora` da UC (campo local, R5) e a da usina vinculada aparece em `conector_execucao.detalhe` — sem recusar e sem sobrescrever. Novo **invariante 13**, nova linha na §7, novo teste obrigatório (`N51`–`N54`). O `N54` nasceu de um buraco encontrado ao escrevê-lo: o `fechar()` do caminho de **erro** levava `recusas` e não levava `divergencias`, então o sinal se perderia justamente no ciclo interrompido. **Medido contra produção em 28/07: zero divergências nas 35 UCs** — o sinal nasce silencioso, que é o estado correto |

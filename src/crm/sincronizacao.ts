@@ -36,6 +36,7 @@ import { ehSqlstate, SQLSTATE } from '../db/sqlstate.ts';
 import { indiceDeDocumentoExiste } from '../db/catalogo.ts';
 import { paraDecimal, decimalParaTexto } from '../dominio/fatura-unificada.ts';
 import { conferirCreditoDeOriginador, type ResumoDeSituacao } from '../dominio/credito-originador.ts';
+import { decidirSaidas, type UcVinculada } from '../dominio/saida-do-rateio.ts';
 /* A semente do documento reusa o MESMO normalizador e o MESMO detector de tipo
  * da R7/R8 - se a fronteira tivesse regra propria, um documento aceito aqui
  * poderia ser recusado na aba Clientes, e a divergencia so apareceria quando um
@@ -526,8 +527,23 @@ export function sementeDeDocumento(
   if (!doc) return null;
   const tipo = detectarTipo(doc);
   if (!tipo) return null;   // sem forma de documento: nao grava
+  /* O COMPRIMENTO NAO BASTA, e a prova e de 22/09/2026: o card G3-0575 traz
+   * `726XXXXXX15` - um CPF MASCARADO, 11 posicoes com letra. `detectarTipo`
+   * olha so o comprimento e disse "cpf"; a constraint `cliente_documento_formato`
+   * recusou; e um 23514 no meio do `createMany` derrubou o LOTE e o ciclo
+   * inteiro, a partir do momento em que o card foi dado como ganho. Um valor que
+   * o banco vai recusar nao tem forma de documento, e cai no mesmo `null` do
+   * comprimento errado. A forma e a MESMA da constraint, para as duas nao
+   * discordarem. */
+  if (!FORMA_DO_DOCUMENTO[tipo].test(doc)) return null;
   return { documento: doc, documento_tipo: tipo };
 }
+
+/** A forma que `cliente_documento_formato` aceita (migration 20260726130000). */
+const FORMA_DO_DOCUMENTO = {
+  cpf: /^[0-9]{11}$/,
+  cnpj: /^[0-9A-Z]{12}[0-9]{2}$/,
+} as const;
 
 /**
  * ============================================================================
@@ -1080,6 +1096,18 @@ async function espelharLote(
      * conector nao escolhe qual dos dois leva o documento.
      */
     const doc = sementeDeDocumento(l.documento, l.documento_tipo);
+    /* O CRM tem ALGO no campo e nao e documento: vira sinal, para alguem corrigir
+     * o card. O valor nao vai para o sinal - pode ser meio documento de alguem. */
+    if (!doc && normalizar(l.documento)) {
+      const bruto = normalizar(l.documento);
+      r.divergencias.push({
+        entidade: 'cliente', chave: texto(l.codigo) ?? l.lead_id,
+        sinal: `o campo CPF/CNPJ do card no CRM tem ${bruto.length} posicoes`
+             + (/[A-Z]/.test(bruto) ? ' com letra' : '')
+             + ' e nao tem forma de CPF nem de CNPJ (mascarado ou digitado pela metade?). O cliente '
+             + 'foi espelhado SEM documento. Corrija o card no CRM e o proximo ciclo semeia sozinho.',
+      });
+    }
     let semente: Record<string, unknown> = {};
     /*
      * UMA SEMENTE PODE SER CORRIGIDA POR OUTRA SEMENTE, e isto NAO afrouxa a R5.
@@ -1407,6 +1435,17 @@ async function espelharUnidades(
     // em que ele foi criado.
     vistosNoCrm.add(credito.lead_id);
   }
+
+  /*
+   * A SAIDA VEM ANTES DA ENTRADA, e a ordem e o conserto de 22/09/2026 (R27).
+   *
+   * A trava R11 e DEFERIDA: ela soma o rateio da usina no COMMIT. Se o rateio
+   * novo entrasse no mesmo lote em que a UC que saiu ainda conta, a soma passaria
+   * de 100 e o lote inteiro cairia - foi assim que 590 rodadas morreram entre
+   * 16/09 e 22/09. Soltando primeiro, numa transacao propria, a entrada ja
+   * encontra a usina com a conta certa.
+   */
+  await soltarQuemSaiuDoRateio(clientes.linhas, r, tenantId, lote, gravarContadores);
 
   for (const bloco of emLotes(alvos, tamanho)) {
     r.maiorLote = Math.max(r.maiorLote, bloco.length);
@@ -1762,6 +1801,100 @@ async function espelharUnidades(
     });
   }
   return situacoes.linhas;
+}
+
+/**
+ * R27 - a UC que saiu do rateio no CRM perde o vinculo com a usina aqui.
+ *
+ * A decisao (quem sai, e se o freio segura) e pura e mora em
+ * `src/dominio/saida-do-rateio.ts`; aqui so ha leitura, escrita e registro.
+ * A escrita e estreita: `usina_id`, `percentual_rateio` e a situacao do rateio.
+ * `crm_usina_cliente_id` FICA, como rastro de qual contrato saiu - ele nao
+ * atrapalha a volta, porque o espelho acha a UC pelo numero. Cliente, contrato e
+ * campos locais nao sao tocados. O gatilho de auditoria da tabela grava o antes
+ * e o depois (regra 9).
+ */
+async function soltarQuemSaiuDoRateio(
+  linhas: RateioCliente[], r: ResultadoDoCiclo, tenantId: string,
+  lote: AbrirLote, gravarContadores: () => Promise<void>,
+): Promise<void> {
+  const lido = {
+    contratos: new Set(linhas.map((l) => l.contrato_id)),
+    ucs: new Set(linhas.map((l) => texto(l.uc)).filter((x): x is string => !!x)),
+    usinas: new Set(linhas.map((l) => texto(l.codigo_geradora)).filter((x): x is string => !!x)),
+  };
+
+  await lote(async () => {
+    const db = dbt();
+    const atuais = await db.unidade_consumidora.findMany({
+      where: { tenant_id: tenantId, usina_id: { not: null }, crm_usina_cliente_id: { not: null } },
+      select: {
+        id: true, numero_uc: true, cliente_id: true, crm_usina_cliente_id: true, percentual_rateio: true,
+        usina: { select: { codigo_geradora: true } },
+        contrato: { where: { status: { in: ['ativo', 'suspenso'] } }, select: { status: true } },
+      },
+    });
+    const porId = new Map(atuais.map((u) => [u.id, u]));
+    const vinculadas: UcVinculada[] = atuais.map((u) => ({
+      id: u.id, numero_uc: u.numero_uc, crm_usina_cliente_id: u.crm_usina_cliente_id!,
+      codigo_geradora: u.usina?.codigo_geradora ?? null,
+      percentual_rateio: u.percentual_rateio === null ? null : String(u.percentual_rateio),
+    }));
+
+    const decisao = decidirSaidas(vinculadas, lido);
+
+    for (const { uc, motivo } of decisao.retidas) {
+      r.divergencias.push({ entidade: 'unidade_consumidora', chave: uc.numero_uc,
+        sinal: `a UC saiu do rateio no CRM (o contrato ${uc.crm_usina_cliente_id} nao esta em `
+             + `financeiro.rateio_clientes), mas ${motivo}` });
+    }
+
+    const clientesTocados = new Set<string>();
+    for (const uc of decisao.soltar) {
+      /* O predicado repete o contrato de proposito: se um lote concorrente ja
+       * religou a UC a outro contrato, este UPDATE nao acha a linha e nao solta
+       * um vinculo que acabou de nascer. */
+      const { count } = await db.unidade_consumidora.updateMany({
+        where: { tenant_id: tenantId, id: uc.id, crm_usina_cliente_id: uc.crm_usina_cliente_id },
+        data: { usina_id: null, percentual_rateio: null, rateio_situacao: null,
+                rateio_em_troca_titularidade: null, rateio_situacao_lida_em: new Date() },
+      });
+      if (count === 0) continue;
+      r.atualizados++; r.porEntidade.unidade_consumidora.atualizados++;
+      const atual = porId.get(uc.id)!;
+      clientesTocados.add(atual.cliente_id);
+      const contratos = atual.contrato.map((c) => c.status);
+      r.divergencias.push({ entidade: 'unidade_consumidora', chave: uc.numero_uc,
+        sinal: `a UC saiu do rateio no CRM: o contrato de rateio ${uc.crm_usina_cliente_id} nao esta `
+             + 'mais em financeiro.rateio_clientes. O vinculo foi SOLTO aqui (R27): antes, usina '
+             + `${uc.codigo_geradora} com ${uc.percentual_rateio ?? '(sem percentual)'}%; agora, sem usina. `
+             + (contratos.length
+               ? `Ela tem contrato ${contratos.join(' e ')} neste sistema, e ele NAO foi mexido: se a `
+                 + 'saida foi de verdade, o contrato precisa ser encerrado aqui; se foi engano, recadastre '
+                 + 'o rateio no CRM e o proximo ciclo religa sozinho.'
+               : 'Ela nao tem contrato ativo aqui. Se foi engano, recadastre no CRM e o proximo ciclo religa.'),
+      });
+    }
+
+    /* R7/R24: `tem_rateio_ativo` era so ligado. Cliente que ficou sem nenhuma UC
+     * vinculada deixa de ter rateio ativo - se outra UC dele entrar ainda neste
+     * ciclo, `marcarRateioAtivo` liga de novo. */
+    if (clientesTocados.size) {
+      const aindaVinculados = await db.unidade_consumidora.findMany({
+        where: { tenant_id: tenantId, cliente_id: { in: [...clientesTocados] }, usina_id: { not: null } },
+        select: { cliente_id: true },
+      });
+      const comVinculo = new Set(aindaVinculados.map((u) => u.cliente_id));
+      const semRateio = [...clientesTocados].filter((id) => !comVinculo.has(id));
+      if (semRateio.length) {
+        await db.cliente_estado_crm.updateMany({
+          where: { tenant_id: tenantId, cliente_id: { in: semRateio }, tem_rateio_ativo: true },
+          data: { tem_rateio_ativo: false, sincronizado_em: new Date() },
+        });
+      }
+    }
+    await gravarContadores();
+  });
 }
 
 /**
