@@ -1350,6 +1350,114 @@ const L3 = 'aaaa3333-0000-4000-8000-00000000cc03';
       `R27 recadastro no CRM religa a UC no ciclo seguinte (usina=${volta?.usina_id === USINA_27 ? 'GER-CRM-27' : volta?.usina_id}, pct=${volta?.pct}, rateio_ativo=${volta?.tem_rateio_ativo})`);
 }
 
+// ============ N69-N73: o contrato que MUDOU DE UC no CRM (SPEC-002 R28, 24/09/2026)
+//
+// O caso real, reproduzido: o contrato da Carla (G3-0229) passou no CRM da UC
+// antiga, na usina 04, para uma UC nova na usina 0002. A R23 recusava a nova e
+// deixava a antiga com 9% na 04; entrou um rateio de 5% la, e a 04 somou 101,56%
+// aqui contra 92,56% no CRM. A trava R11 derrubou todas as rodadas.
+//
+// Aqui com numeros redondos: F 85% e V 9% na usina P; depois o contrato de V vai
+// para a UC N na usina Q, e G entra com 10% na P. Sem a R28, P somaria
+// 85 + 9 + 10 = 104 e o ciclo morreria. So o ponteiro velho solto faz caber.
+//
+// Duas usinas proprias, pela mesma razao da R27: as UCs das secoes anteriores nao
+// aparecem nestas leituras e caem no freio 1 dela, sem serem tocadas.
+{
+  const P = 'dddd2828-0000-4000-8000-00000000aa28';
+  const Q = 'dddd2829-0000-4000-8000-00000000aa29';
+  await sql(`INSERT INTO usina (id, tenant_id, codigo_geradora, distribuidora, apelido)
+             VALUES ($1::uuid,$2::uuid,'GER-CRM-28P','Equatorial GO','Usina P da R28'),
+                    ($3::uuid,$2::uuid,'GER-CRM-28Q','Equatorial GO','Usina Q da R28')`, P, A, Q);
+  const LF = 'aaaa2801-0000-4000-8000-0000000028a1', CF = 'bbbb2801-0000-4000-8000-0000000028b1';
+  const LV = 'aaaa2802-0000-4000-8000-0000000028a2', CV = 'bbbb2802-0000-4000-8000-0000000028b2';
+  const LG = 'aaaa2803-0000-4000-8000-0000000028a3', CG = 'bbbb2803-0000-4000-8000-0000000028b3';
+  const LS = 'aaaa2804-0000-4000-8000-0000000028a4';
+  const CS1 = 'bbbb2804-0000-4000-8000-0000000028b4', CS2 = 'bbbb2805-0000-4000-8000-0000000028b5';
+  const LH = 'aaaa2806-0000-4000-8000-0000000028a6', CH = 'bbbb2806-0000-4000-8000-0000000028b6';
+  const UF = '000000000002801', UV = '000000000002802', UN = '000000000002803', UG = '000000000002804';
+  const US1 = '000000000002805', US2 = '000000000002806', UH = '000000000002807', UH2 = '000000000002808';
+
+  const linha = (contrato: string, uc: string, pct: string, usina = 'GER-CRM-28P') =>
+    rateioCliCrm({ contrato_id: contrato, uc, codigo_geradora: usina, percentual_rateio: pct });
+  const credito = (contrato: string, lead: string, pct: string) =>
+    rateioCreCrm({ contrato_id: contrato, lead_id: lead, percentual_rateio: pct });
+  const ciclo = (cli: RateioCliente[], cre: RateioCredito[]) =>
+    executarCiclo(porta([venda({ lead_id: L1 })], [], [], true,
+      [usinaCrm({ usina_id: 'dddd1111-0000-4000-8000-00000000aa28', codigo_geradora: 'GER-CRM-28P' }),
+       usinaCrm({ usina_id: 'dddd1111-0000-4000-8000-00000000aa29', codigo_geradora: 'GER-CRM-28Q' })], [],
+      cli, cre), loteEmA());
+  const ucDe = async (numero: string) => (await sql(
+    `SELECT id, cliente_id, usina_id, percentual_rateio::text AS pct, crm_usina_cliente_id
+       FROM unidade_consumidora WHERE tenant_id=$1::uuid AND numero_uc=$2`, A, numero))[0];
+  const somaDe = async (usina: string) => Number((await sql(
+    `SELECT coalesce(sum(percentual_rateio),0)::text AS s FROM unidade_consumidora
+      WHERE tenant_id=$1::uuid AND usina_id=$2::uuid AND status <> 'cancelada'`, A, usina))[0].s);
+  const trocasDe = (r: { divergencias: { chave: string; sinal: string }[] }, uc: string) =>
+    r.divergencias.filter((d) => d.chave === uc && /mudou de UC no CRM/.test(d.sinal));
+
+  // Estado inicial: F 85% e V 9% em P.
+  await ciclo([linha(CF, UF, '85.0000'), linha(CV, UV, '9.0000')],
+              [credito(CF, LF, '85.0000'), credito(CV, LV, '9.0000')]);
+  const antes = await ucDe(UV);
+
+  // ---- N69: o contrato de V vai para N em Q, e G entra em P. O ciclo CHEGA AO FIM.
+  const r = await ciclo([linha(CF, UF, '85.0000'), linha(CV, UN, '9.0000', 'GER-CRM-28Q'), linha(CG, UG, '10.0000')],
+                        [credito(CF, LF, '85.0000'), credito(CV, LV, '9.0000'), credito(CG, LG, '10.0000')]);
+  const [exec] = await sql(`SELECT status, detalhe FROM conector_execucao WHERE tenant_id=$1::uuid AND ciclo_id=$2::uuid`,
+                           A, r.cicloId);
+  const n = await ucDe(UN);
+  chk('N69', antes?.usina_id === P && r.status !== 'erro' && !exec?.detalhe?.erro
+       && await somaDe(P) === 95 && await somaDe(Q) === 9
+       && n?.usina_id === Q && n?.crm_usina_cliente_id === CV && n?.cliente_id === antes?.cliente_id,
+      `R28 o caso de 24/09: o contrato de V passa para N, G entra, e P soma ${await somaDe(P)}% (sem a R28 seria 104 e o COMMIT cairia)`);
+
+  // ---- N70: a UC antiga perde o ponteiro INTEIRO - diferente da R27, que guarda rastro.
+  const v = await ucDe(UV);
+  chk('N70', v?.usina_id === null && v?.pct === null && v?.crm_usina_cliente_id === null && v?.cliente_id === antes?.cliente_id,
+      `R28 a UC antiga fica com o cliente e sem usina, percentual nem contrato (contrato=${v?.crm_usina_cliente_id})`);
+
+  // ---- N71: a troca e SINAL com o antes, e nao recusa; e a segunda passada e muda (R3).
+  const sv = trocasDe(r, UV);
+  const r2 = await ciclo([linha(CF, UF, '85.0000'), linha(CV, UN, '9.0000', 'GER-CRM-28Q'), linha(CG, UG, '10.0000')],
+                         [credito(CF, LF, '85.0000'), credito(CV, LV, '9.0000'), credito(CG, LG, '10.0000')]);
+  chk('N71', sv.length === 1 && /SOLTO \(R28\)/.test(sv[0].sinal) && new RegExp(UN).test(sv[0].sinal)
+       && r.porEntidade.unidade_consumidora.recusados === 0
+       && trocasDe(r2, UV).length === 0 && r2.porEntidade.unidade_consumidora.atualizados === 0,
+      `R28 um sinal com as duas UCs, zero recusas, e a segunda passada nao anuncia nem escreve (${sv.length} sinal)`);
+
+  // ---- N72: a permuta do Carlos Gabriel - duas UCs trocam de contrato entre si.
+  await ciclo([linha(CS1, US1, '2.0000'), linha(CS2, US2, '3.0000')],
+              [credito(CS1, LS, '2.0000'), credito(CS2, LS, '3.0000')]);
+  const rp = await ciclo([linha(CS1, US2, '2.0000'), linha(CS2, US1, '3.0000')],
+                         [credito(CS1, LS, '2.0000'), credito(CS2, LS, '3.0000')]);
+  const [s1, s2] = [await ucDe(US1), await ucDe(US2)];
+  chk('N72', rp.status !== 'erro' && s1?.crm_usina_cliente_id === CS2 && Number(s1?.pct) === 3
+       && s2?.crm_usina_cliente_id === CS1 && Number(s2?.pct) === 2
+       && !rp.recusas.some((x) => x.codigo === US1 || x.codigo === US2),
+      `R28 permuta: cada UC fica com o contrato que o CRM diz, sem recusa (US1=${s1?.pct}%, US2=${s2?.pct}%)`);
+
+  // ---- N73: com HISTORIA a R23 continua: a UC antiga tem contrato aqui, e nada se move.
+  await ciclo([linha(CH, UH, '1.0000')], [credito(CH, LH, '1.0000')]);
+  const h = await ucDe(UH);
+  const ORIG = 'aaaa7001-0000-4000-8000-00000000dd01';   // o mesmo do N61: mesmo documento, e o indice unico nao aceitaria outro
+  await sql(`INSERT INTO originador (id, tenant_id, nome, natureza, tipo, documento, documento_tipo)
+             VALUES ($1::uuid,$2::uuid,'Out Sales','pj','terceirizado','19131243000197','cnpj')
+             ON CONFLICT DO NOTHING`, ORIG, A);
+  await sql(`INSERT INTO contrato (id, tenant_id, cliente_id, unidade_consumidora_id, usina_id,
+                                   originador_id, originador_tipo_no_fechamento, data_fechamento,
+                                   valor_referencia_centavos, valor_referencia_origem, status)
+             VALUES ($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,$6::uuid,'terceirizado','2026-06-01',
+                     100,'local','ativo')`,
+            'bbbb7002-0000-4000-8000-00000000dd28', A, h.cliente_id, h.id, P, ORIG);
+  const rh = await ciclo([linha(CH, UH2, '1.0000')], [credito(CH, LH, '1.0000')]);
+  const h2 = await ucDe(UH);
+  const recusa = rh.recusas.find((x) => x.codigo === UH2);
+  chk('N73', h2?.crm_usina_cliente_id === CH && h2?.usina_id === P && !(await ucDe(UH2))
+       && !!recusa && /R28/.test(recusa.motivo) && /1 contrato/.test(recusa.motivo) && trocasDe(rh, UH).length === 0,
+      `R23 intacta com historia: a UC antiga guarda contrato e usina, a nova e recusada e o motivo diz por que (${recusa?.motivo.slice(0, 60)}...)`);
+}
+
 await verificador.end();
 await prisma.$disconnect();
 await pools.transacional.end();

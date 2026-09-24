@@ -37,6 +37,7 @@ import { indiceDeDocumentoExiste } from '../db/catalogo.ts';
 import { paraDecimal, decimalParaTexto } from '../dominio/fatura-unificada.ts';
 import { conferirCreditoDeOriginador, type ResumoDeSituacao } from '../dominio/credito-originador.ts';
 import { decidirSaidas, type UcVinculada } from '../dominio/saida-do-rateio.ts';
+import { decidirTrocas, type UcComContrato } from '../dominio/troca-de-uc.ts';
 /* A semente do documento reusa o MESMO normalizador e o MESMO detector de tipo
  * da R7/R8 - se a fronteira tivesse regra propria, um documento aceito aqui
  * poderia ser recusado na aba Clientes, e a divergencia so apareceria quando um
@@ -1446,6 +1447,12 @@ async function espelharUnidades(
    * encontra a usina com a conta certa.
    */
   await soltarQuemSaiuDoRateio(clientes.linhas, r, tenantId, lote, gravarContadores);
+  /*
+   * E pela mesma razao, a TROCA DE UC tambem vem antes (R28, 24/09/2026): o
+   * ponteiro velho de um contrato que mudou de UC prende usina e percentual na
+   * UC antiga, e a entrada ligaria o mesmo contrato a UC nova no mesmo COMMIT.
+   */
+  const trocasRetidas = await soltarContratoQueMudouDeUc(clientes.linhas, alvos, r, tenantId, lote, gravarContadores);
 
   for (const bloco of emLotes(alvos, tamanho)) {
     r.maiorLote = Math.max(r.maiorLote, bloco.length);
@@ -1542,8 +1549,9 @@ async function espelharUnidades(
           r.recusas.push({
             lead_id: a.leadId, codigo: a.numeroUc,
             motivo: `contrato de rateio ${a.contratoId} ja esta vinculado a UC ${ucAnterior} e agora aponta `
-                  + `para ${a.numeroUc}. O conector nao move vinculo de contrato entre UCs: uma das duas `
-                  + 'leituras esta errada, e escolher seria palpite.',
+                  + `para ${a.numeroUc}. O conector so move esse vinculo quando a UC antiga nao tem historia `
+                  + `(R28), e aqui nao moveu: ${trocasRetidas.get(a.contratoId)
+                      ?? 'uma das duas leituras esta errada, e escolher seria palpite.'}`,
           });
           continue;
         }
@@ -1876,24 +1884,112 @@ async function soltarQuemSaiuDoRateio(
       });
     }
 
-    /* R7/R24: `tem_rateio_ativo` era so ligado. Cliente que ficou sem nenhuma UC
-     * vinculada deixa de ter rateio ativo - se outra UC dele entrar ainda neste
-     * ciclo, `marcarRateioAtivo` liga de novo. */
-    if (clientesTocados.size) {
-      const aindaVinculados = await db.unidade_consumidora.findMany({
-        where: { tenant_id: tenantId, cliente_id: { in: [...clientesTocados] }, usina_id: { not: null } },
-        select: { cliente_id: true },
-      });
-      const comVinculo = new Set(aindaVinculados.map((u) => u.cliente_id));
-      const semRateio = [...clientesTocados].filter((id) => !comVinculo.has(id));
-      if (semRateio.length) {
-        await db.cliente_estado_crm.updateMany({
-          where: { tenant_id: tenantId, cliente_id: { in: semRateio }, tem_rateio_ativo: true },
-          data: { tem_rateio_ativo: false, sincronizado_em: new Date() },
-        });
-      }
-    }
+    await desligarRateioSemVinculo(clientesTocados, tenantId);
     await gravarContadores();
+  });
+}
+
+/**
+ * R7/R24: `tem_rateio_ativo` era so ligado. Cliente que ficou sem nenhuma UC
+ * vinculada deixa de ter rateio ativo - se outra UC dele entrar ainda neste
+ * ciclo, `marcarRateioAtivo` liga de novo. Roda DENTRO do lote de quem soltou. *
+ * ⚑ `Q-CLIENTE-SEM-USINA-01` (24/09/2026): o dono quer que o cliente que nao
+ * esta em usina nenhuma SAIA DE ATIVOS, e vai detalhar a regra depois. Este
+ * `false` e a marca que ela vai ler - hoje NADA o consome para decidir, e isso
+ * e de proposito: so a flag, sem efeito, ate a regra chegar.
+ */
+async function desligarRateioSemVinculo(clientesTocados: ReadonlySet<string>, tenantId: string): Promise<void> {
+  if (!clientesTocados.size) return;
+  const db = dbt();
+  const aindaVinculados = await db.unidade_consumidora.findMany({
+    where: { tenant_id: tenantId, cliente_id: { in: [...clientesTocados] }, usina_id: { not: null } },
+    select: { cliente_id: true },
+  });
+  const comVinculo = new Set(aindaVinculados.map((u) => u.cliente_id));
+  const semRateio = [...clientesTocados].filter((id) => !comVinculo.has(id));
+  if (semRateio.length) {
+    await db.cliente_estado_crm.updateMany({
+      where: { tenant_id: tenantId, cliente_id: { in: semRateio }, tem_rateio_ativo: true },
+      data: { tem_rateio_ativo: false, sincronizado_em: new Date() },
+    });
+  }
+}
+
+/**
+ * R28 - O CONTRATO QUE MUDOU DE UC NO CRM, com a UC antiga sem historia.
+ *
+ * A decisao e pura e mora em `src/dominio/troca-de-uc.ts`; aqui so ha leitura,
+ * escrita e sinal. Solta o ponteiro velho INTEIRO - `crm_usina_cliente_id`
+ * junto com usina, percentual e situacao -, porque e ele que o `uc_crm_unico`
+ * guarda e que faria a entrada recusar a UC nova pela R23. Diferente da R27,
+ * que guarda o contrato como rastro: la o contrato sumiu; aqui ele continua
+ * vivo e precisa ficar livre para a UC certa.
+ *
+ * Transacao propria e ANTES da entrada, pela mesma razao da R27: a trava R11 e
+ * deferida, e soltar no mesmo lote em que se liga nao muda a conta do COMMIT.
+ */
+async function soltarContratoQueMudouDeUc(
+  linhas: RateioCliente[], alvos: readonly { contratoId: string; codigoGeradora: string | null }[],
+  r: ResultadoDoCiclo, tenantId: string,
+  lote: AbrirLote, gravarContadores: () => Promise<void>,
+): Promise<ReadonlyMap<string, string>> {
+  return lote(async () => {
+    const db = dbt();
+    const atuais = await db.unidade_consumidora.findMany({
+      where: { tenant_id: tenantId, crm_usina_cliente_id: { not: null } },
+      select: {
+        id: true, numero_uc: true, cliente_id: true, crm_usina_cliente_id: true, percentual_rateio: true,
+        usina: { select: { codigo_geradora: true } },
+        _count: { select: { contrato: true, fatura: true, registro_de_fatura_unificada: true } },
+      },
+    });
+    const porId = new Map(atuais.map((u) => [u.id, u]));
+    const vinculadas: UcComContrato[] = atuais.map((u) => ({
+      id: u.id, numero_uc: u.numero_uc, crm_usina_cliente_id: u.crm_usina_cliente_id!,
+      codigo_geradora: u.usina?.codigo_geradora ?? null,
+      percentual_rateio: u.percentual_rateio === null ? null : String(u.percentual_rateio),
+      historia: { contratos: u._count.contrato, faturas: u._count.fatura,
+                  contas_lidas: u._count.registro_de_fatura_unificada },
+    }));
+
+    /* So entra na decisao o contrato que a entrada vai gravar: passou pelas
+     * recusas de leitura (`alvos`) E tem a usina espelhada aqui - a mesma
+     * conferencia que a entrada faz logo depois, lida uma vez so. */
+    const usinasAqui = new Set((await db.usina.findMany({
+      where: { tenant_id: tenantId }, select: { codigo_geradora: true },
+    })).map((u) => u.codigo_geradora));
+    const entram = new Set(alvos.filter((a) => a.codigoGeradora && usinasAqui.has(a.codigoGeradora))
+                                .map((a) => a.contratoId));
+    const decisao = decidirTrocas(vinculadas, linhas.map((l) => ({ contrato_id: l.contrato_id, uc: texto(l.uc) })), entram);
+
+    /* O que fica retido NAO vira sinal aqui: a entrada logo depois ja recusa a
+     * linha pela R23, e a recusa passa a levar o motivo da R28 junto. Dois
+     * registros para o mesmo fato seriam ruido na tela do conector. */
+    const retidas = new Map(decisao.retidas.map((t) => [t.uc.crm_usina_cliente_id, t.motivo]));
+
+    const clientesTocados = new Set<string>();
+    for (const { uc, para } of decisao.soltar) {
+      /* O predicado repete o contrato, como na R27: se um lote concorrente ja
+       * mexeu na linha, este UPDATE nao a acha e nao solta nada. */
+      const { count } = await db.unidade_consumidora.updateMany({
+        where: { tenant_id: tenantId, id: uc.id, crm_usina_cliente_id: uc.crm_usina_cliente_id },
+        data: { crm_usina_cliente_id: null, usina_id: null, percentual_rateio: null, rateio_situacao: null,
+                rateio_em_troca_titularidade: null, rateio_situacao_lida_em: new Date() },
+      });
+      if (count === 0) continue;
+      r.atualizados++; r.porEntidade.unidade_consumidora.atualizados++;
+      clientesTocados.add(porId.get(uc.id)!.cliente_id);
+      r.divergencias.push({ entidade: 'unidade_consumidora', chave: uc.numero_uc,
+        sinal: `o contrato de rateio ${uc.crm_usina_cliente_id} mudou de UC no CRM: estava na ${uc.numero_uc} `
+             + `e agora aponta para ${para}. A UC antiga nao tinha contrato, fatura nem conta lida aqui, `
+             + 'entao o vinculo foi SOLTO (R28): antes, usina '
+             + `${uc.codigo_geradora ?? '(sem usina)'} com ${uc.percentual_rateio ?? '(sem percentual)'}%; agora, `
+             + `sem usina e sem contrato. O contrato segue para a ${para} neste mesmo ciclo. Se foi engano, `
+             + 'corrija no CRM e o proximo ciclo refaz.' });
+    }
+    await desligarRateioSemVinculo(clientesTocados, tenantId);
+    await gravarContadores();
+    return retidas;
   });
 }
 
