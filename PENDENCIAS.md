@@ -11,7 +11,22 @@
 | **Estado da suíte** | Sem banco: `typecheck` + `documento` + `brcode` + `dominio` + `web` → **`EXIT=0`, 2.420 linhas `ok`** (28/08, madrugada), e desde 27/08 com as verificações de `tests/sicoob-http.ts` — hoje **63** — dentro do `test:dominio`. Fora da suíte, contra a Sicoob de verdade: `npm run ensaio-sicoob` → **6 de 6**. `test:repos` e `test:isolamento` **não rodam nesta VPS** (exigem PostgreSQL local) |
 | **Produção** | `financeiro.blackhaus.io` · **35 migrations no ar** (a 34 em 21/08, a **35 em 28/08**) · a **36 escrita e NÃO aplicada** · Pix estático e boleto importado no ar · central de ajuda em toda tela · **a conta unificada lida já vira cobrança** (migration 34) · o conector roda sozinho a cada 15 min pelo `financeiro-ciclo.timer`, e desde **28/08** a agenda de cobrança roda sozinha em três timers (`fila` 5 min · `consulta` e `certificado` diárias) |
 
-> ## 🆕 11/09/2026 — CONFERÊNCIA DE PRODUÇÃO, e ela reabre um item que estava fechado
+> ## 🆕 26/09/2026 — OS DOIS ITENS DE IMPLEMENTADOR FECHARAM
+>
+> ⚠️ **Este arquivo ficou parado de 11/09 a 26/09.** O que aconteceu no meio
+> (dois funis, conector em tempo real, R27, R28) está em `QUESTOES.md` §2.p–§2.r,
+> que é a fonte mais nova. E o **§1 abaixo está vencido**: o A1 foi comprado e
+> instalado — `saude-cobranca` de 26/09 06:37: *"certificado A1 ... ok (324 dia(s))"*.
+>
+> | Item | O que foi medido | Situação |
+> |---|---|---|
+> | 🔴 **O aviso do `pg`** (§ de 11/09 abaixo) | Voltou em **21/09 15:54** e **22/09 03:06**, as duas no segundo em que a tela «Contas a pagar» abriu. **A causa é do Prisma, não nossa:** o nó `join` do runtime 7.9 carrega as relações de um `include` com `Promise.all`, e dentro da transação interativa todas caem na MESMA conexão. `contaPagar.listar()` pede quatro relações. A guarda CS2 não tinha como ver isso: o `Promise.all` está no `node_modules` | ✅ **fechado na raiz**: `src/db/conexao-em-serie.ts`. Os dois pools passam a construir uma conexão que manda uma consulta por vez (`Client: ConexaoEmSerie` em `db/pools.ts`). Vale para todo `include` do sistema, não só para esta tela (`porId` pede cinco). `tests/conexao-em-serie.ts` (CE1–CE7) **reproduz o defeito sem banco**: com o Prisma e a função reais, 4 consultas em voo na mesma conexão sem a fila, e 1 com ela |
+> | 🟠 **Cabeçalhos de segurança no nginx** | `curl -sI`: nenhum dos quatro | ✅ **aplicados**: HSTS, `nosniff`, `X-Frame-Options DENY` e `Referrer-Policy`, com o motivo de cada um no próprio vhost. Backup em `/etc/nginx/sites-available/zz-financeiro.blackhaus.io.bak-cabecalhos-20260926` |
+>
+> **Suíte sem banco:** typecheck `EXIT=0` · documento 17 · brcode 377 · web 1.669 ·
+> domínio 1.102 (com as 7 novas). `test:repos`/`test:isolamento` seguem só no CI.
+
+> ## 11/09/2026 — CONFERÊNCIA DE PRODUÇÃO, e ela reabre um item que estava fechado
 >
 > Sessão sem código: processo, bundle, CI, timers, journal, nginx e suíte medidos
 > por dentro. O retrato inteiro é `RETOMADA-2026-09-11.md`. Três linhas mudam aqui:

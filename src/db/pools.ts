@@ -7,6 +7,7 @@
 // nunca derrube o caminho transacional.
 
 import pg from 'pg';
+import { ConexaoEmSerie } from './conexao-em-serie.ts';
 
 const n = (v: string | undefined, padrao: number) => {
   const x = Number(v);
@@ -25,9 +26,15 @@ const n = (v: string | undefined, padrao: number) => {
 export const TETO_TRANSACIONAL = n(process.env.POOL_TRANSACIONAL, 8);
 export const TETO_RELATORIO    = n(process.env.POOL_RELATORIO, 2);
 
+/**
+ * `Client: ConexaoEmSerie` nos DOIS: toda unidade de trabalho e uma transacao
+ * interativa, e o Prisma carrega as relacoes de um `include` em paralelo pela
+ * conexao dela. Sem isto o `pg` enfileira e avisa - e no `pg@9` lanca. O
+ * porque inteiro esta em `db/conexao-em-serie.ts`.
+ */
 export function criarPools(connectionString: string) {
   return {
-    transacional: new pg.Pool({ connectionString, max: TETO_TRANSACIONAL, application_name: 'financeiro/tx' }),
-    relatorio:    new pg.Pool({ connectionString, max: TETO_RELATORIO,    application_name: 'financeiro/relatorio' }),
+    transacional: new pg.Pool({ connectionString, max: TETO_TRANSACIONAL, application_name: 'financeiro/tx', Client: ConexaoEmSerie }),
+    relatorio:    new pg.Pool({ connectionString, max: TETO_RELATORIO,    application_name: 'financeiro/relatorio', Client: ConexaoEmSerie }),
   };
 }

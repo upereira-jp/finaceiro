@@ -45,6 +45,13 @@
 // `db...`. A funcao adia; o valor nao. E o `for` abaixo garante que a proxima so
 // comeca quando a anterior terminou.
 //
+// ⚠️ 26/09/2026 - ISTO NAO BASTOU, e o resto do conserto mora na CONEXAO. O
+// aviso voltou depois deste arquivo porque o proprio Prisma carrega as relacoes
+// de um `include` com `Promise.all` pela conexao da transacao - codigo que a
+// guarda CS2 nao tem como ler. `db/conexao-em-serie.ts` faz a conexao mandar uma
+// consulta por vez, e `tests/conexao-em-serie.ts` reproduz o defeito. Este
+// ajudante continua valendo: ele deixa a ordem das leituras escrita no codigo.
+//
 // ⚠️ ISTO NAO VALE PARA O POOL DO CRM. `crm/pool-de-leitura.ts` e um `pg.Pool`
 // de verdade: cada consulta pega a SUA conexao, e `Promise.all` la e paralelismo
 // real, legitimo e desejado. A guarda de `tests/consulta-em-serie.ts` exclui
