@@ -5,13 +5,28 @@
 | **Para quem** | Quem quiser, em uma tela, a lista viva do que falta — e de quem é cada item |
 | **O que é** | O **índice único** das pendências. Consolida e substitui os dois trackers datados que existiam soltos |
 | **Substitui e apaga** | `PENDENCIAS-2026-08-05.md` e `PROXIMOS-PASSOS-2026-08-09.md` — vencidos, e agora removidos do repo |
-| **NÃO substitui** | `QUESTOES.md` (registro datado, dono por entrada — regra 10) · `RETOMADA-2026-08-30.md` (onde tudo parou — a mais nova) · os `RESUMO-SESSAO-*` (memória datada). Estes continuam sendo a fonte; aqui é o **apontador** |
-| **Data** | 14/08/2026 · rev. **10/09/2026 (varredura completa)** · rev. 17/08 · rev. 19/08 · rev. 21/08 · rev. 27/08 · rev. 28/08 · rev. 08/09 · rev. **09/09/2026** · rev. **09/09/2026, noite** · rev. **09/09/2026, madrugada** · rev. **10/09/2026** · rev. **11/09/2026 (conferência de produção)** |
+| **NÃO substitui** | `QUESTOES.md` (registro datado, dono por entrada — regra 10) · **`RETOMADA-2026-09-27.md`** (onde tudo parou — a mais nova; antes dela, a de 11/09) · os `RESUMO-SESSAO-*` (memória datada). Estes continuam sendo a fonte; aqui é o **apontador** |
+| **Data** | 14/08/2026 · rev. **10/09/2026 (varredura completa)** · rev. 17/08 · rev. 19/08 · rev. 21/08 · rev. 27/08 · rev. 28/08 · rev. 08/09 · rev. **09/09/2026** · rev. **09/09/2026, noite** · rev. **09/09/2026, madrugada** · rev. **10/09/2026** · rev. **11/09/2026 (conferência de produção)** · rev. 26/09 · rev. **27/09/2026** |
 | ⚠️ **Leia primeiro** | Este arquivo ficou **congelado entre 28/08 e 08/09** enquanto a operação andava, e a `RETOMADA-2026-09-08` continuou mandando o leitor para cá como *"o índice único"*. O bloco **«O que mudou desde 28/08»**, logo abaixo do cabeçalho, é a correção — o corpo antigo fica intacto porque é registro datado, e reescrevê-lo falsificaria a história (mesma decisão do `PATCH-citacoes-2026-07-24`) |
 | **Estado da suíte** | Sem banco: `typecheck` + `documento` + `brcode` + `dominio` + `web` → **`EXIT=0`, 2.420 linhas `ok`** (28/08, madrugada), e desde 27/08 com as verificações de `tests/sicoob-http.ts` — hoje **63** — dentro do `test:dominio`. Fora da suíte, contra a Sicoob de verdade: `npm run ensaio-sicoob` → **6 de 6**. `test:repos` e `test:isolamento` **não rodam nesta VPS** (exigem PostgreSQL local) |
 | **Produção** | `financeiro.blackhaus.io` · **35 migrations no ar** (a 34 em 21/08, a **35 em 28/08**) · a **36 escrita e NÃO aplicada** · Pix estático e boleto importado no ar · central de ajuda em toda tela · **a conta unificada lida já vira cobrança** (migration 34) · o conector roda sozinho a cada 15 min pelo `financeiro-ciclo.timer`, e desde **28/08** a agenda de cobrança roda sozinha em três timers (`fila` 5 min · `consulta` e `certificado` diárias) |
 
-> ## 🆕 26/09/2026 — OS DOIS ITENS DE IMPLEMENTADOR FECHARAM
+> ## 🆕 27/09/2026 — ENDEREÇOS, CANCELAMENTOS E O CONECTOR
+>
+> A lista inteira, por dono, e a ordem da próxima sessão estão em
+> **`RETOMADA-2026-09-27.md`**. O que muda aqui:
+>
+> | Item | Situação |
+> |---|---|
+> | Endereço do pagador | ✅ **16 gravados** (9 do CSV de 21/09 + 7 das contas lidas no CRM). ⏳ **Faltam 22** que faturam, e nenhuma delas tem conta lida (lista na retomada §3) |
+> | NI3, NII3 e Ramon (saíram da 0001 em 16/09) | ✅ **Cancelamento confirmado pelo dono**: cards em Rateio › Cancelados no CRM e 3 contratos `encerrado` aqui (0 faturas) |
+> | Conector de leitura (`relatorio_ai`) | ✅ **Seis tabelas voltaram** (`48a00a9`): o EXECUTE das máscaras é conferido contra quem consulta, e agora a role o tem, com guarda no `05`/`06` e no arranque |
+> | 🆕 Carla (G3-0229/0221) e Carlos Gabriel (G3-0401/0403) **sem contrato** | ⏳ investigar: 4 UCs com rateio e sem contrato não faturam |
+> | 🆕 3 avisos de pagamento do Sicoob ignorados (`nosso_numero` 50, 51 e 62) | ⏳ investigar: pode haver pagamento sem baixa |
+> | G3-0401/0403: troca de UC de 21/09 | ⏳ aguardando a Renata e a Jezielly (os percentuais parecem invertidos) |
+> | PAT do Supabase de 21/09 | 🟠 ainda ativo em 27/09: revogar |
+
+> ## 26/09/2026 — OS DOIS ITENS DE IMPLEMENTADOR FECHARAM
 >
 > ⚠️ **Este arquivo ficou parado de 11/09 a 26/09.** O que aconteceu no meio
 > (dois funis, conector em tempo real, R27, R28) está em `QUESTOES.md` §2.p–§2.r,
