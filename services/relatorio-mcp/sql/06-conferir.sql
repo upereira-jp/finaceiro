@@ -7,7 +7,7 @@
 -- responde as MESMAS perguntas em forma de tabela.
 --
 -- Rodar depois do 05. Nao altera nada.
--- Esperado: ok = true nas cinco linhas.
+-- Esperado: ok = true nas seis linhas.
 -- =====================================================================
 
 select 'role sem SUPERUSER e sem BYPASSRLS'                      as verificacao,
@@ -57,4 +57,19 @@ select 'ficha de cliente executavel pela role (e so por ela)',
               has_function_privilege('relatorio_ai', p.oid, 'EXECUTE'),
               has_function_privilege('public', p.oid, 'EXECUTE'))
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
- where n.nspname = 'relatorio' and p.proname = 'fn_ficha_cliente';
+ where n.nspname = 'relatorio' and p.proname = 'fn_ficha_cliente'
+
+union all
+-- A linha "views legiveis" so confere SELECT na view, e deu ok de 21 a 27/09
+-- com seis views quebradas: o EXECUTE da funcao que a view chama e conferido
+-- contra quem consulta, nao contra o dono. Ver o 05.
+select 'toda funcao chamada pelas views e executavel pela role',
+       count(*) = 0,
+       coalesce(string_agg(distinct p.oid::regprocedure::text, ', '), 'nenhuma funcao sem execute')
+  from pg_depend d
+  join pg_rewrite r on r.oid = d.objid
+  join pg_class c on c.oid = r.ev_class
+  join pg_namespace n on n.oid = c.relnamespace and n.nspname = 'relatorio'
+  join pg_proc p on p.oid = d.refobjid
+ where d.classid = 'pg_rewrite'::regclass and d.refclassid = 'pg_proc'::regclass
+   and not has_function_privilege('relatorio_ai', p.oid, 'EXECUTE');

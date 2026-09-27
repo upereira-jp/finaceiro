@@ -157,6 +157,30 @@ async function conferirRole(): Promise<{ usuario: string; infraestrutura: string
         foraDoSchema.slice(0, 5).map((r) => `${r.schema}.${r.objeto}`).join(", ") +
         ". Tabela base nao e superficie desta camada.");
     }
+    // SELECT na view nao basta, e isto e medido: de 21 a 27/09/2026 seis views
+    // (v_cliente, v_unidade_consumidora, ...) responderam "permission denied
+    // for function" enquanto o catalogo dizia 43 legiveis. A view sem
+    // security_invoker usa o dono para as TABELAS; o EXECUTE da funcao que ela
+    // chama o Postgres confere contra QUEM CONSULTA. Uma view que so quebra na
+    // hora da pergunta e pior que um arranque recusado -- mesma regra das views
+    // ausentes em carregarCatalogo().
+    const semExecute = await c.query<{ funcao: string; views: string }>(
+      `select p.oid::regprocedure::text as funcao, string_agg(distinct c.relname, ', ') as views
+         from pg_depend d
+         join pg_rewrite r on r.oid = d.objid
+         join pg_class c on c.oid = r.ev_class
+         join pg_namespace n on n.oid = c.relnamespace and n.nspname = 'relatorio'
+         join pg_proc p on p.oid = d.refobjid
+        where d.classid = 'pg_rewrite'::regclass and d.refclassid = 'pg_proc'::regclass
+          and not has_function_privilege(p.oid, 'EXECUTE')
+        group by p.oid
+        order by 1`);
+    if (semExecute.rows.length) {
+      throw new Error(
+        `A role '${p.usuario}' nao executa ${semExecute.rows.length} funcao(oes) que as views chamam: ` +
+        semExecute.rows.map((r) => `${r.funcao} (em ${r.views})`).join("; ") +
+        ". Essas views falhariam na consulta -- rode sql/05 de novo.");
+    }
     // Privilegio herdado de extensao em schema de infraestrutura nao derruba o
     // arranque -- e declarado, nunca silenciado (mesma escolha do conector).
     return {
