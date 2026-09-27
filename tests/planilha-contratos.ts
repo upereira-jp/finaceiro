@@ -25,8 +25,8 @@
 
 import {
   lerPlanilhaDeContratos, lerDataDeFechamento, lerOrigemDoValor, fechamentoNoFuturo,
-  montarModeloDeContratos, MODELO_DE_CONTRATOS,
-  type LinhaDoModeloDeContrato,
+  montarModeloDeContratos, MODELO_DE_CONTRATOS, resolverOriginadorDoModelo,
+  type LinhaDoModeloDeContrato, type OriginadorCadastrado,
 } from '../src/dominio/planilha-contratos.ts';
 import { ehFaturaCheia, competencia } from '../src/dominio/faturamento.ts';
 import { ehUuid } from '../src/dominio/csv.ts';
@@ -333,6 +333,44 @@ const CAB = 'numero_uc;originador_id;data_fechamento;valor_referencia;origem\n';
     chk('M3d', ex.cabecalho && ex.erros.length === 0 && ex.linhas.length === 2,
         `o MODELO_DE_CONTRATOS passa pelo proprio leitor (l=${ex.linhas.length} e=${ex.erros.length})`);
   }
+}
+
+// ---------------------------------------------------------------------------
+// R: QUEM VENDEU. O modelo de 27/09 saiu com originador vazio nas 61 linhas
+// porque casava so por nome, e o CRM credita "Renata" e "Out Sales".
+{
+  const RENATA: OriginadorCadastrado = {
+    id: 'r', nome: 'Renata Ferreira Estevam', tipo: 'vendedor_g3', crm_user_id: 'u-renata' };
+  const ALICE: OriginadorCadastrado = {
+    id: 'a', nome: 'Alice Ribeiro Franca', tipo: 'vendedor_g3', crm_user_id: 'u-outsales' };
+  const cad = [RENATA, ALICE];
+  const cred = (vendedor: string | null, vendedor_user_id: string | null, parceiro_nome: string | null = null) =>
+    ({ vendedor, vendedor_user_id, parceiro_nome });
+
+  chk('R1a', resolverOriginadorDoModelo(cred('Renata', 'u-renata'), cad)?.id === 'r',
+      'o nome curto do CRM casa pela CHAVE com o nome completo do cadastro');
+  chk('R1b', resolverOriginadorDoModelo(cred('Out Sales', 'u-outsales'), cad)?.id === 'a',
+      'e o nome que NAO e abreviacao ("Out Sales" -> Alice) tambem');
+
+  chk('R2', resolverOriginadorDoModelo(cred('Renata Ferreira Estevam', 'u-outra'), cad) === null,
+      'chave dos dois lados que DIFERE e resposta: o nome identico nao salva');
+
+  chk('R3a', resolverOriginadorDoModelo(cred('Renata Ferreira Estevam', null), cad)?.id === 'r',
+      'sem chave no credito, o nome vale (sem acento de caixa nem espaco)');
+  const semChave = [{ ...RENATA, crm_user_id: null }];
+  chk('R3b', resolverOriginadorDoModelo(cred('  renata ferreira  estevam ', 'u-renata'), semChave)?.id === 'r',
+      'sem chave no cadastro, o nome vale mesmo com chave no credito');
+  const homonimos = [{ ...RENATA, crm_user_id: null }, { ...RENATA, id: 'r2', crm_user_id: null }];
+  chk('R3c', resolverOriginadorDoModelo(cred('Renata Ferreira Estevam', null), homonimos) === null,
+      'dois cadastros com o mesmo nome: nao escolhe');
+
+  chk('R4', resolverOriginadorDoModelo(cred('Renata', 'u-renata', 'Sharliene'), cad) === null,
+      'venda com PARCEIRO sai vazia mesmo com a chave casando (Q-PARCERIA-01)');
+
+  chk('R5a', resolverOriginadorDoModelo(cred('Kallina Tandara', 'u-kallina'), cad) === null,
+      'vendedor sem cadastro aqui sai vazio');
+  chk('R5b', resolverOriginadorDoModelo(null, cad) === null && resolverOriginadorDoModelo(cred(null, null), cad) === null,
+      'UC sem credito no CRM sai vazia');
 }
 
 console.log(`\n${falhas === 0 ? 'TODAS PASSARAM' : `${falhas} FALHA(S)`}`);

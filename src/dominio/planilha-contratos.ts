@@ -50,6 +50,7 @@
 
 import { reaisParaCentavos, type Centavos } from './centavos.ts';
 import { SEP, emLinhas, escreverCelula, lerLinha, ehUuid } from './csv.ts';
+import { normalizarNome } from './credito-originador.ts';
 
 /** As duas origens do valor de referencia, e o enum do banco tem exatamente
  *  estas duas. Nao ha default: ver `lerOrigemDoValor`. */
@@ -395,8 +396,10 @@ export const MODELO_DE_CONTRATOS =
 //   origem            `crm_consumo_reais` quando o valor veio de la, e o rotulo
 //                     acompanha o valor - trocar um sem o outro e a unica coisa
 //                     que este arquivo NAO consegue pegar sozinho
-//   originador_id     o uuid do NOSSO cadastro, resolvido pelo nome que o CRM
-//                     creditou. Sai VAZIO enquanto o originador nao existir -
+//   originador_id     o uuid do NOSSO cadastro, resolvido pela CHAVE do CRM
+//                     (`crm_user_id` x `vendedor_user_id`) e, onde ela falta,
+//                     pelo nome - `resolverOriginadorDoModelo`, no fim deste
+//                     arquivo. Sai VAZIO enquanto o originador nao existir -
 //                     e o arquivo entao e recusado pelo leitor, de proposito
 //
 // A COLUNA `originador_crm` FICA MESMO QUANDO O uuid RESOLVEU, e ela e a unica
@@ -406,8 +409,8 @@ export const MODELO_DE_CONTRATOS =
 
 export type LinhaDoModeloDeContrato = {
   numero_uc: string;
-  /** Vazio quando o nome creditado pelo CRM nao casa com nenhum originador
-   *  cadastrado - o que e o estado de hoje, com `originador` em 0 linhas. */
+  /** Vazio quando `resolverOriginadorDoModelo` nao resolve: vendedor sem
+   *  cadastro aqui, ou venda com parceiro (Q-PARCERIA-01). */
   originador_id: string;
   /** Sugerido a partir de `ganho_em`. Vazio quando o CRM nao tem credito para
    *  esta UC - e ai a decisao e inteiramente de quem preenche. */
@@ -464,4 +467,54 @@ export function montarModeloDeContratos(linhas: LinhaDoModeloDeContrato[]): stri
     ].join(';') + '\n';
   }
   return csv;
+}
+
+// ============================================================================
+// QUEM, DO NOSSO CADASTRO, VENDEU ESTA UC
+//
+// O `--modelo` casava so pelo NOME, e o CRM credita o nome curto: "Renata" nao e
+// "Renata Ferreira Estevam", e "Out Sales" e a Alice Ribeiro Franca. Em 27/09 o
+// modelo saiu com a coluna vazia nas 61 linhas, embora os dois originadores ja
+// tivessem `crm_user_id` desde a migration 40. A regra aqui e a mesma do
+// `ladoQueCasa` (`credito-originador.ts`), porque o importador e a conferencia do
+// ciclo tem de concordar sobre quem e quem:
+//
+//   1. chave primeiro       `crm_user_id` === `vendedor_user_id`
+//   2. chave que existe dos DOIS lados e difere e resposta: nao tenta o nome,
+//      senao dois homonimos passariam como o mesmo
+//   3. nome so onde a chave falta, e so se casar com UM cadastro
+//
+// E uma recusa que e do modelo e nao da conferencia: VENDA COM PARCEIRO SAI
+// VAZIA. O contrato guarda um originador so, e escolher o vendedor muda a 2a
+// parcela da comissao do parceiro para zero (Q-PARCERIA-01, aberta). Vazia, a
+// linha e recusada pelo leitor, e a escolha fica com quem tem de faze-la.
+
+export type OriginadorCadastrado = {
+  id: string; nome: string; tipo: string; crm_user_id: string | null;
+};
+
+export type CreditoDoModelo = {
+  vendedor: string | null;
+  vendedor_user_id: string | null;
+  parceiro_nome: string | null;
+};
+
+export function resolverOriginadorDoModelo(
+  credito: CreditoDoModelo | null | undefined,
+  originadores: OriginadorCadastrado[],
+): OriginadorCadastrado | null {
+  if (!credito || credito.parceiro_nome) return null;
+
+  const chave = credito.vendedor_user_id;
+  if (chave) {
+    const porChave = originadores.filter((o) => o.crm_user_id === chave);
+    // O indice unico por tenant impede dois; se aparecerem, nao se escolhe.
+    if (porChave.length > 0) return porChave.length === 1 ? porChave[0]! : null;
+  }
+
+  const nome = normalizarNome(credito.vendedor);
+  if (!nome) return null;
+  const porNome = originadores.filter((o) =>
+    normalizarNome(o.nome) === nome && !(chave && o.crm_user_id));
+  return porNome.length === 1 ? porNome[0]! : null;
 }

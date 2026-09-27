@@ -40,7 +40,8 @@ import {
 } from '../src/repos/contrato.ts';
 import {
   lerPlanilhaDeContratos, montarModeloDeContratos, fechamentoNoFuturo,
-  MODELO_DE_CONTRATOS, type LinhaDoModeloDeContrato,
+  MODELO_DE_CONTRATOS, resolverOriginadorDoModelo,
+  type LinhaDoModeloDeContrato, type OriginadorCadastrado,
 } from '../src/dominio/planilha-contratos.ts';
 import { emReais } from '../src/dominio/centavos.ts';
 import { crmDoAmbiente, conferirRoleDeLeitura } from '../src/crm/conexao.ts';
@@ -71,6 +72,7 @@ const paraCelulaEmReais = (numerico: string | null): string =>
  */
 type DoCrm = {
   vendedor: string;
+  vendedor_user_id: string | null;
   parceiro_nome: string | null;
   ganho_em: Date | null;
   consumo_reais: string | null;
@@ -115,6 +117,7 @@ async function lerOCrm(a: any, sessao: any, tenantProposto: string | undefined):
       if (!c.vigente || !c.uc) continue;
       porUC.set(c.uc, {
         vendedor: c.vendedor ?? '',
+        vendedor_user_id: c.vendedor_user_id ?? null,
         parceiro_nome: c.parceiro_nome,
         ganho_em: c.ganho_em,
         consumo_reais: consumoPorLead.get(c.crm_lead_id) ?? null,
@@ -184,7 +187,7 @@ async function main(): Promise<void> {
         },
       }),
       originadores: await tx.originador.findMany({
-        where: { ativo: true }, select: { id: true, nome: true, tipo: true },
+        where: { ativo: true }, select: { id: true, nome: true, tipo: true, crm_user_id: true },
       }),
     }));
 
@@ -193,25 +196,32 @@ async function main(): Promise<void> {
     const jaContratada = new Set(vigentes.map((c: any) => c.uc_vigente));
 
     /*
-     * A RESOLUCAO DO ORIGINADOR, e ela e deliberadamente FRACA: casa por nome
-     * exato (sem acento de caixa) e desiste no empate. Nome nao e chave neste
-     * projeto - e a razao pela qual a coluna do arquivo e o uuid. O casamento
-     * aqui existe so para poupar a digitacao quando ele e obvio; quando nao e,
-     * a celula sai vazia e o leitor RECUSA o arquivo, que e o comportamento
-     * certo: melhor um erro na importacao do que a comissao na pessoa errada.
+     * UC COM CONTRATO ENCERRADO E SEM VIGENTE: o cliente saiu. A UC continua
+     * `ativa` aqui depois do cancelamento (NI3, NII3 e Ramon, 26/09), e
+     * `lancarContratosPorUC` so olha o vigente - entao, com o originador
+     * resolvido, o arquivo abriria contrato NOVO para quem cancelou. Religar
+     * cliente e `renovar`, nao importacao: a celula sai vazia e o motivo e dito.
      */
-    const porNome = new Map<string, Array<{ id: string; nome: string; tipo: string }>>();
-    for (const o of originadores as any[]) {
-      const chave = o.nome.trim().toLowerCase();
-      if (!porNome.has(chave)) porNome.set(chave, []);
-      porNome.get(chave)!.push(o);
-    }
+    const encerradas = await a.withTenant(sessao, tenantProposto, async (tx: any) =>
+      tx.contrato.findMany({ where: { status: 'encerrado' }, select: { unidade_consumidora_id: true } }));
+    const jaEncerrada = new Set(encerradas.map((c: any) => c.unidade_consumidora_id));
+
+    /*
+     * A RESOLUCAO DO ORIGINADOR e `resolverOriginadorDoModelo`: chave do CRM
+     * primeiro, nome so onde ela falta, e venda com parceiro sai vazia. Quando
+     * nao resolve, a celula sai vazia e o leitor RECUSA o arquivo, que e o
+     * comportamento certo: melhor um erro na importacao do que a comissao na
+     * pessoa errada.
+     */
+    const cadastrados = originadores as OriginadorCadastrado[];
 
     const comParceria: string[] = [];
+    const saiuDaCarteira: string[] = [];
     const modeladas: LinhaDoModeloDeContrato[] = (ucs as any[]).map((u) => {
       const crm = doCrm.get(u.numero_uc);
-      const candidatos = crm ? (porNome.get(crm.vendedor.trim().toLowerCase()) ?? []) : [];
-      const resolvido = candidatos.length === 1 ? candidatos[0]! : null;
+      const encerrada = !jaContratada.has(u.id) && jaEncerrada.has(u.id);
+      if (encerrada) saiuDaCarteira.push(`${u.numero_uc}  ${u.cliente?.nome ?? ''}`);
+      const resolvido = encerrada ? null : resolverOriginadorDoModelo(crm, cadastrados);
 
       if (crm?.parceiro_nome) comParceria.push(`${u.numero_uc}  ${crm.vendedor} E ${crm.parceiro_nome}`);
 
@@ -256,13 +266,20 @@ async function main(): Promise<void> {
       console.log('\n   originadores cadastrados (o uuid e o que vai na coluna 2):');
       for (const o of originadores as any[]) console.log(`     ${o.id}  ${o.nome} · ${o.tipo}`);
       if (semOrig.length > 0) {
-        console.log(`\n   ${semOrig.length} linha(s) sairam SEM originador - o nome do CRM nao casou com`);
-        console.log('   nenhum cadastro, ou casou com mais de um. Preencha o uuid a mao nessas:');
+        console.log(`\n   ${semOrig.length} linha(s) sairam SEM originador - venda com parceiro, ou vendedor`);
+        console.log('   que nao casou com nenhum cadastro nem pela chave nem pelo nome:');
         for (const l of semOrig.slice(0, 15)) {
           console.log(`     ${l.numero_uc}  ${l.originador_crm || '(sem credito no CRM)'}`);
         }
         if (semOrig.length > 15) console.log(`     +${semOrig.length - 15}`);
       }
+    }
+
+    if (saiuDaCarteira.length > 0) {
+      console.log(`\n   ${saiuDaCarteira.length} UC(s) com contrato ENCERRADO e sem vigente - o cliente saiu, e a`);
+      console.log('   linha sai sem originador de proposito. Religar e `renovar` na tela, nao este');
+      console.log('   arquivo. Apague estas linhas antes do --ensaio:');
+      for (const c of saiuDaCarteira) console.log(`     ${c}`);
     }
 
     if (comParceria.length > 0) {
