@@ -78,6 +78,8 @@ import { QrCode } from '@phosphor-icons/react/QrCode';
 import { Certificate } from '@phosphor-icons/react/Certificate';
 import { SpinnerGap } from '@phosphor-icons/react/SpinnerGap';
 import { Gear } from '@phosphor-icons/react/Gear';
+import { ChartPieSlice } from '@phosphor-icons/react/ChartPieSlice';
+import { Briefcase } from '@phosphor-icons/react/Briefcase';
 
 import type { NomeDeIcone } from './iconografia.ts';
 
@@ -179,6 +181,16 @@ const DESENHO: Record<NomeDeIcone, Icon> = {
   tema_escuro: Moon,
   tema_sistema: Desktop,
   abrir_menu: CaretDown,
+  /* RATEIO É A FATIA: o setor existe para repartir a geração de uma usina entre
+   * as unidades, e a fatia de pizza é esse gesto. EMPRESA É A PASTA, e não o
+   * prédio: `Buildings` já é o `empresa` do seletor de tenant, logo ao lado — o
+   * mesmo desenho significando "qual CNPJ" e "qual setor" faria a pessoa ler um
+   * pelo outro. */
+  setor_rateio: ChartPieSlice,
+  setor_empresa: Briefcase,
+  /* O MESMO DESENHO DE `ordem_nenhuma`, e os dois significam a mesma coisa: "há
+   * mais de uma posição aqui, escolha". */
+  trocar_setor: CaretUpDown,
   ajuda: Lifebuoy,
   abrir_externo: ArrowSquareOut,
 

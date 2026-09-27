@@ -121,24 +121,77 @@ export const ESTILO = `
     font-weight: 680; font-size: 15.5px; letter-spacing: -0.02em;
   }
   .marca-app .logotipo { flex: none; }
-  /* O SELETOR DE FUNIL (22/09/2026). Duas pilulas ao lado da marca: «Rateio» e
-     «Empresa». A ativa e o Orange SOLIDO com o texto no Navy — o inverso da aba
-     ativa da barra de baixo (Orange sobre Navy), de proposito: sao dois niveis, e
-     o de cima precisa pesar mais. O contraste e o mesmo par de tokens da T6c,
-     5,93:1, que vale nos dois sentidos. Nenhum token novo: o veu do topo e a
-     calha, o acento e a pilula. */
-  .funis {
-    display: inline-flex; align-items: center; gap: 2px; padding: 3px; flex: none;
-    background: var(--topo-veu); border-radius: var(--raio-pequeno);
+  /* O SELETOR DE SETOR (27/09/2026), no desenho de migalha do Supabase:
+     "Financeiro G3 / Rateio" e o par de setas que abre a lista. Substituiu as
+     duas pilulas de 22/09 - o porque esta em "seletor-de-setor.tsx".
+
+     A BARRA INCLINADA E UM FILETE DE 1px GIRADO, e nao o caractere "/": a barra
+     da fonte muda de peso e de altura com a familia tipografica, e o filete fica
+     igual nos dois temas e em qualquer zoom. A margem negativa come parte do
+     "gap" da faixa - sem ela a marca e o setor pareceriam dois blocos soltos, e
+     nao um endereco. */
+  .migalha {
+    flex: none; width: 1px; height: 20px; margin: 0 -4px;
+    background: var(--topo-veu-forte); transform: rotate(20deg);
   }
-  .funis a {
-    display: inline-flex; align-items: center; padding: 4px 13px; white-space: nowrap;
-    text-decoration: none; color: var(--topo-fraco); font-size: 13px; font-weight: 600;
-    letter-spacing: .01em; border-radius: var(--raio-pequeno);
-    transition: color .16s ease, background-color .16s ease;
+  .setor { position: relative; flex: none; }
+  /* O GATILHO E TEXTO, e nao botao pesado: fundo so no hover e com a lista
+     aberta. O nome do setor pesa como a marca, porque e a segunda metade do
+     mesmo endereco. O desenho do setor leva o Orange sobre o Navy - o mesmo par
+     da aba ativa, 5,93:1 -, e as setas ficam no "--topo-fraco" ate o ponteiro
+     chegar: elas sao o convite, nao a informacao. */
+  .barra .setor-gatilho {
+    gap: 7px; padding: 5px 8px 5px 9px;
+    background: transparent; border-color: transparent; box-shadow: none;
+    color: var(--topo-texto); font-size: 14px; font-weight: 620; letter-spacing: -0.01em;
   }
-  .funis a:hover { color: var(--topo-texto); background: var(--topo-veu-forte); }
-  .funis a.ativo, .funis a.ativo:hover { background: var(--acento); color: var(--topo); }
+  .barra .setor-gatilho:hover:not(:disabled), .barra .setor-gatilho[aria-expanded="true"] {
+    background: var(--topo-veu); border-color: var(--topo-veu-forte);
+    color: var(--topo-texto); box-shadow: none; transform: none;
+  }
+  .setor-gatilho .setor-simbolo { color: var(--acento); }
+  .setor-gatilho .setor-setas { color: var(--topo-fraco); transition: color .16s ease; }
+  .setor-gatilho:hover .setor-setas, .setor-gatilho[aria-expanded="true"] .setor-setas {
+    color: var(--topo-texto);
+  }
+  /* A LISTA FLUTUA como o menu da conta - mesma superficie, borda, sombra do
+     terceiro degrau e entrada -, mas abre para a DIREITA a partir do gatilho,
+     porque ela mora no comeco da faixa e o menu da conta, no fim. */
+  .setor-painel {
+    position: absolute; left: 0; top: calc(100% + 8px); z-index: 30;
+    width: 324px; padding: 6px;
+    background: var(--fundo2); color: var(--texto);
+    border: 1px solid var(--borda); border-radius: var(--raio-cartao); box-shadow: var(--sombra-3);
+    animation: descer-suave .14s ease-out;
+  }
+  .setor-painel .titulo { padding: 7px 10px 6px; color: var(--fraco); }
+  .setor-painel ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+  .setor-item {
+    display: flex; align-items: center; gap: 11px; padding: 8px 10px;
+    border-radius: var(--raio-pequeno); color: var(--texto); text-decoration: none;
+    transition: background-color .14s ease;
+  }
+  .setor-item:hover, .setor-item:focus-visible { background: var(--fundo-hover); color: var(--texto); }
+  /* O anel do teclado vai PARA DENTRO: com o afastamento de 2px da regra geral
+     ele encostava na borda da lista e parecia cortado. */
+  .setor-item:focus-visible { outline-offset: -2px; }
+  /* O SELO: o desenho do setor num quadrado de acento suave - o papel que o
+     avatar do projeto tem no Supabase. E o que o olho encontra antes do nome. */
+  .setor-selo {
+    flex: none; display: grid; place-items: center; width: 32px; height: 32px;
+    border-radius: var(--raio-pequeno); background: var(--acento-suave); color: var(--acento-forte);
+  }
+  .setor-texto { display: grid; gap: 1px; min-width: 0; }
+  .setor-texto strong { font-size: 13.5px; font-weight: 620; }
+  .setor-texto span { font-size: 12px; color: var(--fraco); }
+  .setor-marca { margin-left: auto; flex: none; color: var(--acento-forte); }
+  /* EM TELA ESTREITA A LISTA OCUPA A LARGURA DA FAIXA. Presa ao gatilho, que
+     fica a uns 180px da borda, ela passaria da tela num celular de 375px. */
+  @media (max-width: 600px) {
+    .barra { position: relative; }
+    .setor { position: static; }
+    .setor-painel { left: 16px; right: 16px; width: auto; top: calc(100% + 6px); }
+  }
   .sessao { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 13px; }
   .sessao .campo-caixa select { width: auto; max-width: 260px; padding: 5px 30px 5px 10px; }
   /* O nome de quem esta logado sai em tela estreita: o icone do menu continua

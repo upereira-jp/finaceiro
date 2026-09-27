@@ -62,14 +62,19 @@ export function useCaminho(): string {
  *  quatro dependem de ver. Para quem usa leitor de tela, as treze telas eram
  *  treze links idênticos, e "onde estou" não existia. É exatamente a restrição 3
  *  do `tema.ts` ("cor nunca é o único sinal") aplicada ao lugar onde ela ainda
- *  não tinha chegado. */
+ *  não tinha chegado.
+ *
+ *  `atual: 'true'` (27/09/2026) é o item atual de um CONJUNTO que não é a página
+ *  — o setor financeiro em que a pessoa está, no menu de setores. O link dele
+ *  leva à primeira tela do setor, e dizer "página atual" ali seria mentira
+ *  quando a tela aberta é outra. */
 export function Ligacao(p: {
   para: string; className?: string; style?: CSSProperties; children: ReactNode;
-  rotulo?: string; atual?: boolean;
+  rotulo?: string; atual?: boolean | 'true';
 }) {
   return (
     <a href={p.para} className={p.className} style={p.style} aria-label={p.rotulo}
-       aria-current={p.atual ? 'page' : undefined}
+       aria-current={p.atual === 'true' ? 'true' : p.atual ? 'page' : undefined}
        onClick={(e) => {
          if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
          e.preventDefault();

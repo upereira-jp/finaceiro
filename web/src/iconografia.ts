@@ -42,6 +42,10 @@ export type NomeDeIcone =
   | 'ordem_crescente' | 'ordem_decrescente' | 'ordem_nenhuma'
   // a barra do topo
   | 'empresa' | 'usuario' | 'sair' | 'tema_claro' | 'tema_escuro' | 'tema_sistema' | 'abrir_menu'
+  /* O MENU DE SETORES (27/09/2026): um desenho por setor e o ⌃⌄ que abre a
+   * lista. `trocar_setor` NÃO reusa `abrir_menu`: a seta única é "abre um menu
+   * de ações" (a conta); as duas setas são "troca o lugar em que você está". */
+  | 'setor_rateio' | 'setor_empresa' | 'trocar_setor'
   /* A ajuda tem desenho PRÓPRIO e não reusa o ponto de interrogação: aquele já é
    * o `nao_medido` da tabela de Pendências, e o mesmo desenho significando
    * "estado desta linha" num lugar e "peça ajuda" noutro é a cor sendo o único

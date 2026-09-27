@@ -316,6 +316,17 @@ chk('I4f', TELAS[0]!.funil === 'rateio' && TELAS[0]!.grupo === 'cadastro' && TEL
   chk('I4g3', new Set(FUNIS.map((f) => f.rotulo)).size === FUNIS.length
            && FUNIS.every((f) => f.rotulo.length <= 10 && f.nome.startsWith('Financeiro ')),
       'os rotulos dos funis sao unicos e curtos, e o nome inteiro comeca por "Financeiro"');
+  // O MENU DE SETORES (27/09/2026). Cada setor tem desenho proprio, e ele nao
+  // repete o de uma tela nem o `empresa` do seletor de tenant, que fica na mesma
+  // faixa: o mesmo desenho dizendo "qual setor" e "qual CNPJ" e ler um pelo outro.
+  const iconesDasTelas = new Set<string>(TELAS.map((t) => t.icone));
+  chk('I4g4', new Set(FUNIS.map((f) => f.icone)).size === FUNIS.length
+           && FUNIS.every((f) => !iconesDasTelas.has(f.icone) && f.icone !== 'empresa'),
+      'cada setor tem desenho proprio, que nao e o de nenhuma tela nem o do seletor de empresa');
+  // O resumo e a linha de baixo de um menu de 324px: passou de 40 caracteres, quebra
+  // em duas e o menu deixa de ser uma lista para virar um paragrafo.
+  chk('I4g5', FUNIS.every((f) => f.resumo.length > 0 && f.resumo.length <= 40 && f.resumo !== f.descricao),
+      'o resumo de cada setor cabe numa linha do menu (ate 40 caracteres) e nao e a descricao da ajuda');
 }
 
 for (const f of FUNIS) {

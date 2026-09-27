@@ -16,7 +16,8 @@
 // de baixo SO as telas do funil escolhido. A divisao e a do negocio (o dinheiro
 // que entra dos clientes; o caixa da empresa), e mora em `navegacao.ts` como
 // dado — aqui so se desenha. O funil ativo e DERIVADO do caminho, nunca guardado
-// em estado: o endereco ja diz de que lado a pessoa esta.
+// em estado: o endereco ja diz de que lado a pessoa esta. Desde 27/09 o seletor
+// e a migalha `Financeiro G3 / Rateio ⌃⌄` — o porque esta em `seletor-de-setor.tsx`.
 //
 // O TOPO TEM DUAS FAIXAS DESDE 30/07. Doze telas mais o bloco do usuario numa
 // faixa unica dependiam de `flex-wrap` para caber, e o resultado era duas linhas
@@ -29,10 +30,9 @@ import {
   Aviso, Logotipo, Icone, Menu, ItensDeTema, Escolha, Carregando, ESTILO,
 } from './ui.tsx';
 import { useCaminho, Ligacao } from './rota.tsx';
-import {
-  FUNIS, telaDoCaminho, telasDoFunil, primeiraTelaDoFunil, funilDoCaminho, divisoriasDe,
-} from './navegacao.ts';
+import { telaDoCaminho, telasDoFunil, funilDoCaminho, divisoriasDe } from './navegacao.ts';
 import { GatilhoDeAjuda } from './ajuda-gatilho.tsx';
+import { SeletorDeSetor } from './seletor-de-setor.tsx';
 import { Login } from './telas/login.tsx';
 /*
  * ============================================================================
@@ -185,24 +185,15 @@ export function App() {
           <span className="marca-app"><Logotipo tamanho={22} /> Financeiro G3</span>
 
           {/*
-            O SELETOR DE FUNIL. Duas pilulas, e a ativa e derivada do caminho —
-            nao ha estado proprio para ela desincronizar. Trocar de funil leva a
-            PRIMEIRA tela do outro lado: Pendencias no Rateio (a tela que diz o
-            que falta) e Contas a receber na Empresa (a tela que diz quanto vai
-            entrar). E uma ancora de verdade, entao botao do meio e "copiar
-            endereco" funcionam.
+            O SELETOR DE SETOR, como migalha: a barra inclinada separa a marca
+            do setor, e o ⌃⌄ abre a lista dos setores. O setor ativo e derivado
+            do caminho — nao ha estado proprio para ele desincronizar. Trocar de
+            setor leva a PRIMEIRA tela do outro lado: Pendencias no Rateio (a
+            tela que diz o que falta) e Contas a receber na Empresa (a tela que
+            diz quanto vai entrar).
           */}
-          <nav className="funis" aria-label="Funis">
-            {FUNIS.map((f) => {
-              const ativo = f.chave === funil.chave;
-              return (
-                <Ligacao key={f.chave} para={primeiraTelaDoFunil(f.chave).rota} atual={ativo}
-                         className={ativo ? 'ativo' : undefined} rotulo={f.nome}>
-                  {f.rotulo}
-                </Ligacao>
-              );
-            })}
-          </nav>
+          <span className="migalha" aria-hidden="true" />
+          <SeletorDeSetor atual={funil} />
 
           <div className="sessao">
             {/*

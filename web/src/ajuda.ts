@@ -988,18 +988,24 @@ export const TOPICOS: readonly Topico[] = [
      * OS DOIS FUNIS (22/09/2026). E a primeira pergunta de quem abriu o sistema
      * depois da reorganizacao e nao achou a aba onde ela estava: a barra de baixo
      * mostra so as telas do lado escolhido no alto.
+     *
+     * DESDE 27/09 O LADO SE ESCOLHE NUM MENU, e o texto diz «setor» — a palavra
+     * do dono quando pediu a troca. As duas pilulas viraram o nome do setor
+     * atual com o icone de duas setas (⌃⌄), que abre a lista.
      */
     id: 'dois-funis',
     pergunta: 'O que são «Rateio» e «Empresa» no alto da tela?',
-    resposta: 'São as duas metades do sistema, e a barra de abas muda conforme a metade escolhida. '
-      + 'Rateio é o dinheiro que entra dos clientes: usinas, unidades, contratos, a conta lida, a '
-      + 'fatura, o boleto e a cobrança. Empresa é o caixa da G3: o que há para receber, o que há '
-      + 'para pagar, o banco e o histórico. Nenhuma aba sumiu — ela está do outro lado.',
+    resposta: 'São os dois setores financeiros do sistema, e a barra de abas muda conforme o setor '
+      + 'escolhido. Rateio é o dinheiro que entra dos clientes: usinas, unidades, contratos, a conta '
+      + 'lida, a fatura, o boleto e a cobrança. Empresa é o caixa da G3: o que há para receber, o que '
+      + 'há para pagar, o banco e o histórico. Nenhuma aba sumiu — ela está no outro setor.',
     passos: [
-      'Clique em «Rateio» ou «Empresa», ao lado do nome do sistema, no alto.',
-      'A barra de abas logo abaixo passa a mostrar as telas daquela metade.',
-      'Se não achar uma aba, troque de metade: Contas a pagar, Conector Sicoob e Histórico ficam '
-        + 'na Empresa; todo o cadastro e a cobrança ficam no Rateio.',
+      'No alto, ao lado de «Financeiro G3», está o nome do setor aberto agora. Clique nele — no '
+        + 'ícone de duas setas, ⌃⌄ — para ver a lista dos setores.',
+      'Escolha «Rateio» ou «Empresa»: a barra de abas logo abaixo passa a mostrar as telas daquele '
+        + 'setor.',
+      'Se não achar uma aba, mude de setor: Contas a pagar, Conector Sicoob e Histórico ficam na '
+        + 'Empresa; todo o cadastro e a cobrança ficam no Rateio.',
     ],
     caminhos: [ver('/pendencias', 'Abrir o Rateio'), ver('/contas-a-receber', 'Abrir a Empresa')],
     camada: null,
@@ -1009,7 +1015,7 @@ export const TOPICOS: readonly Topico[] = [
        de tenant (`trocar-empresa`), e duas palavras casadas bastam para a busca. */
     termos: ['financeiro rateio', 'financeiro empresa', 'aba rateio', 'aba empresa', 'as duas metades',
              'o outro lado', 'onde foi a aba', 'sumiu a aba', 'nao acho a aba', 'barra mudou',
-             'funil', 'funis'],
+             'funil', 'funis', 'setor', 'setores', 'setor financeiro', 'mudar de setor', 'duas setas'],
   },
   {
     id: 'contas-a-receber',

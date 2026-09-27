@@ -21,6 +21,13 @@
 // a barra de baixo mostra só as telas do funil escolhido. Nove abas viraram
 // nove, e quatro viraram quatro — ninguém mais lê treze.
 //
+// O SELETOR VIROU MENU EM 27/09/2026, a pedido do dono e no desenho do Supabase:
+// em vez de duas pílulas lado a lado, o nome do setor atual com o ícone ⌃⌄, que
+// abre a lista dos setores. Na tela eles se chamam **setores financeiros** — a
+// palavra do dono —; no código continuam `funil`, que é o nome do domínio desde
+// 22/09. A lista cresce sem pedir espaço na barra: um terceiro setor é uma linha
+// a mais no menu, e não uma terceira pílula disputando lugar com a marca.
+//
 // O QUE NÃO MUDOU, de propósito: as ROTAS (todo favorito e todo link da ajuda
 // continuam valendo), os RÓTULOS (o roteiro do mês exige que o nome no botão
 // seja letra por letra o da barra — `RM13`) e os NOMES DE DOMÍNIO. Um caminho
@@ -51,6 +58,11 @@ export type Funil = {
   nome: string;
   /** Uma frase: o que este funil controla. */
   descricao: string;
+  /** A linha de baixo no menu de setores — cabe numa linha de 324px, e por isso
+   *  não é a `descricao`: o menu é para ESCOLHER, a frase inteira é para a ajuda. */
+  resumo: string;
+  /** O desenho do setor, no gatilho e no menu. */
+  icone: NomeDeIcone;
 };
 
 export const FUNIS: readonly Funil[] = [
@@ -58,11 +70,15 @@ export const FUNIS: readonly Funil[] = [
     chave: 'rateio', rotulo: 'Rateio', nome: 'Financeiro Rateio',
     descricao: 'O dinheiro que entra dos clientes: usinas, unidades, contratos, a conta lida, '
              + 'a fatura, o boleto e a cobrança.',
+    resumo: 'Usinas, clientes, faturas e cobrança',
+    icone: 'setor_rateio',
   },
   {
     chave: 'empresa', rotulo: 'Empresa', nome: 'Financeiro Empresa',
     descricao: 'O caixa da empresa: o que há para receber, o que há para pagar, o banco e o '
              + 'histórico do que foi feito.',
+    resumo: 'A receber, a pagar, banco e histórico',
+    icone: 'setor_empresa',
   },
 ] as const;
 
