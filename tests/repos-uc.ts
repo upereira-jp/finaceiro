@@ -134,6 +134,27 @@ const lancou = async (f: () => Promise<unknown>): Promise<any> => {
       'editar do tenant B uma UC do tenant A devolve 404 - a RLS esconde, o repo nao mente');
 }
 
+// ------------------------------------------------- U13 CEP de um estado, UF de outro
+// Medido em 28/09/2026: uma conta de Indiara (GO) imprime o CEP 76995-000, de
+// Rondonia. O importador ja recusava; a tela precisa recusar igual.
+{
+  const nova = await emA(() => uc.criar({ cliente_id: CLI, numero_uc: 'UC-U13', distribuidora: 'Equatorial' }));
+  const junto = await lancou(() => emA(() => uc.editar(nova.id, { endereco_uf: 'GO', endereco_cep: '76995-000' })));
+  chk('U13', junto?.name === 'CepDeOutraUf' && junto?.status === 422 && junto.message.includes('RO'),
+      'CEP de RO com UF GO na mesma edicao e recusado com 422, dizendo de que estado o CEP e');
+
+  await emA(() => uc.editar(nova.id, { endereco_uf: 'GO', endereco_cep: '75955-000' }));
+  const soCep = await lancou(() => emA(() => uc.editar(nova.id, { endereco_cep: '76995000' })));
+  const gravado = await emA(() => uc.porId(nova.id));
+  chk('U13b', soCep?.status === 422 && gravado?.endereco_cep === '75955-000',
+      'trocar SO o CEP e conferido contra a UF ja gravada - e a recusa nao grava nada');
+
+  const e = await lancou(() => emA(() => uc.criar({
+    cliente_id: CLI, numero_uc: 'UC-U13c', distribuidora: 'Equatorial', endereco_uf: 'GO', endereco_cep: '70040-000',
+  })));
+  chk('U13c', e?.status === 422, 'e criar com CEP de Brasilia e UF GO tambem e recusado');
+}
+
 console.log(`\n${falhas === 0 ? 'TODAS PASSARAM' : `${falhas} FALHA(S)`}`);
 await prisma.$disconnect();
 await pools.transacional.end();

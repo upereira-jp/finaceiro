@@ -38,7 +38,8 @@ import {
 } from '../unidades-regras.ts';
 import { decimalTexto } from '../dinheiro.ts';
 import { FILTROS_DA_TELA, filtroDaConsulta } from '../destino-da-camada.ts';
-import { separarEndereco, completarVazios, faltamNaProposta } from '../endereco-da-conta.ts';
+import { separarEndereco, completarVazios, faltamNaProposta, avisoDoCepDaConta } from '../endereco-da-conta.ts';
+import { cepDeOutraUf } from '../../../src/dominio/cep.ts';
 
 export function TelaUnidades() {
   const ucs = useDados<UnidadeConsumidora[]>(() => api.get('/unidades-consumidoras?limite=500'));
@@ -457,6 +458,14 @@ function EnderecoDoPagador({ uc, ocupado, daConta, aoGravar }: {
   const proposta = daConta ? separarEndereco(daConta.endereco) : null;
   const faltamNela = proposta ? faltamNaProposta(proposta) : [];
   const ofertar = !!proposta && !enderecoEmiteBoleto(atual);
+  /* O CEP QUE A CONTA IMPRIMIU E É DE OUTRO ESTADO (28/09/2026: uma conta de
+   * Indiara/GO imprime um CEP de Rondônia). A proposta já o deixa em branco;
+   * esta frase diz por quê, para ninguém copiar o da conta à mão. */
+  const cepDaContaErrado = daConta ? avisoDoCepDaConta(daConta.endereco) : null;
+  /* E O QUE ESTÁ DIGITADO: CEP de um estado e UF de outro. Não impede gravar
+   * (quem digita pode estar no meio da correção), mas diz na hora, porque o
+   * boleto sai com os dois. */
+  const ufDoCepDigitado = cepDeOutraUf(cep, uf);
 
   const usarADaConta = () => {
     const j = completarVazios(atual, proposta!);
@@ -486,6 +495,9 @@ function EnderecoDoPagador({ uc, ocupado, daConta, aoGravar }: {
                 : `Preenche o que dá para reconhecer; ainda vai faltar ${faltamNela.join(', ')}.`}
             </span>
           </div>
+          {cepDaContaErrado && (
+            <p style={{ margin: '8px 0 0', fontSize: 12.5, color: 'var(--erro)' }}>{cepDaContaErrado}</p>
+          )}
           {/* O QUE ESTE BOTÃO NÃO FAZ, dito onde ele está: ele preenche o
               formulário e para. Nada é gravado sem alguém apertar «Gravar
               endereço» — e nada que já esteja escrito é substituído, porque quem
@@ -517,6 +529,13 @@ function EnderecoDoPagador({ uc, ocupado, daConta, aoGravar }: {
           </button>
         </div>
       </div>
+      {ufDoCepDigitado && (
+        <Aviso tipo="alerta">
+          O CEP {cep.trim()} é de <strong>{ufDoCepDigitado}</strong>, e a UF digitada é{' '}
+          <strong>{uf.trim().toUpperCase()}</strong>. Um dos dois está errado, e o boleto sai com os
+          dois — confira o CEP da rua nos Correios antes de gravar.
+        </Aviso>
+      )}
       <span className="fraco" style={{ fontSize: 13 }}>
         É o endereço que sai impresso no boleto, e é <strong>da unidade</strong> — não do cliente,
         que pode ter várias. Sem logradouro, bairro, município, CEP e UF a{' '}

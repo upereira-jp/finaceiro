@@ -1266,6 +1266,84 @@ e se há prazo de carência antes de sair.
 
 ---
 
+## 2.s Decisão do dono em 27/09/2026 — as vendas da Kallina Tandara comissionam a Out Sales
+
+> Verbatim: *"Kallina Tandara não precisa ser contabilizada dentro do sistema mais,
+> ela saiu da operação"* e, perguntado quem fica com a comissão, *"comissão para
+> OutSales"*.
+
+Fecha o aviso da §2.o (*"se alguma venda dele entrar na carteira, o contrato não
+fecha"*). A Kallina **não** entra no cadastro de originadores. Os contratos das
+vendas creditadas a ela no CRM levam a **Alice Ribeiro Franca**
+(`fbd970f3-…`, `vendedor_g3`), que é a Out Sales pela §2.o.
+
+| # | Ponto | Decisão | Por quê |
+|:--:|---|---|---|
+| 1 | Onde o mapeamento mora | **No arquivo do importador, não no código.** A coluna `originador_crm` da linha diz `Kallina Tandara -> Out Sales (dono, 27/09 …)` | `originador.crm_user_id` é único por tenant e já é da Out Sales. Pôr a chave da Kallina na Alice quebraria a regra 2 da §2.o, e uma tabela de apelidos no código seria uma segunda fonte de verdade para uma decisão que acontece uma vez |
+| 2 | O `--modelo` continua saindo **vazio** nas linhas da Kallina | Se for gerado de novo, as linhas dela precisam ser preenchidas à mão | Vazio é recusado pelo leitor, e isso é mais seguro que um preenchimento automático que ninguém revisou |
+| 3 | O sinal **C3** da conferência do ciclo | Esperado: cada contrato dela vai acusar `Alice Ribeiro Franca × Kallina Tandara` a cada rodada, porque as duas chaves existem e diferem (`ladoQueCasa`). Nenhum sinal escreve ou recusa | O silêncio só vem do lado do CRM: **revogar o crédito da Kallina e recreditar à Out Sales**. É operação no CRM, e este sistema não escreve lá (regra 4) |
+
+**Medido em 27/09 (ensaio, nada gravado):** das 7 UCs dela, **4 viram contrato**:
+Marli, Guilherme, Unus e Valdemir. Nayara e João Marcos param na R9 (sem documento
+validado). João Batista (`000398329901226`) ficou fora do arquivo porque o rateio
+ainda não está ativado. O arquivo é `/opt/financeiro/contratos-prontos-2026-09-27.csv`:
+12 a criar, 9 na R9 e 0 erro.
+
+---
+
+## 2.t Decisões técnicas de 28/09/2026 — a conta de verdade reprovou a proposta de endereço, e o CEP passa a ser conferido com a UF
+
+**Dono: o implementador** (§2.b), salvo o que está marcado como do dono.
+
+### O que motivou
+
+Em 28/09 o leitor de anexos do CRM rodou (com `aplicar:false`, liberado pelo dono)
+nos cards que travavam a R9 e nos 48 já validados, e leu também as **contas da
+Equatorial** anexadas. Com isso, **21 das 23 UCs que faturam sem endereço** passaram
+a ter o endereço impresso na conta. Duas medições saíram daí, e as duas eram as que
+a §2.n dizia que ainda faltavam: *"esta regra nunca foi exercida contra uma conta de
+verdade"*.
+
+| Medido | Resultado |
+|---|---|
+| `separarEndereco` (a proposta da tela Unidades) contra o bloco de endereço de **18 contas em PDF** | ❌ **errou nas 18.** A conta de Goiás é escrita por quadra e lote: `Q. 91` virava o **bairro**, `GOIANIA BRASIL` (ou `CASA 1 VILA ALVORADA GOIANIA BRASIL`) virava o **município**, o `S/N` se perdia e «RUA 1044» virava logradouro «RUA» e número «1044» |
+| CEP impresso na conta × CEP da rua (ViaCEP), nas 21 | **2 errados na própria conta**: uma de Indiara (GO) imprime **76995-000, que é de Rondônia**, e uma de Rio Verde imprime o CEP de outra rua. Mais uma com o genérico `74000-000` e uma com o CEP da cidade, que o ViaCEP não tem |
+| O importador de endereços diante do CEP de Rondônia com UF `GO` | ❌ **aceitava.** Ele confere oito dígitos e confere a UF, mas nunca os dois juntos |
+
+### As decisões
+
+| # | Decisão | Por quê |
+|:--:|---|---|
+| 1 | **O bloco da Equatorial é reconhecido pela forma** (`separarBlocoDaEquatorial`, em `web/src/endereco-da-conta.ts`): logradouro com quadra, lote, número e complemento por vírgula; o bairro sozinho numa linha; e o rabo `CEP: <8 dígitos> <MUNICÍPIO> <UF> [BRASIL]` | É a conta de toda a carteira hoje, e a forma é fixa. O rabo dá CEP, município e UF sem ambiguidade. Medido depois do conserto: **36 de 36** completos (18 contas × linhas juntadas por quebra ou por vírgula) |
+| 2 | **Juntado por espaço, o bairro fica VAZIO** quando a fronteira some (`- CASA 1 VILA ALVORADA`) | É a regra 2 da §2.n. A tela já diz *"ainda vai faltar bairro"* |
+| 3 | **No bloco da Equatorial o complemento é PREENCHIDO** (quadra, lote, apartamento), ao contrário da leitura genérica, que continua não o adivinhando | Aqui ele não é adivinhado: é tudo o que a linha tem além da rua e do número. E numa rua `S/N` de Goiás, quadra e lote **são** o endereço |
+| 4 | **Quadra, lote e complemento nunca viram bairro nem município**, também na leitura genérica (`pareceDoLogradouro`) | É o defeito medido, e a leitura genérica é o que sobra quando a forma não é reconhecida |
+| 5 | **CEP × UF conferidos juntos pela faixa dos Correios** (`src/dominio/cep.ts`), nas três portas: o importador **recusa a linha**, `repos/unidade_consumidora` **recusa com 422** (`CepDeOutraUf`, sobre o estado final da linha), e a proposta deixa o CEP **em branco** e diz por quê. A tela também avisa enquanto se digita | Enquanto uma porta recusasse e a outra gravasse, o erro só mudaria de caminho. A faixa é pública e não muda, e **só se acusa o CEP que é, com certeza, de outro estado**: o que cai fora de toda faixa não é acusado |
+| 6 | **Quando o CEP da conta diverge do da rua, vale o dos Correios** (ViaCEP), e a divergência fica escrita no arquivo do importador | A conta é a fonte da rua, do bairro e da quadra. O CEP impresso nela já errou 2 vezes em 21 |
+
+**Medido em produção antes de mudar:** os **34 endereços já gravados** passam na
+conferência de CEP × UF (58 de 58, contando os 24 propostos). A regra nova não
+reprova nada que está no ar.
+
+### Para o dono
+
+- **24 endereços prontos** em `/opt/financeiro/enderecos-proposta-crm-2026-09-28.csv`
+  (21 que faturam e 3 cujo rateio ainda não foi ativado). O ensaio deu **24 a aplicar,
+  0 UC inexistente, 0 erro**. Para gravar, rode `/opt/financeiro/enderecos-valendo-2026-09-28.sh`.
+  Em 14 deles o titular da conta não é o cliente. O endereço é o da instalação,
+  como nos 4 aprovados em 26/09.
+- **Ficam 2 que faturam sem endereço:** a UC antiga da Carla (`000000100076075`),
+  que a R28 desligou do CRM, e a do Rhenan (`000406456101252`), que não tem conta
+  anexada no card. O João Batista (`000398329901226`) ficou fora porque o CEP de
+  Nerópolis não confere no ViaCEP, e o rateio dele ainda não foi ativado.
+- **Documentos (R9):** a semente `crm_semente` trazia o CPF do **titular da conta**, e
+  não o do cliente, em **4 de 9** cadastros e em **6 dos 48** já validados. A correção
+  dos 6 está em `/opt/financeiro/documentos-correcao-2026-09-28.csv`. O ensaio de
+  28/09 às 15:45 dá **6 a aplicar e 0 colisão**, e ela ainda **não foi gravada**. Para
+  gravar, rode `/opt/financeiro/documentos-correcao-valendo-2026-09-28.sh`.
+
+---
+
 ## 3. F0 — o que falta para fechar
 
 Entregas da F0 conforme `PRD-v2.2` §10:

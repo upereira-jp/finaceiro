@@ -41,6 +41,25 @@
 // clientes desta carteira normalmente coincidem — e "normalmente" não é critério
 // para escrever sozinho no que vai impresso numa cobrança. Por isso a decisão
 // final é de quem olha, e a tela diz de onde o dado veio e de qual mês.
+//
+// ============================================================================
+// 28/09/2026 — A PRIMEIRA MEDIÇÃO CONTRA CONTA DE VERDADE, e ela reprovou tudo
+//
+// O leitor do CRM leu as contas anexadas aos cards, e o bloco de endereço de 18
+// contas da Equatorial em PDF foi passado por esta função. **Errou nas 18**: a
+// conta de Goiás é escrita por QUADRA e LOTE, e o primeiro pedaço depois da rua
+// é `Q. 91`. A leitura posicional o punha no BAIRRO, mandava `GOIANIA BRASIL`
+// (ou `CASA 1 VILA ALVORADA GOIANIA BRASIL`) para o município, perdia o `S/N` e
+// partia «RUA 1044» em logradouro «RUA» e número «1044».
+//
+// O bloco da Equatorial tem forma fixa, e agora é reconhecido por ela antes de
+// qualquer leitura genérica (`separarBlocoDaEquatorial`). E duas conferências
+// passaram a valer nos dois caminhos: um pedaço que é quadra, lote ou
+// complemento nunca vira bairro nem município, e um CEP de outro estado sai em
+// branco. A mesma medição achou uma conta que imprime o CEP de Rondônia para
+// uma cidade de Goiás.
+
+import { cepDeOutraUf } from '../../src/dominio/cep.ts';
 
 /** As unidades federativas, para a UF só ser reconhecida quando for uma. */
 const UFS = [
@@ -120,6 +139,130 @@ const limpo = (s: string) =>
   s.replace(/\s+/g, ' ').replace(/^[\s,;/-]+|[\s,;/-]+$/g, '').trim();
 
 /**
+ * O PEDAÇO QUE É DO LOGRADOURO, e por isso nunca é bairro nem município.
+ *
+ * Quadra (`Q. 91`, `QD 4`), lote (`L. 27/28`, `LT 3`), o número (`S/N`,
+ * `N. 315`, ou só dígitos) e o que é complemento (`CASA 1`, `APART - 402`, `BLOCO C`,
+ * `SALA 4`). E também o pedaço que COMEÇA com traço solto (`- CASA 1`,
+ * `- - 16`): na conta da Equatorial é o que sobra de um campo vazio, e no meio de
+ * uma linha juntada por espaço é o sinal de que o complemento e o bairro colaram.
+ */
+function pareceDoLogradouro(pedaco: string): boolean {
+  const p = pedaco.trim();
+  return /^-/.test(p)
+    || /^\d+[A-Z]?$/i.test(p)
+    || /^(Q|QD|QUADRA|L|LT|LOTE)\b\.?\s*[\w/-]/i.test(p)
+    || /^S\/?N\b/i.test(p)
+    || /^N[º°.]?\s*\d/i.test(p)
+    || /^(CASA|APART|APTO|AP|APARTAMENTO|BLOCO|BL|SALA|LOJA|COND|CONDOMINIO|ED|EDIFICIO|UNIDADE|FUNDOS|ANDAR)\b/i.test(p);
+}
+
+/**
+ * O BLOCO DA EQUATORIAL, reconhecido pela forma. Medido em 28/09/2026 em 18
+ * contas reais (o endereço abaixo é inventado; a forma, não):
+ *
+ *   RUA 1010, Q. 12, L. 3/4, S/N, APART - 201, COND - ED EXEMPLO, - - 16
+ *   SETOR PEDRO LUDOVICO
+ *   CEP: 74825110 GOIANIA GO BRASIL
+ *
+ * Três linhas: a do logradouro (rua, quadra, lote, número e complemento, por
+ * vírgula), a do BAIRRO sozinho, e o rabo `CEP: <oito dígitos> <MUNICÍPIO> <UF>
+ * BRASIL`. O rabo é o que identifica a forma, e dele saem sem ambiguidade CEP,
+ * município e UF. A primeira linha quebra em duas quando é longa.
+ *
+ * O BAIRRO SÓ SAI QUANDO A FRONTEIRA DELE EXISTE: uma quebra de linha ou uma
+ * vírgula antes dele. Se o leitor juntou as linhas com espaço, `- CASA 1 VILA
+ * ALVORADA` não diz onde termina o complemento — e aí o bairro fica vazio.
+ *
+ * O COMPLEMENTO AQUI É PREENCHIDO, ao contrário da leitura genérica, porque não é
+ * adivinhado: é tudo o que a primeira linha tem além da rua e do número. E em
+ * Goiás ele carrega a quadra e o lote, que numa rua sem número SÃO o endereço.
+ *
+ * `null` quando a linha não tem o rabo: aí quem decide é a leitura genérica.
+ */
+export function separarBlocoDaEquatorial(linha: string | null | undefined): CamposDoEndereco | null {
+  const texto = String(linha ?? '').replace(/\r/g, '').trim();
+  /* `BRASIL` é opcional: o leitor de visão pode deixar o país de fora, e o que
+   * identifica a forma é o CEP ANTES da cidade — na leitura genérica ele vem
+   * depois (`GOIANIA - GO, 74210-030`). */
+  const rabo = /\bCEP:?\s*(\d{5})-?(\d{3})\s+([^\n,]+?)\s+([A-Z]{2})(?:\s+BRASIL)?\s*$/i.exec(texto);
+  if (!rabo) return null;
+  const uf = rabo[4]!.toUpperCase();
+  if (!(UFS as readonly string[]).includes(uf)) return null;
+  const municipio = limpo(rabo[3]!);
+  const cep = `${rabo[1]}-${rabo[2]}`;
+
+  const antes = texto.slice(0, rabo.index);
+  let cabeca: string;
+  let bairro = '';
+  const linhas = antes.split('\n').map(limpo).filter(Boolean);
+  if (linhas.length >= 2) {
+    /* Com quebra de linha, a última antes do CEP é a do bairro — e a primeira
+     * linha, se era longa, veio partida nas de cima. */
+    const ultima = linhas[linhas.length - 1]!;
+    if (!pareceDoLogradouro(ultima) && !ultima.includes(',')) {
+      bairro = ultima;
+      cabeca = linhas.slice(0, -1).join(' ');
+    } else {
+      cabeca = linhas.join(' ');
+    }
+  } else {
+    const pedacos = (linhas[0] ?? '').split(',').map((p) => p.trim()).filter(Boolean);
+    const ultimo = pedacos[pedacos.length - 1] ?? '';
+    const semNumero = /^(S\/?N|N[º°.]?\s*\d+[A-Z]?)\s+(.+)$/i.exec(ultimo);
+    if (pedacos.length >= 2 && !pareceDoLogradouro(ultimo)) {
+      bairro = limpo(ultimo);
+      pedacos.pop();
+    } else if (pedacos.length >= 2 && semNumero && !pareceDoLogradouro(semNumero[2]!)) {
+      /* `..., S/N CONJUNTO ANHANGUERA`: a linha foi juntada por espaço logo
+       * depois do número, e o número marca a fronteira. */
+      bairro = limpo(semNumero[2]!);
+      pedacos[pedacos.length - 1] = semNumero[1]!;
+    }
+    cabeca = pedacos.join(', ');
+  }
+
+  const pedacos = cabeca.split(',').map((p) => p.trim()).filter(Boolean);
+  const logradouro = limpo(pedacos.shift() ?? '');
+  let numero = '';
+  const complemento: string[] = [];
+  for (const p of pedacos) {
+    const num = /^N[º°.]?\s*(\d+[A-Z]?)$/i.exec(p);
+    if (!numero && /^S\/?N$/i.test(p)) { numero = 'S/N'; continue; }
+    if (!numero && num) { numero = num[1]!; continue; }
+    /* O traço solto é o que a Equatorial imprime entre um rótulo e um valor
+     * vazio (`APART - 402`, `- - 16`): sai, e o que sobra fica como veio. */
+    const semTraco = p.replace(/(^|\s)-(?=\s|$)/g, ' ').replace(/\s+/g, ' ').trim();
+    if (semTraco) complemento.push(semTraco);
+  }
+
+  return {
+    endereco_logradouro: logradouro,
+    endereco_numero: numero,
+    endereco_complemento: complemento.join(', '),
+    endereco_bairro: bairro,
+    endereco_municipio: municipio,
+    endereco_uf: uf,
+    endereco_cep: cepDeOutraUf(cep, uf) ? '' : cep,
+  };
+}
+
+/**
+ * O CEP IMPRESSO NA CONTA QUE É DE OUTRO ESTADO, dito em uma frase para a tela.
+ * `null` quando não há o que dizer. Medido em 28/09/2026: uma conta da
+ * Equatorial de Indiara (GO) imprime o CEP 76995-000, que é de Rondônia.
+ */
+export function avisoDoCepDaConta(linha: string | null | undefined): string | null {
+  const bruta = String(linha ?? '');
+  const cep = acharCep(bruta);
+  const uf = acharUf(bruta);
+  const outra = cepDeOutraUf(cep, uf);
+  return outra
+    ? `O CEP impresso na conta, ${cep}, é de ${outra}, e a cidade é de ${uf}. Ele ficou em branco: confira o da rua nos Correios antes de gravar.`
+    : null;
+}
+
+/**
  * A LINHA DA CONTA VIRANDO SETE CAMPOS — **melhor esforço, e sem chute**.
  *
  * O formato brasileiro típico é `LOGRADOURO, NÚMERO, BAIRRO, MUNICÍPIO - UF, CEP`,
@@ -137,6 +280,11 @@ const limpo = (s: string) =>
  *     que tem a conta na frente.
  */
 export function separarEndereco(linha: string | null | undefined): CamposDoEndereco {
+  /* A forma conhecida primeiro: a conta da Equatorial é a de toda a carteira
+   * hoje, e a leitura genérica errava nela em 18 de 18 (28/09/2026). */
+  const daEquatorial = separarBlocoDaEquatorial(linha);
+  if (daEquatorial) return daEquatorial;
+
   const bruta = String(linha ?? '').replace(/\s+/g, ' ').trim();
   if (!bruta) return { ...VAZIO };
 
@@ -148,6 +296,8 @@ export function separarEndereco(linha: string | null | undefined): CamposDoEnder
   let resto = bruta;
   if (cep) resto = resto.replace(/\b\d{5}[.\s-]?\d{3}\b/, ' ');
   resto = resto.replace(/\bCEP\b[:\s]*/i, ' ');
+  /* O país no fim ("GOIANIA GO BRASIL") não é município nem bairro. */
+  resto = resto.replace(/[\s,;-]*\bBRASIL\s*$/i, ' ');
   if (uf) resto = resto.replace(new RegExp(`(^|[^A-Za-zÀ-ú])${uf}([^A-Za-zÀ-ú]|$)`, 'i'), '$1 $2');
 
   /* ⚠️ A BARRA NAO ENTRA NOS SEPARADORES, e ela estava entrando: `GOIANIA/GO` a
@@ -166,8 +316,20 @@ export function separarEndereco(linha: string | null | undefined): CamposDoEnder
   const ehPedacoDeNumero = (p: string) => /^\d{1,6}[A-Za-z]?$/.test(p) || /^S\/?N$/i.test(p);
   if (pedacos[1] && ehPedacoDeNumero(pedacos[1]!)) { cabeca = `${cabeca}, ${pedacos[1]}`; daCabeca = 2; }
 
-  const { logradouro, numero } = separarNumero(cabeca);
-  const sobra = pedacos.slice(daCabeca);
+  const separado = separarNumero(cabeca);
+  const logradouro = separado.logradouro;
+  let numero = separado.numero;
+  const depois = pedacos.slice(daCabeca);
+
+  /* QUADRA, LOTE E COMPLEMENTO NUNCA SÃO BAIRRO NEM MUNICÍPIO (28/09/2026: a
+   * conta de Goiás põe `Q. 91` logo depois da rua, e ele virava o bairro). Saem
+   * da conta posicional antes dela — e o `S/N` que estava entre eles ainda
+   * serve de número. */
+  if (!numero) {
+    const n = depois.find((p) => /^S\/?N$/i.test(p) || /^N[º°.]?\s*\d+[A-Z]?$/i.test(p));
+    if (n) numero = /^S\/?N$/i.test(n) ? 'S/N' : n.replace(/^N[º°.]?\s*/i, '');
+  }
+  const sobra = depois.filter((p) => !pareceDoLogradouro(p));
 
   /* O COMPLEMENTO NAO E ADIVINHADO: ele e opcional para o boleto e nao conta
    * como pendencia, entao errar nele nao paga o risco de tirar um pedaco que
@@ -184,7 +346,9 @@ export function separarEndereco(linha: string | null | undefined): CamposDoEnder
     endereco_bairro: bairro,
     endereco_municipio: municipio,
     endereco_uf: uf,
-    endereco_cep: cep,
+    /* O CEP de outro estado sai em branco: a tela diz por quê
+     * (`avisoDoCepDaConta`), e o branco alguém preenche. */
+    endereco_cep: cepDeOutraUf(cep, uf) ? '' : cep,
   };
 }
 

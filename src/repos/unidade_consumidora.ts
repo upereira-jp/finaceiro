@@ -9,6 +9,7 @@
 import { dbt } from '../db/tipado.ts';
 import { paraDecimal, decimalParaTexto } from '../dominio/fatura-unificada.ts';
 import { tenantCorrente, exigir } from '../db/contexto.ts';
+import { cepDeOutraUf } from '../dominio/cep.ts';
 import type { titularidade_uc as TitularidadeUC, status_uc as StatusUC } from '../generated/prisma/enums.ts';
 
 export type NovaUC = {
@@ -76,8 +77,29 @@ export class NumeroDeUCJaExiste extends Error {
   }
 }
 
+/**
+ * O CEP DE UM ESTADO COM A UF DE OUTRO. 422, e a mesma regra do importador
+ * (`dominio/planilha-enderecos.ts`): enquanto uma porta recusasse e a outra
+ * gravasse, o erro so mudaria de caminho. Medido em 28/09/2026: uma conta da
+ * Equatorial de Indiara (GO) imprime o CEP 76995-000, que e de Rondonia.
+ */
+export class CepDeOutraUf extends Error {
+  readonly status = 422;
+  constructor(cep: string, doCep: string, uf: string) {
+    super(`O CEP ${cep} e de ${doCep}, e a UF informada e ${uf}. Um dos dois esta errado, e o boleto ` +
+          'sairia com os dois - confira o CEP da rua nos Correios. Nada foi gravado.');
+    this.name = 'CepDeOutraUf';
+  }
+}
+
+function conferirCepDaUf(cep: string | null | undefined, uf: string | null | undefined) {
+  const doCep = cepDeOutraUf(cep, uf);
+  if (doCep) throw new CepDeOutraUf(String(cep).trim(), doCep, String(uf).trim().toUpperCase());
+}
+
 export async function criar(e: NovaUC) {
   await exigir('escrever_cadastro');
+  conferirCepDaUf(e.endereco_cep, e.endereco_uf);
   try {
     return await dbt().unidade_consumidora.create({
       data: {
@@ -177,6 +199,22 @@ export async function editar(id: string, e: EdicaoUC) {
   }
   if (e.endereco_uf !== undefined) dados.endereco_uf = limpar(e.endereco_uf)?.toUpperCase() ?? null;
   if (Object.keys(dados).length === 0) return;
+
+  /* CEP x UF sobre o estado FINAL da linha: a tela manda os sete campos, mas
+   * uma edicao que troca so o CEP tem de ser conferida contra a UF que ja esta
+   * gravada. A leitura so acontece nesse caso. */
+  if ('endereco_cep' in dados || 'endereco_uf' in dados) {
+    let cep = dados.endereco_cep as string | null | undefined;
+    let uf = dados.endereco_uf as string | null | undefined;
+    if (!('endereco_cep' in dados) || !('endereco_uf' in dados)) {
+      const atual = await dbt().unidade_consumidora.findFirst({
+        where: { id }, select: { endereco_cep: true, endereco_uf: true },
+      });
+      if (!('endereco_cep' in dados)) cep = atual?.endereco_cep;
+      if (!('endereco_uf' in dados)) uf = atual?.endereco_uf;
+    }
+    conferirCepDaUf(cep, uf);
+  }
 
   // updateMany e nao update: `update` usa chave unica e lanca P2025 quando a RLS
   // esconde a linha - "nao existe" que na verdade e "outro tenant".

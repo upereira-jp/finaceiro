@@ -112,6 +112,29 @@ const OK2 = `${UC2};Avenida T-9;S/N;;Jardim America;Goiania;GO;74255220\n`;
       'e ela nao inventa mascara para o que nao e CEP - devolve como veio');
 }
 
+// ==================================================== E3x o CEP e a UF JUNTOS
+//
+// Medido em conta real em 28/09/2026: a Equatorial imprimiu "CEP: 76995000
+// INDIARA GO", e 76995000 e de Rondonia. Cada campo passava sozinho.
+{
+  const p = lerPlanilhaDeEnderecos(CAB + `${UC1};Rua Beija-Flor;S/N;Q. 14, L. 3;Setor X;Indiara;GO;76995-000\n`);
+  chk('E3x1', p.linhas.length === 0 && p.erros.length === 1,
+      'o CEP de RONDONIA numa linha de Goias e RECUSADO - o boleto sairia com os dois');
+  chk('E3x2', p.erros[0]?.motivo.includes('76995-000') === true && p.erros[0]!.motivo.includes('RO')
+              && p.erros[0]!.motivo.includes('GO'),
+      `e a mensagem diz o CEP, a UF dele e a da linha (veio: ${p.erros[0]?.motivo.slice(0, 70)}...)`);
+
+  const certo = lerPlanilhaDeEnderecos(CAB + `${UC1};Rua Beija-Flor;S/N;Q. 14, L. 3;Setor X;Indiara;GO;75955-000\n`);
+  chk('E3x3', certo.erros.length === 0 && certo.linhas.length === 1,
+      'o CEP da cidade certa passa');
+
+  /* O ENTORNO: 72800000 a 72999999 fica no meio das faixas do DF e e de Goias.
+   * E o caso que erra quem confere pelo comeco do CEP. */
+  const entorno = lerPlanilhaDeEnderecos(CAB + `${UC1};Rua 1;10;;Centro;Valparaiso de Goias;GO;72870-000\n`);
+  chk('E3x4', entorno.erros.length === 0,
+      'Valparaiso de Goias (72870000) e GO, embora 70000000-72799999 seja DF');
+}
+
 // ==================================================== E4 os obrigatorios
 {
   const semBairro = lerPlanilhaDeEnderecos(CAB + `${UC1};Rua X;1;;;Goiania;GO;74210-030\n`);

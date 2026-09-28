@@ -75,8 +75,11 @@
 //   VAZIO   celula vazia e erro, nunca "sem endereco". Ausente nao e zero, e
 //           aqui isso e literal: um pagador sem bairro nao e um pagador de
 //           bairro vazio
+//   CEP x UF  os dois JUNTOS, pela faixa dos Correios (`cep.ts`): um CEP de
+//           outro estado e recusado. Medido em conta real em 28/09/2026
 
 import { SEP, emLinhas, escreverCelula, lerLinha } from './csv.ts';
+import { cepDeOutraUf } from './cep.ts';
 /** Os 27, e a lista e fechada de proposito - nao ha "UF de duas letras". */
 export const UFS = [
   'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG',
@@ -276,6 +279,23 @@ export function lerPlanilhaDeEnderecos(conteudo: string): PlanilhaDeEnderecos {
       cep = lerCep(cepBruto);
     } catch (e) {
       erros.push({ linha: numeroDaLinha, motivo: `UC ${uc}: ${(e as Error).message}` });
+      return;
+    }
+
+    /*
+     * O CEP E A UF CONFERIDOS JUNTOS. Cada um passava sozinho, e a combinacao
+     * errada chegava ao boleto: em 28/09/2026 uma conta da Equatorial imprimiu
+     * "CEP: 76995000 INDIARA GO", e 76995000 e de Rondonia. Copiar a conta para
+     * a planilha e o caminho natural, entao a recusa tem de estar aqui.
+     */
+    const outra = cepDeOutraUf(cep, uf);
+    if (outra) {
+      erros.push({
+        linha: numeroDaLinha,
+        motivo: `UC ${uc}: o CEP ${cepComMascara(cep)} e de ${outra}, e a linha diz ${uf}. A conta da ` +
+                'distribuidora pode imprimir o CEP errado - confira o da rua nos Correios (ou no ViaCEP) ' +
+                'antes de gravar, porque o boleto sai com os dois',
+      });
       return;
     }
 

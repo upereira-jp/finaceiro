@@ -17,7 +17,8 @@
 // que veio e acrescentar um caso aqui.
 
 import {
-  separarEndereco, completarVazios, acharCep, acharUf, faltamNaProposta, VAZIO,
+  separarEndereco, separarBlocoDaEquatorial, avisoDoCepDaConta,
+  completarVazios, acharCep, acharUf, faltamNaProposta, VAZIO,
 } from '../src/endereco-da-conta.ts';
 
 let falhas = 0;
@@ -106,6 +107,116 @@ chk('E4c', separarEndereco('').endereco_logradouro === ''
 chk('E4e', separarEndereco('RUA X, 100, BAIRRO Y, CIDADE Z').endereco_complemento === '',
     'o complemento NUNCA e adivinhado: ele e opcional para o boleto, entao errar nele nao '
     + 'paga o risco de tirar um pedaco que era o bairro');
+
+// ============================================================ E6 a conta da Equatorial
+//
+// 28/09/2026: a primeira medicao contra conta de verdade. O bloco de endereco
+// de 18 contas da Equatorial em PDF passou por `separarEndereco`, e a leitura
+// posicional errou nas 18 - `Q. 91` virava bairro, `GOIANIA BRASIL` virava
+// municipio, o `S/N` se perdia e "RUA 1044" virava "RUA" numero "1044".
+//
+// Os enderecos abaixo sao INVENTADOS. A FORMA e copiada das contas: tres linhas,
+// quadra e lote depois da rua, traco solto no lugar de campo vazio, e o rabo
+// `CEP: <oito digitos> <MUNICIPIO> <UF> BRASIL`.
+
+const EQ_APTO = [
+  'RUA 1010, Q. 12, L. 3/4, S/N, APART - 201, COND - ED EXEMPLO, - - 16',
+  'SETOR PEDRO LUDOVICO',
+  'CEP: 74825110 GOIANIA GO BRASIL',
+];
+const EQ_CASA = ['RUA T-99, Q. 22, L. 6, S/N, - CASA 1', 'VILA ALVORADA', 'CEP: 74315610 GOIANIA GO BRASIL'];
+const EQ_SIMPLES = ['RUA JAVAES, Q. 5, L. 16, S/N', 'CONJUNTO ANHANGUERA', 'CEP: 74850600 GOIANIA GO BRASIL'];
+
+{
+  const e = separarEndereco(EQ_APTO.join('\n'));
+  chk('E6', e.endereco_logradouro === 'RUA 1010' && e.endereco_numero === 'S/N',
+      `⚠️ "RUA 1010" continua inteiro e o S/N e o numero (veio "${e.endereco_logradouro}" / "${e.endereco_numero}")`);
+  chk('E6b', e.endereco_bairro === 'SETOR PEDRO LUDOVICO',
+      `⚠️ o bairro e a linha do meio, e NAO a quadra (veio "${e.endereco_bairro}")`);
+  chk('E6c', e.endereco_municipio === 'GOIANIA' && e.endereco_uf === 'GO' && e.endereco_cep === '74825-110',
+      `municipio, UF e CEP saem do rabo, sem o "BRASIL" (veio "${e.endereco_municipio}" ${e.endereco_uf} ${e.endereco_cep})`);
+  chk('E6d', e.endereco_complemento === 'Q. 12, L. 3/4, APART 201, COND ED EXEMPLO, 16',
+      `a quadra, o lote e o apartamento vao para o complemento, sem os tracos soltos (veio "${e.endereco_complemento}")`);
+  chk('E6e', faltamNaProposta(e).length === 0, 'e os cinco que a Sicoob exige saem preenchidos');
+}
+
+{
+  const e = separarEndereco(EQ_CASA.join(', '));
+  chk('E6f', e.endereco_bairro === 'VILA ALVORADA' && e.endereco_municipio === 'GOIANIA'
+              && e.endereco_complemento === 'Q. 22, L. 6, CASA 1',
+      `com as linhas juntadas por VIRGULA a fronteira do bairro continua existindo (veio "${e.endereco_bairro}")`);
+}
+
+{
+  /* O CASO QUE NAO SE CHUTA: juntadas por ESPACO, "- CASA 1 VILA ALVORADA" nao
+   * diz onde acaba o complemento e comeca o bairro. */
+  const e = separarEndereco(EQ_CASA.join(' '));
+  chk('E6g', e.endereco_bairro === '' && e.endereco_municipio === 'GOIANIA' && e.endereco_cep === '74315-610',
+      `⚠️ juntada por espaco com complemento, o bairro fica VAZIO - e o resto continua certo (veio "${e.endereco_bairro}")`);
+  chk('E6h', faltamNaProposta(e).join(', ') === 'bairro',
+      `e a tela diz que falta o bairro (veio: ${faltamNaProposta(e).join(', ')})`);
+
+  const s = separarEndereco(EQ_SIMPLES.join(' '));
+  chk('E6i', s.endereco_bairro === 'CONJUNTO ANHANGUERA' && s.endereco_numero === 'S/N',
+      `mas sem complemento o S/N marca a fronteira, e o bairro sai (veio "${s.endereco_bairro}")`);
+}
+
+{
+  /* A primeira linha longa quebra em duas na conta. */
+  const e = separarEndereco([
+    'RUA FULANO DE TAL, Q. 19, L. 15, S/N, APART - 102 BLOCO G, - COND.',
+    'RESIDENCIAL EXEMPLO', 'SOLANGE PARK', 'CEP: 74484180 GOIANIA GO BRASIL',
+  ].join('\n'));
+  chk('E6j', e.endereco_bairro === 'SOLANGE PARK'
+              && e.endereco_complemento === 'Q. 19, L. 15, APART 102 BLOCO G, COND. RESIDENCIAL EXEMPLO',
+      `a linha partida volta a ser uma, e o bairro continua sendo a ultima (veio "${e.endereco_bairro}" / "${e.endereco_complemento}")`);
+}
+
+{
+  const e = separarEndereco(['RUA 09, Q. 5, L. 15, N. 315, - CASA 1', 'VILA DONA AUTA', 'CEP: 75902030 RIO VERDE GO BRASIL'].join('\n'));
+  chk('E6k', e.endereco_numero === '315' && e.endereco_municipio === 'RIO VERDE',
+      `"N. 315" e o numero, e municipio de duas palavras sai inteiro (veio "${e.endereco_numero}" / "${e.endereco_municipio}")`);
+
+  const semPais = separarBlocoDaEquatorial(EQ_SIMPLES.join('\n').replace(' BRASIL', ''));
+  chk('E6l', semPais?.endereco_bairro === 'CONJUNTO ANHANGUERA' && semPais.endereco_municipio === 'GOIANIA',
+      'sem o "BRASIL" no fim a forma continua reconhecida - o que a identifica e o CEP ANTES da cidade');
+  chk('E6m', separarBlocoDaEquatorial('RUA T-55, 930, SETOR BUENO, GOIANIA - GO, 74210-030') === null,
+      'e a linha no formato generico (CEP no fim) NAO e tomada por bloco da Equatorial');
+}
+
+// ============================================================ E7 o CEP de outro estado
+//
+// Medido na mesma leva: uma conta de Indiara (GO) imprime "CEP: 76995000", e
+// 76995000 e de Rondonia.
+
+{
+  const linha = ['RUA BEIJA-FLOR, Q. 14, L. 3, S/N', 'SITIOS DE RECREIO', 'CEP: 76995000 INDIARA GO BRASIL'].join('\n');
+  const e = separarEndereco(linha);
+  chk('E7', e.endereco_cep === '' && e.endereco_municipio === 'INDIARA' && e.endereco_bairro === 'SITIOS DE RECREIO',
+      `⚠️ o CEP de Rondonia numa conta de Goias sai em BRANCO, e o resto do endereco sai (veio cep "${e.endereco_cep}")`);
+  chk('E7b', faltamNaProposta(e).join(', ') === 'CEP',
+      'e a tela diz que falta o CEP, em vez de oferecer um boleto com dois estados');
+  const aviso = avisoDoCepDaConta(linha) ?? '';
+  chk('E7c', aviso.includes('76995-000') && aviso.includes('RO') && aviso.includes('GO'),
+      `e diz por que: o CEP, o estado dele e o da cidade (veio: ${aviso.slice(0, 60)}...)`);
+  chk('E7d', avisoDoCepDaConta(EQ_APTO.join('\n')) === null && avisoDoCepDaConta('') === null,
+      'a conta com CEP certo, ou sem nada, nao gera aviso');
+  chk('E7e', separarEndereco('RUA X, 100, CENTRO, INDIARA - GO, 76995-000').endereco_cep === '',
+      'a mesma conferencia vale na leitura generica');
+}
+
+// ============================================================ E8 quadra e lote nunca sao bairro
+
+{
+  const e = separarEndereco('RUA X, Q. 5, L. 16, S/N, SETOR BUENO, GOIANIA - GO, 74210-030');
+  chk('E8', e.endereco_bairro === 'SETOR BUENO' && e.endereco_municipio === 'GOIANIA',
+      `na leitura generica, quadra e lote saem da conta posicional (veio "${e.endereco_bairro}" / "${e.endereco_municipio}")`);
+  chk('E8b', e.endereco_numero === 'S/N',
+      `e o S/N que estava depois deles ainda e o numero (veio "${e.endereco_numero}")`);
+  const so = separarEndereco('RUA X, Q. 5, L. 16');
+  chk('E8c', so.endereco_bairro === '' && so.endereco_municipio === '',
+      '⚠️ sem nada alem de quadra e lote, bairro e municipio ficam VAZIOS - e nao "Q. 5"');
+}
 
 // ============================================================ E5 completar sem substituir
 
