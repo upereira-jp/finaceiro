@@ -42,7 +42,7 @@ import { VERBETE_DA_CAMADA, EFEITO, SITUACAO, GLOSSARIO,
 import { DESTINO_DA_CAMADA, enderecoDoDestino } from '../src/destino-da-camada.ts';
 import { CRM, usinaNoCrm } from '../src/crm.ts';
 import { readFileSync } from 'node:fs';
-import { TELAS, caminhoNaBarra } from '../src/navegacao.ts';
+import { TELAS, caminhoNoMenu } from '../src/navegacao.ts';
 
 let falhas = 0;
 let feitas = 0;
@@ -57,7 +57,7 @@ const chk = (id: string, cond: boolean, d: string) => {
 // destino do emissor, que precisa de `#cadastro` para revelar a aba oculta da
 // Fatura unificada: sem tirar o fragmento aqui, um caminho legitimo era acusado
 // de nao ser tela de verdade. Os dois separadores saem pelo mesmo motivo — o que
-// se compara com a barra de navegacao e o CAMINHO, nao o endereco inteiro.
+// se compara com o menu de navegacao e o CAMINHO, nao o endereco inteiro.
 const so = (rota: string): string => rota.split(/[?#]/)[0]!;
 
 /**
@@ -396,7 +396,7 @@ chk('A5g', ORDEM_DOS_GRUPOS.length === Object.keys(EFEITO).length
       .replace(/^\s*\/\/.*$/gm, ' ');
     chk('A5y', /aindaEmAberto\(/.test(tela) && /jaFechadas\(/.test(tela)
             && /agruparPorEfeito\(verFechadas \? dado\.camadas : emAberto\)/.test(tela),
-        'e a PRIMEIRA tela da barra usa as duas: a tabela recebe so o que esta em aberto, e as '
+        'e a PRIMEIRA tela do menu usa as duas: a tabela recebe so o que esta em aberto, e as '
         + 'fechadas so entram quando alguem pede - sem esta linha, a regra existiria e a tela '
         + 'continuaria mostrando tudo');
   }
@@ -639,7 +639,7 @@ for (const g of GLOSSARIO) {
 
 chk('A9', Object.keys(PALAVRAS_DA_TELA).every((r) => TELAS.some((t) => t.rota === r))
        && TELAS.every((t) => t.rota in PALAVRAS_DA_TELA),
-    'as telas da barra tem apelido, e nenhum apelido aponta para tela que nao existe');
+    'as telas do menu tem apelido, e nenhum apelido aponta para tela que nao existe');
 
 // ============ A9b o texto NAO manda abrir aba que nao existe — entrou em 10/09/2026
 //
@@ -656,9 +656,12 @@ chk('A9', Object.keys(PALAVRAS_DA_TELA).every((r) => TELAS.some((t) => t.rota ==
 {
   const titulos = TELAS.map((t) => t.titulo);
 
-  /* «aba X», onde X comeca com maiuscula. As abas INTERNAS da fatura unificada
-   * («1 · Leitura e calculo») nao casam de proposito: comecam com digito. */
-  const citacao = /\baba ([A-ZÀ-Ú][A-Za-zÀ-ÿ]*(?: [a-zà-ÿ]+)*)/g;
+  /* «aba X» ou «tela X», onde X comeca com maiuscula. As abas INTERNAS da fatura
+   * unificada («1 · Leitura e calculo») nao casam de proposito: comecam com
+   * digito. «tela X» ENTROU EM 30/09/2026 (etapa 3b): com a barra virando menu
+   * lateral, a ajuda parou de chamar as telas de «aba» — e a amarra tinha de ir
+   * junto com a palavra, ou o texto novo ficava sem ela. */
+  const citacao = /\b(?:aba|tela) ([A-ZÀ-Ú][A-Za-zÀ-ÿ]*(?: [a-zà-ÿ]+)*)/g;
 
   /*
    * PREFIXO NOS DOIS SENTIDOS, e a primeira versao desta linha errou por nao ter
@@ -684,9 +687,9 @@ chk('A9', Object.keys(PALAVRAS_DA_TELA).every((r) => TELAS.some((t) => t.rota ==
   }
 
   chk('A9z', fantasmas.size === 0,
-      'nenhum texto da ajuda manda abrir uma aba que nao esta na barra'
+      'nenhum texto da ajuda manda abrir uma tela que nao esta no menu'
       + `${fantasmas.size ? ` (fantasmas: ${[...fantasmas].join(', ')})` : ''} - quem procura uma `
-      + 'aba que nao existe varre a barra inteira antes de duvidar do texto, e nao ha a quem '
+      + 'tela que nao existe varre o menu inteiro antes de duvidar do texto, e nao ha a quem '
       + 'perguntar');
 }
 
@@ -697,7 +700,8 @@ chk('A9', Object.keys(PALAVRAS_DA_TELA).every((r) => TELAS.some((t) => t.rota ==
  * Contas de luz, Emissão e cobrança → Cobranças), e a ajuda tinha vinte botões
  * «Abrir <nome velho>». A regra do roteiro (`RM13`) passa a valer aqui: o botão
  * que diz «Abrir X» tem de levar a uma tela cujo nome, onde se clica, é X — a
- * aba solta ou o item do menu «Cadastros».
+ * aba solta ou o item do menu «Cadastros». Desde a etapa 3b (menu lateral), o
+ * item do menu, debaixo do título da seção (`caminhoNoMenu`).
  */
 {
   const botoes = [
@@ -707,14 +711,14 @@ chk('A9', Object.keys(PALAVRAS_DA_TELA).every((r) => TELAS.some((t) => t.rota ==
   const errados = botoes.filter(([, c]) => {
     const m = /^Abrir (.+)$/.exec(c.rotulo);
     if (!m || c.tipo === 'crm') return false;
-    const nomes = caminhoNaBarra(so(c.rota));
+    const nomes = caminhoNoMenu(so(c.rota));
     /* «Abrir a leitura da conta» e «Abrir a lista de clientes» descrevem o ato
        e nao citam aba: so conta como citacao quando comeca com maiuscula. */
     if (!/^[A-ZÀ-Ú]/.test(m[1]!)) return false;
     return !nomes || nomes[nomes.length - 1] !== m[1];
   });
   chk('A9y', errados.length === 0,
-      'todo botao «Abrir X» da ajuda nomeia, letra por letra, a aba (ou o item de menu) a que leva'
+      'todo botao «Abrir X» da ajuda nomeia, letra por letra, o item do menu a que leva'
       + `${errados.length ? ` (errados: ${errados.map(([id, c]) => `${id}: «${c.rotulo}» -> ${c.rota}`).join(' · ')})` : ''}`);
 }
 
@@ -739,7 +743,7 @@ chk('A9', Object.keys(PALAVRAS_DA_TELA).every((r) => TELAS.some((t) => t.rota ==
   chk('A9c', telasCitadas('jabuticaba quantica').length === 0,
       'e o que nao e nome de tela nao vira sugestao de tela — palpite ruim gasta a confianca do bom');
   chk('A9d', telasCitadas('fatura').length <= 3,
-      'no maximo tres: uma lista de doze telas e um menu, e a pessoa ja tem um na barra');
+      'no maximo tres: uma lista de doze telas e um menu, e a pessoa ja tem um ao lado');
 }
 
 // ============ A10 A PROMESSA: NENHUMA PERGUNTA TERMINA SEM UMA TELA CLICAVEL

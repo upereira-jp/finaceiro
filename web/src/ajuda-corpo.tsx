@@ -133,7 +133,7 @@ export function CorpoDaAjuda(p: CorpoDaAjuda) {
                   {/* O BOTÃO LEVA AO FUNIL, e ele diz o nome da aba — «Mês» é
                       onde cada passo tem o número e o como fazer. */}
                   <div className="ajuda-caminhos">
-                    <BotaoDoCaminho caminho={{ rota: '/pendencias', rotulo: 'Ver o mês na aba Mês', tipo: 'ver' }}
+                    <BotaoDoCaminho caminho={{ rota: '/pendencias', rotulo: 'Ver o mês na tela Mês', tipo: 'ver' }}
                                     ir={p.ir} />
                   </div>
                 </>

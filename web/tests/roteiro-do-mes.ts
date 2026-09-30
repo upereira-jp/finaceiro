@@ -16,14 +16,17 @@
 //                    «fechado»;
 //   cadastro à parte  a pendência de cadastro não consome o destaque: vira uma
 //                    linha própria, com o caminho;
-//   o texto aponta    todo destino é rota da barra, e o nome no botão é letra por
-//                    letra o que a pessoa lê onde clica (`RM12`/`RM13`, mantidas).
+//   o texto aponta    todo destino é item do menu, e o nome no botão é letra por
+//                    letra o que a pessoa lê onde clica (`RM12`/`RM13`, mantidas
+//                    quando a barra virou menu lateral, na etapa 3b).
+//   uma sequência só  o número do passo que o menu mostra ao lado de cada tela é
+//                    o mesmo do funil e da faixa (`RM25`, etapa 3b).
 
 import {
   mesNoFunil, travasDe, ondeEstouNoMes, escolherOFoco, MOLDES, TETO_DAS_COBRANCAS,
   type CamadaDoRoteiro, type LeituraDoMes, type LinhaSemBoleto, type ContaRegistrada,
 } from '../src/roteiro-do-mes.ts';
-import { TELAS, caminhoNaBarra } from '../src/navegacao.ts';
+import { TELAS, caminhoNoMenu, rotuloDosPassos } from '../src/navegacao.ts';
 import { VERBETE_DA_CAMADA } from '../src/vocabulario.ts';
 
 let falhas = 0;
@@ -266,37 +269,39 @@ const passo = (e: LeituraDoMes, chave: string) => mesNoFunil(e).passos.find((p) 
  * RM12..RM15 — o texto aponta lugares que existem
  * ========================================================================== */
 
-// -------------------------------------------- RM12 todo destino está na barra
+// -------------------------------------------- RM12 todo destino está no menu
 {
   const destinos = MOLDES.flatMap((m) => [m.destino, ...(m.destinoDoRisco ? [m.destinoDoRisco] : [])]);
-  const fora = destinos.filter((d) => caminhoNaBarra(d.endereco) === null);
+  const fora = destinos.filter((d) => caminhoNoMenu(d.endereco) === null);
   chk('RM12', fora.length === 0 && destinos.length >= MOLDES.length,
-      `todo «Abrir X» do funil — o de cada passo e o do risco — aponta uma rota que está na barra`
+      `todo «Abrir X» do funil — o de cada passo e o do risco — aponta uma tela que é item do menu`
       + `${fora.length ? ` (fora: ${fora.map((d) => d.endereco).join(', ')})` : ''} - link para lugar nenhum `
       + 'é pior que link nenhum');
 }
 
 // ------------------------------- RM13 o nome no botão é o que se lê onde se clica
 {
-  /* «RÓTULO DA ABA» DESDE QUE A BARRA TEM MENU (30/09/2026): o ÚLTIMO nome de
-   * `caminhoNaBarra` — a aba solta, ou o item dentro do menu «Cadastros». É a
-   * palavra que a pessoa lê no lugar em que clica. */
+  /* «RÓTULO DO ITEM» (30/09/2026, etapa 3b): o ÚLTIMO nome de `caminhoNoMenu`
+   * — o nome da tela no menu lateral, debaixo do título da seção. É a palavra
+   * que a pessoa lê no lugar em que clica. Até a etapa 3 era `caminhoNaBarra`,
+   * com a aba solta ou o item dentro do suspenso «Cadastros ▾». */
   const destinos = MOLDES.flatMap((m) => [m.destino, ...(m.destinoDoRisco ? [m.destinoDoRisco] : [])]);
   const divergem = destinos.filter((d) => {
-    const c = caminhoNaBarra(d.endereco);
+    const c = caminhoNoMenu(d.endereco);
     return !c || c[c.length - 1] !== d.rotulo;
   });
   chk('RM13', divergem.length === 0,
-      'o nome no botão é LETRA POR LETRA o que a barra mostra onde se clica'
+      'o nome no botão é LETRA POR LETRA o que o menu mostra onde se clica'
       + `${divergem.length ? ` (divergem: ${divergem.map((d) => d.rotulo).join(', ')})` : ''} - «Abrir Fatura `
       + 'unificada» para uma aba chamada Contas de luz faz a pessoa procurar a aba errada');
-  const menu = caminhoNaBarra('/unidades');
+  const menu = caminhoNoMenu('/unidades');
   chk('RM13b', menu?.join(' › ') === 'Cadastros › Unidades consumidoras'
-               && caminhoNaBarra('/documento')?.join() === 'Contas de luz'
-               && caminhoNaBarra('/contas-a-pagar')?.join() === 'Contas a pagar'
+               && caminhoNoMenu('/documento')?.join(' › ') === 'O mês, passo a passo › Contas de luz'
+               && caminhoNoMenu('/contas-a-pagar')?.join(' › ') === 'Caixa › Contas a pagar'
+               && caminhoNoMenu('/pendencias')?.join(' › ') === 'Mês'
                && MOLDES.some((m) => m.comoFazer.some((l) => l.includes(menu![1]!))),
-      'para a tela dentro do menu, o rótulo é o nome do ITEM («Unidades consumidoras», um clique abaixo '
-      + 'de «Cadastros») — e é assim que o passo 4 a nomeia');
+      'o rótulo é o nome do ITEM, debaixo do título da seção («Unidades consumidoras», na seção '
+      + '«Cadastros») — e é assim que o passo 4 a nomeia');
 }
 
 // ---------------------- RM14 o roteiro não manda procurar aba que saiu ou mudou
@@ -412,6 +417,27 @@ const passo = (e: LeituraDoMes, chave: string) => mesNoFunil(e).passos.find((p) 
       'Contas a pagar é o passo 5 e FECHA o mês (sem «depois»), aponta o passo 4 em Cobranças, e sabe '
       + 'que é de outro setor — a faixa dela diz «do mês do Rateio», porque quem chega pela Empresa '
       + 'não sabe de que mês ela é o fim');
+}
+
+/* ==========================================================================
+ * RM25 — o menu conta a mesma sequência (30/09/2026, etapa 3b)
+ * ========================================================================== */
+
+// ------------------ RM25 o número no menu é o do funil e o da faixa, sempre
+{
+  /* O menu lateral mostra, ao lado de Contas de luz, Cobranças e Contas a pagar,
+   * os passos do mês que acontecem ali («1–2», «3–4», «5»). O número é DADO em
+   * `navegacao.ts` (o menu mora no pedaço de entrada e não pode carregar este
+   * módulo), e é por isso que ele é conferido aqui contra `ondeEstouNoMes`: se um
+   * passo mudar de tela nos moldes, o menu tem de mudar junto, ou esta linha
+   * falha. As três contam a mesma sequência, ou nenhuma conta. */
+  const divergem = TELAS.filter((t) => {
+    const doFunil = ondeEstouNoMes(t.rota)?.aqui.map((p) => p.numero).join() ?? '';
+    return (t.passos ?? []).join() !== doFunil;
+  });
+  chk('RM25', divergem.length === 0 && TELAS.some((t) => t.passos?.length),
+      'o número do passo que o menu mostra em cada tela é o mesmo que o funil da tela Mês e a faixa da '
+      + `própria tela mostram${divergem.length ? ` (divergem: ${divergem.map((t) => `${t.titulo} menu «${rotuloDosPassos(t.passos)}»`).join(', ')})` : ''}`);
 }
 
 console.log(`\n${falhas === 0 ? 'roteiro-do-mes: todas as verificacoes passaram'

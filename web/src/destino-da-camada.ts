@@ -203,7 +203,7 @@ export const DESTINO_DA_CAMADA: Record<string, DestinoDaCamada> = {
     nota: 'O preço vem impresso na conta da distribuidora e é lido com até seis casas. Esta linha '
       + 'acusa a conta em que ele ficou ZERADO — e zero é recusado de propósito, porque a folha '
       + 'sairia dizendo que o kWh não custa nada. Corrige-se na própria leitura e registra-se de '
-      + 'novo. A coluna «Tarifa R$/kWh» da aba Unidades consumidoras é outra coisa: ela serve o '
+      + 'novo. A coluna «Tarifa R$/kWh» da tela Unidades consumidoras é outra coisa: ela serve o '
       + 'caminho em lote, que não é o oficial, e o conector continua semeando ela do card.',
   },
 
@@ -255,7 +255,7 @@ export const DESTINO_DA_CAMADA: Record<string, DestinoDaCamada> = {
     nota: 'A Sicoob exige logradouro, bairro, município, CEP e UF do pagador, e a emissão é '
       + 'RECUSADA sem eles — a fatura existe e continua cobrável por Pix, o que não nasce é o '
       + 'boleto. O número é o único campo do formulário que não entra na exigência. Entra linha a '
-      + 'linha na aba Unidades consumidoras, ou na carteira inteira pelo importador em lote.',
+      + 'linha na tela Unidades consumidoras, ou na carteira inteira pelo importador em lote.',
   },
 
   dono_da_usina: {
@@ -263,7 +263,7 @@ export const DESTINO_DA_CAMADA: Record<string, DestinoDaCamada> = {
     rotulo: 'Vincular o dono da usina',
     caminho: null,
     nota: 'A escolha da lista grava na hora, sem botão de confirmar. O dono precisa EXISTIR '
-      + 'antes: quem não aparece na lista se cadastra na aba Donos de usina, que exige chave Pix '
+      + 'antes: quem não aparece na lista se cadastra na tela Donos de usina, que exige chave Pix '
       + 'ou conta completa — conferido no cadastro, porque no pagamento já é tarde.',
   },
 
@@ -314,7 +314,7 @@ export const DESTINO_DA_CAMADA: Record<string, DestinoDaCamada> = {
       + 'e a senha NÃO entram aqui: segredo por tenant vive em armazenamento cifrado e é acessado '
       + 'por referência (regra 5) — o formulário recusa um valor que pareça o próprio segredo. '
       + 'Sem o conector a fatura existe e é cobrável por Pix, e o boleto emitido no banco pode ser '
-      + 'importado na aba Cobranças; o que falta é a emissão pela API.',
+      + 'importado na tela Cobranças; o que falta é a emissão pela API.',
   },
 };
 

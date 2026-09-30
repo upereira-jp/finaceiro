@@ -89,7 +89,7 @@ export function TelaContasAReceber() {
 
   return (
     <Pagina titulo="Contas a receber"
-            sub="Tudo o que os clientes ainda devem, de qualquer mês: quanto venceu, quanto vence nos próximos dias e se cada título tem boleto para ser pago. Cobrar — emitir, pedir o boleto, dar baixa — continua na aba Cobranças, no setor Rateio.">
+            sub="Tudo o que os clientes ainda devem, de qualquer mês: quanto venceu, quanto vence nos próximos dias e se cada título tem boleto para ser pago. Cobrar — emitir, pedir o boleto, dar baixa — continua na tela Cobranças, no setor Rateio.">
 
       {carga.erro && (
         <Aviso tipo="erro">
@@ -204,7 +204,7 @@ export function TelaContasAReceber() {
         vazio={carga.carregando ? <Carregando />
              : carga.erro ? 'Desconhecido.'
              : todas.length === 0
-               ? 'Nenhum título em aberto. Ou tudo o que foi emitido já foi pago, ou nenhuma fatura foi emitida ainda — a aba Mês, no setor Rateio, diz qual dos dois.'
+               ? 'Nenhum título em aberto. Ou tudo o que foi emitido já foi pago, ou nenhuma fatura foi emitida ainda — a tela Mês, no setor Rateio, diz qual dos dois.'
                : 'Nenhum título com esses filtros.'}>
         {visiveis.map((t) => {
           const dias = diasDeAtraso(t.vencimento, hoje);

@@ -69,17 +69,55 @@
 // servidor continuam valendo.
 
 // ============================================================================
+// A BARRA VIROU MENU LATERAL, E A ORDEM VIROU A DO TRABALHO (30/09/2026, etapa 3b)
+//
+// Dois pedidos do dono no mesmo dia, e o segundo desfaz metade do de cima:
+//
+//   «Ao invés dos tópicos ficarem dispostos na barra fixa superior, quero um
+//   menu lateral, similar ao de /opt/intreply. As telas devem permanecer as
+//   mesmas.»
+//
+//   «A ordem das telas deve refletir a ordem de cada etapa de trabalho.»
+//
+// O MENU LATERAL TEM O ESPAÇO QUE A BARRA NÃO TINHA. Os cinco cadastros tinham
+// ido para um menu «Cadastros ▾» porque cinco abas na mesma fileira empurravam o
+// trabalho para fora da tela; numa coluna, nove itens cabem inteiros com folga.
+// O suspenso deixou de pagar o clique que custava, e os cadastros voltaram a ser
+// itens à vista — agora numa SEÇÃO com título, que fecha se a pessoa quiser.
+//
+// E A ORDEM PASSOU A SER A DO TRABALHO, de cima para baixo, em quatro blocos:
+//
+//   Mês                      o ponto de partida: o funil do mês e onde começar;
+//   Cadastros                o que precisa existir antes de o mês rodar, na ORDEM
+//                            DE DEPENDÊNCIA — cada um só se completa com o de
+//                            cima pronto (ver o comentário da seção, abaixo);
+//   O mês, passo a passo     Contas de luz (passos 1 e 2) e Cobranças (3 e 4);
+//   Resultado                Relatórios — a apuração do que o mês produziu.
+//
+// Na Empresa, a mesma lógica: primeiro o dinheiro que entra (Contas a receber),
+// depois o que se reparte e se paga (Contas a pagar — o passo 5, onde o mês do
+// Rateio termina), e por último o apoio (Conector Sicoob, Histórico).
+//
+// O NÚMERO DO PASSO APARECE NO ITEM («1–2», «3–4», «5»), e ele não é escrito
+// duas vezes: `passos` abaixo é conferido contra `ondeEstouNoMes` do roteiro
+// (`RM25`), que é a mesma lista que monta o funil da tela Mês e a faixa de cada
+// tela. O menu, o funil e a faixa contam a mesma sequência, ou a suíte falha.
+//
+// O QUE ERA «A BARRA» NOS TESTES E NA AJUDA PASSOU A SER «O MENU», com as mesmas
+// garantias: toda tela é item do menu do seu setor, e o nome que um texto manda
+// procurar é, letra por letra, o rótulo do item (`caminhoNoMenu`, `RM13`).
+
+// ============================================================================
 // POR QUE ESTE ARQUIVO É DADO E NÃO JSX (30/07/2026)
 //
 // O runner do `web/` é `node --experimental-strip-types`, que não lê JSX. O que
 // precisa de teste sai do `.tsx` — regra 8. O `render` ficou no `app.tsx`, e o
 // `Record` exaustivo de lá recusa compilar uma tela sem componente.
 //
-// A ORDEM DENTRO DE CADA FUNIL NÃO É ALFABÉTICA, e isso é deliberado. No Rateio,
-// primeiro o trabalho do mês na ordem dos ATOS: o mês inteiro (Mês), ler a conta
-// e gerar a cobrança (Contas de luz), emitir, boleto e baixa (Cobranças), conferir
-// (Relatórios) — e por último os cadastros, que a barra junta num menu. Na
-// Empresa: o que entra, o que sai, o banco, o histórico.
+// A ORDEM DENTRO DE CADA FUNIL NÃO É ALFABÉTICA, e isso é deliberado. Desde
+// 30/09/2026 (etapa 3b) ela é a ordem em que o trabalho ACONTECE — ver o bloco
+// acima. Até ali o Rateio punha o trabalho do mês primeiro e os cadastros por
+// último, num menu; o menu lateral devolveu a eles o lugar na sequência.
 
 // ============================================================================
 // A TERCEIRA PASTA, «ADMINISTRAÇÃO DA PLATAFORMA» (30/09/2026)
@@ -96,7 +134,7 @@
 // um segundo mecanismo; o que muda é o menu, que agrupa por `pasta`.
 //
 // E QUEM VÊ CADA PASTA É DO VÍNCULO, desde o mesmo dia: `setores` na sessão
-// (migration 41), marcado por caixa na tela de Usuários. A barra só desenha o
+// (migration 41), marcado por caixa na tela de Usuários. O seletor só desenha o
 // que o vínculo vê, e um endereço de setor oculto leva à primeira tela visível
 // (`destinoVisivel`). Isto é o que a pessoa VÊ; o que ela pode FAZER continua no
 // papel, conferido no servidor.
@@ -115,7 +153,7 @@ export const PASTAS: ReadonlyArray<{ chave: PastaDoMenu; titulo: string }> = [
 
 export type Funil = {
   chave: ChaveDoFunil;
-  /** O que a barra mostra — curto, porque fica ao lado da marca «Financeiro G3». */
+  /** O que o seletor mostra — curto, porque fica no alto do menu, sob a marca «Financeiro G3». */
   rotulo: string;
   /** O nome inteiro, para leitor de tela, título de página e ajuda. */
   nome: string;
@@ -160,31 +198,42 @@ export const FUNIS: readonly Funil[] = [
 ] as const;
 
 /**
- * O grupo separa, DENTRO de um funil, blocos que a barra desenha com uma
- * divisória fina. No Rateio é trabalho ‖ cadastro; na Empresa é dinheiro ‖ apoio
- * (o banco e o histórico não são atos de caixa — são o que sustenta os atos).
+ * O GRUPO É A SEÇÃO DO MENU LATERAL (30/09/2026, etapa 3b). Dentro de um funil,
+ * as telas do mesmo grupo ficam juntas sob um título; o grupo muda, a seção
+ * muda. Até esta data o grupo era a DIVISÓRIA fina da barra de cima (trabalho ‖
+ * cadastro no Rateio, dinheiro ‖ apoio na Empresa) e o `cadastro` virava um
+ * menu suspenso; com o menu lateral, a fronteira ganhou nome.
  *
- * `trabalho` ENTROU EM 30/09/2026, e o nome é a decisão: até ali a primeira
- * tela do Rateio era do grupo `cadastro` (a lista de pendências abria a fila de
- * cadastros) e as de dinheiro vinham depois. Agora o mês vem primeiro.
+ * OS GRUPOS DIZEM EM QUE MOMENTO DO TRABALHO A TELA ENTRA, e a ordem deles é
+ * a ordem em que o trabalho acontece:
+ *
+ *   `abertura`    a tela que abre o setor e não precisa de título — Mês no
+ *                 Rateio, Usuários na Administração. É o «comece por aqui»;
+ *   `cadastro`    o que precisa existir antes de o mês rodar;
+ *   `passos`      onde os passos do mês acontecem, na ordem deles;
+ *   `resultado`   a apuração do que o mês produziu;
+ *   `caixa`       o dinheiro da empresa: o que entra e o que sai;
+ *   `apoio`       o que sustenta os atos e não é ato — o banco, a trilha.
  */
-export type GrupoDeTela = 'trabalho' | 'cadastro' | 'dinheiro' | 'apoio';
+export type GrupoDeTela = 'abertura' | 'cadastro' | 'passos' | 'resultado' | 'caixa' | 'apoio';
 
 /**
- * OS GRUPOS QUE A BARRA DESENHA COMO MENU, e não aba a aba.
+ * O TÍTULO DE CADA SEÇÃO. `null` é a abertura, que vem sem título de propósito:
+ * uma seção de um item só chamada «Início» em cima de «Mês» seria o menu
+ * dizendo a mesma coisa duas vezes.
  *
- * Só o cadastro, e o critério é a frequência: o trabalho do mês é aberto todo
- * dia e precisa estar à vista; os cadastros são abertos quando o mês acusa algo
- * — e aí a pendência chega com o link direto, sem passar pela barra. Cinco abas
- * de cadastro na mesma fileira do trabalho eram o que empurrava o trabalho para
- * fora da tela no celular.
- *
- * O `rotulo` é o nome do menu na barra; os ITENS são as telas do grupo, com o
- * `titulo` de cada uma — e é esse `titulo` que o roteiro, a ajuda e a tela de
- * Mês usam para nomeá-las (`RM13`, `caminhoNaBarra`).
+ * «O mês, passo a passo» e não «Trabalho»: as duas telas dali são os passos 1 a
+ * 4 do funil da tela Mês, e o título diz isso na língua do funil. «Caixa» é a
+ * palavra que o próprio setor usa para se descrever («o caixa da empresa: o que
+ * há para receber, o que há para pagar»).
  */
-export const MENU_DO_GRUPO: Partial<Record<GrupoDeTela, { rotulo: string; icone: NomeDeIcone }>> = {
-  cadastro: { rotulo: 'Cadastros', icone: 'cadastros' },
+export const SECAO_DO_GRUPO: Record<GrupoDeTela, { titulo: string | null }> = {
+  abertura: { titulo: null },
+  cadastro: { titulo: 'Cadastros' },
+  passos: { titulo: 'O mês, passo a passo' },
+  resultado: { titulo: 'Resultado' },
+  caixa: { titulo: 'Caixa' },
+  apoio: { titulo: 'Apoio' },
 };
 
 export type Tela = {
@@ -196,6 +245,13 @@ export type Tela = {
   /** A linha de baixo quando a TELA aparece no menu ⌃⌄ — so as da pasta
    *  «Administração da plataforma», que lista telas e não setores. */
   resumo?: string;
+  /**
+   * OS PASSOS DO MÊS QUE ACONTECEM NESTA TELA, na numeração do funil da tela
+   * Mês (1 a 5). O menu os mostra discretos ao lado do nome («1–2»). Não são
+   * uma segunda fonte: `RM25` confere cada um contra `ondeEstouNoMes`, que lê
+   * os MESMOS moldes que montam o funil e a faixa de cada tela.
+   */
+  passos?: readonly number[];
 };
 
 export const TELAS: readonly Tela[] = [
@@ -208,32 +264,35 @@ export const TELAS: readonly Tela[] = [
    * segue nomeando o CÁLCULO. `/prontidao` e `/` continuam chegando aqui porque
    * caminho desconhecido cai na primeira tela, que é esta.
    */
-  { funil: 'rateio', rota: '/pendencias', titulo: 'Mês', icone: 'prontidao', grupo: 'trabalho' },
+  { funil: 'rateio', rota: '/pendencias', titulo: 'Mês', icone: 'prontidao', grupo: 'abertura' },
   /*
-   * «CONTAS DE LUZ», E ANTES «FATURA UNIFICADA» (17/08) E «DOCUMENTO». É a tela
-   * dos passos 1 e 2: a conta da distribuidora entra, é conferida, registrada e
-   * vira cobrança — e a folha do cliente, a Fatura unificada, se imprime aqui na
-   * aba «2 · Folha do cliente». A ROTA NÃO MUDA: `/documento#cadastro` abre
-   * direto a aba do emissor, «3 · Cadastro da fatura».
-   */
-  { funil: 'rateio', rota: '/documento',  titulo: 'Contas de luz', icone: 'documento', grupo: 'trabalho' },
-  /*
-   * «COBRANÇAS», E ANTES «EMISSÃO E COBRANÇA» (17/08) E «FATURAS». Os passos 3 e
-   * 4: emitir, pedir o boleto, dar baixa. «Faturas» e «Fatura unificada» lado a
-   * lado não se distinguiam (o dono disse duas vezes, 17/08); «Cobranças» e
-   * «Contas de luz» são a saída e a entrada do mês, e não dividem palavra.
-   * A rota `/cobranca` é OUTRA tela (Conector Sicoob, na Empresa) — a do
-   * endereço não é a do nome, e fica assim para nenhum link antigo quebrar.
-   */
-  { funil: 'rateio', rota: '/faturas',    titulo: 'Cobranças', icone: 'faturas', grupo: 'trabalho' },
-  /* Repasse por dono, comissão por originador e uso da usina: é a APURAÇÃO do
-   * rateio. O que a empresa DEVE por causa deles aparece do outro lado, em
-   * Contas a pagar — provisionado pela divisão do dinheiro, nunca digitado. */
-  { funil: 'rateio', rota: '/relatorios', titulo: 'Relatórios', icone: 'relatorios', grupo: 'trabalho' },
-  /*
-   * OS CADASTROS, no menu «Cadastros ▾» desde 30/09/2026 (`MENU_DO_GRUPO`). A
-   * ordem é a em que uma camada destrava a próxima: quem paga, onde consome, o
-   * contrato, a usina que gera, quem recebe o repasse.
+   * OS CADASTROS, NA ORDEM DE DEPENDÊNCIA DO NEGÓCIO (30/09/2026, etapa 3b).
+   * Cada um só se completa com o de cima pronto, e a ordem foi tirada do banco e
+   * das telas, e não do gosto:
+   *
+   *   Donos de usina   não dependem de nada — e precisam EXISTIR antes de a
+   *                    usina apontar para eles: a lista de dono na linha da usina
+   *                    só oferece quem já está cadastrado (`destino-da-camada.ts`,
+   *                    camada `dono_da_usina`), e a própria tela de Donos termina
+   *                    com «agora vincule-o à usina na tela Usinas»;
+   *   Usinas           a geradora, espelhada do CRM. Aqui se vincula o dono e se
+   *                    abre a vigência de repasse — as duas pedem o dono pronto;
+   *   Clientes         quem paga. A unidade consumidora só nasce com cliente (a
+   *                    chave dela é obrigatória no banco), e o contrato só ativa
+   *                    com o documento dele conferido;
+   *   Unidades         o ponto de consumo: pede o cliente, e o rateio pede a
+   *   consumidoras     usina — as duas de cima;
+   *   Contratos        amarra cliente, unidade e usina, os três obrigatórios.
+   *
+   * É a cadeia do `PLANO-global` §0 («usina → unidade → contrato») com as duas
+   * pontas que ela não nomeia: o dono antes da usina, o cliente antes da unidade.
+   * A proposta inicial punha Usinas antes de Donos, e o domínio disse o contrário:
+   * a usina existe antes (vem do CRM), mas não se COMPLETA sem o dono cadastrado.
+   *
+   * ATÉ 30/09/2026 A ORDEM ERA OUTRA — Clientes, Unidades, Contratos, Usinas,
+   * Donos —, a da tela Mês: o que trava COBRAR primeiro, o que trava REPARTIR
+   * depois. Aquela é a ordem da urgência de um mês que já está andando; esta é a
+   * ordem de quem monta o cadastro, e é a que o menu deve contar.
    *
    * A ABA «Tarifas» SAIU EM 14/08/2026 (a tarifa virou coluna da unidade,
    * migration 30) e a ABA «Faturamento» (`/carteira`) SAIU EM 10/09/2026 — era o
@@ -242,15 +301,36 @@ export const TELAS: readonly Tela[] = [
    * /faturamento/:competencia/compor`) segue no servidor sem tela, e apagá-lo
    * tem dono (`Q-CICLO-02`).
    */
+  /* "Donos" não diz de QUE. É o cadastro de quem recebe o repasse — o maior
+   * fluxo de dinheiro do sistema —, e "dono de usina" é o termo do `GLOSSARIO`. */
+  { funil: 'rateio', rota: '/donos',      titulo: 'Donos de usina', icone: 'donos', grupo: 'cadastro' },
+  { funil: 'rateio', rota: '/usinas',     titulo: 'Usinas',     icone: 'usinas',    grupo: 'cadastro' },
   { funil: 'rateio', rota: '/clientes',   titulo: 'Clientes',   icone: 'clientes',  grupo: 'cadastro' },
   /* "Unidades" sozinho, ao lado de "Usinas", troca o PONTO DE CONSUMO pelo
    * GERADOR. O termo do `GLOSSARIO` é "UC / unidade consumidora". */
   { funil: 'rateio', rota: '/unidades',   titulo: 'Unidades consumidoras', icone: 'unidades', grupo: 'cadastro' },
   { funil: 'rateio', rota: '/contratos',  titulo: 'Contratos',  icone: 'contratos', grupo: 'cadastro' },
-  { funil: 'rateio', rota: '/usinas',     titulo: 'Usinas',     icone: 'usinas',    grupo: 'cadastro' },
-  /* "Donos" não diz de QUE. É o cadastro de quem recebe o repasse — o maior
-   * fluxo de dinheiro do sistema —, e "dono de usina" é o termo do `GLOSSARIO`. */
-  { funil: 'rateio', rota: '/donos',      titulo: 'Donos de usina', icone: 'donos', grupo: 'cadastro' },
+  /*
+   * «CONTAS DE LUZ», E ANTES «FATURA UNIFICADA» (17/08) E «DOCUMENTO». É a tela
+   * dos passos 1 e 2: a conta da distribuidora entra, é conferida, registrada e
+   * vira cobrança — e a folha do cliente, a Fatura unificada, se imprime aqui na
+   * aba «2 · Folha do cliente». A ROTA NÃO MUDA: `/documento#cadastro` abre
+   * direto a aba do emissor, «3 · Cadastro da fatura».
+   */
+  { funil: 'rateio', rota: '/documento',  titulo: 'Contas de luz', icone: 'documento', grupo: 'passos', passos: [1, 2] },
+  /*
+   * «COBRANÇAS», E ANTES «EMISSÃO E COBRANÇA» (17/08) E «FATURAS». Os passos 3 e
+   * 4: emitir, pedir o boleto, dar baixa. «Faturas» e «Fatura unificada» lado a
+   * lado não se distinguiam (o dono disse duas vezes, 17/08); «Cobranças» e
+   * «Contas de luz» são a saída e a entrada do mês, e não dividem palavra.
+   * A rota `/cobranca` é OUTRA tela (Conector Sicoob, na Empresa) — a do
+   * endereço não é a do nome, e fica assim para nenhum link antigo quebrar.
+   */
+  { funil: 'rateio', rota: '/faturas',    titulo: 'Cobranças', icone: 'faturas', grupo: 'passos', passos: [3, 4] },
+  /* Repasse por dono, comissão por originador e uso da usina: é a APURAÇÃO do
+   * rateio. O que a empresa DEVE por causa deles aparece do outro lado, em
+   * Contas a pagar — provisionado pela divisão do dinheiro, nunca digitado. */
+  { funil: 'rateio', rota: '/relatorios', titulo: 'Relatórios', icone: 'relatorios', grupo: 'resultado' },
 
   // ====================================================== FINANCEIRO EMPRESA
   /*
@@ -260,10 +340,12 @@ export const TELAS: readonly Tela[] = [
    * tem botão de cobrar — cobrar é ato do Rateio, e a tela aponta para lá.
    * Entrou em 22/09/2026 junto com os funis.
    */
-  { funil: 'empresa', rota: '/contas-a-receber', titulo: 'Contas a receber', icone: 'contas_a_receber', grupo: 'dinheiro' },
+  { funil: 'empresa', rota: '/contas-a-receber', titulo: 'Contas a receber', icone: 'contas_a_receber', grupo: 'caixa' },
   /* Só tem linha depois de a primeira fatura ser liquidada — a divisão do
-   * dinheiro as provisiona. O vazio aqui tem significado, e a tela o diz. */
-  { funil: 'empresa', rota: '/contas-a-pagar',   titulo: 'Contas a pagar', icone: 'contas_a_pagar', grupo: 'dinheiro' },
+   * dinheiro as provisiona. O vazio aqui tem significado, e a tela o diz.
+   * É o PASSO 5 do mês do Rateio — o último —, e por isso vem depois de Contas a
+   * receber: primeiro o que entra, depois o que se reparte e se paga. */
+  { funil: 'empresa', rota: '/contas-a-pagar',   titulo: 'Contas a pagar', icone: 'contas_a_pagar', grupo: 'caixa', passos: [5] },
   /*
    * "COBRANÇA" DIZIA O CONTRÁRIO DO QUE A TELA FAZ: aqui se cadastra a CREDENCIAL
    * do banco — agência, conta, convênio, validade do A1 e a `credencial_ref`. O
@@ -286,7 +368,7 @@ export const TELAS: readonly Tela[] = [
    * pessoa e marcar, por caixa, os setores de cada uma. «Usuários», e não
    * «Pessoas» nem «Acessos»: é a palavra do pedido do dono.
    */
-  { funil: 'administracao', rota: '/usuarios', titulo: 'Usuários', icone: 'usuarios', grupo: 'apoio',
+  { funil: 'administracao', rota: '/usuarios', titulo: 'Usuários', icone: 'usuarios', grupo: 'abertura',
     resumo: 'Cadastrar e escolher o que cada um vê' },
 ] as const;
 
@@ -296,7 +378,7 @@ export const TELAS: readonly Tela[] = [
 export const telaDoCaminho = (caminho: string): Tela =>
   TELAS.find((t) => t.rota === caminho) ?? TELAS[0]!;
 
-/** As telas de um funil, na ordem da barra. */
+/** As telas de um funil, na ordem do menu — que é a ordem do trabalho. */
 export const telasDoFunil = (funil: ChaveDoFunil): readonly Tela[] =>
   TELAS.filter((t) => t.funil === funil);
 
@@ -317,7 +399,7 @@ export const funisDaPasta = (pasta: PastaDoMenu): readonly Funil[] =>
  * OS FUNIS QUE O VÍNCULO VÊ. `setores` vem da sessão; ausente (servidor sem a
  * migration 41, ou vínculo ainda não escolhido) é o que todo vínculo via até
  * então — os dois setores financeiros, nunca a Administração. Lista que não
- * casa nada também cai aí: uma barra vazia não é estado que a tela saiba
+ * casa nada também cai aí: um menu vazio não é estado que a tela saiba
  * desenhar.
  */
 export function funisVisiveis(setores: readonly string[] | undefined | null): readonly Funil[] {
@@ -338,52 +420,65 @@ export function destinoVisivel(caminho: string, setores: readonly string[] | und
   return primeiraTelaDoFunil(visiveis[0]!.chave).rota;
 }
 
-/**
- * Onde a barra desenha divisória: os índices, DENTRO da lista dada, em que o
- * grupo muda em relação ao vizinho da esquerda. Calculado, não escrito —
- * reordenar as telas move a divisória junto, e uma constante `7` não moveria.
- * Serve às telas e aos itens da barra (`itensDaBarra`), que também têm grupo.
- */
-export const divisoriasDe = <T extends { grupo: GrupoDeTela }>(itens: readonly T[]): readonly number[] =>
-  itens.flatMap((t, i) => (i > 0 && t.grupo !== itens[i - 1]!.grupo ? [i] : []));
-
-/** Um item da barra de baixo: uma aba, ou um menu que junta as telas de um grupo. */
-export type ItemDaBarra =
-  | { tipo: 'tela'; grupo: GrupoDeTela; tela: Tela }
-  | { tipo: 'menu'; grupo: GrupoDeTela; rotulo: string; icone: NomeDeIcone; telas: readonly Tela[] };
+/** Uma seção do menu lateral: o título (ou nenhum, na abertura) e as telas dela. */
+export type SecaoDoMenu = {
+  grupo: GrupoDeTela;
+  titulo: string | null;
+  telas: readonly Tela[];
+};
 
 /**
- * O QUE A BARRA DESENHA, na ordem: as telas soltas como abas e cada grupo de
- * `MENU_DO_GRUPO` como UM item, no lugar em que a primeira tela dele estaria.
- * Dado puro, para a suíte poder afirmar o que a barra mostra sem montar React.
+ * O QUE O MENU LATERAL DESENHA, na ordem: uma seção por trecho contíguo de
+ * telas do mesmo grupo. Dado puro, para a suíte afirmar o que o menu mostra
+ * sem montar React — e para uma tela reordenada levar a seção junto, em vez de
+ * uma lista de seções escrita à mão que discordaria da de telas.
+ *
+ * GRUPO REPETIDO DEPOIS DE OUTRO vira DUAS seções com o mesmo título, e isso é
+ * de propósito: é o sintoma visível de uma tela fora do lugar, e a `I4h` o
+ * recusa antes de chegar à tela.
  */
-export function itensDaBarra(telas: readonly Tela[]): ItemDaBarra[] {
-  const itens: ItemDaBarra[] = [];
+export function secoesDoMenu(telas: readonly Tela[]): SecaoDoMenu[] {
+  const secoes: SecaoDoMenu[] = [];
   for (const t of telas) {
-    const menu = MENU_DO_GRUPO[t.grupo];
-    const ultimo = itens[itens.length - 1];
-    if (!menu) itens.push({ tipo: 'tela', grupo: t.grupo, tela: t });
-    else if (ultimo?.tipo === 'menu' && ultimo.grupo === t.grupo) itens[itens.length - 1] = { ...ultimo, telas: [...ultimo.telas, t] };
-    else itens.push({ tipo: 'menu', grupo: t.grupo, rotulo: menu.rotulo, icone: menu.icone, telas: [t] });
+    const ultima = secoes[secoes.length - 1];
+    if (ultima && ultima.grupo === t.grupo) secoes[secoes.length - 1] = { ...ultima, telas: [...ultima.telas, t] };
+    else secoes.push({ grupo: t.grupo, titulo: SECAO_DO_GRUPO[t.grupo].titulo, telas: [t] });
   }
-  return itens;
+  return secoes;
 }
 
 /**
- * COMO SE CHEGA A UMA TELA PELA BARRA, nome por nome: `['Contas de luz']` para a
- * aba solta, `['Cadastros', 'Unidades consumidoras']` para o item de menu.
- * `null` para rota que não está na barra de setor nenhum.
+ * ONDE UMA TELA ESTÁ NO MENU DO SETOR DELA, nome por nome: `['Cadastros',
+ * 'Unidades consumidoras']`, `['O mês, passo a passo', 'Contas de luz']` — e
+ * `['Mês']` para a abertura, que não tem título de seção. `null` para rota que
+ * não é item de menu nenhum.
  *
- * É O QUE «RÓTULO DA ABA» QUER DIZER DESDE QUE A BARRA TEM MENU (`RM13`): o
- * ÚLTIMO nome do caminho é o que a pessoa lê no lugar em que clica — a aba, ou o
- * item dentro do menu. Instrução que diz «abra Unidades consumidoras» continua
- * certa: a palavra está lá, um clique abaixo de «Cadastros».
+ * É O QUE «RÓTULO DO ITEM» QUER DIZER (`RM13`, `A9y`): o ÚLTIMO nome é o que a
+ * pessoa lê no lugar em que clica, e todo «Abrir X» que um texto oferece tem de
+ * ser, letra por letra, esse nome. Até 30/09/2026 era `caminhoNaBarra`, com o
+ * menu suspenso «Cadastros ▾» no meio do caminho; no menu lateral o item é um
+ * clique só, e a seção é onde o olho o procura.
  */
-export function caminhoNaBarra(rota: string): readonly string[] | null {
+export function caminhoNoMenu(rota: string): readonly string[] | null {
   const tela = TELAS.find((t) => t.rota === rota);
   if (!tela) return null;
-  const item = itensDaBarra(telasDoFunil(tela.funil))
-    .find((i) => (i.tipo === 'tela' ? i.tela.rota === rota : i.telas.some((t) => t.rota === rota)));
-  if (!item) return null;
-  return item.tipo === 'tela' ? [tela.titulo] : [item.rotulo, tela.titulo];
+  const secao = secoesDoMenu(telasDoFunil(tela.funil)).find((s) => s.telas.some((t) => t.rota === rota));
+  if (!secao) return null;
+  return secao.titulo ? [secao.titulo, tela.titulo] : [tela.titulo];
+}
+
+/** «1–2», «3–4», «5»: os passos de uma tela como o menu os mostra. Vazio para a
+ *  tela que não é passo do mês. O traço é o meia-risca de intervalo, e dois
+ *  passos seguidos viram intervalo — hoje não há tela com passos salteados. */
+export function rotuloDosPassos(passos: readonly number[] | undefined): string {
+  if (!passos || passos.length === 0) return '';
+  return passos.length === 1 ? String(passos[0]) : `${passos[0]}\u2013${passos[passos.length - 1]}`;
+}
+
+/** A mesma informação por extenso, para o leitor de tela e para a dica:
+ *  «passos 1 e 2 do mês», «passo 5 do mês». */
+export function fraseDosPassos(passos: readonly number[] | undefined): string {
+  if (!passos || passos.length === 0) return '';
+  if (passos.length === 1) return `passo ${passos[0]} do mês`;
+  return `passos ${passos.slice(0, -1).join(', ')} e ${passos[passos.length - 1]} do mês`;
 }

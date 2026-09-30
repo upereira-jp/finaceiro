@@ -401,8 +401,8 @@ function Contato({ c, ocupado, aoGravar }: {
       </div>
       <span className="fraco" style={{ fontSize: 13 }}>
         Nenhum dos dois é exigido para faturar. O que a emissão exige é o CPF/CNPJ, na linha acima,
-        e o endereço do pagador, que é da <strong>unidade consumidora</strong> e se preenche na aba
-        Unidades.
+        e o endereço do pagador, que é da <strong>unidade consumidora</strong> e se preenche na tela
+        Unidades consumidoras.
       </span>
     </div>
   );

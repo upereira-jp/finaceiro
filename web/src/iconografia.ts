@@ -27,10 +27,9 @@ export type NomeDeIcone =
   | 'prontidao' | 'clientes' | 'unidades' | 'contratos' | 'usinas' | 'donos' | 'vigencia'
   | 'carteira' | 'faturas' | 'cobranca' | 'documento' | 'relatorios'
   | 'contas_a_receber' | 'contas_a_pagar' | 'historico' | 'usuarios'
-  /* O MENU «Cadastros ▾» DA BARRA DO RATEIO (30/09/2026). Não é tela — é o
-   * gatilho que junta as cinco de cadastro —, e tem desenho próprio para não
-   * se ler como nenhuma delas. */
-  | 'cadastros'
+  /* `cadastros` SAIU EM 30/09/2026 (etapa 3b), no mesmo dia em que entrou: era
+   * o desenho do gatilho «Cadastros ▾» da barra, e no menu lateral os cadastros
+   * são uma seção com título, sem gatilho para desenhar. */
   // os três estados da prontidão
   | 'ok' | 'pendente' | 'nao_medido'
   // os três avisos
@@ -48,8 +47,14 @@ export type NomeDeIcone =
   | 'subir' | 'descer' | 'remover' | 'enviar' | 'acrescentar' | 'emitir' | 'recarregar'
   // ordenação de coluna
   | 'ordem_crescente' | 'ordem_decrescente' | 'ordem_nenhuma'
-  // a barra do topo
+  // a sessão: empresa, conta e tema (até 30/09/2026 na barra do topo, hoje no pé do menu)
   | 'empresa' | 'usuario' | 'sair' | 'tema_claro' | 'tema_escuro' | 'tema_sistema' | 'abrir_menu'
+  /* O MENU LATERAL (30/09/2026, etapa 3b). `abrir_navegacao` é o ☰ da faixa do
+   * celular, que abre a gaveta; `recolher_navegacao` e `expandir_navegacao` são
+   * o par do botão que deixa o menu só com os desenhos. São DOIS nomes, e não um
+   * desenho girado: a seta diz para que lado o menu vai, e quem lê o botão
+   * recolhido precisa ver «abre para cá», não «fecha». */
+  | 'abrir_navegacao' | 'recolher_navegacao' | 'expandir_navegacao'
   /* O MENU DE SETORES (27/09/2026): um desenho por setor e o ⌃⌄ que abre a
    * lista. `trocar_setor` NÃO reusa `abrir_menu`: a seta única é "abre um menu
    * de ações" (a conta); as duas setas são "troca o lugar em que você está". */

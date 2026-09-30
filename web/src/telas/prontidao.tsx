@@ -646,7 +646,7 @@ function SinaisDoConector() {
                 As <strong>recusas</strong> impedem: a linha recusada <strong>não foi gravada</strong>,
                 e o que mudou do outro lado não chega aqui enquanto durar. Quando a recusa for de
                 unidade que trocou de contrato, ela se resolve <strong>aqui</strong> — abra a linha
-                daquela unidade na aba Unidades consumidoras e confira o vínculo. As{' '}
+                daquela unidade na tela Unidades consumidoras e confira o vínculo. As{' '}
                 <strong>divergências</strong> não impedem nada: são coisas que os dois sistemas
                 dizem diferente, e a correção é feita no outro, que é o dono do dado.
               </>

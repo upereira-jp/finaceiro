@@ -187,7 +187,7 @@ export function faixaDaEmissaoTravada(e: EmissaoTravadaNaTela | null): FaixaDaEm
     titulo: `${quantas} sem boleto no banco.`,
     corpo: (antiga > 0 ? `A mais antiga está assim ${faz(antiga)}. ` : '')
          + 'Enquanto o boleto não é registrado, o cliente não recebe nada para pagar. '
-         + 'A lista, com o motivo de cada uma e o que fazer, está na aba Cobranças.',
+         + 'A lista, com o motivo de cada uma e o que fazer, está na tela Cobranças.',
   };
 }
 

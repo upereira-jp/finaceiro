@@ -29,6 +29,16 @@
 //   TROCAR DE SETOR LEVA À PRIMEIRA TELA DELE — Mês no Rateio (até 30/09/2026
 //   Pendências), Contas a receber na Empresa (`primeiraTelaDoFunil`, `I4l`).
 //
+// ============================================================================
+// DO LADO DA MARCA PARA O ALTO DO MENU LATERAL (30/09/2026, etapa 3b)
+//
+// A barra do topo saiu, e o seletor foi junto com a marca para o alto do menu
+// lateral, logo abaixo de «Financeiro G3». Nada do comportamento mudou — mesma
+// lista, mesmas setas, mesmo foco —; muda o lugar, e o gatilho passou a ocupar
+// a largura do menu, que é o desenho de «em que lugar estou» de todo menu
+// lateral. A migalha inclinada entre a marca e o setor saiu: um em cima do
+// outro, a relação já é de endereço.
+//
 // NÃO REUSA O `Menu` de `ui.tsx`, e a diferença é de SIGNIFICADO: aquele é
 // `role="menu"`, uma lista de AÇÕES (tema, sair) feita de botões. Esta é uma
 // lista de LUGARES, e leitor de tela precisa ouvir «link, atual», não «item de
@@ -120,7 +130,10 @@ export function SeletorDeSetor({ atual, visiveis, rotaAtual }: {
                 if (e.key === 'ArrowDown' && !aberto) { e.preventDefault(); setAberto(true); }
               }}>
         <Icone nome={atual.icone} tamanho={16} className="setor-simbolo" />
-        {atual.rotulo}
+        {/* O nome num `span` próprio (30/09/2026): com o menu lateral recolhido o
+            gatilho fica só com o desenho e as setas, e o nome sai da VISTA — o
+            `aria-label` acima continua dizendo o setor inteiro. */}
+        <span className="setor-rotulo">{atual.rotulo}</span>
         <Icone nome="trocar_setor" tamanho={14} peso="bold" className="setor-setas" />
       </button>
 

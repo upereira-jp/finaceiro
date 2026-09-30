@@ -75,7 +75,7 @@ export function TelaRelatorios() {
       <Bloco titulo="Comissão por originador"
              nota="A parcela importa: o PRD §5.4 escalona a comissão na 1ª e na 2ª fatura cheia, e zero da 3ª em diante."
              carga={comissoes}
-             vazio="Nenhuma comissão ainda. Se já houve pagamento e isto continua vazio, olhe se o contrato tem quem trouxe o cliente — a aba Mês acusa, na lista do cadastro."
+             vazio="Nenhuma comissão ainda. Se já houve pagamento e isto continua vazio, olhe se o contrato tem quem trouxe o cliente — a tela Mês acusa, na lista do cadastro."
              csv={{ assunto: 'comissoes', mes, colunas: [
                { titulo: 'Originador', de: (c: Comissao) => c.originador },
                { titulo: 'Mes de referencia', de: (c: Comissao) => String(c.competencia).slice(0, 7) },

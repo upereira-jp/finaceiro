@@ -301,7 +301,7 @@ export const GLOSSARIO: readonly TermoDoGlossario[] = [
     texto: 'O mês a que a cobrança se refere. A conta de agosto cobra a energia de agosto, mesmo '
       + 'que ela seja paga em setembro. No sistema aparece como «competência» em alguns lugares.',
     busca: ['mes', 'mes de referencia', 'competencia', 'periodo', 'qual mes', 'mes errado'],
-    caminhos: [{ rota: '/pendencias', rotulo: 'Escolher o mês na aba Mês', tipo: 'ver' }],
+    caminhos: [{ rota: '/pendencias', rotulo: 'Escolher o mês na tela Mês', tipo: 'ver' }],
   },
   {
     termo: 'Fatia do cliente (rateio)',
@@ -331,7 +331,7 @@ export const GLOSSARIO: readonly TermoDoGlossario[] = [
   {
     termo: 'Preço do kWh (tarifa)',
     texto: 'Quanto custa cada kWh de energia daquela unidade. Varia de cliente para cliente. Na '
-      + 'cobrança de hoje o preço que vale é o lido na conta da distribuidora; o preço da aba '
+      + 'cobrança de hoje o preço que vale é o lido na conta da distribuidora; o preço da tela '
       + 'Unidades consumidoras serve o caminho antigo, e continua sendo semeado sozinho.',
     busca: ['tarifa', 'preco do kwh', 'kwh', 'valor da energia', 'preco da energia', 'quanto custa'],
     caminhos: [{ rota: '/documento', rotulo: 'Conferir o preço na conta lida', tipo: 'resolver' },
@@ -343,7 +343,7 @@ export const GLOSSARIO: readonly TermoDoGlossario[] = [
   {
     termo: 'Pendências',
     texto: 'A lista do que o cadastro ainda deixa faltar para o mês poder ser cobrado — ela fica na '
-      + 'aba Mês, embaixo dos cinco passos (até 30/09/2026 a aba se chamava Pendências). Cada linha '
+      + 'tela Mês, embaixo dos cinco passos (até 30/09/2026 a tela se chamava Pendências). Cada linha '
       + 'diz quantos faltam de quantos, quem preenche e onde. Vermelho impede cobrar; laranja '
       + 'impede dividir o dinheiro depois; amarelo é o que ainda não dá para conferir.',
     busca: ['pendencia', 'pendencias', 'o que falta', 'lista', 'checklist', 'vermelho', 'laranja',
@@ -376,7 +376,7 @@ export const GLOSSARIO: readonly TermoDoGlossario[] = [
   {
     termo: 'Documento confirmado',
     texto: 'Um CPF ou CNPJ que veio do CRM entra aqui como sugestão, não como confirmado — mesmo '
-      + 'estando certo. Alguém precisa reenviar o número na aba Clientes para ele passar a valer. '
+      + 'estando certo. Alguém precisa reenviar o número na tela Clientes para ele passar a valer. '
       + 'É esse ato que libera o contrato.',
     busca: ['documento', 'cpf', 'cnpj', 'confirmar documento', 'validar', 'nao vale',
             'documento do crm', 'sugestao'],
@@ -389,7 +389,7 @@ export const GLOSSARIO: readonly TermoDoGlossario[] = [
      * ato continua existindo, com outro nome e no caminho oficial — «conferir
      * antes», por conta, na lista de contas registradas. */
     texto: 'Conferir sem gravar: o sistema responde se aquela conta viraria cobrança, e por que '
-      + 'não, sem mexer em nada. Na aba Contas de luz é o botão «conferir antes», na lista de '
+      + 'não, sem mexer em nada. Na tela Contas de luz é o botão «conferir antes», na lista de '
       + 'contas registradas — clicar quantas vezes quiser não cobra ninguém.',
     /* «ensaio» continua na busca embora não seja o rótulo de botão nenhum: quem
      * ouviu a palavra numa conversa vai digitá-la, e é para isso que o verbete
@@ -417,7 +417,7 @@ export const GLOSSARIO: readonly TermoDoGlossario[] = [
     termo: 'Fatura unificada',
     texto: 'A folha que o cliente recebe, juntando a conta da distribuidora com a cobrança da G3 num '
       + 'papel só. Ela não cria a cobrança nem recebe dinheiro — só apresenta. Monta-se e imprime-se '
-      + 'na aba Contas de luz, em «2 · Folha do cliente».',
+      + 'na tela Contas de luz, em «2 · Folha do cliente».',
     busca: ['fatura unificada', 'folha', 'papel do cliente', 'documento do cliente', 'unificada',
             'conta junta'],
     caminhos: [{ rota: '/documento', rotulo: 'Abrir Contas de luz', tipo: 'resolver' }],

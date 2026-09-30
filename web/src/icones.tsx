@@ -23,7 +23,6 @@
 
 import type { Icon, IconWeight } from '@phosphor-icons/react';
 import { ListChecks } from '@phosphor-icons/react/ListChecks';
-import { Cards } from '@phosphor-icons/react/Cards';
 import { UsersFour } from '@phosphor-icons/react/UsersFour';
 import { Lightning } from '@phosphor-icons/react/Lightning';
 import { Signature } from '@phosphor-icons/react/Signature';
@@ -87,6 +86,9 @@ import { Key } from '@phosphor-icons/react/Key';
 import { DotsThree } from '@phosphor-icons/react/DotsThree';
 import { CaretRight } from '@phosphor-icons/react/CaretRight';
 import { ArrowRight } from '@phosphor-icons/react/ArrowRight';
+import { List } from '@phosphor-icons/react/List';
+import { ArrowLineLeft } from '@phosphor-icons/react/ArrowLineLeft';
+import { ArrowLineRight } from '@phosphor-icons/react/ArrowLineRight';
 
 import type { NomeDeIcone } from './iconografia.ts';
 
@@ -144,12 +146,6 @@ const DESENHO: Record<NomeDeIcone, Icon> = {
    * mesmo desenho nas duas faria «Usuários» parecer outro nome para «Clientes». */
   usuarios: UserGear,
 
-  /* AS FICHAS: o menu «Cadastros ▾» junta as cinco telas onde o dado de cada
-   * cliente, unidade, contrato, usina e dono é fichado. É um desenho de GRUPO —
-   * uma pilha — e não repete o de nenhuma das cinco, que continuam com o seu
-   * dentro do menu. */
-  cadastros: Cards,
-
   // os três estados da prontidão — glifo nu, porque a pílula já é a moldura
   ok: Check,
   pendente: X,
@@ -200,6 +196,12 @@ const DESENHO: Record<NomeDeIcone, Icon> = {
   tema_escuro: Moon,
   tema_sistema: Desktop,
   abrir_menu: CaretDown,
+  /* O MENU LATERAL (30/09/2026): as três linhas do ☰, que todo celular lê como
+   * «menu», e a seta contra a parede para recolher e expandir — ela diz para
+   * que lado o menu vai. */
+  abrir_navegacao: List,
+  recolher_navegacao: ArrowLineLeft,
+  expandir_navegacao: ArrowLineRight,
   /* RATEIO É A FATIA: o setor existe para repartir a geração de uma usina entre
    * as unidades, e a fatia de pizza é esse gesto. EMPRESA É A PASTA, e não o
    * prédio: `Buildings` já é o `empresa` do seletor de tenant, logo ao lado — o

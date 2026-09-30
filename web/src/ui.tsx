@@ -567,6 +567,11 @@ export const Ferramentas = ({ children, contagem }: { children: ReactNode; conta
  * baixo. Com `fixo` ele sai do corte: a posicao e a do gatilho, lida ao abrir,
  * e como o topo e `sticky` o gatilho nao se move com a rolagem. Redimensionar a
  * janela fecha o menu, em vez de deixa-lo flutuando longe do gatilho.
+ *
+ * `acima` (30/09/2026, etapa 3b): O PAINEL ABRE PARA CIMA. O menu da conta
+ * desceu da barra do topo para o PE do menu lateral, e abrindo para baixo ele
+ * nasceria fora da janela. A seta do gatilho vira para cima junto (no CSS), para
+ * o desenho dizer para que lado a lista vai sair.
  */
 export function Menu(p: {
   gatilho: ReactNode; rotulo: string; children: ReactNode;
@@ -579,6 +584,8 @@ export function Menu(p: {
   classeDoGatilho?: string;
   /** O nome do painel, quando nao e o mesmo do gatilho. */
   rotuloDoPainel?: string;
+  /** O painel abre para CIMA do gatilho — para menu que mora no pe da janela. */
+  acima?: boolean;
 }) {
   const [aberto, setAberto] = useState(false);
   const [posicao, setPosicao] = useState<{ topo: number; esquerda: number } | null>(null);
@@ -643,7 +650,7 @@ export function Menu(p: {
     : undefined;
 
   return (
-    <div className={`menu${p.className ? ` ${p.className}` : ''}`} ref={caixa}
+    <div className={`menu${p.acima ? ' menu-acima' : ''}${p.className ? ` ${p.className}` : ''}`} ref={caixa}
          onBlur={(e) => {
            /* O foco saiu da caixa (Tab depois do ultimo item): fecha. So com
               destino, pelo mesmo motivo escrito no seletor de setor. */

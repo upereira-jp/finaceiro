@@ -131,7 +131,7 @@ export function TelaHistorico() {
         <span className="fraco" style={{ fontSize: 12 }}>
           As rotinas que rodam sozinhas se registram aqui a cada poucos minutos e respondem por
           quase toda a lista. Para saber se elas estão rodando, a resposta melhor está no rodapé
-          da aba Mês, no setor Rateio.
+          da tela Mês, no setor Rateio.
         </span>
       </div>
 

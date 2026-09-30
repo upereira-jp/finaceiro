@@ -10,8 +10,8 @@
 //   2. "so estas seis se movem, e todo movimento para sob prefers-reduced-motion"
 //      — promessa de acessibilidade (WCAG 2.3.3) que um ajuste de CSS apaga sem
 //      ninguem notar, e cujo efeito so aparece na maquina de quem precisa dela;
-//   3. "toda tela tem icone, rota e titulo unicos" — a barra de navegacao com
-//      dois itens do mesmo desenho e uma barra em que a pessoa clica no errado;
+//   3. "toda tela tem icone, rota e titulo unicos" — um menu de navegacao com
+//      dois itens do mesmo desenho e um menu em que a pessoa clica no errado;
 //   4. "cor nunca e o unico sinal de estado" — a restricao 3 do tema, que agora
 //      depende de tres coisas casarem: cor, icone e texto.
 //
@@ -25,8 +25,9 @@ import {
   ICONES_QUE_SE_MOVEM, ICONE_DO_ESTADO, ICONE_DO_AVISO, ICONE_DO_STATUS_DA_FATURA,
 } from '../src/iconografia.ts';
 import {
-  TELAS, FUNIS, PASTAS, telaDoCaminho, telasDoFunil, primeiraTelaDoFunil, funilDoCaminho, divisoriasDe,
-  funisDaPasta, funisVisiveis, destinoVisivel, itensDaBarra, caminhoNaBarra, MENU_DO_GRUPO,
+  TELAS, FUNIS, PASTAS, telaDoCaminho, telasDoFunil, primeiraTelaDoFunil, funilDoCaminho,
+  funisDaPasta, funisVisiveis, destinoVisivel, secoesDoMenu, caminhoNoMenu, SECAO_DO_GRUPO,
+  rotuloDosPassos, fraseDosPassos,
 } from '../src/navegacao.ts';
 import {
   ABAS, ROTULO_DA_ABA, FRAGMENTO_DO_CADASTRO, abaDoFragmento, fragmentoDaAba,
@@ -246,7 +247,7 @@ chk('I3e', /animation-delay:\s*0s?\s*!important/.test(bloqueio)
     'e zera o ATRASO de animacao e de transicao — sem isso, o estado inicial invisivel fica '
     + 'segurado durante o atraso e o movimento volta pela porta dos fundos');
 
-// ------------------------------------------------------- I4 a barra de navegacao
+// ------------------------------------------ I4 a navegacao (barra ate 30/09, menu lateral desde entao)
 
 /* TREZE desde 10/09/2026 - entrou "Historico", a leitura da trilha de auditoria.
  * O dado ja existia desde a primeira semana do projeto (21.917 registros em
@@ -283,56 +284,77 @@ chk('I4b', new Set(TELAS.map((t) => t.rota)).size === TELAS.length,
 chk('I4c', new Set(TELAS.map((t) => t.titulo)).size === TELAS.length,
     'nenhum titulo repetido');
 chk('I4d', new Set(TELAS.map((t) => t.icone)).size === TELAS.length,
-    'nenhum ICONE repetido: dois itens com o mesmo desenho e uma barra em que se clica no errado');
+    'nenhum ICONE repetido: dois itens com o mesmo desenho e um menu em que se clica no errado');
 chk('I4e', TELAS.every((t) => t.rota.startsWith('/') && !t.rota.includes(' ')),
     'toda rota comeca com / e nao tem espaco');
 
 // A ORDEM E DECISAO DOCUMENTADA, nao gosto. DOIS FUNIS desde 22/09/2026 -
 // Rateio (o dinheiro que entra dos clientes) e Empresa (o caixa) -, cada um
 // contiguo na lista e na ordem em que `FUNIS` os declara; DENTRO de cada funil,
-// os grupos sao contiguos (cadastro | dinheiro no Rateio, dinheiro | apoio na
-// Empresa), e a divisoria da barra cai onde o grupo muda. Este teste prende a
-// FORMA da decisao, nao os nomes: teste que quebra por cosmetica treina o time a
-// ignora-lo.
-/* [30/09/2026] O GRUPO DA PRIMEIRA TELA MUDOU DE `cadastro` PARA `trabalho`: a
- * barra do Rateio passou a abrir pelo trabalho do mes, e os cadastros foram para
- * um menu no fim. A afirmacao que importa ficou: a primeira tela e a que diz em
- * que pe esta o mes, e e onde cai quem se perde. */
-chk('I4f', TELAS[0]!.funil === 'rateio' && TELAS[0]!.grupo === 'trabalho' && TELAS[0]!.rota === '/pendencias',
+// os grupos sao contiguos, e cada grupo e uma SECAO do menu lateral.
+/* [30/09/2026, etapa 3b] A PRIMEIRA TELA E A `abertura`: o menu passou a seguir
+ * a ordem do trabalho, e o trabalho comeca pela tela que diz em que pe esta o
+ * mes. A afirmacao que importa ficou: e onde cai quem se perde. */
+chk('I4f', TELAS[0]!.funil === 'rateio' && TELAS[0]!.grupo === 'abertura' && TELAS[0]!.rota === '/pendencias',
     'a primeira tela e a que diz em que pe esta o mes - e onde cai quem se perde, e ela abre o Rateio');
 
 /*
- * I4o — A BARRA DO RATEIO SEGUE O TRABALHO DO MES (30/09/2026, etapa 3).
+ * I4o — O MENU SEGUE A ORDEM DO TRABALHO (30/09/2026, etapa 3b).
  *
- * A critica de 30/09 contou 9 abas no Rateio, 6 delas de cadastro, e o trabalho
- * de todo dia no fim — e no celular, duas abas e meia visiveis, todas de
- * cadastro. O que se prende aqui e a FORMA da decisao: o trabalho do mes vem
- * primeiro e solto, e o cadastro e UM item (um menu) no fim, depois de uma
- * divisoria. Os nomes estao em I4o2, porque sao eles que o roteiro, a ajuda e a
- * tela Mes citam letra por letra.
+ * Pedido do dono: «a ordem das telas deve refletir a ordem de cada etapa de
+ * trabalho». Ate esta data a barra do Rateio punha o trabalho do mes primeiro e
+ * os cinco cadastros num menu suspenso no fim. No menu lateral:
+ *
+ *   Mes ‖ Cadastros ‖ O mes, passo a passo ‖ Resultado
+ *
+ * — o ponto de partida, o que precisa existir antes, os passos do mes na ordem
+ * deles, e a apuracao. Os NOMES e a ORDEM estao presos aqui de proposito: e
+ * deles que o roteiro, a ajuda e a tela Mes falam letra por letra.
  */
 {
-  const itens = itensDaBarra(telasDoFunil('rateio'));
-  const soltas = itens.filter((i) => i.tipo === 'tela');
-  const menus = itens.filter((i) => i.tipo === 'menu');
-  const ultimo = itens[itens.length - 1]!;
-  chk('I4o', itens.length === 5 && soltas.length === 4 && menus.length === 1
-          && ultimo.tipo === 'menu' && ultimo.telas.length === 5
-          && soltas.every((i) => i.grupo === 'trabalho')
-          && divisoriasDe(itens).join() === '4',
-      'o Rateio mostra 5 itens: 4 abas do trabalho do mes, soltas, e os 5 cadastros num menu no fim, '
-      + 'depois da unica divisoria — era 9 abas com 6 de cadastro na frente');
-  chk('I4o2', soltas.map((i) => (i.tipo === 'tela' ? i.tela.titulo : '')).join(' · ') === 'Mês · Contas de luz · Cobranças · Relatórios'
-          && ultimo.tipo === 'menu' && ultimo.rotulo === 'Cadastros',
-      'e os nomes anunciam o passo do mes: Mês · Contas de luz · Cobranças · Relatórios ‖ Cadastros');
-  chk('I4o3', ['empresa', 'administracao'].every((f) => itensDaBarra(telasDoFunil(f as 'empresa')).every((i) => i.tipo === 'tela')),
-      'o menu e so do grupo de cadastro: a Empresa e a Administracao continuam com todas as abas soltas');
+  const nomes = (f: 'rateio' | 'empresa' | 'administracao') => secoesDoMenu(telasDoFunil(f))
+    .map((sec) => `${sec.titulo ?? '·'}: ${sec.telas.map((t) => t.titulo).join(', ')}`).join(' ‖ ');
+  chk('I4o', nomes('rateio') === '·: Mês ‖ Cadastros: Donos de usina, Usinas, Clientes, Unidades consumidoras, '
+                              + 'Contratos ‖ O mês, passo a passo: Contas de luz, Cobranças ‖ Resultado: Relatórios',
+      `o Rateio segue o trabalho: Mês, os cadastros na ordem de dependencia, os passos do mes e o resultado `
+      + `(hoje: ${nomes('rateio')})`);
+  chk('I4o2', nomes('empresa') === 'Caixa: Contas a receber, Contas a pagar ‖ Apoio: Conector Sicoob, Histórico'
+           && nomes('administracao') === '·: Usuários',
+      `a Empresa: primeiro o que entra, depois o que se paga, e o apoio por ultimo; a Administracao, a tela dela `
+      + `(hoje: ${nomes('empresa')} / ${nomes('administracao')})`);
+  /* OS CADASTROS NA ORDEM DE DEPENDENCIA, par a par, com o motivo de cada um —
+   * a ordem de I4o dita por que. Um cadastro reordenado por gosto quebra aqui
+   * com a razao escrita, e nao so com uma string diferente. */
+  const pos = (titulo: string) => TELAS.findIndex((t) => t.titulo === titulo);
+  const DEPENDE: Array<[string, string, string]> = [
+    ['Donos de usina', 'Usinas', 'a linha da usina so aceita dono que ja existe'],
+    ['Usinas', 'Unidades consumidoras', 'o rateio da unidade aponta a usina'],
+    ['Clientes', 'Unidades consumidoras', 'a unidade so nasce com cliente'],
+    ['Clientes', 'Contratos', 'o contrato so ativa com o documento do cliente conferido'],
+    ['Unidades consumidoras', 'Contratos', 'o contrato amarra a unidade'],
+  ];
+  const fora = DEPENDE.filter(([antes, depois]) => !(pos(antes) >= 0 && pos(antes) < pos(depois)));
+  chk('I4o3', fora.length === 0,
+      'cada cadastro vem depois do que ele precisa que exista'
+      + `${fora.length ? ` (fora de ordem: ${fora.map(([a, d, m]) => `${a} antes de ${d}, porque ${m}`).join(' · ')})` : ''}`);
   chk('I4o4', TELAS.every((t) => {
-    const c = caminhoNaBarra(t.rota);
-    return c !== null && c[c.length - 1] === t.titulo && (c.length === 1 || c[0] === MENU_DO_GRUPO[t.grupo]?.rotulo);
+    const c = caminhoNoMenu(t.rota);
+    const sec = SECAO_DO_GRUPO[t.grupo].titulo;
+    return c !== null && c[c.length - 1] === t.titulo && (sec ? c.length === 2 && c[0] === sec : c.length === 1);
   }),
-      'toda tela e alcancavel pela barra, e o ultimo nome do caminho e o titulo dela — aba solta ou item '
-      + 'do menu. E o que o roteiro chama de «rotulo da aba» (RM13)');
+      'toda tela e item do menu do setor dela, e o ultimo nome do caminho e o titulo dela — o que o roteiro e a '
+      + 'ajuda chamam de «rotulo do item» (RM13, A9y)');
+  /* OS PASSOS NO MENU (o conferir contra o funil e o `RM25`, na suite do
+   * roteiro). Aqui: o formato que a pessoa le, e que os passos aparecem no menu
+   * na ordem do mes — de cima para baixo, e do Rateio para a Empresa. */
+  const comPassos = TELAS.filter((t) => t.passos && t.passos.length > 0);
+  const sequencia = comPassos.flatMap((t) => [...t.passos!]);
+  chk('I4o5', comPassos.map((t) => `${t.titulo} ${rotuloDosPassos(t.passos)}`).join(' | ')
+                === 'Contas de luz 1\u20132 | Cobranças 3\u20134 | Contas a pagar 5'
+          && sequencia.every((n, i) => i === 0 || n > sequencia[i - 1]!)
+          && fraseDosPassos([1, 2]) === 'passos 1 e 2 do mês' && fraseDosPassos([5]) === 'passo 5 do mês',
+      'o menu mostra os passos do mes nas telas onde eles acontecem, em ordem crescente de cima para baixo: '
+      + '«1–2», «3–4», «5»');
 }
 
 {
@@ -343,7 +365,7 @@ chk('I4f', TELAS[0]!.funil === 'rateio' && TELAS[0]!.grupo === 'trabalho' && TEL
     return idx.length > 0 && idx[idx.length - 1]! - idx[0]! === idx.length - 1;
   });
   chk('I4g', contiguos && primeiroIndice.every((v, i) => i === 0 || v > primeiroIndice[i - 1]!),
-      'os funis sao contiguos e vem na ordem declarada - o seletor de cima e a barra de baixo '
+      'os funis sao contiguos e vem na ordem declarada - o seletor de setor e o menu '
       + 'contam a mesma historia');
   chk('I4g2', TELAS.every((t) => FUNIS.some((f) => f.chave === t.funil)),
       'toda tela pertence a um funil declarado');
@@ -377,18 +399,18 @@ chk('I4f', TELAS[0]!.funil === 'rateio' && TELAS[0]!.grupo === 'trabalho' && TEL
       'o resumo de cada setor cabe numa linha do menu (ate 40 caracteres) e nao e a descricao da ajuda');
 }
 
-/* A DIVISORIA E REGRA DE SETOR FINANCEIRO. A pasta de administracao tem uma
- * tela so (30/09/2026), e uma fronteira interna numa barra de um item seria uma
- * linha sem nada de um lado. Quando ela ganhar a segunda tela, a pergunta volta. */
+/* A SECAO E REGRA DE SETOR FINANCEIRO. A pasta de administracao tem uma tela
+ * so (30/09/2026), e uma secao com titulo sobre um item seria o menu dizendo a
+ * mesma coisa duas vezes. Nos setores financeiros: cada grupo e UMA secao — um
+ * grupo que volta depois de outro viraria duas secoes com o mesmo titulo, que e
+ * o sintoma de uma tela fora do lugar —, e ha ao menos duas. */
 for (const f of funisDaPasta('setores')) {
-  const telas = telasDoFunil(f.chave);
-  const div = divisoriasDe(telas);
-  // Grupo contiguo: o numero de divisorias e o numero de grupos distintos menos um.
-  const grupos = new Set(telas.map((t) => t.grupo)).size;
-  chk('I4h', div.length === grupos - 1 && div.every((i) => i > 0 && i < telas.length),
-      `${f.nome}: ${grupos} grupo(s) contiguo(s), e a divisoria cai DENTRO da lista`);
-  chk('I4h2', div.length >= 1,
-      `${f.nome}: tem ao menos uma divisoria - um funil sem fronteira interna e uma fila de abas iguais de novo`);
+  const secoes = secoesDoMenu(telasDoFunil(f.chave));
+  const grupos = secoes.map((sec) => sec.grupo);
+  chk('I4h', new Set(grupos).size === grupos.length,
+      `${f.nome}: cada grupo e uma secao so, contigua (hoje: ${grupos.join(' | ')})`);
+  chk('I4h2', secoes.length >= 2 && secoes.filter((sec) => sec.titulo === null).every((sec, i, l) => l.length === 1 && secoes[0] === sec),
+      `${f.nome}: ao menos duas secoes, e so a primeira pode vir sem titulo — uma lista sem fronteira e uma fila de itens iguais de novo`);
 }
 
 chk('I4l', primeiraTelaDoFunil('rateio').rota === '/pendencias'
@@ -398,7 +420,7 @@ chk('I4l', primeiraTelaDoFunil('rateio').rota === '/pendencias'
     + 'e quem entra (Administracao)');
 
 /*
- * QUEM VE O QUE (30/09/2026). A barra so desenha os setores do vinculo, e o
+ * QUEM VE O QUE (30/09/2026). O menu so desenha os setores do vinculo, e o
  * endereco de um setor oculto desvia para a primeira tela visivel. As duas
  * pontas que importam: o servidor SEM a migration 41 (setores ausentes) mostra o
  * que todo mundo via ate entao - nunca a Administracao -, e o desvio nunca manda
@@ -526,7 +548,7 @@ chk('I4k2', ENTRE_SETORES.every((t) => {
   const vizinhas = (porCabeca.get(c) ?? []).filter((o) => o !== t);
   return TELAS.some((x) => x.titulo === t) && vizinhas.every((o) => setorDe(o) !== setorDe(t));
 }),
-    'toda excecao entre setores existe e nao divide a barra com nenhuma aba de mesma cabeca — '
+    'toda excecao entre setores existe e nao divide o menu com nenhum item de mesma cabeca — '
     + '«Contas de luz» (Rateio) so convive com «Contas a receber» e «Contas a pagar» (Empresa)');
 chk('I4k0', PARES_DECLARADOS.every(([a, b]) => TELAS.some((t) => t.titulo === a) && TELAS.some((t) => t.titulo === b)),
     'todo par declarado aponta para duas abas que existem — excecao para aba que sumiu e lista envelhecendo calada');
@@ -776,12 +798,13 @@ chk('I7e', /summary:focus-visible\s*\{[^}]*outline:/.test(REGRAS),
   chk('I8a', /font:[^;]*var\(--fonte\)/.test(regraDe('body')) && /--fonte:\s*'Barlow'/.test(VARIAVEIS_CSS),
       'o corpo do sistema INTEIRO e a Barlow — declarada no body, nao num escopo');
   /* Os papeis da condensada numa regra so: titulo, rotulo caixa-alta, cabecalho
-     de tabela, nome e numero do KPI, selo e aba da barra. */
+     de tabela, nome e numero do KPI, selo e item do menu (ate 30/09/2026, aba da
+     barra: `.barra-nav a`; desde a etapa 3b, `.lateral-item`). */
   const papeis = REGRAS_PARES.find(([sel]) =>
-    /(^|, )h1, h2, h3\b/.test(sel) && sel.includes('thead th') && sel.includes('.barra-nav a')
+    /(^|, )h1, h2, h3\b/.test(sel) && sel.includes('thead th') && sel.includes('.lateral-item')
     && sel.includes('.kpi .valor') && sel.includes('.marca'));
   chk('I8a2', papeis !== undefined && /font-family:\s*var\(--fonte-cond\)/.test(papeis[1]),
-      'titulo, rotulo em caixa alta, cabecalho de tabela, numero do KPI, selo e aba da barra sao a '
+      'titulo, rotulo em caixa alta, cabecalho de tabela, numero do KPI, selo e item do menu sao a '
       + 'Barlow Semi Condensed — e numa regra so, por papel');
   chk('I8a3', /font-family:\s*var\(--fonte-cond\)/.test(regraDe('button'))
           && /text-transform:\s*uppercase/.test(regraDe('button.primario'))
@@ -898,7 +921,9 @@ chk('I7e', /summary:focus-visible\s*\{[^}]*outline:/.test(REGRAS),
 // desenho decorativo sem informacao (a marca d'agua do KPI, a engrenagem do
 // carregando). Em superficie clara, o laranja-texto e `--acento-forte`.
 {
-  const SOBRE_O_NAVY_OU_DECORATIVO = ['.barra', '.setor-gatilho', '.fu-painel', '.marca-dagua', '.marca-girando'];
+  /* `.barra` (a faixa do topo) saiu em 30/09/2026 com a etapa 3b; o navy agora e
+     o menu lateral (`.lateral`), e o item ativo dele e o laranja sobre o navy. */
+  const SOBRE_O_NAVY_OU_DECORATIVO = ['.lateral', '.setor-gatilho', '.fu-painel', '.marca-dagua', '.marca-girando'];
   const intrusos: string[] = [];
   for (const [sel, decl] of REGRAS_PARES) {
     for (const [prop, valor] of declaracoes(decl)) {

@@ -40,6 +40,8 @@ import type { NivelDaRodada, ChaveDaAutomacao, RodadaNaTela } from '../src/autom
 import type { NivelDoAviso } from '../src/saude-do-dinheiro.ts';
 import type { EstadoDoCertificado } from '../src/cobranca-regras.ts';
 import { GatilhoDeAjuda } from '../src/ajuda-gatilho.tsx';
+import { MenuLateral } from '../src/menu-lateral.tsx';
+import { FUNIS, telaDoCaminho } from '../src/navegacao.ts';
 import { passosDoEstado, type CamadaLida } from '../src/ajuda.ts';
 import { TabelaDaFila, TabelaDasRegistradas, GavetaDaConta, type PropsDasRegistradas } from '../src/fatura-lote-corpo.tsx';
 import type { ItemDoLote } from '../src/lote-de-contas.ts';
@@ -216,8 +218,9 @@ const camada = (p: Partial<CamadaLida>): CamadaLida =>
       'e a pergunta certa e desenhada — desde 21/08 esta e a do assunto do BOLETO DA FATURA, e nao '
       + 'a do formulario de credencial do banco, que era onde quem so queria o boleto acabava');
   /* [30/09/2026] a aba se chama «Cobranças» (antes «Emissão e cobrança"); o
-   * texto do passo e o botão acompanham o rótulo da barra. */
-  chk('R4c', t.includes('Abra a aba Cobranças'),
+   * texto do passo e o botão acompanham o rótulo da barra. [etapa 3b] A barra
+   * virou menu lateral, e a ajuda chama o lugar de «tela», não de «aba». */
+  chk('R4c', t.includes('Abra a tela Cobranças'),
       'com os PASSOS abertos: resultado unico ja vem expandido, porque nao ha o que escolher');
   chk('R4d', !t.includes('Como está o mês agora'),
       'e o estado ao vivo some durante a busca — quem digitou uma pergunta quer a resposta dela');
@@ -292,8 +295,8 @@ const camada = (p: Partial<CamadaLida>): CamadaLida =>
    * veio — é o que a prende às outras duas. */
   const FECHADO = 'Nada falta fazer neste mês: o que resta é o cliente pagar, e isso o sistema acompanha sozinho.';
   const fechado = texto(desenhar({ passos: [], mes: { estado: 'fechado', frase: FECHADO } }));
-  chk('R6d', fechado.includes(FECHADO) && fechado.includes('Ver o mês na aba Mês'),
-      'vazio: a frase do mês fechado é uma resposta, e não uma tela em branco — e ela leva à aba Mês');
+  chk('R6d', fechado.includes(FECHADO) && fechado.includes('Ver o mês na tela Mês'),
+      'vazio: a frase do mês fechado é uma resposta, e não uma tela em branco — e ela leva à tela Mês');
   chk('R6e', !texto(desenhar({ carregando: true })).includes('Nada falta')
              && !texto(desenhar({ carregando: true })).includes('Nada pendente'),
       'e carregando NAO diz que nada falta — anunciar tudo certo antes de conferir e o defeito '
@@ -1246,6 +1249,55 @@ const LEITURA_VAZIA = {
   chk('R27a', /Abrir a 2ª via de\s+09\/2026\s+da unidade\s+000000000000101\s*\?/.test(texto(segunda))
           && /unidade 101/.test(texto(segunda)) && /Manter a edição/.test(texto(segunda)),
       'a 2a via pergunta NA LINHA, dizendo qual conta em edicao sai da tela — nao mais um window.confirm');
+}
+
+// ============================ R28 o menu lateral (30/09/2026, etapa 3b do redesenho)
+//
+// A barra do topo virou menu lateral, e as garantias que ela tinha precisam
+// continuar de pé no DOM que chega à pessoa: um `<nav>` com nome, um único item
+// «página atual», o nome de cada tela presente mesmo com o menu recolhido, a
+// ordem do trabalho, e o número do passo dito por extenso para quem ouve.
+{
+  const menu = (rota: string, recolhido = false) => renderToStaticMarkup(
+    <MenuLateral funil={FUNIS.find((f) => f.chave === telaDoCaminho(rota).funil)!} visiveis={FUNIS}
+                 tela={telaDoCaminho(rota)} recolhidoInicial={recolhido}
+                 pe={(r) => <span className="teste-pe">{r ? 'pe recolhido' : 'pe aberto'}</span>}>
+      <h1>Conteudo da tela</h1>
+    </MenuLateral>,
+  );
+  const aberto = menu('/unidades');
+  const nav = aberto.slice(aberto.indexOf('<nav'), aberto.indexOf('</nav>'));
+  const itens = [...nav.matchAll(/<a [^>]*class="lateral-item[^"]*"[^>]*>([\s\S]*?)<\/a>/g)]
+    .map((m) => /<span class="lateral-rotulo">([^<]*)<\/span>/.exec(m[1]!)?.[1]);
+  chk('R28a', /<nav class="lateral-nav" aria-label="Financeiro Rateio"/.test(aberto)
+          && itens.join(' · ') === 'Mês · Donos de usina · Usinas · Clientes · Unidades consumidoras · Contratos · Contas de luz · Cobranças · Relatórios',
+      `o menu do Rateio e um <nav> com o nome do setor, e os itens vem na ordem do trabalho (veio: ${itens.join(' · ')})`);
+  const atuais = [...aberto.matchAll(/aria-current="page"/g)].length;
+  chk('R28b', atuais === 1 && /<a href="\/unidades" class="lateral-item ativo" aria-current="page">/.test(aberto),
+      'um item, e so um, e a pagina atual — e e o da tela aberta, com o desenho de ativo');
+  chk('R28c', /aria-expanded="true"[^>]*>Cadastros</.test(aberto) && />O mês, passo a passo</.test(aberto) && />Resultado</.test(aberto)
+          && /<ul class="lateral-lista" id="[^"]+" aria-labelledby="[^"]+">/.test(aberto),
+      'as secoes tem titulo que e botao com aria-expanded, e cada lista leva o nome do titulo');
+  chk('R28d', /class="lateral-passos" aria-hidden="true"[^>]*>1–2</.test(aberto) && /class="so-leitor">, passos 1 e 2 do mês</.test(aberto)
+          && /class="lateral-passos" aria-hidden="true"[^>]*>3–4</.test(aberto),
+      'Contas de luz mostra «1–2» e Cobrancas «3–4», e o leitor de tela ouve «passos 1 e 2 do mes», nao «um traco dois»');
+  chk('R28e', aberto.indexOf('class="pular"') < aberto.indexOf('class="lateral"')
+          && /<main id="conteudo" class="conteudo" tabindex="-1"><h1>Conteudo da tela<\/h1><\/main>/.test(aberto),
+      '«Pular para o conteudo» e a primeira parada, e a tela entra inteira no <main> — o menu nao toca nela');
+  chk('R28f', /aria-label="Recolher o menu"[^>]*title="Recolher o menu/.test(aberto) && /pe aberto/.test(aberto),
+      'o botao de recolher tem nome e dica, e o pe recebe o estado aberto');
+
+  const recolhido = menu('/documento', true);
+  const nomes = [...recolhido.matchAll(/<span class="lateral-rotulo">([^<]*)<\/span>/g)].map((m) => m[1]);
+  chk('R28g', /class="casca recolhida"/.test(recolhido) && nomes.includes('Contas de luz') && nomes.includes('Donos de usina')
+          && /data-dica="Contas de luz · passos 1 e 2 do mês"/.test(recolhido)
+          && /aria-label="Expandir o menu"/.test(recolhido) && /pe recolhido/.test(recolhido),
+      'recolhido, o nome de cada tela CONTINUA no DOM (so sai da vista), a dica leva o passo, e o botao vira «Expandir»');
+
+  const empresa = menu('/contas-a-pagar');
+  chk('R28h', /<nav class="lateral-nav" aria-label="Financeiro Empresa"/.test(empresa)
+          && /class="lateral-passos" aria-hidden="true"[^>]*>5</.test(empresa) && />Caixa</.test(empresa) && />Apoio</.test(empresa),
+      'na Empresa: Caixa e Apoio, e Contas a pagar mostra o passo 5 — o fim do mes do Rateio');
 }
 
 export const resultado = () => ({ falhas, feitas });

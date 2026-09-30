@@ -11,31 +11,29 @@
 // mesma que existe entre `cobranca-regras.ts` e a tela de Cobrança: o que precisa
 // de teste sai do `.tsx`, porque o runner do `web/` não lê JSX.
 //
-// DOIS FUNIS DESDE 22/09/2026 — «Rateio» e «Empresa» —, e o topo passou a ter
-// dois niveis: o seletor de funil na faixa de cima, ao lado da marca, e na faixa
-// de baixo SO as telas do funil escolhido. A divisao e a do negocio (o dinheiro
-// que entra dos clientes; o caixa da empresa), e mora em `navegacao.ts` como
-// dado — aqui so se desenha. O funil ativo e DERIVADO do caminho, nunca guardado
-// em estado: o endereco ja diz de que lado a pessoa esta. Desde 27/09 o seletor
-// e a migalha `Financeiro G3 / Rateio ⌃⌄` — o porque esta em `seletor-de-setor.tsx`.
+// DOIS FUNIS DESDE 22/09/2026 — «Rateio» e «Empresa» —, e a navegacao passou a
+// ter dois niveis: o seletor de funil e, abaixo dele, SO as telas do funil
+// escolhido (na barra ate 30/09/2026; no menu lateral desde entao). A divisao e
+// a do negocio (o dinheiro que entra dos clientes; o caixa da empresa), e mora
+// em `navegacao.ts` como dado — aqui so se desenha. O funil ativo e DERIVADO do
+// caminho, nunca guardado em estado: o endereco ja diz de que lado a pessoa
+// esta. Desde 27/09 o seletor e o nome do setor com o ⌃⌄ — o porque esta em
+// `seletor-de-setor.tsx`.
 //
-// O TOPO TEM DUAS FAIXAS DESDE 30/07. Doze telas mais o bloco do usuario numa
-// faixa unica dependiam de `flex-wrap` para caber, e o resultado era duas linhas
-// irregulares em tela media. Agora: identidade, funil e sessao em cima,
-// navegacao embaixo, com rolagem horizontal quando nao couber.
+// O TOPO TEVE DUAS FAIXAS DE 30/07 A 30/09/2026: identidade, funil e sessao em
+// cima, navegacao embaixo. Em 30/09 (etapa 3b) a barra inteira virou o MENU
+// LATERAL, a pedido do dono — ver `menu-lateral.tsx`. O que ficou aqui e o que
+// liga a casca a sessao: quem esta logado, em qual empresa, e o que o vinculo ve.
 
 import { lazy, Suspense, useEffect, useState, type ReactElement } from 'react';
 import { useSessao } from './sessao.tsx';
 import {
-  Aviso, Logotipo, Icone, Menu, ItensDeTema, Escolha, Carregando, ESTILO,
+  Aviso, Icone, Menu, ItensDeTema, Escolha, Carregando, ESTILO,
 } from './ui.tsx';
-import { useCaminho, Ligacao, navegar } from './rota.tsx';
-import {
-  telaDoCaminho, telasDoFunil, funilDoCaminho, divisoriasDe, funisVisiveis, destinoVisivel,
-  itensDaBarra, type ItemDaBarra, type Tela,
-} from './navegacao.ts';
+import { useCaminho, navegar } from './rota.tsx';
+import { telaDoCaminho, funilDoCaminho, funisVisiveis, destinoVisivel } from './navegacao.ts';
 import { GatilhoDeAjuda } from './ajuda-gatilho.tsx';
-import { SeletorDeSetor } from './seletor-de-setor.tsx';
+import { MenuLateral } from './menu-lateral.tsx';
 import { Login } from './telas/login.tsx';
 /*
  * ============================================================================
@@ -53,9 +51,9 @@ import { Login } from './telas/login.tsx';
  * 4.461 linhas de `telas/` — so chegam para quem abre a aba Documento.
  *
  * O QUE FICA NO PEDACO DE ENTRADA: o login, o chrome (`ui.tsx`, `rota.tsx`,
- * `sessao.tsx`, `estilo.ts`) e `navegacao.ts`. A barra de navegacao precisa dos
- * nomes e dos icones das doze ANTES de qualquer uma carregar — ela e o que
- * mostra para onde ir.
+ * `sessao.tsx`, `estilo.ts`, `menu-lateral.tsx`) e `navegacao.ts`. O menu de
+ * navegacao precisa dos nomes e dos icones das telas ANTES de qualquer uma
+ * carregar — ele e o que mostra para onde ir.
  *
  * `Suspense` COM O MESMO `Carregando` DO RESTO, e nao um spinner proprio: a
  * troca de tela ja tinha um estado de carga (o `useDados` de cada tela), e um
@@ -137,49 +135,6 @@ const RENDER: Record<string, () => ReactElement> = {
   '/usuarios': () => <TelaUsuarios />,
 };
 
-/**
- * O MENU DE UM GRUPO NA BARRA — hoje, «Cadastros ▾» (30/09/2026).
- *
- * QUANDO A TELA ABERTA E DELE, O GATILHO DIZ QUAL. Um menu fechado com a tela
- * atual escondida dentro dele faria a barra perder o «voce esta aqui» — que e o
- * trabalho dela. Entao o gatilho ganha o estado ativo da aba (o laranja e o
- * filete) e o nome da tela: «Cadastros · Unidades consumidoras». Em tela media o
- * prefixo sai e fica so o nome da tela com a seta, e no celular fica so
- * «Cadastros» com o desenho da tela aberta — o `h1` logo abaixo diz o resto.
- *
- * O NOME ACESSIVEL DIZ AS DUAS COISAS, porque o `aria-label` do gatilho
- * substitui o texto de dentro: «Cadastros, aberta: Unidades consumidoras».
- */
-function MenuDaBarra({ item, atual }: { item: Extract<ItemDaBarra, { tipo: 'menu' }>; atual: Tela }) {
-  const aqui = item.telas.find((t) => t.rota === atual.rota) ?? null;
-  return (
-    <Menu lugares fixo className="nav-menu" classeDoGatilho={aqui ? 'ativo' : undefined}
-          rotulo={aqui ? `${item.rotulo}, aberta: ${aqui.titulo}` : item.rotulo}
-          rotuloDoPainel={item.rotulo}
-          gatilho={<>
-            <Icone nome={aqui ? aqui.icone : item.icone} tamanho={17} peso={aqui ? 'fill' : 'regular'} />
-            <span className="nav-menu-texto">
-              {aqui
-                ? <><span className="nav-menu-grupo">{item.rotulo} · </span><span className="nav-menu-tela">{aqui.titulo}</span></>
-                : item.rotulo}
-              {aqui && <span className="nav-menu-curto">{item.rotulo}</span>}
-            </span>
-          </>}>
-      <ul className="menu-lugares">
-        {item.telas.map((t) => (
-          <li key={t.rota}>
-            <Ligacao para={t.rota} atual={t.rota === atual.rota} className="menu-lugar">
-              <Icone nome={t.icone} tamanho={17} peso={t.rota === atual.rota ? 'fill' : 'regular'} />
-              {t.titulo}
-              {t.rota === atual.rota && <Icone nome="ok" tamanho={13} peso="bold" className="ao-fim" />}
-            </Ligacao>
-          </li>
-        ))}
-      </ul>
-    </Menu>
-  );
-}
-
 export function App() {
   const s = useSessao();
   const caminho = useCaminho();
@@ -194,7 +149,7 @@ export function App() {
   const encerrarAviso = () => { setAvisoDaAjuda(false); marcarAvisoVisto(); };
 
   /*
-   * O SETOR QUE O VÍNCULO NÃO VÊ (30/09/2026). A barra só desenha os setores do
+   * O SETOR QUE O VÍNCULO NÃO VÊ (30/09/2026). O menu só desenha os setores do
    * vínculo, mas o endereço pode chegar de um favorito, de um link da ajuda ou
    * de antes de alguém desmarcar a caixa. O desvio troca o ENDEREÇO — o setor
    * ativo é derivado dele, e um segundo estado diria outra coisa. `replaceState`
@@ -235,123 +190,83 @@ export function App() {
   // tela que diz em que pé está o mês é o lugar certo para se perder.
   const tela = telaDoCaminho(caminho);
   const funil = funilDoCaminho(caminho);
-  const itensDaNav = itensDaBarra(telasDoFunil(funil.chave));
-  const divisorias = new Set(divisoriasDe(itensDaNav));
   const vinculo = vinculoAtual;
   const visiveis = funisVisiveis(vinculo?.setores);
   const varios = Boolean(s.sessao && s.sessao.tenants.length > 1);
 
+  /*
+   * O PE DO MENU: a empresa e a conta. Ate 30/09/2026 os dois moravam no canto
+   * direito da barra do topo; o menu lateral os levou para baixo, e o alto
+   * ficou com o «onde» (marca e setor).
+   *
+   * O TENANT FICA VISIVEL O TEMPO TODO, e nao escondido num menu. Todo dado desta
+   * tela e de UM tenant, e a RLS garante que so ele apareca - mas quem opera
+   * precisa saber de qual empresa esta olhando o dinheiro sem ter que procurar.
+   * Com um vinculo so, ele e a segunda linha do botao da conta; com mais de um,
+   * vira um seletor logo acima dela, porque trocar de empresa e um ato frequente.
+   * Recolhido, o menu mostra so o desenho da conta — o nome da empresa continua
+   * no alto da lista dela.
+   *
+   * O GATILHO DA AJUDA NAO ESTA AQUI, e o motivo e o de 21/08 (`ajuda-gatilho.tsx`):
+   * ele desceu para o canto inferior direito por pedido do dono, e o balao de
+   * primeira visita aponta para la.
+   */
+  const pe = (recolhido: boolean) => (
+    <>
+      {varios && !recolhido && (
+        <Escolha valor={s.tenantId ?? ''} ao={(v) => s.escolherTenant(v)}
+                 rotuloAcessivel="Empresa" primeira="Escolha a empresa…"
+                 opcoes={s.sessao!.tenants.map((t) => ({
+                   valor: t.tenantId, texto: `${t.razaoSocial} (${t.papel})`,
+                 }))} />
+      )}
+      <Menu acima soIcone={recolhido} className="lateral-conta" rotulo="Conta e aparência"
+            gatilho={recolhido ? <Icone nome="usuario" tamanho={20} /> : (
+              <>
+                <Icone nome="usuario" tamanho={20} />
+                <span className="lateral-conta-texto">
+                  <strong>{s.sessao?.nome}</strong>
+                  <span>{vinculo?.razaoSocial ?? '—'}</span>
+                </span>
+              </>
+            )}>
+        <div className="quem">
+          <strong>{s.sessao?.nome}</strong>
+          <span>{vinculo ? `${vinculo.razaoSocial} · ${vinculo.papel}` : '—'}</span>
+        </div>
+        <hr />
+        <ItensDeTema />
+        <hr />
+        <button type="button" role="menuitem" onClick={() => void s.sair()}>
+          <Icone nome="sair" tamanho={16} /> Sair
+        </button>
+      </Menu>
+    </>
+  );
+
   return (
     <>
       <style>{ESTILO}</style>
-      <header className="topo">
-        <div className="filete" aria-hidden="true" />
-
-        <div className="barra">
-          <span className="marca-app"><Logotipo tamanho={22} /> Financeiro G3</span>
-
-          {/*
-            O SELETOR DE SETOR, como migalha: a barra inclinada separa a marca
-            do setor, e o ⌃⌄ abre a lista dos setores. O setor ativo e derivado
-            do caminho — nao ha estado proprio para ele desincronizar. Trocar de
-            setor leva a PRIMEIRA tela do outro lado: Mes no Rateio (a tela que
-            diz em que pe esta o mes) e Contas a receber na Empresa (a tela que
-            diz quanto vai entrar).
-          */}
-          <span className="migalha" aria-hidden="true" />
-          <SeletorDeSetor atual={funil} visiveis={visiveis} rotaAtual={tela.rota} />
-
-          <div className="sessao">
-            {/*
-              O TENANT FICA VISIVEL O TEMPO TODO, e nao escondido num menu. Todo
-              dado desta tela e de UM tenant, e a RLS garante que so ele apareca -
-              mas quem opera precisa saber de qual empresa esta olhando o dinheiro
-              sem ter que procurar. Com mais de um vinculo ele continua sendo um
-              seletor na barra, porque trocar de empresa e um ato frequente; com
-              um so, e um rotulo com o icone de predio.
-            */}
-            {varios ? (
-              <Escolha valor={s.tenantId ?? ''} ao={(v) => s.escolherTenant(v)}
-                       rotuloAcessivel="Empresa" primeira="Escolha a empresa…"
-                       opcoes={s.sessao!.tenants.map((t) => ({
-                         valor: t.tenantId, texto: `${t.razaoSocial} (${t.papel})`,
-                       }))} />
-            ) : (
-              <span className="fraco" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <Icone nome="empresa" tamanho={15} />
-                {vinculo?.razaoSocial ?? '—'}
-              </span>
-            )}
-
-            {/*
-              O GATILHO DA AJUDA SAIU DAQUI EM 21/08/2026 e foi para o canto
-              inferior direito, por pedido do dono. O argumento que o mantinha
-              fora da NAVEGACAO continua igual — aquela lista e a ordem do
-              trabalho, e ajuda nao e etapa do trabalho —, mas a barra de sessao
-              tambem nao era o lugar: ali ele se lia como mais um controle de
-              conta, ao lado de empresa e tema, e nao como socorro. O motivo
-              inteiro esta no cabecalho de `ajuda-gatilho.tsx`.
-            */}
-            <Menu rotulo="Conta e aparência"
-                  gatilho={<><Icone nome="usuario" tamanho={18} />
-                             <span className="so-largo">{s.sessao?.nome}</span></>}>
-              <div className="quem">
-                <strong>{s.sessao?.nome}</strong>
-                <span>{vinculo ? `${vinculo.razaoSocial} · ${vinculo.papel}` : '—'}</span>
-              </div>
-              <hr />
-              <ItensDeTema />
-              <hr />
-              <button type="button" role="menuitem" onClick={() => void s.sair()}>
-                <Icone nome="sair" tamanho={16} /> Sair
-              </button>
-            </Menu>
-          </div>
-        </div>
-
-        <nav className="barra-nav" aria-label={funil.nome}>
-          {/* `flatMap` e nao `map` com fragmento: a divisoria e um IRMAO dos
-              itens, nao um filho. Envolver o par num fragmento por item faria o
-              `gap` do flex contar o par como um elemento so, e a divisoria
-              grudaria no item seguinte.
-
-              DESDE 30/09/2026 A BARRA TEM DOIS TIPOS DE ITEM: a aba solta e o
-              menu de um grupo («Cadastros ▾»). Quais grupos viram menu e dado,
-              em `navegacao.ts` (`MENU_DO_GRUPO`, `itensDaBarra`). */}
-          {itensDaNav.flatMap((item, i) => {
-            const el = item.tipo === 'menu'
-              ? <MenuDaBarra key={`menu-${item.grupo}`} item={item} atual={tela} />
-              : (
-                <Ligacao key={item.tela.rota} para={item.tela.rota} atual={item.tela.rota === tela.rota}
-                         className={item.tela.rota === tela.rota ? 'ativo' : undefined}>
-                  <Icone nome={item.tela.icone} tamanho={17} peso={item.tela.rota === tela.rota ? 'fill' : 'regular'} />
-                  <span>{item.tela.titulo}</span>
-                </Ligacao>
-              );
-            // A divisoria onde o GRUPO muda (trabalho ‖ cadastro no Rateio,
-            // dinheiro ‖ apoio na Empresa). Os indices vem calculados de
-            // `navegacao.ts`: reordenar as telas move a divisoria junto.
-            return divisorias.has(i)
-              ? [<span key={`divisor-${i}`} className="divisor" aria-hidden="true" />, el]
-              : [el];
-          })}
-        </nav>
-      </header>
-
-      <main className="conteudo">
+      {/*
+        Com mais de um vinculo e nenhuma empresa escolhida, o menu abre mesmo que
+        a preferencia seja recolhido: o seletor de empresa mora nele, e a tela
+        manda escolher ali.
+      */}
+      <MenuLateral funil={funil} visiveis={visiveis} tela={tela} pe={pe}
+                   forcarAberto={varios && !s.tenantId}>
         {destino ? (
           <Carregando texto="Abrindo o seu setor…" />
         ) : !s.tenantId ? (
           <Aviso tipo="erro">
-            Escolha a empresa na barra acima. Nenhuma tela carrega sem isso — e o servidor recusaria
-            de qualquer forma: com mais de um vínculo, ele não escolhe por você.
+            Escolha a empresa no pé do menu, logo acima do seu nome. Nenhuma tela carrega sem isso — e o
+            servidor recusaria de qualquer forma: com mais de um vínculo, ele não escolhe por você.
           </Aviso>
         ) : (
           <Suspense fallback={<Carregando texto="Abrindo a tela…" />}>
             {RENDER[tela.rota]!()}
           </Suspense>
         )}
-      </main>
+      </MenuLateral>
 
       {/*
         O BOTAO DA AJUDA, no canto inferior direito, e o balao que ensina que ele

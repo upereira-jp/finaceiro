@@ -200,10 +200,11 @@ for (const arq of TELAS) {
 // T2 — o chrome, que aparece em TODA tela
 // ============================================================================
 //
-// `ui.tsx` e `app.tsx` desenham a barra, os avisos, os botoes e os vazios de
-// tabela. Um rotulo errado ali aparece doze vezes, e nao uma.
+// `ui.tsx` e `app.tsx` desenham os avisos, os botoes e os vazios de tabela, e
+// `menu-lateral.tsx` o menu (a barra, ate 30/09/2026). Um rotulo errado ali
+// aparece em toda tela, e nao em uma.
 
-for (const arq of ['ui.tsx', 'app.tsx']) {
+for (const arq of ['ui.tsx', 'app.tsx', 'menu-lateral.tsx']) {
   const src = semIcones(semDetalheTecnico(semComentario(ler(arq))));
   const achados: string[] = [];
   for (const [linha, cru] of visiveis(src)) {

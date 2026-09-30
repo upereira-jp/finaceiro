@@ -467,7 +467,7 @@ export function TelaFaturas() {
     /* O TITULO E O NOME DA ABA, «Cobranças», desde 30/09/2026 (etapa 3; antes
        «Emissão e cobrança»): os passos 3 e 4 do mes. A rota `/faturas` ficou. */
     <Pagina titulo="Cobranças"
-            sub="O mês de referência inteiro, linha por linha. Emitir fecha o valor, o boleto vem depois, e dar baixa é o que dispara a divisão do dinheiro. A folha que o cliente recebe, a Fatura unificada, se monta na aba Contas de luz.">
+            sub="O mês de referência inteiro, linha por linha. Emitir fecha o valor, o boleto vem depois, e dar baixa é o que dispara a divisão do dinheiro. A folha que o cliente recebe, a Fatura unificada, se monta na tela Contas de luz.">
       {/* ONDE ESTA TELA FICA NO MÊS — 10/09/2026. Quem chega aqui vindo de fora
           do roteiro não sabia que existem dois passos antes deste, nem que há um
           depois. A faixa é derivada do mesmo `MOLDES` que monta o funil na
@@ -624,7 +624,7 @@ export function TelaFaturas() {
                          trabalho, entao o vazio aqui e um mes escolhido sem
                          cobranca, e o texto diz onde elas nascem. */
                       : `Nenhuma cobrança em ${mesPorExtenso}. A cobrança nasce no mês da CONTA da `
-                        + 'distribuidora — troque o mês acima. Ela é gerada na aba Contas de luz, '
+                        + 'distribuidora — troque o mês acima. Ela é gerada na tela Contas de luz, '
                         + 'em «Gerar N cobranças».'}>
             {lista.map((f) => {
               const t = travadaPorFatura.get(f.id);
@@ -944,7 +944,7 @@ function PainelDaFatura({ f, unidade, uc, mes, daSessao, ultimoErroDaLista, pedi
           <h3 id={`${ids}-tarifa`}><Icone nome="carteira" tamanho={16} /> Tarifa da distribuidora</h3>
           <p className="em-painel-nota">
             É a parte da conta da distribuidora que entra nesta cobrança. Quando a conta é lida
-            na aba Contas de luz, ela vem de lá e não precisa ser digitada. Só entra em
+            na tela Contas de luz, ela vem de lá e não precisa ser digitada. Só entra em
             rascunho: depois de emitida, o valor já foi para o documento e para o boleto.
           </p>
           <div style={{ ...linha, gap: 8 }}>

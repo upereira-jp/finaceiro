@@ -269,7 +269,7 @@ export function FaixaDoPasso({ rota }: { rota: string }) {
         {onde.antes && onde.depois && ' '}
         {onde.depois && <Vizinho passo={onde.depois} rotulo="Depois daqui:" />}
         {' '}<Ligacao para="/pendencias">
-          {onde.deOutroSetor ? 'Ver o mês inteiro, na aba Mês do Rateio' : 'Ver o mês inteiro'}
+          {onde.deOutroSetor ? 'Ver o mês inteiro, na tela Mês do Rateio' : 'Ver o mês inteiro'}
         </Ligacao>
       </p>
     </div>

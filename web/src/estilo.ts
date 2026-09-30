@@ -63,6 +63,15 @@
 
 import { VARIAVEIS_CSS, TIPOGRAFIA } from './tema.ts';
 
+/**
+ * ONDE O MENU LATERAL VIRA GAVETA (30/09/2026, etapa 3b). Uma constante e nao
+ * dois numeros: o CSS abaixo e o `matchMedia` de `menu-lateral.tsx` leem a mesma,
+ * e a gaveta com foco preso nunca pode valer numa largura em que o menu esta
+ * desenhado fixo — ou vice-versa. 900 e onde o conteudo, com os 248px do menu,
+ * cai abaixo de ~650px e as tabelas passam a rolar mais do que mostram.
+ */
+export const MENU_VIRA_GAVETA = 900;
+
 export const ESTILO = `
   ${VARIAVEIS_CSS}
 
@@ -112,7 +121,7 @@ export const ESTILO = `
      esta aqui: a regra dele comeca por "font: inherit", que zeraria esta - ele
      declara a condensada na propria regra, logo depois. */
   h1, h2, h3, .rot-alta, thead th, .kpi .nome, .kpi .valor, .menu-painel .titulo,
-  .setor-painel .titulo, .ajuda-secao h3, .marca, .barra-nav a, .marca-app,
+  .setor-painel .titulo, .ajuda-secao h3, .marca, .lateral-item, .marca-app,
   .fu-rotulo, .fu-painel-rot, .fu-secao-tit {
     font-family: var(--fonte-cond);
   }
@@ -122,89 +131,100 @@ export const ESTILO = `
      flex do contexto, que e quem sabe o tamanho da linha. */
   .ic { display: block; flex: none; transition: transform .16s ease, color .16s ease; }
 
-  /* -------------------------------------------------------------- o topo
-     Duas faixas em vez de uma: identidade e sessao em cima, navegacao embaixo.
-     Doze telas numa faixa unica com o bloco do usuario ao lado quebravam em duas
-     linhas irregulares - o desenho antigo dependia de 'flex-wrap' para caber. */
-  .topo { position: sticky; top: 0; z-index: 20; }
-  .filete { height: 3px; background: var(--gradiente); }
-  /* A FAIXA E NAVY DESDE 06/08, e essa e a mudanca estrutural da paleta nova.
-     Antes ela era '--fundo2' - a mesma superficie do cartao -, e sobre uma pagina
-     creme isso a deixaria BRANCA: o elemento que deve dominar seria o mais claro
-     da tela. Consequencia de leitura, e ela e o ganho: a pagina passou a ter duas
-     zonas de peso - a faixa escura, que diz ONDE VOCE ESTA, e o creme, onde o
-     trabalho acontece. */
-  .barra {
-    display: flex; align-items: center; gap: 14px; flex-wrap: wrap; row-gap: 6px;
-    padding: 9px 20px; background: var(--topo); color: var(--topo-texto);
-    border-bottom: 1px solid var(--topo-veu);
+  /* ------------------------------------------- a casca e o menu lateral
+     A BARRA DO TOPO VIROU MENU LATERAL em 30/09/2026 (etapa 3b), a pedido do
+     dono: *«ao inves dos topicos ficarem dispostos na barra fixa superior, quero
+     um menu lateral, similar ao de /opt/intreply»*. O que veio de la foi o
+     COMPORTAMENTO — secoes, recolher para os desenhos com a escolha lembrada,
+     conta no pe, gaveta no celular — e nao o desenho: aqui e o g3ref da etapa 0,
+     navy com o laranja como sinal, condensada nos rotulos, canto reto e nenhuma
+     sombra. O porque de cada escolha de comportamento esta em "menu-lateral.tsx".
+
+     DUAS ZONAS DE PESO CONTINUAM, so mudaram de eixo. Desde 06/08 a faixa navy
+     era o "onde voce esta" e o creme era onde o trabalho acontece; agora a
+     coluna navy e o onde, e o creme ganhou a altura inteira da janela — que e o
+     recurso que a barra de duas faixas mais gastava (~90px em toda tela).
+
+     A LARGURA SAI DE UMA VARIAVEL NA CASCA, e nao de duas regras: o menu, a dica
+     do menu recolhido e quem mais precisar leem a mesma "--lateral-largura".
+     248px aberto cabe «Unidades consumidoras» com o desenho e o numero do passo
+     de outra; 64px recolhido e o desenho com folga para o anel de foco. */
+  .casca {
+    --lateral-largura: 248px;
+    display: flex; align-items: flex-start; min-height: 100vh; min-height: 100dvh;
   }
-  /* Dentro da faixa escura, o que era '--fraco' (medido contra superficie CLARA)
-     ficaria ilegivel. Os seletores abaixo existem por isso, e nao por estilo:
-     rotulo, select e botao da sessao passaram a pousar no Navy. O branco
-     translucido, e nao um token novo, porque ele funciona sobre AS DUAS variantes
-     de navy - a do tema claro e a do escuro - sem virar duas cores para manter. */
-  .barra .fraco, .barra .sub, .barra label { color: var(--topo-fraco); }
-  /* A SETA DO SELETOR DE EMPRESA ESCAPAVA DA REGRA ACIMA, e ela era o unico
-     desenho do sistema ainda pintado com tinta de superficie CLARA dentro da
-     faixa escura. ".campo-caixa .adorno" puxa "--fraco" e nao tem a classe
-     ".fraco", entao o seletor de cima nao a alcancava. Medido em 14/08: 2,20:1
-     contra o veu do topo no tema claro - a WCAG 1.4.11 pede 3 para componente
-     nao-textual. Com "--topo-fraco": 4,52:1 no claro e 5,04:1 no escuro. */
-  .barra .campo-caixa .adorno, .barra .campo-caixa .adorno-esquerda { color: var(--topo-fraco); }
-  .barra .campo-caixa select, .barra button {
-    background: var(--topo-veu); color: var(--topo-texto);
-    border-color: var(--topo-veu-forte);
+  .casca.recolhida { --lateral-largura: 64px; }
+  .casca-corpo { flex: 1 1 auto; min-width: 0; }
+  /* O foco chega aqui so pelo "Pular para o conteudo", por programa: o anel
+     contornaria a tela inteira para dizer o que o salto ja disse. */
+  .conteudo:focus { outline: none; }
+  .filete { height: 3px; flex: none; background: var(--gradiente); }
+
+  /* O MENU. Preso a janela no desktop (sticky, altura da janela): a tela rola e o
+     menu fica — o que a barra "sticky" fazia, sem comer altura do conteudo. Ele
+     NAO corta o que transborda: a lista de setores e o menu da conta saem para
+     o lado quando ele esta recolhido, e quem rola por dentro e so a lista de
+     telas.
+
+     RECOLHER NAO ANIMA A LARGURA, e isto e diferente do intreply de proposito:
+     la a largura desliza em 200ms. Aqui cada quadro dessa animacao refaria o
+     layout da tela inteira — tabelas de ate 500 linhas —, e o detector de
+     desenho acusa a transicao de "width" por isso mesmo. O menu troca de
+     largura num quadro so; o estado e dito pelo proprio menu, que muda de forma.
+
+     A BORDA DIREITA DE 1px e a do tema escuro: la o menu e a pagina sao dois
+     navys quase iguais, e sem ela a coluna se dissolvia na tela. No claro ela e
+     a linha bege entre o navy e o creme, e some. */
+  .lateral {
+    position: sticky; top: 0; z-index: 25; flex: none;
+    width: var(--lateral-largura); height: 100vh; height: 100dvh;
+    display: flex; flex-direction: column;
+    background: var(--topo); color: var(--topo-texto);
+    border-right: 1px solid var(--borda);
   }
-  .barra button:hover:not(:disabled) {
-    background: var(--topo-veu-forte); color: var(--topo-texto);
-    border-color: var(--topo-veu-forte);
+  .lateral-cabeca {
+    flex: none; display: flex; align-items: center; gap: 8px;
+    min-height: 58px; padding: 0 12px 0 18px;
   }
   /* A MARCA NA CONDENSADA, e um degrau acima do corpo: e o nome do sistema, e
      ele pesa como o titulo de um cartao da referencia. */
   .marca-app {
-    display: inline-flex; align-items: center; gap: 9px;
-    font-weight: 600; font-size: 18px; letter-spacing: .01em;
+    display: inline-flex; align-items: center; gap: 9px; min-width: 0;
+    font-weight: 600; font-size: 18px; letter-spacing: .01em; white-space: nowrap;
   }
   .marca-app .logotipo { flex: none; }
-  /* O SELETOR DE SETOR (27/09/2026), no desenho de migalha do Supabase:
-     "Financeiro G3 / Rateio" e o par de setas que abre a lista. Substituiu as
-     duas pilulas de 22/09 - o porque esta em "seletor-de-setor.tsx".
+  /* Fechar a gaveta so existe no celular; no desktop o menu nao fecha, recolhe. */
+  button.lateral-fechar { display: none; }
 
-     A BARRA INCLINADA E UM FILETE DE 1px GIRADO, e nao o caractere "/": a barra
-     da fonte muda de peso e de altura com a familia tipografica, e o filete fica
-     igual nos dois temas e em qualquer zoom. A margem negativa come parte do
-     "gap" da faixa - sem ela a marca e o setor pareceriam dois blocos soltos, e
-     nao um endereco. */
-  .migalha {
-    flex: none; width: 1px; height: 20px; margin: 0 -4px;
-    background: var(--topo-veu-forte); transform: rotate(20deg);
-  }
-  .setor { position: relative; flex: none; }
-  /* O GATILHO E TEXTO, e nao botao pesado: fundo so no hover e com a lista
-     aberta. O nome do setor pesa como a marca, porque e a segunda metade do
-     mesmo endereco. O desenho do setor leva o Orange sobre o Navy - o mesmo par
-     da aba ativa, 5,93:1 -, e as setas ficam no "--topo-fraco" ate o ponteiro
-     chegar: elas sao o convite, nao a informacao. */
-  .barra .setor-gatilho {
-    gap: 7px; padding: 5px 8px 5px 9px;
-    background: transparent; border-color: transparent; box-shadow: none;
+  /* O SELETOR DE SETOR, no alto do menu (27/09 como migalha na barra; 30/09 aqui).
+     O gatilho ocupa a largura do menu e tem contorno de 1px: e o "em que lugar
+     estou" do menu inteiro, e as setas a direita dizem que dali se vai a outro.
+     O desenho do setor leva o Orange sobre o Navy — o mesmo par do item ativo,
+     5,93:1 —, e as setas ficam no "--topo-fraco" ate o ponteiro chegar: elas sao
+     o convite, nao a informacao. */
+  .lateral-setor { flex: none; padding: 0 12px 14px; border-bottom: 1px solid var(--topo-veu); }
+  .setor { position: relative; }
+  .lateral .setor-gatilho {
+    width: 100%; justify-content: flex-start; gap: 9px; padding: 9px 10px;
+    background: var(--topo-veu); border-color: var(--topo-veu-forte); box-shadow: none;
     color: var(--topo-texto); font-size: 17px; font-weight: 600; letter-spacing: .01em;
   }
-  .barra .setor-gatilho:hover:not(:disabled), .barra .setor-gatilho[aria-expanded="true"] {
-    background: var(--topo-veu); border-color: var(--topo-veu-forte);
+  .lateral .setor-gatilho:hover:not(:disabled), .lateral .setor-gatilho[aria-expanded="true"] {
+    background: var(--topo-veu-forte); border-color: var(--topo-veu-forte);
     color: var(--topo-texto); box-shadow: none; transform: none;
   }
+  .setor-rotulo { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .setor-gatilho .setor-simbolo { color: var(--acento); }
-  .setor-gatilho .setor-setas { color: var(--topo-fraco); transition: color .16s ease; }
+  .setor-gatilho .setor-setas { margin-left: auto; color: var(--topo-fraco); transition: color .16s ease; }
   .setor-gatilho:hover .setor-setas, .setor-gatilho[aria-expanded="true"] .setor-setas {
     color: var(--topo-texto);
   }
   /* A LISTA FLUTUA como o menu da conta - mesma superficie, borda, sombra do
-     terceiro degrau e entrada -, mas abre para a DIREITA a partir do gatilho,
-     porque ela mora no comeco da faixa e o menu da conta, no fim. */
+     terceiro degrau e entrada. Presa ao gatilho, ela abre para baixo e para a
+     DIREITA: com o menu recolhido (64px) ela sai por cima do conteudo, e e isso
+     que o menu nao cortar o que transborda garante. */
   .setor-painel {
-    position: absolute; left: 0; top: calc(100% + 8px); z-index: 30;
+    position: absolute; left: 0; top: calc(100% + 6px); z-index: 30;
     width: 324px; padding: 6px;
     background: var(--fundo2); color: var(--texto);
     border: 1px solid var(--borda); border-radius: var(--raio-cartao); box-shadow: var(--sombra-3);
@@ -235,127 +255,220 @@ export const ESTILO = `
      plataforma». A segunda se separa por uma linha suave e pelo proprio titulo -
      nenhuma cor nova: e a mesma lista, com outro assunto. */
   .setor-pasta + .setor-pasta { border-top: 1px solid var(--borda-suave); margin-top: 6px; padding-top: 4px; }
-  /* EM TELA ESTREITA A LISTA OCUPA A LARGURA DA FAIXA. Presa ao gatilho, que
-     fica a uns 180px da borda, ela passaria da tela num celular de 375px. */
-  @media (max-width: 600px) {
-    .barra { position: relative; }
-    .setor { position: static; }
-    .setor-painel { left: 16px; right: 16px; width: auto; top: calc(100% + 6px); }
-  }
-  .sessao { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: var(--t-meta); }
-  .sessao .campo-caixa select { width: auto; max-width: 260px; padding: 5px 30px 5px 10px; }
-  /* O nome de quem esta logado sai em tela estreita: o icone do menu continua
-     clicavel e o nome esta dentro dele, no bloco de identidade. */
-  @media (max-width: 720px) { .so-largo { display: none; } }
 
-  /* A NAVEGACAO. O item ativo nao e uma aba: e um filete de marca embaixo mais um
-     esfumado do --acento-suave subindo do rodape do item. A borda inferior de
-     2px existe em TODOS os itens, transparente nos inativos - sem isso o ativo
-     empurraria os vizinhos 2px para cima ao trocar de tela.
-
-     [30/09] A ABA FALA COMO AS ABAS DE ETAPA DA REFERENCIA: condensada, caixa
-     alta, tracking aberto. A sombra de baixo saiu - a faixa se separa do creme
-     pela propria cor, que e o que ela faz na referencia. 13px e nao os 15px da
-     aba de etapa: aqui sao nove abas numa linha, e caixa alta e mais larga que
-     minusculo. A medida foi tirada, nao escolhida: com 13.5px e tracking .05em a
-     barra do Rateio passava 49px da tela de 1280 e rolava para o lado; com 13px e
-     .04em ela cabe nos 1280 como cabia com a Inter. */
-  .barra-nav {
-    display: flex; align-items: stretch; gap: 1px; overflow-x: auto;
-    padding: 0 12px; background: var(--topo);
-    border-bottom: 1px solid var(--borda);
+  /* A LISTA DE TELAS, em secoes na ordem do trabalho. E a unica parte do menu que
+     rola: um setor com muitas telas numa janela baixa desce por dentro, e a
+     marca, o setor e a conta continuam onde estao. */
+  .lateral-nav {
+    flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden;
+    padding: 12px 10px 16px;
     scrollbar-width: thin; scrollbar-color: var(--topo-veu-forte) transparent;
   }
-  .barra-nav > a {
-    display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
-    padding: 10px 10px 9px; text-decoration: none; color: var(--topo-fraco);
-    font-size: 13px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
-    border-bottom: 2px solid transparent; border-radius: var(--raio-pequeno) var(--raio-pequeno) 0 0;
-    transition: color .16s ease, background-color .16s ease, border-color .16s ease;
+  .lateral-secao + .lateral-secao { margin-top: 14px; }
+  /* O TITULO DA SECAO E O BOTAO QUE A FECHA. Rotulo em caixa alta, na tinta
+     apagada da faixa (4,54:1): ele organiza, e quem chama o olho sao os itens.
+     A seta gira para o lado quando a secao fecha — o mesmo desenho, sem um
+     segundo icone para o mesmo sinal. */
+  button.lateral-secao-tit {
+    display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 6px;
+    margin: 0 0 3px; padding: 4px 10px;
+    background: none; border: 0; box-shadow: none; color: var(--topo-fraco);
+    font-size: var(--rotulo-tamanho); font-weight: var(--rotulo-peso); text-transform: uppercase;
+    letter-spacing: var(--rotulo-tracking); line-height: 1.3; text-align: left;
   }
-  .barra-nav > a:hover { color: var(--topo-texto); background: var(--topo-veu); }
-  .barra-nav > a:hover .ic { transform: translateY(-1px) scale(1.08); }
-  /* O ATIVO E O ORANGE SOBRE O NAVY, e aqui ele NAO usa o '--acento-forte':
-     aquele token existe para o laranja pousar em superficie CLARA. Sobre a faixa
-     escura o Orange entregue vale como esta - 5.93:1. O esfumado de baixo saiu
-     junto: sobre escuro ele virava borrao, e quem carrega o sinal sao a cor e o
-     filete de 2px. */
-  .barra-nav > a.ativo {
-    color: var(--acento);
-    border-bottom-color: var(--acento);
-    background: var(--topo-ativo);
+  button.lateral-secao-tit:hover:not(:disabled) {
+    background: none; border-color: transparent; color: var(--topo-texto); transform: none;
   }
-  .barra-nav > a.ativo .ic { color: var(--acento); }
-  /* A divisoria onde o grupo muda dentro do funil (cadastro | dinheiro no Rateio,
-     dinheiro | apoio na Empresa). A fronteira e dado ('grupo', em navegacao.ts) e
-     ate 29/07 era invisivel: doze abas iguais em fila. */
-  .barra-nav .divisor { width: 1px; background: var(--topo-veu-forte); margin: 9px 9px; flex: none; }
+  .lateral-secao-tit[aria-expanded="false"] .lateral-secao-seta { transform: rotate(-90deg); }
+  .lateral-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+  /* O ITEM. Nome no creme, desenho na tinta apagada: nove nomes em tinta apagada
+     leriam como lista desligada, e nove desenhos em creme brigariam com o nome.
 
-  /* O MENU «CADASTROS ▾» DENTRO DA BARRA (30/09/2026). O gatilho e um <button>,
-     e sem estas regras ele seria o botao comum do sistema — contorno, fundo
-     branco — no meio de uma faixa de abas. Aqui ele se desenha COMO ABA: mesma
-     tinta, mesma caixa alta, o mesmo filete de 2px quando a tela aberta e dele.
-     O ":hover:not(:disabled)" tem a forma do seletor generico e por isso ganha
-     dele (I7). */
-  .barra-nav .nav-menu { display: flex; flex: none; }
-  .barra-nav .nav-menu > button {
-    gap: 7px; white-space: nowrap;
-    padding: 10px 10px 9px; color: var(--topo-fraco); background: transparent;
-    border: 0; border-bottom: 2px solid transparent; box-shadow: none;
-    border-radius: var(--raio-pequeno) var(--raio-pequeno) 0 0;
-    font-size: 13px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
-    transition: color .16s ease, background-color .16s ease, border-color .16s ease;
+     O ATIVO E O ORANGE SOBRE O NAVY com o lastro "--topo-ativo" por tras (4,84:1
+     medido sobre o lastro), e o desenho passa a cheio. SEM FILETE LATERAL, e a
+     decisao e de proposito: o filete de 2px embaixo era o sinal da aba, e o
+     equivalente numa coluna e a faixa grossa de cor num lado so — o "callout"
+     que o g3ref tirou do aviso na etapa 0. Tres sinais sem ele: a superficie, a
+     tinta e o peso do desenho; e "aria-current" para quem nao ve nenhum dos tres. */
+  .lateral-item {
+    position: relative; display: flex; align-items: center; gap: 11px;
+    min-height: 40px; padding: 8px 10px;
+    color: var(--topo-texto); text-decoration: none; white-space: nowrap; overflow: hidden;
+    font-size: 15.5px; font-weight: 500; letter-spacing: .01em; line-height: 1.2;
+    transition: background-color .14s ease, color .14s ease;
   }
-  .barra-nav .nav-menu > button:hover:not(:disabled),
-  .barra-nav .nav-menu > button[aria-expanded="true"] {
-    color: var(--topo-texto); background: var(--topo-veu); border-color: transparent;
-    box-shadow: none; transform: none;
+  .lateral-item .ic { color: var(--topo-fraco); }
+  .lateral-item:hover { background: var(--topo-veu); color: var(--topo-texto); text-decoration: none; }
+  .lateral-item:hover .ic { color: var(--topo-texto); }
+  .lateral-item.ativo, .lateral-item.ativo:hover { background: var(--topo-ativo); color: var(--acento); font-weight: 600; }
+  .lateral-item.ativo .ic { color: var(--acento); }
+  .lateral-item:focus-visible { outline-offset: -2px; }
+  .lateral-rotulo { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  /* O NUMERO DO PASSO: o mesmo quadrado de contorno fino que numera os passos no
+     funil da tela Mes, pequeno e na tinta apagada. Ele conta a sequencia sem
+     disputar com o nome; no item ativo acompanha a tinta dele. */
+  .lateral-passos {
+    flex: none; margin-left: auto; padding: 0 5px;
+    border: 1px solid var(--topo-veu-forte); color: var(--topo-fraco);
+    font-size: 12px; font-weight: 600; line-height: 18px; letter-spacing: .02em;
+    font-variant-numeric: tabular-nums;
   }
-  .barra-nav .nav-menu > button.ativo,
-  .barra-nav .nav-menu > button.ativo:hover:not(:disabled) {
-    color: var(--acento); border-bottom-color: var(--acento); background: var(--topo-ativo);
-  }
-  /* O NOME DO GRUPO VAI APAGADO quando a tela aberta e dele: «Cadastros ·» diz
-     de onde, e o nome da tela, na tinta da aba ativa, diz onde. */
-  .barra-nav .nav-menu > button.ativo .nav-menu-grupo { color: var(--topo-fraco); }
-  .barra-nav .nav-menu-curto { display: none; }
-  .barra-nav .nav-menu .menu-seta { opacity: .8; }
-  /* EM TELA MEDIA O PREFIXO SAI: «Unidades consumidoras ▾» com o filete ja diz
-     que e uma aba com vizinhas, e a barra cabe sem rolar. */
-  @media (max-width: 1100px) { .barra-nav .nav-menu-grupo { display: none; } }
+  .lateral-item.ativo .lateral-passos { color: var(--acento); border-color: var(--acento); }
 
-  /* NO CELULAR A BARRA E UMA FILEIRA DE COLUNAS IGUAIS (30/09/2026). Com rolagem
-     lateral ela mostrava duas abas e meia de nove — todas de cadastro — e o
-     trabalho do mes ficava fora da tela. Com quatro abas e um menu, cada item
-     vira uma coluna: o desenho em cima, o nome embaixo, quebrando em duas linhas
-     quando precisa («Contas / de luz»). Nada rola, nada se esconde. A divisoria
-     sai: numa fileira de colunas ela roubaria uma coluna so para ser uma linha. */
-  @media (max-width: 720px) {
-    .barra-nav {
-      display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr);
-      gap: 0; padding: 0 4px; overflow-x: visible;
+  /* RECOLHER E O PE. O botao de recolher mora logo acima da conta, e nao ao lado
+     da marca: no alto ele disputaria com o nome do sistema, e recolhido nao
+     haveria largura para os dois. Ele fala baixo — tinta apagada, sem contorno —
+     porque e preferencia, e nao trabalho. */
+  .lateral-recolher { flex: none; padding: 6px 10px; border-top: 1px solid var(--topo-veu); }
+  .lateral-recolher button {
+    width: 100%; justify-content: flex-start; gap: 11px; padding: 8px 10px;
+    background: none; border-color: transparent; box-shadow: none; color: var(--topo-fraco);
+    font-size: var(--t-ui); font-weight: 500; white-space: nowrap; overflow: hidden;
+  }
+  .lateral-recolher button:hover:not(:disabled) {
+    background: var(--topo-veu); border-color: transparent; color: var(--topo-texto); transform: none;
+  }
+  .lateral-pe { flex: none; display: grid; gap: 8px; padding: 10px 10px 12px; border-top: 1px solid var(--topo-veu); }
+  /* O TENANT, quando ha mais de um vinculo. Dentro da faixa escura o que era
+     "--fraco" (medido contra superficie CLARA) ficaria ilegivel: a seta do
+     seletor usa "--topo-fraco" (4,52:1 sobre o veu), a regra de 14/08. */
+  .lateral-pe .campo-caixa select {
+    width: 100%; padding: 7px 30px 7px 10px; font-size: var(--t-meta);
+    background: var(--topo-veu); color: var(--topo-texto); border-color: var(--topo-veu-forte);
+  }
+  .lateral-pe .campo-caixa .adorno { color: var(--topo-fraco); }
+  /* A CONTA: quem esta logado e em qual empresa, sempre a vista — todo dado da
+     tela e de UM tenant, e quem opera precisa saber de qual sem procurar. O
+     menu dela abre para CIMA ("Menu acima"), e a seta do gatilho vira junto. */
+  .lateral-conta { display: block; }
+  .lateral-conta > button {
+    width: 100%; justify-content: flex-start; gap: 10px; padding: 7px 9px; text-align: left;
+    background: none; border-color: transparent; box-shadow: none; color: var(--topo-texto);
+  }
+  .lateral-conta > button:hover:not(:disabled), .lateral-conta > button[aria-expanded="true"] {
+    background: var(--topo-veu); border-color: var(--topo-veu-forte); color: var(--topo-texto); transform: none;
+  }
+  .lateral-conta > button .ic { color: var(--topo-fraco); }
+  .lateral-conta > button .menu-seta { margin-left: auto; transform: rotate(180deg); }
+  .lateral-conta-texto { display: grid; gap: 1px; min-width: 0; line-height: 1.25; }
+  .lateral-conta-texto strong, .lateral-conta-texto span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lateral-conta-texto strong { font-size: var(--t-ui); font-weight: 600; }
+  .lateral-conta-texto span {
+    font-family: var(--fonte); font-size: var(--t-meta); font-weight: 400; letter-spacing: normal;
+    color: var(--topo-fraco);
+  }
+
+  /* RECOLHIDO: SO OS DESENHOS. O nome continua no DOM — so sai da vista, com o
+     mesmo recorte do ".so-leitor" —, e e por isso que o leitor de tela e a busca
+     da pagina continuam achando cada item. Quem ve ganha a dica ao lado
+     (".lateral-dica"), no ponteiro e no foco do teclado. Os titulos de secao
+     viram uma linha fina: seis letras em caixa alta nao cabem em 64px, e a
+     fronteira entre as secoes continua dita. */
+  .recolhida .lateral-rotulo, .recolhida .setor-rotulo {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+  }
+  .recolhida .lateral-cabeca { justify-content: center; padding: 0; }
+  .recolhida .lateral-setor { padding: 0 8px 12px; }
+  .recolhida .lateral .setor-gatilho { justify-content: center; gap: 2px; padding: 9px 0; }
+  .recolhida .setor-gatilho .setor-setas { margin-left: 0; }
+  .recolhida .lateral-nav { padding: 12px 8px 14px; }
+  .recolhida .lateral-secao-tit, .recolhida .lateral-passos { display: none; }
+  .recolhida .lateral-secao + .lateral-secao { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--topo-veu-forte); }
+  .recolhida .lateral-item { justify-content: center; padding: 10px 0; }
+  .recolhida .lateral-recolher { padding: 6px 8px; }
+  .recolhida .lateral-recolher button { justify-content: center; padding: 8px 0; }
+  .recolhida .lateral-pe { padding: 10px 8px 12px; }
+  .recolhida .lateral-conta > button.so-icone { width: 100%; height: 38px; padding: 0; justify-content: center; }
+  /* A DICA DO MENU RECOLHIDO: o nome do item, ao lado dele, no ponteiro e no foco.
+     "position: fixed" com a altura medida do item, e nao um "::after" preso a
+     ele: a lista rola e corta o que transborda, e uma dica cortada na borda do
+     menu seria a dica que nao aparece. Navy com contorno do veu, como o menu —
+     nenhuma sombra: ela fica rente ao menu e se separa do creme pela cor. */
+  .lateral-dica {
+    position: fixed; z-index: 45; left: calc(var(--lateral-largura) + 6px); top: var(--dica-topo);
+    transform: translateY(-50%); pointer-events: none;
+    padding: 5px 9px; background: var(--topo); color: var(--topo-texto);
+    border: 1px solid var(--topo-veu-forte);
+    font-family: var(--fonte-cond); font-size: var(--t-ui); font-weight: 600; white-space: nowrap;
+    animation: surgir .12s ease-out;
+  }
+
+  /* PULAR PARA O CONTEUDO. Com o menu na frente do conteudo no DOM, quem usa
+     teclado passaria por uma dezena de paradas antes da primeira linha da tela.
+     O link fica fora da vista ate receber o foco, e ai aparece no canto, no
+     laranja do botao primario. */
+  .pular {
+    position: fixed; left: 12px; top: 12px; z-index: 50; padding: 9px 14px;
+    background: var(--acento); color: var(--acento-texto); text-decoration: none;
+    font-family: var(--fonte-cond); font-weight: 600; letter-spacing: .02em;
+    transform: translateY(-200%);
+  }
+  .pular:focus { transform: none; color: var(--acento-texto); }
+
+  /* A FAIXA DO CELULAR e a gaveta. So existem abaixo de ${MENU_VIRA_GAVETA}px. */
+  .faixa-celular, .lateral-veu { display: none; }
+
+  /* NA TELA ESTREITA O MENU VIRA GAVETA (abaixo de ${MENU_VIRA_GAVETA}px).
+     248px fixos deixariam 142px de conteudo num telefone de 390px, e mesmo os
+     64px recolhidos comeriam um sexto da largura de uma tabela. O menu sai do
+     fluxo e passa a deslizar da esquerda por cima da tela, aberto por um botao
+     numa faixa fina no alto — a unica barra que sobrou, e so aqui: sem ela nao
+     haveria de onde abrir o menu, nem onde dizer em que setor se esta.
+
+     A GAVETA ESTA SEMPRE ABERTA POR DENTRO: recolher para os desenhos nao faz
+     sentido num menu que ja sai da frente, e a preferencia do desktop fica
+     guardada, intocada, para quando a janela voltar a ser larga.
+
+     "visibility" entra na transicao com atraso na SAIDA: a gaveta desliza e so
+     entao some — e sumida ela sai do Tab e do leitor de tela, que e o que um
+     menu fechado tem de ser. */
+  @media (max-width: ${MENU_VIRA_GAVETA - 0.02}px) {
+    .casca { display: block; }
+    .faixa-celular {
+      display: block; position: sticky; top: 0; z-index: 20;
+      background: var(--topo); color: var(--topo-texto);
     }
-    .barra-nav .divisor { display: none; }
-    .barra-nav > a, .barra-nav .nav-menu > button {
-      flex-direction: column; justify-content: flex-start; gap: 4px; width: 100%;
-      white-space: normal; text-align: center; padding: 9px 3px 8px;
-      font-size: var(--t-rotulo); letter-spacing: .02em; line-height: 1.15;
+    .faixa-celular-linha { display: flex; align-items: center; gap: 10px; min-height: 50px; padding: 0 14px 0 6px; }
+    .faixa-celular .marca-app { font-size: 17px; gap: 8px; }
+    button.faixa-celular-botao {
+      min-height: 44px; padding: 0 10px; gap: 8px;
+      background: none; border-color: transparent; box-shadow: none; color: var(--topo-texto);
+      font-size: var(--t-ui); text-transform: uppercase; letter-spacing: .06em;
     }
-    .barra-nav .nav-menu { display: flex; min-width: 0; }
-    /* O GATILHO DO MENU E UMA GRADE: a seta sobe para o lado do desenho, e o
-       nome fica sozinho embaixo. Ao lado do nome ela nao cabia — «CADASTROS»
-       mais a seta passavam dos 70px da coluna num telefone de 360px — e em
-       coluna viraria uma terceira linha sozinha. */
-    .barra-nav .nav-menu > button {
-      display: grid; grid-template-columns: auto auto; grid-template-areas: "ic seta" "txt txt";
-      justify-content: center; align-content: start; column-gap: 2px; row-gap: 4px;
+    button.faixa-celular-botao:hover:not(:disabled) {
+      background: var(--topo-veu); border-color: transparent; color: var(--topo-texto); transform: none;
     }
-    .barra-nav .nav-menu > button > .ic:first-child { grid-area: ic; }
-    .barra-nav .nav-menu > button > .menu-seta { grid-area: seta; align-self: center; }
-    .barra-nav .nav-menu > button > .nav-menu-texto { grid-area: txt; }
-    .barra-nav > a, .barra-nav .nav-menu > button { letter-spacing: 0; padding-left: 2px; padding-right: 2px; }
-    .barra-nav .nav-menu-grupo, .barra-nav .nav-menu-tela { display: none; }
-    .barra-nav .nav-menu-curto { display: inline; }
+    .faixa-celular-setor {
+      margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      font-family: var(--fonte-cond); font-size: var(--t-ui); font-weight: 600; color: var(--topo-fraco);
+    }
+    .lateral {
+      position: fixed; top: 0; bottom: 0; left: 0; z-index: 42;
+      width: min(304px, 86vw); height: auto;
+      transform: translateX(-100%); visibility: hidden;
+      transition: transform .22s ease-out, visibility 0s linear .22s;
+    }
+    .gaveta-aberta .lateral { transform: none; visibility: visible; transition: transform .22s ease-out; }
+    .lateral-veu {
+      display: block; position: fixed; inset: 0; z-index: 41;
+      background: color-mix(in srgb, var(--topo) 55%, transparent);
+      animation: surgir .14s ease-out;
+    }
+    button.lateral-fechar {
+      display: inline-flex; margin-left: auto; width: 44px; height: 44px; padding: 0;
+      background: none; border-color: transparent; box-shadow: none; color: var(--topo-fraco);
+    }
+    button.lateral-fechar:hover:not(:disabled) {
+      background: var(--topo-veu); border-color: transparent; color: var(--topo-texto); transform: none;
+    }
+    .lateral-recolher { display: none; }
+    .lateral .setor-painel { left: 0; right: 0; width: auto; }
+  }
+  /* NO TOQUE, 44px DE ALVO em todo item, em qualquer largura: um notebook com
+     tela de toque tem o menu aberto e o dedo de um celular. */
+  @media (pointer: coarse) {
+    .lateral-item, .lateral-conta > button, .lateral-recolher button { min-height: 44px; }
   }
 
   /* -------------------------------------------------- o menu suspenso
@@ -367,14 +480,18 @@ export const ESTILO = `
   .menu-painel {
     position: absolute; right: 0; top: calc(100% + 6px); z-index: 30;
     min-width: 216px; padding: 6px;
-    background: var(--fundo2); border: 1px solid var(--borda);
+    background: var(--fundo2); color: var(--texto); border: 1px solid var(--borda);
     border-radius: var(--raio-cartao); box-shadow: var(--sombra-3);
     animation: descer-suave .14s ease-out;
   }
   .menu-painel .titulo { padding: 7px 10px 5px; color: var(--fraco); }
   .menu-painel hr { border: 0; border-top: 1px solid var(--borda-suave); margin: 5px 4px; }
+  /* O ITEM ALINHA A ESQUERDA, e precisa dizer isso: o botao geral centraliza
+     ("justify-content: center"), e sem esta linha tema e Sair saiam no meio do
+     painel, cada um numa coluna — visto em 30/09/2026 com o menu da conta no pe
+     do menu lateral. */
   .menu-painel button, .menu-painel .item {
-    display: flex; align-items: center; gap: 9px; width: 100%;
+    display: flex; align-items: center; justify-content: flex-start; gap: 9px; width: 100%;
     padding: 8px 10px; border: 0; border-radius: var(--raio-pequeno);
     background: none; box-shadow: none; color: var(--texto);
     font: inherit; font-size: var(--t-corpo); letter-spacing: normal; text-transform: none;
@@ -394,6 +511,14 @@ export const ESTILO = `
      vem do gatilho, lida ao abrir, em duas variaveis — e nao em "style" com
      "top"/"left", que venceria a regra do celular logo abaixo. */
   .menu-painel.fixo { position: fixed; top: var(--menu-topo); left: var(--menu-esquerda); right: auto; }
+  /* O PAINEL QUE ABRE PARA CIMA ("Menu acima", 30/09/2026): o da conta, no pe do
+     menu lateral. Alinhado pela esquerda do gatilho — com o menu recolhido ele sai
+     por cima do conteudo —, e a entrada sobe em vez de descer. A "color" e
+     declarada no painel porque ele mora dentro do navy, e herdaria o creme. */
+  .menu-acima > .menu-painel {
+    top: auto; bottom: calc(100% + 6px); left: 0; right: auto;
+    animation-name: subir-suave;
+  }
   /* A LISTA DE LUGARES: links, com o desenho de cada tela e o ✓ na aberta. O
      painel mora DENTRO da barra de abas, e por isso as regras das abas valem
      so para os filhos diretos dela ("> a"); o seletor aqui tem as duas classes
@@ -1196,6 +1321,10 @@ export const ESTILO = `
     from { opacity: 0; transform: translateY(-5px); }
     to { opacity: 1; transform: translateY(0); }
   }
+  @keyframes subir-suave {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
 
   .ic-carregando { animation: girar .9s linear infinite; }
   .ic-engrenagem { animation: girar 3.2s linear infinite; }
@@ -1970,10 +2099,20 @@ export const ESTILO = `
     .em-bloco-acoes { flex-direction: column-reverse; align-items: stretch; width: 100%; }
   }
 
-  /* A TABELA DO MES. Sem rolagem lateral em largura nenhuma: acima de 900px as
-     sete colunas cabem (o cliente trunca), abaixo cada linha vira cartao. E o
-     que deixa o menu da linha e o painel aberto FORA de um "overflow" que os
-     cortaria. */
+  /* A TABELA DO MES. Sem rolagem lateral em largura nenhuma: acima de 860px de
+     tabela as sete colunas cabem (o cliente trunca), abaixo cada linha vira
+     cartao. E o que deixa o menu da linha e o painel aberto FORA de um
+     "overflow" que os cortaria.
+
+     [30/09/2026, etapa 3b] A MEDIDA PASSOU A SER A DA PROPRIA TABELA, e nao a da
+     janela. Ate aqui era "@media (max-width: 900px)", que supunha o conteudo na
+     largura da janela; com o menu lateral de 248px, uma janela de 1024 deixa
+     736px para a tabela, as sete colunas nao cabiam e a PAGINA INTEIRA rolava
+     87px para o lado. Com a tabela como "container", ela vira cartao quando ELA
+     fica estreita — com o menu aberto, recolhido ou na gaveta. Nenhum elemento
+     "position: fixed" mora dentro dela, entao a contencao nao muda onde nada
+     aparece. */
+  .em-tabela { container-type: inline-size; }
   .em-tabela .rolagem { overflow: visible; }
   .em-tabela thead th { padding: 10px 10px; }
   .em-tabela tbody td { padding: 11px 10px; vertical-align: middle; }
@@ -2120,10 +2259,14 @@ export const ESTILO = `
   .em-resumo-contas .em-resumo-total dt { color: var(--texto); }
   .em-resumo-efeito { margin: 0; max-width: 80ch; }
 
-  /* ABAIXO DE 900px CADA LINHA VIRA UM CARTAO — o mesmo HTML, como na Fatura
-     unificada. Total e o ato ficam sempre a vista; o triangulo ganha o nome
-     escrito («Boleto e baixa»), porque no dedo um icone sozinho e adivinhacao. */
-  @media (max-width: 900px) {
+  /* ABAIXO DE 860px DE TABELA CADA LINHA VIRA UM CARTAO — o mesmo HTML, como na
+     Fatura unificada. Total e o ato ficam sempre a vista; o triangulo ganha o
+     nome escrito («Boleto e baixa»), porque no dedo um icone sozinho e
+     adivinhacao. [30/09/2026] Medido na tabela ("@container"), e nao na janela:
+     ver a nota do ".em-tabela" acima. O que mora FORA da tabela (a revisao antes
+     de emitir, a lista de outros meses, o importar) continua na janela, logo
+     abaixo. */
+  @container (max-width: 860px) {
     .em-tabela .rolagem { border: 0; background: none; }
     .em-tabela table, .em-tabela tbody, .em-tabela thead { display: block; }
     .em-tabela thead { display: none; }
@@ -2167,6 +2310,8 @@ export const ESTILO = `
     .em-baixa-campos { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .em-baixa-obs { grid-column: 1 / -1; }
     .em-importar-corpo { padding-left: 0; }
+  }
+  @media (max-width: 900px) {
     .em-revisao { padding: 14px; }
     .em-revisao-lista li {
       grid-template-columns: 22px minmax(0, 1fr) auto;
