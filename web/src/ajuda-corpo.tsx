@@ -49,9 +49,17 @@ import { EFEITO } from './vocabulario.ts';
 export type CorpoDaAjuda = {
   /** A tela em que a ajuda foi aberta. Decide as sugestões de contexto. */
   rota: string;
-  /** O que está travando o mês. Vazio significa «nada pendente» — e é diferente
-   *  de `carregando`, que significa «ainda não sei». */
+  /** O que o CADASTRO ainda trava no mês, com o caminho de cada coisa. Vazio é
+   *  «nada de cadastro» — e é diferente de `carregando`, que é «ainda não sei». */
   passos: readonly PassoDoEstado[];
+  /**
+   * O ESTADO DO MÊS, na frase da tela Mês (30/09/2026). A MESMA frase, saída da
+   * mesma função (`mesNoFunil`) sobre as mesmas leituras — até esta data a
+   * ajuda tinha a sua («Nada pendente. Este mês pode ser cobrado»), e ela olhava
+   * só o cadastro: dizia «pode ser cobrado» num mês com boleto recusado.
+   * `null` quando as leituras não chegaram.
+   */
+  mes?: { estado: 'andando' | 'travado' | 'nao_medido' | 'fechado'; frase: string } | null;
   carregando: boolean;
   /** Não deu para conferir o mês. A ajuda CONTINUA servindo: os assuntos e a
    *  busca não dependem da rede. */
@@ -117,15 +125,23 @@ export function CorpoDaAjuda(p: CorpoDaAjuda) {
                   Não consegui conferir o mês agora. Os assuntos abaixo continuam valendo.
                 </p>
               )}
-              {!p.carregando && !p.falhou && p.passos.length === 0 && (
-                <p className="ajuda-tudo-certo">
-                  <Icone nome="ok" tamanho={16} peso="fill" /> Nada pendente. Este mês pode ser cobrado.
-                </p>
+              {!p.carregando && !p.falhou && p.mes && (
+                <>
+                  <p className={p.mes.estado === 'fechado' ? 'ajuda-tudo-certo' : 'ajuda-nota ajuda-frase-do-mes'}>
+                    {p.mes.estado === 'fechado' && <Icone nome="ok" tamanho={16} peso="fill" />} {p.mes.frase}
+                  </p>
+                  {/* O BOTÃO LEVA AO FUNIL, e ele diz o nome da aba — «Mês» é
+                      onde cada passo tem o número e o como fazer. */}
+                  <div className="ajuda-caminhos">
+                    <BotaoDoCaminho caminho={{ rota: '/pendencias', rotulo: 'Ver o mês na aba Mês', tipo: 'ver' }}
+                                    ir={p.ir} />
+                  </div>
+                </>
               )}
               {!p.carregando && !p.falhou && p.passos.length > 0 && (
                 <>
                   <p className="fraco ajuda-nota">
-                    Estas são as coisas que ainda faltam. Comece pela primeira — fechar a de cima
+                    O que ainda falta preencher, em ordem. Comece pela primeira — fechar a de cima
                     costuma destravar as de baixo.
                   </p>
                   <ul className="ajuda-passos">

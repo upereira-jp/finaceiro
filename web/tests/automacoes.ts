@@ -230,7 +230,7 @@ chk('AU-11', cadencia(300) === 'a cada 5 minutos' && cadencia(900) === 'a cada 1
   const monta = /<FaixasDasAutomacoes\b/.test(tela) && /<PainelDasAutomacoes\b/.test(tela);
   const busca = /api\.get\('\/automacoes'\)/.test(tela);
   chk('AU-16', importa && monta && busca,
-      'a tela de Pendencias - a PRIMEIRA da barra - importa, BUSCA `/automacoes` e monta as duas '
+      'a tela Mes (ate 30/09 Pendencias) - a PRIMEIRA da barra - importa, BUSCA `/automacoes` e monta as duas '
       + 'metades. Sem esta linha, apagar qualquer uma das tres coisas passaria em todo o resto e o '
       + 'sintoma seria silencio');
 

@@ -220,10 +220,15 @@ export function TelaDocumento() {
    * cobranca do mes NASCE nesta tela. Pior que estar velha, ela mandava para a
    * aba **Faturamento**, que e o caminho aposentado — a legenda da tela certa
    * apontando para a errada. Corrigido em 10/09/2026.
+   *
+   * O TITULO E O NOME DA ABA, «Contas de luz», desde 30/09/2026 (etapa 3): a
+   * tela e onde as contas da distribuidora chegam e viram cobrança — os passos
+   * 1 e 2 do mes. «Fatura unificada» continua sendo o nome da FOLHA que o
+   * cliente recebe, e a legenda o diz; so deixou de ser o nome da tela.
    */
   return (
-    <Pagina titulo="Fatura unificada"
-            sub="Onde a cobrança do mês nasce: sobe a conta da distribuidora, confere os dados, gera a cobrança e imprime a folha que o cliente recebe.">
+    <Pagina titulo="Contas de luz"
+            sub="Onde as contas de luz do mês chegam e viram cobrança: sobe a conta da distribuidora, confere os dados, gera a cobrança e imprime a folha que o cliente recebe, a Fatura unificada.">
       <FaixaDoPasso rota="/documento" />
 
       {/*
@@ -394,7 +399,7 @@ export function TelaDocumento() {
           estático</strong> gerado aqui. Chave Pix <strong>não é segredo</strong> — ela identifica o
           destino e sai impressa no documento; quem a tem consegue te pagar, não se autenticar como
           você. <strong>A conciliação é manual:</strong> um Pix estático não carrega identificador por
-          fatura, então o dinheiro chega sem dizer de quem é — a baixa é na aba Emissão e cobrança.
+          fatura, então o dinheiro chega sem dizer de quem é — a baixa é na aba Cobranças.
         </p>
         {/* AS CHAVES CADASTRADAS, e a escolha da padrao. O apelido e o que se
             escolhe: a chave em si nao se reconhece de cor, e conferir um CNPJ

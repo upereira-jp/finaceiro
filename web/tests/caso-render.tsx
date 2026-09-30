@@ -65,6 +65,7 @@ const desenhar = (p: Partial<CorpoDaAjuda> = {}): string =>
       passos={p.passos ?? []}
       carregando={p.carregando ?? false}
       falhou={p.falhou ?? false}
+      mes={p.mes ?? null}
       aoFechar={() => {}}
       ir={() => {}}
       consultaInicial={p.consultaInicial}
@@ -214,7 +215,9 @@ const camada = (p: Partial<CamadaLida>): CamadaLida =>
   chk('R4b', t.includes('Cadê o boleto? Como gero o boleto de uma fatura?'),
       'e a pergunta certa e desenhada — desde 21/08 esta e a do assunto do BOLETO DA FATURA, e nao '
       + 'a do formulario de credencial do banco, que era onde quem so queria o boleto acabava');
-  chk('R4c', t.includes('Abra a aba Emissão e cobrança'),
+  /* [30/09/2026] a aba se chama «Cobranças» (antes «Emissão e cobrança"); o
+   * texto do passo e o botão acompanham o rótulo da barra. */
+  chk('R4c', t.includes('Abra a aba Cobranças'),
       'com os PASSOS abertos: resultado unico ja vem expandido, porque nao ha o que escolher');
   chk('R4d', !t.includes('Como está o mês agora'),
       'e o estado ao vivo some durante a busca — quem digitou uma pergunta quer a resposta dela');
@@ -224,7 +227,7 @@ const camada = (p: Partial<CamadaLida>): CamadaLida =>
    * em telas diferentes — a fatura (se ja da para gerar) e a credencial do banco
    * (se nao da). Oferecer so a primeira deixa metade das pessoas presa.
    */
-  chk('R4g', t.includes('Abrir Emissão e cobrança') && t.includes('Conferir a conexão com o banco'),
+  chk('R4g', t.includes('Abrir Cobranças') && t.includes('Conferir a conexão com o banco'),
       'o assunto desenha TODOS os caminhos, e nao so o primeiro');
 }
 
@@ -283,11 +286,22 @@ const camada = (p: Partial<CamadaLida>): CamadaLida =>
       'falhou: admite a falha E diz que o resto da ajuda continua valendo');
   chk('R6c', texto(desenhar({ falhou: true })).includes('Perguntas mais comuns'),
       'e prova isso desenhando os assuntos mesmo sem o mes — a ajuda nao depende da rede');
-  chk('R6d', texto(desenhar({ passos: [] })).includes('Nada pendente'),
-      'vazio: "nada pendente" e uma resposta, e nao uma tela em branco');
-  chk('R6e', !texto(desenhar({ carregando: true })).includes('Nada pendente'),
-      'e carregando NAO diz "nada pendente" — anunciar tudo certo antes de conferir e o defeito '
+  /* [30/09/2026] A FRASE DO MÊS É A DA TELA MÊS, e não uma da ajuda. Até esta
+   * data o vazio dizia «Nada pendente. Este mês pode ser cobrado.» olhando só o
+   * cadastro; agora o painel recebe a frase de `mesNoFunil` e a desenha como
+   * veio — é o que a prende às outras duas. */
+  const FECHADO = 'Nada falta fazer neste mês: o que resta é o cliente pagar, e isso o sistema acompanha sozinho.';
+  const fechado = texto(desenhar({ passos: [], mes: { estado: 'fechado', frase: FECHADO } }));
+  chk('R6d', fechado.includes(FECHADO) && fechado.includes('Ver o mês na aba Mês'),
+      'vazio: a frase do mês fechado é uma resposta, e não uma tela em branco — e ela leva à aba Mês');
+  chk('R6e', !texto(desenhar({ carregando: true })).includes('Nada falta')
+             && !texto(desenhar({ carregando: true })).includes('Nada pendente'),
+      'e carregando NAO diz que nada falta — anunciar tudo certo antes de conferir e o defeito '
       + 'mais perigoso desta tela');
+  const andando = texto(desenhar({ passos: [], mes: { estado: 'andando', frase: 'Falta trabalho em dois dos cinco passos.' } }));
+  chk('R6f', andando.includes('Falta trabalho em dois dos cinco passos.') && !andando.includes('Nada pendente'),
+      'e sem pendência de CADASTRO o painel não diz mais que o mês pode ser cobrado: diz a frase do mês, '
+      + 'que olha os cinco passos');
 }
 
 // ==================================== R7 o contexto muda com a tela aberta
@@ -804,71 +818,103 @@ const vinculoTravado: VinculoNaTela = {
 const desenharRoteiro = (leitura: Parameters<typeof CorpoDoRoteiro>[0]): string =>
   renderToStaticMarkup(<CorpoDoRoteiro {...leitura} />);
 
+/* [30/09/2026, etapa 3] O ROTEIRO VIROU FUNIL, e estas verificações seguiram o
+ * modelo: cinco abas com a contagem de cada passo, UM «Comece aqui», um painel
+ * só, e o cadastro numa linha própria. As garantias de antes continuam — uma
+ * instrução por vez, o link de verdade, o mês fechado que fala — com a forma
+ * nova. */
+const LEITURA_VAZIA = {
+  mes: '2026-07', posicao: { vencidas_em_aberto: 0 }, cobrancas: [],
+  registradas: { lista: [], parcial: false }, semBoleto: { linhas: [], total: 0 },
+};
+
 {
   const camadas = [
     { camada: 'conta_lida_da_competencia', situacao: 'pendente' as const, faltam: 29, total: 29, efeito: 'bloqueia_fatura' as const },
     { camada: 'contrato_ativo', situacao: 'ok' as const, faltam: 0, total: 29, efeito: 'bloqueia_fatura' as const },
   ];
 
-  const html = desenharRoteiro({
-    competencia: 'julho de 2026', camadas, posicao: null, semCobranca: null,
-  });
+  const html = desenharRoteiro({ competencia: 'julho de 2026', ...LEITURA_VAZIA, camadas });
   const t = texto(html);
 
-  chk('R16a', html.length > 300 && t.includes('O mês de julho de 2026, passo a passo'),
+  chk('R16a', html.length > 300 && t.includes('O mês de julho de 2026'),
       `a caixa monta (${html.length} caracteres) e o título nomeia o mês por extenso - «a `
       + 'competência 2026-07-01» é o nome que o banco dá, e não o que a pessoa fala');
 
-  chk('R16b', t.includes('Ler as contas de luz do mês') && t.includes('você está no 1 de 5'),
-      'com o mês zerado, o passo aberto é o primeiro - e a caixa DIZ em qual dos cinco a pessoa '
-      + 'está, que é a frase que ela guarda de um dia para o outro');
+  chk('R16b', (html.match(/role="tab"/g) ?? []).length === 5 && (t.match(/Comece aqui/g) ?? []).length === 1
+             && t.includes('Ler as contas de luz do mês') && /29\s*contas a ler/.test(t),
+      'os cinco passos aparecem como abas, cada um com a sua contagem, e UM só leva o «Comece aqui» '
+      + '— com o mês zerado, o de ler as 29 contas');
 
   chk('R16c', t.includes('Como fazer') && /Baixe do portal da distribuidora/.test(t),
-      'e o «como fazer» sai inteiro no HTML, começando por onde o arquivo vem - sem isso a caixa '
-      + 'diria o que fazer e não como, que é a metade que a operação não tem');
+      'e o «como fazer» do passo em destaque sai inteiro no HTML, começando por onde o arquivo vem');
 
-  chk('R16d', (html.match(/Como fazer/g) ?? []).length === 1,
-      'UMA instrução por vez: só o passo aberto traz o «como fazer», e os outros quatro ficam em '
-      + 'uma linha cada - cinco instruções ao mesmo tempo é o mesmo que nenhuma');
+  chk('R16d', (html.match(/Como fazer/g) ?? []).length === 1 && (html.match(/role="tabpanel"/g) ?? []).length === 1,
+      'UM painel, com UM «como fazer»: cinco instruções ao mesmo tempo é o mesmo que nenhuma');
 
-  chk('R16e', html.includes('href="/documento"'),
-      'e o botão leva ao endereço REAL da tela onde o passo acontece (`href` de verdade, como '
-      + 'manda `rota.tsx`) - não a uma explicação de onde clicar');
+  chk('R16e', html.includes('href="/documento"') && t.includes('Abrir Contas de luz'),
+      'e o botão leva ao endereço REAL da tela onde o passo acontece, com o nome da aba — «Abrir '
+      + 'Contas de luz» —, e não a uma explicação de onde clicar');
 
-  // ------------------------------------------------ o passo travado, que é o difícil
+  // ------------------------------------ o cadastro que trava, numa linha própria
   const travado = desenharRoteiro({
-    competencia: 'julho de 2026',
+    competencia: 'julho de 2026', ...LEITURA_VAZIA,
     camadas: [
       { camada: 'conta_lida_da_competencia', situacao: 'ok', faltam: 0, total: 29, efeito: 'bloqueia_fatura' },
       { camada: 'contrato_ativo', situacao: 'pendente', faltam: 11, total: 29, efeito: 'bloqueia_fatura' },
     ],
-    posicao: { faturas: 0, emitidas: 0, liquidadas: 0, vencidas_em_aberto: 0 },
-    semCobranca: 0,
   });
   const tt = texto(travado);
 
-  chk('R16f', /Antes disso, falta uma coisa/.test(tt) && tt.includes('contrato'),
-      'o passo travado mostra O QUE fecha a porta, antes do passo a passo - seguir a instrução '
-      + 'com uma porta fechada na frente termina numa recusa do servidor depois de cinco cliques');
+  chk('R16f', /O cadastro trava parte do mês/.test(tt) && tt.includes('Contrato ativo') && /11\s*unidades/.test(tt),
+      'a pendência de cadastro vira uma linha própria, com o nome, quantos faltam e de quê — e não '
+      + 'consome mais o destaque do mês');
 
-  chk('R16g', travado.includes('href="/contratos"'),
-      'e a trava carrega o link de onde ela se resolve, que vem de `destino-da-camada.ts` - o mapa '
-      + 'não é reescrito no roteiro');
+  chk('R16g', travado.includes('href="/contratos'),
+      'e ela carrega o link de onde se resolve, que vem de `destino-da-camada.ts` - o mapa não é '
+      + 'reescrito no roteiro');
 
   // ------------------------------------------------- o mês fechado FALA
   const fechado = desenharRoteiro({
-    competencia: 'julho de 2026',
+    competencia: 'julho de 2026', ...LEITURA_VAZIA,
     camadas: [{ camada: 'conta_lida_da_competencia', situacao: 'ok', faltam: 0, total: 29, efeito: 'bloqueia_fatura' }],
-    posicao: { faturas: 29, emitidas: 29, liquidadas: 29, vencidas_em_aberto: 0 },
-    semCobranca: 0,
+    cobrancas: Array(29).fill({ status: 'paga' }),
+    registradas: { lista: Array(29).fill({ competencia: '2026-07-01', fatura_id: 'x', cobranca_disponivel: true }), parcial: false },
   });
-  chk('R16h', fechado !== '' && /os cinco passos fecharam/.test(texto(fechado)),
-      'e com o mês inteiro fechado a caixa NÃO some: ela diz que fechou - caixa que some tem a '
-      + 'mesma cara de caixa que quebrou, a lição que a tabela das camadas já tinha aprendido');
+  chk('R16h', fechado !== '' && /Nada falta fazer neste mês/.test(texto(fechado)) && !/Comece aqui/.test(texto(fechado)),
+      'e com o mês inteiro fechado a caixa NÃO some: ela diz que nada falta fazer, com a mesma frase '
+      + 'da tabela de conferências e da Central de Ajuda');
+
+  // ----------------------------------------- o risco leva o destaque, e o botão
+  const risco = desenharRoteiro({
+    competencia: 'setembro de 2026', mes: '2026-09',
+    camadas: [{ camada: 'conta_lida_da_competencia', situacao: 'pendente', faltam: 15, total: 41, efeito: 'bloqueia_fatura' }],
+    posicao: { vencidas_em_aberto: 2 },
+    cobrancas: [...Array(5).fill({ status: 'rascunho' }), ...Array(9).fill({ status: 'emitida' }),
+                ...Array(2).fill({ status: 'vencida' }), ...Array(4).fill({ status: 'paga' })],
+    registradas: { lista: Array(6).fill({ competencia: '2026-09-01', fatura_id: null, cobranca_disponivel: true }), parcial: false },
+    semBoleto: {
+      linhas: [
+        { competencia: '2026-09-01', pede_gente: false, boleto: null },
+        { competencia: '2026-09-01', pede_gente: true, boleto: { ultimo_erro: 'PagadorSemEndereco: falta o endereço.' } },
+      ],
+      total: 2,
+    },
+  });
+  const tr = texto(risco);
+  const abaEscolhida = /<button[^>]*aria-selected="true"[^>]*data-passo="([a-z]+)"/.exec(risco)?.[1];
+  chk('R16j', abaEscolhida === 'cobrar' && tr.includes('Abrir Cobranças') && /recusada pelo banco/.test(tr)
+             && risco.includes('href="/faturas"'),
+      'com 15 contas a ler e um boleto recusado pelo banco, o painel abre no PASSO 4 — «Abrir '
+      + 'Cobranças», com a recusa escrita —, e não no 1');
+
+  const semMedida = desenharRoteiro({ competencia: 'julho de 2026', ...LEITURA_VAZIA, camadas, cobrancas: null });
+  chk('R16k', /não medido/.test(texto(semMedida)) && semMedida.includes('>—<'),
+      'e a leitura que não chegou aparece como «—» e «não medido», nunca como zero');
 
   // ------------------------------------- nada de jargão chega em quem lê
   for (const regra of [/\bcamada\b/i, /\bwebhook\b/i, /\bendpoint\b/i, /\bQ-[A-Z]/, /npm run/]) {
-    chk('R16i', !regra.test(t) && !regra.test(tt), `o que a pessoa le nao casa com ${regra}`);
+    chk('R16i', !regra.test(t) && !regra.test(tt) && !regra.test(tr), `o que a pessoa le nao casa com ${regra}`);
   }
 }
 
@@ -912,6 +958,14 @@ const desenharRoteiro = (leitura: Parameters<typeof CorpoDoRoteiro>[0]): string 
   chk('R17f', cadastro.every((h) => h === ''),
       'e nenhuma tela de cadastro ganha faixa - inclusive a APOSENTADA, porque uma faixa de '
       + '«passo do mês» nela seria o sistema convidando de volta para o caminho que trava a unidade');
+
+  // [30/09/2026] O FIM DO MÊS, do outro lado da barra.
+  const cp = renderToStaticMarkup(<FaixaDoPasso rota="/contas-a-pagar" />);
+  chk('R17g', /Passo 5 de 5 do mês do Rateio/.test(texto(cp)) && /É aqui que o mês termina/.test(texto(cp))
+              && cp.includes('href="/pendencias"') && cp.includes('href="/faturas"'),
+      'Contas a pagar diz que é o passo 5 e o FIM do mês do Rateio, aponta o passo 4 em Cobranças e '
+      + 'volta para o mês inteiro — até 30/09 o roteiro mandava para cá e a tela não sabia de que mês '
+      + 'era o fim');
 }
 
 // ============================================================================

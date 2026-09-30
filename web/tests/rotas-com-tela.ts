@@ -85,7 +85,7 @@ const EXCECOES: Record<string, string> = {
   'POST /faturamento/:competencia/ensaio':
     'NAO deve ter tela: e o caminho de faturamento aposentado (`Q-CICLO-01` decidiu pelo da conta '
     + 'da distribuidora em 21/08/2026). O ensaio equivalente do caminho oficial e o botao '
-    + '«conferir antes», por conta registrada, na aba Fatura unificada. O motor segue alcancavel '
+    + '«conferir antes», por conta registrada, na aba Contas de luz. O motor segue alcancavel '
     + 'por `npm run faturar`.',
   'POST /faturamento/:competencia/compor':
     'NAO deve ter tela, pelo mesmo motivo do irmao acima - e neste o custo de um clique curioso e '

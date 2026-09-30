@@ -239,7 +239,7 @@ export function TelaUnidades() {
           <Aviso tipo="ok">
             O endereço da unidade <strong>{ucDoAlvo.numero_uc}</strong> está completo — o banco já
             aceita o boleto dela.{' '}
-            <Ligacao para={mesDeVolta ? `/faturas?mes=${mesDeVolta}` : '/faturas'}>Voltar à Emissão e cobrança</Ligacao>{' '}
+            <Ligacao para={mesDeVolta ? `/faturas?mes=${mesDeVolta}` : '/faturas'}>Voltar a Cobranças</Ligacao>{' '}
             e peça o boleto.
           </Aviso>
         ) : (
@@ -247,7 +247,7 @@ export function TelaUnidades() {
             O boleto da unidade <strong>{ucDoAlvo.numero_uc}</strong> é recusado por falta de endereço
             ({rotuloDoEndereco(ucDoAlvo).replace(/^Falta /, 'falta ')}). Complete logo abaixo e grave;
             depois,{' '}
-            <Ligacao para={mesDeVolta ? `/faturas?mes=${mesDeVolta}` : '/faturas'}>volte à Emissão e cobrança</Ligacao>{' '}
+            <Ligacao para={mesDeVolta ? `/faturas?mes=${mesDeVolta}` : '/faturas'}>volte a Cobranças</Ligacao>{' '}
             e peça o boleto de novo.
           </Aviso>
         )

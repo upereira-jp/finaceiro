@@ -26,7 +26,7 @@
 import { useState } from 'react';
 import {
   api, ErroDaApi,
-  type Camada, type Prontidao, type ExecucaoDoConector, type Automacao, type PosicaoDaCarteira,
+  type Camada, type ExecucaoDoConector, type Automacao,
 } from '../api.ts';
 import { useDados } from '../dados.ts';
 import {
@@ -34,13 +34,10 @@ import {
   DetalheTecnico,
 } from '../ui.tsx';
 import { Ligacao } from '../rota.tsx';
-import { competenciaISO } from '../dinheiro.ts';
 import { DESTINO_DA_CAMADA, enderecoDoDestino, telaDoDestino } from '../destino-da-camada.ts';
 import { estadoDoCertificado } from '../cobranca-regras.ts';
 import { CorpoDaSaude } from '../saude-corpo.tsx';
 import { FaixasDasAutomacoes, PainelDasAutomacoes } from '../automacoes-corpo.tsx';
-import { FaixaDaEmissao } from '../emissao-travada-corpo.tsx';
-import type { EmissaoTravadaNaTela } from '../emissao-travada.ts';
 import type { NivelDoAviso } from '../saude-do-dinheiro.ts';
 import {
   VERBETE_DA_CAMADA, EFEITO, SITUACAO,
@@ -48,6 +45,8 @@ import {
   mesPorExtenso,
 } from '../vocabulario.ts';
 import { CorpoDoRoteiro } from '../roteiro-corpo.tsx';
+import { mesNoFunil } from '../roteiro-do-mes.ts';
+import { useLeiturasDoMes } from '../leitura-do-mes.ts';
 
 const mesAtual = () => new Date().toISOString().slice(0, 7);
 
@@ -141,8 +140,13 @@ function SaudeDoDinheiro() {
 
 export function TelaProntidao() {
   const [mes, setMes] = useState(mesAtual);
-  const { dado, carregando, erro } = useDados<Prontidao>(
-    () => api.get(`/faturamento/${competenciaISO(mes)}/prontidao`), [mes]);
+  /* AS CINCO LEITURAS DO MÊS, num gancho só desde 30/09/2026: a prontidão (o
+   * cadastro e a conta lida), a carteira do mês, as cobranças do mês, as contas
+   * registradas e as cobranças sem boleto. A Central de Ajuda usa o MESMO gancho
+   * — é o que faz a frase do estado do mês ser a mesma nos dois lugares. Cada
+   * uma falha sozinha, e o passo que dependia dela diz «não medido». */
+  const leituras = useLeiturasDoMes(mes);
+  const { dado, carregando, erro } = leituras.prontidao;
 
   /* AS TRES RODADAS AUTOMATICAS, LIDAS UMA VEZ SO e desenhadas em dois lugares:
    * o alarme no alto, junto das faixas do caminho do dinheiro, e a afirmacao no
@@ -157,26 +161,18 @@ export function TelaProntidao() {
    * proprio, entao a tabela das camadas renderiza no tempo dela. */
   const automacoes = useDados<Automacao[]>(() => api.get('/automacoes'));
 
-  /* O QUE NAO CHEGOU AO BANCO — a mesma disciplina da leitura acima: nao depende
-   * do mes do seletor. A pergunta e "ha cliente sem boleto?", e ela vale para a
-   * carteira inteira: uma fatura de MAI que nunca virou boleto continua sendo
-   * dinheiro parado em SET, e trocar o mes aqui a esconderia.
+  /*
+   * A FAIXA «N FATURAS EMITIDAS ESTÃO SEM BOLETO» SAIU DESTA TELA EM 30/09/2026,
+   * e o que ela dizia não se perdeu: mudou de lugar.
    *
-   * A FAIXA CONTA E NAO LISTA. A lista mora na aba de emissao e cobranca, que e
-   * onde se age sobre ela; esta faixa existe para ninguem precisar abrir aquela
-   * tela para descobrir que precisa abri-la. */
-  const emissao = useDados<EmissaoTravadaNaTela>(() => api.get('/emissao/travada'));
-
-  /* A POSICAO DO MES, para o roteiro poder dizer QUANTAS ja foram geradas,
-   * emitidas e pagas. Ela DEPENDE do mes, ao contrario das duas leituras acima:
-   * a pergunta e sobre esta competencia, e so sobre ela.
-   *
-   * `/carteira` devolve uma LISTA (ate 12 competencias); com o filtro ela volta
-   * com zero ou uma linha, e zero e a resposta legitima do mes em que nada foi
-   * gerado ainda. `?? null` deixa o roteiro dizer "esperando" em vez de "feito"
-   * enquanto a leitura nao chega — nada e afirmado sem medida. */
-  const carteira = useDados<PosicaoDaCarteira[]>(
-    () => api.get(`/carteira?competencia=${competenciaISO(mes)}`), [mes]);
+   * Ela ficava ACIMA do roteiro, em vermelho, mandando agir no passo 4 — e o
+   * roteiro logo abaixo dizia «você está no 1 de 5». Duas respostas para «o que
+   * eu faço agora», e a crítica de 30/09 (P1 nº 3) mediu a confusão. Agora o
+   * passo 4 do funil carrega o mesmo número, a mesma recusa e o mesmo «de
+   * outros meses», e ganha o destaque quando é ele que tem risco: uma resposta
+   * só. A lista inteira continua na tela Cobranças, onde se age sobre ela.
+   */
+  const funil = leituras.leitura ? mesNoFunil(leituras.leitura) : null;
 
   const naoMedidas = dado?.camadas.filter((c) => c.situacao === 'nao_medido').length ?? 0;
 
@@ -210,13 +206,13 @@ export function TelaProntidao() {
 
   return (
     /*
-      O TÍTULO ERA "Prontidão para faturar" e a aba se chama "Pendências" desde
-      30/07 — quem clicava em uma palavra chegava na outra. "Prontidão" é o nome
-      do CÁLCULO no servidor (`repos/prontidao.ts`), e ele fica lá: aqui vale o
-      nome que a barra já usa.
+      O TÍTULO É O NOME DA ABA, e a aba se chama «Mês» desde 30/09/2026 (antes
+      «Pendências», e antes «Prontidão para faturar»): quem clica numa palavra
+      tem de chegar na mesma palavra. «Prontidão» continua sendo o nome do
+      CÁLCULO no servidor (`repos/prontidao.ts`); aqui vale o nome da barra.
     */
-    <Pagina titulo="Pendências"
-            sub="O que ainda falta para este mês poder ser cobrado. Cada linha diz o que é, quantos faltam e onde se resolve. Esta tela só confere — ela não muda nada sozinha.">
+    <Pagina titulo="Mês"
+            sub="Em que passo está cada unidade deste mês, o que o cadastro ainda trava e onde se resolve. Esta tela só confere — ela não muda nada sozinha.">
       <div className="ferramentas">
         <label style={{ margin: 0 }}>Mês de referência</label>
         <CampoData mes valor={mes} ao={setMes} rotuloAcessivel="Mês de referência" style={{ width: 'auto' }} /><AjudaDoMes />
@@ -234,12 +230,6 @@ export function TelaProntidao() {
           sistema parou de andar por ele. Quem le de cima para baixo encontra
           primeiro a coisa que impede, e depois a que atrasa. */}
       <FaixasDasAutomacoes rodadas={automacoes.dado} />
-      {/* A TERCEIRA FAIXA, e a ordem continua sendo de consequencia: a primeira
-          diz que o caminho do dinheiro esta quebrado, a segunda que o sistema
-          parou de andar por ele, e esta diz que o caminho esta de pe, o sistema
-          esta andando — e mesmo assim ha cliente sem boleto. E a mais especifica
-          das tres, e por isso vem por ultimo. */}
-      <FaixaDaEmissao dados={emissao.dado} />
       {/* "Conferindo o mês" e nao "Contando as camadas", desde 21/08/2026.
           "Camada" e o nome da estrutura interna do relatorio — a propria suite da
           ajuda o proibe no texto exibido (V4) —, e esta frase era a PRIMEIRA
@@ -271,9 +261,7 @@ export function TelaProntidao() {
           */}
           <CorpoDoRoteiro
             competencia={mesPorExtenso(dado.competencia) || mes}
-            camadas={dado.camadas}
-            posicao={carteira.dado?.[0] ?? null}
-            semCobranca={emissao.dado ? emissao.dado.total : null}
+            {...leituras.leitura!}
           />
 
           {/*
@@ -361,9 +349,15 @@ export function TelaProntidao() {
                     /* A LISTA VAZIA AQUI E BOA NOTICIA, e por isso ela FALA. Uma
                        tabela que some quando tudo fecha tem a mesma cara de uma
                        tabela que quebrou - a licao que esta tela ja aprendeu no
-                       rodape das automacoes. */
-                    <>Nada falta para este mês: as <strong>{fechadas.length}</strong> conferências
-                    fecharam. A cobrança depende agora só de emitir.</>
+                       rodape das automacoes.
+
+                       A SEGUNDA FRASE E A DO MES, e nao uma propria (30/09/2026).
+                       Ela dizia «A cobranca depende agora so de emitir» — o que
+                       era falso num mes com tudo emitido e boleto recusado. Agora
+                       e `mesNoFunil(...).frase`, a mesma do alto da tela e da
+                       Central de Ajuda. */
+                    <>Nenhuma conferência em aberto: as <strong>{fechadas.length}</strong> fecharam.
+                    {' '}{funil?.frase}</>
                   }>
             {agruparPorEfeito(verFechadas ? dado.camadas : emAberto).flatMap((g) => [
               <tr key={`grupo:${g.chave}`}>

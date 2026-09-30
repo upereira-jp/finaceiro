@@ -21,30 +21,36 @@
 // `ajuda-corpo.tsx`, que não tem efeito nenhum e por isso pode ser renderizado
 // num teste (`web/tests/render.ts`) sem rede, sem relógio e sem banco.
 //
-// A CHAMADA É A MESMA DA TELA DE PENDÊNCIAS, de propósito. O painel não tem
-// relatório próprio: dois caminhos de leitura para o mesmo número poderiam
-// discordar, e nenhum dos dois pareceria errado.
+// AS LEITURAS SÃO AS MESMAS DA TELA MÊS, de propósito, e desde 30/09/2026 pelo
+// MESMO gancho (`useLeiturasDoMes`). O painel não tem relatório próprio: dois
+// caminhos de leitura para o mesmo número poderiam discordar, e nenhum dos dois
+// pareceria errado. E a FRASE do estado do mês sai da mesma função que escreve a
+// do alto da tela Mês — até ali a ajuda tinha a sua, e ela olhava só o cadastro.
 
-import { useMemo } from 'react';
-import { api, type Prontidao } from './api.ts';
-import { useDados } from './dados.ts';
+import { useMemo, useState } from 'react';
 import { navegar } from './rota.tsx';
-import { competenciaISO } from './dinheiro.ts';
 import { passosDoEstado } from './ajuda.ts';
 import { CorpoDaAjuda } from './ajuda-corpo.tsx';
+import { useLeiturasDoMes } from './leitura-do-mes.ts';
+import { mesNoFunil } from './roteiro-do-mes.ts';
 
 const mesAtual = () => new Date().toISOString().slice(0, 7);
 
 export function PainelDeAjuda({ rota, aoFechar }: { rota: string; aoFechar: () => void }) {
-  const { dado, carregando, erro } = useDados<Prontidao>(
-    () => api.get(`/faturamento/${competenciaISO(mesAtual())}/prontidao`), []);
+  // O mês é lido UMA vez, na montagem: o painel abre e fecha em segundos.
+  const [mes] = useState(mesAtual);
+  const leituras = useLeiturasDoMes(mes);
+  const { dado, carregando, erro } = leituras.prontidao;
 
   const passos = useMemo(() => (dado ? passosDoEstado(dado.camadas) : []), [dado]);
+  const funil = leituras.leitura ? mesNoFunil(leituras.leitura) : null;
+  const estado = funil ? { estado: funil.estado, frase: funil.frase } : null;
 
   return (
     <CorpoDaAjuda
       rota={rota}
       passos={passos}
+      mes={estado}
       carregando={carregando}
       /* `!carregando` NA FRENTE, e não só `erro || !dado`: durante a carga o
        * dado é nulo por definição, e sem esta guarda o painel nasceria

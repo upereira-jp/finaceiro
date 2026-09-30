@@ -232,7 +232,7 @@ export function RevisaoDaSerie(p: {
       : placar.recusadas === 0
         ? (p.tipo === 'emitir'
           ? 'Todas emitidas. O próximo passo é pedir os boletos ao banco.'
-          : 'Todos registrados no banco. A folha com o boleto sai em Fatura unificada.')
+          : 'Todos registrados no banco. A folha com o boleto sai em Contas de luz, na aba «2 · Folha do cliente».')
         : p.tipo === 'emitir'
           ? `${placar.recusadas} ${placar.recusadas === 1 ? 'foi recusada' : 'foram recusadas'} — o motivo `
             + 'está na linha. As outras foram emitidas.'

@@ -220,13 +220,23 @@ const TODOS: NivelDaEmissao[] = ['nao_pedido', 'esquecido', 'esperando', 'insist
       'a tela de emissao BUSCA `/emissao/travada`, MONTA a lista e liga o botao que pede o boleto - '
       + 'as tres coisas, porque apagar qualquer uma delas passaria em todo o resto');
 
+  /* [30/09/2026, etapa 3] A GARANTIA FICOU, O LUGAR MUDOU. Até esta data a
+   * primeira tela punha a FAIXA vermelha acima da tabela; ela saiu porque dava
+   * uma segunda resposta a «o que eu faço agora», acima de um roteiro que dizia
+   * outra. O mesmo número — e a mesma recusa — agora é o PASSO 4 do funil, que
+   * ganha o destaque quando é ele que tem risco. O que se prende é o mesmo: a
+   * tela Mês BUSCA `/emissao/travada` (pelo gancho das leituras do mês) e
+   * desenha o funil ACIMA da tabela. Que o passo 4 mostra o número e a recusa,
+   * `caso-render.tsx` prova no HTML montado (R16j). */
   const pendencias = semComentario(readFileSync(new URL('../src/telas/prontidao.tsx', import.meta.url), 'utf8'));
-  const iFaixa = pendencias.indexOf('<FaixaDaEmissao');
+  const leituras = semComentario(readFileSync(new URL('../src/leitura-do-mes.ts', import.meta.url), 'utf8'));
+  const iFunil = pendencias.indexOf('<CorpoDoRoteiro');
   const iTabela = pendencias.indexOf('<Tabela cabecalho=');
-  chk('EM-13', iFaixa > 0 && /api\.get\('\/emissao\/travada'\)/.test(pendencias) && iTabela > iFaixa,
-      'e a PRIMEIRA tela da barra busca a mesma leitura e poe a faixa ACIMA da tabela do mes - '
-      + 'quem so abre Pendencias tem de descobrir ali que ha cliente sem boleto, sem depender de '
-      + 'abrir a aba certa no dia certo');
+  chk('EM-13', iFunil > 0 && /useLeiturasDoMes\(/.test(pendencias)
+            && /api\.get\('\/emissao\/travada'\)/.test(leituras) && iTabela > iFunil,
+      'e a PRIMEIRA tela da barra busca a mesma leitura e poe o funil — com o passo 4 contando quem '
+      + 'esta sem boleto — ACIMA da tabela do mes: quem so abre a aba Mes descobre ali que ha cliente '
+      + 'sem boleto, sem depender de abrir a aba certa no dia certo');
 }
 
 console.log(`\n${falhas === 0 ? `emissao travada: ${feitas} verificacoes, 0 falhas`

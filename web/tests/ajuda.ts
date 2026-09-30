@@ -42,7 +42,7 @@ import { VERBETE_DA_CAMADA, EFEITO, SITUACAO, GLOSSARIO,
 import { DESTINO_DA_CAMADA, enderecoDoDestino } from '../src/destino-da-camada.ts';
 import { CRM, usinaNoCrm } from '../src/crm.ts';
 import { readFileSync } from 'node:fs';
-import { TELAS } from '../src/navegacao.ts';
+import { TELAS, caminhoNaBarra } from '../src/navegacao.ts';
 
 let falhas = 0;
 let feitas = 0;
@@ -538,7 +538,7 @@ for (const t of TOPICOS) {
   const esperado = enderecoDoDestino(DESTINO_DA_CAMADA[t.camada]!);
   if (esperado === null) continue;  // as duas sem tela: o caminho delas e `ver`, escrito a mao
   chk('A6f', t.caminhos[0]?.rota === esperado,
-      `${t.id}: o primeiro caminho e O MESMO que a tela de Pendencias usa — dois mapas discordariam em silencio`);
+      `${t.id}: o primeiro caminho e O MESMO que a tela Mes usa — dois mapas discordariam em silencio`);
 }
 
 // ============================================ A7 o estado ao vivo, em portugues
@@ -562,7 +562,7 @@ const camada = (p: Partial<CamadaLida>): CamadaLida =>
       '"nao medido" NAO vira "0 de 0" — seria o relatorio autorizando o que nao conferiu');
   chk('A7d', passos[0]!.caminho?.rota === enderecoDoDestino(DESTINO_DA_CAMADA.documento_do_cliente!)
           && passos[0]!.caminho?.tipo === 'resolver',
-      'e cada passo carrega o MESMO endereco que a tela de Pendencias usaria, marcado como "resolver"');
+      'e cada passo carrega o MESMO endereco que a tela Mes usaria, marcado como "resolver"');
   chk('A7e', passos[0]!.topico?.id === 'documento-cliente',
       'o passo acha o topico que o explica — o numero ao vivo e os passos escritos chegam juntos');
 
@@ -690,6 +690,34 @@ chk('A9', Object.keys(PALAVRAS_DA_TELA).every((r) => TELAS.some((t) => t.rota ==
       + 'perguntar');
 }
 
+/*
+ * A9y — «ABRIR X» NOMEIA A ABA QUE ABRE (30/09/2026, etapa 3 do redesenho).
+ *
+ * Três abas mudaram de nome no mesmo dia (Pendências → Mês, Fatura unificada →
+ * Contas de luz, Emissão e cobrança → Cobranças), e a ajuda tinha vinte botões
+ * «Abrir <nome velho>». A regra do roteiro (`RM13`) passa a valer aqui: o botão
+ * que diz «Abrir X» tem de levar a uma tela cujo nome, onde se clica, é X — a
+ * aba solta ou o item do menu «Cadastros».
+ */
+{
+  const botoes = [
+    ...TOPICOS.flatMap((t) => t.caminhos.map((c) => [`${t.id}`, c] as const)),
+    ...GLOSSARIO.flatMap((g) => g.caminhos.map((c) => [`verbete ${g.termo}`, c] as const)),
+  ];
+  const errados = botoes.filter(([, c]) => {
+    const m = /^Abrir (.+)$/.exec(c.rotulo);
+    if (!m || c.tipo === 'crm') return false;
+    const nomes = caminhoNaBarra(so(c.rota));
+    /* «Abrir a leitura da conta» e «Abrir a lista de clientes» descrevem o ato
+       e nao citam aba: so conta como citacao quando comeca com maiuscula. */
+    if (!/^[A-ZÀ-Ú]/.test(m[1]!)) return false;
+    return !nomes || nomes[nomes.length - 1] !== m[1];
+  });
+  chk('A9y', errados.length === 0,
+      'todo botao «Abrir X» da ajuda nomeia, letra por letra, a aba (ou o item de menu) a que leva'
+      + `${errados.length ? ` (errados: ${errados.map(([id, c]) => `${id}: «${c.rotulo}» -> ${c.rota}`).join(' · ')})` : ''}`);
+}
+
 {
   const casos: Array<[string, string]> = [
     ['onde ficam as usinas', '/usinas'],
@@ -697,6 +725,11 @@ chk('A9', Object.keys(PALAVRAS_DA_TELA).every((r) => TELAS.some((t) => t.rota ==
     ['abrir contas a pagar', '/contas-a-pagar'],
     ['tela de relatorios', '/relatorios'],
     ['fatura unificada', '/documento'],
+    /* [30/09/2026] os nomes NOVOS e os VELHOS levam as mesmas abas */
+    ['contas de luz', '/documento'],
+    ['emissao e cobranca', '/faturas'],
+    ['aba cobrancas', '/faturas'],
+    ['pendencias', '/pendencias'],
   ];
   for (const [consulta, rota] of casos) {
     const t = telasCitadas(consulta);
@@ -784,7 +817,7 @@ const PROIBIDO: Array<[RegExp, string]> = [
   [/\bQ-[A-Z]/, 'codigo de questao (Q-PAGADOR-01) — e rastreio interno'],
   [/npm run/, 'comando de terminal — usuario novo nao roda comando'],
   [/\bsplit\b/i, 'a GLOSSARIO.md proibe usar "split" sozinho: colide com o split payment tributario'],
-  [/\bprontid[aã]o\b/i, 'o nome interno do calculo; na tela a palavra e "Pendencias"'],
+  [/\bprontid[aã]o\b/i, 'o nome interno do calculo; na tela a palavra e "Mês" (a aba) ou "pendencias" (a lista)'],
   [/\bcamadas?\b/i, 'nome da estrutura interna do relatorio'],
   [/\btiers?\b/i, 'jargao de comissionamento'],
   [/\bUC\b/, 'sigla — a tela diz "unidade" ou "unidade consumidora"'],

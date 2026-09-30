@@ -266,30 +266,97 @@ export const ESTILO = `
     border-bottom: 1px solid var(--borda);
     scrollbar-width: thin; scrollbar-color: var(--topo-veu-forte) transparent;
   }
-  .barra-nav a {
+  .barra-nav > a {
     display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
     padding: 10px 10px 9px; text-decoration: none; color: var(--topo-fraco);
     font-size: 13px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
     border-bottom: 2px solid transparent; border-radius: var(--raio-pequeno) var(--raio-pequeno) 0 0;
     transition: color .16s ease, background-color .16s ease, border-color .16s ease;
   }
-  .barra-nav a:hover { color: var(--topo-texto); background: var(--topo-veu); }
-  .barra-nav a:hover .ic { transform: translateY(-1px) scale(1.08); }
+  .barra-nav > a:hover { color: var(--topo-texto); background: var(--topo-veu); }
+  .barra-nav > a:hover .ic { transform: translateY(-1px) scale(1.08); }
   /* O ATIVO E O ORANGE SOBRE O NAVY, e aqui ele NAO usa o '--acento-forte':
      aquele token existe para o laranja pousar em superficie CLARA. Sobre a faixa
      escura o Orange entregue vale como esta - 5.93:1. O esfumado de baixo saiu
      junto: sobre escuro ele virava borrao, e quem carrega o sinal sao a cor e o
      filete de 2px. */
-  .barra-nav a.ativo {
+  .barra-nav > a.ativo {
     color: var(--acento);
     border-bottom-color: var(--acento);
     background: var(--topo-ativo);
   }
-  .barra-nav a.ativo .ic { color: var(--acento); }
+  .barra-nav > a.ativo .ic { color: var(--acento); }
   /* A divisoria onde o grupo muda dentro do funil (cadastro | dinheiro no Rateio,
      dinheiro | apoio na Empresa). A fronteira e dado ('grupo', em navegacao.ts) e
      ate 29/07 era invisivel: doze abas iguais em fila. */
   .barra-nav .divisor { width: 1px; background: var(--topo-veu-forte); margin: 9px 9px; flex: none; }
+
+  /* O MENU «CADASTROS ▾» DENTRO DA BARRA (30/09/2026). O gatilho e um <button>,
+     e sem estas regras ele seria o botao comum do sistema — contorno, fundo
+     branco — no meio de uma faixa de abas. Aqui ele se desenha COMO ABA: mesma
+     tinta, mesma caixa alta, o mesmo filete de 2px quando a tela aberta e dele.
+     O ":hover:not(:disabled)" tem a forma do seletor generico e por isso ganha
+     dele (I7). */
+  .barra-nav .nav-menu { display: flex; flex: none; }
+  .barra-nav .nav-menu > button {
+    gap: 7px; white-space: nowrap;
+    padding: 10px 10px 9px; color: var(--topo-fraco); background: transparent;
+    border: 0; border-bottom: 2px solid transparent; box-shadow: none;
+    border-radius: var(--raio-pequeno) var(--raio-pequeno) 0 0;
+    font-size: 13px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+    transition: color .16s ease, background-color .16s ease, border-color .16s ease;
+  }
+  .barra-nav .nav-menu > button:hover:not(:disabled),
+  .barra-nav .nav-menu > button[aria-expanded="true"] {
+    color: var(--topo-texto); background: var(--topo-veu); border-color: transparent;
+    box-shadow: none; transform: none;
+  }
+  .barra-nav .nav-menu > button.ativo,
+  .barra-nav .nav-menu > button.ativo:hover:not(:disabled) {
+    color: var(--acento); border-bottom-color: var(--acento); background: var(--topo-ativo);
+  }
+  /* O NOME DO GRUPO VAI APAGADO quando a tela aberta e dele: «Cadastros ·» diz
+     de onde, e o nome da tela, na tinta da aba ativa, diz onde. */
+  .barra-nav .nav-menu > button.ativo .nav-menu-grupo { color: var(--topo-fraco); }
+  .barra-nav .nav-menu-curto { display: none; }
+  .barra-nav .nav-menu .menu-seta { opacity: .8; }
+  /* EM TELA MEDIA O PREFIXO SAI: «Unidades consumidoras ▾» com o filete ja diz
+     que e uma aba com vizinhas, e a barra cabe sem rolar. */
+  @media (max-width: 1100px) { .barra-nav .nav-menu-grupo { display: none; } }
+
+  /* NO CELULAR A BARRA E UMA FILEIRA DE COLUNAS IGUAIS (30/09/2026). Com rolagem
+     lateral ela mostrava duas abas e meia de nove — todas de cadastro — e o
+     trabalho do mes ficava fora da tela. Com quatro abas e um menu, cada item
+     vira uma coluna: o desenho em cima, o nome embaixo, quebrando em duas linhas
+     quando precisa («Contas / de luz»). Nada rola, nada se esconde. A divisoria
+     sai: numa fileira de colunas ela roubaria uma coluna so para ser uma linha. */
+  @media (max-width: 720px) {
+    .barra-nav {
+      display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr);
+      gap: 0; padding: 0 4px; overflow-x: visible;
+    }
+    .barra-nav .divisor { display: none; }
+    .barra-nav > a, .barra-nav .nav-menu > button {
+      flex-direction: column; justify-content: flex-start; gap: 4px; width: 100%;
+      white-space: normal; text-align: center; padding: 9px 3px 8px;
+      font-size: var(--t-rotulo); letter-spacing: .02em; line-height: 1.15;
+    }
+    .barra-nav .nav-menu { display: flex; min-width: 0; }
+    /* O GATILHO DO MENU E UMA GRADE: a seta sobe para o lado do desenho, e o
+       nome fica sozinho embaixo. Ao lado do nome ela nao cabia — «CADASTROS»
+       mais a seta passavam dos 70px da coluna num telefone de 360px — e em
+       coluna viraria uma terceira linha sozinha. */
+    .barra-nav .nav-menu > button {
+      display: grid; grid-template-columns: auto auto; grid-template-areas: "ic seta" "txt txt";
+      justify-content: center; align-content: start; column-gap: 2px; row-gap: 4px;
+    }
+    .barra-nav .nav-menu > button > .ic:first-child { grid-area: ic; }
+    .barra-nav .nav-menu > button > .menu-seta { grid-area: seta; align-self: center; }
+    .barra-nav .nav-menu > button > .nav-menu-texto { grid-area: txt; }
+    .barra-nav > a, .barra-nav .nav-menu > button { letter-spacing: 0; padding-left: 2px; padding-right: 2px; }
+    .barra-nav .nav-menu-grupo, .barra-nav .nav-menu-tela { display: none; }
+    .barra-nav .nav-menu-curto { display: inline; }
+  }
 
   /* -------------------------------------------------- o menu suspenso
      Usado pela area do usuario e pelo seletor de tema. Sombra do terceiro degrau
@@ -323,6 +390,36 @@ export const ESTILO = `
   .menu-painel .quem { padding: 4px 10px 8px; }
   .menu-painel .quem strong { display: block; font-size: var(--t-corpo); }
   .menu-painel .quem span { font-size: var(--t-meta); color: var(--fraco); }
+  /* O PAINEL QUE SE POSICIONA PELA JANELA ("Menu fixo", 30/09/2026). A posicao
+     vem do gatilho, lida ao abrir, em duas variaveis — e nao em "style" com
+     "top"/"left", que venceria a regra do celular logo abaixo. */
+  .menu-painel.fixo { position: fixed; top: var(--menu-topo); left: var(--menu-esquerda); right: auto; }
+  /* A LISTA DE LUGARES: links, com o desenho de cada tela e o ✓ na aberta. O
+     painel mora DENTRO da barra de abas, e por isso as regras das abas valem
+     so para os filhos diretos dela ("> a"); o seletor aqui tem as duas classes
+     para vencer tambem a familia condensada que a regra de papeis da as abas. */
+  .menu-lugares { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; min-width: 240px; }
+  .menu-painel .menu-lugar {
+    display: flex; align-items: center; gap: 10px; padding: 9px 10px;
+    border-radius: var(--raio-pequeno); color: var(--texto); text-decoration: none;
+    font-family: var(--fonte); font-size: var(--t-corpo); font-weight: 500;
+    letter-spacing: normal; text-transform: none; white-space: nowrap;
+    transition: background-color .14s ease;
+  }
+  .menu-painel .menu-lugar:hover, .menu-painel .menu-lugar:focus-visible {
+    background: var(--fundo-hover); color: var(--texto); text-decoration: none;
+  }
+  .menu-painel .menu-lugar:focus-visible { outline-offset: -2px; }
+  .menu-painel .menu-lugar[aria-current="page"] { color: var(--acento-forte); font-weight: 600; }
+  .menu-painel .menu-lugar .ic { color: var(--fraco); }
+  .menu-painel .menu-lugar[aria-current="page"] .ic { color: var(--acento-forte); }
+  .menu-painel .menu-lugar .ao-fim { margin-left: auto; }
+  /* NO CELULAR O PAINEL OCUPA A LARGURA DA TELA, como o menu de setores: preso
+     ao gatilho, que e a ultima coluna, ele passaria da borda. */
+  @media (max-width: 600px) {
+    .menu-painel.fixo { left: 16px; right: 16px; }
+    .menu-lugares { min-width: 0; }
+  }
 
   /* ------------------------------------------- o gatilho da central de ajuda
      O BOTAO DESCEU DA BARRA DO TOPO PARA O CANTO INFERIOR DIREITO em 21/08/2026,
@@ -2101,6 +2198,155 @@ export const ESTILO = `
     .em-baixa-campos { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
     .em-baixa-campos > div:first-child { grid-column: 1 / -1; }
   }
+
+  /* ======================== O MES, PASSO A PASSO (30/09/2026, etapa 3 do redesenho)
+     O funil do mes no alto da tela Mes, e a faixa que diz, dentro de cada tela
+     de trabalho, que parte do mes ela e. Ate esta data os dois eram desenhados
+     com estilo escrito no proprio componente — cinco "style" por linha, e as
+     cores com um valor de reserva literal ao lado do token. */
+
+  /* ------------------------------------------------------------- a caixa */
+  .roteiro { padding: 0; }
+  .roteiro-topo { padding: 20px 20px 16px; }
+  .roteiro-topo h2 { margin: 0; font-size: var(--t-h2); }
+  .roteiro-frase {
+    margin: 6px 0 0; max-width: 72ch; font-size: var(--t-corpo); line-height: 1.5;
+    display: flex; gap: 7px; align-items: baseline;
+  }
+  .roteiro.estado-fechado .roteiro-frase { color: var(--ok); font-weight: 600; }
+  .roteiro-frase .ic { align-self: center; }
+
+  /* ------------------------------------------------ os cinco passos, lado a lado
+     UMA FAIXA, E NAO CINCO CARTOES: sao cinco momentos da mesma coisa, e a
+     linha de 1px entre eles e o que os mantem uma peca so. Cada passo e uma aba
+     do painel de baixo. */
+  .roteiro-passos {
+    display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+    border-top: 1px solid var(--borda); border-bottom: 1px solid var(--borda);
+    background: var(--fundo-recuo);
+  }
+  .roteiro-passo {
+    display: grid; grid-template-rows: auto auto auto auto auto 1fr; justify-items: start;
+    align-content: start; gap: 2px; text-align: left;
+    padding: 12px 16px 14px; margin: 0;
+    background: transparent; color: var(--texto);
+    border: 0; border-left: 1px solid var(--borda); border-bottom: 3px solid transparent;
+    border-radius: 0; box-shadow: none;
+    font-family: var(--fonte); font-size: var(--t-corpo); font-weight: 400; letter-spacing: normal;
+    line-height: 1.3; text-transform: none;
+  }
+  .roteiro-passo:first-child { border-left: 0; }
+  .roteiro-passo:hover:not(:disabled) {
+    background: var(--fundo-hover); color: var(--texto); border-color: var(--borda);
+    border-bottom-color: transparent; box-shadow: none; transform: none;
+  }
+  .roteiro-passo:first-child:hover:not(:disabled) { border-left-color: transparent; }
+  /* A ABA ESCOLHIDA SOBE PARA A SUPERFICIE DO PAINEL — o mesmo branco dele — e
+     ganha o filete da aba ativa da barra. E o que liga o passo ao texto de baixo. */
+  .roteiro-passo[aria-selected="true"],
+  .roteiro-passo[aria-selected="true"]:hover:not(:disabled) {
+    background: var(--fundo2); border-bottom-color: var(--acento-forte);
+  }
+  .roteiro-passo:focus-visible { outline-offset: -3px; }
+
+  .roteiro-selo { min-height: 15px; color: var(--acento-forte); font-size: var(--t-rotulo); line-height: 1.25; }
+  .roteiro-cab { display: flex; gap: 8px; align-items: flex-start; min-height: 2.5em; }
+  .roteiro-num {
+    flex: none; display: grid; place-items: center; width: 22px; height: 22px; margin-top: 1px;
+    border: 1px solid var(--borda-forte); border-radius: var(--raio-pequeno);
+    font-family: var(--fonte-cond); font-size: 13px; font-weight: 700; color: var(--texto);
+    background: var(--fundo2);
+  }
+  /* O DESTAQUE E O NUMERO CHEIO — o laranja com a tinta Navy, 5,93:1 — mais a
+     palavra «Comece aqui» em cima. Forma e palavra: a cor nunca sozinha. */
+  .roteiro-passo.foco .roteiro-num { background: var(--acento); border-color: var(--acento); color: var(--acento-texto); }
+  .roteiro-tit { font-family: var(--fonte-cond); font-size: var(--t-ui); font-weight: 600; line-height: 1.25; }
+  .roteiro-qtd {
+    margin-top: 6px; font-family: var(--fonte-cond); font-size: 28px; font-weight: 600; line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .roteiro-rot { font-size: var(--t-meta); font-weight: 600; }
+  .roteiro-ctx { font-size: var(--t-meta); color: var(--fraco); }
+  /* ZERO E NAO MEDIDO FICAM NA TINTA APAGADA — que continua AA (--fraco, 5,5:1
+     no branco) —, e nao em opacidade: o «apagado a 60%» do roteiro antigo
+     derrubava o texto para baixo de 4,5:1. */
+  .roteiro-passo.zerado .roteiro-qtd, .roteiro-passo.zerado .roteiro-rot { color: var(--fraco); }
+  .roteiro-risco {
+    margin-top: 6px; display: flex; gap: 5px; align-items: flex-start;
+    font-size: var(--t-meta); font-weight: 600; line-height: 1.35; color: var(--alerta);
+  }
+  .roteiro-risco .ic { margin-top: 2px; }
+
+  /* ------------------------------------------------------------- o painel */
+  .roteiro-painel { padding: 18px 20px 20px; }
+  .roteiro-painel-cab { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .roteiro-painel-cab h3 { margin: 0; font-size: var(--t-h3); }
+  .roteiro-painel-risco {
+    margin: 8px 0 0; display: flex; gap: 6px; align-items: flex-start;
+    color: var(--alerta); font-size: var(--t-corpo);
+  }
+  .roteiro-painel-risco .ic { margin-top: 3px; }
+  .roteiro-painel-oque { margin: 8px 0 0; max-width: 72ch; line-height: 1.6; }
+  .roteiro-painel-ir { margin: 14px 0 0; }
+  .roteiro-como-tit {
+    margin: 18px 0 0; font-family: var(--fonte-cond); font-size: var(--t-rotulo); font-weight: 600;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--fraco);
+  }
+  .roteiro-como { margin: 6px 0 0; padding-left: 20px; max-width: 76ch; line-height: 1.65; }
+  .roteiro-como li + li { margin-top: 4px; }
+
+  /* ------------------------------------------------- o que o cadastro trava
+     UMA LINHA PROPRIA, embaixo do painel e separada dele: o cadastro trava
+     unidades, nao passos. Ambar e nao vermelho — e trabalho a fazer, nao coisa
+     quebrada; o vermelho da casa e para o que esta quebrado. */
+  .roteiro-travas {
+    border-top: 1px solid var(--borda); padding: 14px 20px 16px;
+    background: var(--alerta-fundo);
+  }
+  .roteiro-travas-tit {
+    margin: 0; display: flex; gap: 7px; align-items: baseline; flex-wrap: wrap;
+    font-size: var(--t-corpo);
+  }
+  .roteiro-travas-tit .ic { color: var(--alerta); align-self: center; }
+  .roteiro-travas ul {
+    list-style: none; margin: 8px 0 0; padding: 0;
+    display: flex; flex-wrap: wrap; gap: 6px 22px;
+  }
+  .roteiro-travas li { font-size: var(--t-ui); line-height: 1.5; }
+  .roteiro-trava-nome { font-weight: 600; }
+  .roteiro-travas-repasse { margin: 8px 0 0; font-size: var(--t-meta); max-width: 90ch; }
+
+  /* NO CELULAR OS CINCO PASSOS SAO UMA LISTA: numero e titulo a esquerda, a
+     contagem grande a direita, e o risco embaixo, na largura toda. Cinco colunas
+     de 70px quebrariam «Pedir o boleto e entregar ao cliente» em seis linhas. */
+  @media (max-width: 720px) {
+    .roteiro-topo { padding: 16px 16px 14px; }
+    .roteiro-passos { grid-template-columns: minmax(0, 1fr); }
+    .roteiro-passo {
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-rows: none;
+      grid-template-areas: "selo selo" "cab qtd" "rot qtd" "ctx ctx" "risco risco";
+      column-gap: 12px; padding: 10px 16px 11px;
+      border-left: 0; border-top: 1px solid var(--borda);
+    }
+    .roteiro-passo:first-child { border-top: 0; }
+    .roteiro-selo { grid-area: selo; min-height: 0; }
+    .roteiro-selo:empty { display: none; }
+    .roteiro-cab { grid-area: cab; min-height: 0; align-items: center; }
+    .roteiro-qtd { grid-area: qtd; margin: 0; align-self: center; justify-self: end; font-size: 26px; }
+    .roteiro-rot { grid-area: rot; padding-left: 30px; }
+    .roteiro-ctx { grid-area: ctx; padding-left: 30px; }
+    .roteiro-risco { grid-area: risco; padding-left: 30px; margin-top: 4px; }
+    .roteiro-painel { padding: 16px; }
+    .roteiro-travas { padding: 12px 16px 14px; }
+    .roteiro-travas ul { flex-direction: column; gap: 6px; }
+  }
+
+  /* --------------------------------------------- a faixa da tela de trabalho */
+  .faixa-do-passo { padding: 10px 14px; margin-bottom: 14px; font-size: var(--t-meta); line-height: 1.6; }
+  .faixa-do-passo p { margin: 0; }
+  .faixa-do-passo p + p { margin-top: 3px; }
+  .faixa-do-passo > p:first-child .ic { display: inline-block; vertical-align: -2px; }
 
   @media (prefers-reduced-motion: reduce) {
     /* WCAG 2.3.3. Nao e cortesia: ha gente para quem movimento na tela e

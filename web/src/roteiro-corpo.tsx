@@ -7,153 +7,129 @@
 // tempo — e `caso-render.tsx` monta os que importam.
 //
 // ============================================================================
-// AS DECISÕES DE DESENHO, e cada uma responde a um jeito de a tela mentir
+// AS DECISÕES DE DESENHO (30/09/2026, etapa 3 do redesenho)
 //
-//   A LISTA INTEIRA APARECE, e só um item se abre. Mostrar cinco instruções ao
-//   mesmo tempo é a mesma coisa que não mostrar nenhuma; mostrar SÓ a de agora
-//   esconde o mapa, e quem não vê o mapa não sabe se o que está fazendo é o
-//   começo ou o fim. Os outros quatro ficam em uma linha cada, com o número, o
-//   título e a contagem;
+//   O MÊS É UM FUNIL, NÃO UMA FILA. Os cinco passos aparecem lado a lado, cada
+//   um com QUANTAS unidades estão nele agora. Até esta data a caixa era uma
+//   fila — «você está no 1 de 5», e os passos 2 a 5 apagados — e num mês com
+//   quinze cobranças emitidas ela dizia «1 de 5» porque ainda havia conta a ler;
 //
-//   O NÚMERO DE CADA PASSO É FIXO, e não a posição na lista de pendências. «Você
-//   está no 2 de 5» é uma frase que se guarda de um dia para o outro;
+//   UM PASSO EM DESTAQUE, pelo RISCO. O «Comece aqui» vai para o passo em que o
+//   dinheiro corre perigo (a recusa do banco, a vencida), e não para o primeiro.
+//   A regra está em `escolherOFoco`, com suíte;
 //
-//   TRAVADO NÃO É ERRO, e por isso não é vermelho. É o passo certo, com uma
-//   porta fechada na frente — e a porta tem nome, número e link. A cor de erro
-//   fica reservada para o que está QUEBRADO, que é a faixa da saúde do dinheiro,
-//   logo acima;
+//   UM PAINEL SÓ, e a pessoa escolhe qual. Os passos são abas (`role="tab"`) de
+//   um painel com o que fazer, o botão e o como fazer. Ele abre no destaque, e
+//   qualquer outro passo se abre com um clique ou com as setas — cinco
+//   instruções abertas ao mesmo tempo é o mesmo que nenhuma;
+//
+//   O CADASTRO É UMA LINHA PRÓPRIA, com o link de onde se resolve cada coisa.
+//   Ele trava unidades, não passos, e por isso não disputa o destaque;
+//
+//   NÃO MEDIDO É «—» E DIZ ISSO. Um número que não chegou não vira zero, e zero
+//   não vira verde: a casa inteira trata «medido e certo» e «nunca medido» como
+//   coisas diferentes;
 //
 //   QUANDO TUDO FECHA, A CAIXA FALA. Uma caixa que some quando o mês acaba tem a
-//   mesma cara de uma caixa que quebrou — a mesma lição que a tabela das camadas
-//   já aprendeu no `vazio` dela.
+//   mesma cara de uma caixa que quebrou.
 
-import type { ReactNode } from 'react';
+import { useId, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Ligacao } from './rota.tsx';
 import { Icone } from './ui.tsx';
 import {
-  roteiroDoMes, passoDeAgora, ondeEstouNoMes,
-  type LeituraDoMes, type PassoDoMes, type PassoNoMapa,
+  mesNoFunil, ondeEstouNoMes,
+  type ChaveDoPasso, type LeituraDoMes, type PassoDoMes, type PassoNoMapa, type TravaDoPasso,
 } from './roteiro-do-mes.ts';
 
-/** O ponto de cada passo: número dentro de um círculo que muda de cor. Ele
- *  carrega o estado sem depender de cor sozinha — o «✓» e o «!» são forma. */
-function Ponto({ passo }: { passo: PassoDoMes }) {
-  const cor =
-    passo.estado === 'feito' ? 'var(--ok, #1a7f37)'
-    : passo.estado === 'agora' ? 'var(--acento, #0969da)'
-    : passo.estado === 'travado' ? 'var(--alerta, #9a6700)'
-    : 'var(--borda, #d0d7de)';
-  const dentro = passo.estado === 'feito' ? '✓' : passo.estado === 'travado' ? '!' : String(passo.numero);
-
+/** Um passo do funil, como aba. O número, o título, a contagem e o risco. */
+function AbaDoPasso({ passo, escolhido, idAba, idPainel, aoEscolher }: {
+  passo: PassoDoMes; escolhido: boolean; idAba: string; idPainel: string; aoEscolher: () => void;
+}) {
+  const medido = passo.quantos !== null;
+  const classes = ['roteiro-passo', passo.foco ? 'foco' : '', medido && passo.quantos === 0 ? 'zerado' : '',
+                   passo.risco ? 'com-risco' : ''].filter(Boolean).join(' ');
   return (
-    <span aria-hidden="true"
-          style={{
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            width: 26, height: 26, borderRadius: '50%', flex: '0 0 26px',
-            fontSize: 13, fontWeight: 700, lineHeight: 1,
-            border: `2px solid ${cor}`,
-            background: passo.estado === 'agora' ? cor : 'transparent',
-            color: passo.estado === 'agora' ? '#fff' : cor,
-          }}>
-      {dentro}
-    </span>
-  );
-}
-
-const PALAVRA: Record<PassoDoMes['estado'], string> = {
-  feito: 'feito',
-  agora: 'é agora',
-  travado: 'falta destravar',
-  espera: 'depois',
-};
-
-/** A linha de um passo que NÃO é o de agora: uma linha, e nada mais. */
-function LinhaCurta({ passo }: { passo: PassoDoMes }) {
-  const apagado = passo.estado === 'espera';
-  return (
-    <li style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '7px 0' }}>
-      <Ponto passo={passo} />
-      <span style={{ opacity: apagado ? 0.6 : 1 }}>
-        <strong style={{ fontWeight: passo.estado === 'feito' ? 500 : 600 }}>{passo.titulo}</strong>
-        {passo.contagem && <span className="fraco" style={{ fontSize: 13 }}> — {passo.contagem}</span>}
-        {/* «depois» não é dito: a posição na lista já diz. Dizer seria repetir
-            cinco vezes a mesma palavra numa caixa que tem cinco linhas. */}
-        {passo.estado === 'feito' && (
-          <span className="fraco" style={{ fontSize: 13 }}> · {PALAVRA.feito}</span>
-        )}
+    <button type="button" role="tab" id={idAba} aria-selected={escolhido} aria-controls={idPainel}
+            tabIndex={escolhido ? 0 : -1} className={classes} data-passo={passo.chave}
+            onClick={aoEscolher}>
+      {/* O SELO EXISTE EM TODA ABA, vazio nas outras: é o que alinha o número
+          das cinco na mesma altura, sem depender de quantas linhas o título
+          de cada uma ocupa. */}
+      <span className="roteiro-selo rot-alta">{passo.foco ? 'Comece aqui' : ''}</span>
+      <span className="roteiro-cab">
+        <span className="roteiro-num" aria-hidden="true">{passo.numero}</span>
+        <span className="roteiro-tit">{passo.titulo}</span>
       </span>
-    </li>
+      <span className="roteiro-qtd">{medido ? passo.quantos : '—'}</span>
+      <span className="roteiro-rot">{medido ? passo.rotulo : 'não medido'}</span>
+      {passo.contexto && <span className="roteiro-ctx">{passo.contexto}</span>}
+      {passo.risco && (
+        <span className="roteiro-risco">
+          <Icone nome="aviso_alerta" tamanho={14} peso="bold" /> {passo.risco.frase}
+        </span>
+      )}
+    </button>
   );
 }
 
-/** O passo de agora, aberto: o que fazer, como fazer, e para onde ir. */
-function LinhaAberta({ passo }: { passo: PassoDoMes }) {
+/** O painel do passo escolhido: o que é, o botão, e como se faz. */
+function PainelDoPasso({ passo, idAba, idPainel }: { passo: PassoDoMes; idAba: string; idPainel: string }) {
   return (
-    <li style={{ display: 'flex', gap: 12, padding: '12px 0', alignItems: 'flex-start' }}>
-      <div style={{ paddingTop: 2 }}><Ponto passo={passo} /></div>
-
-      <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
-          <strong style={{ fontSize: 16 }}>{passo.titulo}</strong>
-          <span className="fraco" style={{ fontSize: 13 }}>
-            {PALAVRA[passo.estado]}{passo.contagem ? ` · ${passo.contagem}` : ''}
-          </span>
-        </div>
-
-        <p style={{ margin: '6px 0 0', maxWidth: 720, lineHeight: 1.6 }}>{passo.oQueFazer}</p>
-
-        {/* ======================================================= as travas
-          * ELAS VÊM ANTES DO «COMO», e a ordem é o argumento: seguir o passo a
-          * passo com uma porta fechada na frente termina numa recusa do
-          * servidor, e recusa depois de cinco cliques é a pior forma de
-          * descobrir que faltava cadastro. */}
-        {passo.travas.length > 0 && (
-          <div style={{ marginTop: 10 }}>
-            <div style={{ fontWeight: 600, fontSize: 14 }}>
-              Antes disso, {passo.travas.length === 1 ? 'falta uma coisa' : `faltam ${passo.travas.length} coisas`}:
-            </div>
-            <ul style={{ margin: '6px 0 0', paddingLeft: 18, lineHeight: 1.65 }}>
-              {passo.travas.map((t) => (
-                <li key={t.camada}>
-                  <strong>{t.titulo}</strong>
-                  {t.faltam > 0 && <span className="fraco"> ({t.faltam})</span>}
-                  {t.frase && <> — {t.frase}</>}
-                  {t.endereco
-                    ? <> <Ligacao para={t.endereco}>resolver</Ligacao></>
-                    : <span className="fraco"> Não há tela para isto — veja a linha correspondente na
-                        tabela abaixo.</span>}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {/* ======================================================== o «como»
-          * NUMERADO E NÃO EM MARCADORES: são atos em ordem, e a ordem é o que a
-          * pessoa precisa. Uma lista de marcadores convida a escolher. */}
-        <div style={{ marginTop: 12 }}>
-          <div style={{ fontWeight: 600, fontSize: 14 }}>Como fazer</div>
-          <ol style={{ margin: '6px 0 0', paddingLeft: 20, lineHeight: 1.7, maxWidth: 760 }}>
-            {passo.comoFazer.map((l) => <li key={l}>{l}</li>)}
-          </ol>
-        </div>
-
-        {passo.destino && (
-          <p style={{ margin: '12px 0 0' }}>
-            <Ligacao para={passo.destino.endereco}>Abrir {passo.destino.rotulo}</Ligacao>
-          </p>
-        )}
+    <div className="roteiro-painel" role="tabpanel" id={idPainel} aria-labelledby={idAba}>
+      <div className="roteiro-painel-cab">
+        <h3>{passo.numero} · {passo.titulo}</h3>
+        {passo.automatico && <span className="fraco">o sistema faz sozinho</span>}
       </div>
+
+      {passo.risco && (
+        <p className="roteiro-painel-risco">
+          <Icone nome="aviso_alerta" tamanho={15} peso="bold" /> <strong>{passo.risco.frase}.</strong>
+        </p>
+      )}
+
+      <p className="roteiro-painel-oque">{passo.oQueFazer}</p>
+
+      {/* O BOTÃO VEM ANTES DO «COMO», e não no fim dele: quem já sabe fazer não
+          precisa ler quatro linhas para achar a porta. O nome é o da aba, letra
+          por letra (`RM13`). */}
+      <p className="roteiro-painel-ir">
+        <Ligacao para={passo.destino.endereco} className="botao primario">
+          Abrir {passo.destino.rotulo} <Icone nome="ir_para" tamanho={15} peso="bold" />
+        </Ligacao>
+      </p>
+
+      {/* NUMERADO E NÃO EM MARCADORES: são atos em ordem, e a ordem é o que a
+          pessoa precisa. Uma lista de marcadores convida a escolher. */}
+      <h4 className="roteiro-como-tit">Como fazer</h4>
+      <ol className="roteiro-como">
+        {passo.comoFazer.map((l) => <li key={l}>{l}</li>)}
+      </ol>
+    </div>
+  );
+}
+
+/** Uma pendência de cadastro: o que é, quantos, e o ato que a resolve. */
+function Trava({ trava }: { trava: TravaDoPasso }) {
+  return (
+    <li>
+      <span className="roteiro-trava-nome">{trava.titulo}</span>
+      {trava.faltam > 0 && <span className="fraco"> · {trava.faltam} {trava.contagem}</span>}
+      {' '}
+      {trava.endereco && trava.rotuloDoDestino
+        ? <Ligacao para={trava.endereco}>{trava.rotuloDoDestino}</Ligacao>
+        : <span className="fraco">não há tela para isto — veja a linha na tabela abaixo</span>}
     </li>
   );
 }
 
 export type CorpoDoRoteiro = LeituraDoMes & {
-  /** «julho/2026», já formatado por quem chamou — este módulo não conhece
+  /** «setembro de 2026», já formatado por quem chamou — este módulo não conhece
    *  calendário, e inventar um segundo formatador daria duas grafias do mesmo
    *  mês na mesma tela. */
   competencia: ReactNode;
 };
+
+const ORDEM: readonly ChaveDoPasso[] = ['ler', 'gerar', 'emitir', 'cobrar', 'receber'];
 
 /**
  * A CAIXA INTEIRA. Nunca devolve `null`: mesmo com o mês fechado ela fala, e
@@ -161,42 +137,76 @@ export type CorpoDoRoteiro = LeituraDoMes & {
  * «o que este sistema espera de mim».
  */
 export function CorpoDoRoteiro({ competencia, ...leitura }: CorpoDoRoteiro) {
-  const passos = roteiroDoMes(leitura);
-  const agora = passoDeAgora(passos);
+  const mes = mesNoFunil(leitura);
+  const base = useId();
+  const [escolha, setEscolha] = useState<ChaveDoPasso | null>(null);
+  /* Sem escolha da pessoa, o painel é o do destaque; sem destaque (mês fechado
+     ou nada medido), o do primeiro passo — ele é o que ensina o mês. */
+  const aberto = escolha ?? mes.foco?.chave ?? 'ler';
+  const passoAberto = mes.passos.find((p) => p.chave === aberto)!;
+  const idAba = (c: ChaveDoPasso) => `${base}-aba-${c}`;
+  const idPainel = `${base}-painel`;
+
+  /* AS SETAS ANDAM ENTRE OS PASSOS e abrem o painel de cada um — o padrão de
+     abas da WAI-ARIA, com as duas direções valendo porque no celular a lista é
+     vertical. */
+  const aoTeclar = (e: KeyboardEvent<HTMLDivElement>) => {
+    const i = ORDEM.indexOf(aberto);
+    const ir = (j: number) => {
+      e.preventDefault();
+      const c = ORDEM[(j + ORDEM.length) % ORDEM.length]!;
+      setEscolha(c);
+      document.getElementById(idAba(c))?.focus();
+    };
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') ir(i + 1);
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') ir(i - 1);
+    else if (e.key === 'Home') ir(0);
+    else if (e.key === 'End') ir(ORDEM.length - 1);
+  };
 
   return (
-    <section className="cartao secao" aria-label="O mês, passo a passo"
-             style={{ marginBottom: 18 }}>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
-        <h2 style={{ margin: 0, fontSize: 17 }}>O mês de {competencia}, passo a passo</h2>
-        <span className="fraco" style={{ fontSize: 13 }}>
-          {agora
-            ? `você está no ${agora.numero} de ${passos.length}`
-            : 'os cinco passos fecharam'}
-        </span>
+    <section className={`cartao secao roteiro estado-${mes.estado}`} aria-labelledby={`${base}-titulo`}>
+      <div className="roteiro-topo">
+        <h2 id={`${base}-titulo`}>O mês de {competencia}</h2>
+        {/* A FRASE É A MESMA da tabela de conferências e da Central de Ajuda:
+            as três saem de `mesNoFunil`, e não têm como discordar. */}
+        <p className="roteiro-frase">
+          {mes.estado === 'fechado' && <Icone nome="ok" tamanho={16} peso="bold" />}
+          {mes.frase}
+        </p>
       </div>
 
-      {!agora && (
-        /* A BOA NOTÍCIA FALA. Ver o comentário do cabeçalho: uma caixa que some
-           quando o mês acaba tem a mesma cara de uma que quebrou. */
-        <p style={{ margin: '8px 0 0', lineHeight: 1.6 }}>
-          <Icone nome="ok" tamanho={15} /> Não há passo pendente neste mês: as contas foram lidas,
-          as cobranças saíram e o que falta é o cliente pagar — e isso o sistema acompanha sozinho.
-        </p>
-      )}
-
-      <ol style={{ listStyle: 'none', margin: '10px 0 0', padding: 0 }}>
-        {passos.map((p) => (
-          p.chave === agora?.chave
-            ? <LinhaAberta key={p.chave} passo={p} />
-            : <LinhaCurta key={p.chave} passo={p} />
+      <div className="roteiro-passos" role="tablist" aria-label="Os cinco passos do mês" onKeyDown={aoTeclar}>
+        {mes.passos.map((p) => (
+          <AbaDoPasso key={p.chave} passo={p} escolhido={p.chave === aberto}
+                      idAba={idAba(p.chave)} idPainel={idPainel} aoEscolher={() => setEscolha(p.chave)} />
         ))}
-      </ol>
+      </div>
 
-      <p className="fraco" style={{ fontSize: 13, margin: '14px 0 0', lineHeight: 1.6 }}>
-        A tabela abaixo é o detalhe: ela lista todas as conferências do mês, inclusive as que ainda
-        não chegaram a atrapalhar nenhum passo.
-      </p>
+      <PainelDoPasso passo={passoAberto} idAba={idAba(aberto)} idPainel={idPainel} />
+
+      {(mes.travas.length > 0 || mes.travasDoRepasse.length > 0) && (
+        <div className="roteiro-travas">
+          {mes.travas.length > 0 && (
+            <>
+              <p className="roteiro-travas-tit">
+                <Icone nome="aviso_alerta" tamanho={15} peso="bold" />
+                <strong>O cadastro trava parte do mês</strong>
+                <span className="fraco">— a unidade que cai aqui não anda enquanto isto não for preenchido.</span>
+              </p>
+              <ul>{mes.travas.map((t) => <Trava key={t.camada} trava={t} />)}</ul>
+            </>
+          )}
+          {mes.travasDoRepasse.length > 0 && (
+            <p className="fraco roteiro-travas-repasse">
+              {mes.travasDoRepasse.length === 1
+                ? 'E uma conferência só impede dividir o dinheiro quando ele entrar'
+                : `E ${mes.travasDoRepasse.length} conferências só impedem dividir o dinheiro quando ele entrar`}
+              {' '}— {mes.travasDoRepasse.map((t) => t.titulo.toLowerCase()).join(', ')}. Estão na tabela abaixo.
+            </p>
+          )}
+        </div>
+      )}
     </section>
   );
 }
@@ -205,20 +215,18 @@ export function CorpoDoRoteiro({ competencia, ...leitura }: CorpoDoRoteiro) {
  * A FAIXA DE ORIENTAÇÃO, dentro da tela de trabalho
  * ==========================================================================
  *
- * O roteiro inteiro mora em Pendências; o TRABALHO mora aqui. Quem está dentro
- * de «Fatura unificada» ou de «Emissão e cobrança» perdeu o mapa: a tela não
- * dizia que parte do mês ela é, nem para onde se vai quando ela acaba. Foi
- * assim que a aba aposentada conseguiu parecer o caminho — nenhuma tela dizia o
- * que vinha antes ou depois dela.
+ * O funil inteiro mora em Mês; o TRABALHO mora em Contas de luz, em Cobranças e
+ * termina em Contas a pagar. Quem está lá dentro perdeu o mapa: a tela não dizia
+ * que parte do mês ela é, nem para onde se vai quando ela acaba.
  *
- * UMA LINHA, E NÃO UM SEGUNDO ROTEIRO. Ela diz três coisas e para: que passos
- * são estes, o que vem antes, o que vem depois. O estado ao vivo («você está no
- * 1 de 5») fica em Pendências, a um clique — repetir estado em três telas seria
- * criar três lugares para discordarem.
+ * UMA FAIXA, E NÃO UM SEGUNDO ROTEIRO. Ela diz que passos são estes, o que vem
+ * antes e o que vem depois, e para. O estado ao vivo fica em Mês, a um clique —
+ * repetir estado em três telas seria criar três lugares para discordarem.
  */
 
+/** «Ler as contas de luz do mês e Gerar as cobranças». */
 const nomes = (ps: readonly PassoNoMapa[]): string =>
-  ps.map((p) => `${p.numero} · ${p.titulo}`).join('   ');
+  (ps.length === 1 ? ps[0]!.titulo : `${ps.slice(0, -1).map((p) => p.titulo).join(', ')} e ${ps[ps.length - 1]!.titulo}`);
 
 /** O rótulo da tela onde um passo vizinho acontece, quando não é esta mesma. */
 function Vizinho({ passo, rotulo }: { passo: PassoNoMapa; rotulo: string }) {
@@ -238,26 +246,32 @@ export function FaixaDoPasso({ rota }: { rota: string }) {
   if (!onde) return null;
 
   const varios = onde.aqui.length > 1;
+  /* A TELA QUE FECHA O MÊS DIZ ISSO (30/09/2026). Contas a pagar mora no setor
+     Empresa, e quem chega nela pela barra de lá não sabe que é o fim de um mês
+     que começou no Rateio — nem que o passo anterior está do outro lado. */
+  const doMes = onde.deOutroSetor ? 'do mês do Rateio' : 'do mês';
 
   return (
-    <div className="cartao" style={{ padding: '10px 14px', marginBottom: 14, fontSize: 13.5, lineHeight: 1.65 }}>
-      <div>
-        <Icone nome="prontidao" tamanho={14} />{' '}
+    <div className="cartao faixa-do-passo">
+      <p>
+        <Icone nome="prontidao" tamanho={15} />{' '}
         <strong>
           {varios ? 'Passos' : 'Passo'}{' '}
-          {onde.aqui.map((p) => p.numero).join(' e ')} de {onde.total} do mês
-        </strong>
-        <span className="fraco"> — {nomes(onde.aqui)}</span>
-      </div>
+          {onde.aqui.map((p) => p.numero).join(' e ')} de {onde.total} {doMes}:
+        </strong>{' '}
+        {nomes(onde.aqui)}.
+        {!onde.depois && <> É aqui que o mês termina: quando o cliente paga, a parte do dono da usina e a
+          comissão nascem nesta lista.</>}
+      </p>
 
-      {(onde.antes || onde.depois) && (
-        <div className="fraco" style={{ marginTop: 4 }}>
-          {onde.antes && <Vizinho passo={onde.antes} rotulo="Antes daqui:" />}
-          {onde.antes && onde.depois && ' '}
-          {onde.depois && <Vizinho passo={onde.depois} rotulo="Depois daqui:" />}
-          {' '}<Ligacao para="/pendencias">Ver o mês inteiro</Ligacao>
-        </div>
-      )}
+      <p className="fraco">
+        {onde.antes && <Vizinho passo={onde.antes} rotulo="Antes daqui:" />}
+        {onde.antes && onde.depois && ' '}
+        {onde.depois && <Vizinho passo={onde.depois} rotulo="Depois daqui:" />}
+        {' '}<Ligacao para="/pendencias">
+          {onde.deOutroSetor ? 'Ver o mês inteiro, na aba Mês do Rateio' : 'Ver o mês inteiro'}
+        </Ligacao>
+      </p>
     </div>
   );
 }

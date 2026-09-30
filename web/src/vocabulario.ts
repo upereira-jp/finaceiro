@@ -301,7 +301,7 @@ export const GLOSSARIO: readonly TermoDoGlossario[] = [
     texto: 'O mês a que a cobrança se refere. A conta de agosto cobra a energia de agosto, mesmo '
       + 'que ela seja paga em setembro. No sistema aparece como «competência» em alguns lugares.',
     busca: ['mes', 'mes de referencia', 'competencia', 'periodo', 'qual mes', 'mes errado'],
-    caminhos: [{ rota: '/pendencias', rotulo: 'Escolher o mês em Pendências', tipo: 'ver' }],
+    caminhos: [{ rota: '/pendencias', rotulo: 'Escolher o mês na aba Mês', tipo: 'ver' }],
   },
   {
     termo: 'Fatia do cliente (rateio)',
@@ -337,14 +337,18 @@ export const GLOSSARIO: readonly TermoDoGlossario[] = [
     caminhos: [{ rota: '/documento', rotulo: 'Conferir o preço na conta lida', tipo: 'resolver' },
                { rota: '/unidades?pendencia=sem_tarifa', rotulo: 'Ver o preço no cadastro', tipo: 'ver' }],
   },
+  /* A ABA SE CHAMA «MÊS» DESDE 30/09/2026, e a lista de pendências é a metade de
+   * baixo dela. O verbete continua atendendo «pendências» — é a palavra que a
+   * equipe usou por dois meses — e diz onde ela foi parar. */
   {
     termo: 'Pendências',
-    texto: 'A lista do que está faltando para o mês poder ser cobrado. Cada linha diz quantos faltam '
-      + 'de quantos, quem preenche e onde. Vermelho impede cobrar; laranja impede dividir o dinheiro '
-      + 'depois; amarelo é o que ainda não dá para conferir.',
+    texto: 'A lista do que o cadastro ainda deixa faltar para o mês poder ser cobrado — ela fica na '
+      + 'aba Mês, embaixo dos cinco passos (até 30/09/2026 a aba se chamava Pendências). Cada linha '
+      + 'diz quantos faltam de quantos, quem preenche e onde. Vermelho impede cobrar; laranja '
+      + 'impede dividir o dinheiro depois; amarelo é o que ainda não dá para conferir.',
     busca: ['pendencia', 'pendencias', 'o que falta', 'lista', 'checklist', 'vermelho', 'laranja',
             'cores', 'status', 'painel'],
-    caminhos: [{ rota: '/pendencias', rotulo: 'Abrir Pendências', tipo: 'resolver' }],
+    caminhos: [{ rota: '/pendencias', rotulo: 'Abrir Mês', tipo: 'resolver' }],
   },
   {
     termo: 'Geração do mês',
@@ -385,14 +389,14 @@ export const GLOSSARIO: readonly TermoDoGlossario[] = [
      * ato continua existindo, com outro nome e no caminho oficial — «conferir
      * antes», por conta, na lista de contas registradas. */
     texto: 'Conferir sem gravar: o sistema responde se aquela conta viraria cobrança, e por que '
-      + 'não, sem mexer em nada. Na aba Fatura unificada é o botão «conferir antes», na lista de '
+      + 'não, sem mexer em nada. Na aba Contas de luz é o botão «conferir antes», na lista de '
       + 'contas registradas — clicar quantas vezes quiser não cobra ninguém.',
     /* «ensaio» continua na busca embora não seja o rótulo de botão nenhum: quem
      * ouviu a palavra numa conversa vai digitá-la, e é para isso que o verbete
      * serve. */
     busca: ['ensaio', 'simular', 'simulacao', 'teste', 'ensaiar', 'sem gravar', 'sem valer',
             'conferir antes'],
-    caminhos: [{ rota: '/documento', rotulo: 'Abrir Fatura unificada', tipo: 'resolver' }],
+    caminhos: [{ rota: '/documento', rotulo: 'Abrir Contas de luz', tipo: 'resolver' }],
   },
   {
     termo: 'Baixa',
@@ -406,13 +410,17 @@ export const GLOSSARIO: readonly TermoDoGlossario[] = [
     busca: ['baixa', 'dar baixa', 'baixar fatura', 'quitado', 'liquidar', 'baixa da fatura'],
     caminhos: [{ rota: '/faturas', rotulo: 'Dar baixa numa fatura', tipo: 'resolver' }],
   },
+  /* O NOME DO DOCUMENTO FICOU; o da aba, não (30/09/2026). A folha continua
+   * sendo a Fatura unificada — é o nome que o cliente vê no papel —, e ela se
+   * imprime na aba Contas de luz. */
   {
     termo: 'Fatura unificada',
     texto: 'A folha que o cliente recebe, juntando a conta da distribuidora com a cobrança da G3 num '
-      + 'papel só. Ela não cria a cobrança nem recebe dinheiro — só apresenta.',
+      + 'papel só. Ela não cria a cobrança nem recebe dinheiro — só apresenta. Monta-se e imprime-se '
+      + 'na aba Contas de luz, em «2 · Folha do cliente».',
     busca: ['fatura unificada', 'folha', 'papel do cliente', 'documento do cliente', 'unificada',
             'conta junta'],
-    caminhos: [{ rota: '/documento', rotulo: 'Abrir Fatura unificada', tipo: 'resolver' }],
+    caminhos: [{ rota: '/documento', rotulo: 'Abrir Contas de luz', tipo: 'resolver' }],
   },
   {
     termo: 'Empresa selecionada',

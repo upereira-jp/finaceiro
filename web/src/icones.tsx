@@ -23,6 +23,7 @@
 
 import type { Icon, IconWeight } from '@phosphor-icons/react';
 import { ListChecks } from '@phosphor-icons/react/ListChecks';
+import { Cards } from '@phosphor-icons/react/Cards';
 import { UsersFour } from '@phosphor-icons/react/UsersFour';
 import { Lightning } from '@phosphor-icons/react/Lightning';
 import { Signature } from '@phosphor-icons/react/Signature';
@@ -142,6 +143,12 @@ const DESENHO: Record<NomeDeIcone, Icon> = {
    * lista de quem paga — `clientes` já é o grupo de pessoas (`UsersFour`), e o
    * mesmo desenho nas duas faria «Usuários» parecer outro nome para «Clientes». */
   usuarios: UserGear,
+
+  /* AS FICHAS: o menu «Cadastros ▾» junta as cinco telas onde o dado de cada
+   * cliente, unidade, contrato, usina e dono é fichado. É um desenho de GRUPO —
+   * uma pilha — e não repete o de nenhuma das cinco, que continuam com o seu
+   * dentro do menu. */
+  cadastros: Cards,
 
   // os três estados da prontidão — glifo nu, porque a pílula já é a moldura
   ok: Check,

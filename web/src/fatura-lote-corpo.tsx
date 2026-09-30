@@ -580,7 +580,7 @@ function Revisao(p: {
     <div className="fu-revisao" id="fu-revisao" role="region" aria-labelledby="fu-revisao-titulo">
       <h3 id="fu-revisao-titulo">{titulo}</h3>
       <p className="fu-revisao-nota" role="status">
-        {!emRodada && 'Cada uma nasce como rascunho — nada é enviado ao cliente agora. Emitir é o passo seguinte, em «Emissão e cobrança».'}
+        {!emRodada && 'Cada uma nasce como rascunho — nada é enviado ao cliente agora. Emitir é o passo seguinte, em «Cobranças».'}
         {p.rodando && 'Uma de cada vez, na ordem abaixo. Pode acompanhar aqui; não feche a página.'}
         {acabou && (placar.recusadas === 0
           ? 'Todas nasceram como rascunho. O próximo passo é emiti-las.'
@@ -635,7 +635,7 @@ function Revisao(p: {
             <>
               <button type="button" onClick={p.aoFechar}>Fechar</button>
               {placar.geradas > 0 && (
-                <Ligacao para="/faturas" className="fu-ir">Emitir em «Emissão e cobrança»</Ligacao>
+                <Ligacao para="/faturas" className="fu-ir">Emitir em «Cobranças»</Ligacao>
               )}
             </>
           )}

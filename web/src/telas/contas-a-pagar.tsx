@@ -42,6 +42,7 @@ import {
 import { mesPorExtenso } from '../vocabulario.ts';
 import { paraCsv, reaisParaPlanilha, nomeDoArquivo, type Coluna } from '../csv.ts';
 import { baixarCsv } from '../baixar.ts';
+import { FaixaDoPasso } from '../roteiro-corpo.tsx';
 
 type ResumoLinha = {
   tipo: string; beneficiario: string; titulos: number;
@@ -125,6 +126,15 @@ export function TelaContasAPagar() {
   return (
     <Pagina titulo="Contas a pagar"
             sub="O que a empresa deve — a parte do dono da usina, a comissão de quem trouxe o cliente, a concessionária e despesas avulsas. A parte do dono e a comissão nascem sozinhas quando um cliente paga.">
+      {/*
+        O FIM DO MÊS DO RATEIO MORA AQUI, do outro lado da barra (30/09/2026). O
+        passo 5 do mês — receber e repartir — termina nesta lista: quando o
+        cliente paga, a parte do dono da usina e a comissão nascem aqui. Até esta
+        data a tela não dizia isso, e o roteiro mandava para cá sem que a tela
+        de chegada soubesse de que mês ela era o fim. A faixa é a mesma das telas
+        Contas de luz e Cobranças, e o link volta para o mês inteiro.
+      */}
+      <FaixaDoPasso rota="/contas-a-pagar" />
 
       {/*
         * A CONFERÊNCIA ENTRE APURAÇÃO E QUITAÇÃO, e ela vem ANTES da lista de

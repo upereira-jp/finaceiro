@@ -83,7 +83,7 @@ const GUARDA: Record<1 | 2 | 3 | 4, { titulo: string; corpo: (v: VinculoNaTela) 
     titulo: 'Esta unidade não está presa a nenhum contrato do outro sistema.',
     corpo: () =>
       'Não há vínculo velho para soltar. Se a leitura automática está recusando alguma coisa '
-      + 'nesta unidade, é por outro motivo — o aviso em Pendências diz qual.',
+      + 'nesta unidade, é por outro motivo — o aviso na aba Mês diz qual.',
   },
   2: {
     titulo: 'Não há troca a destravar.',

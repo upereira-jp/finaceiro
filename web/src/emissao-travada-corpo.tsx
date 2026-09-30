@@ -8,7 +8,7 @@
 //                       faturas emitidas estão sem boleto no banco, a mais
 //                       antiga há 9 dias». Existe para ninguém precisar abrir a
 //                       tela de emissão para descobrir que precisa abri-la;
-//   `PainelDaEmissao`   a LISTA, na tela de emissão e cobrança, que é onde se
+//   `PainelDaEmissao`   a LISTA, na tela Cobranças, que é onde se
 //                       age sobre ela — cada linha tem o motivo, o que o banco
 //                       respondeu e o botão que pede o boleto.
 //
@@ -16,6 +16,15 @@
 // o alarme deixaria de caber na primeira dobra da tela de Pendências. Uma lista
 // sem faixa dependeria de alguém abrir a aba certa no dia certo — que é
 // exatamente o que o levantamento de 10/09 disse que não acontece.
+//
+// ⚠️ A FAIXA SAIU DA TELA MÊS EM 30/09/2026 (etapa 3 do redesenho), e o que ela
+// dizia mudou de lugar, não de dono. Ela ficava acima do roteiro do mês, em
+// vermelho, mandando agir no passo 4 — enquanto o roteiro, logo abaixo, dizia
+// «você está no 1 de 5». Duas respostas para «o que eu faço agora». Agora o
+// PASSO 4 do funil conta as cobranças sem boleto (do mês e de outros meses) e
+// ganha o destaque quando alguma pede gente — a mesma contagem, numa resposta
+// só (`roteiro-do-mes.ts`, `RM2`/`RM10`). O componente fica: a suíte o monta, e
+// ele é o desenho pronto se o alarme voltar a ser pedido fora do funil.
 //
 // COMO A SEPARAÇÃO SE PROVA: `renderToStaticMarkup` não roda efeito, então um
 // componente que busca sozinho renderiza sempre o estado vazio e o teste mede o

@@ -175,7 +175,7 @@ export function TelaCobranca() {
 
   return (
     <Pagina titulo="Conector Sicoob"
-            sub="A credencial do banco — pela referência, nunca pelo segredo. Cobrar um cliente é na aba Emissão e cobrança; aqui só se cadastra por onde o boleto sairia.">
+            sub="A credencial do banco — pela referência, nunca pelo segredo. Cobrar um cliente é na aba Cobranças, no setor Rateio; aqui só se cadastra por onde o boleto sairia.">
 
       {/* ------------------------------------------------ o estado de hoje */}
       {cert.erro && (
@@ -318,7 +318,7 @@ export function TelaCobranca() {
           Sicoob. O que ainda falta para sair boleto por aqui está <strong>fora do sistema</strong>:
           o cadastro do aplicativo no portal do banco, a autorização dele no aplicativo do celular,
           e os três números de identidade abaixo, que vêm da cooperativa. Enquanto isso, dá para
-          cobrar por Pix e importar na aba Emissão e cobrança um boleto emitido no site do banco.
+          cobrar por Pix e importar na aba Cobranças um boleto emitido no site do banco.
         </p>
         <DetalheTecnico>
           <p style={{ margin: '0 0 6px' }}>

@@ -495,7 +495,7 @@ const chk = (id: string, cond: boolean, d: string) => {
   const comPergunta = ['telas/faturas.tsx', 'telas/fatura-unificada.tsx', 'fatura-lote-corpo.tsx', 'emissao-corpo.tsx']
     .filter((a) => /\b(window\.)?(confirm|prompt)\(/.test(fonte(a)));
   chk('B21c', comPergunta.length === 0,
-      'Emissao e cobranca e Fatura unificada nao usam confirm() nem prompt() — toda pergunta acontece na tela '
+      'Cobranças e Contas de luz nao usam confirm() nem prompt() — toda pergunta acontece na tela '
       + `(achados: ${comPergunta.join(', ') || 'nenhum'})`);
   chk('B21d', !/emitirLote|\/faturamento\/\$\{[^}]*\}\/emitir/.test(fonte('telas/faturas.tsx'))
           && /\/faturas\/\$\{f\.id\}\/emitir/.test(fonte('telas/faturas.tsx')),

@@ -221,12 +221,13 @@ export const TOPICOS: readonly Topico[] = [
   {
     id: 'nao-consigo-cobrar',
     pergunta: 'Por que não consigo cobrar este mês?',
-    resposta: 'Quase sempre falta um cadastro, e não é um defeito do sistema. A tela de Pendências '
-      + 'mostra exatamente o que está faltando, em ordem.',
+    resposta: 'Quase sempre falta um cadastro, e não é um defeito do sistema. A aba Mês mostra em '
+      + 'que passo está cada unidade e, logo abaixo dos passos, o que o cadastro ainda trava.',
     passos: [
-      'Abra a aba Pendências (é a primeira da barra).',
+      'Abra a aba Mês (é a primeira da barra).',
       'Confira o mês no alto da tela.',
-      'Olhe as linhas marcadas como «Falta preencher» — cada uma tem um botão que abre a tela certa, já filtrada.',
+      'Em «O cadastro trava parte do mês», cada item tem o link que abre a tela certa, já filtrada. '
+        + 'A lista completa está na tabela mais abaixo, nas linhas marcadas como «Falta preencher».',
       'Comece pela de cima: fechar a primeira costuma destravar as de baixo.',
     ],
     caminhos: [ir('/pendencias', 'Ver o que está faltando')],
@@ -260,16 +261,19 @@ export const TOPICOS: readonly Topico[] = [
   {
     id: 'primeiro-dia',
     pergunta: 'Nunca usei este sistema. Por onde começo?',
-    resposta: 'Pela aba Pendências. Ela é a lista do que falta, em ordem: resolver a de cima é o '
-      + 'que faz a de baixo passar a valer. Nada aqui se perde por clicar no lugar errado.',
+    resposta: 'Pela aba Mês, a primeira da barra. No alto estão os cinco passos do mês, cada um com '
+      + 'quantas unidades estão nele agora, e o «Comece aqui» no passo que pede você primeiro. Nada '
+      + 'aqui se perde por clicar no lugar errado.',
     passos: [
-      'Abra a aba Pendências e confira o mês que está selecionado no alto.',
-      'Leia de cima para baixo. A ordem não é por importância — é a ordem do trabalho.',
-      'Comece pela primeira linha vermelha. Cada uma tem um botão que já abre a tela certa, filtrada.',
-      'Volte a Pendências depois de cada tanto: os números mudam sozinhos e mostram o que andou.',
+      'Abra a aba Mês e confira o mês que está selecionado no alto.',
+      'Leia os cinco passos na ordem: ler as contas, gerar, emitir, pedir o boleto, receber. O '
+        + 'número de cada um é quantas unidades estão nele agora.',
+      'Comece pelo passo marcado «Comece aqui». O botão «Abrir …» leva à tela onde ele se faz, e '
+        + '«Como fazer» diz os cliques.',
+      'Volte à aba Mês depois de cada tanto: os números mudam sozinhos e mostram o que andou.',
       'Se travar em alguma palavra, procure aqui mesmo pelo nome dela — o significado está escrito.',
     ],
-    caminhos: [ir('/pendencias', 'Abrir Pendências'), ver('/clientes', 'Ver a lista de clientes')],
+    caminhos: [ir('/pendencias', 'Abrir Mês'), ver('/clientes', 'Ver a lista de clientes')],
     camada: null,
     telas: ['/pendencias'],
     comum: true,
@@ -280,16 +284,17 @@ export const TOPICOS: readonly Topico[] = [
   {
     id: 'o-que-e-pendencia',
     pergunta: 'O que são as pendências?',
-    resposta: 'É a lista do que está faltando para o mês poder ser cobrado. Cada linha é um tipo de '
-      + 'dado que falta, com quantos faltam de quantos, quem preenche e onde se preenche.',
+    resposta: 'É a lista, na aba Mês, do que falta no cadastro para o mês poder ser cobrado — a '
+      + 'tabela embaixo dos cinco passos. Cada linha é um tipo de dado que falta, com quantos '
+      + 'faltam de quantos, quem preenche e onde se preenche.',
     passos: [
       'Vermelho é o que impede cobrar. Sem isso, a cobrança do mês não sai.',
       'Laranja impede dividir o dinheiro depois: dá para cobrar, mas o repasse ao dono da usina trava.',
       'Amarelo quer dizer «ainda não dá para conferir» — depende de uma linha de cima que está vazia.',
       'Verde é o que já está pronto. Nada a fazer ali.',
-      'Os dois cartões do alto resumem tudo: «Pode faturar» e «Pode repartir».',
+      'Os cartões acima da tabela resumem tudo: «Pode faturar», «Pode emitir boleto» e «Pode repartir».',
     ],
-    caminhos: [ir('/pendencias', 'Abrir Pendências')],
+    caminhos: [ir('/pendencias', 'Abrir Mês')],
     camada: null,
     telas: ['/pendencias'],
     comum: true,
@@ -339,19 +344,50 @@ export const TOPICOS: readonly Topico[] = [
   {
     id: 'o-que-falta',
     pergunta: 'Onde vejo tudo o que está faltando?',
-    resposta: 'Na aba Pendências. Ela lista o que impede cobrar e o que impede dividir o dinheiro, '
-      + 'com o número exato de cada coisa e o caminho para resolver.',
+    resposta: 'Na aba Mês. No alto, quantas unidades estão em cada passo do mês; embaixo, o que '
+      + 'impede cobrar e o que impede dividir o dinheiro, com o número exato de cada coisa e o '
+      + 'caminho para resolver.',
     passos: [
-      'Abra a aba Pendências.',
-      'Os dois cartões do alto respondem de uma vez: «Pode faturar» e «Pode repartir».',
-      'Cada linha de baixo tem um botão «onde resolver» que já abre a tela filtrada.',
+      'Abra a aba Mês.',
+      'Os cinco passos do alto dizem onde está o trabalho; o «Comece aqui» marca o que pede você primeiro.',
+      'Cada linha da tabela de baixo tem um botão «onde resolver» que já abre a tela filtrada.',
     ],
-    caminhos: [ir('/pendencias', 'Abrir Pendências')],
+    caminhos: [ir('/pendencias', 'Abrir Mês')],
     camada: null,
     telas: ['/pendencias'],
     comum: true,
     termos: ['o que falta', 'pendencias', 'o que preciso fazer', 'por onde comeco', 'checklist',
              'lista do que falta', 'status', 'como esta', 'resumo', 'primeiro dia', 'comecar do zero'],
+  },
+  /*
+   * AS ABAS QUE MUDARAM DE NOME (30/09/2026, etapa 3 do redesenho). Quem trabalhou
+   * com «Pendências», «Fatura unificada» e «Emissão e cobrança» vai procurar
+   * esses nomes na barra e não achar — e num sistema sem suporte, a Central de
+   * Ajuda é onde essa pessoa vai perguntar. A resposta diz o nome novo de cada
+   * uma e onde ficaram os cadastros, e termina nas três abas.
+   */
+  {
+    id: 'abas-com-nome-novo',
+    pergunta: 'Cadê as abas Pendências, Fatura unificada e Emissão e cobrança?',
+    resposta: 'Mudaram de nome em 30/09/2026 e continuam fazendo o mesmo, no mesmo endereço: '
+      + 'Pendências virou Mês, Fatura unificada virou Contas de luz e Emissão e cobrança virou '
+      + 'Cobranças. A folha que o cliente recebe continua se chamando Fatura unificada.',
+    passos: [
+      'Mês é a primeira aba: os cinco passos do mês, com quantas unidades estão em cada um, e o que o cadastro ainda trava.',
+      'Contas de luz é onde a conta da distribuidora entra e vira cobrança — e onde a folha do cliente se imprime.',
+      'Cobranças é onde se emite, se pede o boleto e se dá baixa.',
+      'Clientes, Unidades consumidoras, Contratos, Usinas e Donos de usina ficam no menu «Cadastros», no fim da barra.',
+    ],
+    caminhos: [ir('/pendencias', 'Abrir Mês'), ir('/documento', 'Abrir Contas de luz'),
+               ir('/faturas', 'Abrir Cobranças')],
+    camada: null,
+    telas: [],
+    /* SÓ FRASES QUE CITAM A ABA, e nenhuma com «onde ficam» ou «cadê» sozinhos:
+     * «onde ficam as usinas» é alguém procurando a tela de Usinas, e casar aqui
+     * pela metade da frase o mandaria ler sobre nomes de aba. */
+    termos: ['aba pendencias', 'cade pendencias', 'sumiu a aba', 'aba sumiu', 'mudou o nome da aba',
+             'nome da aba mudou', 'nome antigo da aba', 'cade a fatura unificada', 'aba fatura unificada',
+             'aba emissao e cobranca', 'cade emissao e cobranca', 'menu cadastros', 'cadastros'],
   },
   {
     id: 'ainda-nao-da-para-conferir',
@@ -360,10 +396,10 @@ export const TOPICOS: readonly Topico[] = [
       + 'Não é o mesmo que «pronto», e por isso ela aparece em amarelo e não em verde.',
     passos: [
       'Resolva primeiro a linha de cima, que é de onde vem o vazio.',
-      'Volte a Pendências: a linha passa a mostrar um número de verdade.',
+      'Volte à aba Mês: a linha passa a mostrar um número de verdade.',
       'Se a linha de cima já estiver pronta e esta continuar amarela, o mês escolhido pode não ter movimento.',
     ],
-    caminhos: [ir('/pendencias', 'Abrir Pendências')],
+    caminhos: [ir('/pendencias', 'Abrir Mês')],
     camada: null,
     telas: ['/pendencias'],
     termos: ['amarelo', 'nao da para conferir', 'nao medido', 'zero de zero', 'linha amarela',
@@ -379,7 +415,7 @@ export const TOPICOS: readonly Topico[] = [
       'Escolha o mês da energia que está sendo cobrada.',
       'Em Relatórios, deixar o campo vazio mostra o histórico inteiro em vez de um mês só.',
     ],
-    caminhos: [ir('/pendencias', 'Conferir o mês em Pendências'), ver('/faturas', 'Ver o mês em Emissão e cobrança')],
+    caminhos: [ir('/pendencias', 'Conferir o mês na aba Mês'), ver('/faturas', 'Ver o mês em Cobranças')],
     camada: null,
     telas: [],
     termos: ['mes', 'mes de referencia', 'competencia', 'trocar o mes', 'mudar o mes', 'mes errado',
@@ -480,11 +516,11 @@ export const TOPICOS: readonly Topico[] = [
   {
     id: 'conta-lida',
     pergunta: 'Onde subo a conta da distribuidora?',
-    resposta: 'Na aba Fatura unificada, uma conta ou o mês inteiro de uma vez. É dela que sai o valor a cobrar: o '
+    resposta: 'Na aba Contas de luz, uma conta ou o mês inteiro de uma vez. É dela que sai o valor a cobrar: o '
       + 'sistema lê o arquivo, você confere o que foi lido e registra.',
     porque: PORQUE['conta-lida'],
     passos: [
-      'Abra a aba Fatura unificada.',
+      'Abra a aba Contas de luz.',
       'Suba o arquivo da conta daquela unidade neste mês e confira campo a campo o que foi lido.',
       'Registre a conta. Ela passa a aparecer na lista de contas registradas, logo abaixo.',
       'Na lista, o botão «Gerar N cobranças» transforma as contas registradas marcadas nas cobranças '
@@ -523,11 +559,11 @@ export const TOPICOS: readonly Topico[] = [
   {
     id: 'tarifa',
     pergunta: 'O preço do kWh saiu zerado. Onde corrijo?',
-    resposta: 'Na própria leitura da conta, na aba Fatura unificada — o preço vem impresso na conta '
+    resposta: 'Na própria leitura da conta, na aba Contas de luz — o preço vem impresso na conta '
       + 'da distribuidora e é lido com até seis casas depois da vírgula.',
     porque: PORQUE['tarifa'],
     passos: [
-      'Abra a aba Fatura unificada e localize a conta daquele mês.',
+      'Abra a aba Contas de luz e localize a conta daquele mês.',
       'Confira o campo do preço do kWh contra o que está impresso na conta.',
       'Corrija e registre de novo. Zerado, a cobrança é recusada de propósito.',
       'A coluna de preço da aba Unidades consumidoras é outra: ela serve o caminho antigo e não entra aqui.',
@@ -630,7 +666,7 @@ export const TOPICOS: readonly Topico[] = [
     passos: [
       'Abra a aba Conector Sicoob.',
       'Preencha agência, conta, contrato, convênio e a validade do certificado.',
-      'Enquanto isso não estiver pronto, dá para cobrar por Pix e importar na aba Emissão e cobrança um boleto emitido no site do banco.',
+      'Enquanto isso não estiver pronto, dá para cobrar por Pix e importar na aba Cobranças um boleto emitido no site do banco.',
     ],
     caminhos: [
       daCamada('cobranca_sicoob', 'Cadastrar a credencial do banco'),
@@ -770,22 +806,22 @@ export const TOPICOS: readonly Topico[] = [
      * faturo» — e respondia «Na aba Faturamento», que deixou de ser onde a
      * fatura nasce em 21/08, com a Q-CICLO-01. E gerar por lá TRAVA a unidade no
      * caminho oficial com «esta unidade ja tem fatura». */
-    resposta: 'Da conta da distribuidora, na aba Fatura unificada: você sobe o PDF (pode subir '
+    resposta: 'Da conta da distribuidora, na aba Contas de luz: você sobe o PDF (pode subir '
       + 'vários de uma vez), confere o que foi lido, registra, e então clica em «Gerar N cobranças». '
       + 'Não há outro caminho: a aba de faturamento em lote, que existia até 10/09/2026, foi '
       + 'removida justamente porque gerar por lá travava a unidade neste.',
     passos: [
-      'Confira antes a aba Pendências: o que estiver faltando lá vira recusa aqui.',
-      'Abra a aba Fatura unificada, em «1 · Leitura e cálculo».',
+      'Confira antes a aba Mês: o que o cadastro ainda trava lá vira recusa aqui.',
+      'Abra a aba Contas de luz, em «1 · Leitura e cálculo».',
       'Envie as contas da distribuidora — uma, ou todas as do mês de uma vez.',
       'Confira cada linha da fila: unidade, mês, total e vencimento. Corrija o que precisar.',
       'Clique em «Registrar N contas conferidas».',
       'Na lista de contas registradas, use «conferir antes» para ver se ela virará cobrança — '
         + 'isso não grava nada — e então «Gerar N cobranças», que mostra o resumo antes de gravar.',
-      'Emitir e cobrar acontecem na aba Emissão e cobrança, no mês DA CONTA.',
+      'Emitir e cobrar acontecem na aba Cobranças, no mês DA CONTA.',
     ],
     caminhos: [
-      ir('/documento', 'Abrir Fatura unificada'),
+      ir('/documento', 'Abrir Contas de luz'),
       ver('/pendencias', 'Antes: ver o que falta'),
       ver('/faturas', 'Depois: emitir e cobrar'),
     ],
@@ -802,7 +838,7 @@ export const TOPICOS: readonly Topico[] = [
     resposta: 'Não. O ensaio só simula: ele mostra quem entraria no mês e quem ficaria de fora, com '
       + 'o motivo de cada recusa, e não grava nada. Rodar de novo não faz mal.',
     passos: [
-      'No caminho oficial: na lista de contas registradas da aba Fatura unificada, clique em '
+      'No caminho oficial: na lista de contas registradas da aba Contas de luz, clique em '
         + '«conferir antes». Ele responde se aquela conta viraria cobrança, e por que não, '
         + 'sem gravar nada.',
       /* A SEGUNDA LINHA ENSINAVA O BOTÃO DE UMA ABA QUE SAIU EM 10/09/2026
@@ -811,9 +847,9 @@ export const TOPICOS: readonly Topico[] = [
        * barra inteira antes de duvidar do texto. */
       'Clicar quantas vezes quiser não cobra ninguém — «conferir antes» só lê.',
       'Só «Gerar N cobranças» grava alguma coisa, e só depois do «Sim» no resumo — e a cobrança '
-        + 'ainda nasce como rascunho: emitir é um segundo ato, na aba Emissão e cobrança.',
+        + 'ainda nasce como rascunho: emitir é um segundo ato, na aba Cobranças.',
     ],
-    caminhos: [ir('/documento', 'Abrir Fatura unificada'), ver('/faturas', 'Ver as cobranças do mês')],
+    caminhos: [ir('/documento', 'Abrir Contas de luz'), ver('/faturas', 'Ver as cobranças do mês')],
     camada: null,
     telas: ['/documento'],
     termos: ['ensaio', 'simular', 'teste', 'sem gravar', 'vai cobrar', 'e seguro', 'ensaiar',
@@ -823,21 +859,21 @@ export const TOPICOS: readonly Topico[] = [
     id: 'ficou-de-fora',
     pergunta: 'Um cliente ficou de fora do faturamento. Por quê?',
     resposta: 'O ensaio diz o motivo de cada recusa, linha por linha. Quase sempre é um cadastro '
-      + 'faltando — e o mesmo motivo aparece contado na aba Pendências.',
+      + 'faltando — e o mesmo motivo aparece contado na aba Mês.',
     /* OS PASSOS MUDARAM EM 10/09/2026 e passaram a ensinar o caminho OFICIAL.
      * Até aqui a resposta começava por «Abra a aba Faturamento», que é o caminho
      * aposentado — e a pergunta «um cliente ficou de fora» é das mais comuns de
      * quem está fechando o mês. A tela em lote continua no fim, como segunda
      * opção nomeada, porque quem já compôs por ela precisa saber ler a recusa. */
     passos: [
-      'Abra a aba Fatura unificada e vá à lista «Contas registradas».',
+      'Abra a aba Contas de luz e vá à lista «Contas registradas».',
       'Clique em «conferir antes» na linha do cliente: ele responde se aquela conta viraria '
         + 'cobrança, e por que não, sem gravar nada.',
-      'Abra a aba Pendências: o roteiro do mês, no alto, diz em qual passo o mês parou, e o botão '
-        + 'de cada pendência leva à tela onde aquilo se preenche.',
+      'Abra a aba Mês: os cinco passos, no alto, dizem quantas unidades estão em cada um, e cada '
+        + 'item de «O cadastro trava parte do mês» leva à tela onde aquilo se preenche.',
       'Resolva e clique «conferir antes» de novo.',
     ],
-    caminhos: [ir('/documento', 'Abrir Fatura unificada'), ir('/pendencias', 'Ver o que falta no mês'),
+    caminhos: [ir('/documento', 'Abrir Contas de luz'), ir('/pendencias', 'Ver o que falta no mês'),
                noCrm('/rateio', 'Conferir a situação no outro sistema')],
     camada: null,
     telas: ['/documento', '/pendencias'],
@@ -847,10 +883,10 @@ export const TOPICOS: readonly Topico[] = [
   {
     id: 'emitir-fatura',
     pergunta: 'Como emito as faturas do mês?',
-    resposta: 'Na aba Emissão e cobrança. Emitir fecha o valor da fatura — o boleto e a baixa vêm '
+    resposta: 'Na aba Cobranças. Emitir fecha o valor da fatura — o boleto e a baixa vêm '
       + 'depois, cada um no seu botão.',
     passos: [
-      'Abra a aba Emissão e cobrança. Ela abre no mês que tem cobrança por emitir.',
+      'Abra a aba Cobranças. Ela abre no mês que tem cobrança por emitir.',
       /* O BOTÃO NÃO SE CHAMA «Emitir em lote», e nunca se chamou nesta tela: o
        * rótulo tem o número dentro. Instrução que nomeia botão inexistente faz a
        * pessoa duvidar de si — a mesma regra que `RM13` prende no roteiro do
@@ -860,8 +896,8 @@ export const TOPICOS: readonly Topico[] = [
         + 'Para uma só, use «Emitir» na linha dela.',
       'Emitidas, o próximo passo aparece no mesmo lugar: «Pedir os N boletos».',
     ],
-    caminhos: [ir('/faturas', 'Abrir Emissão e cobrança'),
-               ir('/documento', 'Antes: gerar as cobranças em Fatura unificada')],
+    caminhos: [ir('/faturas', 'Abrir Cobranças'),
+               ir('/documento', 'Antes: gerar as cobranças em Contas de luz')],
     camada: null,
     telas: ['/faturas'],
     /* «como emito» SOZINHO saiu: ele casava frase inteira com «como emito
@@ -873,11 +909,11 @@ export const TOPICOS: readonly Topico[] = [
   {
     id: 'gerar-boleto',
     pergunta: 'Cadê o boleto? Como gero o boleto de uma fatura?',
-    resposta: 'Na aba Emissão e cobrança, depois de emitida: «Pedir os N boletos» pede os do mês de uma '
+    resposta: 'Na aba Cobranças, depois de emitida: «Pedir os N boletos» pede os do mês de uma '
       + 'vez, e «Pedir o boleto» pede o de uma linha. Só funciona com a conexão do banco configurada; '
       + 'sem ela, dá para cobrar por Pix ou importar um boleto emitido no site do banco.',
     passos: [
-      'Abra a aba Emissão e cobrança.',
+      'Abra a aba Cobranças.',
       'Emita a cobrança, se ela ainda estiver em rascunho.',
       /* UM NOME SÓ PARA PEDIR O BOLETO (30/09): eram três — «Gerar boleto» no
        * painel da linha, «Pedir o boleto agora» na lista e «gerar o boleto»
@@ -888,7 +924,7 @@ export const TOPICOS: readonly Topico[] = [
       'Não funcionou por outro motivo? Confira a aba Conector Sicoob: sem a credencial cadastrada o sistema não emite sozinho.',
     ],
     caminhos: [
-      ir('/faturas', 'Abrir Emissão e cobrança'),
+      ir('/faturas', 'Abrir Cobranças'),
       ver('/cobranca', 'Conferir a conexão com o banco'),
     ],
     camada: null,
@@ -903,12 +939,12 @@ export const TOPICOS: readonly Topico[] = [
     resposta: 'Na linha da fatura, colando a linha digitável. O sistema confere o valor e a data '
       + 'dentro do próprio código antes de aceitar — se não bater com a fatura, ele recusa.',
     passos: [
-      'Abra a aba Emissão e cobrança e abra a linha da cobrança — o triângulo no começo dela.',
+      'Abra a aba Cobranças e abra a linha da cobrança — o triângulo no começo dela.',
       'Em «Boleto», clique em «Já emitiu este boleto no site do banco?» e cole a linha digitável.',
       'Clique em conferir: o sistema lê o valor e o vencimento de dentro do código.',
       'Se bater, importe. Se não bater, ele diz o que está diferente.',
     ],
-    caminhos: [ir('/faturas', 'Abrir Emissão e cobrança')],
+    caminhos: [ir('/faturas', 'Abrir Cobranças')],
     camada: null,
     telas: ['/faturas'],
     termos: ['importar boleto', 'boleto do banco', 'emiti no site do banco', 'colar linha digitavel',
@@ -920,12 +956,12 @@ export const TOPICOS: readonly Topico[] = [
     resposta: 'Dá, e independe da conexão com o banco. A fatura traz o código para copiar e mandar '
       + 'ao cliente.',
     passos: [
-      'Abra a aba Emissão e cobrança e ache a fatura emitida.',
+      'Abra a aba Cobranças e ache a fatura emitida.',
       'Abra a linha dela — o triângulo no começo — e copie o código de pagamento: o botão de '
         + 'copiar evita errar um dígito.',
       'Mande ao cliente. Quando ele pagar, registre o pagamento em «Baixa manual», na mesma linha.',
     ],
-    caminhos: [ir('/faturas', 'Abrir Emissão e cobrança')],
+    caminhos: [ir('/faturas', 'Abrir Cobranças')],
     camada: null,
     telas: ['/faturas'],
     termos: ['pix', 'cobrar por pix', 'qr code', 'codigo pix', 'copia e cola', 'chave pix da empresa'],
@@ -933,10 +969,10 @@ export const TOPICOS: readonly Topico[] = [
   {
     id: 'cliente-pagou',
     pergunta: 'O cliente pagou. Como dou baixa?',
-    resposta: 'Na aba Emissão e cobrança, na linha da própria fatura. É a baixa que dispara a '
+    resposta: 'Na aba Cobranças, na linha da própria fatura. É a baixa que dispara a '
       + 'divisão do dinheiro: a parte do dono da usina e a comissão de quem indicou nascem dela.',
     passos: [
-      'Abra a aba Emissão e cobrança e abra a linha da cobrança do cliente — o triângulo no começo.',
+      'Abra a aba Cobranças e abra a linha da cobrança do cliente — o triângulo no começo.',
       'Em «Baixa manual», confira a data, os juros e a multa e clique em «Registrar pagamento».',
       /* [30/09] O PAGAMENTO PASSA POR UM RESUMO: ele não se desfaz, e o botão
        * deixou de ser o laranja do painel. */
@@ -944,7 +980,7 @@ export const TOPICOS: readonly Topico[] = [
         + 'pagamento». Isto não se desfaz pelo sistema.',
       'O que a empresa passa a dever aparece sozinho na aba Contas a pagar.',
     ],
-    caminhos: [ir('/faturas', 'Abrir Emissão e cobrança'), ver('/contas-a-pagar', 'Depois: o que a empresa deve')],
+    caminhos: [ir('/faturas', 'Abrir Cobranças'), ver('/contas-a-pagar', 'Depois: o que a empresa deve')],
     camada: null,
     telas: ['/faturas'],
     comum: true,
@@ -963,9 +999,9 @@ export const TOPICOS: readonly Topico[] = [
       /* «gere o mês de novo na aba Faturamento» saiu em 10/09/2026 com a aba. E
        * o conserto real nunca foi «gerar de novo»: a cobrança já existe, e o
        * caminho é cancelá-la para a conta lida voltar a ser faturável. */
-      'Corrigido o cadastro, cancele a cobrança errada na aba Emissão e cobrança — no menu de três '
+      'Corrigido o cadastro, cancele a cobrança errada na aba Cobranças — no menu de três '
         + 'pontos da linha, «Cancelar esta cobrança…», com o motivo. A conta lida volta a ser '
-        + 'faturável, e você gera de novo na aba Fatura unificada.',
+        + 'faturável, e você gera de novo na aba Contas de luz.',
     ],
     caminhos: [
       ir('/unidades', 'Conferir preço do kWh e fatia'),
@@ -985,7 +1021,7 @@ export const TOPICOS: readonly Topico[] = [
     resposta: 'A parte dele nasce sozinha quando um cliente paga, e vai para a aba Contas a pagar. '
       + 'É lá que se registra a quitação.',
     passos: [
-      'Dê baixa na fatura do cliente, na aba Emissão e cobrança — é isso que cria o que a empresa deve.',
+      'Dê baixa na fatura do cliente, na aba Cobranças — é isso que cria o que a empresa deve.',
       'Abra a aba Contas a pagar.',
       'Confira a linha e registre o pagamento.',
     ],
@@ -1068,8 +1104,8 @@ export const TOPICOS: readonly Topico[] = [
     pergunta: 'Onde vejo quem está devendo, e quanto?',
     resposta: 'Na aba Contas a receber, na metade Empresa. Ela lista todo título emitido e ainda '
       + 'não pago, de qualquer mês, com os dias de atraso e se o boleto chegou ao banco. Cobrar '
-      + '— emitir, pedir o boleto, dar baixa — continua sendo na aba Emissão e cobrança.',
-    porque: 'Emissão e cobrança responde por MÊS, e uma fatura antiga some atrás do mês corrente. '
+      + '— emitir, pedir o boleto, dar baixa — continua sendo na aba Cobranças, no setor Rateio.',
+    porque: 'A aba Cobranças responde por MÊS, e uma fatura antiga some atrás do mês corrente. '
       + 'Contas a receber olha a carteira inteira por vencimento: é onde se vê o que venceu há 90 '
       + 'dias sem ninguém precisar lembrar de voltar o seletor.',
     passos: [
@@ -1077,10 +1113,10 @@ export const TOPICOS: readonly Topico[] = [
       'Abra a aba Contas a receber.',
       'Use «Por tempo de atraso» para ver o que venceu e há quanto tempo, e «Quem mais deve» '
         + 'para ver por cliente.',
-      'Para agir sobre uma fatura, use «Ver na emissão»: ele abre Emissão e cobrança já no mês '
+      'Para agir sobre uma fatura, use «Ver em Cobranças»: ele abre a aba Cobranças já no mês '
         + 'certo.',
     ],
-    caminhos: [ir('/contas-a-receber', 'Abrir Contas a receber'), ver('/faturas', 'Cobrar: Emissão e cobrança')],
+    caminhos: [ir('/contas-a-receber', 'Abrir Contas a receber'), ver('/faturas', 'Cobrar na aba Cobranças')],
     camada: null,
     telas: ['/contas-a-receber', '/faturas'],
     termos: ['contas a receber', 'a receber', 'quem deve', 'quem esta devendo', 'inadimplencia',
@@ -1108,16 +1144,21 @@ export const TOPICOS: readonly Topico[] = [
   {
     id: 'fatura-unificada',
     pergunta: 'Que papel o cliente recebe? Onde eu monto isso?',
-    resposta: 'Na aba Fatura unificada. Ela junta a conta da distribuidora com a cobrança da G3 numa '
-      + 'folha só — e não cria fatura nem cobra ninguém: isso é Faturamento e Emissão e cobrança.',
+    /* A FOLHA SE CHAMA FATURA UNIFICADA, e a ABA, desde 30/09/2026, Contas de
+     * luz. A resposta dizia ainda «isso é Faturamento e Emissão e cobrança» —
+     * uma aba que saiu em 10/09 e outra que mudou de nome. */
+    resposta: 'A Fatura unificada: uma folha só, que junta a conta da distribuidora com a cobrança '
+      + 'da G3. Ela se monta e se imprime na aba Contas de luz, em «2 · Folha do cliente» — e só '
+      + 'apresenta: quem cria a cobrança é o «Gerar N cobranças», e quem cobra é a aba Cobranças.',
     passos: [
-      'Abra a aba Fatura unificada.',
-      'Suba a conta de energia daquele cliente.',
-      'Confira os dados lidos e emita a folha.',
+      'Abra a aba Contas de luz.',
+      'Suba a conta de energia daquele cliente e registre a leitura.',
+      'Abra «2 · Folha do cliente» para conferir e imprimir a folha — ou use «2ª via» na lista de '
+        + 'contas registradas.',
     ],
     caminhos: [
-      ir('/documento', 'Abrir Fatura unificada'),
-      ver('/faturas', 'A cobrança em si fica aqui'),
+      ir('/documento', 'Abrir Contas de luz'),
+      ver('/faturas', 'A cobrança em si fica em Cobranças'),
     ],
     camada: null,
     telas: ['/documento'],
@@ -1128,12 +1169,12 @@ export const TOPICOS: readonly Topico[] = [
   {
     id: 'identidade-da-empresa',
     pergunta: 'Como coloco o logotipo e os dados da empresa na fatura?',
-    resposta: 'No cadastro do emissor, na aba Fatura unificada. É de lá que saem o nome, o '
+    resposta: 'No cadastro do emissor, na aba Contas de luz. É de lá que saem o nome, o '
       + 'documento, o logotipo e a chave de pagamento impressos na folha.',
     porque: PORQUE['identidade-da-empresa'],
     passos: [
-      'Abra a aba Fatura unificada e vá até «3 · Cadastro da fatura».',
-      'Preencha a razão social e o CNPJ — são esses dois que a tela de Pendências cobra.',
+      'Abra a aba Contas de luz e vá até «3 · Cadastro da fatura».',
+      'Preencha a razão social e o CNPJ — são esses dois que a aba Mês cobra.',
       'Suba o logotipo e cadastre a chave de pagamento, que ficam no mesmo cartão.',
       'Grave e emita uma folha para conferir como ficou.',
     ],
@@ -1160,8 +1201,8 @@ export const TOPICOS: readonly Topico[] = [
       /* O ENDEREÇO MUDOU EM 10/09/2026: os quatro números viviam no alto da aba
        * Faturamento, que saiu. Foram para Emissão e cobrança, e lá seguem o
        * seletor de mês em vez de mostrar sempre a competência mais nova. */
-      'Faturado, recebido, a receber e vencidas em aberto aparecem no alto da aba Emissão e '
-        + 'cobrança, para o mês que estiver escolhido ali.',
+      'Faturado, recebido, a receber e vencidas em aberto aparecem no alto da aba Cobranças, '
+        + 'para o mês que estiver escolhido ali.',
     ],
     caminhos: [ir('/relatorios', 'Abrir Relatórios'), ver('/faturas', 'Ver o resumo do mês')],
     camada: null,
@@ -1176,14 +1217,14 @@ export const TOPICOS: readonly Topico[] = [
     resposta: 'As telas de lista têm um botão que salva o que está na tela em arquivo de planilha — '
       + 'e ele respeita o filtro: o que estiver escondido não vai junto.',
     passos: [
-      'Abra a tela que tem a lista: Relatórios, Contas a pagar ou Emissão e cobrança.',
+      'Abra a tela que tem a lista: Relatórios, Contas a pagar ou Cobranças.',
       'Deixe na tela só o que você quer levar — o arquivo sai igual ao que está visível.',
       'Use o botão de salvar em planilha.',
     ],
     caminhos: [
       ir('/relatorios', 'Abrir Relatórios'),
       ver('/contas-a-pagar', 'Abrir Contas a pagar'),
-      ver('/faturas', 'Abrir Emissão e cobrança'),
+      ver('/faturas', 'Abrir Cobranças'),
     ],
     camada: null,
     telas: ['/relatorios'],
@@ -1217,7 +1258,7 @@ export const TOPICOS: readonly Topico[] = [
     passos: [
       'Clique no nome da empresa, no alto à direita.',
       'Escolha a outra empresa na lista.',
-      'Confira em Pendências: o que falta é contado por empresa, e muda junto.',
+      'Confira na aba Mês: o que falta é contado por empresa, e muda junto.',
     ],
     caminhos: [ir('/pendencias', 'Ver o que falta nesta empresa')],
     camada: null,
@@ -1232,7 +1273,7 @@ export const TOPICOS: readonly Topico[] = [
       + 'faltando, não uma falha. Ler a frase inteira costuma dar o próximo passo.',
     passos: [
       'Leia a frase da faixa: ela nomeia o que faltou.',
-      'Abra a aba Pendências e procure a linha correspondente.',
+      'Abra a aba Mês e procure a linha correspondente.',
       'Se a mensagem falar de sessão ou de credencial, saia e entre de novo pelo menu da conta.',
       'Se ela voltar sempre igual depois disso, avise o responsável técnico com a frase copiada.',
     ],
@@ -1285,7 +1326,7 @@ export const TOPICOS: readonly Topico[] = [
       + 'acesso que o servidor usa para rodá-las. Não é alguém mexendo no sistema à noite.',
     passos: [
       'Se o interruptor «Mostrar também as rotinas automáticas» estiver ligado, desligue: o que sobra é o que pessoas fizeram.',
-      'Para saber se essas rotinas estão funcionando, olhe o rodapé da aba Pendências — é lá que elas se explicam.',
+      'Para saber se essas rotinas estão funcionando, olhe o rodapé da aba Mês — é lá que elas se explicam.',
     ],
     caminhos: [ir('/historico', 'Abrir Histórico'), ver('/pendencias', 'Ver se as rotinas estão rodando')],
     camada: null,
@@ -1440,10 +1481,21 @@ export const topicosComuns = (base: readonly Topico[] = TOPICOS): Topico[] =>
  * nada mais casou.
  */
 export const PALAVRAS_DA_TELA: Record<string, readonly string[]> = {
-  '/pendencias': ['pendencia', 'pendencias', 'o que falta', 'bloqueio', 'inicio', 'comeco', 'painel'],
+  /*
+   * OS NOMES ANTIGOS FICAM, e apontam para as abas novas (30/09/2026). Três abas
+   * mudaram de nome — Pendências virou Mês, Fatura unificada virou Contas de luz,
+   * Emissão e cobrança virou Cobranças —, e quem trabalhou com o nome velho vai
+   * digitá-lo por semanas. Tirar o apelido junto com o rótulo seria responder
+   * «não achei» a quem sabe exatamente o que procura.
+   */
+  '/pendencias': ['mes', 'o mes', 'aba mes', 'passo a passo', 'funil', 'andamento do mes',
+                  'pendencia', 'pendencias', 'o que falta', 'bloqueio', 'inicio', 'comeco', 'painel'],
   '/clientes': ['cliente', 'clientes', 'cadastro de cliente', 'quem paga', 'documento do cliente'],
+  /* «conta de luz» SAIU DAQUI EM 30/09/2026: agora há uma aba com esse nome, e
+     é para ela que vai quem digita. O número da unidade continua na conta, e o
+     verbete do glossário ainda explica isso. */
   '/unidades': ['unidade', 'unidades', 'unidade consumidora', 'instalacao', 'ponto de luz',
-                'conta de luz', 'numero da unidade'],
+                'numero da unidade'],
   '/contratos': ['contrato', 'contratos'],
   '/usinas': ['usina', 'usinas', 'geradora', 'geracao', 'energia gerada', 'producao'],
   '/donos': ['dono', 'donos', 'donos de usina', 'proprietario', 'chave pix do dono'],
@@ -1461,12 +1513,13 @@ export const PALAVRAS_DA_TELA: Record<string, readonly string[]> = {
    * pessoa chama o ato. `A9` exige que esta lista tenha exatamente as telas da
    * barra, então a linha não podia ficar órfã aqui.
    */
-  '/faturas': ['fatura', 'faturas', 'emissao e cobranca', 'boleto', 'cobranca do cliente', 'baixa',
-               'emitir'],
+  '/faturas': ['cobrancas', 'aba cobrancas', 'fatura', 'faturas', 'emissao e cobranca', 'emissao',
+               'boleto', 'cobranca do cliente', 'baixa', 'emitir'],
   '/cobranca': ['sicoob', 'conector', 'banco', 'certificado', 'credencial do banco'],
   /* As três que vieram de `/carteira` em 10/09 entram aqui: é nesta tela que a
      cobrança do mês nasce, desde 21/08. Ver o comentário na linha da carteira. */
-  '/documento': ['fatura unificada', 'folha', 'documento do cliente', 'imprimir', 'logotipo',
+  '/documento': ['contas de luz', 'conta de luz', 'aba contas de luz', 'ler a conta',
+                 'fatura unificada', 'folha', 'documento do cliente', 'imprimir', 'logotipo',
                  'papel do cliente', 'faturar', 'faturamento', 'gerar o mes', 'fechar o mes',
                  'gerar cobranca'],
   /* A PONTE ENTRE OS DOIS FUNIS (22/09/2026): a carteira inteira em aberto, por

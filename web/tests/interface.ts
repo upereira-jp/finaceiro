@@ -26,7 +26,7 @@ import {
 } from '../src/iconografia.ts';
 import {
   TELAS, FUNIS, PASTAS, telaDoCaminho, telasDoFunil, primeiraTelaDoFunil, funilDoCaminho, divisoriasDe,
-  funisDaPasta, funisVisiveis, destinoVisivel,
+  funisDaPasta, funisVisiveis, destinoVisivel, itensDaBarra, caminhoNaBarra, MENU_DO_GRUPO,
 } from '../src/navegacao.ts';
 import {
   ABAS, ROTULO_DA_ABA, FRAGMENTO_DO_CADASTRO, abaDoFragmento, fragmentoDaAba,
@@ -291,8 +291,46 @@ chk('I4e', TELAS.every((t) => t.rota.startsWith('/') && !t.rota.includes(' ')),
 // Empresa), e a divisoria da barra cai onde o grupo muda. Este teste prende a
 // FORMA da decisao, nao os nomes: teste que quebra por cosmetica treina o time a
 // ignora-lo.
-chk('I4f', TELAS[0]!.funil === 'rateio' && TELAS[0]!.grupo === 'cadastro' && TELAS[0]!.rota === '/pendencias',
-    'a primeira tela e a que diz o que falta - e onde cai quem se perde, e ela abre o Rateio');
+/* [30/09/2026] O GRUPO DA PRIMEIRA TELA MUDOU DE `cadastro` PARA `trabalho`: a
+ * barra do Rateio passou a abrir pelo trabalho do mes, e os cadastros foram para
+ * um menu no fim. A afirmacao que importa ficou: a primeira tela e a que diz em
+ * que pe esta o mes, e e onde cai quem se perde. */
+chk('I4f', TELAS[0]!.funil === 'rateio' && TELAS[0]!.grupo === 'trabalho' && TELAS[0]!.rota === '/pendencias',
+    'a primeira tela e a que diz em que pe esta o mes - e onde cai quem se perde, e ela abre o Rateio');
+
+/*
+ * I4o — A BARRA DO RATEIO SEGUE O TRABALHO DO MES (30/09/2026, etapa 3).
+ *
+ * A critica de 30/09 contou 9 abas no Rateio, 6 delas de cadastro, e o trabalho
+ * de todo dia no fim — e no celular, duas abas e meia visiveis, todas de
+ * cadastro. O que se prende aqui e a FORMA da decisao: o trabalho do mes vem
+ * primeiro e solto, e o cadastro e UM item (um menu) no fim, depois de uma
+ * divisoria. Os nomes estao em I4o2, porque sao eles que o roteiro, a ajuda e a
+ * tela Mes citam letra por letra.
+ */
+{
+  const itens = itensDaBarra(telasDoFunil('rateio'));
+  const soltas = itens.filter((i) => i.tipo === 'tela');
+  const menus = itens.filter((i) => i.tipo === 'menu');
+  const ultimo = itens[itens.length - 1]!;
+  chk('I4o', itens.length === 5 && soltas.length === 4 && menus.length === 1
+          && ultimo.tipo === 'menu' && ultimo.telas.length === 5
+          && soltas.every((i) => i.grupo === 'trabalho')
+          && divisoriasDe(itens).join() === '4',
+      'o Rateio mostra 5 itens: 4 abas do trabalho do mes, soltas, e os 5 cadastros num menu no fim, '
+      + 'depois da unica divisoria — era 9 abas com 6 de cadastro na frente');
+  chk('I4o2', soltas.map((i) => (i.tipo === 'tela' ? i.tela.titulo : '')).join(' · ') === 'Mês · Contas de luz · Cobranças · Relatórios'
+          && ultimo.tipo === 'menu' && ultimo.rotulo === 'Cadastros',
+      'e os nomes anunciam o passo do mes: Mês · Contas de luz · Cobranças · Relatórios ‖ Cadastros');
+  chk('I4o3', ['empresa', 'administracao'].every((f) => itensDaBarra(telasDoFunil(f as 'empresa')).every((i) => i.tipo === 'tela')),
+      'o menu e so do grupo de cadastro: a Empresa e a Administracao continuam com todas as abas soltas');
+  chk('I4o4', TELAS.every((t) => {
+    const c = caminhoNaBarra(t.rota);
+    return c !== null && c[c.length - 1] === t.titulo && (c.length === 1 || c[0] === MENU_DO_GRUPO[t.grupo]?.rotulo);
+  }),
+      'toda tela e alcancavel pela barra, e o ultimo nome do caminho e o titulo dela — aba solta ou item '
+      + 'do menu. E o que o roteiro chama de «rotulo da aba» (RM13)');
+}
 
 {
   // Cada funil ocupa uma faixa contigua de TELAS, e as faixas vem na ordem de FUNIS.
@@ -454,12 +492,39 @@ const PARES_DECLARADOS: ReadonlyArray<readonly [string, string]> = [
 const ehParDeclarado = (ts: string[]): boolean =>
   ts.length === 2 && PARES_DECLARADOS.some(([a, b]) => ts.includes(a) && ts.includes(b));
 
+/*
+ * A EXCECAO ENTRE SETORES — «Contas de luz» (30/09/2026, etapa 3 do redesenho).
+ *
+ * «Conta de luz» e locucao fixa do portugues: ninguem a le como «conta a pagar»,
+ * e e o nome que a operacao da ao documento da distribuidora (o roteiro ja
+ * dizia «Ler as contas de luz do mes», e a ajuda ja buscava por ele). A cabeca
+ * semantica e «luz», como a do par acima e o verbo.
+ *
+ * ELA E MAIS ESTREITA QUE O PAR, e a verificacao prende o estreitamento: um
+ * titulo desta lista so pode colidir com telas de OUTRO setor — nunca dividir a
+ * barra com outra aba que comece igual. A aba de Contas de luz mora no Rateio;
+ * Contas a receber e Contas a pagar, na Empresa. Uma quarta «Contas» no Rateio,
+ * ou esta mudando de setor, volta a reprovar.
+ */
+const ENTRE_SETORES: readonly string[] = ['Contas de luz'];
+const setorDe = (titulo: string) => TELAS.find((t) => t.titulo === titulo)?.funil;
+const semAsDeOutroSetor = (ts: string[]): string[] => ts.filter((t) =>
+  !(ENTRE_SETORES.includes(t) && ts.every((o) => o === t || setorDe(o) !== setorDe(t))));
+
 const porCabeca = new Map<string, string[]>();
 for (const t of TELAS) {
   const c = cabecaDo(t.titulo);
   porCabeca.set(c, [...(porCabeca.get(c) ?? []), t.titulo]);
 }
-const colididos = [...porCabeca.values()].filter((ts) => ts.length > 1 && !ehParDeclarado(ts));
+const colididos = [...porCabeca.values()].map(semAsDeOutroSetor)
+  .filter((ts) => ts.length > 1 && !ehParDeclarado(ts));
+chk('I4k2', ENTRE_SETORES.every((t) => {
+  const c = cabecaDo(t);
+  const vizinhas = (porCabeca.get(c) ?? []).filter((o) => o !== t);
+  return TELAS.some((x) => x.titulo === t) && vizinhas.every((o) => setorDe(o) !== setorDe(t));
+}),
+    'toda excecao entre setores existe e nao divide a barra com nenhuma aba de mesma cabeca — '
+    + '«Contas de luz» (Rateio) so convive com «Contas a receber» e «Contas a pagar» (Empresa)');
 chk('I4k0', PARES_DECLARADOS.every(([a, b]) => TELAS.some((t) => t.titulo === a) && TELAS.some((t) => t.titulo === b)),
     'todo par declarado aponta para duas abas que existem — excecao para aba que sumiu e lista envelhecendo calada');
 

@@ -203,7 +203,7 @@ const recusada = (guarda: 1 | 2 | 3 | 4, motivo: string, extra: Partial<VinculoN
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
     .replace(/^\s*\/\/.*$/gm, ' ');
   chk('V-7b', /recusas/i.test(pendencias) && /Unidades consumidoras/.test(pendencias),
-      'e a tela de Pendencias, onde a recusa aparece, manda para a aba certa - a frase antiga '
+      'e a tela Mes (antes Pendencias), onde a recusa aparece, manda para a aba certa - a frase antiga '
       + 'dizia que a correcao era "no outro sistema, dono do dado", e nesta recusa o outro '
       + 'sistema ja esta certo: o que esta velho e o vinculo daqui');
 }

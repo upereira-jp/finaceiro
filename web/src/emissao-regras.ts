@@ -205,7 +205,7 @@ export function lerRecusa(p: {
         tipo, original, prevista,
         frase: 'A cobrança fecha em R$ 0,00.',
         oQueFazer: 'O banco não registra boleto de valor zero — em geral a compensação cobriu a conta '
-          + 'inteira. Se ela não devia fechar em zero, confira a conta lida em Fatura unificada.',
+          + 'inteira. Se ela não devia fechar em zero, confira a conta lida em Contas de luz.',
         saida: null,
       };
     case 'sem_conexao':

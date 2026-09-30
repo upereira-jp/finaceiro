@@ -89,7 +89,7 @@ export function TelaContasAReceber() {
 
   return (
     <Pagina titulo="Contas a receber"
-            sub="Tudo o que os clientes ainda devem, de qualquer mês: quanto venceu, quanto vence nos próximos dias e se cada título tem boleto para ser pago. Cobrar — emitir, pedir o boleto, dar baixa — continua em Emissão e cobrança.">
+            sub="Tudo o que os clientes ainda devem, de qualquer mês: quanto venceu, quanto vence nos próximos dias e se cada título tem boleto para ser pago. Cobrar — emitir, pedir o boleto, dar baixa — continua na aba Cobranças, no setor Rateio.">
 
       {carga.erro && (
         <Aviso tipo="erro">
@@ -204,7 +204,7 @@ export function TelaContasAReceber() {
         vazio={carga.carregando ? <Carregando />
              : carga.erro ? 'Desconhecido.'
              : todas.length === 0
-               ? 'Nenhum título em aberto. Ou tudo o que foi emitido já foi pago, ou nenhuma fatura foi emitida ainda — a aba Pendências diz qual dos dois.'
+               ? 'Nenhum título em aberto. Ou tudo o que foi emitido já foi pago, ou nenhuma fatura foi emitida ainda — a aba Mês, no setor Rateio, diz qual dos dois.'
                : 'Nenhum título com esses filtros.'}>
         {visiveis.map((t) => {
           const dias = diasDeAtraso(t.vencimento, hoje);
@@ -224,11 +224,13 @@ export function TelaContasAReceber() {
               <td className="num">{emReais(t.valor_total_centavos)}</td>
               <td><Marca tom={TOM_DA_SITUACAO[sit]} icone="boleto">{ROTULO_DA_SITUACAO[sit]}</Marca></td>
               <td>
-                {/* Abre Emissao e cobranca JA NO MES da fatura — sem isso a pessoa
-                    cai no mes corrente e o titulo antigo some de novo. */}
+                {/* Abre Cobrancas JA NO MES da fatura — sem isso a pessoa cai no
+                    mes corrente e o titulo antigo some de novo. «Ver em
+                    Cobranças», e nao «Ver na emissao», desde 30/09/2026: o nome
+                    no link e o da aba a que ele leva. */}
                 <Ligacao para={`/faturas?mes=${String(t.competencia).slice(0, 7)}`}
-                         rotulo={`Ver a fatura de ${t.cliente} em Emissão e cobrança`}>
-                  Ver na emissão
+                         rotulo={`Ver a fatura de ${t.cliente} em Cobranças`}>
+                  Ver em Cobranças
                 </Ligacao>
               </td>
             </tr>

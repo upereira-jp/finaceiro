@@ -27,6 +27,10 @@ export type NomeDeIcone =
   | 'prontidao' | 'clientes' | 'unidades' | 'contratos' | 'usinas' | 'donos' | 'vigencia'
   | 'carteira' | 'faturas' | 'cobranca' | 'documento' | 'relatorios'
   | 'contas_a_receber' | 'contas_a_pagar' | 'historico' | 'usuarios'
+  /* O MENU «Cadastros ▾» DA BARRA DO RATEIO (30/09/2026). Não é tela — é o
+   * gatilho que junta as cinco de cadastro —, e tem desenho próprio para não
+   * se ler como nenhuma delas. */
+  | 'cadastros'
   // os três estados da prontidão
   | 'ok' | 'pendente' | 'nao_medido'
   // os três avisos

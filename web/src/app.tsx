@@ -32,6 +32,7 @@ import {
 import { useCaminho, Ligacao, navegar } from './rota.tsx';
 import {
   telaDoCaminho, telasDoFunil, funilDoCaminho, divisoriasDe, funisVisiveis, destinoVisivel,
+  itensDaBarra, type ItemDaBarra, type Tela,
 } from './navegacao.ts';
 import { GatilhoDeAjuda } from './ajuda-gatilho.tsx';
 import { SeletorDeSetor } from './seletor-de-setor.tsx';
@@ -136,6 +137,49 @@ const RENDER: Record<string, () => ReactElement> = {
   '/usuarios': () => <TelaUsuarios />,
 };
 
+/**
+ * O MENU DE UM GRUPO NA BARRA — hoje, «Cadastros ▾» (30/09/2026).
+ *
+ * QUANDO A TELA ABERTA E DELE, O GATILHO DIZ QUAL. Um menu fechado com a tela
+ * atual escondida dentro dele faria a barra perder o «voce esta aqui» — que e o
+ * trabalho dela. Entao o gatilho ganha o estado ativo da aba (o laranja e o
+ * filete) e o nome da tela: «Cadastros · Unidades consumidoras». Em tela media o
+ * prefixo sai e fica so o nome da tela com a seta, e no celular fica so
+ * «Cadastros» com o desenho da tela aberta — o `h1` logo abaixo diz o resto.
+ *
+ * O NOME ACESSIVEL DIZ AS DUAS COISAS, porque o `aria-label` do gatilho
+ * substitui o texto de dentro: «Cadastros, aberta: Unidades consumidoras».
+ */
+function MenuDaBarra({ item, atual }: { item: Extract<ItemDaBarra, { tipo: 'menu' }>; atual: Tela }) {
+  const aqui = item.telas.find((t) => t.rota === atual.rota) ?? null;
+  return (
+    <Menu lugares fixo className="nav-menu" classeDoGatilho={aqui ? 'ativo' : undefined}
+          rotulo={aqui ? `${item.rotulo}, aberta: ${aqui.titulo}` : item.rotulo}
+          rotuloDoPainel={item.rotulo}
+          gatilho={<>
+            <Icone nome={aqui ? aqui.icone : item.icone} tamanho={17} peso={aqui ? 'fill' : 'regular'} />
+            <span className="nav-menu-texto">
+              {aqui
+                ? <><span className="nav-menu-grupo">{item.rotulo} · </span><span className="nav-menu-tela">{aqui.titulo}</span></>
+                : item.rotulo}
+              {aqui && <span className="nav-menu-curto">{item.rotulo}</span>}
+            </span>
+          </>}>
+      <ul className="menu-lugares">
+        {item.telas.map((t) => (
+          <li key={t.rota}>
+            <Ligacao para={t.rota} atual={t.rota === atual.rota} className="menu-lugar">
+              <Icone nome={t.icone} tamanho={17} peso={t.rota === atual.rota ? 'fill' : 'regular'} />
+              {t.titulo}
+              {t.rota === atual.rota && <Icone nome="ok" tamanho={13} peso="bold" className="ao-fim" />}
+            </Ligacao>
+          </li>
+        ))}
+      </ul>
+    </Menu>
+  );
+}
+
 export function App() {
   const s = useSessao();
   const caminho = useCaminho();
@@ -187,12 +231,12 @@ export function App() {
 
   if (!s.sessaoAuth) return <><style>{ESTILO}</style><Login /></>;
 
-  // Caminho desconhecido (inclusive `/`) cai na primeira tela, que é a
-  // Pendências — a tela que diz o que falta é o lugar certo para se perder.
+  // Caminho desconhecido (inclusive `/`) cai na primeira tela, que é Mês — a
+  // tela que diz em que pé está o mês é o lugar certo para se perder.
   const tela = telaDoCaminho(caminho);
   const funil = funilDoCaminho(caminho);
-  const telasDaBarra = telasDoFunil(funil.chave);
-  const divisorias = new Set(divisoriasDe(telasDaBarra));
+  const itensDaNav = itensDaBarra(telasDoFunil(funil.chave));
+  const divisorias = new Set(divisoriasDe(itensDaNav));
   const vinculo = vinculoAtual;
   const visiveis = funisVisiveis(vinculo?.setores);
   const varios = Boolean(s.sessao && s.sessao.tenants.length > 1);
@@ -210,8 +254,8 @@ export function App() {
             O SELETOR DE SETOR, como migalha: a barra inclinada separa a marca
             do setor, e o ⌃⌄ abre a lista dos setores. O setor ativo e derivado
             do caminho — nao ha estado proprio para ele desincronizar. Trocar de
-            setor leva a PRIMEIRA tela do outro lado: Pendencias no Rateio (a
-            tela que diz o que falta) e Contas a receber na Empresa (a tela que
+            setor leva a PRIMEIRA tela do outro lado: Mes no Rateio (a tela que
+            diz em que pe esta o mes) e Contas a receber na Empresa (a tela que
             diz quanto vai entrar).
           */}
           <span className="migalha" aria-hidden="true" />
@@ -267,24 +311,29 @@ export function App() {
 
         <nav className="barra-nav" aria-label={funil.nome}>
           {/* `flatMap` e nao `map` com fragmento: a divisoria e um IRMAO dos
-              links, nao um filho. Envolver o par num fragmento por item faria o
+              itens, nao um filho. Envolver o par num fragmento por item faria o
               `gap` do flex contar o par como um elemento so, e a divisoria
-              grudaria no link seguinte. */}
-          {telasDaBarra.flatMap((t, i) => {
-            const ativo = t.rota === tela.rota;
-            const link = (
-              <Ligacao key={t.rota} para={t.rota} atual={ativo}
-                       className={ativo ? 'ativo' : undefined}>
-                <Icone nome={t.icone} tamanho={17} peso={ativo ? 'fill' : 'regular'} />
-                {t.titulo}
-              </Ligacao>
-            );
-            // A divisoria onde o GRUPO muda (cadastro ‖ dinheiro no Rateio,
+              grudaria no item seguinte.
+
+              DESDE 30/09/2026 A BARRA TEM DOIS TIPOS DE ITEM: a aba solta e o
+              menu de um grupo («Cadastros ▾»). Quais grupos viram menu e dado,
+              em `navegacao.ts` (`MENU_DO_GRUPO`, `itensDaBarra`). */}
+          {itensDaNav.flatMap((item, i) => {
+            const el = item.tipo === 'menu'
+              ? <MenuDaBarra key={`menu-${item.grupo}`} item={item} atual={tela} />
+              : (
+                <Ligacao key={item.tela.rota} para={item.tela.rota} atual={item.tela.rota === tela.rota}
+                         className={item.tela.rota === tela.rota ? 'ativo' : undefined}>
+                  <Icone nome={item.tela.icone} tamanho={17} peso={item.tela.rota === tela.rota ? 'fill' : 'regular'} />
+                  <span>{item.tela.titulo}</span>
+                </Ligacao>
+              );
+            // A divisoria onde o GRUPO muda (trabalho ‖ cadastro no Rateio,
             // dinheiro ‖ apoio na Empresa). Os indices vem calculados de
             // `navegacao.ts`: reordenar as telas move a divisoria junto.
             return divisorias.has(i)
-              ? [<span key={`divisor-${i}`} className="divisor" aria-hidden="true" />, link]
-              : [link];
+              ? [<span key={`divisor-${i}`} className="divisor" aria-hidden="true" />, el]
+              : [el];
           })}
         </nav>
       </header>

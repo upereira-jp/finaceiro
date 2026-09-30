@@ -150,7 +150,7 @@ function avisos2(): NivelDoAviso[] { return ['url_divergente', 'inativado', 'aus
   const importa = /import \{ CorpoDaSaude \} from '\.\.\/saude-corpo\.tsx'/.test(tela);
   const monta = /<CorpoDaSaude\b/.test(tela);
   chk('SD-12', importa && monta,
-      'a tela de Pendencias — a PRIMEIRA da barra — importa e MONTA `CorpoDaSaude`. Sem esta '
+      'a tela Mes (ate 30/09 Pendencias) — a PRIMEIRA da barra — importa e MONTA `CorpoDaSaude`. Sem esta '
       + 'linha, apagar a faixa da tela passaria em todas as outras verificacoes, e o sintoma '
       + 'seria silencio');
 

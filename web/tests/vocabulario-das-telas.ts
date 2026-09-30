@@ -164,7 +164,7 @@ const PROIBIDO: Array<[RegExp, string]> = [
   [/npm run/, 'comando de terminal — quem abre a tela nao tem o repositorio clonado'],
   [/\bADR-\d/, 'numero de decisao de arquitetura'],
   [/\bsplit\b/i, 'a GLOSSARIO.md proibe usar "split" sozinho: colide com o split payment tributario'],
-  [/\bprontid[aã]o\b/i, 'o nome interno do calculo; na tela a palavra e "Pendencias"'],
+  [/\bprontid[aã]o\b/i, 'o nome interno do calculo; na tela a palavra e "Mês" (a aba) ou "pendencias" (a lista)'],
   [/\bcamadas?\b/i, 'nome da estrutura interna do relatorio'],
   [/\btiers?\b/i, 'jargao de comissionamento'],
   [/\bUC\b/, 'sigla — a tela diz "unidade" ou "unidade consumidora"'],

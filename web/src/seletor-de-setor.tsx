@@ -26,8 +26,8 @@
 //   estado daqui é «a lista está aberta».
 //   OS ITENS SÃO ÂNCORAS (`Ligacao`), e não botões: botão do meio e «copiar
 //   endereço» continuam funcionando, como nas pílulas.
-//   TROCAR DE SETOR LEVA À PRIMEIRA TELA DELE — Pendências no Rateio, Contas a
-//   receber na Empresa (`primeiraTelaDoFunil`, verificado em `I4l`).
+//   TROCAR DE SETOR LEVA À PRIMEIRA TELA DELE — Mês no Rateio (até 30/09/2026
+//   Pendências), Contas a receber na Empresa (`primeiraTelaDoFunil`, `I4l`).
 //
 // NÃO REUSA O `Menu` de `ui.tsx`, e a diferença é de SIGNIFICADO: aquele é
 // `role="menu"`, uma lista de AÇÕES (tema, sair) feita de botões. Esta é uma

@@ -25,7 +25,7 @@
 // `Menu` (a area do usuario), `Kpi`/`KpiSimNao` (o cartao flutuante) e
 // `Carregando` (a engrenagem com o sol da G3).
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { ReactNode, CSSProperties, KeyboardEvent as EventoDeTecla } from 'react';
 import { lerModo, aplicarModo, type ModoTema } from './tema.ts';
 import { Icone, Logotipo } from './icones.tsx';
@@ -545,47 +545,102 @@ export const Ferramentas = ({ children, contagem }: { children: ReactNode; conta
  * `soIcone` e para o menu de uma LINHA de tabela («mais acoes»): o gatilho vira
  * o quadrado de 30px do `BotaoDeIcone`, e o `rotulo` e o nome dele para o leitor
  * de tela e para o `title`.
+ *
+ * ============================================================================
+ * [30/09, etapa 3] `lugares`: O MESMO MENU, PARA IR A OUTRA TELA
+ *
+ * O menu «Cadastros ▾» da barra do Rateio e uma lista de LUGARES, e nao de
+ * acoes — e a diferenca e a que `seletor-de-setor.tsx` ja registrou: leitor de
+ * tela precisa ouvir «link, pagina atual», e nao «item de menu». Com `lugares`:
+ *
+ *   - o gatilho e um botao de divulgacao (`aria-expanded` + `aria-controls`), e
+ *     nao anuncia `aria-haspopup="menu"`;
+ *   - o painel NAO e `role="menu"`, e os itens sao ancoras (`Ligacao`) — botao
+ *     do meio e «copiar endereco» continuam funcionando;
+ *   - o TECLADO e o mesmo: abrir leva o foco ao item atual (ou ao primeiro),
+ *     setas andam e dao a volta, Home/End, Escape devolve o foco ao gatilho,
+ *     Tab para fora fecha, e escolher um item fecha.
+ *
+ * `fixo`: O PAINEL SE POSICIONA PELA JANELA, e nao pelo pai. A barra de
+ * navegacao tem `overflow-x: auto` — e a rede de seguranca para uma barra que
+ * nao couber —, e um painel `absolute` dentro dela seria cortado na borda de
+ * baixo. Com `fixo` ele sai do corte: a posicao e a do gatilho, lida ao abrir,
+ * e como o topo e `sticky` o gatilho nao se move com a rolagem. Redimensionar a
+ * janela fecha o menu, em vez de deixa-lo flutuando longe do gatilho.
  */
 export function Menu(p: {
   gatilho: ReactNode; rotulo: string; children: ReactNode;
   soIcone?: boolean; className?: string;
+  /** Os itens sao links para outras telas, e nao acoes. */
+  lugares?: boolean;
+  /** O painel se posiciona pela janela — para menu dentro de caixa que rola. */
+  fixo?: boolean;
+  /** Classe do botao gatilho (ex.: `ativo`, quando uma tela do menu esta aberta). */
+  classeDoGatilho?: string;
+  /** O nome do painel, quando nao e o mesmo do gatilho. */
+  rotuloDoPainel?: string;
 }) {
   const [aberto, setAberto] = useState(false);
+  const [posicao, setPosicao] = useState<{ topo: number; esquerda: number } | null>(null);
   const caixa = useRef<HTMLDivElement>(null);
   const botao = useRef<HTMLButtonElement>(null);
+  const idDoPainel = useId();
 
-  const itens = (): HTMLButtonElement[] => Array.from(
-    caixa.current?.querySelectorAll<HTMLButtonElement>(
-      '.menu-painel [role="menuitem"]:not(:disabled), .menu-painel [role="menuitemradio"]:not(:disabled)') ?? []);
+  const SELETOR = p.lugares
+    ? '.menu-painel a[href]'
+    : '.menu-painel [role="menuitem"]:not(:disabled), .menu-painel [role="menuitemradio"]:not(:disabled)';
+  const itens = (): HTMLElement[] => Array.from(caixa.current?.querySelectorAll<HTMLElement>(SELETOR) ?? []);
 
   const fechar = (devolverFoco: boolean) => {
     setAberto(false);
     if (devolverFoco) botao.current?.focus();
   };
 
+  const abrir = () => {
+    /* A POSICAO E LIDA ANTES DE ABRIR, e nao num efeito depois: o painel nasce
+       ja no lugar, sem um quadro desenhado no canto da janela. Alinha pela
+       esquerda do gatilho e encosta na direita da janela se nao couber — a
+       largura de referencia e a minima do painel (`.menu-painel`, 216px). */
+    if (p.fixo && botao.current) {
+      const r = botao.current.getBoundingClientRect();
+      setPosicao({ topo: r.bottom + 6, esquerda: Math.max(8, Math.min(r.left, innerWidth - 256)) });
+    }
+    setAberto(true);
+  };
+
   useEffect(() => {
     if (!aberto) return;
     const lista = itens();
-    (lista.find((b) => b.getAttribute('aria-checked') === 'true') ?? lista[0])?.focus();
+    (lista.find((b) => b.getAttribute('aria-checked') === 'true' || b.hasAttribute('aria-current')) ?? lista[0])?.focus();
     const fora = (e: MouseEvent) => {
       if (!caixa.current?.contains(e.target as Node)) setAberto(false);
     };
     const tecla = (e: KeyboardEvent) => { if (e.key === 'Escape') fechar(true); };
+    const redimensionou = () => setAberto(false);
     addEventListener('mousedown', fora);
     addEventListener('keydown', tecla);
-    return () => { removeEventListener('mousedown', fora); removeEventListener('keydown', tecla); };
+    if (p.fixo) addEventListener('resize', redimensionou);
+    return () => {
+      removeEventListener('mousedown', fora); removeEventListener('keydown', tecla);
+      removeEventListener('resize', redimensionou);
+    };
   }, [aberto]);
 
   const aoTeclar = (e: EventoDeTecla<HTMLDivElement>) => {
     const lista = itens();
     if (lista.length === 0) return;
-    const i = lista.indexOf(document.activeElement as HTMLButtonElement);
+    const i = lista.indexOf(document.activeElement as HTMLElement);
     const ir = (j: number) => { e.preventDefault(); lista[(j + lista.length) % lista.length]?.focus(); };
     if (e.key === 'ArrowDown') ir(i + 1);
     else if (e.key === 'ArrowUp') ir(i < 0 ? lista.length - 1 : i - 1);
     else if (e.key === 'Home') ir(0);
     else if (e.key === 'End') ir(lista.length - 1);
   };
+
+  const classeDoBotao = [p.soIcone ? 'so-icone' : '', p.classeDoGatilho ?? ''].filter(Boolean).join(' ') || undefined;
+  const estiloDoPainel = p.fixo && posicao
+    ? ({ '--menu-topo': `${posicao.topo}px`, '--menu-esquerda': `${posicao.esquerda}px` } as CSSProperties)
+    : undefined;
 
   return (
     <div className={`menu${p.className ? ` ${p.className}` : ''}`} ref={caixa}
@@ -594,22 +649,30 @@ export function Menu(p: {
               destino, pelo mesmo motivo escrito no seletor de setor. */
            if (aberto && e.relatedTarget && !caixa.current?.contains(e.relatedTarget as Node)) setAberto(false);
          }}>
-      <button ref={botao} type="button" aria-haspopup="menu" aria-expanded={aberto} aria-label={p.rotulo}
+      <button ref={botao} type="button"
+              aria-haspopup={p.lugares ? undefined : 'menu'} aria-expanded={aberto}
+              aria-controls={p.lugares && aberto ? idDoPainel : undefined}
+              aria-label={p.rotulo}
               title={p.soIcone ? p.rotulo : undefined}
-              className={p.soIcone ? 'so-icone' : undefined}
-              onClick={() => setAberto((v) => !v)}
+              className={classeDoBotao}
+              onClick={() => (aberto ? setAberto(false) : abrir())}
               onKeyDown={(e) => {
-                if (e.key === 'ArrowDown' && !aberto) { e.preventDefault(); setAberto(true); }
+                if (e.key === 'ArrowDown' && !aberto) { e.preventDefault(); abrir(); }
               }}>
         {p.gatilho}
-        {!p.soIcone && <Icone nome="abrir_menu" tamanho={12} peso="bold" />}
+        {!p.soIcone && <Icone nome="abrir_menu" tamanho={12} peso="bold" className="menu-seta" />}
       </button>
       {aberto && (
-        <div className="menu-painel" role="menu" aria-label={p.rotulo} onKeyDown={aoTeclar}
+        <div id={idDoPainel}
+             className={`menu-painel${p.fixo ? ' fixo' : ''}${p.lugares ? ' lugares' : ''}`}
+             role={p.lugares ? undefined : 'menu'} aria-label={p.rotuloDoPainel ?? p.rotulo}
+             style={estiloDoPainel} onKeyDown={aoTeclar}
              onClick={(e) => {
                /* Escolher fecha. O foco volta ao gatilho so se o item nao o
-                  levou para outro lugar (uma confirmacao que se abre, por ex.). */
-               if ((e.target as Element).closest('[role^="menuitem"]')) {
+                  levou para outro lugar (uma confirmacao que se abre, por ex.).
+                  Num menu de lugares, o link navega — e o foco volta ao
+                  gatilho, que e o que ainda existe depois da troca de tela. */
+               if ((e.target as Element).closest(p.lugares ? 'a[href]' : '[role^="menuitem"]')) {
                  setAberto(false);
                  requestAnimationFrame(() => {
                    if (!document.activeElement || document.activeElement === document.body) botao.current?.focus();
