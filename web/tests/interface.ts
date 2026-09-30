@@ -29,8 +29,7 @@ import {
   funisDaPasta, funisVisiveis, destinoVisivel,
 } from '../src/navegacao.ts';
 import {
-  ABAS_VISIVEIS, ABA_OCULTA, ROTULO_DA_ABA, FRAGMENTO_DA_ABA_OCULTA,
-  ordemDasAbas, revelaAbaOculta, abaVigente,
+  ABAS, ROTULO_DA_ABA, FRAGMENTO_DO_CADASTRO, abaDoFragmento, fragmentoDaAba,
 } from '../src/abas-da-fatura.ts';
 
 let falhas = 0;
@@ -743,10 +742,12 @@ chk('I7e', /summary:focus-visible\s*\{[^}]*outline:/.test(REGRAS),
       + `herdados (voltaram: ${voltaram.join(' · ') || 'nenhum'})`);
   /* A aba de etapa e o painel navy continuam sendo DESTA tela: sem eles a
      secao teria virado vazia, e o que o `documento.tsx` poe na raiz nao teria o
-     que escopar. */
+     que escopar. [30/09, etapa 1] A grade de duas colunas (`.fu-grade`) saiu:
+     o lote foi para a largura total e a conta aberta para a GAVETA, que e o
+     terceiro desenho so desta tela. */
   chk('I8b2', seletores.has('.g3ref .fu-aba') && seletores.has('.g3ref .fu-painel')
-          && seletores.has('.g3ref .fu-grade'),
-      'e o que so a Fatura unificada tem continua escopado nela: abas de etapa, grade e painel navy');
+          && seletores.has('.g3ref .fu-gaveta'),
+      'e o que so a Fatura unificada tem continua escopado nela: abas de etapa, gaveta e painel navy');
 }
 
 // --- I8c raio e sombra, no sistema inteiro
@@ -856,50 +857,50 @@ chk('I7e', /summary:focus-visible\s*\{[^}]*outline:/.test(REGRAS),
       + 'o corpo da tela pode mudar sem o papel acompanhar');
 }
 
-// =============== I9 a aba de cadastro esta OCULTA, e continua alcancavel
+// =============== I9 as tres abas estao na barra, e o `#cadastro` abre a terceira
 //
-// Decisao do dono em 14/08/2026: *"deixe a etapa de cadastro da fatura oculta por
-// enquanto"*. O "por enquanto" e a metade que estas verificacoes existem para
-// proteger — esconder e uma linha, e o que se perde ao esconder mal e o unico
-// caminho de tela para razao social, CNPJ, contato do rodape, logo, chave Pix,
-// campos do documento, modelo e campos personalizados. Medido em producao no dia:
-// os cinco campos do emissor VAZIOS e nenhuma logo.
+// De 14/08 a 30/09 a aba de cadastro esteve OCULTA — *"deixe a etapa de cadastro
+// da fatura oculta por enquanto"* — e estas verificacoes protegiam o "por
+// enquanto": que oculta nao virasse inalcancavel. Em 30/09 (etapa 1 do
+// redesenho) ela voltou para a barra, pelo motivo que a propria I9 guardava: e o
+// UNICO caminho de tela para razao social, CNPJ, contato, logo, chave Pix,
+// campos, modelo e campos personalizados — e os cinco campos do emissor estavam
+// VAZIOS em producao no dia em que ela foi escondida.
+//
+// O que continua valendo e o fragmento: Pendencias, a ajuda e tres mensagens do
+// servidor mandam para `/documento#cadastro` pelo nome «3 · Cadastro da fatura».
 
-chk('I9', !ABAS_VISIVEIS.includes(ABA_OCULTA),
-    'a aba de cadastro nao esta na barra por padrao — e o que o dono pediu');
+chk('I9', ABAS.length === 3 && ABAS[0] === 'leitura' && ABAS[1] === 'emissao' && ABAS[2] === 'cadastro',
+    `as tres abas estao na barra, na ordem do trabalho (hoje: ${ABAS.join(' | ')})`);
 
-chk('I9b', ordemDasAbas(false).length === ABAS_VISIVEIS.length
-        && ordemDasAbas(true).length === ABAS_VISIVEIS.length + 1
-        && ordemDasAbas(true).at(-1) === ABA_OCULTA,
-    'revelada, ela entra no FIM da ordem — o rotulo dela diz "3 ·" e o numero tem de bater '
-    + `com a posicao (ordem revelada: ${ordemDasAbas(true).join(' | ')})`);
+chk('I9b', ABAS.every((a, i) => ROTULO_DA_ABA[a].startsWith(`${i + 1} · `)),
+    'o numero do rotulo e a posicao na barra — «3 ·» na terceira, e nao um numero que a barra nao mostra');
 
-// A PORTA CONTINUA ABERTA, e esta linha e a que impede "oculta" de virar
-// "inalcancavel" numa edicao distraida. Sem ela, preencher o emissor volta a
-// exigir `psql` — o erro que a migration 26 ja cometeu uma vez (§15.4).
-chk('I9c', revelaAbaOculta(FRAGMENTO_DA_ABA_OCULTA)
-        && revelaAbaOculta(FRAGMENTO_DA_ABA_OCULTA.replace(/^#/, ''))
-        && revelaAbaOculta('#CADASTRO'),
-    `"${FRAGMENTO_DA_ABA_OCULTA}" revela a aba, com ou sem o "#" e sem depender de caixa`);
+// A PORTA DO ENDERECO CONTINUA ABERTA, agora para ABRIR e nao para revelar.
+chk('I9c', abaDoFragmento(FRAGMENTO_DO_CADASTRO) === 'cadastro'
+        && abaDoFragmento(FRAGMENTO_DO_CADASTRO.replace(/^#/, '')) === 'cadastro'
+        && abaDoFragmento('#CADASTRO') === 'cadastro',
+    `"${FRAGMENTO_DO_CADASTRO}" abre a aba do cadastro, com ou sem o "#" e sem depender de caixa`);
 
-chk('I9d', !revelaAbaOculta('') && !revelaAbaOculta('#') && !revelaAbaOculta('#emissao')
-        && !revelaAbaOculta('#cadastro-de-outra-coisa'),
-    'e nenhum outro fragmento a revela — inclusive o vazio, que e o caso normal');
+chk('I9d', abaDoFragmento('') === null && abaDoFragmento('#') === null
+        && abaDoFragmento('#emissao') === null && abaDoFragmento('#cadastro-de-outra-coisa') === null,
+    'e nenhum outro fragmento abre aba nenhuma — inclusive o vazio, que e o caso normal');
 
-// O CAMINHO QUE ISTO EXISTE PARA COBRIR: quem esta em `#cadastro` e apaga o `#`
-// da barra de endereco. `aba` continua 'cadastro' e a ordem passou a ter duas.
-// Sem o recuo, a barra desenha duas abas com NENHUMA marcada, o painel segue
-// mostrando o cadastro e — pior — nenhuma fica no caminho do Tab, porque
-// `tabIndex` e 0 so na ativa. Vira uma barra de abas inalcancavel por teclado.
-chk('I9e', abaVigente(ABA_OCULTA, ordemDasAbas(false)) === ordemDasAbas(false)[0],
-    'com a aba oculta fechada, quem estava nela cai na primeira — e nao numa barra sem selecao');
+// A ABA 2 NAO DIZ «EMISSAO». Ela e a folha que o cliente recebe, para conferir e
+// imprimir; «2 · Emissão» fazia quem estava no passo 1 procurar ali o passo 3 do
+// mes, que e a tela «Emissão e cobrança» (critica de 30/09, heuristica 2).
+chk('I9e', !/emiss/i.test(ROTULO_DA_ABA.emissao) && /folha/i.test(ROTULO_DA_ABA.emissao),
+    `a aba 2 diz o que mostra — a folha — e nao «Emissão» (hoje: «${ROTULO_DA_ABA.emissao}»)`);
 
-chk('I9f', abaVigente(ABA_OCULTA, ordemDasAbas(true)) === ABA_OCULTA
-        && ABAS_VISIVEIS.every((a) => abaVigente(a, ordemDasAbas(false)) === a),
-    'e nenhuma aba que existe na ordem e trocada por outra');
+// O ENDERECO ACOMPANHA A ABA. Com `#cadastro` parado no endereco depois de
+// sair do cadastro, um link para `/documento#cadastro` nao mudava o fragmento,
+// nao disparava `hashchange` e o clique nao abria nada.
+chk('I9f', fragmentoDaAba('cadastro') === FRAGMENTO_DO_CADASTRO
+        && fragmentoDaAba('leitura') === '' && fragmentoDaAba('emissao') === '',
+    'o fragmento so esta no endereco com o cadastro aberto — sair dele o tira');
 
-chk('I9g', ordemDasAbas(true).every((a) => (ROTULO_DA_ABA[a] ?? '').trim() !== ''),
-    'toda aba, inclusive a oculta, tem rotulo — uma aba sem nome na barra e um botao mudo');
+chk('I9g', ABAS.every((a) => (ROTULO_DA_ABA[a] ?? '').trim() !== ''),
+    'toda aba tem rotulo — uma aba sem nome na barra e um botao mudo');
 
 // ============================================================================
 // I10 — A ABA DO CAMINHO APOSENTADO NÃO EXISTE MAIS

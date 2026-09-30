@@ -34,8 +34,9 @@ export function navegar(caminho: string, substituir = false): void {
    * mudou por navegacao interna.
    *
    * O CASO CONCRETO, e ele estava no caminho critico: a aba «3 · Cadastro da
-   * fatura» esta oculta da barra por decisao do dono e so aparece com
-   * `#cadastro` no endereco (`abas-da-fatura.ts`). Ela e o UNICO caminho de tela
+   * fatura» esteve oculta da barra de 14/08 a 30/09 e so aparecia com
+   * `#cadastro` no endereco (`abas-da-fatura.ts`); hoje o fragmento e o que a
+   * ABRE direto. Ela e o UNICO caminho de tela
    * para a razao social e o CNPJ de quem cobra — que estao VAZIOS em producao, e
    * cuja falta faz a folha sair sem dizer quem cobra e sem a linha antigolpe do
    * boleto. Os dois links que levavam ate ela passavam por aqui, entao **quem ja

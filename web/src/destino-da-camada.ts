@@ -46,7 +46,7 @@
 // e `navegacao.ts`.
 
 import { TELAS, type Tela } from './navegacao.ts';
-import { FRAGMENTO_DA_ABA_OCULTA } from './abas-da-fatura.ts';
+import { FRAGMENTO_DO_CADASTRO } from './abas-da-fatura.ts';
 
 export type DestinoDaCamada = {
   /** A tela onde o dado ENTRA. `null` quando nao existe tela — e ai o `caminho`
@@ -63,11 +63,13 @@ export type DestinoDaCamada = {
    * link viraria "nao ha tela", que e mentira.
    *
    * EXISTE POR UM CASO CONCRETO, e ele foi achado em 24/08/2026 depois de o
-   * link do emissor ja estar no ar: a aba «3 · Cadastro da fatura» esta OCULTA
-   * da barra por decisao do dono (`abas-da-fatura.ts`), e o unico jeito de
-   * alcanca-la e `#cadastro`. Sem o fragmento o link abria a etapa 1 e a etapa
-   * 3 nem aparecia — o pior tipo de link, o que leva a algum lugar. A tela le
-   * `location.hash` na montagem, entao o `pushState` da `Ligacao` basta.
+   * link do emissor ja estar no ar: a aba «3 · Cadastro da fatura» estava
+   * OCULTA da barra, e o unico jeito de alcanca-la era `#cadastro`. Sem o
+   * fragmento o link abria a etapa 1 e a etapa 3 nem aparecia — o pior tipo de
+   * link, o que leva a algum lugar. Desde 30/09 a aba fica na barra, e o
+   * fragmento continua sendo o que ABRE direto nela (`abaDoFragmento`): o link
+   * leva ao formulario, e nao a tela onde ele mora. A tela le `location.hash`
+   * na montagem, entao o `pushState` da `Ligacao` basta.
    */
   fragmento?: string;
   /** O ATO, em imperativo. Vira o texto do link. */
@@ -170,10 +172,9 @@ export const DESTINO_DA_CAMADA: Record<string, DestinoDaCamada> = {
     caminho: null,
     nota: 'Na aba «1 · Leitura e cálculo»: sobe-se o PDF da conta, confere-se campo a campo o que '
       + 'o leitor extraiu e registra-se. É a conta registrada que vira a cobrança, pelo botão '
-      + '«gerar cobrança» da lista logo abaixo. Uma conta por unidade e por mês, sempre uma de '
-      + 'cada vez — se vale um caminho para subir as 29 de uma pasta só é decisão em aberto, com '
-      + 'dono. Registrar não exige a unidade cadastrada, de propósito, porque quem sobe o arquivo '
-      + 'está conferindo; faturar exige.',
+      + '«Gerar N cobranças» da lista logo abaixo. Uma conta por unidade e por mês — as do mês '
+      + 'inteiro podem subir juntas, e cada uma vira uma linha da fila. Registrar não exige a '
+      + 'unidade cadastrada, de propósito, porque quem sobe o arquivo está conferindo; faturar exige.',
   },
 
   vencimento: {
@@ -208,9 +209,10 @@ export const DESTINO_DA_CAMADA: Record<string, DestinoDaCamada> = {
 
   /*
    * O EMISSOR ENTROU EM 24/08/2026, e o destino e a MESMA aba da conta lida —
-   * outra etapa dela, e a etapa e OCULTA. `ABA_OCULTA` em `abas-da-fatura.ts`:
-   * a «3 · Cadastro da fatura» saiu da barra por decisao do dono em 14/08 e so
-   * e revelada por `#cadastro`, que a tela le de `location.hash` ao montar.
+   * outra etapa dela. De 14/08 a 30/09 a «3 · Cadastro da fatura» esteve fora
+   * da barra e so era revelada por `#cadastro`; desde a etapa 1 do redesenho
+   * ela esta na barra, e o `#cadastro` e o que a ABRE direto
+   * (`abaDoFragmento` em `abas-da-fatura.ts`), lido de `location.hash` ao montar.
    *
    * Por isso `rota` e `/documento` e o `#cadastro` vai no FRAGMENTO. A primeira
    * versao desta linha, no mesmo dia, mandava so `/documento`: abria a etapa 1
@@ -218,7 +220,7 @@ export const DESTINO_DA_CAMADA: Record<string, DestinoDaCamada> = {
    * algum lugar e nao ao lugar — a regra 3 deste arquivo, contra ele mesmo.
    */
   emissor_da_fatura: {
-    rota: '/documento', fragmento: FRAGMENTO_DA_ABA_OCULTA, filtro: null,
+    rota: '/documento', fragmento: FRAGMENTO_DO_CADASTRO, filtro: null,
     rotulo: 'Cadastrar quem emite a fatura (etapa 3)',
     /* `null` E A RESPOSTA CERTA, e a primeira versao desta linha dizia
        `npm run identidade` — que esta ERRADO. Aquele script cadastra CHAVE PIX

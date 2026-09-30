@@ -13,7 +13,7 @@
 // nomes diferentes dos das abas:
 //
 //   «Fatura unificada»      enviar as contas · «Conferir» · «Registrar» ·
-//                           «conferir antes» · «gerar cobrança»
+//                           «conferir antes» · «Gerar N cobranças»
 //   «Emissão e cobrança»    «Emitir as N em rascunho» · o botão do boleto
 //
 // E há uma armadilha a mais, que sozinha justifica este arquivo: a tela
@@ -148,10 +148,10 @@ export const MOLDES: readonly Molde[] = [
       'Baixe do portal da distribuidora as contas do mês — uma por unidade.',
       'Abra «Fatura unificada» e envie TODAS de uma vez na aba «1 · Leitura e cálculo». '
       + 'Não precisa ser uma por vez: o sistema lê em fila.',
-      'Cada conta lida vira uma linha. A que estiver com pendência aparece no topo, com o motivo — '
-      + 'clique «Conferir», ajuste o campo ao lado e salve.',
-      'Com a linha sem pendência, clique «Registrar». Ela sai da fila e passa para a lista '
-      + '«Contas registradas», logo abaixo.',
+      'Cada conta lida vira uma linha da fila. A que estiver com pendência aparece no topo, com o '
+      + 'motivo — clique «Conferir», corrija o campo na gaveta que abre, e a linha se resolve.',
+      'Com as linhas conferidas, clique «Registrar N contas conferidas» (ou «Registrar» numa linha '
+      + 'só). Elas passam para a lista «Contas registradas», logo abaixo.',
     ],
     destino: FATURA_UNIFICADA,
     trava: null,
@@ -166,7 +166,12 @@ export const MOLDES: readonly Molde[] = [
       'Continue em «Fatura unificada», na lista «Contas registradas».',
       'Clique «conferir antes» na linha. Ele diz, sem gravar nada, se falta alguma coisa para '
       + 'aquela conta virar cobrança.',
-      'Estando certo, clique «gerar cobrança» e confirme. A linha passa a dizer «cobrança gerada».',
+      /* [30/09] UMA REVISAO NO LUGAR DE UM `confirm` POR LINHA: o botao age
+       * sobre as marcadas (todas vem marcadas) e mostra a lista e a soma antes
+       * de gravar. */
+      'Clique «Gerar N cobranças»: as contas sem cobrança do mês vêm marcadas, e um resumo mostra '
+      + 'unidade, cliente e valor antes de gravar. Confirme em «Sim, gerar as N». Cada linha passa '
+      + 'a dizer «Cobrança gerada» — ou o motivo da recusa.',
       /* A QUARTA LINHA SAIU EM 10/09/2026, com a aba que ela mandava evitar.
        * Ela dizia «A aba Faturamento NÃO é este passo», e o dono removeu a aba
        * no mesmo dia — um aviso sobre uma porta que não existe mais é uma porta
@@ -201,8 +206,8 @@ export const MOLDES: readonly Molde[] = [
       + 'pagador na unidade — e ele costuma vir na conta que você já leu.',
       'Boleto pedido que não registrou volta sozinho na fila, a cada 5 minutos. Não adianta ficar '
       + 'clicando: a lista mostra quantas tentativas já houve.',
-      'A folha do cliente se imprime em «Fatura unificada» — e a «2ª via» de qualquer mês já '
-      + 'registrado sai pelo botão de mesmo nome.',
+      'A folha do cliente se imprime em «Fatura unificada», na aba «2 · Folha do cliente» — e a '
+      + '«2ª via» de qualquer mês já registrado sai pelo botão de mesmo nome.',
     ],
     destino: EMISSAO,
     trava: 'bloqueia_boleto',

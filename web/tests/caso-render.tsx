@@ -41,6 +41,10 @@ import type { NivelDoAviso } from '../src/saude-do-dinheiro.ts';
 import type { EstadoDoCertificado } from '../src/cobranca-regras.ts';
 import { GatilhoDeAjuda } from '../src/ajuda-gatilho.tsx';
 import { passosDoEstado, type CamadaLida } from '../src/ajuda.ts';
+import { TabelaDaFila, TabelaDasRegistradas, GavetaDaConta, type PropsDasRegistradas } from '../src/fatura-lote-corpo.tsx';
+import type { ItemDoLote } from '../src/lote-de-contas.ts';
+import { CAMPOS_DA_FATURA_VAZIOS, type RegistroDeFatura } from '../src/api.ts';
+import { filtrarRegistradas } from '../src/registradas-regras.ts';
 
 let falhas = 0;
 let feitas = 0;
@@ -906,6 +910,157 @@ const desenharRoteiro = (leitura: Parameters<typeof CorpoDoRoteiro>[0]): string 
   chk('R17f', cadastro.every((h) => h === ''),
       'e nenhuma tela de cadastro ganha faixa - inclusive a APOSENTADA, porque uma faixa de '
       + '«passo do mês» nela seria o sistema convidando de volta para o caminho que trava a unidade');
+}
+
+// ============================================================================
+// R18..R21 — A ABA 1 DA FATURA UNIFICADA (etapa 1 do redesenho, 30/09/2026)
+// ============================================================================
+//
+// O QUE ESTAS VERIFICACOES PRENDEM e o que a critica de 30/09 mediu no espelho:
+// Situacao e acao so com rolagem lateral, o laranja numa previa, «gerar
+// cobrança» um por um com `confirm`, «excluir» colado nele. Nada disso aparece
+// numa suite que nao monta a tabela — e a tabela agora e montavel, porque o
+// desenho saiu da tela para `fatura-lote-corpo.tsx`.
+{
+  const campos = (uc: string, mes: string, total: string) =>
+    ({ ...CAMPOS_DA_FATURA_VAZIOS, unidade_consumidora: uc, mes_referencia: mes, valor_total_equatorial: total,
+       vencimento: '10/10/2026' });
+  const UCS = new Set(['000000000000101', '000000000000102', '000000000000103', '000000000000104',
+                       '000000000000105', '000000000000106']);
+  const fila: ItemDoLote[] = [
+    { id: 'a', nome: 'Equatorial_Goias_conta_de_energia_unidade_0101_setembro_2026_segunda_via.pdf', tamanho: 1,
+      estado: 'lido', erro: null, campos: campos('101', '09/2026', '412,80') },
+    { id: 'b', nome: 'conta-0102.pdf', tamanho: 1, estado: 'lido', erro: null, campos: campos('', '09/2026', '99,10') },
+    { id: 'c', nome: 'conta-0103.pdf', tamanho: 1, estado: 'lido', erro: null, campos: campos('103', '09/2026', '87,00') },
+    { id: 'd', nome: 'conta-0104.pdf', tamanho: 1, estado: 'registrado', erro: null, campos: campos('104', '09/2026', '120,00') },
+    { id: 'e', nome: 'conta-0105.pdf', tamanho: 1, estado: 'lendo', erro: null, campos: null },
+    { id: 'f', nome: 'foto-borrada.jpg', tamanho: 1, estado: 'falhou', erro: 'O leitor não achou a tabela da conta.', campos: null },
+    { id: 'g', nome: 'conta-0106.pdf', tamanho: 1, estado: 'lido', erro: null, campos: campos('106', '09/2026', '55,00') },
+  ];
+  const semNada = () => {};
+  const html = renderToStaticMarkup(
+    <TabelaDaFila itens={fila} ucs={UCS} registrando={false} principal abertaId="c"
+                  registrar={semNada} conferir={semNada} remover={semNada} limpar={semNada} />);
+  const t = texto(html);
+  const linhas = html.split('<tr').length - 2; // o cabecalho e o primeiro `<tr`
+
+  chk('R18a', linhas === 7 && (html.match(/class="marca /g) ?? []).length === 7,
+      `a fila desenha as sete linhas, cada uma com a sua Situação (linhas: ${linhas})`);
+  chk('R18b', /<button[^>]*class="primario"[^>]*>Registrar 3 contas conferidas<\/button>/.test(html),
+      'o laranja da tela e «Registrar N contas conferidas», com o numero das conferidas');
+  chk('R18c', html.includes('title="Equatorial_Goias_conta_de_energia_unidade_0101_setembro_2026_segunda_via.pdf"')
+          && html.includes('class="fu-nome"'),
+      'o nome do arquivo trunca numa linha e leva o nome inteiro no title — ele nao quebra mais a linha em quatro');
+  chk('R18d', (html.match(/data-conferir="/g) ?? []).length === 5,
+      'toda linha com campos lidos tem «Conferir», e ele carrega o endereco da volta do foco');
+  chk('R18e', /Corrigir/.test(t) && /Não leu/.test(t) && /Lendo…/.test(t) && /Registrada/.test(t),
+      'os estados dizem a PALAVRA: corrigir, nao leu, lendo, registrada');
+  chk('R18f', html.includes('aria-current="true"') && html.includes('class="fu-aberta"'),
+      'a linha aberta na gaveta fica marcada na parte da fila que continua a vista');
+  chk('R18g', (html.match(/data-rotulo="/g) ?? []).length === 7 * 4,
+      'cada dado da linha carrega o proprio rotulo — e o que faz o cartao do celular sem outra marcacao');
+  chk('R18h', renderToStaticMarkup(
+      <TabelaDaFila itens={[]} ucs={UCS} registrando={false} principal
+                    registrar={semNada} conferir={semNada} remover={semNada} limpar={semNada} />) === '',
+      'sem fila, nada — uma tabela vazia na primeira dobra seria ruido');
+  const naoPrincipal = renderToStaticMarkup(
+    <TabelaDaFila itens={fila} ucs={UCS} registrando={false} principal={false}
+                  registrar={semNada} conferir={semNada} remover={semNada} limpar={semNada} />);
+  chk('R18i', !naoPrincipal.includes('class="primario"'),
+      'e quando o passo e outro, o «Registrar N» deixa de ser laranja — um primario por tela');
+}
+
+{
+  const reg = (id: string, uc: string, cli: string, total: number, over: Partial<RegistroDeFatura> = {}): RegistroDeFatura => ({
+    id, numero_uc: uc, competencia: '2026-09-01', cliente_nome: cli, vencimento: '2026-10-10',
+    compensada_kwh: '1', tarifa_kwh: '1', desconto_centavos: 500, total_centavos: total, fatura_id: null,
+    cobranca_disponivel: true, criado_em: '', atualizado_em: '', ...over,
+  });
+  const lista = [
+    reg('r1', '000000000000101', 'Ana Souza', 111_111),
+    reg('r2', '000000000000102', 'Bruno Lima', 22_222),
+    reg('r3', '000000000000103', 'Carla Dias', 33_333, { fatura_id: 'f3' }),
+    reg('r4', '000000000000104', 'Davi Rocha', 4_444),
+    reg('r5', '000000000000105', 'Elisa Prado', 5_555, { competencia: '2026-08-01', fatura_id: 'f5' }),
+  ];
+  const filtro = { mes: '2026-09', soSemCobranca: false, unidade: null };
+  const nada = () => {};
+  const base: PropsDasRegistradas = {
+    lista, visiveis: filtrarRegistradas(lista, filtro), erro: null, filtro, meses: ['2026-09', '2026-08'],
+    parcial: false, aoFiltrar: nada, desmarcadas: new Set(['r4']), aoMarcar: nada, aoMarcarTodas: nada,
+    principal: true, revisando: false, aoRevisar: nada, rodada: {}, rodadaIds: [], rodando: false,
+    aoGerar: nada, ensaio: {}, ensaiando: null, aoEnsaiar: nada, aoEnsaiarTodas: nada, aoSegundaVia: nada,
+    excluindo: null, aoPedirExclusao: nada, aoExcluir: nada, aoVerUnidade: nada,
+  };
+  const desenharReg = (p: Partial<PropsDasRegistradas> = {}) => renderToStaticMarkup(<TabelaDasRegistradas {...base} {...p} />);
+
+  const html = desenharReg();
+  const t = texto(html);
+  chk('R19a', /Contas registradas de setembro de 2026/.test(t),
+      'o titulo diz O MES da lista — e nao «todas as unidades» com dois meses misturados');
+  chk('R19b', /<button[^>]*class="primario"[^>]*>Gerar 2 cobranças<\/button>/.test(html),
+      'o «Gerar N cobranças» conta as marcadas sem cobrança (tres sem cobrança, uma desmarcada) e e o laranja');
+  chk('R19c', (html.match(/type="checkbox"[^>]*checked=""/g) ?? []).length === 2,
+      'as marcadas aparecem marcadas; a ja cobrada nem tem caixa');
+  chk('R19d', !/gerar cobrança<\/button>/.test(html) && !/window\.confirm/.test(html),
+      'nao ha mais «gerar cobrança» por linha — a cobranca sai pela revisao, uma vez');
+  chk('R19e', /Cobrança gerada/.test(t) && (t.match(/Sem cobrança/g) ?? []).length >= 3,
+      'a Situacao de cada linha e palavra: sem cobranca ou cobranca gerada');
+  chk('R19f', html.includes('aria-label="Excluir o registro de 09/2026 da unidade 000000000000101"')
+          && !html.includes('aria-label="Excluir o registro de 09/2026 da unidade 000000000000103"'),
+      '«excluir» e um icone com nome proprio no fim da linha, e a ja cobrada nao oferece');
+  chk('R19g', !/\bUC\b/.test(t), 'a tela diz «unidade», nunca a sigla');
+
+  const rev = desenharReg({ revisando: true });
+  const rt = texto(rev);
+  const soRevisao = texto(rev.slice(rev.indexOf('class="fu-revisao"'), rev.indexOf('class="fu-tabela fu-registradas"')));
+  chk('R20a', /Gerar 2 cobranças de setembro de 2026\?/.test(soRevisao) && /Ana Souza/.test(soRevisao)
+          && /Bruno Lima/.test(soRevisao) && /R\$ 1\.111,11/.test(soRevisao) && !/Davi Rocha/.test(soRevisao),
+      'a revisao lista unidade, cliente e valor das MARCADAS — a desmarcada fica fora');
+  chk('R20b', /Soma: R\$ 1\.333,33 em 2 contas/.test(rt),
+      'e a soma, em centavos somados como inteiros');
+  chk('R20c', /Sim, gerar as 2/.test(rt) && /rascunho/.test(rt),
+      'o ato nomeia o que faz, e a nota diz que nada vai ao cliente agora');
+  chk('R20d', !/>Gerar 2 cobranças<\/button>/.test(rev),
+      'com a revisao aberta, o botao de cima some — o proximo clique e o de dentro da revisao');
+
+  const rodando = desenharReg({
+    revisando: true, rodando: true, rodadaIds: ['r1', 'r2', 'r4'],
+    rodada: { r1: { estado: 'gerada' }, r2: { estado: 'gerando' }, r4: { estado: 'na_vez' } },
+  });
+  chk('R20e', /Gerando 2 de 3…/.test(texto(rodando)) && !/Sim, gerar/.test(texto(rodando)),
+      'durante a rodada a revisao vira placar, e o botao de gerar nao existe para um segundo clique');
+  const acabou = desenharReg({
+    revisando: true, rodando: false, rodadaIds: ['r1', 'r2'],
+    rodada: { r1: { estado: 'gerada' }, r2: { estado: 'recusada', motivo: 'Não vira cobrança: a unidade não tem contrato ativo.' } },
+  });
+  chk('R20f', /1 de 2 cobranças geradas/.test(texto(acabou)) && /não tem contrato ativo/.test(texto(acabou))
+          && acabou.includes('href="/faturas"'),
+      'no fim, o placar, o motivo de cada recusa, e o caminho para o passo seguinte');
+
+  const exc = desenharReg({ excluindo: 'r1' });
+  chk('R21a', /Excluir o registro de 09\/2026 da unidade 000000000000101 ?\?/.test(texto(exc))
+          && /Manter/.test(texto(exc)) && /economia acumulada/.test(texto(exc)),
+      'excluir pede confirmacao NA LINHA, dizendo o que sai da economia — sem dialogo do navegador');
+  const chip = desenharReg({ filtro: { mes: null, soSemCobranca: false, unidade: '000000000000101' },
+                             visiveis: filtrarRegistradas(lista, { mes: null, soSemCobranca: false, unidade: '000000000000101' }) });
+  chk('R21b', /Contas registradas da unidade 000000000000101/.test(texto(chip))
+          && chip.includes('aria-label="Tirar o filtro da unidade 000000000000101"'),
+      'o filtro de unidade e um chip que se tira, e o titulo diz que a lista esta filtrada');
+  const vazia = desenharReg({ lista: [], visiveis: [] });
+  chk('R21c', /Nenhuma conta registrada ainda/.test(texto(vazia)) && /vira cobrança/.test(texto(vazia)),
+      'a lista vazia ensina de onde as linhas vem e para onde vao');
+
+  const gaveta = renderToStaticMarkup(
+    <GavetaDaConta titulo="Conferência da conta" sub="Conferindo «conta.pdf»." aoFechar={nada}
+                   rodape={<button type="button" className="primario">Registrar este mês</button>}>
+      <p>campos</p>
+    </GavetaDaConta>);
+  chk('R21d', /role="dialog"/.test(gaveta) && /aria-modal="true"/.test(gaveta)
+          && /aria-labelledby="fu-gaveta-titulo"/.test(gaveta) && /id="fu-gaveta-titulo"/.test(gaveta),
+      'a gaveta e um dialogo modal de verdade, com nome — o titulo dela');
+  chk('R21e', gaveta.includes('aria-label="Fechar a conferência"') && /data-foco-inicial/.test(gaveta),
+      'fechar tem nome, e o foco sabe onde nascer');
 }
 
 export const resultado = () => ({ falhas, feitas });

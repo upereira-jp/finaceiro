@@ -165,6 +165,7 @@ const DESENHO: Record<NomeDeIcone, Icon> = {
   calendario: CalendarBlank,
   confirmar: CheckCircle,
   limpar: Broom,
+  fechar: X,
   baixar: DownloadSimple,
   imprimir: Printer,
   copiar: Copy,

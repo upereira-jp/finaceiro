@@ -1,80 +1,71 @@
-// AS ABAS DA FATURA COMO DADO PURO: quais existem, quais aparecem, e como se
-// chega na que nao aparece. Sem JSX.
+// AS ABAS DA FATURA COMO DADO PURO: quais existem, como se chamam, e qual o
+// endereco abre direto em cada uma. Sem JSX.
 //
-// POR QUE ISTO SAIU DO `fatura-unificada.tsx` EM 14/08/2026. O pedido do dono foi
-// *"deixe a etapa de cadastro da fatura oculta por enquanto"*, e esconder uma aba
-// e uma linha de codigo — mas a linha carrega tres decisoes que ninguem consegue
-// ler no `.tsx`: QUAIS aparecem, COMO se alcanca a escondida, e o que acontece com
+// POR QUE ISTO SAIU DO `fatura-unificada.tsx` EM 14/08/2026. Esconder uma aba
+// era uma linha de codigo que carregava tres decisoes que ninguem conseguia ler
+// no `.tsx`: QUAIS aparecem, COMO se alcanca a escondida, e o que acontece com
 // quem ja estava dentro dela quando ela sumiu. O runner do `web/` e
 // `node --experimental-strip-types` e nao le JSX, entao nada dentro de um `.tsx`
 // pode ser verificado. E o mesmo motivo de `navegacao.ts`, `cobranca-regras.ts` e
 // `contrato-regras.ts` existirem fora das telas. Regra 8.
+//
+// ============================================================================
+// 30/09/2026 (etapa 1 do redesenho) — AS TRES ABAS FICAM NA BARRA
+//
+// De 14/08 a 30/09 o cadastro da fatura esteve OCULTO — decisao do dono,
+// *"deixe a etapa de cadastro da fatura oculta por enquanto"* — e so aparecia
+// com `#cadastro` no endereco. O "por enquanto" venceu pelo motivo que este
+// arquivo ja registrava: a aba e o UNICO caminho de tela para o que a folha
+// imprime (razao social, CNPJ, contato do rodape, logo, chave Pix, campos, modelo),
+// e **os cinco campos do emissor estavam VAZIOS em producao** no dia em que ela
+// foi escondida. Uma porta que so abre para quem sabe o endereco e, na pratica,
+// uma porta fechada para quem chega depois — a critica de 30/09 a contou como
+// problema de controle (heuristica 3), e o redesenho aprovado pelo dono a tira.
+//
+// O `#cadastro` CONTINUA VALENDO, agora para ABRIR a aba e nao para revela-la:
+// a tela de Pendencias, a ajuda e tres mensagens do SERVIDOR mandam para
+// `/documento#cadastro` pelo nome «3 · Cadastro da fatura», e as tres
+// continuam certas letra por letra.
+//
+// E A ABA 2 MUDOU DE NOME. Ela se chamava «2 · Emissão», e e so a folha que o
+// cliente recebe, para conferir e imprimir — quem lia "Emissão" procurava ali o
+// passo 3 do mes, que e a tela «Emissão e cobrança». Agora ela diz o que mostra.
 
 export type AbaDaFatura = 'leitura' | 'emissao' | 'cadastro';
 
-/** O rotulo carrega o NUMERO da etapa, e o numero e o da ordem visivel: com o
- *  cadastro oculto a barra le "1 · …" e "2 · …", e o "3 ·" so aparece junto com
- *  a aba que o usa. Renumerar na mao seria a quarta coisa a lembrar. */
+/** O rotulo carrega o NUMERO da aba, e o numero e o da ordem na barra. A chave
+ *  interna `emissao` ficou (ela e o `id` do painel), o que a pessoa le mudou. */
 export const ROTULO_DA_ABA: Record<AbaDaFatura, string> = {
   leitura: '1 · Leitura e cálculo',
-  emissao: '2 · Emissão',
+  emissao: '2 · Folha do cliente',
   cadastro: '3 · Cadastro da fatura',
 };
 
-/** As que aparecem por padrao. */
-export const ABAS_VISIVEIS: readonly AbaDaFatura[] = ['leitura', 'emissao'];
+/** A ordem da barra. E a MESMA lista que governa a seta do teclado — duas listas
+ *  discordando dariam uma aba clicavel que a seta nao alcanca. */
+export const ABAS: readonly AbaDaFatura[] = ['leitura', 'emissao', 'cadastro'];
 
-/**
- * A QUE ESTA OCULTA — decisao do dono em 14/08/2026, *"por enquanto"*.
- *
- * OCULTA E NAO REMOVIDA, e a distincao nao e de estilo. Esta aba e o UNICO
- * caminho de tela para o que a folha imprime: razao social, CNPJ, o contato do
- * rodape, a logo, a chave Pix, os campos do documento, o modelo e os campos
- * personalizados. **Medido em producao no dia em que ela foi escondida: os cinco
- * campos do emissor estao VAZIOS e nao ha logo** — entao a folha sai sem a linha
- * do emissor e sem o Beneficiario do boleto, que e o nome ao qual o aviso contra
- * o golpe se amarra.
- *
- * Remove-la fecharia o unico jeito de consertar isso pela tela, e este projeto ja
- * pagou por esse erro uma vez: a migration 26 criou `razao_social` e `cnpj` sem
- * formulario, e o registro daquele dia diz *"um campo que so o `psql` alcanca nao
- * e um campo — e uma coluna"* (`REFERENCIA-fatura-unificada-2026-08-13.md` §15.4).
- *
- * Entao ela sai da BARRA e continua alcancavel pelo endereco. Quem precisa
- * preencher o emissor abre `/documento#cadastro`; quem nao precisa nao ve.
- */
-export const ABA_OCULTA: AbaDaFatura = 'cadastro';
+/** O endereco que abre direto no cadastro. Fragmento e nao rota nova: `#` nao
+ *  vai ao servidor, nao entra no `telaDoCaminho` e nao inventa uma tela que a
+ *  navegacao teria de conhecer. */
+export const FRAGMENTO_DO_CADASTRO = '#cadastro';
 
-/** O que revela a aba oculta. Fragmento e nao rota nova: `#` nao vai ao servidor,
- *  nao entra no `telaDoCaminho` e nao inventa uma tela que a navegacao teria de
- *  conhecer. Some da barra tirando o `#` — sem recarregar. */
-export const FRAGMENTO_DA_ABA_OCULTA = '#cadastro';
-
-/** `true` quando o endereco pede a aba oculta. Aceita o fragmento com ou sem o
- *  `#`, porque `location.hash` vem com ele e um teste tende a escrever sem. */
-export function revelaAbaOculta(hash: string): boolean {
+/** A aba que o endereco pede, ou `null` quando ele nao pede nenhuma. Aceita o
+ *  fragmento com ou sem o `#`, porque `location.hash` vem com ele e um teste
+ *  tende a escrever sem. */
+export function abaDoFragmento(hash: string): AbaDaFatura | null {
   const limpo = hash.trim().replace(/^#/, '').toLowerCase();
-  return limpo === FRAGMENTO_DA_ABA_OCULTA.replace(/^#/, '');
-}
-
-/** A ordem que a barra desenha. E a MESMA lista que governa a seta do teclado —
- *  duas listas discordando dariam uma aba clicavel que a seta nao alcanca. */
-export function ordemDasAbas(revelada: boolean): readonly AbaDaFatura[] {
-  return revelada ? [...ABAS_VISIVEIS, ABA_OCULTA] : ABAS_VISIVEIS;
+  return limpo === FRAGMENTO_DO_CADASTRO.replace(/^#/, '') ? 'cadastro' : null;
 }
 
 /**
- * A aba que vale, dada a que esta aberta e a ordem vigente.
+ * O fragmento que o endereco deve ter com esta aba aberta.
  *
- * EXISTE POR UM CAMINHO CONCRETO: quem esta em `#cadastro` e apaga o `#` da barra
- * de endereco continua com `aba === 'cadastro'` enquanto a ordem passou a ter
- * duas. Sem esta funcao a barra desenharia duas abas com NENHUMA marcada, o
- * painel seguiria mostrando o cadastro, e — pior — nenhuma delas ficaria no
- * caminho do `Tab`, porque `tabIndex` e 0 so na ativa. Vira uma barra de abas
- * inalcancavel por teclado.
+ * O ENDERECO ACOMPANHA A ABA, e o motivo e um defeito que a aba oculta tinha: com
+ * `#cadastro` ja no endereco, um link para `/documento#cadastro` nao mudava nada
+ * — mesmo fragmento, nenhum `hashchange` — e o clique nao abria a aba. Com o
+ * endereco sempre dizendo a aba aberta, o fragmento so esta la quando o cadastro
+ * esta aberto, e recarregar a pagina volta para onde a pessoa estava.
  */
-export function abaVigente(
-  atual: AbaDaFatura, ordem: readonly AbaDaFatura[],
-): AbaDaFatura {
-  return ordem.includes(atual) ? atual : ordem[0]!;
-}
+export const fragmentoDaAba = (aba: AbaDaFatura): string =>
+  (aba === 'cadastro' ? FRAGMENTO_DO_CADASTRO : '');

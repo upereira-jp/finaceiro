@@ -245,7 +245,8 @@ export function TelaDocumento() {
 
         ESSE DIA FOI 30/09/2026 (etapa 0 do redesenho): os tokens subiram e a
         paleta propria saiu. A CLASSE FICOU, e agora so da escopo ao que e desta
-        tela — grade de duas colunas, abas de etapa, area de envio, painel navy.
+        tela — abas de etapa, area de envio, as tabelas do lote, a gaveta da
+        conta e o painel navy (a grade de duas colunas saiu na etapa 1, 30/09).
         Fonte, cor, campo, botao e aviso sao os do sistema. O bloco de CSS esta
         em `estilo.ts`, secao "A FATURA UNIFICADA E A REFERENCIA".
       */}

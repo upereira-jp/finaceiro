@@ -487,7 +487,8 @@ export const TOPICOS: readonly Topico[] = [
       'Abra a aba Fatura unificada.',
       'Suba o arquivo da conta daquela unidade neste mês e confira campo a campo o que foi lido.',
       'Registre a conta. Ela passa a aparecer na lista de contas registradas, logo abaixo.',
-      'Na lista, o botão «gerar cobrança» transforma a conta registrada na cobrança do cliente.',
+      'Na lista, o botão «Gerar N cobranças» transforma as contas registradas marcadas nas cobranças '
+        + 'dos clientes, depois de um resumo que você confirma.',
     ],
     caminhos: [daCamada('conta_lida_da_competencia', 'Ler a conta da distribuidora')],
     camada: 'conta_lida_da_competencia',
@@ -770,7 +771,7 @@ export const TOPICOS: readonly Topico[] = [
      * fatura nasce em 21/08, com a Q-CICLO-01. E gerar por lá TRAVA a unidade no
      * caminho oficial com «esta unidade ja tem fatura». */
     resposta: 'Da conta da distribuidora, na aba Fatura unificada: você sobe o PDF (pode subir '
-      + 'vários de uma vez), confere o que foi lido, registra, e então clica em «gerar cobrança». '
+      + 'vários de uma vez), confere o que foi lido, registra, e então clica em «Gerar N cobranças». '
       + 'Não há outro caminho: a aba de faturamento em lote, que existia até 10/09/2026, foi '
       + 'removida justamente porque gerar por lá travava a unidade neste.',
     passos: [
@@ -778,9 +779,9 @@ export const TOPICOS: readonly Topico[] = [
       'Abra a aba Fatura unificada, em «1 · Leitura e cálculo».',
       'Envie as contas da distribuidora — uma, ou todas as do mês de uma vez.',
       'Confira cada linha da fila: unidade, mês, total e vencimento. Corrija o que precisar.',
-      'Clique em «Registrar as N contas conferidas».',
+      'Clique em «Registrar N contas conferidas».',
       'Na lista de contas registradas, use «conferir antes» para ver se ela virará cobrança — '
-        + 'isso não grava nada — e então «gerar cobrança».',
+        + 'isso não grava nada — e então «Gerar N cobranças», que mostra o resumo antes de gravar.',
       'Emitir e cobrar acontecem na aba Emissão e cobrança, no mês DA CONTA.',
     ],
     caminhos: [
@@ -809,8 +810,8 @@ export const TOPICOS: readonly Topico[] = [
        * onde não há o que clicar é pior do que não ensinar: quem procura varre a
        * barra inteira antes de duvidar do texto. */
       'Clicar quantas vezes quiser não cobra ninguém — «conferir antes» só lê.',
-      'Só «gerar cobrança» grava alguma coisa, e ela ainda nasce como rascunho: emitir é um '
-        + 'segundo ato, na aba Emissão e cobrança.',
+      'Só «Gerar N cobranças» grava alguma coisa, e só depois do «Sim» no resumo — e a cobrança '
+        + 'ainda nasce como rascunho: emitir é um segundo ato, na aba Emissão e cobrança.',
     ],
     caminhos: [ir('/documento', 'Abrir Fatura unificada'), ver('/faturas', 'Ver as cobranças do mês')],
     camada: null,

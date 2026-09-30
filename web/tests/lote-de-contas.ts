@@ -18,10 +18,15 @@ import { readFileSync } from 'node:fs';
 import {
   recusaDoArquivo, normalizarUc, competenciaDoItem, chaveDoItem,
   pendenciaDoItem, avisoDoItem, chavesRepetidas, podeRegistrar,
-  resumoDoLote, ordemDaFila, TETO_DO_ARQUIVO, LEITURAS_SIMULTANEAS,
+  resumoDoLote, ordemDaFila, corrigirItem, vizinhosNaFila, TETO_DO_ARQUIVO, LEITURAS_SIMULTANEAS,
   type ItemDoLote,
 } from '../src/lote-de-contas.ts';
-import { CAMPOS_DA_FATURA_VAZIOS } from '../src/api.ts';
+import {
+  mesPadrao, mesesDaLista, filtrarRegistradas, selecaoParaGerar, somaEmCentavos,
+  economiaAcumulada, resumoDaRodada, podeGerar, rotuloDoMes, mesCurto, listaParcial,
+  ordemDasRegistradas, LIMITE_DA_LISTA,
+} from '../src/registradas-regras.ts';
+import { CAMPOS_DA_FATURA_VAZIOS, type RegistroDeFatura } from '../src/api.ts';
 
 let falhas = 0;
 const chk = (id: string, cond: boolean, d: string) => {
@@ -211,6 +216,146 @@ const lido = (over: Partial<ItemDoLote> & { uc?: string; mes?: string; total?: s
       `o teto do browser (${TETO_DO_ARQUIVO / 1024 / 1024} MB) e o do servidor (${m ? m[1] : '?'} MB) sao o MESMO numero`);
   chk('L9c', LEITURAS_SIMULTANEAS >= 1 && LEITURAS_SIMULTANEAS <= 6,
       'a concorrencia cabe no limite de conexoes por origem do navegador');
+}
+
+// ------------------ L10 a correcao feita na gaveta volta para a linha da fila
+{
+  // O beco que isto fecha: a conta chega sem a unidade, a pessoa digita o numero
+  // na gaveta — e ate 30/09 a linha da fila continuava dizendo «Corrigir».
+  const semUc = lido({ id: 'x', uc: '' });
+  chk('L10a', pendenciaDoItem(semUc, UCS) !== null, 'a linha sem unidade comeca com pendencia');
+  const corrigida = corrigirItem(semUc, { ...semUc.campos!, unidade_consumidora: '91584701207' });
+  chk('L10b', pendenciaDoItem(corrigida, UCS) === null && podeRegistrar(corrigida, UCS, new Set()),
+      'digitada a unidade na gaveta, a linha se resolve e o «Registrar N» passa a conta-la');
+
+  chk('L10c', corrigirItem(semUc, semUc.campos!) === semUc,
+      'abrir a gaveta copia os campos SEM mexer: a mesma referencia nao conta como correcao');
+
+  const recusada = { ...lido({ id: 'r' }), estado: 'falhou' as const, erro: 'O servidor recusou.' };
+  const mexida = corrigirItem(recusada, { ...recusada.campos!, vencimento: '10/06/2026' });
+  chk('L10d', mexida.estado === 'lido' && mexida.erro === null,
+      'a linha que o servidor recusou volta a «lido» quando alguem a corrige — e o jeito de tentar de novo');
+
+  const gravada = lido({ id: 'g', estado: 'registrado' });
+  chk('L10e', corrigirItem(gravada, { ...gravada.campos!, valor_total_equatorial: '99,00' }).estado === 'lido',
+      'a ja registrada que e editada volta a «lido»: o que esta na tela deixou de ser o que esta gravado');
+
+  const lendo: ItemDoLote = { ...lido({ id: 'l' }), estado: 'lendo', campos: null };
+  chk('L10f', corrigirItem(lendo, CAMPOS_DA_FATURA_VAZIOS) === lendo,
+      'a linha que ainda esta lendo nao recebe campos de fora — a leitura paga e quem os traz');
+}
+
+// ------------------------- L11 «Anterior» e «Proxima» andam pelo que falta
+{
+  const fila = [
+    lido({ id: 'ok1' }),
+    lido({ id: 'pend', uc: '' }),
+    lido({ id: 'ok2', uc: '000091670201219' }),
+    lido({ id: 'feita', uc: '000307301401201', estado: 'registrado' }),
+    { ...lido({ id: 'lendo' }), estado: 'lendo' as const, campos: null },
+  ];
+  // Ordem da tabela: pendencia primeiro, depois as conferidas, a registrada no fim.
+  const v = vizinhosNaFila(fila, UCS, 'ok1');
+  chk('L11a', v.total === 3 && v.posicao === 2 && v.anterior === 'pend' && v.proxima === 'ok2',
+      `anda na ordem da tabela e so pelo que espera registro (${JSON.stringify(v)})`);
+  const depois = vizinhosNaFila(fila, UCS, 'feita');
+  chk('L11b', depois.posicao === null && depois.proxima === 'pend',
+      'quem acabou de ser registrada sai da conta, e «Proxima» leva a primeira que falta');
+  chk('L11c', vizinhosNaFila(fila, UCS, 'ok2').proxima === null,
+      'na ultima, nao ha proxima — o botao desliga em vez de dar a volta');
+  chk('L11d', vizinhosNaFila([], UCS, null).total === 0, 'fila vazia, nada a andar');
+}
+
+// ============================================================================
+// AS CONTAS REGISTRADAS (`registradas-regras.ts`) — 30/09/2026
+// ============================================================================
+
+const reg = (over: Partial<RegistroDeFatura> & { id: string }): RegistroDeFatura => ({
+  numero_uc: '000091584701207', competencia: '2026-09-01', cliente_nome: 'Cliente',
+  vencimento: '2026-10-10', compensada_kwh: '100', tarifa_kwh: '0.95',
+  desconto_centavos: 1000, total_centavos: 10000, fatura_id: null, cobranca_disponivel: true,
+  criado_em: '2026-09-30T12:00:00.000Z', atualizado_em: '2026-09-30T12:00:00.000Z',
+  ...over,
+});
+
+// ----------------------------------------- L12 a lista abre no mes que tem trabalho
+{
+  const lista = [
+    reg({ id: 's1', competencia: '2026-09-01T00:00:00.000Z', fatura_id: 'f1' }),
+    reg({ id: 's2', competencia: '2026-09-01', fatura_id: 'f2' }),
+    reg({ id: 'a1', competencia: '2026-08-01', fatura_id: null }),
+    reg({ id: 'j1', competencia: '2026-07-01', fatura_id: 'f3' }),
+  ];
+  chk('L12a', mesPadrao(lista) === '2026-08',
+      'setembro esta todo cobrado e agosto tem uma esperando: a lista abre em AGOSTO, e nao no mais recente');
+  chk('L12b', mesPadrao(lista.map((r) => ({ ...r, fatura_id: 'x' }))) === '2026-09',
+      'sem nada por cobrar, abre no mais recente — e a confirmacao do que foi feito');
+  chk('L12c', mesPadrao([]) === null, 'lista vazia nao inventa mes');
+  chk('L12d', mesesDaLista(lista).join(',') === '2026-09,2026-08,2026-07',
+      'os meses saem do mais novo para o mais velho, sem repetir — mesmo com horario no JSON');
+  chk('L12e', mesPadrao(lista.map((r) => ({ ...r, fatura_id: null, cobranca_disponivel: false }))) === '2026-09',
+      'num banco que ainda nao cobra conta lida, nada «tem trabalho»: abre no mais recente');
+  chk('L12f', rotuloDoMes('2026-09') === 'setembro de 2026' && mesCurto('2026-09') === '09/2026',
+      'o mes se le por extenso no titulo e curto na linha');
+}
+
+// ----------------------------------- L13 o filtro e explicito, e a unidade tambem
+{
+  const lista = [
+    reg({ id: 'a', competencia: '2026-09-01', numero_uc: '91584701207' }),
+    reg({ id: 'b', competencia: '2026-09-01', numero_uc: '000091670201219', fatura_id: 'f' }),
+    reg({ id: 'c', competencia: '2026-08-01', numero_uc: '000091584701207' }),
+  ];
+  const f = (o: Partial<Parameters<typeof filtrarRegistradas>[1]>) =>
+    filtrarRegistradas(lista, { mes: null, soSemCobranca: false, unidade: null, ...o }).map((r) => r.id).join('');
+  chk('L13a', f({ mes: '2026-09' }) === 'ab', 'o mes filtra pelo mes da conta');
+  chk('L13b', f({ mes: '2026-09', soSemCobranca: true }) === 'a', '«Só sem cobrança» tira a que ja virou cobranca');
+  chk('L13c', f({ unidade: '000091584701207' }) === 'ac',
+      'a unidade casa com ou sem os zeros da Equatorial, e atravessa os meses');
+  chk('L13d', f({}) === 'abc', 'sem filtro nenhum, a lista inteira');
+  const misturada = [
+    reg({ id: 'g1', fatura_id: 'f1' }), reg({ id: 's1' }), reg({ id: 'g2', fatura_id: 'f2' }),
+    reg({ id: 'x1', cobranca_disponivel: false }), reg({ id: 's2' }),
+  ];
+  chk('L13e', ordemDasRegistradas(misturada).map((r) => r.id).join(' ') === 's1 s2 x1 g1 g2',
+      'o trabalho no topo: as que podem virar cobranca primeiro, as ja cobradas no fim, e a ordem de chegada dentro de cada grupo');
+}
+
+// ------------------------- L14 a selecao do «Gerar N» e o que ela soma
+{
+  const visiveis = [
+    reg({ id: 'a', total_centavos: 12345 }),
+    reg({ id: 'b', total_centavos: 100 }),
+    reg({ id: 'c', total_centavos: 999, fatura_id: 'f' }),
+    reg({ id: 'd', total_centavos: 1, cobranca_disponivel: false }),
+  ];
+  const todas = selecaoParaGerar(visiveis, new Set());
+  chk('L14a', todas.map((r) => r.id).join('') === 'ab',
+      'todas as que podem gerar comecam marcadas — a que ja virou cobranca e a do banco que nao sabe cobrar ficam fora');
+  chk('L14b', selecaoParaGerar(visiveis, new Set(['a'])).map((r) => r.id).join('') === 'b',
+      'desmarcar tira da rodada');
+  chk('L14c', selecaoParaGerar(visiveis, new Set(['c'])).length === 2,
+      'uma desmarcada que ja virou cobranca nao muda nada — a selecao pelo avesso nao precisa de poda');
+  chk('L14d', somaEmCentavos(todas) === 12445 && Number.isInteger(somaEmCentavos(todas)),
+      'a soma da revisao e inteiro em centavos (regra 1)');
+  chk('L14e', !podeGerar(visiveis[2]!) && !podeGerar(visiveis[3]!) && podeGerar(visiveis[0]!),
+      'pode gerar = sem cobranca E banco que sabe cobrar');
+}
+
+// ------------------------------------ L15 a economia e o placar da rodada
+{
+  const serie = [reg({ id: 'a', desconto_centavos: 5000 }), reg({ id: 'b', desconto_centavos: 1595 })];
+  const e = economiaAcumulada(serie);
+  chk('L15a', e.centavos === 6595 && e.faturas === 2, 'a economia acumulada soma os descontos da serie');
+  const r = resumoDaRodada({
+    a: { estado: 'gerada' }, b: { estado: 'recusada', motivo: 'sem contrato' },
+    c: { estado: 'gerando' }, d: { estado: 'na_vez' },
+  });
+  chk('L15b', r.total === 4 && r.geradas === 1 && r.recusadas === 1 && r.faltam === 2,
+      `o placar conta geradas, recusadas e as que faltam (${JSON.stringify(r)})`);
+  chk('L15c', LIMITE_DA_LISTA <= 500 && !listaParcial([reg({ id: 'x' })])
+          && listaParcial(Array.from({ length: LIMITE_DA_LISTA }, (_, i) => reg({ id: `p${i}` }))),
+      'a lista pede no maximo o que o servidor aceita, e diz quando bateu no teto');
 }
 
 console.log(falhas === 0 ? '\nEXIT=0' : `\nFALHAS: ${falhas}`);

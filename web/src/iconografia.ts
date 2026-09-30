@@ -37,6 +37,10 @@ export type NomeDeIcone =
   | 'sim' | 'nao'
   // ações e controles
   | 'buscar' | 'calendario' | 'confirmar' | 'limpar' | 'baixar' | 'imprimir' | 'copiar'
+  /* FECHAR E O X, e nao a vassoura de `limpar` (30/09): fechar a gaveta da
+   * Fatura unificada e tirar um filtro-chip nao limpam nada — a vassoura ali
+   * dizia um ato que nao acontece. */
+  | 'fechar'
   | 'subir' | 'descer' | 'remover' | 'enviar' | 'acrescentar' | 'emitir' | 'recarregar'
   // ordenação de coluna
   | 'ordem_crescente' | 'ordem_decrescente' | 'ordem_nenhuma'

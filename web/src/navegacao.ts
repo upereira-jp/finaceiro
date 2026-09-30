@@ -177,8 +177,8 @@ export const TELAS: readonly Tela[] = [
   /*
    * "DOCUMENTO" NÃO DIZIA QUAL. `Fatura unificada` é como o projeto inteiro já a
    * chama (`fatura-unificada.tsx`, `dominio/fatura-unificada.ts`, a tabela
-   * `registro_de_fatura_unificada`). A ROTA NÃO MUDA: `/documento#cadastro` é o
-   * único caminho de tela para o emissor.
+   * `registro_de_fatura_unificada`). A ROTA NÃO MUDA: `/documento#cadastro` abre
+   * direto a aba do emissor, «3 · Cadastro da fatura».
    */
   { funil: 'rateio', rota: '/documento',  titulo: 'Fatura unificada', icone: 'documento', grupo: 'dinheiro' },
   /*

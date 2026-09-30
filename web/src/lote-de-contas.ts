@@ -297,3 +297,72 @@ export function ordemDaFila(
     .sort((a, b) => peso(a.i) - peso(b.i) || a.indice - b.indice)
     .map(({ i }) => i);
 }
+
+/**
+ * A CORRECAO FEITA NA GAVETA VOLTA PARA A LINHA DA FILA — 30/09/2026.
+ *
+ * ATE AQUI ELA NAO VOLTAVA, e o caminho que o roteiro ensina levava a um beco.
+ * «Conferir» copiava os campos da linha para o painel, e o que se corrigia ali
+ * ficava SO no painel. O caso de todo mes: a conta chega sem o numero da
+ * unidade, a linha diz «Corrigir», a pessoa digita o numero no painel e registra
+ * por la — e a linha da fila continua sem unidade, dizendo «Corrigir» para
+ * sempre, porque a chave dela (unidade, mes) nunca casou com a do registro.
+ *
+ * Agora a linha aberta RECEBE os campos corrigidos. Tres consequencias, todas
+ * desejadas:
+ *
+ *   - a pendencia se resolve na propria fila, ao vivo, e o «Registrar N contas
+ *     conferidas» passa a conta-la;
+ *   - uma linha que o servidor recusou ao gravar (`falhou` com campos) volta a
+ *     `lido` quando alguem mexe nela: corrigir e o jeito de tentar de novo;
+ *   - uma linha `registrado` que e editada volta a `lido`. Regravar e o caminho
+ *     normal de CORRIGIR (o registro e `upsert` por unidade e mes), e a fila
+ *     precisa dizer que o que esta gravado ja nao e o que esta na tela.
+ *
+ * MESMA REFERENCIA, MESMA LINHA: abrir a gaveta copia os campos da linha sem
+ * muda-los, e isso nao pode contar como correcao.
+ */
+export function corrigirItem(i: ItemDoLote, campos: CamposDaFatura): ItemDoLote {
+  if (i.campos === campos) return i;
+  if (i.estado === 'na_fila' || i.estado === 'lendo' || i.estado === 'registrando') return i;
+  return { ...i, campos, estado: 'lido', erro: null };
+}
+
+/** O que a gaveta precisa para andar pela fila sem fechar. */
+export type VizinhosNaFila = {
+  anterior: string | null;
+  proxima: string | null;
+  /** 1-based dentro das que ainda esperam registro; `null` quando a aberta nao
+   *  esta entre elas (acabou de ser registrada, ou nao veio da fila). */
+  posicao: number | null;
+  /** Quantas linhas ainda esperam registro. */
+  total: number;
+};
+
+/**
+ * A ANTERIOR E A PROXIMA, na MESMA ordem que a tabela mostra (`ordemDaFila`).
+ *
+ * SO ANDA PELO QUE FALTA: linhas lidas (conferidas ou com pendencia) e as que o
+ * servidor recusou. A ja registrada nao e trabalho, e a que ainda esta lendo nao
+ * tem o que conferir.
+ *
+ * QUEM ACABOU DE SER REGISTRADA SAI DA LISTA, e ai «Proxima» leva a primeira
+ * que falta — que e o que se quer depois de registrar: continuar de onde o
+ * trabalho esta, e nao de onde a linha estava.
+ */
+export function vizinhosNaFila(
+  itens: readonly ItemDoLote[], ucs: ReadonlySet<string>, id: string | null,
+): VizinhosNaFila {
+  const abertas = ordemDaFila(itens, ucs)
+    .filter((i) => i.campos !== null && (i.estado === 'lido' || i.estado === 'falhou'));
+  const k = id ? abertas.findIndex((i) => i.id === id) : -1;
+  if (k < 0) {
+    return { anterior: null, proxima: abertas[0]?.id ?? null, posicao: null, total: abertas.length };
+  }
+  return {
+    anterior: abertas[k - 1]?.id ?? null,
+    proxima: abertas[k + 1]?.id ?? null,
+    posicao: k + 1,
+    total: abertas.length,
+  };
+}

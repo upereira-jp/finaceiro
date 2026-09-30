@@ -317,7 +317,7 @@ export function TelaFaturas() {
                      no caminho oficial com `uc_ja_faturada`. */
                   : `Nenhuma fatura em ${mes}. A cobrança nasce na competência da CONTA da `
                     + 'distribuidora, que quase nunca é o mês de hoje — troque o mês acima. '
-                    + 'Ela é gerada na aba Fatura unificada, em «gerar cobrança».'}>
+                    + 'Ela é gerada na aba Fatura unificada, em «Gerar N cobranças».'}>
         {lista.map((f) => (
           <FaturaLinha key={f.id} f={f} uc={numeroDaUc.get(f.unidade_consumidora_id)}
                        aberta={aberta === f.id} abrir={() => setAberta(aberta === f.id ? null : f.id)}
