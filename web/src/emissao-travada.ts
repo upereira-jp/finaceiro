@@ -155,41 +155,10 @@ export function fraseDaLinha(l: LinhaNaTela): FraseDaLinha {
   };
 }
 
-/**
- * O ALARME, para a tela de Pendências — e ele conta, não lista.
- *
- * `null` quando não há nada que peça gente, e **`null` é a resposta**: quem monta
- * não precisa saber quais níveis merecem faixa. A lista inteira mora na tela de
- * emissão, que é onde se age sobre ela; a faixa existe para que ninguém precise
- * abrir aquela tela para descobrir que precisa abri-la.
- */
-export type FaixaDaEmissao = { tom: 'erro' | 'alerta'; titulo: string; corpo: string };
-
-export function faixaDaEmissaoTravada(e: EmissaoTravadaNaTela | null): FaixaDaEmissao | null {
-  if (!e || e.pedem_gente === 0) return null;
-
-  const n = e.pedem_gente;
-  const quantas = n === 1 ? '1 fatura emitida está' : `${n} faturas emitidas estão`;
-
-  /* A MAIS ANTIGA É O QUE DÁ TAMANHO AO NÚMERO. «4 faturas sem cobrança» pode ser
-   * de hoje de manhã; «a mais antiga há 9 dias» é outra conversa, e é a que faz
-   * alguém abrir a tela hoje em vez de amanhã. */
-  const antiga = e.linhas
-    .filter((l) => l.pede_gente && l.ha_quanto_tempo_segundos !== null)
-    .reduce<number>((m, l) => Math.max(m, l.ha_quanto_tempo_segundos ?? 0), 0);
-
-  return {
-    /* `erro` e não `alerta`: cliente sem boleto é dinheiro que não entra, e a
-     * fronteira desta casa é a mesma da faixa vizinha — «está quebrado» é erro,
-     * «tropeçou uma vez» é alerta. O que tropeçou uma vez está em `esperando` e
-     * não conta para cá. */
-    tom: 'erro',
-    titulo: `${quantas} sem boleto no banco.`,
-    corpo: (antiga > 0 ? `A mais antiga está assim ${faz(antiga)}. ` : '')
-         + 'Enquanto o boleto não é registrado, o cliente não recebe nada para pagar. '
-         + 'A lista, com o motivo de cada uma e o que fazer, está na tela Cobranças.',
-  };
-}
+/* O ALARME QUE CONTAVA (`faixaDaEmissaoTravada`) SAIU EM 30/09/2026 (etapa 4a),
+ * com o componente que o desenhava: desde a etapa 3 o passo 4 do funil do mês
+ * conta as cobranças sem boleto e leva o destaque quando alguma pede gente
+ * (`roteiro-do-mes.ts`). Nenhuma tela o montava. */
 
 /**
  * A AFIRMAÇÃO — o rodapé que fala MESMO quando está tudo certo.

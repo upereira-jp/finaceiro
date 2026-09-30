@@ -24,6 +24,7 @@ import { competenciaISO } from './dinheiro.ts';
 import type { EmissaoTravadaNaTela } from './emissao-travada.ts';
 import { LIMITE_DA_LISTA, listaParcial } from './registradas-regras.ts';
 import type { LeituraDoMes } from './roteiro-do-mes.ts';
+import { procurarMesComTrabalho, lerMesLembrado, type EscolhaDoMes } from './emissao-regras.ts';
 
 export type LeiturasDoMes = {
   prontidao: Carga<Prontidao>;
@@ -36,16 +37,26 @@ export type LeiturasDoMes = {
   leitura: LeituraDoMes | null;
 };
 
-/** `mes` é `'AAAA-MM'`. */
-export function useLeiturasDoMes(mes: string): LeiturasDoMes {
-  const comp = competenciaISO(mes);
-  const prontidao = useDados<Prontidao>(() => api.get(`/faturamento/${comp}/prontidao`), [mes]);
+/**
+ * `mes` é `'AAAA-MM'`, ou `null` enquanto a tela ainda PROCURA o mês com
+ * trabalho (30/09/2026, etapa 4a). Com `null`, as três leituras do mês esperam
+ * — não há mês para ler — e as duas que atravessam meses (contas registradas e
+ * cobranças sem boleto) já saem: a segunda é justamente o que a procura lê.
+ */
+export function useLeiturasDoMes(mes: string | null): LeiturasDoMes {
+  const comp = mes ? competenciaISO(mes) : null;
+  /* Sem mês, a leitura devolve «nada» — e `leitura` abaixo continua `null`,
+   * porque sem a prontidão não há universo nem cadastro. */
+  const nada = <T,>(): Promise<T> => Promise.resolve(null as T);
+  const prontidao = useDados<Prontidao>(
+    () => (comp ? api.get(`/faturamento/${comp}/prontidao`) : nada()), [mes]);
   /* `/carteira` devolve uma LISTA; com o filtro ela volta com zero ou uma linha,
    * e zero é a resposta legítima do mês em que nada foi gerado. */
-  const carteira = useDados<PosicaoDaCarteira[]>(() => api.get(`/carteira?competencia=${comp}`), [mes]);
+  const carteira = useDados<PosicaoDaCarteira[]>(
+    () => (comp ? api.get(`/carteira?competencia=${comp}`) : nada()), [mes]);
   /* A MESMA LISTA da tela Cobranças, com o mesmo teto — o «5 a emitir» daqui é
    * o «Emitir 5 cobranças» de lá. */
-  const cobrancas = useDados<Fatura[]>(() => api.get(`/faturamento/${comp}`), [mes]);
+  const cobrancas = useDados<Fatura[]>(() => (comp ? api.get(`/faturamento/${comp}`) : nada()), [mes]);
   /* A MESMA LISTA da tela Contas de luz, com o mesmo teto — o «6 a gerar» daqui
    * é o «Gerar 6 cobranças» de lá. Atravessa meses, e por isso não depende do
    * seletor: o recorte é feito em `mesNoFunil`. */
@@ -53,7 +64,7 @@ export function useLeiturasDoMes(mes: string): LeiturasDoMes {
     () => api.get(`/faturas/unificada/registros?limite=${LIMITE_DA_LISTA}`));
   const semBoleto = useDados<EmissaoTravadaNaTela>(() => api.get('/emissao/travada'));
 
-  const leitura: LeituraDoMes | null = prontidao.dado ? {
+  const leitura: LeituraDoMes | null = mes && prontidao.dado ? {
     mes,
     camadas: prontidao.dado.camadas,
     posicao: carteira.dado ? (carteira.dado[0] ?? { vencidas_em_aberto: 0 }) : null,
@@ -63,4 +74,34 @@ export function useLeiturasDoMes(mes: string): LeiturasDoMes {
   } : null;
 
   return { prontidao, carteira, cobrancas, registradas, semBoleto, leitura };
+}
+
+/** O mês de hoje no RELÓGIO LOCAL (`toISOString` é UTC: na noite do último dia
+ *  do mês, em Goiânia, já seria o mês seguinte). */
+export function mesDeHoje(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/** O armazenamento do navegador, ou nada. Acessar `localStorage` levanta em
+ *  alguns navegadores com o armazenamento bloqueado. */
+export function armazemDoNavegador(): Storage | null {
+  try { return window.localStorage; } catch { return null; }
+}
+
+/**
+ * EM QUE MÊS A TELA ABRE — a procura de `emissao-regras.ts` ligada à API. Uma
+ * só para Cobranças e Mês (30/09/2026, etapa 4a): as duas abrem no mês mais
+ * recente com trabalho, pela mesma ordem, e lembram o mesmo mês escolhido.
+ */
+export function procurarMesDoTrabalho(
+  travadas: ReadonlyArray<{ competencia: string }>,
+): Promise<EscolhaDoMes> {
+  return procurarMesComTrabalho({
+    travadas,
+    carteira: () => api.get<PosicaoDaCarteira[]>('/carteira'),
+    cobrancasDoMes: (m) => api.get<Fatura[]>(`/faturamento/${competenciaISO(m)}`),
+    lembrado: lerMesLembrado(armazemDoNavegador()),
+    hoje: mesDeHoje(),
+  });
 }

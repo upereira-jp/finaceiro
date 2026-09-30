@@ -84,9 +84,10 @@ import {
 } from '../cobranca-regras.ts';
 import {
   chaveDaOrdemDeAcao, acaoDaLinha, notaDaSituacao, recusaDaLinha, tipoDaRecusa, paraPedirBoleto,
-  candidatosDoMes, mesSemTrabalho, fraseDaOrigem, lerMesLembrado, lembrarMes, MESES_A_CONFERIR,
-  type EstadoDaVez, type OrigemDoMes, type RecusaLida,
+  fraseDaOrigem, lembrarMes,
+  type EstadoDaVez, type EscolhaDoMes, type RecusaLida,
 } from '../emissao-regras.ts';
+import { procurarMesDoTrabalho, armazemDoNavegador } from '../leitura-do-mes.ts';
 import {
   SituacaoDaCobranca, RecusaNaTela, BotaoDaSaida, RevisaoDaSerie, ConfirmacaoNaLinha, ResumoDaBaixa,
   dataEmBr, type LinhaDaSerie,
@@ -96,7 +97,6 @@ import type { EmissaoTravadaNaTela, LinhaNaTela } from '../emissao-travada.ts';
 import { FaixaDoPasso } from '../roteiro-corpo.tsx';
 import { rotuloDoMes } from '../registradas-regras.ts';
 
-type EscolhaDoMes = { mes: string; origem: OrigemDoMes; certo?: boolean };
 type DaSessao = { nome: string | null; texto: string };
 type Serie = {
   tipo: 'emitir' | 'boletos';
@@ -107,48 +107,15 @@ type Serie = {
   rodando: boolean;
 };
 
-/** O armazenamento do navegador, ou nada. Acessar `localStorage` levanta em
- *  alguns navegadores com o armazenamento bloqueado. */
-function armazem(): Storage | null {
-  try { return window.localStorage; } catch { return null; }
-}
-
-/** O mes de hoje no RELOGIO LOCAL (`toISOString` e UTC: na noite do ultimo dia
- *  do mes, em Goiania, ja seria o mes seguinte). */
-function mesDeHoje(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
-
-/**
- * EM QUE MES A TELA ABRE — ver a ordem em `emissao-regras.ts` (secao 5).
- *
- * O que ja se sabe sem ler nada (`/emissao/travada`, que a tela busca de
- * qualquer jeito) decide sozinho; o mes que so PODE ter rascunho e lido antes de
- * a tela abrir nele — no maximo `MESES_A_CONFERIR`, em serie. Qualquer leitura
- * que falhe so tira aquele candidato: o pior caso e a tela abrir no mes
- * lembrado ou no de hoje, que e o que ela fazia antes.
- */
-async function procurarMes(travadas: readonly LinhaNaTela[]): Promise<EscolhaDoMes> {
-  let carteira: PosicaoDaCarteira[] = [];
-  try { carteira = await api.get<PosicaoDaCarteira[]>('/carteira'); } catch { /* segue so com a lista do banco */ }
-  let lidos = 0;
-  for (const c of candidatosDoMes(carteira, travadas)) {
-    if (c.certo) return { mes: c.mes, origem: 'trabalho', certo: true };
-    if (lidos >= MESES_A_CONFERIR) continue;
-    lidos++;
-    try {
-      const l = await api.get<Fatura[]>(`/faturamento/${competenciaISO(c.mes)}`);
-      if (l.some((f) => f.status === 'rascunho')) return { mes: c.mes, origem: 'trabalho', certo: false };
-    } catch { /* mes que nao se le nao e aberto por palpite */ }
-  }
-  return mesSemTrabalho(lerMesLembrado(armazem()), carteira, mesDeHoje());
-}
+/* A PROCURA DO MES EM QUE A TELA ABRE saiu daqui em 30/09/2026 (etapa 4a) e
+ * mora em `procurarMesComTrabalho` (`emissao-regras.ts`), ligada a API por
+ * `procurarMesDoTrabalho` (`leitura-do-mes.ts`) — a tela Mes passou a abrir pelo
+ * MESMO criterio, e duas copias divergiriam na primeira correcao. */
 
 export function TelaFaturas() {
   /* O MES VEM DO ENDERECO QUANDO ALGUEM O PEDIU (`?mes=2026-08`) — e o que faz
    * «Ver na emissao», em Contas a receber, abrir ESTA tela ja no mes da fatura.
-   * Sem pedido, ele e PROCURADO (ver `procurarMes`), e ate a resposta a tabela
+   * Sem pedido, ele e PROCURADO (ver `procurarMesComTrabalho`), e ate a resposta a tabela
    * diz que esta procurando em vez de mostrar o mes errado por um instante. */
   const [escolha, setEscolha] = useState<EscolhaDoMes | null>(() => {
     const q = mesDaQuery(location.search);
@@ -180,14 +147,14 @@ export function TelaFaturas() {
    * ao seletor faria a lista sumir quando alguem trocasse o mes para conferir
    * outra coisa — que e a maneira mais silenciosa de perder justamente o caso
    * antigo. [30/09] Ela tambem e o que diz, sem ler nada a mais, quais meses tem
-   * cobranca sem boleto — a primeira pergunta de `procurarMes`.
+   * cobranca sem boleto — a primeira pergunta de `procurarMesComTrabalho`.
    */
   const emissao = useDados<EmissaoTravadaNaTela>(() => api.get('/emissao/travada'));
 
   useEffect(() => {
     if (escolha || emissao.carregando) return;
     let vivo = true;
-    void procurarMes(emissao.dado?.linhas ?? []).then((e) => { if (vivo) setEscolha(e); });
+    void procurarMesDoTrabalho(emissao.dado?.linhas ?? []).then((e) => { if (vivo) setEscolha(e); });
     return () => { vivo = false; };
   }, [escolha, emissao.carregando]);
 
@@ -255,7 +222,7 @@ export function TelaFaturas() {
   function escolherMes(v: string) {
     if (!/^\d{4}-\d{2}$/.test(v)) return;
     setEscolha({ mes: v, origem: 'escolhido' });
-    lembrarMes(armazem(), v);
+    lembrarMes(armazemDoNavegador(), v);
     setAberta(null); setCancelando(null); setRevisando(null); setSerie(null);
     acao.limpar();
   }
@@ -970,7 +937,7 @@ function PainelDaFatura({ f, unidade, uc, mes, daSessao, ultimoErroDaLista, pedi
           {boleto.dado && (
             <div className="em-boleto">
               <div style={{ ...linha, gap: 10 }}>
-                <Marca tom={boleto.dado.status === 'liquidado' ? 'ok' : boleto.dado.status === 'erro' ? 'pendente' : 'nao_medido'}>
+                <Marca tom={boleto.dado.status === 'liquidado' ? 'ok' : boleto.dado.status === 'erro' ? 'erro' : 'nao_medido'}>
                   {rotulo(boleto.dado.status)}
                 </Marca>
                 {/*

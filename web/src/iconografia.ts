@@ -30,14 +30,20 @@ export type NomeDeIcone =
   /* `cadastros` SAIU EM 30/09/2026 (etapa 3b), no mesmo dia em que entrou: era
    * o desenho do gatilho «Cadastros ▾» da barra, e no menu lateral os cadastros
    * são uma seção com título, sem gatilho para desenhar. */
-  // os três estados da prontidão
-  | 'ok' | 'pendente' | 'nao_medido'
+  /* OS CINCO TONS DO SELO (30/09/2026, etapa 4a do redesenho). Até esta data
+   * eram três, e o do meio se chamava `pendente` e desenhava o X vermelho — o
+   * mesmo X para «o banco recusou o boleto» e para «falta o CPF do cliente».
+   * Hoje o X é `falha`, e só a falha o usa; a lacuna de cadastro ganhou o lápis
+   * de `a_fazer`, e o que não é bom nem ruim (inativo, cancelada) ganhou o traço
+   * de `neutro`. Ver `TomDoSelo`, logo abaixo. */
+  | 'ok' | 'falha' | 'a_fazer' | 'nao_medido' | 'neutro'
   // os três avisos
   | 'aviso_erro' | 'aviso_ok' | 'aviso_alerta'
   // as métricas dos cartões de resumo
-  | 'pode_faturar' | 'pode_repartir' | 'faturado' | 'recebido' | 'a_receber' | 'vencidas'
-  // o par sim/não dos cartões — grande, colorido, e ele APARECE animado
-  | 'sim' | 'nao'
+  | 'pode_repartir' | 'faturado' | 'recebido' | 'a_receber' | 'vencidas'
+  /* O PAR `sim`/`nao` E O `pode_faturar` SAÍRAM EM 30/09/2026 (etapa 4a) com
+   * o `KpiSimNao`, que era o único a desenhá-los: os três cartões de sim e não
+   * da tela Mês repetiam a linha de cadastro do funil. */
   // ações e controles
   | 'buscar' | 'calendario' | 'confirmar' | 'limpar' | 'baixar' | 'imprimir' | 'copiar'
   /* FECHAR E O X, e nao a vassoura de `limpar` (30/09): fechar a gaveta da
@@ -85,7 +91,41 @@ export type NomeDeIcone =
   | 'carregando' | 'engrenagem';
 
 /**
- * OS TRÊS ESTADOS DA PRONTIDÃO -> ícone.
+ * O TOM DO SELO — e o nome é o que ele QUER DIZER, não a cor.
+ *
+ * ============================================================================
+ * VERMELHO SÓ PARA FALHA (30/09/2026, etapa 4a do redesenho)
+ *
+ * Até esta data havia três tons — `ok`, `pendente` e `nao_medido` — e o do meio
+ * era vermelho. O nome vinha da prontidão, onde `pendente` quer dizer «falta
+ * preencher», e a tela passava a situação da camada DIRETO como tom: resultado,
+ * «Falta preencher» em vermelho, ao lado de «Recusada pelo banco» no mesmo
+ * vermelho. A crítica de 30/09 (P2 nº 4) mediu o efeito: a tela de trabalho
+ * gritava em toda linha de cadastro, e o grito que importava — o banco recusou,
+ * venceu, o conector caiu — não se distinguia mais.
+ *
+ * AGORA SÃO CINCO, e o vermelho tem nome próprio:
+ *
+ *   `ok`          pronto, pago, registrado;
+ *   `erro`        FALHA — a recusa do banco, a cobrança vencida, o conector
+ *                 caído, a leitura que não voltou. Só isto é vermelho;
+ *   `a_fazer`     TAREFA — a lacuna de cadastro, a conta a pagar em aberto. É
+ *                 trabalho de alguém, e não um defeito: âmbar, com o lápis;
+ *   `nao_medido`  «ainda não dá para saber», e o que está a caminho (lendo, na
+ *                 fila). Âmbar também, com a interrogação ou o desenho do ato;
+ *   `neutro`      nem bom nem ruim: inativo, cancelada, suspenso. Cinza.
+ *
+ * `pendente` SAIU DO VOCABULÁRIO DE TOM DE PROPÓSITO: com ele fora, passar a
+ * situação da prontidão direto como tom não compila mais — a tela tem de dizer
+ * o que a situação significa, e é essa tradução que faltava.
+ */
+export type TomDoSelo = 'ok' | 'erro' | 'a_fazer' | 'nao_medido' | 'neutro';
+
+/** A ordem de apresentação dos tons, para quem precisa percorrê-los (a suíte). */
+export const TONS_DO_SELO: readonly TomDoSelo[] = ['ok', 'erro', 'a_fazer', 'nao_medido', 'neutro'];
+
+/**
+ * OS CINCO TONS -> ícone.
  *
  * ESTA É A RESTRIÇÃO 3 DO TEMA GANHANDO UM SEGUNDO SINAL. O `tema.ts` exige que
  * "cor não pode ser o único sinal" e resolvia isso com o texto do estado dentro
@@ -98,10 +138,14 @@ export type NomeDeIcone =
  * e não está — o que falta é a medição. A interrogação é a única forma que diz
  * "não sei" em vez de "está ruim" ou "está bom".
  */
-export const ICONE_DO_ESTADO: Record<'ok' | 'pendente' | 'nao_medido', NomeDeIcone> = {
+export const ICONE_DO_ESTADO: Record<TomDoSelo, NomeDeIcone> = {
   ok: 'ok',
-  pendente: 'pendente',
+  erro: 'falha',
+  /* O LÁPIS, e não o triângulo de alerta: a lacuna de cadastro é uma coisa a
+   * preencher, e o desenho diz o ato. O triângulo continua sendo o do AVISO. */
+  a_fazer: 'a_fazer',
   nao_medido: 'nao_medido',
+  neutro: 'neutro',
 };
 
 /**
@@ -109,8 +153,8 @@ export const ICONE_DO_ESTADO: Record<'ok' | 'pendente' | 'nao_medido', NomeDeIco
  * primeira versão do acabamento produziu — vale registrar porque ele é sobre
  * significado, não sobre desenho.
  *
- * A pílula de estado deriva a COR de três tons (`ok`, `pendente`, `nao_medido`),
- * e a fatura reusa esses três para seis status: `emitida` cai em `nao_medido`
+ * A pílula de estado deriva a COR do tom (`TomDoSelo`), e a fatura reusa os
+ * tons para seis status: `emitida` cai em `nao_medido`
  * porque não é nem bom nem ruim, é meio do caminho. Enquanto o único sinal era a
  * cor, isso funcionava. Assim que o ícone entrou, "Emitida" passou a exibir uma
  * INTERROGAÇÃO — o desenho de "não sei", que é o significado certo para uma
@@ -172,8 +216,7 @@ export const ICONE_DO_AVISO: Record<'erro' | 'ok' | 'alerta', NomeDeIcone> = {
  * TUDO ISTO É SUSPENSO POR `prefers-reduced-motion`. Não é cortesia: é WCAG
  * 2.3.3, e há gente para quem movimento na tela é sintoma, não estilo. Nenhuma
  * informação vive só no movimento — o carregando tem texto ao lado, o erro tem
- * ícone e faixa lateral, o sim/não tem a palavra escrita —, então parar tudo não
- * esconde nada.
+ * ícone e faixa lateral —, então parar tudo não esconde nada.
  */
 export const ICONES_QUE_SE_MOVEM: readonly NomeDeIcone[] =
-  ['carregando', 'engrenagem', 'aviso_erro', 'aviso_ok', 'sim', 'nao'] as const;
+  ['carregando', 'engrenagem', 'aviso_erro', 'aviso_ok'] as const;

@@ -73,6 +73,9 @@ export type CorpoDaAjuda = {
   consultaInicial?: string;
   /** Só o teste usa: monta o painel com a lista completa de assuntos já aberta. */
   tudoInicial?: boolean;
+  /** O assunto que abre EXPANDIDO, pedido de dentro de uma tela (30/09/2026):
+   *  o «Como ler esta lista» da tela Mês. Os outros continuam fechados. */
+  topicoAberto?: string | null;
 };
 
 export function CorpoDaAjuda(p: CorpoDaAjuda) {
@@ -95,6 +98,15 @@ export function CorpoDaAjuda(p: CorpoDaAjuda) {
     caixa.current?.querySelector('input')?.focus();
     return () => removeEventListener('keydown', tecla);
   }, [aoFechar]);
+
+  /* O ASSUNTO PEDIDO DE DENTRO DA TELA APARECE, e não só abre: expandido lá
+     embaixo, abaixo do estado do mês, ele ficaria fora da vista de quem clicou
+     «Como ler esta lista» (30/09/2026, etapa 4a). */
+  const pedido = p.topicoAberto ?? null;
+  useEffect(() => {
+    if (!pedido) return;
+    caixa.current?.querySelector(`[data-topico="${pedido}"]`)?.scrollIntoView({ block: 'start' });
+  }, [pedido]);
 
   return (
     <>
@@ -216,7 +228,9 @@ export function CorpoDaAjuda(p: CorpoDaAjuda) {
           {!buscando && daTela.length > 0 && (
             <section className="ajuda-secao">
               <h3>Sobre esta tela</h3>
-              {daTela.map((t) => <CartaoDeTopico key={t.id} topico={t} ir={p.ir} />)}
+              {daTela.map((t) => (
+                <CartaoDeTopico key={t.id} topico={t} ir={p.ir} aberto={t.id === p.topicoAberto} />
+              ))}
             </section>
           )}
 
@@ -342,7 +356,7 @@ export function CartaoDeTopico(
   const [expandido, setExpandido] = useState(aberto);
 
   return (
-    <div className="ajuda-topico">
+    <div className="ajuda-topico" data-topico={topico.id}>
       <button type="button" className="ajuda-pergunta" aria-expanded={expandido}
               onClick={() => setExpandido((v) => !v)}>
         <Icone nome={expandido ? 'subir' : 'descer'} tamanho={13} peso="bold" />

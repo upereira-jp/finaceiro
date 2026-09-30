@@ -36,7 +36,12 @@ import { mesNoFunil } from './roteiro-do-mes.ts';
 
 const mesAtual = () => new Date().toISOString().slice(0, 7);
 
-export function PainelDeAjuda({ rota, aoFechar }: { rota: string; aoFechar: () => void }) {
+export function PainelDeAjuda({ rota, topico, aoFechar }: {
+  rota: string;
+  /** O assunto que abre expandido — o link de dentro de uma tela (`abrirAjuda`). */
+  topico?: string | null;
+  aoFechar: () => void;
+}) {
   // O mês é lido UMA vez, na montagem: o painel abre e fecha em segundos.
   const [mes] = useState(mesAtual);
   const leituras = useLeiturasDoMes(mes);
@@ -49,6 +54,7 @@ export function PainelDeAjuda({ rota, aoFechar }: { rota: string; aoFechar: () =
   return (
     <CorpoDaAjuda
       rota={rota}
+      topicoAberto={topico ?? null}
       passos={passos}
       mes={estado}
       carregando={carregando}

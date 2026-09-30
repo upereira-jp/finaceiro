@@ -165,7 +165,7 @@ function SituacaoDaVez({ tipo, e }: { tipo: 'emitir' | 'boletos'; e: EstadoDaVez
   if (e.estado === 'feita') {
     return <Marca tom="ok" icone="confirmar">{tipo === 'emitir' ? 'Emitida' : 'Boleto registrado'}</Marca>;
   }
-  return <Marca tom="pendente">Recusada</Marca>;
+  return <Marca tom="erro">Recusada</Marca>;
 }
 
 /**

@@ -22,14 +22,16 @@
 // AQUI FICARAM OS COMPONENTES, e nada mais. Os novos sao os que o pedido de
 // acabamento exigiu: `BotaoDeIcone` (o "OK" que virou botao redondo),
 // `Interruptor` (o checkbox nativo), `CampoData` (o calendario clicavel),
-// `Menu` (a area do usuario), `Kpi`/`KpiSimNao` (o cartao flutuante) e
-// `Carregando` (a engrenagem com o sol da G3).
+// `Menu` (a area do usuario), `Kpi` (o cartao de numero) e `Carregando` (a
+// engrenagem com o sol da G3). [30/09, etapa 4a] E os dois do «menos prosa»:
+// `PainelDeCriar` (listar antes de criar) e `Recolhido` (o que se confere de vez
+// em quando fica fechado, com o resumo de uma linha a vista).
 
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode, CSSProperties, KeyboardEvent as EventoDeTecla } from 'react';
 import { lerModo, aplicarModo, type ModoTema } from './tema.ts';
 import { Icone, Logotipo } from './icones.tsx';
-import { ICONE_DO_ESTADO, ICONE_DO_AVISO, type NomeDeIcone } from './iconografia.ts';
+import { ICONE_DO_ESTADO, ICONE_DO_AVISO, type NomeDeIcone, type TomDoSelo } from './iconografia.ts';
 import { PORQUE } from './porques.ts';
 
 export { Icone, Logotipo };
@@ -297,13 +299,140 @@ export function BotaoDeIcone(p: {
 
 // ------------------------------------------------------------------- pagina
 
-export const Pagina = ({ titulo, sub, children }: { titulo: string; sub?: string; children: ReactNode }) => (
+/**
+ * A PAGINA: o titulo, a frase de baixo e — desde 30/09/2026 — o ATO DA TELA ao
+ * lado do titulo.
+ *
+ * `acao` EXISTE PARA O «NOVO …» DOS CADASTROS (etapa 4a). Ate esta data as cinco
+ * telas de cadastro abriam com o formulario de criar, vazio, acima da lista — em
+ * Clientes, 3 das 40 linhas cabiam acima da dobra. A lista vem primeiro agora, e
+ * criar e um botao no alto, no mesmo lugar nas cinco: quem procura «como
+ * cadastro» olha para o canto do titulo uma vez e aprende as cinco telas.
+ */
+export const Pagina = ({ titulo, sub, acao, children }: {
+  titulo: string; sub?: string; acao?: ReactNode; children: ReactNode;
+}) => (
   <>
-    <h1>{titulo}</h1>
-    {sub && <p className="sub">{sub}</p>}
+    {acao ? (
+      /* O TÍTULO E A FRASE NUMA COLUNA, o ato na outra: no celular o ato desce
+         para DEPOIS da frase, e não fica espremido entre o título e ela. */
+      <div className="pagina-cab">
+        <div className="pagina-cab-texto">
+          <h1>{titulo}</h1>
+          {sub && <p className="sub">{sub}</p>}
+        </div>
+        <div className="pagina-acao">{acao}</div>
+      </div>
+    ) : (
+      <>
+        <h1>{titulo}</h1>
+        {sub && <p className="sub">{sub}</p>}
+      </>
+    )}
     {children}
   </>
 );
+
+/**
+ * O BOTAO «NOVO …» — o gatilho do `PainelDeCriar`.
+ *
+ * NAO E O PRIMARIO DA TELA, de proposito: nas telas de cadastro o trabalho de
+ * todo dia e conferir e completar a LISTA (o CPF que falta, o dono da usina), e
+ * criar e o caso raro — cliente e unidade chegam do outro sistema sozinhos. O
+ * laranja fica com o «Cadastrar» dentro do painel, que e o ato de fato.
+ *
+ * `controla` e o `id` do painel: `aria-controls` liga os dois para o leitor de
+ * tela, e o painel devolve o foco a `<controla>-gatilho` quando fecha.
+ */
+export function BotaoDeCriar(p: { controla: string; aberto: boolean; ao: () => void; children: ReactNode }) {
+  return (
+    <button type="button" id={`${p.controla}-gatilho`} aria-expanded={p.aberto} aria-controls={p.controla}
+            className={p.aberto ? 'ativo' : undefined} onClick={p.ao}>
+      <Icone nome="acrescentar" tamanho={15} peso="bold" /> {p.children}
+    </button>
+  );
+}
+
+/**
+ * O PAINEL DE CRIAR, acima da lista — e nao uma gaveta.
+ *
+ * ==========================================================================
+ * POR QUE PAINEL E NAO GAVETA (30/09/2026, etapa 4a)
+ *
+ * A `GavetaDaConta` da tela Contas de luz e MODAL por um motivo que la existe:
+ * conferir uma conta e um subtrabalho com ato proprio, e as acoes da fila atras
+ * ficariam cobertas. Cadastrar um cliente, um dono ou uma usina nao tem nada
+ * disso: sao dois a cinco campos, e ver a lista enquanto se digita AJUDA (o
+ * nome ja existe? a usina ja esta la?). Prender o foco numa gaveta seria
+ * interromper sem proteger nada — e o primeiro reflexo que a casa recusa.
+ *
+ * UM PADRAO SO, NAS CINCO TELAS: o botao no alto, o painel logo abaixo do
+ * titulo, o formulario dentro, «Cancelar» e Esc fecham, e o foco anda junto —
+ * entra no primeiro campo ao abrir e volta ao «Novo …» ao fechar.
+ */
+export function PainelDeCriar(p: {
+  id: string; titulo: string; aoFechar: () => void; children: ReactNode;
+}) {
+  const caixa = useRef<HTMLElement>(null);
+  /* A referencia guarda o `aoFechar` mais novo sem reinstalar o efeito — o mesmo
+     cuidado da `GavetaDaConta`: remontar a cada tecla arrancaria o cursor. */
+  const fechar = useRef(p.aoFechar);
+  fechar.current = p.aoFechar;
+
+  useEffect(() => {
+    caixa.current?.querySelector<HTMLElement>('input, select, textarea')?.focus();
+    const gatilho = `${p.id}-gatilho`;
+    /* Fechou (Cancelar, Esc, ou cadastrou): o foco volta a quem abriu. Sem isto
+       ele cairia no `body`, e o proximo Tab recomecaria do topo da pagina. */
+    return () => { document.getElementById(gatilho)?.focus(); };
+  }, [p.id]);
+
+  return (
+    <section id={p.id} ref={caixa} className="cartao secao painel-criar" aria-labelledby={`${p.id}-titulo`}
+             onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); fechar.current(); } }}>
+      <header className="painel-criar-cab">
+        <h2 id={`${p.id}-titulo`}>{p.titulo}</h2>
+        <button type="button" className="so-icone" onClick={p.aoFechar}
+                title="Fechar (Esc)" aria-label={`Fechar — ${p.titulo}`}>
+          <Icone nome="fechar" tamanho={15} peso="bold" />
+        </button>
+      </header>
+      {p.children}
+    </section>
+  );
+}
+
+/**
+ * O QUE SE CONFERE DE VEZ EM QUANDO, FECHADO — com o resumo de uma linha a vista.
+ *
+ * Entrou em 30/09/2026 (etapa 4a) para as duas secoes do pe da tela Mes: o que a
+ * leitura do outro sistema achou e o que o sistema fez sozinho. As duas existem
+ * para poder ser CONFERIDAS, e nao para serem lidas todo dia — abertas, elas
+ * somavam quase uma tela de prosa embaixo do funil.
+ *
+ * `<details>` NATIVO, e nao um botao com estado: o conteudo continua no HTML
+ * (o teste que monta o painel das automacoes segue enxergando as tres linhas),
+ * o teclado e o leitor de tela ja sabem abrir e fechar, e nao ha efeito nenhum
+ * para dar errado. O RESUMO e a parte que nao pode faltar: fechado, ele e a
+ * unica coisa que diz se ha algo la dentro.
+ */
+export function Recolhido(p: {
+  titulo: ReactNode; resumo: ReactNode; icone?: NomeDeIcone; aberto?: boolean; children: ReactNode;
+}) {
+  return (
+    <details className="recolhido" open={p.aberto}>
+      <summary>
+        <span className="recolhido-tit">
+          {p.icone && <Icone nome={p.icone} tamanho={16} />}
+          {p.titulo}
+        </span>
+        <span className="recolhido-resumo">{p.resumo}</span>
+        <Icone nome="abrir_menu" tamanho={13} peso="bold" className="recolhido-seta" />
+      </summary>
+      <div className="recolhido-corpo">{p.children}</div>
+    </details>
+  );
+}
 
 export const Tabela = ({ cabecalho, children, vazio }: {
   cabecalho: ReactNode; children: ReactNode; vazio?: ReactNode;
@@ -333,6 +462,10 @@ export function rotulo(s: string): string {
 /**
  * A PILULA DE ESTADO. Preenchida suave, com icone E texto dentro.
  *
+ * [30/09, etapa 4a] OS TONS SAO CINCO E TEM NOME DE SIGNIFICADO (`TomDoSelo`):
+ * `erro` e o unico vermelho, e so a falha o usa; lacuna de cadastro e `a_fazer`
+ * (ambar, com o lapis). A regra inteira esta em `iconografia.ts`.
+ *
  * OS TRES SINAIS SAO DELIBERADOS e atendem a restricao 3 do tema (cor nao pode
  * ser o unico sinal): a cor do fundo, o desenho do icone e a palavra. Tirar
  * qualquer um deles deixa alguem sem a informacao — daltonico perde a cor, quem
@@ -344,7 +477,7 @@ export function rotulo(s: string): string {
  * acento e preenchido solido, o estado e preenchido suave.
  */
 export const Marca = ({ tom, icone, children }: {
-  tom: 'ok' | 'pendente' | 'nao_medido';
+  tom: TomDoSelo;
   /** Sobrepõe o ícone do TOM pelo ícone do SIGNIFICADO. Existe porque a fatura
    *  tem seis status mapeados em três tons: "Emitida" é tom `nao_medido` e
    *  exibiria a interrogação de "não sei", que é o certo para uma camada não
@@ -379,47 +512,33 @@ export const Carregando = ({ texto = 'Carregando…' }: { texto?: string }) => (
 // ------------------------------------------------------- cartao de metrica
 
 /**
- * O CARTAO DE METRICA. Borda de 1px, canto reto, o numero na condensada e o
- * icone como MARCA D'AGUA — grande, em `--acento`, a 11% de opacidade.
+ * O CARTAO DE METRICA. Borda de 1px, canto reto, o numero na condensada — e o
+ * icone PEQUENO, ao lado do nome.
+ *
+ * [30/09, etapa 4a] A MARCA D'AGUA SAIU. Era o icone a 44px, em `--acento`, a
+ * 11% de opacidade no canto do cartao — o pedido de 30/07 para a marca ganhar
+ * presenca. Numa tela de trabalho ela era ruido: quatro desenhos grandes e
+ * apagados competindo com os quatro numeros que a pessoa veio ler. O icone
+ * ficou, a 14px e na cor do rotulo, onde ele ajuda a achar o cartao sem pesar.
+ *
+ * `KpiSimNao` saiu no mesmo dia: os tres cartoes «Pode faturar / emitir boleto /
+ * repartir» da tela Mes repetiam, em sim e nao, a linha de cadastro do funil logo
+ * acima — e eram os unicos que o usavam.
  *
  * [30/09] A SOMBRA DO SEGUNDO DEGRAU SAIU com a etapa 0: no g3ref nada
  * flutua, e o KPI e um cartao como os outros.
- *
- * A BORDA ESQUERDA DE 3px SAIU. Ela era o sinal de marca do cartao ate 29/07, e
- * o pedido de 30/07 foi exatamente trocar "borda generica grossa" por "borda
- * finissima mais sombra, para o cartao flutuar". A presenca da marca nao se
- * perdeu — mudou de lugar, e ficou maior.
  */
 export function Kpi(p: {
-  nome: ReactNode; valor: ReactNode; icone: NomeDeIcone; tom?: 'ok' | 'erro' | 'alerta';
+  nome: ReactNode; valor: ReactNode; icone?: NomeDeIcone; tom?: 'ok' | 'erro' | 'alerta';
 }) {
   const cor = p.tom === 'ok' ? 'var(--ok)' : p.tom === 'erro' ? 'var(--erro)' : p.tom === 'alerta' ? 'var(--alerta)' : undefined;
   return (
     <div className="kpi">
-      <div className="nome">{p.nome}</div>
-      <div className="valor" style={cor ? { color: cor } : undefined}>{p.valor}</div>
-      <span className="marca-dagua"><Icone nome={p.icone} tamanho={44} peso="duotone" /></span>
-    </div>
-  );
-}
-
-/**
- * O CARTAO DE SIM OU NAO — "pode faturar" e "pode repartir".
- *
- * A PALAVRA CONTINUA ESCRITA ao lado do icone grande, e isso e a restricao 3 de
- * novo: `pode_faturar` e a resposta de maior consequencia da tela, e ela nao pode
- * depender de reconhecer um desenho verde. O icone entra desenhando-se uma vez —
- * e o unico movimento desta tela, para o olho ir nele primeiro.
- */
-export function KpiSimNao(p: { nome: ReactNode; sim: boolean; icone: NomeDeIcone }) {
-  return (
-    <div className="kpi">
-      <div className="nome">{p.nome}</div>
-      <div className="valor sim-nao" style={{ color: p.sim ? 'var(--ok)' : 'var(--erro)' }}>
-        <Icone nome={p.sim ? 'sim' : 'nao'} tamanho={26} peso="fill" />
-        {p.sim ? 'Sim' : 'Não'}
+      <div className="nome">
+        {p.icone && <Icone nome={p.icone} tamanho={14} />}
+        {p.nome}
       </div>
-      <span className="marca-dagua"><Icone nome={p.icone} tamanho={44} peso="duotone" /></span>
+      <div className="valor" style={cor ? { color: cor } : undefined}>{p.valor}</div>
     </div>
   );
 }
@@ -546,27 +665,11 @@ export const Ferramentas = ({ children, contagem }: { children: ReactNode; conta
  * o quadrado de 30px do `BotaoDeIcone`, e o `rotulo` e o nome dele para o leitor
  * de tela e para o `title`.
  *
- * ============================================================================
- * [30/09, etapa 3] `lugares`: O MESMO MENU, PARA IR A OUTRA TELA
- *
- * O menu «Cadastros ▾» da barra do Rateio e uma lista de LUGARES, e nao de
- * acoes — e a diferenca e a que `seletor-de-setor.tsx` ja registrou: leitor de
- * tela precisa ouvir «link, pagina atual», e nao «item de menu». Com `lugares`:
- *
- *   - o gatilho e um botao de divulgacao (`aria-expanded` + `aria-controls`), e
- *     nao anuncia `aria-haspopup="menu"`;
- *   - o painel NAO e `role="menu"`, e os itens sao ancoras (`Ligacao`) — botao
- *     do meio e «copiar endereco» continuam funcionando;
- *   - o TECLADO e o mesmo: abrir leva o foco ao item atual (ou ao primeiro),
- *     setas andam e dao a volta, Home/End, Escape devolve o foco ao gatilho,
- *     Tab para fora fecha, e escolher um item fecha.
- *
- * `fixo`: O PAINEL SE POSICIONA PELA JANELA, e nao pelo pai. A barra de
- * navegacao tem `overflow-x: auto` — e a rede de seguranca para uma barra que
- * nao couber —, e um painel `absolute` dentro dela seria cortado na borda de
- * baixo. Com `fixo` ele sai do corte: a posicao e a do gatilho, lida ao abrir,
- * e como o topo e `sticky` o gatilho nao se move com a rolagem. Redimensionar a
- * janela fecha o menu, em vez de deixa-lo flutuando longe do gatilho.
+ * [30/09, etapa 4a] OS MODOS `lugares` E `fixo` SAIRAM. Existiam para o menu
+ * «Cadastros ▾» da barra do topo (etapa 3), que a etapa 3b trocou pelo menu
+ * lateral no mesmo dia — e nada mais os usava. Um modo sem chamador e codigo
+ * que ninguem testa e todo mundo le. Sairam junto `classeDoGatilho` e
+ * `rotuloDoPainel`, que so aquele menu passava.
  *
  * `acima` (30/09/2026, etapa 3b): O PAINEL ABRE PARA CIMA. O menu da conta
  * desceu da barra do topo para o PE do menu lateral, e abrindo para baixo ele
@@ -576,26 +679,14 @@ export const Ferramentas = ({ children, contagem }: { children: ReactNode; conta
 export function Menu(p: {
   gatilho: ReactNode; rotulo: string; children: ReactNode;
   soIcone?: boolean; className?: string;
-  /** Os itens sao links para outras telas, e nao acoes. */
-  lugares?: boolean;
-  /** O painel se posiciona pela janela — para menu dentro de caixa que rola. */
-  fixo?: boolean;
-  /** Classe do botao gatilho (ex.: `ativo`, quando uma tela do menu esta aberta). */
-  classeDoGatilho?: string;
-  /** O nome do painel, quando nao e o mesmo do gatilho. */
-  rotuloDoPainel?: string;
   /** O painel abre para CIMA do gatilho — para menu que mora no pe da janela. */
   acima?: boolean;
 }) {
   const [aberto, setAberto] = useState(false);
-  const [posicao, setPosicao] = useState<{ topo: number; esquerda: number } | null>(null);
   const caixa = useRef<HTMLDivElement>(null);
   const botao = useRef<HTMLButtonElement>(null);
-  const idDoPainel = useId();
 
-  const SELETOR = p.lugares
-    ? '.menu-painel a[href]'
-    : '.menu-painel [role="menuitem"]:not(:disabled), .menu-painel [role="menuitemradio"]:not(:disabled)';
+  const SELETOR = '.menu-painel [role="menuitem"]:not(:disabled), .menu-painel [role="menuitemradio"]:not(:disabled)';
   const itens = (): HTMLElement[] => Array.from(caixa.current?.querySelectorAll<HTMLElement>(SELETOR) ?? []);
 
   const fechar = (devolverFoco: boolean) => {
@@ -603,17 +694,7 @@ export function Menu(p: {
     if (devolverFoco) botao.current?.focus();
   };
 
-  const abrir = () => {
-    /* A POSICAO E LIDA ANTES DE ABRIR, e nao num efeito depois: o painel nasce
-       ja no lugar, sem um quadro desenhado no canto da janela. Alinha pela
-       esquerda do gatilho e encosta na direita da janela se nao couber — a
-       largura de referencia e a minima do painel (`.menu-painel`, 216px). */
-    if (p.fixo && botao.current) {
-      const r = botao.current.getBoundingClientRect();
-      setPosicao({ topo: r.bottom + 6, esquerda: Math.max(8, Math.min(r.left, innerWidth - 256)) });
-    }
-    setAberto(true);
-  };
+  const abrir = () => setAberto(true);
 
   useEffect(() => {
     if (!aberto) return;
@@ -623,14 +704,9 @@ export function Menu(p: {
       if (!caixa.current?.contains(e.target as Node)) setAberto(false);
     };
     const tecla = (e: KeyboardEvent) => { if (e.key === 'Escape') fechar(true); };
-    const redimensionou = () => setAberto(false);
     addEventListener('mousedown', fora);
     addEventListener('keydown', tecla);
-    if (p.fixo) addEventListener('resize', redimensionou);
-    return () => {
-      removeEventListener('mousedown', fora); removeEventListener('keydown', tecla);
-      removeEventListener('resize', redimensionou);
-    };
+    return () => { removeEventListener('mousedown', fora); removeEventListener('keydown', tecla); };
   }, [aberto]);
 
   const aoTeclar = (e: EventoDeTecla<HTMLDivElement>) => {
@@ -644,10 +720,7 @@ export function Menu(p: {
     else if (e.key === 'End') ir(lista.length - 1);
   };
 
-  const classeDoBotao = [p.soIcone ? 'so-icone' : '', p.classeDoGatilho ?? ''].filter(Boolean).join(' ') || undefined;
-  const estiloDoPainel = p.fixo && posicao
-    ? ({ '--menu-topo': `${posicao.topo}px`, '--menu-esquerda': `${posicao.esquerda}px` } as CSSProperties)
-    : undefined;
+  const classeDoBotao = p.soIcone ? 'so-icone' : undefined;
 
   return (
     <div className={`menu${p.acima ? ' menu-acima' : ''}${p.className ? ` ${p.className}` : ''}`} ref={caixa}
@@ -657,8 +730,7 @@ export function Menu(p: {
            if (aberto && e.relatedTarget && !caixa.current?.contains(e.relatedTarget as Node)) setAberto(false);
          }}>
       <button ref={botao} type="button"
-              aria-haspopup={p.lugares ? undefined : 'menu'} aria-expanded={aberto}
-              aria-controls={p.lugares && aberto ? idDoPainel : undefined}
+              aria-haspopup="menu" aria-expanded={aberto}
               aria-label={p.rotulo}
               title={p.soIcone ? p.rotulo : undefined}
               className={classeDoBotao}
@@ -670,16 +742,12 @@ export function Menu(p: {
         {!p.soIcone && <Icone nome="abrir_menu" tamanho={12} peso="bold" className="menu-seta" />}
       </button>
       {aberto && (
-        <div id={idDoPainel}
-             className={`menu-painel${p.fixo ? ' fixo' : ''}${p.lugares ? ' lugares' : ''}`}
-             role={p.lugares ? undefined : 'menu'} aria-label={p.rotuloDoPainel ?? p.rotulo}
-             style={estiloDoPainel} onKeyDown={aoTeclar}
+        <div className="menu-painel" role="menu" aria-label={p.rotulo}
+             onKeyDown={aoTeclar}
              onClick={(e) => {
                /* Escolher fecha. O foco volta ao gatilho so se o item nao o
-                  levou para outro lugar (uma confirmacao que se abre, por ex.).
-                  Num menu de lugares, o link navega — e o foco volta ao
-                  gatilho, que e o que ainda existe depois da troca de tela. */
-               if ((e.target as Element).closest(p.lugares ? 'a[href]' : '[role^="menuitem"]')) {
+                  levou para outro lugar (uma confirmacao que se abre, por ex.). */
+               if ((e.target as Element).closest('[role^="menuitem"]')) {
                  setAberto(false);
                  requestAnimationFrame(() => {
                    if (!document.activeElement || document.activeElement === document.body) botao.current?.focus();

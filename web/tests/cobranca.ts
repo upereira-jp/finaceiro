@@ -31,7 +31,7 @@ import {
 } from '../src/cobranca-regras.ts';
 import {
   grupoDeAcao, chaveDaOrdemDeAcao, tipoDaRecusa, lerRecusa, recusaPrevista, recusaDaLinha,
-  acaoDaLinha, notaDaSituacao, paraPedirBoleto, placarDaSerie, candidatosDoMes, mesSemTrabalho,
+  acaoDaLinha, notaDaSituacao, paraPedirBoleto, placarDaSerie, candidatosDoMes, mesSemTrabalho, procurarMesComTrabalho,
   lerMesLembrado, lembrarMes, CHAVE_DO_MES_LEMBRADO, type StatusDaCobranca,
 } from '../src/emissao-regras.ts';
 import { decimalEmBr, kwhEmBr } from '../src/dinheiro.ts';
@@ -146,10 +146,11 @@ const chk = (id: string, cond: boolean, d: string) => {
 // ------------------------------------------------------------ B7 tom do status
 {
   chk('B7', tomDoStatusDaFatura('paga') === 'ok'
-         && tomDoStatusDaFatura('vencida') === 'pendente'
-         && tomDoStatusDaFatura('cancelada') === 'pendente'
+         && tomDoStatusDaFatura('vencida') === 'erro'
+         && tomDoStatusDaFatura('cancelada') === 'neutro'
          && tomDoStatusDaFatura('rascunho') === 'nao_medido',
-      'rascunho nao e problema nem sucesso: e `nao_medido`, como no resto do sistema');
+      'rascunho nao e problema nem sucesso: e `nao_medido`, como no resto do sistema; so a vencida '
+      + 'e vermelha — cancelar e decisao, nao falha (30/09, etapa 4a)');
 }
 
 // -------------------------------- B8 reordenar campos do documento, sem buraco
@@ -466,6 +467,37 @@ const chk = (id: string, cond: boolean, d: string) => {
   chk('B19c', lerMesLembrado(quebrado) === null && (() => { lembrarMes(quebrado, '2026-08'); return true; })()
           && lerMesLembrado(bom) === '2026-08' && lerMesLembrado(null) === null,
       'o armazenamento do navegador que levanta nao derruba a tela, e so mes valido e guardado');
+}
+
+// ------------------ B19d a procura inteira, uma so para Cobrancas e Mes (etapa 4a)
+// Ela morava dentro de `telas/faturas.tsx`; a tela Mes passou a abrir pelo MESMO
+// criterio, e a procura desceu para `emissao-regras.ts` com a rede por parametro.
+{
+  const carteira = [
+    { competencia: '2026-09-01', faturas: 20, emitidas: 9, liquidadas: 4 },
+    { competencia: '2026-08-01', faturas: 33, emitidas: 0, liquidadas: 29 },
+  ];
+  const lidos: string[] = [];
+  const a = await procurarMesComTrabalho({
+    travadas: [{ competencia: '2026-08-01' }],
+    carteira: async () => carteira,
+    cobrancasDoMes: async (m) => { lidos.push(m); return m === '2026-09' ? [{ status: 'emitida' }] : []; },
+    lembrado: null, hoje: '2026-10',
+  });
+  chk('B19d', a.mes === '2026-08' && a.origem === 'trabalho' && a.certo === true && lidos.join() === '2026-09',
+      'setembro e LIDO (pode ter rascunho) e nao tem; agosto tem emitida sem boleto e e o mes da tela');
+  const comRascunho = await procurarMesComTrabalho({
+    travadas: [], carteira: async () => carteira,
+    cobrancasDoMes: async () => [{ status: 'rascunho' }], lembrado: null, hoje: '2026-10',
+  });
+  const semRede = await procurarMesComTrabalho({
+    travadas: [], carteira: async () => { throw new Error('caiu'); },
+    cobrancasDoMes: async () => { throw new Error('caiu'); }, lembrado: '2026-06', hoje: '2026-10',
+  });
+  chk('B19e', comRascunho.mes === '2026-09' && comRascunho.origem === 'trabalho' && comRascunho.certo === false
+          && semRede.mes === '2026-06' && semRede.origem === 'lembrado',
+      'rascunho no mes mais recente abre nele; e leitura que falha so tira o candidato — sem rede, abre no '
+      + 'mes lembrado');
 }
 
 // ------------------------------------------------ B20 kWh e decimal em portugues

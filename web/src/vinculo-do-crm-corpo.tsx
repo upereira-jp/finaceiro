@@ -42,7 +42,7 @@ export function PainelDoVinculo({ dados, carregando, erro, destravar, ocupado }:
   return (
     <div style={{ display: 'grid', gap: 8 }}>
       <h4 style={{ margin: 0 }}>
-        <Icone nome={f.travada ? 'pendente' : 'ok'} tamanho={15} peso="bold" />{' '}
+        <Icone nome={f.travada ? 'falha' : 'ok'} tamanho={15} peso="bold" />{' '}
         Vínculo com o outro sistema
       </h4>
       <div style={{ lineHeight: 1.55 }}>

@@ -67,9 +67,9 @@ export function SituacaoDaLinha({ item, pendente }: { item: ItemDoLote; pendente
   if (item.estado === 'registrando') return <Marca tom="nao_medido" icone="carregando">Gravando…</Marca>;
   if (item.estado === 'lendo') return <Marca tom="nao_medido" icone="carregando">Lendo…</Marca>;
   if (item.estado === 'na_fila') return <Marca tom="nao_medido">Na fila</Marca>;
-  if (item.estado === 'falhou') return <Marca tom="pendente">{item.campos ? 'Recusada' : 'Não leu'}</Marca>;
+  if (item.estado === 'falhou') return <Marca tom="erro">{item.campos ? 'Recusada' : 'Não leu'}</Marca>;
   return pendente
-    ? <Marca tom="pendente">Corrigir</Marca>
+    ? <Marca tom="a_fazer">Corrigir</Marca>
     : <Marca tom="ok">Conferida</Marca>;
 }
 
@@ -289,7 +289,7 @@ function tituloDasRegistradas(f: FiltroDasRegistradas): string {
 function SituacaoDoRegistro({ r, g }: { r: RegistroDeFatura; g: EstadoDaGeracao | undefined }) {
   if (g?.estado === 'gerando') return <Marca tom="nao_medido" icone="carregando">Gerando…</Marca>;
   if (r.fatura_id || g?.estado === 'gerada') return <Marca tom="ok" icone="confirmar">Cobrança gerada</Marca>;
-  if (g?.estado === 'recusada') return <Marca tom="pendente">Recusada</Marca>;
+  if (g?.estado === 'recusada') return <Marca tom="erro">Recusada</Marca>;
   if (g?.estado === 'na_vez') return <Marca tom="nao_medido">Na vez</Marca>;
   if (!r.cobranca_disponivel) return <Marca tom="nao_medido">Registrada</Marca>;
   /* AMBAR E NAO VERMELHO: sem cobranca e trabalho A FAZER, nao erro — o

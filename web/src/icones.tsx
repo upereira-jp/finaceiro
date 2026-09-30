@@ -38,19 +38,19 @@ import { ClockCounterClockwise } from '@phosphor-icons/react/ClockCounterClockwi
 import { Check } from '@phosphor-icons/react/Check';
 import { X } from '@phosphor-icons/react/X';
 import { Question } from '@phosphor-icons/react/Question';
+import { PencilSimpleLine } from '@phosphor-icons/react/PencilSimpleLine';
+import { Minus } from '@phosphor-icons/react/Minus';
 import { Lifebuoy } from '@phosphor-icons/react/Lifebuoy';
 import { ArrowSquareOut } from '@phosphor-icons/react/ArrowSquareOut';
 import { WarningOctagon } from '@phosphor-icons/react/WarningOctagon';
 import { CheckCircle } from '@phosphor-icons/react/CheckCircle';
 import { Warning } from '@phosphor-icons/react/Warning';
-import { Checks } from '@phosphor-icons/react/Checks';
 import { HandCoins } from '@phosphor-icons/react/HandCoins';
 import { HandArrowDown } from '@phosphor-icons/react/HandArrowDown';
 import { CurrencyCircleDollar } from '@phosphor-icons/react/CurrencyCircleDollar';
 import { ArrowCircleDown } from '@phosphor-icons/react/ArrowCircleDown';
 import { Clock } from '@phosphor-icons/react/Clock';
 import { WarningCircle } from '@phosphor-icons/react/WarningCircle';
-import { XCircle } from '@phosphor-icons/react/XCircle';
 import { MagnifyingGlass } from '@phosphor-icons/react/MagnifyingGlass';
 import { CalendarBlank } from '@phosphor-icons/react/CalendarBlank';
 import { Broom } from '@phosphor-icons/react/Broom';
@@ -146,10 +146,12 @@ const DESENHO: Record<NomeDeIcone, Icon> = {
    * mesmo desenho nas duas faria «Usuários» parecer outro nome para «Clientes». */
   usuarios: UserGear,
 
-  // os três estados da prontidão — glifo nu, porque a pílula já é a moldura
+  // os cinco tons do selo — glifo nu, porque a pílula já é a moldura
   ok: Check,
-  pendente: X,
+  falha: X,
+  a_fazer: PencilSimpleLine,
   nao_medido: Question,
+  neutro: Minus,
 
   // os três avisos — octógono é PARADA, triângulo é atenção
   aviso_erro: WarningOctagon,
@@ -157,14 +159,11 @@ const DESENHO: Record<NomeDeIcone, Icon> = {
   aviso_alerta: Warning,
 
   // as métricas
-  pode_faturar: Checks,
   pode_repartir: HandCoins,
   faturado: CurrencyCircleDollar,
   recebido: ArrowCircleDown,
   a_receber: Clock,
   vencidas: WarningCircle,
-  sim: CheckCircle,
-  nao: XCircle,
 
   // ações
   buscar: MagnifyingGlass,

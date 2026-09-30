@@ -15,8 +15,10 @@
 import {
   motivoDaEspera, podeRepartirAgora, contarPorMotivo, totalCentavos,
   ordenarPelaEspera, resumoDaEspera, ROTULO_DO_MOTIVO, EXPLICACAO_DO_MOTIVO,
-  type RepassePendente,
+  ROTULO_CURTO_DO_MOTIVO, COMO_DESTRAVAR, ORDEM_DOS_MOTIVOS,
+  type RepassePendente, type MotivoDaEspera,
 } from '../src/repasse-pendente.ts';
+import { TELAS } from '../src/navegacao.ts';
 
 let falhas = 0;
 let feitas = 0;
@@ -110,6 +112,45 @@ chk('R7', resumoDaEspera([]) === '',
   chk('R9', !jargao.test(textos),
       'nem rotulo nem explicacao usam a palavra interna do sistema - quem le esta tela quer saber '
       + 'de quem recebe o dinheiro, nao do nome que o codigo da ao evento');
+}
+
+// ------------------------------- R10 falta o dono: DOIS passos, em duas telas
+// [30/09/2026, etapa 4a] A frase dizia «Cadastre o dono na tela de Usinas», e na
+// tela de Usinas nao se cadastra dono — ali ele so se escolhe numa lista. O
+// caminho real e cadastrar em «Donos de usina» e vincular em «Usinas».
+{
+  const passos = COMO_DESTRAVAR.sem_dono ?? [];
+  const existe = (endereco: string, rotulo: string) =>
+    TELAS.some((t) => t.rota === endereco.split('?')[0] && t.titulo === rotulo);
+  chk('R10', passos.length === 2
+             && passos[0]!.destino.endereco === '/donos' && passos[1]!.destino.endereco.startsWith('/usinas')
+             && passos.every((x) => existe(x.destino.endereco, x.destino.rotulo)),
+      'o caminho de «falta o dono» tem dois passos na ordem certa — cadastrar em Donos de usina, '
+      + 'vincular em Usinas —, e cada destino e uma tela do menu com o rotulo letra por letra');
+  chk('R10b', !/na tela de Usinas/.test(EXPLICACAO_DO_MOTIVO.sem_dono)
+              && /dois passos/.test(EXPLICACAO_DO_MOTIVO.sem_dono),
+      'e a frase nao manda mais cadastrar o dono em Usinas: ela aponta para os dois passos, que a '
+      + 'tela lista com os links');
+  chk('R10c', COMO_DESTRAVAR.aguardando_banco === undefined,
+      'a espera do banco nao ganha caminho: nao ha nada a fazer, e um link ali mandaria agir sobre '
+      + 'uma intencao de pagamento');
+}
+
+// ----------------------------------------- R11 os grupos e o rotulo curto
+{
+  const todos: MotivoDaEspera[] = ['sem_dono', 'aguardando_banco', 'pronto'];
+  chk('R11', ORDEM_DOS_MOTIVOS.length === todos.length && todos.every((m) => ORDEM_DOS_MOTIVOS.includes(m)),
+      'todo motivo tem grupo na tela — motivo sem grupo sumiria da tabela em silencio');
+  const ordenada = ordenarPelaEspera([
+    linha({ liquidacao_id: 'b', origem: 'webhook_sicoob' }),
+    linha({ liquidacao_id: 's', usina_sem_dono: true }),
+    linha({ liquidacao_id: 'p', origem: 'conciliacao' }),
+  ]).map(motivoDaEspera);
+  chk('R11b', ordenada.join(',') === ORDEM_DOS_MOTIVOS.join(','),
+      'e a ordem dos grupos e a mesma da fila: quem exige acao primeiro');
+  const curtos = Object.values(ROTULO_CURTO_DO_MOTIVO);
+  chk('R11c', curtos.length === 3 && curtos.every((t) => t.length > 0 && t.length <= 20),
+      'a linha diz o estado em ate vinte letras — a explicacao longa e do cabecalho do grupo');
 }
 
 console.log(`\n--- repasse pendente (a fila onde o dinheiro espera): ${feitas} verificacoes, ${falhas} falha(s)`);

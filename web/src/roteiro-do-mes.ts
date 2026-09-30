@@ -130,6 +130,26 @@ export type RiscoDoPasso = {
   peso: number;
 };
 
+/**
+ * O QUE DE OUTROS MESES PEDE VOCÊ — um aviso com link, e NÃO um risco.
+ *
+ * [30/09/2026, etapa 4a] Até aqui o boleto parado de OUTRO mês entrava no risco
+ * do passo 4 com o peso mais alto (3), e o destaque do funil ia para um passo
+ * com ZERO unidades no mês escolhido: abrir agosto dizia «Comece pelo 4» sobre um
+ * passo vazio em agosto, porque havia um boleto recusado em setembro. O caso de
+ * fora continua valendo — «uma fatura de MAI que nunca virou boleto continua
+ * sendo dinheiro parado em SET» —, mas ele pesa MENOS que qualquer risco do mês:
+ * não escolhe o destaque, e aparece como uma linha própria, com o link para o mês
+ * dele em Cobranças.
+ */
+export type AvisoDeOutrosMeses = {
+  quantos: number;
+  /** «E 2 de outros meses pedem você: estão sem boleto.» */
+  frase: string;
+  /** Cobranças, já no mês mais recente dos que pedem. */
+  endereco: string;
+};
+
 /** Uma pendência de cadastro que trava parte do mês, já em português e com o
  *  caminho. Vem inteira dos dois mapas que já existem. */
 export type TravaDoPasso = {
@@ -160,6 +180,9 @@ export type PassoDoMes = {
   /** Uma linha de contexto: «de 41 unidades», «e 2 de outros meses». */
   contexto: string | null;
   risco: RiscoDoPasso | null;
+  /** O que de OUTROS meses pede você neste passo — o aviso com link, e não um
+   *  risco: ver `AvisoDeOutrosMeses`. */
+  deOutrosMeses: AvisoDeOutrosMeses | null;
   /** O passo que a tela abre, e o único. */
   foco: boolean;
   /** Uma frase. O que este passo É, para quem nunca o fez. */
@@ -347,7 +370,14 @@ type Numeros = {
   quantos: number | null;
   contexto: string | null;
   risco: RiscoDoPasso | null;
+  deOutrosMeses?: AvisoDeOutrosMeses | null;
 };
+
+/** «15 contas a ler, 6 cobranças a gerar e 3 sem boleto». Sem «·» no meio da
+ *  frase (30/09/2026, etapa 4a): o ponto do meio é separador de rótulo, e numa
+ *  frase corrida ele obriga a adivinhar se é «e», vírgula ou ponto. */
+const emLista = (itens: readonly string[]): string =>
+  (itens.length <= 1 ? (itens[0] ?? '') : `${itens.slice(0, -1).join(', ')} e ${itens[itens.length - 1]}`);
 
 function contar(l: LeituraDoMes): Record<ChaveDoPasso, Numeros> & { pagas: number | null } {
   const conta = l.camadas.find((c) => c.camada === CAMADA_DA_CONTA) ?? null;
@@ -392,17 +422,28 @@ function contar(l: LeituraDoMes): Record<ChaveDoPasso, Numeros> & { pagas: numbe
 
   const recusadasNoMes = doMes.filter(recusada).length;
   const pedemNoMes = doMes.filter(pedeVoce).length;
-  const pedemFora = deFora.filter(pedeVoce).length;
+  const quemPedeFora = deFora.filter(pedeVoce);
+  /* O RISCO É SÓ DO MÊS desde 30/09/2026 (etapa 4a). O de outros meses virou
+   * `deOutrosMeses`, logo abaixo — ver `AvisoDeOutrosMeses`. */
   let riscoDoBoleto: RiscoDoPasso | null = null;
-  if (pedemNoMes + pedemFora > 0) {
+  if (pedemNoMes > 0) {
     const partes: string[] = [];
     if (recusadasNoMes > 0) {
       partes.push(`${recusadasNoMes} ${recusadasNoMes === 1 ? 'recusada' : 'recusadas'} pelo banco`);
     }
     const paradas = pedemNoMes - recusadasNoMes;
     if (paradas > 0) partes.push(`${paradas} ${paradas === 1 ? 'parada' : 'paradas'} há mais de um dia`);
-    if (pedemFora > 0) partes.push(`${pedemFora} de outros meses ${pedemFora === 1 ? 'pede' : 'pedem'} você`);
-    riscoDoBoleto = { quantos: pedemNoMes + pedemFora, frase: partes.join(' · '), peso: 3 };
+    riscoDoBoleto = { quantos: pedemNoMes, frase: emLista(partes), peso: 3 };
+  }
+  let deOutrosMeses: AvisoDeOutrosMeses | null = null;
+  if (quemPedeFora.length > 0) {
+    const n = quemPedeFora.length;
+    const maisRecente = quemPedeFora.map((x) => mesDe(x.competencia)).filter(Boolean).sort().reverse()[0];
+    deOutrosMeses = {
+      quantos: n,
+      frase: `E ${n} de outros meses ${n === 1 ? 'pede' : 'pedem'} você: ${n === 1 ? 'está' : 'estão'} sem boleto.`,
+      endereco: maisRecente ? `/faturas?mes=${maisRecente}` : '/faturas',
+    };
   }
 
   /* ------------------------------------------------------ 5 · a receber
@@ -438,6 +479,7 @@ function contar(l: LeituraDoMes): Record<ChaveDoPasso, Numeros> & { pagas: numbe
         ? (foraDoMes > 0 ? `e ${foraDoMes} de outros meses` : null)
         : sb ? `${sb.total} sem boleto contando todos os meses` : null,
       risco: riscoDoBoleto,
+      deOutrosMeses,
     },
     receber: {
       quantos: receber,
@@ -461,13 +503,17 @@ function contar(l: LeituraDoMes): Record<ChaveDoPasso, Numeros> & { pagas: numbe
  *      passos pela frente. Terminar o que já começou antes de abrir mais é o que
  *      põe dinheiro no caixa primeiro — e é a leitura de quadro de trabalho
  *      (puxar da direita);
- *   3. O passo AUTOMÁTICO só entra pelo risco: sem ele não há o que clicar.
+ *   3. O passo AUTOMÁTICO só entra pelo risco: sem ele não há o que clicar;
+ *   4. [30/09, etapa 4a] PASSO COM ZERO NO MÊS NÃO GANHA O DESTAQUE, nem pelo
+ *      risco. O destaque diz «comece aqui», e começar num passo vazio no mês
+ *      escolhido manda a pessoa para uma lista sem nada. O que vem de outros
+ *      meses tem o seu aviso próprio (`AvisoDeOutrosMeses`).
  *
  * `null` quando nenhum passo tem trabalho nem risco — e aí a tela diz isso, que é
  * uma notícia e não um vazio.
  */
 export function escolherOFoco(passos: readonly Omit<PassoDoMes, 'foco'>[]): ChaveDoPasso | null {
-  const comRisco = passos.filter((p) => p.risco !== null)
+  const comRisco = passos.filter((p) => p.risco !== null && p.quantos !== 0)
     .sort((a, b) => b.risco!.peso - a.risco!.peso || b.numero - a.numero);
   if (comRisco.length > 0) return comRisco[0]!.chave;
   const comTrabalho = passos.filter((p) => !p.automatico && p.quantos !== null && p.quantos > 0)
@@ -520,6 +566,8 @@ export type MesNoFunil = {
   travas: TravaDoPasso[];
   /** O que só impede dividir o dinheiro quando ele entrar. */
   travasDoRepasse: TravaDoPasso[];
+  /** O boleto de OUTRO mês que pede você — o aviso com link (`AvisoDeOutrosMeses`). */
+  deOutrosMeses: AvisoDeOutrosMeses | null;
   pagas: number | null;
   estado: EstadoDoMes;
   /**
@@ -531,10 +579,6 @@ export type MesNoFunil = {
    */
   frase: string;
 };
-
-/** «15 contas a ler, 6 cobranças a gerar e 3 sem boleto». */
-const emLista = (itens: readonly string[]): string =>
-  (itens.length <= 1 ? (itens[0] ?? '') : `${itens.slice(0, -1).join(', ')} e ${itens[itens.length - 1]}`);
 
 function fraseDoMes(
   passos: readonly PassoDoMes[], foco: PassoDoMes | null, travas: readonly TravaDoPasso[],
@@ -552,9 +596,11 @@ function fraseDoMes(
     const EXTENSO = ['', 'um', 'dois', 'três', 'quatro'];
     const onde = comTrabalho.length >= passos.length ? 'nos cinco passos'
       : `em ${EXTENSO[comTrabalho.length]} dos cinco passos`;
+    /* «Comece pelo passo 4, Pedir o boleto…» e não mais «Comece pelo 4 · Pedir o
+       boleto…» (30/09, etapa 4a): o «·» no meio da frase corrida saiu. */
     return {
       estado: 'andando',
-      frase: `Falta trabalho ${onde}. Comece pelo ${foco.numero} · ${foco.titulo}: ${motivo}.${semMedida}`,
+      frase: `Falta trabalho ${onde}. Comece pelo passo ${foco.numero}, ${foco.titulo}: ${motivo}.${semMedida}`,
     };
   }
   if (naoMedidos.length > 0) {
@@ -589,6 +635,7 @@ export function mesNoFunil(l: LeituraDoMes): MesNoFunil {
       nome: plural(x.quantos ?? 2, m.nome),
       contexto: x.contexto,
       risco: x.risco,
+      deOutrosMeses: x.deOutrosMeses ?? null,
       oQueFazer: m.oQueFazer,
       comoFazer: m.comoFazer,
       destino: x.risco && m.destinoDoRisco ? m.destinoDoRisco : m.destino,
@@ -602,7 +649,11 @@ export function mesNoFunil(l: LeituraDoMes): MesNoFunil {
   const travas = travasDe(l.camadas, ['bloqueia_fatura', 'bloqueia_boleto']);
   const travasDoRepasse = travasDe(l.camadas, ['bloqueia_split']);
 
-  return { passos, foco, travas, travasDoRepasse, pagas: n.pagas, ...fraseDoMes(passos, foco, travas) };
+  const deOutrosMeses = passos.find((p) => p.deOutrosMeses)?.deOutrosMeses ?? null;
+
+  return {
+    passos, foco, travas, travasDoRepasse, deOutrosMeses, pagas: n.pagas, ...fraseDoMes(passos, foco, travas),
+  };
 }
 
 /* ==========================================================================

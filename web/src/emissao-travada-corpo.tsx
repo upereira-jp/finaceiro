@@ -2,20 +2,14 @@
 // propriedade, de propósito.
 //
 // ============================================================================
-// POR QUE SÃO DOIS COMPONENTES E NÃO UM, e é a mesma divisão das automações
+// ERAM DOIS COMPONENTES, E FICOU UM (30/09/2026, etapa 4a)
 //
-//   `FaixaDaEmissao`    o ALARME, no alto de Pendências. CONTA, não lista: «4
-//                       faturas emitidas estão sem boleto no banco, a mais
-//                       antiga há 9 dias». Existe para ninguém precisar abrir a
-//                       tela de emissão para descobrir que precisa abri-la;
-//   `PainelDaEmissao`   a LISTA, na tela Cobranças, que é onde se
-//                       age sobre ela — cada linha tem o motivo, o que o banco
-//                       respondeu e o botão que pede o boleto.
+//   `PainelDaEmissao`   a LISTA, na tela Cobranças, que é onde se age sobre
+//                       ela — cada linha tem o motivo, o que o banco respondeu
+//                       e o botão que pede o boleto.
 //
-// Uma faixa que listasse as quatro faturas viraria a segunda tela de emissão, e
-// o alarme deixaria de caber na primeira dobra da tela de Pendências. Uma lista
-// sem faixa dependeria de alguém abrir a aba certa no dia certo — que é
-// exatamente o que o levantamento de 10/09 disse que não acontece.
+// O outro era `FaixaDaEmissao`, o ALARME que contava no alto de Pendências. Ele
+// saiu da tela na etapa 3 e do código na 4a — ver a nota logo abaixo.
 //
 // ⚠️ A FAIXA SAIU DA TELA MÊS EM 30/09/2026 (etapa 3 do redesenho), e o que ela
 // dizia mudou de lugar, não de dono. Ela ficava acima do roteiro do mês, em
@@ -23,8 +17,9 @@
 // «você está no 1 de 5». Duas respostas para «o que eu faço agora». Agora o
 // PASSO 4 do funil conta as cobranças sem boleto (do mês e de outros meses) e
 // ganha o destaque quando alguma pede gente — a mesma contagem, numa resposta
-// só (`roteiro-do-mes.ts`, `RM2`/`RM10`). O componente fica: a suíte o monta, e
-// ele é o desenho pronto se o alarme voltar a ser pedido fora do funil.
+// só (`roteiro-do-mes.ts`, `RM2`/`RM10`). Na etapa 4a o componente e a regra que
+// o alimentava (`faixaDaEmissaoTravada`) saíram também: nenhuma tela o montava,
+// e código que ninguém monta é código que ninguém confere.
 //
 // COMO A SEPARAÇÃO SE PROVA: `renderToStaticMarkup` não roda efeito, então um
 // componente que busca sozinho renderiza sempre o estado vazio e o teste mede o
@@ -34,7 +29,7 @@
 import { Aviso, Icone } from './ui.tsx';
 import { emReais } from './dinheiro.ts';
 import {
-  faixaDaEmissaoTravada, fraseDaLinha, haQuantoTempo, resumoDaEmissao, avisoDeTruncagem,
+  fraseDaLinha, haQuantoTempo, resumoDaEmissao, avisoDeTruncagem,
   type EmissaoTravadaNaTela, type LinhaNaTela,
 } from './emissao-travada.ts';
 import { acaoDaLinha, lerRecusa, type RecusaLida, type StatusDaCobranca } from './emissao-regras.ts';
@@ -75,18 +70,6 @@ const mesCurto = (v: string): string => {
 };
 
 const dataBr = (v: string): string => String(v).slice(0, 10).split('-').reverse().join('/');
-
-/** Devolve `null` quando nada pede gente, e **`null` é a resposta**: quem monta
- *  não precisa saber quais níveis merecem faixa. */
-export function FaixaDaEmissao({ dados }: CorpoDaEmissao) {
-  const f = faixaDaEmissaoTravada(dados);
-  if (!f) return null;
-  return (
-    <Aviso tipo={f.tom}>
-      <strong>{f.titulo}</strong> {f.corpo}
-    </Aviso>
-  );
-}
 
 /**
  * A LISTA, e ela desenha ATÉ quando está vazia.
@@ -168,7 +151,7 @@ function LinhaDaEmissao({ l, primeira, pedirBoleto, ocupado, recusa }: {
         {/* O ícone é o SEGUNDO sinal, e não a informação: quem não distingue a
             cor lê a mesma frase inteira. Restrição 3 do tema. O calendário é o
             que espera a próxima tentativa; a pendência é o que espera alguém. */}
-        <Icone nome={f.grave ? 'pendente' : 'calendario'} tamanho={15} peso="bold" />
+        <Icone nome={f.grave ? 'falha' : 'calendario'} tamanho={15} peso="bold" />
         <strong>{l.unidade}</strong>
         <span>{l.cliente}</span>
         {mesCurto(l.competencia) && <span className="fraco">mês {mesCurto(l.competencia)}</span>}

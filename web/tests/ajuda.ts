@@ -399,6 +399,18 @@ chk('A5g', ORDEM_DOS_GRUPOS.length === Object.keys(EFEITO).length
         'e a PRIMEIRA tela do menu usa as duas: a tabela recebe so o que esta em aberto, e as '
         + 'fechadas so entram quando alguem pede - sem esta linha, a regra existiria e a tela '
         + 'continuaria mostrando tudo');
+
+    /* [30/09/2026, etapa 4a] «COMO LER ESTA TELA» VIROU ASSUNTO DA AJUDA, e na
+       tela ficou um link. O que se prende: a tela abre ESTE assunto, ele existe
+       e é da tela Mês, e a lista fixa de marcadores não voltou para a página. */
+    const assunto = TOPICOS.find((t) => t.id === 'o-que-e-pendencia');
+    chk('A5z', /abrirAjuda\('o-que-e-pendencia'\)/.test(tela) && !/Como ler esta tela<\/h2>/.test(tela)
+            && assunto !== undefined && assunto.telas.includes('/pendencias')
+            && assunto.passos.some((p) => /ordem do trabalho/.test(p))
+            && assunto.passos.some((p) => /n[aã]o [eé] o mesmo que pronto/.test(p))
+            && assunto.passos.some((p) => /Vermelho.*s[oó] falha/.test(p)),
+        'o «Como ler esta tela» mora na Central de Ajuda — com a ordem do trabalho, o «não é o mesmo '
+        + 'que pronto» e o vermelho só para falha —, e a tela Mês o abre por um link');
   }
 }
 

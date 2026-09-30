@@ -24,7 +24,7 @@
 
 import { readFileSync } from 'node:fs';
 import {
-  faixaDaEmissaoTravada, fraseDaLinha, haQuantoTempo, resumoDaEmissao, avisoDeTruncagem,
+  fraseDaLinha, haQuantoTempo, resumoDaEmissao, avisoDeTruncagem,
   type LinhaNaTela, type NivelDaEmissao, type EmissaoTravadaNaTela,
 } from '../src/emissao-travada.ts';
 
@@ -65,15 +65,12 @@ const TODOS: NivelDaEmissao[] = ['nao_pedido', 'esquecido', 'esperando', 'insist
 // ============================================================ EM-1 o vazio FALA
 {
   const vazio = conjunto([]);
-  chk('EM-1', faixaDaEmissaoTravada(vazio) === null
-           && /j[aá] t[eê]m boleto/i.test(resumoDaEmissao(vazio)),
-      'com a lista vazia nao ha faixa NENHUMA e o painel AFIRMA que todas as faturas emitidas tem '
-      + 'boleto no banco - as duas metades no mesmo estado, porque uma lista que so cala nao '
-      + 'distingue "esta tudo certo" de "a leitura quebrou"');
-
-  chk('EM-1b', faixaDaEmissaoTravada(null) === null,
-      'e enquanto a leitura nao voltou (`null`) tambem nao ha faixa: ausencia de resposta nao e '
-      + 'resposta, e uma faixa que pisca vermelho durante o carregamento e ruido');
+  /* [30/09/2026, etapa 4a] A metade «nao ha faixa» (EM-1, EM-1b, EM-6, EM-6b e
+   * EM-7) saiu com `faixaDaEmissaoTravada`: a faixa nao existe mais. O que
+   * fica e a metade que continua em tela — o painel que AFIRMA. */
+  chk('EM-1', /j[aá] t[eê]m boleto/i.test(resumoDaEmissao(vazio)),
+      'com a lista vazia o painel AFIRMA que todas as faturas emitidas tem boleto no banco - uma '
+      + 'lista que so cala nao distingue "esta tudo certo" de "a leitura quebrou"');
 }
 
 // ================================================ EM-2 e EM-3 as duas ausencias
@@ -118,33 +115,6 @@ const TODOS: NivelDaEmissao[] = ['nao_pedido', 'esquecido', 'esperando', 'insist
   const achados = proibido.filter((p) => p.test(fonte));
   chk('EM-5', achados.length === 0,
       `nenhuma frase manda rodar comando nem cita codigo interno${achados.length ? ` - ACHADO: ${achados.join(' · ')}` : ''}`);
-}
-
-// ====================================== EM-6 a faixa CONTA, da idade e nao lista
-{
-  const f = faixaDaEmissaoTravada(conjunto([
-    linha('esquecido', { fatura_id: 'a', ha_quanto_tempo_segundos: 9 * 86_400 }),
-    linha('insistindo', { fatura_id: 'b', ha_quanto_tempo_segundos: 2 * 86_400 }),
-    linha('esperando', { fatura_id: 'c' }),
-  ]));
-  chk('EM-6', f !== null && /2 faturas/.test(f.titulo) && /9 dias/.test(f.corpo)
-           && !f.corpo.includes('000401269001287'),
-      'a faixa conta as que pedem gente (2 das 3 - `esperando` nao entra), da a idade da MAIS '
-      + 'ANTIGA e NAO lista unidade nenhuma: «4 sem cobranca» pode ser de hoje de manha, e «a mais '
-      + 'antiga ha 9 dias» e o que faz alguem abrir a tela hoje');
-
-  const so = faixaDaEmissaoTravada(conjunto([linha('esquecido')]));
-  chk('EM-6b', so !== null && /1 fatura emitida est[aá]/.test(so.titulo),
-      'e no singular a frase e singular - "1 faturas estao" e a marca de contador escrito sem '
-      + 'ninguem ler a saida');
-}
-
-// ============================== EM-7 a faixa cala quando so ha o que anda sozinho
-{
-  const f = faixaDaEmissaoTravada(conjunto([linha('nao_pedido'), linha('esperando')]));
-  chk('EM-7', f === null,
-      'com so `nao_pedido` e `esperando` NAO ha faixa - as duas sao o dia normal de quem acabou '
-      + 'de emitir o mes, e um alarme que toca todo dia de trabalho e um alarme que se ignora');
 }
 
 // ========================================= EM-8 o resumo nao mente sobre o total

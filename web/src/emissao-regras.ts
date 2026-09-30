@@ -457,6 +457,47 @@ export function mesSemTrabalho(
   return { mes: hoje, origem: 'hoje' };
 }
 
+/** O mês em que a tela abre, e por quê. */
+export type EscolhaDoMes = { mes: string; origem: OrigemDoMes; certo?: boolean };
+
+/**
+ * A PROCURA INTEIRA, com a rede POR PARÂMETRO — e ela é uma só para as duas
+ * telas que abrem no mês com trabalho: Cobranças e, desde 30/09/2026 (etapa 4a),
+ * Mês. Até esta data ela morava dentro de `telas/faturas.tsx`, e a tela Mês
+ * abria no mês de HOJE; a segunda cópia divergiria na primeira correção, e as
+ * duas telas voltariam a abrir em meses diferentes com o mesmo trabalho na mesa.
+ *
+ * O que já se sabe sem ler nada (`travadas`, que as duas telas buscam de
+ * qualquer jeito) decide sozinho; o mês que só PODE ter rascunho é lido antes —
+ * no máximo `MESES_A_CONFERIR`, em série. Qualquer leitura que falhe só tira
+ * aquele candidato: o pior caso é abrir no mês lembrado ou no de hoje.
+ *
+ * A REDE ENTRA POR PARÂMETRO pelo motivo de sempre deste arquivo: sem ela, a
+ * procura é testável sem servidor. Quem liga à API é `procurarMesDoTrabalho`,
+ * em `leitura-do-mes.ts`.
+ */
+export async function procurarMesComTrabalho(p: {
+  travadas: ReadonlyArray<{ competencia: string }>;
+  carteira: () => Promise<ReadonlyArray<{ competencia: string; faturas: number; emitidas: number; liquidadas: number }>>;
+  cobrancasDoMes: (mes: string) => Promise<ReadonlyArray<{ status: string }>>;
+  lembrado: string | null;
+  hoje: string;
+}): Promise<EscolhaDoMes> {
+  let carteira: ReadonlyArray<{ competencia: string; faturas: number; emitidas: number; liquidadas: number }> = [];
+  try { carteira = await p.carteira(); } catch { /* segue só com a lista do banco */ }
+  let lidos = 0;
+  for (const c of candidatosDoMes(carteira, p.travadas)) {
+    if (c.certo) return { mes: c.mes, origem: 'trabalho', certo: true };
+    if (lidos >= MESES_A_CONFERIR) continue;
+    lidos++;
+    try {
+      const l = await p.cobrancasDoMes(c.mes);
+      if (l.some((f) => f.status === 'rascunho')) return { mes: c.mes, origem: 'trabalho', certo: false };
+    } catch { /* mês que não se lê não é aberto por palpite */ }
+  }
+  return mesSemTrabalho(p.lembrado, carteira, p.hoje);
+}
+
 /** A FRASE AO LADO DO SELETOR, dizendo por que a tela está neste mês. Sem ela,
  *  abrir em agosto com setembro no calendário parece defeito. */
 export function fraseDaOrigem(origem: OrigemDoMes): string {

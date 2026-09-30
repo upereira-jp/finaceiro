@@ -35,6 +35,7 @@
 // ficaria "aguardando ativacao" para sempre, esperando um CRM que nao sabe dela.
 
 import { faltamNoEndereco } from '../../src/sicoob/porta.ts';
+import type { NomeDeIcone, TomDoSelo } from './iconografia.ts';
 
 export type UcParaSituacao = {
   status: string;
@@ -66,20 +67,21 @@ export const ROTULO_DA_SITUACAO: Record<SituacaoDaUc, string> = {
 /**
  * O tom da pilula. **So `ativa` e verde: e a unica que fatura.**
  *
- * Sao os TRES tons de `Marca`, e nao um quarto: a pilula existe com tres sinais
- * (cor, icone e palavra) pela restricao 3 do tema, e inventar um tom novo
- * pediria cor nova com contraste medido. Seis situacoes em tres tons e o mesmo
- * arranjo que os seis status de fatura ja usam.
+ * [30/09, etapa 4a] AS QUE NAO FATURAM SAIRAM DO VERMELHO. Aguardando ativacao,
+ * troca de titularidade e suspensa nao sao falha de ninguem: sao estados do
+ * cadastro, decididos no outro sistema ou por gente. Pintadas de vermelho, a
+ * tabela gritava em linha que nao pede conserto — agora sao `neutro` (cinza), e a
+ * palavra continua dizendo qual e. O vermelho ficou para a falha (`TomDoSelo`).
  */
-export const TOM_DA_SITUACAO: Record<SituacaoDaUc, 'ok' | 'pendente' | 'nao_medido'> = {
+export const TOM_DA_SITUACAO: Record<SituacaoDaUc, TomDoSelo> = {
   ativa: 'ok',
-  aguardando_ativacao: 'pendente',
-  em_troca_titularidade: 'pendente',
-  suspensa: 'pendente',
+  aguardando_ativacao: 'neutro',
+  em_troca_titularidade: 'neutro',
+  suspensa: 'neutro',
   // A interrogacao do `nao_medido` esta CERTA aqui: nos literalmente nao sabemos
   // - o conector nao leu esta UC.
   situacao_nao_lida: 'nao_medido',
-  cancelada: 'nao_medido',
+  cancelada: 'neutro',
 };
 
 /**
@@ -90,8 +92,11 @@ export const TOM_DA_SITUACAO: Record<SituacaoDaUc, 'ok' | 'pendente' | 'nao_medi
  * 'nao sei', que e o certo para uma camada nao medida e o errado para uma
  * fatura emitida". Cancelada e o mesmo caso - nos sabemos muito bem.
  */
-export const ICONE_DA_SITUACAO: Partial<Record<SituacaoDaUc, 'remover'>> = {
+export const ICONE_DA_SITUACAO: Partial<Record<SituacaoDaUc, NomeDeIcone>> = {
   cancelada: 'remover',
+  /* A espera tem desenho de espera: o relogio, e nao o traco do neutro. */
+  aguardando_ativacao: 'a_receber',
+  em_troca_titularidade: 'recarregar',
 };
 
 /**
@@ -213,9 +218,9 @@ export const ROTULO_DO_ENDERECO: Record<SituacaoDoEndereco, string> = {
  * A tela ficou onze dias dizendo «isto nao impede cobrar» sobre a unica coisa
  * que, hoje, impede — e em amarelo, que e a cor de "pode deixar para depois".
  */
-export const TOM_DO_ENDERECO: Record<SituacaoDoEndereco, 'ok' | 'pendente' | 'nao_medido'> = {
-  vazio: 'pendente',
-  parcial: 'pendente',
+export const TOM_DO_ENDERECO: Record<SituacaoDoEndereco, TomDoSelo> = {
+  vazio: 'a_fazer',
+  parcial: 'a_fazer',
   completo: 'ok',
 };
 
@@ -247,13 +252,19 @@ export const enderecoEmiteBoleto = (u: EnderecoDaUc): boolean => faltamParaOBole
 
 /**
  * O TOM DA PILULA, e ele responde a pergunta que decide o trabalho do dia: esta
- * unidade consegue emitir? Verde so quando sim; vermelho quando nao.
+ * unidade consegue emitir? Verde so quando sim; `a_fazer` quando nao.
  *
  * Nao ha `nao_medido` aqui de proposito — "nao sei" era a resposta certa
  * enquanto a exigencia da Sicoob nao estava medida, e nao e mais.
+ *
+ * [30/09, etapa 4a] E NAO E MAIS VERMELHO. O medo de 08/09 era o ambar dizer
+ * «pode deixar para depois» — e era o que ele dizia, porque o ambar era so o da
+ * interrogacao. Hoje o ambar do endereco vem com o LAPIS e com a palavra do que
+ * falta («Falta CEP, UF»): e tarefa, com nome. O vermelho ficou para a recusa do
+ * banco, que e o que acontece quando a tarefa nao e feita.
  */
-export const tomDoEndereco = (u: EnderecoDaUc): 'ok' | 'pendente' =>
-  (enderecoEmiteBoleto(u) ? 'ok' : 'pendente');
+export const tomDoEndereco = (u: EnderecoDaUc): 'ok' | 'a_fazer' =>
+  (enderecoEmiteBoleto(u) ? 'ok' : 'a_fazer');
 
 /** O rotulo da pilula, dizendo o que falta quando falta. */
 export function rotuloDoEndereco(u: EnderecoDaUc): string {
@@ -292,4 +303,49 @@ export function enderecoNumaLinha(u: EnderecoDaUc): string | null {
   const uf = t('endereco_uf');
   const partes = [rua, cidade ? (uf ? `${cidade}/${uf}` : cidade) : uf].filter(Boolean);
   return partes.length ? partes.join(', ') : null;
+}
+
+/* ==========================================================================
+ * O QUE FALTA NA UNIDADE — a coluna que resume a linha (30/09/2026, etapa 4a)
+ * ==========================================================================
+ *
+ * A TABELA DE UNIDADES ESCONDIA 437px NA PRÓPRIA CAIXA a 1280 de largura: oito
+ * colunas, três delas com campo e botão (a fatia, a tarifa e o vencimento). Quem
+ * procurava «o que falta nesta unidade» rolava para o lado e lia quatro colunas.
+ *
+ * A LINHA FICOU COM O QUE SE PROCURA DE RELANCE: a unidade (com a distribuidora
+ * e a usina embaixo), a situação, O QUE FALTA e o vencimento — o único campo que
+ * se preenche em série, unidade depois de unidade. A fatia, a tarifa e o
+ * endereço moram no detalhe da linha, que abre com um clique.
+ *
+ * AS CHAVES SÃO AS DO FILTRO DE PENDÊNCIA (`FILTROS_DA_TELA['/unidades']`), e na
+ * mesma ordem de critério: o que esta coluna diz que falta é exatamente o que o
+ * filtro «Sem …» mostra — uma lista que discordasse da coluna mandaria a pessoa
+ * procurar o que não está lá.
+ */
+export type FaltaDaUc = {
+  chave: 'sem_usina' | 'sem_vencimento' | 'sem_tarifa' | 'sem_endereco';
+  /** Minúsculo: vai no meio da frase, depois de «Falta». */
+  rotulo: string;
+};
+
+export type UcParaFaltas = EnderecoDaUc & {
+  usina_id: string | null;
+  data_vencimento: string | null;
+  tarifa_reais_por_kwh: string | null;
+};
+
+export function faltasDaUc(u: UcParaFaltas): FaltaDaUc[] {
+  const f: FaltaDaUc[] = [];
+  if (!u.usina_id) f.push({ chave: 'sem_usina', rotulo: 'usina' });
+  if (!u.data_vencimento) f.push({ chave: 'sem_vencimento', rotulo: 'vencimento' });
+  if (!u.tarifa_reais_por_kwh) f.push({ chave: 'sem_tarifa', rotulo: 'tarifa' });
+  if (!enderecoEmiteBoleto(u)) {
+    /* Faltando os cinco, «endereço» basta — listar os cinco nomes numa célula
+       é o mesmo que dizer «tudo», em duas linhas. Faltando parte, diz qual. */
+    const faltam = faltamParaOBoleto(u);
+    const campos = rotuloDoEndereco(u).replace(/^Falta /, '');
+    f.push({ chave: 'sem_endereco', rotulo: faltam.length >= 5 ? 'endereço' : `endereço (${campos})` });
+  }
+  return f;
 }

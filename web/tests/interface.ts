@@ -22,7 +22,7 @@
 import { ESTILO } from '../src/estilo.ts';
 import { VARIAVEIS_CSS, TIPOGRAFIA, RITMO } from '../src/tema.ts';
 import {
-  ICONES_QUE_SE_MOVEM, ICONE_DO_ESTADO, ICONE_DO_AVISO, ICONE_DO_STATUS_DA_FATURA,
+  ICONES_QUE_SE_MOVEM, ICONE_DO_ESTADO, ICONE_DO_AVISO, ICONE_DO_STATUS_DA_FATURA, TONS_DO_SELO,
 } from '../src/iconografia.ts';
 import {
   TELAS, FUNIS, PASTAS, telaDoCaminho, telasDoFunil, primeiraTelaDoFunil, funilDoCaminho,
@@ -559,15 +559,20 @@ chk('I4k', colididos.length === 0,
 
 // ----------------------------------------- I5 cor nunca e o unico sinal (rest. 3)
 
-const TONS = ['ok', 'pendente', 'nao_medido'] as const;
+/* [30/09, etapa 4a] OS TONS SAO CINCO (`TomDoSelo`), e o vermelho so da falha. */
+const TONS = TONS_DO_SELO;
 for (const tom of TONS) {
   chk('I5', Boolean(ICONE_DO_ESTADO[tom]),
       `o estado ${tom} tem icone proprio — cor nao e o unico sinal`);
   chk('I5b', new RegExp(`\\.marca\\.${tom}\\s*\\{[^}]*background:`).test(REGRAS),
       `e tem fundo proprio na pilula .marca.${tom}`);
 }
-chk('I5c', new Set(TONS.map((t) => ICONE_DO_ESTADO[t])).size === 3,
-    'os tres icones de estado sao DIFERENTES entre si: um segundo sinal igual nos tres nao e sinal');
+chk('I5c', new Set(TONS.map((t) => ICONE_DO_ESTADO[t])).size === TONS.length,
+    `os ${TONS.length} icones de estado sao DIFERENTES entre si: um segundo sinal igual em dois tons nao e sinal`);
+chk('I5c2', /\.marca\.erro\s*\{[^}]*var\(--erro\)/.test(REGRAS)
+         && TONS.filter((t) => new RegExp(`\\.marca\\.${t}\\s*\\{[^}]*var\\(--erro`).test(REGRAS)).length === 1,
+    'SO a pilula de `erro` e vermelha: a lacuna de cadastro (`a_fazer`) e o inativo (`neutro`) nao '
+    + 'usam a tinta da falha');
 chk('I5d', new Set(Object.values(ICONE_DO_AVISO)).size === 3,
     'e os tres icones de aviso tambem sao diferentes');
 

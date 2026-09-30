@@ -77,9 +77,14 @@ const cli = (p: Partial<ClienteConferivel>): ClienteConferivel =>
   chk('C2d', !destravaContrato(cli({})),
       'e a ausencia tambem nao, obviamente - mas ela conta separado no aviso');
 
+  /* [30/09, etapa 4a] O digito torto e o campo vazio sao TAREFA (`a_fazer`,
+   * ambar com o lapis), e nao falha: o vermelho ficou so para a recusa do banco,
+   * a vencida, o conector caido e a leitura que nao voltou (`TomDoSelo`). */
   chk('C2e', TOM_DA_SITUACAO_DO_DOCUMENTO.semente_do_crm === 'nao_medido'
-        && TOM_DA_SITUACAO_DO_DOCUMENTO.digito_nao_confere === 'pendente',
-      'semente e `nao_medido` e digito torto e `pendente`: "nao confirmado" nao e "errado"');
+        && TOM_DA_SITUACAO_DO_DOCUMENTO.digito_nao_confere === 'a_fazer'
+        && TOM_DA_SITUACAO_DO_DOCUMENTO.sem_documento === 'a_fazer',
+      'semente e `nao_medido` e digito torto e `a_fazer`: "nao confirmado" nao e "errado" — e nenhum '
+      + 'dos dois e vermelho: faltar documento e tarefa, nao falha');
 }
 
 // ------------------------------------------------ C3 a contagem, e a invariante

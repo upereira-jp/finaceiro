@@ -6,15 +6,22 @@
     <meta name="theme-color" content="#F39200" />
     <title>Financeiro G3</title>
     <!--
-      PRELOAD DA FONTE. Sem ele o browser só descobre a Inter depois de baixar,
+      PRELOAD DA FONTE. Sem ele o browser só descobre a fonte depois de baixar,
       parsear e EXECUTAR o bundle — porque o @font-face vive num <style> que o
       React injeta. São duas viagens em série; o preload as põe em paralelo.
+
+      [30/09/2026, etapa 4a] ERA A INTER, e a Inter saiu do sistema na etapa 0:
+      este preload baixava em toda visita um arquivo que nenhuma regra usava. O
+      arquivo saiu de `public/fontes/`, e o preload passou para as duas faces da
+      primeira pintura — a Barlow 400 do corpo e a condensada 600 do título.
 
       `crossorigin` é obrigatório mesmo sendo mesma origem: requisição de fonte é
       sempre CORS, e sem o atributo o browser baixa o arquivo DUAS vezes — uma
       pelo preload e outra pelo @font-face, que não reaproveita a primeira.
     -->
-    <link rel="preload" href="/fontes/inter-var-latin-v5.3.0.woff2" as="font"
+    <link rel="preload" href="/fontes/barlow-400-latin-v1.408.woff2" as="font"
+          type="font/woff2" crossorigin />
+    <link rel="preload" href="/fontes/barlow-semi-condensed-600-latin-v1.408.woff2" as="font"
           type="font/woff2" crossorigin />
     <script>
       // Anti-flash: aplica o tema guardado ANTES do primeiro paint. Duplica de

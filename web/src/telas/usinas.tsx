@@ -11,7 +11,7 @@ import { usinaNoCrm } from '../crm.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
   Pagina, Aviso, Tabela, Campo, Busca, Ferramentas, Filtro, ThOrd, Marca, Escolha, Icone,
-  useOrdenacao, ordenar, contem, rotulo, linha, CampoData,
+  useOrdenacao, ordenar, contem, rotulo, linha, CampoData, BotaoDeCriar, PainelDeCriar,
 } from '../ui.tsx';
 import { naMensagem } from '../arquivo.ts';
 import { decimalTexto } from '../dinheiro.ts';
@@ -33,6 +33,9 @@ export function TelaUsinas() {
    * proximo ciclo espelha o resto», e o unico caminho era o terminal. */
   const [nova, setNova] = useState({ codigo_geradora: '', distribuidora: '', apelido: '', potencia_kwp: '' });
   const [inicio, setInicio] = useState('2026-01-01');
+  /* LISTAR ANTES DE CRIAR (30/09/2026, etapa 4a): o formulario de usina nova
+     abria a tela acima da lista. «Nova usina» abre o painel abaixo do titulo. */
+  const [criando, setCriando] = useState(false);
 
   const [busca, setBusca] = useState('');
   const [situacao, setSituacao] = useState('');
@@ -91,48 +94,57 @@ export function TelaUsinas() {
       acao.anunciar('Usina cadastrada. A leitura do outro sistema passa a espelhar os dados dela.');
       setNova({ codigo_geradora: '', distribuidora: '', apelido: '', potencia_kwp: '' });
       usinas.recarregar();
+      setCriando(false);
     }
   };
 
   return (
     <Pagina titulo="Usinas"
-            sub="Espelhadas do CRM. O dono e o percentual de repasse são preenchidos aqui — e sem eles dá para cobrar o cliente, mas não dá para repartir o dinheiro que entrar.">
-      {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
-      {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
-      {usinas.erro && <Aviso tipo="erro">{usinas.erro}</Aviso>}
-
+            sub="Espelhadas do CRM. O dono e o percentual de repasse são preenchidos aqui — e sem eles dá para cobrar o cliente, mas não dá para repartir o dinheiro que entrar."
+            acao={<BotaoDeCriar controla="nova-usina" aberto={criando} ao={() => { acao.limpar(); setCriando(!criando); }}>
+              Nova usina
+            </BotaoDeCriar>}>
       {/*
         CADASTRAR A USINA — a tela que faltava, e a falta travava a entrada de
         cliente novo. A leitura do outro sistema espelha o que ja existe aqui e
         NAO cria usina: enquanto a usina nova nao estiver cadastrada, todas as
         unidades dela sao recusadas, uma a uma, a cada quinze minutos.
+        [30/09/2026, etapa 4a] No painel de criar, e nao mais acima da lista.
       */}
-      <div className="cartao secao">
-        <div className="campos">
-          <Campo rotulo="Código da geradora" porqueDe="cadastrar-usina"
-                 valor={nova.codigo_geradora} ao={(v) => setNova({ ...nova, codigo_geradora: v })}
-                 dica="O mesmo código que o outro sistema usa" />
-          <Campo rotulo="Distribuidora" porqueDe="cadastrar-usina"
-                 valor={nova.distribuidora} ao={(v) => setNova({ ...nova, distribuidora: v })}
-                 dica="Ex. Equatorial" />
-          <Campo rotulo="Apelido" porqueDe="cadastrar-usina"
-                 valor={nova.apelido} ao={(v) => setNova({ ...nova, apelido: v })}
-                 dica="Opcional — como vocês a chamam" />
-          <Campo rotulo="Potência kWp" porqueDe="cadastrar-usina"
-                 valor={nova.potencia_kwp} ao={(v) => setNova({ ...nova, potencia_kwp: v })}
-                 dica="Opcional" />
-          <div style={{ alignSelf: 'end' }}>
+      {criando && (
+        <PainelDeCriar id="nova-usina" titulo="Nova usina" aoFechar={() => setCriando(false)}>
+          <div className="campos">
+            <Campo rotulo="Código da geradora" porqueDe="cadastrar-usina"
+                   valor={nova.codigo_geradora} ao={(v) => setNova({ ...nova, codigo_geradora: v })}
+                   dica="O mesmo código que o outro sistema usa" />
+            <Campo rotulo="Distribuidora" porqueDe="cadastrar-usina"
+                   valor={nova.distribuidora} ao={(v) => setNova({ ...nova, distribuidora: v })}
+                   dica="Ex. Equatorial" />
+            <Campo rotulo="Apelido" porqueDe="cadastrar-usina"
+                   valor={nova.apelido} ao={(v) => setNova({ ...nova, apelido: v })}
+                   dica="Opcional — como vocês a chamam" />
+            <Campo rotulo="Potência kWp" porqueDe="cadastrar-usina"
+                   valor={nova.potencia_kwp} ao={(v) => setNova({ ...nova, potencia_kwp: v })}
+                   dica="Opcional" />
+          </div>
+          <p className="nota-do-painel">
+            O dono e o percentual de repasse são preenchidos depois, na linha da usina — e é o
+            código da geradora que casa esta usina com o que vem do outro sistema.
+          </p>
+          {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
+          <div className="painel-criar-pe">
             <button className="primario" onClick={() => void cadastrar()}
                     disabled={acao.ocupado || !nova.codigo_geradora.trim() || !nova.distribuidora.trim()}>
               <Icone nome="acrescentar" tamanho={15} peso="bold" /> Cadastrar usina
             </button>
+            <button type="button" onClick={() => setCriando(false)}>Cancelar</button>
           </div>
-        </div>
-        <p className="sub" style={{ margin: 0 }}>
-          O dono e o percentual de repasse são preenchidos depois, na linha da usina — e é o
-          código da geradora que casa esta usina com o que vem do outro sistema.
-        </p>
-      </div>
+        </PainelDeCriar>
+      )}
+
+      {!criando && acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
+      {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
+      {usinas.erro && <Aviso tipo="erro">{usinas.erro}</Aviso>}
 
       <Ferramentas contagem={todas.length ? `${visiveis.length} de ${todas.length}` : undefined}>
         <Busca valor={busca} ao={setBusca} dica="Buscar por código, apelido ou distribuidora…" />
@@ -196,7 +208,7 @@ export function TelaUsinas() {
                        primeira="— Sem dono (bloqueia o repasse)"
                        opcoes={(donos.dado ?? []).map((d) => ({ valor: d.id, texto: d.nome }))} />
             </td>
-            <td><Marca tom={u.status === 'ativa' ? 'ok' : 'pendente'}>{rotulo(u.status)}</Marca></td>
+            <td><Marca tom={u.status === 'ativa' ? 'ok' : 'neutro'}>{rotulo(u.status)}</Marca></td>
           </tr>
         ))}
       </Tabela>
@@ -330,7 +342,7 @@ function GeracaoLancada({ usinas }: { usinas: Usina[] }) {
                   ? <span className="fraco">lendo…</span>
                   : tem
                     ? <Marca tom="ok" icone="confirmar">lançada</Marca>
-                    : <Marca tom="pendente">falta</Marca>}
+                    : <Marca tom="a_fazer">falta</Marca>}
                 {meses !== undefined && !tem && usinaNoCrm(u.crm_usina_id) && (
                   <a className="ligacao-crm" style={{ marginLeft: 8 }}
                      href={usinaNoCrm(u.crm_usina_id)!} target="_blank" rel="noopener noreferrer"

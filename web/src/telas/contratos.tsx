@@ -41,7 +41,15 @@ import { api, type Contrato, type UnidadeConsumidora, type Originador, type Clie
 import { useAcao, useDados } from '../dados.ts';
 import {
   Pagina, Aviso, Tabela, Campo, ThOrd, Marca, Icone, useOrdenacao, ordenar, rotulo, Escolha, linha,
+  BotaoDeCriar, PainelDeCriar,
 } from '../ui.tsx';
+import type { TomDoSelo } from '../iconografia.ts';
+
+/* O status do contrato no tom do selo (`TomDoSelo`). [30/09/2026, etapa 4a] O
+ * que nao e `ativo` era vermelho; suspender e encerrar sao decisoes, nao falhas
+ * — `neutro` —, e o rascunho e a tarefa de ativar — `a_fazer`. */
+const tomDoContrato = (status: string): TomDoSelo =>
+  (status === 'ativo' ? 'ok' : status === 'rascunho' ? 'a_fazer' : 'neutro');
 import { Ligacao } from '../rota.tsx';
 import { paraCentavos, emReais } from '../dinheiro.ts';
 import { podeCriarContrato, motivoDaTrava } from '../contrato-regras.ts';
@@ -57,6 +65,10 @@ export function TelaContratos() {
   const [fechamento, setFechamento] = useState(new Date().toISOString().slice(0, 10));
   const [valor, setValor] = useState('');
   const { ordem, alternar } = useOrdenacao('uc');
+  /* LISTAR ANTES DE CRIAR (30/09/2026, etapa 4a): o formulario de contrato abria
+     a tela, vazio, acima da lista — e o cadastro de quem traz clientes vinha
+     espremido dentro dele. A lista vem primeiro; «Novo contrato» abre o painel. */
+  const [criando, setCriando] = useState(false);
 
   const uc = ucs.dado?.find((u) => u.id === ucId);
 
@@ -136,71 +148,72 @@ export function TelaContratos() {
       });
       await api.post(`/contratos/${criado.id}/ativar`);
     });
-    if (ok) { setUcId(''); setValor(''); acao.anunciar('Contrato criado e ativado.'); vigentes.recarregar(); }
+    if (ok) {
+      setUcId(''); setValor(''); acao.anunciar('Contrato criado e ativado.'); vigentes.recarregar();
+      setCriando(false);
+    }
   }
 
   return (
     <Pagina titulo="Contratos"
-            sub="Liga o cliente, a unidade, a usina e quem trouxe o cliente. É a peça que faz a cobrança existir: sem contrato ativo, aquela unidade fica fora do mês inteiro.">
-      <div className="cartao secao">
-        <div className="campos">
-          <Campo rotulo="Unidade consumidora" porqueDe="contrato" valor={ucId} ao={setUcId}
-                 opcoes={livres.map((u) => ({
-                   valor: u.id,
-                   texto: `${u.numero_uc}${u.usina_id ? '' : ' (sem usina!)'}`,
-                 }))} />
-          <Campo rotulo="Quem trouxe o cliente (obrigatório)" porqueDe="comissao" valor={origId} ao={setOrigId}
-                 opcoes={(origs.dado ?? []).map((o) => ({ valor: o.id, texto: `${o.nome} · ${o.tipo}` }))} />
-          <Campo rotulo="Data de fechamento" porqueDe="valor-da-comissao" valor={fechamento} ao={setFechamento} tipo="date" />
-          <Campo rotulo="Valor de referência (R$)" porqueDe="valor-de-referencia" valor={valor} ao={setValor} dica="Ex. 789,00" />
-        </div>
-        <p className="sub" style={{ marginTop: 12, marginBottom: 8 }}>
-          Quem trouxe o cliente <strong>não muda depois</strong>: se essa pessoa for promovida mais
-          tarde, este contrato continua valendo o combinado de hoje. E a data de fechamento decide
-          qual é o primeiro mês cobrado por inteiro.
-          {valor && <> Valor: <strong>{(() => { try { return emReais(paraCentavos(valor)); } catch { return 'inválido'; } })()}</strong>.</>}
-        </p>
-        <button className="primario" onClick={criar} disabled={!podeCriarContrato(estado)}>
-          <Icone nome="contratos" tamanho={15} peso="bold" /> Criar e ativar
-        </button>
-        {trava === 'uc_sem_usina' && (
-          <Aviso tipo="erro">
-            Esta unidade ainda não tem usina. Escolha a usina e a fatia do cliente em <Ligacao para="/unidades">Unidades consumidoras</Ligacao> antes de criar o contrato.
-          </Aviso>
-        )}
-        {/* A lista vazia e o estado de PRODUCAO hoje: zero originadores. Sem esta
-            frase o select fica em "—" sem explicacao e o botao trava sem dizer
-            por que - que e o defeito da tela de Contratos de novo, em outra
-            casa. O erro de leitura tem aviso proprio e vem antes: lista vazia
-            por falha nao e lista vazia por ausencia. */}
-        {origs.erro && <Aviso tipo="erro">Não consegui carregar a lista de quem trouxe os clientes: {origs.erro}</Aviso>}
-        {/* ATE 08/09/2026 ESTA FRASE MANDAVA PEDIR A OUTRA PESSOA. `POST
-            /originadores` existia e so era alcancavel por `npm run originadores`
-            — script rodado de um Codespace por quem tem o repositorio clonado.
-            Nao ha aba «Originadores» na barra, e nunca houve.
-
-            O CUSTO ESTAVA MEDIDO: 28 de 29 contratos ativos, e o que falta no
-            29º e um originador que nao existe («Out Sales»). A tela EXIGE um do
-            `<select>`, e a saida era pedir a alguem com terminal. E o defeito
-            historico do projeto — «um campo que so o psql alcanca» — na tela que
-            congela a aliquota de comissao para sempre (R20-b). */}
-        {!origs.erro && !origs.carregando && (origs.dado ?? []).length === 0 && (
-          <Aviso tipo="erro">
-            Ninguém cadastrado ainda como quem traz clientes — e o contrato não pode ser criado
-            sem isso. A escolha não muda depois, então ela precisa estar certa da primeira vez.
-          </Aviso>
-        )}
-        <NovoOriginador aoCriar={() => origs.recarregar()} />
-        <QuemEQuemNoOutroSistema originadores={origs.dado ?? []} aoCasar={() => origs.recarregar()} />
-        {trava === 'sem_originador' && (origs.dado ?? []).length > 0 && (
-          <Aviso tipo="alerta">
-            Escolha quem trouxe o cliente. Isso não pode ser corrigido depois, e sem essa
-            informação a comissão simplesmente não é paga quando o dinheiro entrar — sem aviso.
-          </Aviso>
-        )}
-        {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
-        {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
-      </div>
+            sub="Liga o cliente, a unidade, a usina e quem trouxe o cliente. É a peça que faz a cobrança existir: sem contrato ativo, aquela unidade fica fora do mês inteiro."
+            acao={<BotaoDeCriar controla="novo-contrato" aberto={criando} ao={() => setCriando(!criando)}>
+              Novo contrato
+            </BotaoDeCriar>}>
+      {criando && (
+        <PainelDeCriar id="novo-contrato" titulo="Novo contrato" aoFechar={() => setCriando(false)}>
+          <div className="campos">
+            <Campo rotulo="Unidade consumidora" porqueDe="contrato" valor={ucId} ao={setUcId}
+                   opcoes={livres.map((u) => ({
+                     valor: u.id,
+                     texto: `${u.numero_uc}${u.usina_id ? '' : ' (sem usina!)'}`,
+                   }))} />
+            <Campo rotulo="Quem trouxe o cliente (obrigatório)" porqueDe="comissao" valor={origId} ao={setOrigId}
+                   opcoes={(origs.dado ?? []).map((o) => ({ valor: o.id, texto: `${o.nome} · ${o.tipo}` }))} />
+            <Campo rotulo="Data de fechamento" porqueDe="valor-da-comissao" valor={fechamento} ao={setFechamento} tipo="date" />
+            <Campo rotulo="Valor de referência (R$)" porqueDe="valor-de-referencia" valor={valor} ao={setValor} dica="Ex. 789,00" />
+          </div>
+          <p className="nota-do-painel">
+            Quem trouxe o cliente <strong>não muda depois</strong>: se essa pessoa for promovida mais
+            tarde, este contrato continua valendo o combinado de hoje. E a data de fechamento decide
+            qual é o primeiro mês cobrado por inteiro.
+            {valor && <> Valor: <strong>{(() => { try { return emReais(paraCentavos(valor)); } catch { return 'inválido'; } })()}</strong>.</>}
+          </p>
+          {trava === 'uc_sem_usina' && (
+            /* ÂMBAR E NÃO VERMELHO (etapa 4a): unidade sem usina é cadastro a
+               completar, e o caminho está na própria frase. */
+            <Aviso tipo="alerta">
+              Esta unidade ainda não tem usina. Escolha a usina e a fatia do cliente em <Ligacao para="/unidades">Unidades consumidoras</Ligacao> antes de criar o contrato.
+            </Aviso>
+          )}
+          {/* A lista vazia e o estado de PRODUCAO de 08/09: zero originadores.
+              Sem esta frase o select fica em "—" sem explicacao e o botao trava
+              sem dizer por que. O erro de leitura tem aviso proprio e vem antes:
+              lista vazia por falha nao e lista vazia por ausencia. */}
+          {origs.erro && <Aviso tipo="erro">Não consegui carregar a lista de quem trouxe os clientes: {origs.erro}</Aviso>}
+          {!origs.erro && !origs.carregando && (origs.dado ?? []).length === 0 && (
+            <Aviso tipo="alerta">
+              Ninguém cadastrado ainda como quem traz clientes — e o contrato não pode ser criado
+              sem isso. Cadastre em <a href="#quem-traz-clientes">Quem traz clientes</a>, no pé desta
+              tela. A escolha não muda depois, então ela precisa estar certa da primeira vez.
+            </Aviso>
+          )}
+          {trava === 'sem_originador' && (origs.dado ?? []).length > 0 && (
+            <Aviso tipo="alerta">
+              Escolha quem trouxe o cliente. Isso não pode ser corrigido depois, e sem essa
+              informação a comissão simplesmente não é paga quando o dinheiro entrar — sem aviso.
+            </Aviso>
+          )}
+          {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
+          <div className="painel-criar-pe">
+            <button className="primario" onClick={criar} disabled={!podeCriarContrato(estado)}>
+              <Icone nome="contratos" tamanho={15} peso="bold" /> Criar e ativar
+            </button>
+            <button type="button" onClick={() => setCriando(false)}>Cancelar</button>
+          </div>
+        </PainelDeCriar>
+      )}
+      {!criando && acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
 
       {vigentes.erro && <Aviso tipo="erro">{vigentes.erro}</Aviso>}
       <Tabela cabecalho={<>
@@ -222,6 +235,28 @@ export function TelaContratos() {
           <LinhaDoContrato key={ucid} k={k} uc={numeroUc(ucid)} aoMudar={() => vigentes.recarregar()} />
         ))}
       </Tabela>
+
+      {/*
+        QUEM TRAZ CLIENTES GANHOU LUGAR PRÓPRIO (30/09/2026, etapa 4a). O cadastro
+        e o «quem é quem no outro sistema» moravam DENTRO do cartão de criar
+        contrato, espremidos entre o botão e os avisos — e o cartão de criar saiu
+        do alto da tela. Aqui, no pé, eles têm título, contagem e os mesmos dois
+        atos. Continua sem aba própria no menu, pelo motivo de sempre: é nesta
+        tela que quem trouxe o cliente importa.
+      */}
+      <section className="secao-de-pe" aria-labelledby="quem-traz-clientes">
+        <h2 id="quem-traz-clientes">Quem traz clientes</h2>
+        <p className="sub">
+          {(origs.dado ?? []).length === 0
+            ? 'Ninguém cadastrado ainda.'
+            : `${(origs.dado ?? []).length} ${(origs.dado ?? []).length === 1 ? 'cadastrado' : 'cadastrados'}.`}
+          {' '}O tipo decide a comissão, e fica congelado em cada contrato no dia em que ele é criado.
+        </p>
+        <div className="secao-de-pe-atos">
+          <NovoOriginador aoCriar={() => origs.recarregar()} />
+          <QuemEQuemNoOutroSistema originadores={origs.dado ?? []} aoCasar={() => origs.recarregar()} />
+        </div>
+      </section>
     </Pagina>
   );
 }
@@ -279,13 +314,13 @@ function LinhaDoContrato({ k, uc, aoMudar }: { k: Contrato; uc: string; aoMudar:
       <tr>
         <td><strong>{uc}</strong></td>
         <td className="fraco">{k.data_fechamento?.slice(0, 10)}</td>
-        <td><Marca tom={k.status === 'ativo' ? 'ok' : 'pendente'}>{rotulo(k.status)}</Marca></td>
+        <td><Marca tom={tomDoContrato(k.status)}>{rotulo(k.status)}</Marca></td>
         <td className="num">{k.faturas_cheias_pagas}</td>
         <td>
           <div style={{ ...linha, gap: 6 }}>
             {k.status === 'ativo' && (
               <button onClick={() => void suspender()} disabled={acao.ocupado}>
-                <Icone nome="pendente" tamanho={14} /> Suspender
+                <Icone nome="neutro" tamanho={14} /> Suspender
               </button>
             )}
             {k.status === 'suspenso' && (
@@ -355,8 +390,8 @@ function QuemEQuemNoOutroSistema({ originadores, aoCasar }: {
   const semCasar = originadores.filter((o) => !o.crm_user_id).length;
 
   return (
-    <div style={{ marginTop: 10 }}>
-      <button type="button" onClick={() => setAberto(!aberto)}>
+    <div>
+      <button type="button" onClick={() => setAberto(!aberto)} aria-expanded={aberto}>
         <Icone nome={aberto ? 'ordem_crescente' : 'ordem_decrescente'} tamanho={15} />{' '}
         Quem é quem no outro sistema
         {semCasar > 0 && originadores.length > 0 && (
@@ -365,7 +400,7 @@ function QuemEQuemNoOutroSistema({ originadores, aoCasar }: {
       </button>
 
       {aberto && (
-        <div className="cartao secao" style={{ marginTop: 8 }}>
+        <div className="cartao" style={{ marginTop: 8 }}>
           <p className="sub" style={{ marginTop: 0 }}>
             O sistema confere de hora em hora quem trouxe cada cliente contra o que está
             registrado do outro lado. Enquanto a ligação não é feita, ele compara pelo{' '}
@@ -458,25 +493,28 @@ function NovoOriginador({ aoCriar }: { aoCriar: () => void }) {
       tipo,
     }));
     if (ok) {
-      acao.anunciar(`${nome.trim()} cadastrado. Já aparece na lista acima.`);
+      acao.anunciar(`${nome.trim()} cadastrado. Já aparece em «Quem trouxe o cliente», no Novo contrato.`);
       setNome(''); setDocumento(''); setAberto(false);
       aoCriar();
     }
   };
 
   if (!aberto) {
+    /* Fechado depois de cadastrar, ele ainda diz que deu certo — o formulário
+       some junto com a frase, e sem ela o clique pareceria não ter feito nada. */
     return (
-      <p className="sub">
-        <button type="button" onClick={() => setAberto(true)}>
+      <>
+        <button type="button" onClick={() => { acao.limpar(); setAberto(true); }}>
           <Icone nome="acrescentar" tamanho={15} /> Cadastrar quem traz clientes
         </button>
-      </p>
+        {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
+      </>
     );
   }
 
   return (
-    <div className="cartao secao">
-      <h3 style={{ marginTop: 0 }}>Quem traz clientes</h3>
+    <div className="cartao">
+      <h3 style={{ marginTop: 0 }}>Cadastrar quem traz clientes</h3>
       <div className="campos">
         <Campo rotulo="Nome ou razão social" valor={nome} ao={setNome} />
         <Campo rotulo="CPF ou CNPJ" valor={documento} ao={setDocumento}

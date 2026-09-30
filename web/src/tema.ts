@@ -473,8 +473,9 @@ export const ESCURO: Paleta = {
  * tela em portugues alcanca — e `unicode-range` faz o browser baixar so o
  * subconjunto que a pagina realmente pinta.
  *
- * O ARQUIVO DA INTER FICOU EM `web/public/fontes/` e nenhuma regra o pede mais:
- * sem `@font-face` apontando para ele, o browser nunca o baixa.
+ * O ARQUIVO DA INTER SAIU DE `web/public/fontes/` em 30/09/2026 (etapa 4a). Ele
+ * tinha ficado para trás na etapa 0 — e o `index.html` ainda o PRÉ-CARREGAVA em
+ * toda visita, sem nenhuma regra que o usasse. O preload passou para a Barlow.
  */
 
 /** Os dois `unicode-range` sao os da folha do Google Fonts que a referencia

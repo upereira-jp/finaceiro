@@ -55,10 +55,30 @@ export const ROTULO_DO_MOTIVO: Record<MotivoDaEspera, string> = {
   pronto: 'Pronto para repartir',
 };
 
+/**
+ * O RÓTULO CURTO, o da linha. [30/09/2026, etapa 4a] A explicação de três
+ * linhas se repetia em cada uma das dezesseis linhas da tabela; agora ela é dita
+ * uma vez, no cabeçalho do grupo, e a linha fica com o estado curto e a ação.
+ */
+export const ROTULO_CURTO_DO_MOTIVO: Record<MotivoDaEspera, string> = {
+  sem_dono: 'Sem dono',
+  aguardando_banco: 'Aguardando o banco',
+  pronto: 'Pronto',
+};
+
+/**
+ * A EXPLICAÇÃO, uma por grupo.
+ *
+ * [30/09/2026, etapa 4a] A DE `sem_dono` ESTAVA INCOMPLETA: mandava «cadastre o
+ * dono na tela de Usinas», e na tela de Usinas não se cadastra dono — ali ele
+ * só se ESCOLHE numa lista. O caminho real tem dois passos, em duas telas, e a
+ * frase agora nomeia os dois; os links saem de `COMO_DESTRAVAR`, logo abaixo.
+ */
 export const EXPLICACAO_DO_MOTIVO: Record<MotivoDaEspera, string> = {
   sem_dono:
     'O cliente pagou e o valor está guardado, mas a usina que gerou essa energia não tem dono '
-    + 'cadastrado — não há para quem transferir. Cadastre o dono na tela de Usinas e volte aqui.',
+    + 'cadastrado — não há para quem transferir. Depois dos dois passos abaixo, volte aqui para '
+    + 'repartir.',
   aguardando_banco:
     'O banco avisou que o pagamento foi feito, e esse aviso ainda não é a confirmação de que o '
     + 'dinheiro entrou de vez. O sistema pergunta ao banco todo dia e reparte sozinho assim que '
@@ -66,6 +86,27 @@ export const EXPLICACAO_DO_MOTIVO: Record<MotivoDaEspera, string> = {
   pronto:
     'O pagamento está confirmado e o repasse pode ser feito agora.',
 };
+
+/** Um passo do caminho que destrava a espera, com a tela onde ele se faz. */
+export type PassoParaDestravar = { ato: string; destino: { rotulo: string; endereco: string } };
+
+/**
+ * O CAMINHO QUE DESTRAVA, passo a passo e com o endereço de cada um — só para a
+ * espera que é trabalho de alguém. Os rótulos são os do menu, letra por letra, e
+ * a suíte prende que as duas rotas existem.
+ *
+ * O DONO VEM PRIMEIRO porque a lista de Usinas só oferece quem já existe: tentar
+ * vincular antes de cadastrar é abrir um `<select>` sem a pessoa certa nele.
+ */
+export const COMO_DESTRAVAR: Partial<Record<MotivoDaEspera, readonly PassoParaDestravar[]>> = {
+  sem_dono: [
+    { ato: 'Cadastre o dono', destino: { rotulo: 'Donos de usina', endereco: '/donos' } },
+    { ato: 'Vincule o dono à usina', destino: { rotulo: 'Usinas', endereco: '/usinas?pendencia=sem_dono' } },
+  ],
+};
+
+/** A ordem dos grupos na tela: quem exige ação primeiro — a mesma de `PESO`. */
+export const ORDEM_DOS_MOTIVOS: readonly MotivoDaEspera[] = ['pronto', 'sem_dono', 'aguardando_banco'];
 
 /** O botão só existe onde clicar resolve. Ver o cabeçalho: em
  *  `aguardando_banco` a ausência do botão É a regra. */
@@ -100,8 +141,10 @@ export function ordenarPelaEspera(ls: readonly RepassePendente[]): RepassePenden
 export function resumoDaEspera(ls: readonly RepassePendente[]): string {
   const c = contarPorMotivo(ls);
   const partes: string[] = [];
-  if (c.pronto) partes.push(`${c.pronto} pronto(s) para repartir`);
+  if (c.pronto) partes.push(`${c.pronto} ${c.pronto === 1 ? 'pronto' : 'prontos'} para repartir`);
   if (c.sem_dono) partes.push(`${c.sem_dono} esperando o cadastro do dono da usina`);
   if (c.aguardando_banco) partes.push(`${c.aguardando_banco} aguardando o banco confirmar`);
-  return partes.join(' · ');
+  /* Com «e» e vírgula, e não «·», desde 30/09/2026 (etapa 4a): é uma frase. */
+  return partes.length <= 1 ? (partes[0] ?? '')
+    : `${partes.slice(0, -1).join(', ')} e ${partes[partes.length - 1]}`;
 }

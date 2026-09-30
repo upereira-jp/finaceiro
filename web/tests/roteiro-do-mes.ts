@@ -229,6 +229,48 @@ const passo = (e: LeituraDoMes, chave: string) => mesNoFunil(e).passos.find((p) 
       + 'medido» e o total do banco, que é de todos os meses, diz que é');
 }
 
+// ------------- RM10c o boleto de OUTRO mês é aviso, e não o destaque (etapa 4a)
+// Abrir agosto dizia «Comece pelo 4» sobre um passo VAZIO em agosto, porque havia
+// um boleto recusado em setembro. O caso de fora continua valendo — com peso de
+// aviso, numa linha própria com o link para o mês dele.
+{
+  const agosto = ler({
+    mes: '2026-08',
+    camadas: cadastroEmDia(0),
+    posicao: { vencidas_em_aberto: 1 },
+    cobrancas: cobrancas({ emitida: 3, vencida: 1, paga: 20 }),
+    registradas: { lista: registradas(0, 24, '2026-08'), parcial: false },
+    semBoleto: { linhas: [RECUSA_DE_ENDERECO, ...semBoleto(1, { pede_gente: true })], total: 2 },
+  });
+  const m = mesNoFunil(agosto);
+  const p4 = m.passos.find((p) => p.chave === 'cobrar')!;
+  chk('RM10c', p4.quantos === 0 && p4.risco === null && !p4.foco && m.foco?.chave === 'receber'
+               && m.deOutrosMeses !== null && m.deOutrosMeses.quantos === 2
+               && m.deOutrosMeses.endereco === '/faturas?mes=2026-09'
+               && /de outros meses pedem você/.test(m.deOutrosMeses.frase),
+      'com zero sem boleto em agosto e dois de setembro pedindo você, o passo 4 NÃO leva o destaque '
+      + '(vai para a vencida do mês, no 5), e os de setembro viram o aviso com o link para Cobranças '
+      + 'em setembro');
+
+  const soFora = ler({
+    mes: '2026-08', camadas: cadastroEmDia(0), cobrancas: cobrancas({ paga: 24 }),
+    registradas: { lista: registradas(0, 24, '2026-08'), parcial: false },
+    semBoleto: { linhas: [RECUSA_DE_ENDERECO], total: 1 },
+  });
+  const s2 = mesNoFunil(soFora);
+  chk('RM10d', s2.foco === null && s2.deOutrosMeses?.quantos === 1
+               && /^E 1 de outros meses pede você: está sem boleto\.$/.test(s2.deOutrosMeses.frase),
+      'e com nada a fazer no mês, o destaque não aparece em lugar nenhum — o aviso de fora aparece '
+      + 'sozinho, no singular');
+
+  const risco = passo(RETRATO, 'cobrar').risco;
+  chk('RM10e', risco !== null && risco.frase === '1 recusada pelo banco' && !/·/.test(risco.frase)
+               && passo(ler({ semBoleto: { linhas: [RECUSA_DE_ENDERECO, ...semBoleto(1, { pede_gente: true })], total: 2 } }), 'cobrar')
+                    .risco?.frase === '1 recusada pelo banco e 1 parada há mais de um dia',
+      'o risco do mês é frase de gente — «1 recusada pelo banco e 1 parada há mais de um dia», com '
+      + '«e» e não com «·»');
+}
+
 // --------------------------------- RM10b o que está em cada passo soma o mês
 {
   const r = passo(RETRATO, 'receber');
@@ -336,8 +378,11 @@ const passo = (e: LeituraDoMes, chave: string) => mesNoFunil(e).passos.find((p) 
   const f = mesNoFunil(RETRATO).frase;
   const doisPassos = mesNoFunil(ler({ camadas: cadastroEmDia(15), cobrancas: cobrancas({ rascunho: 5 }),
                                       registradas: { lista: registradas(0, 5), parcial: false } })).frase;
-  chk('RM16', /^Falta trabalho nos cinco passos\. Comece pelo 4 · Pedir o boleto/.test(f) && /recusada pelo banco/.test(f)
-              && /^Falta trabalho em dois dos cinco passos\. Comece pelo 3 · Emitir as cobranças: 5 cobranças a emitir\.$/.test(doisPassos),
+  /* [30/09, etapa 4a] «Comece pelo passo 4, Pedir o boleto…» — sem o «·» no
+     meio da frase corrida. */
+  chk('RM16', /^Falta trabalho nos cinco passos\. Comece pelo passo 4, Pedir o boleto/.test(f) && /recusada pelo banco/.test(f)
+              && /^Falta trabalho em dois dos cinco passos\. Comece pelo passo 3, Emitir as cobranças: 5 cobranças a emitir\.$/.test(doisPassos)
+              && !/·/.test(f),
       `no retrato de 30/09 a frase diz quantos passos têm trabalho e onde começar, com o motivo — «${f}»`);
 }
 

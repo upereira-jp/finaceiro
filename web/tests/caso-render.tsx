@@ -32,7 +32,7 @@ import { CorpoDaAjuda } from '../src/ajuda-corpo.tsx';
 import { CorpoDaSaude } from '../src/saude-corpo.tsx';
 import { CorpoDoRoteiro, FaixaDoPasso } from '../src/roteiro-corpo.tsx';
 import { FaixasDasAutomacoes, PainelDasAutomacoes } from '../src/automacoes-corpo.tsx';
-import { FaixaDaEmissao, PainelDaEmissao } from '../src/emissao-travada-corpo.tsx';
+import { PainelDaEmissao } from '../src/emissao-travada-corpo.tsx';
 import { PainelDoVinculo } from '../src/vinculo-do-crm-corpo.tsx';
 import type { VinculoNaTela } from '../src/vinculo-do-crm.ts';
 import type { LinhaNaTela, NivelDaEmissao, EmissaoTravadaNaTela } from '../src/emissao-travada.ts';
@@ -625,10 +625,13 @@ const desenharFaixas = (r: RodadaNaTela[] | null): string =>
    * Nenhuma outra verificacao pegaria: `AU-*` mede as frases, `R13a` mede que o
    * texto chega, e os dois passam verdes sobre um painel que ninguem enxerga
    * como painel. */
-  chk('R13k', bom.includes('class="cartao secao"'),
-      'o painel desenha sobre a superficie da casa (`cartao secao`), e nao como texto solto no pe '
-      + 'da pagina - foi assim que ele chegou em producao na primeira vez, e o dono viu antes de '
-      + 'qualquer suite');
+  /* [30/09/2026, etapa 4a] A SUPERFICIE PASSOU A SER O `Recolhido` — a secao
+   * fecha com o resumo de uma linha a vista, e e ela que tem borda e fundo. A
+   * garantia e a mesma: nao e texto solto. E o resumo fala mesmo fechado. */
+  chk('R13k', /<details class="recolhido"/.test(bom) && /class="recolhido-resumo">As tr[eê]s rodadas est[aã]o em dia/.test(bom),
+      'o painel desenha sobre uma superficie da casa (o `Recolhido`, com borda e fundo), e nao como '
+      + 'texto solto no pe da pagina - foi assim que ele chegou em producao na primeira vez, e o dono '
+      + 'viu antes de qualquer suite; e fechado ele ainda afirma que as tres estao em dia');
 }
 
 // ============================================================================
@@ -666,8 +669,10 @@ const conjuntoDaEmissao = (linhas: LinhaNaTela[], total = linhas.length): Emissa
 
 const desenharLista = (d: EmissaoTravadaNaTela | null, erro: string | null = null): string =>
   renderToStaticMarkup(<PainelDaEmissao dados={d} erro={erro} pedirBoleto={() => {}} />);
-const desenharFaixaDaEmissao = (d: EmissaoTravadaNaTela | null): string =>
-  renderToStaticMarkup(<FaixaDaEmissao dados={d} />);
+/* A FAIXA DE ALARME (`FaixaDaEmissao`) SAIU EM 30/09/2026 (etapa 4a) com o
+ * caso dela nesta suite: ela nao era montada em tela nenhuma desde a etapa 3,
+ * quando o passo 4 do funil passou a contar as cobrancas sem boleto. O que ela
+ * garantia mora no funil (`RM2`, `RM10`, `R16j`). */
 
 {
   // ---------------------------------------------- o vazio FALA, e nao fica mudo
@@ -675,10 +680,6 @@ const desenharFaixaDaEmissao = (d: EmissaoTravadaNaTela | null): string =>
   chk('R14a', vazio !== '' && /j[aá] t[eê]m boleto/i.test(texto(vazio)),
       'sem nenhuma pendencia a lista AFIRMA que todas as faturas emitidas tem boleto no banco - '
       + 'uma lista que some quando esta tudo certo e indistinguivel de uma lista que quebrou');
-
-  chk('R14b', desenharFaixaDaEmissao(conjuntoDaEmissao([])) === '',
-      'e a faixa de alarme NAO aparece nesse mesmo estado: o par «cala o alarme, fala o painel» e '
-      + 'a divisao inteira dos dois componentes');
 
   // ------------------------------------------------ as cinco linhas desenham
   const todas = desenharLista(conjuntoDaEmissao([
@@ -712,23 +713,14 @@ const desenharFaixaDaEmissao = (d: EmissaoTravadaNaTela | null): string =>
       'e sem o `pedirBoleto` o botao nao e desenhado: botao que existe sem efeito e pior que '
       + 'botao nenhum');
 
-  // ------------------------------------------------- a faixa conta e nao lista
-  const faixa = texto(desenharFaixaDaEmissao(conjuntoDaEmissao([
-    linhaDaEmissao('esquecido', { ha_quanto_tempo_segundos: 9 * 86_400 }),
-    linhaDaEmissao('insistindo'),
-  ])));
-  chk('R14h', /2 faturas/.test(faixa) && /9 dias/.test(faixa) && !faixa.includes('000401269001287'),
-      'a faixa de Pendencias conta duas e da a idade da mais antiga, sem listar unidade nenhuma - '
-      + 'listar viraria a segunda tela de emissao no alto da primeira tela da barra');
-
   // ------------------------------------------------- a leitura que falhou fala
   const falhou = texto(desenharLista(null, 'a rede caiu'));
   chk('R14i', /ningu[eé]m sabe/.test(falhou) && falhou.includes('a rede caiu'),
       'quando a leitura falha, a lista diz que NAO SABE, com o motivo - calar seria a mesma cara '
       + 'de dizer que esta tudo em dia');
 
-  chk('R14j', desenharLista(null) === '' && desenharFaixaDaEmissao(null) === '',
-      'e enquanto a resposta nao voltou nenhum dos dois desenha nada: ausencia de resposta nao e '
+  chk('R14j', desenharLista(null) === '',
+      'e enquanto a resposta nao voltou a lista nao desenha nada: ausencia de resposta nao e '
       + 'resposta');
 
   // ------------------------------------------------------------- a superficie
@@ -740,7 +732,7 @@ const desenharFaixaDaEmissao = (d: EmissaoTravadaNaTela | null): string =>
 
   // ------------------------------- nenhuma palavra proibida chega ao HTML final
   for (const regra of [/npm run/, /\bQ-[A-Z]/, /snake_case/, /\bUC\b/]) {
-    chk('R14l', !regra.test(t) && !regra.test(faixa), `o que a pessoa le nao casa com ${regra}`);
+    chk('R14l', !regra.test(t), `o que a pessoa le nao casa com ${regra}`);
   }
 }
 
@@ -911,6 +903,22 @@ const LEITURA_VAZIA = {
       'com 15 contas a ler e um boleto recusado pelo banco, o painel abre no PASSO 4 — «Abrir '
       + 'Cobranças», com a recusa escrita —, e não no 1');
 
+  // ------------- o boleto de OUTRO mês é aviso com link, e não o destaque (4a)
+  const deFora = desenharRoteiro({
+    competencia: 'agosto de 2026', ...LEITURA_VAZIA, mes: '2026-08',
+    camadas: [{ camada: 'conta_lida_da_competencia', situacao: 'ok', faltam: 0, total: 41, efeito: 'bloqueia_fatura' }],
+    cobrancas: [...Array(20).fill({ status: 'paga' })],
+    semBoleto: {
+      linhas: [{ competencia: '2026-09-01', pede_gente: true, boleto: { ultimo_erro: 'PagadorSemEndereco: falta o endereço.' } }],
+      total: 1,
+    },
+  });
+  const tf = texto(deFora);
+  chk('R16l', /E 1 de outros meses pede você/.test(tf) && deFora.includes('href="/faturas?mes=2026-09"')
+             && !/Comece aqui/.test(tf) && !/data-passo="cobrar"[^>]*>\s*<span class="roteiro-selo[^"]*">Comece/.test(deFora),
+      'em agosto, sem nada sem boleto no mês, o de setembro que pede você aparece como AVISO com o '
+      + 'link para Cobranças em setembro — e o «Comece aqui» não cai no passo 4 vazio');
+
   const semMedida = desenharRoteiro({ competencia: 'julho de 2026', ...LEITURA_VAZIA, camadas, cobrancas: null });
   chk('R16k', /não medido/.test(texto(semMedida)) && semMedida.includes('>—<'),
       'e a leitura que não chegou aparece como «—» e «não medido», nunca como zero');
@@ -941,7 +949,9 @@ const LEITURA_VAZIA = {
       'a tela onde a cobrança nasce diz que ela é os passos 1 e 2 dos 5 - quem chega nela de fora '
       + 'do roteiro não tinha como saber que parte do mês estava fazendo');
 
-  chk('R17b', /Passos 3 e 4 de 5 do mês/.test(texto(ec)) && /Antes daqui: 2/.test(texto(ec)),
+  /* [30/09, etapa 4a] «Antes daqui: o passo 2, Gerar as cobranças» — o «·» saiu
+     do meio da frase corrida. */
+  chk('R17b', /Passos 3 e 4 de 5 do mês/.test(texto(ec)) && /Antes daqui: o passo 2, Gerar as cobranças/.test(texto(ec)),
       'e a de emitir diz que é a 3 e a 4, e que há um passo 2 antes dela');
 
   chk('R17c', ec.includes('href="/documento"') && fu.includes('href="/faturas"'),
@@ -952,7 +962,7 @@ const LEITURA_VAZIA = {
       'e as duas voltam para o roteiro completo: o estado ao vivo tem UM lugar, e repeti-lo aqui '
       + 'criaria três lugares para discordarem');
 
-  chk('R17e', !/Antes daqui/.test(texto(fu)) && /Depois daqui: 3/.test(texto(fu)),
+  chk('R17e', !/Antes daqui/.test(texto(fu)) && /Depois daqui: o passo 3/.test(texto(fu)) && !/·/.test(texto(fu)),
       'a tela que ABRE o mês não inventa um passo anterior, e diz qual é o próximo');
 
   // -------------------------- a tela sem passo desenha NADA, e é o certo

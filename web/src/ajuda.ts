@@ -282,17 +282,31 @@ export const TOPICOS: readonly Topico[] = [
              'nao entendi nada', 'tutorial', 'passo a passo'],
   },
   {
+    /*
+     * «COMO LER ESTA TELA» MORA AQUI desde 30/09/2026 (etapa 4a do redesenho).
+     * Era uma lista de quatro marcadores fixa no meio da tela Mês, lida por todo
+     * mundo em toda visita — e a tela ficou com um link só, que abre este
+     * assunto. As cores também mudaram no mesmo dia: o vermelho passou a ser só
+     * da FALHA, e o que falta preencher é âmbar, com o lápis.
+     */
     id: 'o-que-e-pendencia',
-    pergunta: 'O que são as pendências?',
-    resposta: 'É a lista, na tela Mês, do que falta no cadastro para o mês poder ser cobrado — a '
-      + 'tabela embaixo dos cinco passos. Cada linha é um tipo de dado que falta, com quantos '
-      + 'faltam de quantos, quem preenche e onde se preenche.',
+    pergunta: 'Como ler a lista do mês?',
+    resposta: 'É a tabela da tela Mês, embaixo dos cinco passos: o que ainda falta no cadastro para o '
+      + 'mês poder ser cobrado, quantos faltam de quantos e onde se resolve. Ela mostra só o que está '
+      + 'em aberto; o que já fechou fica a um clique, em «ver quais».',
     passos: [
-      'Vermelho é o que impede cobrar. Sem isso, a cobrança do mês não sai.',
-      'Laranja impede dividir o dinheiro depois: dá para cobrar, mas o repasse ao dono da usina trava.',
-      'Amarelo quer dizer «ainda não dá para conferir» — depende de uma linha de cima que está vazia.',
-      'Verde é o que já está pronto. Nada a fazer ali.',
-      'Os cartões acima da tabela resumem tudo: «Pode faturar», «Pode emitir boleto» e «Pode repartir».',
+      'As linhas vêm em três grupos, e o título do grupo diz o que ele trava: «Para gerar as faturas» '
+      + 'impede a cobrança do mês; «Para o boleto sair» deixa cobrar por Pix, mas o banco recusa o '
+      + 'boleto; «Para dividir o dinheiro» deixa cobrar, e trava o repasse ao dono da usina e a '
+      + 'comissão quando o dinheiro entrar.',
+      'A ordem das linhas é a ordem do trabalho: fechar a de cima costuma destravar as de baixo.',
+      '«Falta preencher», em âmbar com o lápis, é trabalho a fazer. «Ainda não dá para conferir», em '
+      + 'âmbar com a interrogação, não é o mesmo que pronto: depende de uma linha de cima que ainda '
+      + 'está vazia, e não há o que medir.',
+      'Verde é o que já está pronto. Vermelho, no sistema inteiro, é só falha: o banco que recusou, a '
+      + 'cobrança vencida, a conexão que caiu.',
+      '«Onde resolver» abre a tela já filtrada, mostrando só o que falta. Onde diz que não há tela, não '
+      + 'há mesmo — o caminho está escrito ao lado.',
     ],
     caminhos: [ir('/pendencias', 'Abrir Mês')],
     camada: null,
@@ -300,7 +314,9 @@ export const TOPICOS: readonly Topico[] = [
     comum: true,
     termos: ['o que sao as pendencias', 'pendencia', 'pendencias', 'o que e pendencia',
              'como resolvo pendencia', 'lista vermelha', 'para que serve essa tela',
-             'o que significa cada cor', 'cores', 'vermelho', 'laranja', 'amarelo'],
+             'o que significa cada cor', 'cores', 'vermelho', 'laranja', 'amarelo', 'ambar',
+             'como ler esta tela', 'como ler a lista', 'conferencias', 'impede cobrar',
+             'impede dividir o dinheiro', 'onde resolver'],
   },
   {
     id: 'o-que-e-contrato',
@@ -532,13 +548,14 @@ export const TOPICOS: readonly Topico[] = [
   {
     id: 'rateio',
     pergunta: 'Como ligo a unidade do cliente a uma usina?',
-    resposta: 'Na tela Unidades consumidoras, na linha da própria unidade. Primeiro a usina, depois '
-      + 'a fatia em percentual — o campo da fatia fica travado enquanto não houver usina.',
+    resposta: 'Na tela Unidades consumidoras, no detalhe da própria unidade («Abrir», no fim da '
+      + 'linha). Primeiro a usina, depois a fatia em percentual — o campo da fatia fica travado '
+      + 'enquanto não houver usina.',
     porque: PORQUE['rateio'],
     passos: [
       'Abra a tela Unidades consumidoras.',
-      'Encontre a unidade e escolha a usina na coluna correspondente.',
-      'Preencha o percentual que cabe a esse cliente.',
+      'Encontre a unidade e clique «Abrir», no fim da linha: a usina e a fatia ficam no detalhe.',
+      'Preencha o percentual que cabe a esse cliente e confirme no botão ao lado do campo.',
     ],
     caminhos: [daCamada('rateio', 'Vincular a usina e a fatia')],
     camada: 'rateio',
@@ -599,7 +616,7 @@ export const TOPICOS: readonly Topico[] = [
       'Abra a tela Contas de luz e localize a conta daquele mês.',
       'Confira o campo do preço do kWh contra o que está impresso na conta.',
       'Corrija e registre de novo. Zerado, a cobrança é recusada de propósito.',
-      'A coluna de preço da tela Unidades consumidoras é outra: ela serve o caminho antigo e não entra aqui.',
+      'O preço do kWh do detalhe da unidade, na tela Unidades consumidoras, é outro: ele serve o caminho antigo e não entra aqui.',
     ],
     caminhos: [daCamada('tarifa_na_conta', 'Corrigir o preço do kWh na conta lida')],
     camada: 'tarifa_na_conta',
@@ -789,7 +806,8 @@ export const TOPICOS: readonly Topico[] = [
     passos: [
       'Cadastre a unidade no CRM.',
       'Espere a próxima passada da integração — ela roda sozinha várias vezes por hora.',
-      'Quando a unidade aparecer na tela Unidades consumidoras, preencha vencimento, preço do kWh e a usina.',
+      'Quando a unidade aparecer na tela Unidades consumidoras, preencha o vencimento na linha dela; o '
+      + 'preço do kWh e a fatia ficam em «Abrir», no detalhe da linha.',
     ],
     caminhos: [ir('/unidades', 'Abrir Unidades consumidoras')],
     camada: null,
@@ -1026,7 +1044,7 @@ export const TOPICOS: readonly Topico[] = [
     resposta: 'O valor nasce de três coisas: a energia gerada no mês, a fatia daquele cliente e o '
       + 'preço do kWh da unidade dele. Conferir as três costuma achar o erro.',
     passos: [
-      'Confira o preço do kWh na linha da unidade, na tela Unidades consumidoras.',
+      'Confira o preço do kWh no detalhe da unidade («Abrir», na tela Unidades consumidoras).',
       'Confira a fatia em percentual da mesma unidade.',
       'Confira a energia gerada do mês na tela Usinas — ela vem do CRM.',
       /* «gere o mês de novo na aba Faturamento» saiu em 10/09/2026 com a aba. E
@@ -1163,8 +1181,8 @@ export const TOPICOS: readonly Topico[] = [
       + 'fatura — a conta da concessionária e as despesas do dia a dia.',
     passos: [
       'Abra a tela Contas a pagar.',
-      'Use o cadastro de conta nova.',
-      'Preencha o que é, para quem, o valor e o vencimento.',
+      'Clique «Nova despesa avulsa», no alto, ao lado do título.',
+      'Preencha o que é, para quem, o valor e o vencimento, e clique «Lançar».',
     ],
     caminhos: [ir('/contas-a-pagar', 'Abrir Contas a pagar')],
     camada: null,

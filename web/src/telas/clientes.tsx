@@ -30,7 +30,7 @@ import { api, type Cliente } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
   Pagina, Aviso, Tabela, Campo, Busca, Ferramentas, Filtro, ThOrd, Marca, Icone, BotaoDeIcone,
-  useOrdenacao, ordenar, contem, DetalheTecnico,
+  useOrdenacao, ordenar, contem, DetalheTecnico, BotaoDeCriar, PainelDeCriar,
 } from '../ui.tsx';
 import {
   situacaoDoDocumento, contarDocumentos, formatarDocumento, tipoPeloComprimento,
@@ -70,6 +70,12 @@ export function TelaClientes() {
   const acao = useAcao();
   const [nome, setNome] = useState('');
   const [doc, setDoc] = useState('');
+  /* LISTAR ANTES DE CRIAR (30/09/2026, etapa 4a). O formulario de cliente novo
+     abria a tela, vazio, acima da lista — e a 1440 so 3 das 40 linhas cabiam
+     acima da dobra. Cliente novo quase sempre chega do outro sistema sozinho; o
+     trabalho de todo dia e conferir o documento NA LISTA. Ela vem primeiro, e
+     «Novo cliente» abre o painel logo abaixo do titulo. */
+  const [criando, setCriando] = useState(false);
 
   const [busca, setBusca] = useState('');
   /*
@@ -126,7 +132,7 @@ export function TelaClientes() {
     const ok = await acao.executar(() => api.post('/clientes', {
       nome: nome.trim(), documento_bruto: doc.trim() || undefined, documento_origem: 'coleta_local',
     }));
-    if (ok) { setNome(''); setDoc(''); acao.anunciar('Cliente cadastrado.'); lista.recarregar(); }
+    if (ok) { setNome(''); setDoc(''); acao.anunciar('Cliente cadastrado.'); lista.recarregar(); setCriando(false); }
   }
 
   /**
@@ -166,7 +172,25 @@ export function TelaClientes() {
 
   return (
     <Pagina titulo="Clientes"
-            sub="Os clientes que o sistema cobra. É aqui que se confirma o CPF ou o CNPJ — e enquanto ele não estiver confirmado, o contrato daquele cliente não ativa e a cobrança dele não sai.">
+            sub="Os clientes que o sistema cobra. É aqui que se confirma o CPF ou o CNPJ — e enquanto ele não estiver confirmado, o contrato daquele cliente não ativa e a cobrança dele não sai."
+            acao={<BotaoDeCriar controla="novo-cliente" aberto={criando} ao={() => { acao.limpar(); setCriando(!criando); }}>
+              Novo cliente
+            </BotaoDeCriar>}>
+      {criando && (
+        <PainelDeCriar id="novo-cliente" titulo="Novo cliente" aoFechar={() => setCriando(false)}>
+          <div className="campos">
+            <Campo rotulo="Nome" porqueDe="cadastrar-cliente" valor={nome} ao={setNome} />
+            <Campo rotulo="Documento (CPF ou CNPJ)" porqueDe="documento-cliente" valor={doc} ao={setDoc} dica="Opcional" />
+          </div>
+          {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
+          <div className="painel-criar-pe">
+            <button className="primario" onClick={criar} disabled={acao.ocupado || !nome.trim()}>
+              <Icone nome="acrescentar" tamanho={15} peso="bold" /> Cadastrar
+            </button>
+            <button type="button" onClick={() => setCriando(false)}>Cancelar</button>
+          </div>
+        </PainelDeCriar>
+      )}
 
       {/* ------------------------------------------------ o que ainda falta */}
       {/*
@@ -182,16 +206,42 @@ export function TelaClientes() {
         mesma decisão de «esconder, não remover» que a tela de Pendências já
         seguia.
       */}
-      {contagem.sem_documento > 0 && (
-        <Aviso tipo="erro">
-          <strong>{contagem.sem_documento} de {contagem.total} sem CPF/CNPJ.</strong> Sem esse
-          número o contrato do cliente não pode ser ativado — e sem contrato ativo a cobrança
-          dele não sai. <strong>Preencha na coluna Documento</strong>, na linha do cliente.
+      {/*
+        UMA FAIXA SÓ, E ÂMBAR (30/09/2026, etapa 4a). Eram dois avisos, o
+        primeiro vermelho: faltar o documento é TAREFA, e não falha — o vermelho
+        ficou para a recusa do banco, a vencida, o conector caído e a leitura
+        que não voltou. As duas lacunas viraram duas linhas de uma lista, cada
+        uma com o filtro que mostra só aqueles clientes.
+      */}
+      {(contagem.sem_documento + contagem.nao_validados) > 0 && (
+        <Aviso tipo="alerta">
+          <strong>O que falta para os contratos ativarem</strong>
+          <ul className="faixa-lista">
+            {contagem.sem_documento > 0 && (
+              <li>
+                <strong>{contagem.sem_documento} de {contagem.total}</strong> sem CPF/CNPJ — sem ele o contrato
+                não ativa, e a cobrança do cliente não sai. Preencha na coluna Documento.{' '}
+                <button type="button" className="em-link" onClick={() => setPendencia('sem_documento')}>Mostrar só esses</button>
+              </li>
+            )}
+            {contagem.nao_validados > 0 && (
+              <li>
+                <strong>{contagem.nao_validados}</strong> com documento que ainda não vale — veio do outro
+                sistema como sugestão. Confira o número e grave de novo: é o ato de gravar aqui que o faz valer.{' '}
+                <button type="button" className="em-link" onClick={() => setPendencia('nao_validado')}>Mostrar os que não valem</button>
+              </li>
+            )}
+          </ul>
           <DetalheTecnico>
             <p style={{ margin: '0 0 6px' }}>
               Sem documento o contrato não vai para <code>ativo</code> (R9), a triagem recusa por{' '}
               <code>sem_contrato_vigente</code> e o boleto para em <code>PagadorSemDocumento</code>{' '}
               antes de falar com o banco.
+            </p>
+            <p style={{ margin: '0 0 6px' }}>
+              No CRM o campo é livre, e dígito certo não prova que o documento é daquela pessoa
+              (R8): a semente entra com <code>documento_validado = false</code> e só a gravação
+              por esta tela a promove.
             </p>
             <p style={{ margin: 0 }}>
               Para a carteira inteira de uma vez: <code>npm run documentos</code>, que confere
@@ -201,35 +251,11 @@ export function TelaClientes() {
           </DetalheTecnico>
         </Aviso>
       )}
-      {contagem.nao_validados > 0 && (
-        <Aviso tipo="alerta">
-          <strong>{contagem.nao_validados} com documento preenchido que ainda não vale.</strong>{' '}
-          Documento que veio do CRM entra como sugestão e não conta, mesmo estando certo.{' '}
-          <strong>Abra o cliente, confira o número e grave de novo</strong> — pode ser o mesmo
-          número: é o ato de gravar aqui que o faz valer.
-          <DetalheTecnico>
-            <p style={{ margin: 0 }}>
-              No CRM o campo é livre, e dígito certo não prova que o documento é daquela pessoa
-              (R8): a semente entra com <code>documento_validado = false</code> e só a gravação
-              por esta tela a promove.
-            </p>
-          </DetalheTecnico>
-        </Aviso>
-      )}
 
-      <div className="cartao secao">
-        <div className="campos">
-          <Campo rotulo="Nome" porqueDe="cadastrar-cliente" valor={nome} ao={setNome} />
-          <Campo rotulo="Documento (CPF ou CNPJ)" porqueDe="documento-cliente" valor={doc} ao={setDoc} dica="Opcional" />
-          <div style={{ alignSelf: 'end' }}>
-            <button className="primario" onClick={criar} disabled={acao.ocupado || !nome.trim()}>
-              <Icone nome="acrescentar" tamanho={15} peso="bold" /> Cadastrar
-            </button>
-          </div>
-        </div>
-        {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
-        {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
-      </div>
+      {/* O RESULTADO DO QUE SE GRAVA NA LISTA (o documento, o contato), logo
+          acima dela. Morava dentro do cartão de criar, que saiu do alto. */}
+      {!criando && acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
+      {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
 
       {lista.erro && <Aviso tipo="erro">{lista.erro}</Aviso>}
 
@@ -355,7 +381,7 @@ function LinhaDeCliente(p: {
             {ROTULO_DA_SITUACAO_DO_DOCUMENTO[estado]}
           </Marca>
         </td>
-        <td><Marca tom={c.ativo ? 'ok' : 'pendente'}>{c.ativo ? 'Ativo' : 'Inativo'}</Marca></td>
+        <td><Marca tom={c.ativo ? 'ok' : 'neutro'}>{c.ativo ? 'Ativo' : 'Inativo'}</Marca></td>
         <td>
           <button onClick={p.abrir} aria-expanded={p.aberto}>
             <Icone nome="clientes" tamanho={14} />

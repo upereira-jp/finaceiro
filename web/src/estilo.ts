@@ -507,10 +507,6 @@ export const ESTILO = `
   .menu-painel .quem { padding: 4px 10px 8px; }
   .menu-painel .quem strong { display: block; font-size: var(--t-corpo); }
   .menu-painel .quem span { font-size: var(--t-meta); color: var(--fraco); }
-  /* O PAINEL QUE SE POSICIONA PELA JANELA ("Menu fixo", 30/09/2026). A posicao
-     vem do gatilho, lida ao abrir, em duas variaveis — e nao em "style" com
-     "top"/"left", que venceria a regra do celular logo abaixo. */
-  .menu-painel.fixo { position: fixed; top: var(--menu-topo); left: var(--menu-esquerda); right: auto; }
   /* O PAINEL QUE ABRE PARA CIMA ("Menu acima", 30/09/2026): o da conta, no pe do
      menu lateral. Alinhado pela esquerda do gatilho — com o menu recolhido ele sai
      por cima do conteudo —, e a entrada sobe em vez de descer. A "color" e
@@ -519,32 +515,9 @@ export const ESTILO = `
     top: auto; bottom: calc(100% + 6px); left: 0; right: auto;
     animation-name: subir-suave;
   }
-  /* A LISTA DE LUGARES: links, com o desenho de cada tela e o ✓ na aberta. O
-     painel mora DENTRO da barra de abas, e por isso as regras das abas valem
-     so para os filhos diretos dela ("> a"); o seletor aqui tem as duas classes
-     para vencer tambem a familia condensada que a regra de papeis da as abas. */
-  .menu-lugares { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; min-width: 240px; }
-  .menu-painel .menu-lugar {
-    display: flex; align-items: center; gap: 10px; padding: 9px 10px;
-    border-radius: var(--raio-pequeno); color: var(--texto); text-decoration: none;
-    font-family: var(--fonte); font-size: var(--t-corpo); font-weight: 500;
-    letter-spacing: normal; text-transform: none; white-space: nowrap;
-    transition: background-color .14s ease;
-  }
-  .menu-painel .menu-lugar:hover, .menu-painel .menu-lugar:focus-visible {
-    background: var(--fundo-hover); color: var(--texto); text-decoration: none;
-  }
-  .menu-painel .menu-lugar:focus-visible { outline-offset: -2px; }
-  .menu-painel .menu-lugar[aria-current="page"] { color: var(--acento-forte); font-weight: 600; }
-  .menu-painel .menu-lugar .ic { color: var(--fraco); }
-  .menu-painel .menu-lugar[aria-current="page"] .ic { color: var(--acento-forte); }
-  .menu-painel .menu-lugar .ao-fim { margin-left: auto; }
-  /* NO CELULAR O PAINEL OCUPA A LARGURA DA TELA, como o menu de setores: preso
-     ao gatilho, que e a ultima coluna, ele passaria da borda. */
-  @media (max-width: 600px) {
-    .menu-painel.fixo { left: 16px; right: 16px; }
-    .menu-lugares { min-width: 0; }
-  }
+  /* [30/09, etapa 4a] O painel "fixo" e a lista de lugares do menu
+     sairam com os modos "fixo" e "lugares" do "Menu": eram do menu
+     "Cadastros" da barra do topo, que o menu lateral substituiu. */
 
   /* ------------------------------------------- o gatilho da central de ajuda
      O BOTAO DESCEU DA BARRA DO TOPO PARA O CANTO INFERIOR DIREITO em 21/08/2026,
@@ -851,6 +824,119 @@ export const ESTILO = `
     background: var(--fundo2); scrollbar-color: var(--borda-forte) transparent;
   }
   .vazio { padding: 40px 32px; text-align: center; color: var(--fraco); font-size: var(--t-corpo); }
+
+  /* O CABECALHO DE GRUPO DENTRO DA TABELA (30/09/2026, etapa 4a): a linha que
+     diz UMA vez o que as linhas de baixo tem em comum — a lista da tela Mes e o
+     dinheiro que espera em Contas a pagar. Sem o hover de linha: ela nao e
+     linha de dado, e nao se clica nela. */
+  tr.grupo-da-tabela td { padding-top: 20px; border-bottom: 0; }
+  /* A tabela rola na horizontal quando nao cabe (no celular), e o cabecalho do
+     grupo e uma celula da largura da TABELA: sem isto, a frase dele se lia
+     rolando para o lado. Presa a esquerda e na medida da janela, ela fica. */
+  tr.grupo-da-tabela td > * { position: sticky; left: 14px; max-width: min(80ch, calc(100vw - 96px)); }
+  tr.grupo-da-tabela:hover { background: none; }
+  .grupo-da-tabela h3, .grupo-da-tabela h4 {
+    margin: 0; font-family: var(--fonte-cond); font-size: var(--t-h3); font-weight: 600; line-height: 1.25;
+    display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px;
+  }
+  .grupo-da-tabela h4 .fraco { font-family: var(--fonte); font-size: var(--t-ui); font-weight: 500; }
+  .grupo-da-tabela p { margin: 4px 0 0; color: var(--fraco); font-size: var(--t-ui); line-height: 1.5; max-width: 80ch; }
+  .grupo-passos { margin: 6px 0 0; padding-left: 20px; font-size: var(--t-ui); line-height: 1.6; }
+  /* O titulo do cartao com o icone NA LINHA dele — sem isto o icone de 17px caia
+     numa linha propria acima do texto (o h3 nao e flex como o h2). */
+  .cartao-tit { margin-top: 0; display: flex; align-items: center; gap: 8px; }
+
+  /* A LISTA DENTRO DE UMA FAIXA (30/09/2026, etapa 4a): as lacunas de cadastro
+     das Unidades eram tres avisos vermelhos empilhados, e viraram UMA faixa
+     ambar com uma linha por lacuna e o filtro ao lado de cada uma. */
+  .faixa-lista { margin: 6px 0 0; padding-left: 18px; }
+  .faixa-lista li + li { margin-top: 3px; }
+
+  /* A TABELA DE UNIDADES EM CINCO COLUNAS (etapa 4a): a distribuidora e a usina
+     descem para uma linha apagada embaixo do numero; «O que falta» diz a
+     lacuna em palavras, com o lapis da tarefa, na tinta ambar (AA sobre o
+     branco); o detalhe da linha tem a fatia, a tarifa, o endereco e o vinculo. */
+  .uc-meta { margin-top: 2px; color: var(--fraco); font-size: var(--t-meta); white-space: nowrap; }
+  .uc-falta { min-width: 200px; max-width: 320px; }
+  .uc-falta-lista {
+    display: inline-flex; gap: 6px; align-items: flex-start;
+    color: var(--alerta); font-size: var(--t-ui); font-weight: 600; line-height: 1.4;
+  }
+  .uc-falta-lista > .ic { margin-top: 2px; flex: none; }
+  td.uc-abrir { width: 1%; white-space: nowrap; text-align: right; }
+  td.uc-abrir button { padding: 6px 10px; }
+  tr.linha-aberta > td { background: var(--fundo-hover); border-bottom-color: transparent; }
+  tr.linha-detalhe:hover { background: none; }
+  .detalhe-tit {
+    margin: 4px 0 10px; font-family: var(--fonte-cond); font-size: var(--t-rotulo); font-weight: 600;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--fraco);
+  }
+  .detalhe-regua { border: 0; border-top: 1px solid var(--borda-suave); margin: 16px 0 12px; }
+  .detalhe-campos { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); align-items: start; }
+  .detalhe-valor { margin: 0; padding: 8px 0; font-size: var(--t-corpo); }
+
+  /* A SECAO DO PE DA TELA (etapa 4a): «Quem traz clientes», em Contratos — o que
+     era espremido dentro do cartao de criar ganhou titulo e lugar proprio. */
+  .secao-de-pe { margin-top: 8px; }
+  .secao-de-pe .sub { margin-bottom: 12px; }
+  .secao-de-pe-atos { display: grid; gap: 10px; justify-items: start; }
+  .secao-de-pe-atos > .cartao, .secao-de-pe-atos > div, .secao-de-pe-atos > .aviso { justify-self: stretch; }
+
+  /* ================= MENOS PROSA, LISTA ANTES (30/09/2026, etapa 4a)
+     Tres pecas que a etapa deu as telas de trabalho, e as tres moram aqui fora
+     de qualquer escopo porque servem a cinco telas ou mais.
+
+     O ATO DA TELA, AO LADO DO TITULO ("Pagina" com "acao"): o «Novo …» dos
+     cadastros. Quebra para baixo do titulo quando nao cabe, e nunca estica. */
+  .pagina-cab {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 12px 24px; flex-wrap: wrap; margin: 0 0 22px;
+  }
+  .pagina-cab-texto { flex: 1 1 420px; min-width: 0; }
+  .pagina-cab-texto .sub { margin-bottom: 0; }
+  .pagina-acao { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 4px; }
+  /* Aberto, o gatilho fica afundado: diz que o painel logo abaixo e dele. */
+  .pagina-acao button[aria-expanded="true"] { background: var(--fundo-recuo); border-color: var(--texto); }
+
+  /* O PAINEL DE CRIAR ("PainelDeCriar"), acima da lista. E o cartao da casa com
+     o titulo e o X na mesma linha; o respiro de baixo o separa da lista. */
+  .painel-criar-cab {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 14px;
+  }
+  .painel-criar-cab h2 { margin: 0; }
+  .painel-criar-pe { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 16px; }
+  .painel-criar .nota-do-painel {
+    margin: 12px 0 0; color: var(--fraco); font-size: var(--t-ui); line-height: 1.5; max-width: 72ch;
+  }
+
+  /* O RECOLHIDO ("Recolhido"): o que se confere de vez em quando, fechado, com
+     o resumo de uma linha a vista. E SUPERFICIE, e nao texto solto — a licao de
+     10/09 com o painel das automacoes («esta apenas com o texto solto»). O
+     marcador nativo sai e a seta do Phosphor entra, virando ao abrir. */
+  .recolhido {
+    border: 1px solid var(--borda); border-radius: var(--raio-cartao);
+    background: var(--fundo2); margin: 22px 0 0;
+  }
+  .recolhido + .recolhido { margin-top: 10px; }
+  .recolhido > summary {
+    display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 14px;
+    padding: 13px 18px; cursor: pointer; list-style: none;
+  }
+  .recolhido > summary::-webkit-details-marker { display: none; }
+  .recolhido-tit {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--fonte-cond); font-size: var(--t-h3); font-weight: 600; color: var(--texto);
+  }
+  .recolhido-tit > .ic { color: var(--fraco); }
+  .recolhido-resumo { flex: 1 1 280px; min-width: 0; color: var(--fraco); font-size: var(--t-ui); line-height: 1.45; }
+  .recolhido-seta { align-self: center; flex: none; color: var(--fraco); transition: transform .15s ease; }
+  .recolhido[open] > summary .recolhido-seta { transform: rotate(180deg); }
+  .recolhido > summary:hover .recolhido-tit { color: var(--acento-forte); }
+  .recolhido > summary:focus-visible { outline-offset: -2px; }
+  .recolhido-corpo { padding: 14px 18px 18px; border-top: 1px solid var(--borda-suave); }
+  .recolhido-corpo > :first-child { margin-top: 0; }
+  .recolhido-corpo > :last-child { margin-bottom: 0; }
+  .recolhido-corpo .rolagem { margin-top: 12px; }
 
   /* -------------------------------------------------------------- tabela
      LINHA VERTICAL NENHUMA, e a horizontal e a --borda-suave (1.16:1 contra o
@@ -1230,8 +1316,16 @@ export const ESTILO = `
     border-radius: var(--raio-pequeno); border: 1px solid transparent;
   }
   .marca.ok { background: var(--ok-fundo); color: var(--ok); }
-  .marca.pendente { background: var(--erro-fundo); color: var(--erro); }
+  /* [30/09, etapa 4a] OS TONS SAO CINCO, E O VERMELHO E SO DA FALHA. Ate aqui o
+     vermelho se chamava "pendente" e pintava igual «Recusada pelo banco» e
+     «Falta preencher». Agora: "erro" (a recusa, a vencida, o conector caido), e
+     a lacuna de cadastro e "a_fazer" — ambar, com o lapis. "neutro" e o que nao
+     e bom nem ruim (inativo, cancelada): o cinza de rotulo sobre o creme
+     aprofundado, 4,6:1 no claro. A regra inteira: "TomDoSelo", iconografia.ts. */
+  .marca.erro { background: var(--erro-fundo); color: var(--erro); }
+  .marca.a_fazer { background: var(--alerta-fundo); color: var(--alerta); }
   .marca.nao_medido { background: var(--alerta-fundo); color: var(--alerta); }
+  .marca.neutro { background: var(--fundo-recuo); color: var(--fraco); }
   /* SEM HOVER. A pilula e ROTULO, nao controle - "Marca" renderiza um "<span>".
      Ver a nota do ".kpi" acima: movimento sob o mouse e promessa de clique. */
 
@@ -1256,7 +1350,7 @@ export const ESTILO = `
   /* ------------------------------------------------- cartoes de metrica
      A BORDA GROSSA SAIU em 30/07 (era uma faixa de 3px do acento num lado so) e
      a presenca de marca migrou para o icone de fundo: grande, em --acento, com
-     10% de opacidade.
+     10% de opacidade — que saiu tambem, em 30/09 (nota logo abaixo).
 
      [30/09] E A SOMBRA DO SEGUNDO DEGRAU SAIU TAMBEM. O pedido de 30/07 era o
      cartao FLUTUAR; o de 30/09 e o g3ref, onde nada flutua - o KPI e um cartao
@@ -1265,7 +1359,6 @@ export const ESTILO = `
      referencia (o valor a pagar do painel navy e a mesma letra a 52px). */
   .kpis { display: grid; gap: var(--gap); grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin: 0 0 18px; }
   .kpi {
-    position: relative; overflow: hidden;
     border: 1px solid var(--borda); border-radius: var(--raio-cartao);
     background: var(--fundo2); padding: 14px 18px 16px;
   }
@@ -1276,13 +1369,12 @@ export const ESTILO = `
      interacao que nao existe, e gasta a profundidade mais alta da escala num
      elemento estatico. O dia em que o KPI virar um filtro clicavel, o hover
      volta junto com "role", "tabIndex" e ":focus-visible". */
-  .kpi .marca-dagua {
-    position: absolute; right: 10px; bottom: 6px; color: var(--acento);
-    opacity: .11; pointer-events: none;
-  }
-  .kpi .nome { color: var(--fraco); margin-bottom: 4px; }
-  .kpi .valor { font-size: 28px; font-weight: 700; line-height: 1.1; letter-spacing: 0; position: relative; }
-  .kpi .valor.sim-nao { display: flex; align-items: center; gap: 8px; font-size: 24px; }
+  /* [30/09, etapa 4a] A MARCA D'AGUA SAIU (o icone de 44px a 11% no canto): numa
+     tela de trabalho ela era ruido ao lado do numero. O icone ficou pequeno, ao
+     lado do nome e na cor dele. */
+  .kpi .nome { display: flex; align-items: center; gap: 6px; color: var(--fraco); margin-bottom: 4px; }
+  .kpi .nome > .ic { flex: none; }
+  .kpi .valor { font-size: 28px; font-weight: 700; line-height: 1.1; letter-spacing: 0; }
 
   /* --------------------------------------------------------- carregando
      A ENGRENAGEM COM O SOL DA G3 DENTRO. Foi o pedido literal de 30/07 para o
@@ -1330,8 +1422,6 @@ export const ESTILO = `
   .ic-engrenagem { animation: girar 3.2s linear infinite; }
   .aviso.erro > .ic-aviso_erro { animation: pulsar 1.1s ease-in-out 2; }
   .aviso.ok > .ic-aviso_ok { animation: traco-do-check .42s ease-out; }
-  .ic-sim { animation: traco-do-check .5s ease-out; }
-  .ic-nao { animation: traco-do-check .5s ease-out; }
 
   /* ======================= A FATURA UNIFICADA E A REFERENCIA (14/08/2026)
      PEDIDO DO DONO, literal, em 14/08: *"quero ajustar o layout da interface da
@@ -2360,6 +2450,13 @@ export const ESTILO = `
   }
   .roteiro.estado-fechado .roteiro-frase { color: var(--ok); font-weight: 600; }
   .roteiro-frase .ic { align-self: center; }
+  /* O AVISO DE OUTROS MESES (30/09, etapa 4a): uma linha abaixo da frase,
+     menor que ela e sem o peso do risco — o triangulo ambar e o link. */
+  .roteiro-fora {
+    margin: 8px 0 0; display: flex; gap: 6px; align-items: flex-start; max-width: 72ch;
+    font-size: var(--t-ui); line-height: 1.5;
+  }
+  .roteiro-fora .ic { color: var(--alerta); margin-top: 3px; flex: none; }
 
   /* ------------------------------------------------ os cinco passos, lado a lado
      UMA FAIXA, E NAO CINCO CARTOES: sao cinco momentos da mesma coisa, e a
@@ -2412,6 +2509,10 @@ export const ESTILO = `
   }
   .roteiro-rot { font-size: var(--t-meta); font-weight: 600; }
   .roteiro-ctx { font-size: var(--t-meta); color: var(--fraco); }
+  /* O que de outros meses pede voce, na aba: a mesma linha de contexto com o
+     triangulo do aviso — peso de aviso, nao de risco (30/09, etapa 4a). */
+  .roteiro-ctx.fora { display: flex; gap: 4px; align-items: flex-start; }
+  .roteiro-ctx.fora .ic { color: var(--alerta); margin-top: 2px; flex: none; }
   /* ZERO E NAO MEDIDO FICAM NA TINTA APAGADA — que continua AA (--fraco, 5,5:1
      no branco) —, e nao em opacidade: o «apagado a 60%» do roteiro antigo
      derrubava o texto para baixo de 4,5:1. */
@@ -2460,6 +2561,20 @@ export const ESTILO = `
   .roteiro-travas li { font-size: var(--t-ui); line-height: 1.5; }
   .roteiro-trava-nome { font-weight: 600; }
   .roteiro-travas-repasse { margin: 8px 0 0; font-size: var(--t-meta); max-width: 90ch; }
+
+  /* --------------------------------- a lista do mes, embaixo do funil
+     [30/09, etapa 4a] MAIS QUIETA QUE O FUNIL, de proposito: o titulo e uma
+     linha de estado (quantas em aberto, quantas fechadas, «ver quais» e o link
+     da ajuda), e o grupo diz UMA vez o que as linhas dele travam. A linha da
+     tabela ficou com o fato curto. */
+  .mes-lista-cab h2 { margin: 30px 0 4px; }
+  .mes-lista-estado {
+    display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline;
+    gap: 6px 18px; margin: 0 0 12px; color: var(--fraco); font-size: var(--t-ui);
+  }
+  .mes-lista-estado strong { color: var(--texto); }
+  button.mes-como-ler { display: inline-flex; align-items: center; gap: 6px; }
+  .mes-oque { max-width: 520px; }
 
   /* NO CELULAR OS CINCO PASSOS SAO UMA LISTA: numero e titulo a esquerda, a
      contagem grande a direita, e o risco embaixo, na largura toda. Cinco colunas

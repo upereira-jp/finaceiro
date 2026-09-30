@@ -29,7 +29,7 @@
 // sem tempo — e `caso-render.tsx` monta os seis níveis. É o mesmo par de
 // `saude-do-dinheiro.ts` + `saude-corpo.tsx`, pelo mesmo motivo escrito lá.
 
-import { Aviso, DetalheTecnico, Icone } from './ui.tsx';
+import { Aviso, DetalheTecnico, Icone, Recolhido } from './ui.tsx';
 import { faixasDasAutomacoes, linhasDasAutomacoes, type RodadaNaTela } from './automacoes.ts';
 
 export type CorpoDasAutomacoes = {
@@ -89,33 +89,33 @@ export function PainelDasAutomacoes({ rodadas, erro }: CorpoDasAutomacoes) {
   }
   if (linhas.length === 0) return null;
 
+  /* O RESUMO DE UMA LINHA, e ele é o que se lê com a seção fechada (30/09/2026,
+     etapa 4a). Em dia, ele diz isso — e é a afirmação que importa: sem ela,
+     «não estou vendo aviso nenhum» significaria as duas coisas ao mesmo tempo.
+     Com alguma parada, ele a nomeia (o alarme já está no alto da tela). */
+  const paradas = linhas.filter((l) => !l.saudavel);
+  const resumo = paradas.length === 0
+    ? (linhas.length === 1 ? 'A rodada está em dia.' : `As ${linhas.length === 3 ? 'três' : linhas.length} rodadas estão em dia.`)
+    : `${paradas.length} ${paradas.length === 1 ? 'não está em dia' : 'não estão em dia'}: `
+      + `${paradas.map((l) => l.nome.charAt(0).toLowerCase() + l.nome.slice(1)).join(', ')}.`;
+
   return (
-    <>
-      <h2><Icone nome="calendario" tamanho={17} /> O que o sistema fez sozinho</h2>
-      <p className="sub">
+    <Recolhido icone="calendario" titulo="O que o sistema fez sozinho" resumo={resumo}>
+      <p className="sub" style={{ marginBottom: 12 }}>
         Estas rodadas acontecem sem ninguém pedir, e quando uma para o aviso sobe para o alto
-        desta tela. Elas aparecem aqui mesmo estando em dia porque parar é uma ausência: sem esta
-        lista, «não estou vendo aviso nenhum» significaria as duas coisas ao mesmo tempo.
+        desta tela.
       </p>
       {/*
         ⚠️ A SUPERFICIE NAO E ENFEITE, e ela foi paga com o dono abrindo a tela em
         10/09/2026: *"está apenas com o texto solto embaixo das pendências, mas
-        existe"*. As duas metades da frase importam — o caminho inteiro
-        funcionava, e o que chegava era prosa.
+        existe"*. Uma lista de estado desenhada como parágrafo lê como rodapé.
 
-        NESTA TELA, DADO MORA SOBRE SUPERFICIE. Os cartões de cima, a tabela das
-        camadas e a do conector têm borda, fundo e sombra; o único texto solto é
-        o «Como ler esta tela», que é PROSA e se comporta como tal. Uma lista de
-        estado desenhada como parágrafo lê como rodapé explicativo — e o painel
-        que existe para ser conferido todo dia passa a parecer legenda.
-
-        `.cartao secao` é a superfície da casa: oito telas a usam, e o ritmo
-        entre seções sai do token em vez de um `marginBottom` escrito à mão (o
-        comentário de `estilo.ts` conta que esse literal já apareceu dezessete
-        vezes em dez telas antes de virar classe).
+        [30/09/2026, etapa 4a] A SUPERFÍCIE AGORA É O `Recolhido`: a seção fecha
+        com o resumo de uma linha à vista, e é ela que tem borda e fundo. O
+        cartão de dentro saiu — cartão dentro de cartão é o erro que a casa
+        recusa —, e a lista mora direto na superfície de fora.
       */}
-      <div className="cartao secao">
-        <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 12 }}>
+      <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 12 }}>
           {linhas.map((l, i) => (
             <li key={l.chave}
                 style={{
@@ -127,15 +127,14 @@ export function PainelDasAutomacoes({ rodadas, erro }: CorpoDasAutomacoes) {
                 }}>
               {/* O ícone é o SEGUNDO sinal, e não a informação: quem não distingue
                   a cor lê a mesma frase inteira. Restrição 3 do tema. */}
-              <Icone nome={l.saudavel ? 'ok' : 'pendente'} tamanho={15} peso="bold" />
+              <Icone nome={l.saudavel ? 'ok' : 'falha'} tamanho={15} peso="bold" />
               <span style={{ lineHeight: 1.55 }}>
                 <strong>{l.nome}</strong> {l.quando}
                 {l.fez && <span className="fraco"> — {l.fez}</span>}
               </span>
             </li>
           ))}
-        </ul>
-      </div>
-    </>
+      </ul>
+    </Recolhido>
   );
 }

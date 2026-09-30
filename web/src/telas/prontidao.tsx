@@ -23,15 +23,14 @@
 // ha tela, e a de que NAO ha - geracao e regra de comissao nao tem formulario, e
 // a coluna diz isso em vez de desenhar um link para lugar nenhum.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   api, ErroDaApi,
   type Camada, type ExecucaoDoConector, type Automacao,
 } from '../api.ts';
 import { useDados } from '../dados.ts';
 import {
-  Pagina, Aviso, Tabela, Marca, Kpi, KpiSimNao, Carregando, CampoData, AjudaDoMes, Icone,
-  DetalheTecnico,
+  Pagina, Aviso, Tabela, Marca, Carregando, CampoData, AjudaDoMes, Icone, DetalheTecnico, Recolhido,
 } from '../ui.tsx';
 import { Ligacao } from '../rota.tsx';
 import { DESTINO_DA_CAMADA, enderecoDoDestino, telaDoDestino } from '../destino-da-camada.ts';
@@ -39,16 +38,28 @@ import { estadoDoCertificado } from '../cobranca-regras.ts';
 import { CorpoDaSaude } from '../saude-corpo.tsx';
 import { FaixasDasAutomacoes, PainelDasAutomacoes } from '../automacoes-corpo.tsx';
 import type { NivelDoAviso } from '../saude-do-dinheiro.ts';
+import type { TomDoSelo } from '../iconografia.ts';
 import {
-  VERBETE_DA_CAMADA, EFEITO, SITUACAO,
+  VERBETE_DA_CAMADA, SITUACAO,
   agruparPorEfeito, tituloDoGrupo, subDoGrupo, contagemDaCamada, aindaEmAberto, jaFechadas,
   mesPorExtenso,
 } from '../vocabulario.ts';
 import { CorpoDoRoteiro } from '../roteiro-corpo.tsx';
 import { mesNoFunil } from '../roteiro-do-mes.ts';
-import { useLeiturasDoMes } from '../leitura-do-mes.ts';
+import { useLeiturasDoMes, procurarMesDoTrabalho, armazemDoNavegador } from '../leitura-do-mes.ts';
+import { fraseDaOrigem, lembrarMes, type EscolhaDoMes } from '../emissao-regras.ts';
+import { mesDaQuery } from '../dinheiro.ts';
+import { abrirAjuda } from '../ajuda-gatilho.tsx';
 
-const mesAtual = () => new Date().toISOString().slice(0, 7);
+/**
+ * A SITUAÇÃO DA LINHA -> o tom do selo. [30/09/2026, etapa 4a] Até aqui a tela
+ * passava `c.situacao` direto como tom, e `pendente` era o vermelho: «Falta
+ * preencher» saía na mesma tinta de «Recusada pelo banco». Faltar cadastro é
+ * TAREFA — âmbar, com o lápis —, e o vermelho ficou para a falha (`TomDoSelo`).
+ */
+const TOM_DA_SITUACAO: Record<string, TomDoSelo> = {
+  ok: 'ok', pendente: 'a_fazer', nao_medido: 'nao_medido',
+};
 
 /* ==========================================================================
  * A SAUDE DO CAMINHO DO DINHEIRO, no alto da PRIMEIRA tela
@@ -139,14 +150,43 @@ function SaudeDoDinheiro() {
 }
 
 export function TelaProntidao() {
-  const [mes, setMes] = useState(mesAtual);
+  /*
+   * O MÊS EM QUE A TELA ABRE — desde 30/09/2026 (etapa 4a), o MESMO da tela
+   * Cobranças: o do endereço (`?mes=`), senão o mais recente com trabalho
+   * (cobrança por emitir ou sem boleto no banco), senão o último escolhido,
+   * senão o mais recente com cobrança, senão o de hoje. A procura é uma só
+   * (`procurarMesComTrabalho`), e a frase ao lado do seletor diz por que a tela
+   * está nele. Até esta data a tela abria no mês de HOJE — e o mês de hoje
+   * costuma estar vazio justamente quando o trabalho está no anterior.
+   */
+  const [escolha, setEscolha] = useState<EscolhaDoMes | null>(() => {
+    const q = mesDaQuery(location.search);
+    return q ? { mes: q, origem: 'endereco' } : null;
+  });
+  const mes = escolha?.mes ?? null;
+  const escolherMes = (v: string) => {
+    /* Campo apagado não é mês: a tela fica no que estava, como em Cobranças. */
+    if (!/^\d{4}-\d{2}$/.test(v)) return;
+    setEscolha({ mes: v, origem: 'escolhido' });
+    lembrarMes(armazemDoNavegador(), v);
+  };
+
   /* AS CINCO LEITURAS DO MÊS, num gancho só desde 30/09/2026: a prontidão (o
    * cadastro e a conta lida), a carteira do mês, as cobranças do mês, as contas
    * registradas e as cobranças sem boleto. A Central de Ajuda usa o MESMO gancho
    * — é o que faz a frase do estado do mês ser a mesma nos dois lugares. Cada
-   * uma falha sozinha, e o passo que dependia dela diz «não medido». */
+   * uma falha sozinha, e o passo que dependia dela diz «não medido». Com o mês
+   * ainda sendo procurado (`null`), só as duas que atravessam meses saem — e a
+   * das cobranças sem boleto é justamente a que a procura lê primeiro. */
   const leituras = useLeiturasDoMes(mes);
   const { dado, carregando, erro } = leituras.prontidao;
+
+  useEffect(() => {
+    if (escolha || leituras.semBoleto.carregando) return;
+    let vivo = true;
+    void procurarMesDoTrabalho(leituras.semBoleto.dado?.linhas ?? []).then((e) => { if (vivo) setEscolha(e); });
+    return () => { vivo = false; };
+  }, [escolha, leituras.semBoleto.carregando]);
 
   /* AS TRES RODADAS AUTOMATICAS, LIDAS UMA VEZ SO e desenhadas em dois lugares:
    * o alarme no alto, junto das faixas do caminho do dinheiro, e a afirmacao no
@@ -163,42 +203,21 @@ export function TelaProntidao() {
 
   /*
    * A FAIXA «N FATURAS EMITIDAS ESTÃO SEM BOLETO» SAIU DESTA TELA EM 30/09/2026,
-   * e o que ela dizia não se perdeu: mudou de lugar.
-   *
-   * Ela ficava ACIMA do roteiro, em vermelho, mandando agir no passo 4 — e o
-   * roteiro logo abaixo dizia «você está no 1 de 5». Duas respostas para «o que
-   * eu faço agora», e a crítica de 30/09 (P1 nº 3) mediu a confusão. Agora o
-   * passo 4 do funil carrega o mesmo número, a mesma recusa e o mesmo «de
-   * outros meses», e ganha o destaque quando é ele que tem risco: uma resposta
-   * só. A lista inteira continua na tela Cobranças, onde se age sobre ela.
+   * e o que ela dizia não se perdeu: mudou de lugar. O passo 4 do funil carrega
+   * o mesmo número e a mesma recusa, e ganha o destaque quando é ele que tem
+   * risco no mês; o de OUTROS meses virou o aviso com link logo abaixo da frase
+   * do mês (etapa 4a). A lista inteira continua na tela Cobranças.
    */
   const funil = leituras.leitura ? mesNoFunil(leituras.leitura) : null;
 
   const naoMedidas = dado?.camadas.filter((c) => c.situacao === 'nao_medido').length ?? 0;
 
   /*
-   * ============================================================================
-   * A TELA DE PENDENCIAS MOSTRA PENDENCIA. Decisao do dono em 10/09/2026, depois
-   * de abrir a tela com a leva nova no ar: *"deixe as pendencias que nao foram
-   * resolvidas apenas"*.
-   *
-   * O QUE ELA MOSTRAVA: as catorze conferencias, fechadas e abertas na mesma
-   * lista. Hoje sao NOVE fechadas para cinco abertas - dois tercos da tabela
-   * eram trabalho que ja tinha sido feito, e as cinco que importam ficavam
-   * espalhadas no meio delas. Uma tela chamada "Pendencias" que lista sobretudo
-   * o que nao e pendencia treina a percorrer a tabela inteira para achar as
-   * linhas que valem.
-   *
-   * ⚠️ E O QUE FICA FECHADO NAO SOME, e essa e a metade que nao pode ser perdida:
-   * "0 de 29" numa conferencia fechada e PROVA de que ela foi medida, e esta
-   * casa trata "medido e certo" e "nunca medido" como coisas diferentes desde
-   * sempre. Por isso as fechadas ficam a UM clique, com a contagem sempre visivel
-   * - o mesmo desenho dos apontamentos do conector, logo abaixo nesta tela.
-   *
-   * `nao_medido` CONTINUA NA LISTA DE CIMA, e nao entra nas fechadas: a propria
-   * tela define, no "Como ler esta tela", que "ainda nao da para conferir" NAO e
-   * o mesmo que pronto. Ela e pendencia de outra natureza, e nao ausencia de
-   * pendencia.
+   * A TELA MOSTRA PENDENCIA. Decisao do dono em 10/09/2026: *"deixe as
+   * pendencias que nao foram resolvidas apenas"*. O que fica fechado NAO SOME:
+   * "0 de 29" numa conferencia fechada e PROVA de que ela foi medida, e por isso
+   * as fechadas ficam a UM clique, com a contagem sempre visivel. `nao_medido`
+   * continua na lista de cima: "ainda nao da para conferir" nao e pronto.
    */
   const [verFechadas, setVerFechadas] = useState(false);
   const fechadas = jaFechadas(dado?.camadas ?? []);
@@ -212,52 +231,57 @@ export function TelaProntidao() {
       CÁLCULO no servidor (`repos/prontidao.ts`); aqui vale o nome da barra.
     */
     <Pagina titulo="Mês"
-            sub="Em que passo está cada unidade deste mês, o que o cadastro ainda trava e onde se resolve. Esta tela só confere — ela não muda nada sozinha.">
-      <div className="ferramentas">
-        <label style={{ margin: 0 }}>Mês de referência</label>
-        <CampoData mes valor={mes} ao={setMes} rotuloAcessivel="Mês de referência" style={{ width: 'auto' }} /><AjudaDoMes />
+            sub="Em que passo está cada unidade do mês, e o que o cadastro ainda trava.">
+      {/* O MÊS PRIMEIRO, com o porquê de a tela estar nele — o mesmo bloco da
+          tela Cobranças, pela mesma razão: abrir em agosto com setembro no
+          calendário parece defeito se a tela não disser por quê. */}
+      <div className="cartao secao em-mes">
+        <div className="em-mes-campo">
+          <label>Mês de referência</label>
+          {mes
+            ? <CampoData mes valor={mes} ao={escolherMes} rotuloAcessivel="Mês de referência" style={{ width: 'auto' }} />
+            : <span className="em-mes-procurando">Procurando…</span>}
+          <AjudaDoMes />
+        </div>
+        {escolha && escolha.origem !== 'escolhido' && (
+          <p className="em-mes-porque" role="status">
+            <Icone nome="calendario" tamanho={15} />
+            <span>{fraseDaOrigem(escolha.origem)}</span>
+          </p>
+        )}
       </div>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
 
-      {/* ANTES DAS CAMADAS, e de proposito. As camadas dizem o que falta para
-          FATURAR este mes; esta faixa diz se o que ja foi faturado consegue ser
-          cobrado e baixado. E a pergunta mais alta das duas, e um mes inteiro de
-          camadas fechadas nao vale nada com o caminho do dinheiro quebrado. */}
+      {/* ANTES DO FUNIL, e de proposito. O funil diz o que falta fazer no mes;
+          esta faixa diz se o que ja foi faturado consegue ser cobrado e baixado.
+          E a pergunta mais alta das duas, e so aparece quando ha o que dizer. */}
       <SaudeDoDinheiro />
-      {/* LOGO ABAIXO DA VIZINHA, e a ordem entre as duas nao e arbitraria: a de
-          cima diz que o caminho do dinheiro esta quebrado; esta diz que o
-          sistema parou de andar por ele. Quem le de cima para baixo encontra
-          primeiro a coisa que impede, e depois a que atrasa. */}
+      {/* LOGO ABAIXO DA VIZINHA: a de cima diz que o caminho do dinheiro esta
+          quebrado; esta diz que o sistema parou de andar por ele. */}
       <FaixasDasAutomacoes rodadas={automacoes.dado} />
-      {/* "Conferindo o mês" e nao "Contando as camadas", desde 21/08/2026.
-          "Camada" e o nome da estrutura interna do relatorio — a propria suite da
-          ajuda o proibe no texto exibido (V4) —, e esta frase era a PRIMEIRA
-          coisa que um usuario novo lia no sistema, na primeira tela da barra.
-          E a mesma palavra que o painel de ajuda ja usava para a mesma espera. */}
-      {carregando && <Carregando texto="Conferindo o mês…" />}
+      {/* "Conferindo o mês" e nao "Contando as camadas", desde 21/08/2026:
+          "camada" e nome da estrutura interna do relatorio. */}
+      {(carregando || !mes) && <Carregando texto={mes ? 'Conferindo o mês…' : 'Procurando o mês com trabalho…'} />}
 
       {dado && (
         <>
           {/*
-            O ROTEIRO VEM ANTES DE TUDO O QUE ESTA TELA JA MOSTRAVA, e a razao e a
-            pergunta que ele responde.
+            O FUNIL É O HERÓI DESTA TELA (etapa 4a). Ele responde «o que eu faço
+            agora, e como» — a pergunta de quem abriu o sistema para trabalhar —
+            e tudo o que vem abaixo dele ficou mais quieto: a lista do cadastro
+            sem prosa por linha, e as duas seções de conferência recolhidas.
 
-            As faixas acima dizem se o caminho do dinheiro esta de pe. Os cartoes
-            e a tabela abaixo dizem O QUE FALTA. Nenhum dos dois responde **«o que
-            eu faco agora, e como»** — que e a pergunta de quem abriu o sistema
-            para trabalhar, e a unica que a operacao faz todo dia.
-
-            Medido em 10/09/2026: o caminho real de um mes atravessa DUAS telas
-            cujos nomes nao o anunciam, em seis atos com nomes diferentes dos das
-            abas — e a tela de nome mais obvio da barra, «Faturamento», e o
-            caminho APOSENTADO. Nada nesta tela dizia isso.
+            OS TRÊS CARTÕES «Pode faturar / emitir boleto / repartir» SAÍRAM, com
+            os de «Unidades a faturar» e «O que ainda falta». Repetiam em sim e
+            não a linha de cadastro do funil, e em número a contagem da lista
+            logo abaixo — três lugares dizendo a mesma coisa em três formas. O
+            «não» de cada um continua visível: é o GRUPO da lista que aparece
+            («Para gerar as faturas», «Para o boleto sair», «Para dividir o
+            dinheiro»), e grupo só aparece com linha em aberto.
 
             A LOGICA E `roteiro-do-mes.ts`, `.ts` puro com suite propria (regra 8),
-            e quem desenha e `roteiro-corpo.tsx`, que recebe tudo por propriedade —
-            mesmo par de `saude-do-dinheiro.ts` + `saude-corpo.tsx`, e pelo mesmo
-            motivo: `renderToStaticMarkup` nao roda efeito, entao um componente que
-            busca sozinho renderiza vazio e o teste mede o nada.
+            e quem desenha e `roteiro-corpo.tsx`, que recebe tudo por propriedade.
           */}
           <CorpoDoRoteiro
             competencia={mesPorExtenso(dado.competencia) || mes}
@@ -265,118 +289,72 @@ export function TelaProntidao() {
           />
 
           {/*
-            OS TRES PRIMEIROS CARTOES SAO AS TRES RESPOSTAS DE CONSEQUENCIA, e por
-            isso sao os unicos com icone grande de sim/nao: "pode faturar" decide
-            se a cobranca existe, "pode emitir boleto" decide se ela vira titulo,
-            e "pode repartir" decide se o dinheiro que entrar e distribuido. A
-            palavra continua escrita ao lado do desenho.
-
-            O DO MEIO ENTROU EM 08/09/2026 e fechou um verde falso. Com dois
-            cartoes, a tela podia dizer «Pode faturar: sim» num mes em que
-            NENHUMA unidade conseguiria ter boleto registrado — porque desde
-            28/08 a emissao recusa pagador sem endereco, e o relatorio nao
-            contava isso. Um cartao que responde a pergunta errada com confianca
-            e pior que um cartao a menos: ele autoriza.
+            A LINHA DE ESTADO DA LISTA, e ela não repete o funil: diz quantas
+            conferências estão em aberto e quantas já fecharam — com o «ver
+            quais» que era um parágrafo embaixo da tabela — e leva o «Como ler
+            esta tela», que saiu da página e virou assunto da Central de Ajuda.
           */}
-          <div className="kpis">
-            <KpiSimNao nome="Pode faturar" sim={dado.pode_faturar} icone="pode_faturar" />
-            <KpiSimNao nome="Pode emitir boleto" sim={dado.pode_cobrar} icone="boleto" />
-            <KpiSimNao nome="Pode repartir" sim={dado.pode_repartir} icone="pode_repartir" />
-            {/* "Unidades a faturar" E NAO "Unidades ativas", desde 24/08/2026. O campo
-                se chama `ucs_ativas` e o significado dele mudou em 04/08 para
-                "faturaveis" — o servidor registra que "o nome ficou por
-                compatibilidade de payload". O ROTULO nao tem essa obrigacao, e
-                mantê-lo custava caro: o cartao dizia 29 e a aba Unidades lista
-                46 com status ativa. Quem conferisse concluiria que a tela erra. */}
-            <Kpi nome="Unidades a faturar" icone="unidades" valor={dado.ucs_ativas} />
-            {/* "O que ainda falta" e nao "Camadas pendentes": o cartao mostra
-                "3 de 11", e o numero so quer dizer alguma coisa se o nome disser
-                de QUE ele e contagem. "Camada" nomeia a estrutura interna do
-                relatorio e nao existe para quem opera. */}
-            {/* O CARTAO DESOBEDECIA A PROPRIA REGRA DA TELA ate 24/08/2026.
-                Ele contava so `pendente`, entao "4 de 13" fazia concluir que 9
-                estavam prontas — e duas delas eram `nao_medido`, que a lista
-                "Como ler esta tela" define, tres paragrafos abaixo, como NAO
-                sendo o mesmo que pronto. Era o defeito que esta tela inteira
-                existe para combater, na propria tela.
-
-                O NUMERO GRANDE CONTINUA SENDO O DAS PENDENTES, de proposito:
-                e ele que responde "quanto trabalho tenho agora". As nao medidas
-                nao sao trabalho ainda — o que as destrava esta uma linha acima.
-                O que mudou e que elas pararam de ser CONTADAS COMO PRONTAS. */}
-            <Kpi nome="O que ainda falta" icone="prontidao"
-                 valor={<>
-                   {dado.camadas.filter((c) => c.situacao === 'pendente').length}
-                   <span className="fraco" style={{ fontSize: 14, fontWeight: 500 }}> de {dado.camadas.length}</span>
-                   {naoMedidas > 0 && (
-                     <div className="fraco" style={{ fontSize: 12, fontWeight: 500, marginTop: 2 }}>
-                       e mais {naoMedidas} ainda sem conferir
-                     </div>
-                   )}
-                 </>} />
+          <div className="mes-lista-cab">
+            <h2>Conferências do mês</h2>
+            <p className="mes-lista-estado">
+              <span>
+                <strong>{emAberto.length}</strong> em aberto de {dado.camadas.length}
+                {naoMedidas > 0 && <>, {naoMedidas} ainda sem conferir</>}
+                {fechadas.length > 0 && (
+                  <>
+                    {'. '}<strong>{fechadas.length}</strong> {fechadas.length === 1 ? 'já fechada' : 'já fechadas'}{' '}
+                    <button type="button" className="em-link" aria-expanded={verFechadas}
+                            onClick={() => setVerFechadas(!verFechadas)}>
+                      {verFechadas ? 'esconder as fechadas' : 'ver quais'}
+                    </button>
+                  </>
+                )}
+              </span>
+              <button type="button" className="em-link mes-como-ler" onClick={() => abrirAjuda('o-que-e-pendencia')}>
+                <Icone nome="ajuda" tamanho={14} /> Como ler esta lista
+              </button>
+            </p>
           </div>
 
           {/*
-            A COLUNA "DONO" SAIU DA TABELA em 21/08/2026, com o jargão, e as duas
-            pelo mesmo motivo: a partir de 22/08 entram usuários novos e não há
-            divisão de suporte. "Vinicius + operacao" e "Q-PAGADOR-01" são
-            rastreio interno — para quem abre o sistema pela primeira vez, é
-            ruído ocupando duas colunas na largura útil.
+            AS LINHAS ENTRAM AGRUPADAS desde 24/08/2026, a pedido do dono, e o
+            agrupamento não classifica nada de novo: `efeito` já vem do servidor.
 
-            NADA FOI JOGADO FORA. O `dono`, a `questao` e o `explicacao` do
-            servidor continuam chegando e aparecem em "detalhe técnico", atrás de
-            um clique, por decisão do dono no mesmo dia. Quem precisa dos códigos
-            continua a um clique deles; quem não sabe o que são não tropeça.
+            [30/09, etapa 4a] A EXPLICAÇÃO MORA NO CABEÇALHO DO GRUPO, UMA VEZ SÓ.
+            Até aqui cada linha trazia 120 a 260px de prosa — o que falta, em
+            frase, e a consequência — e a coluna «Efeito» repetia, linha a linha,
+            o título do grupo em que ela estava. A coluna saiu; a linha ficou com
+            o fato curto: o que falta, quantas e onde resolver. A consequência
+            de cada uma continua a um clique, no «ver detalhe técnico», e na
+            Central de Ajuda.
+
+            UMA TABELA SÓ, e não três: as colunas são as mesmas e três tabelas
+            desalinhariam «Quantos», que é a coluna que se compara de relance.
           */}
-          {/*
-            AS LINHAS ENTRAM AGRUPADAS desde 24/08/2026, a pedido do dono. As
-            treze respondem a DUAS perguntas — «a cobrança deste mês sai?» e «o
-            dinheiro que entrar vai para quem é de direito?» —, e até aqui o
-            único lugar que dizia isso era a coluna «Efeito», repetida linha a
-            linha. Quem lia de cima para baixo tratava as treze como uma fila só.
-
-            O AGRUPAMENTO NÃO CLASSIFICA NADA DE NOVO: `efeito` já vem do
-            servidor e já é o que governa `pode_faturar`. A regra é `.ts` puro em
-            `vocabulario.ts`, com suíte própria — inclusive a que garante que
-            efeito novo no servidor não some da tela em silêncio.
-
-            UMA TABELA SÓ, e não duas: as colunas são as mesmas e duas tabelas
-            desalinhariam «Quantos» entre os grupos, que é a coluna que a pessoa
-            compara de relance.
-          */}
-          <Tabela cabecalho={<><th>O que falta</th><th>Situação</th><th className="num">Quantos</th><th>Efeito</th><th>Onde resolver</th></>}
+          <Tabela cabecalho={<><th>O que falta</th><th>Situação</th><th className="num">Quantos</th><th>Onde resolver</th></>}
                   vazio={
-                    /* A LISTA VAZIA AQUI E BOA NOTICIA, e por isso ela FALA. Uma
-                       tabela que some quando tudo fecha tem a mesma cara de uma
-                       tabela que quebrou - a licao que esta tela ja aprendeu no
-                       rodape das automacoes.
-
-                       A SEGUNDA FRASE E A DO MES, e nao uma propria (30/09/2026).
-                       Ela dizia «A cobranca depende agora so de emitir» — o que
-                       era falso num mes com tudo emitido e boleto recusado. Agora
-                       e `mesNoFunil(...).frase`, a mesma do alto da tela e da
-                       Central de Ajuda. */
+                    /* A LISTA VAZIA AQUI E BOA NOTICIA, e por isso ela FALA — com a
+                       frase do mês, a mesma do alto da tela e da Central de Ajuda. */
                     <>Nenhuma conferência em aberto: as <strong>{fechadas.length}</strong> fecharam.
                     {' '}{funil?.frase}</>
                   }>
             {agruparPorEfeito(verFechadas ? dado.camadas : emAberto).flatMap((g) => [
-              <tr key={`grupo:${g.chave}`}>
-                <td colSpan={5} style={{ paddingTop: 22, borderBottom: 'none' }}>
-                  <h3 style={{ margin: 0, fontSize: 15 }}>{tituloDoGrupo(g.chave, dado.competencia)}</h3>
-                  <div className="fraco" style={{ fontSize: 13, marginTop: 4, maxWidth: 760, lineHeight: 1.55 }}>
-                    {subDoGrupo(g.chave, dado.ucs_ativas)}
-                  </div>
+              <tr key={`grupo:${g.chave}`} className="grupo-da-tabela">
+                <td colSpan={4}>
+                  <h3>{tituloDoGrupo(g.chave, dado.competencia)}</h3>
+                  <p>{subDoGrupo(g.chave, dado.ucs_ativas)}</p>
                 </td>
               </tr>,
               ...g.camadas.map((c) => (
                 <tr key={c.camada}>
                   <td><OQueFalta camada={c} /></td>
-                  <td><Marca tom={c.situacao}>{SITUACAO[c.situacao]?.curto ?? c.situacao}</Marca></td>
-                  {/* O SUBSTANTIVO ENTROU EM 24/08/2026. O mesmo `X de Y`
-                      significava seis coisas nesta coluna: tres linhas diziam
-                      "de 29" e uma delas contava PESSOAS. Ele vai apagado e
-                      menor porque o numero continua sendo o que se compara de
-                      relance — a palavra so tira a duvida de QUE ele conta. */}
+                  <td>
+                    <Marca tom={TOM_DA_SITUACAO[c.situacao] ?? 'nao_medido'}>
+                      {SITUACAO[c.situacao]?.curto ?? c.situacao}
+                    </Marca>
+                  </td>
+                  {/* O SUBSTANTIVO ENTROU EM 24/08/2026: o mesmo `X de Y`
+                      significava seis coisas nesta coluna. */}
                   <td className="num">
                     {c.situacao === 'nao_medido' ? '—' : <>
                       {c.faltam} de {c.total}{' '}
@@ -385,35 +363,11 @@ export function TelaProntidao() {
                       </span>
                     </>}
                   </td>
-                  <td className="fraco" style={{ fontSize: 13 }}>{EFEITO[c.efeito]?.curto ?? c.efeito}</td>
                   <td><OndeResolver camada={c.camada} situacao={c.situacao} /></td>
                 </tr>
               )),
             ])}
           </Tabela>
-
-          {fechadas.length > 0 && (
-            /* A CONTAGEM E SEMPRE VISIVEL, e so o detalhe e que fica atras do
-               clique: "9 ja fechadas" e a afirmacao de que o trabalho aconteceu,
-               e escondê-la junto com as linhas transformaria a tela num lugar
-               onde so ha problema - o que e outra forma de mentir. */
-            <p className="sub" style={{ marginTop: 12 }}>
-              <strong>{fechadas.length}</strong>{' '}
-              {fechadas.length === 1 ? 'conferência já fechada' : 'conferências já fechadas'}{' '}
-              neste mês{emAberto.length === 0 ? '' : ', e elas não aparecem na lista acima'}.{' '}
-              <button type="button" onClick={() => setVerFechadas(!verFechadas)}>
-                {verFechadas ? 'esconder as fechadas' : 'ver quais'}
-              </button>
-            </p>
-          )}
-
-          <h2>Como ler esta tela</h2>
-          <ul className="fraco" style={{ fontSize: 14, lineHeight: 1.7, paddingLeft: 18 }}>
-            <li><strong>Impede cobrar</strong> significa que a cobrança deste mês não sai enquanto isso faltar. <strong>Impede dividir o dinheiro</strong> deixa cobrar normalmente — o que trava é o repasse ao dono da usina e a comissão, quando o dinheiro entrar.</li>
-            <li><strong>Ainda não dá para conferir</strong> não é o mesmo que <strong>pronto</strong>. Essa conferência depende de algo de uma linha acima, que ainda está vazio — então não há o que medir.</li>
-            <li>A ordem das linhas é a ordem do trabalho: fechar a de cima costuma destravar as de baixo.</li>
-            <li><strong>Onde resolver</strong> abre a aba já filtrada, mostrando só o que falta. Onde diz <strong>não há tela</strong>, não há mesmo — o caminho está escrito ao lado.</li>
-          </ul>
 
           <SinaisDoConector />
         </>
@@ -421,54 +375,47 @@ export function TelaProntidao() {
 
       {/* FORA DO `{dado && ...}` DE PROPOSITO. O painel responde "o sistema esta
           trabalhando?", e essa resposta nao pode depender de a leitura do MES ter
-          dado certo - se a prontidao falhar, a pergunta continua valendo e a
-          resposta continua existindo. */}
+          dado certo. [30/09, etapa 4a] Recolhido, com o resumo de uma linha. */}
       <PainelDasAutomacoes rodadas={automacoes.dado} erro={automacoes.erro} />
     </Pagina>
   );
 }
 
 /**
- * O QUE FALTA, em duas camadas de leitura.
+ * O QUE FALTA — o nome, e o resto atrás de um clique.
  *
- * NA SUPERFÍCIE, português de quem opera: o nome curto, a frase do que falta e a
- * CONSEQUÊNCIA — que é o que responde «posso deixar para depois?». Nenhuma
- * sigla, nenhum nome de coluna, nenhum código de questão.
+ * [30/09/2026, etapa 4a] A LINHA FICOU COM O FATO CURTO. Até aqui a superfície
+ * trazia o nome, a frase do que falta e a CONSEQUÊNCIA — 120 a 260px de prosa
+ * por linha, e a consequência de cada linha repetia em outras palavras o que o
+ * cabeçalho do grupo já dizia. O nome e o «Quantos» ao lado dizem o que falta e
+ * quantas; a explicação do que o grupo trava mora no cabeçalho dele, uma vez.
  *
- * ATRÁS DE UM CLIQUE, tudo o que estava na superfície até 21/08: a explicação de
- * engenharia que o servidor manda, o dono, o código da questão e o comando que
- * resolve a carteira inteira. A decisão do dono foi «esconder, não remover» — e
- * a diferença importa: quem acompanha o projeto continua com os ponteiros, e
- * quem chega amanhã não precisa saber que existem.
- *
- * O TEXTO DO SERVIDOR NÃO É REESCRITO AQUI. `c.explicacao` chega como veio, e é
- * essa a razão de ele caber no detalhe técnico em vez de virar a frase principal:
- * ele é preciso para quem lê código e a frase principal precisa ser outra coisa.
+ * NADA FOI JOGADO FORA — a decisão do dono de 21/08 continua valendo: «esconder,
+ * não remover». A frase e a consequência de cada linha abrem primeiro no
+ * «ver detalhe técnico», e atrás delas o texto de engenharia que o servidor manda
+ * (`c.explicacao`, o dono, a questão e o comando em lote), como antes.
  */
 function OQueFalta({ camada: c }: { camada: Camada }) {
   const v = VERBETE_DA_CAMADA[c.camada];
   const d = DESTINO_DA_CAMADA[c.camada];
 
   return (
-    <div style={{ maxWidth: 620 }}>
-      {/* Sem verbete, cai no nome cru: feio e honesto. Some seria pior — a
-          suíte `ajuda.ts` (A5) impede que chegue aqui. */}
+    <div className="mes-oque">
+      {/* Sem verbete, cai no nome cru: feio e honesto. A suíte `ajuda.ts` (A5)
+          impede que chegue aqui. */}
       <strong>{v?.titulo ?? c.camada}</strong>
 
-      {v && (
-        <div className="fraco" style={{ fontSize: 13, marginTop: 4, lineHeight: 1.55 }}>
-          {v.simples}{' '}
-          {/* A consequência só aparece em quem ainda não está fechado: numa
-              linha resolvida ela seria um aviso sobre um problema que não há. */}
-          {c.situacao !== 'ok' && <span>{v.consequencia}</span>}
-        </div>
-      )}
-
-      {/* O TOGGLE SAIU DAQUI EM 21/08/2026 e virou `DetalheTecnico` no `ui.tsx`.
-          Não foi arrumação: a varredura do dia seguinte achou 23 trechos de
-          jargão em 7 telas que NÃO tinham este esconderijo, e um padrão que cada
-          tela precisa reimplementar é um padrão que a maioria não implementa. */}
+      {/* O TOGGLE É O `DetalheTecnico` DO `ui.tsx` desde 21/08/2026: um padrão
+          que cada tela reimplementa é um padrão que a maioria não implementa. */}
       <DetalheTecnico>
+        {v && (
+          <p style={{ margin: '0 0 6px' }}>
+            {v.simples}{' '}
+            {/* A consequência só em quem ainda não fechou: numa linha resolvida
+                ela seria um aviso sobre um problema que não há. */}
+            {c.situacao !== 'ok' && v.consequencia}
+          </p>
+        )}
         <p style={{ margin: '0 0 6px' }}>{c.explicacao}</p>
         {d?.nota && <p style={{ margin: '0 0 6px' }}>{d.nota}</p>}
         {d?.caminho && (
@@ -573,7 +520,6 @@ function OndeResolver({ camada, situacao }: Pick<Camada, 'camada' | 'situacao'>)
  * no CRM, que e o dono dele — e o proprio sinal diz qual registro olhar.
  */
 function SinaisDoConector() {
-  const [aberto, setAberto] = useState(false);
   const execucoes = useDados<ExecucaoDoConector[]>(() => api.get('/conector-execucao?limite=1'));
   const ultima = execucoes.dado?.[0];
 
@@ -590,28 +536,29 @@ function SinaisDoConector() {
   const quando = new Date(ultima.terminado_em ?? ultima.iniciado_em);
   const relogio = `${String(quando.getHours()).padStart(2, '0')}:${String(quando.getMinutes()).padStart(2, '0')}`;
 
+  /* O RESUMO DE UMA LINHA, e ele é o que se lê com a seção fechada (30/09/2026,
+     etapa 4a): quando foi a última leitura, quanto ela leu e quantos
+     apontamentos há — com a recusa nomeada à parte, porque é a única que impede. */
+  const resumo = (
+    <>
+      Última leitura às {relogio}: {ultima.lidos} {ultima.lidos === 1 ? 'registro lido' : 'registros lidos'}
+      {sinais.length === 0
+        ? ', nada a apontar.'
+        : <>, {sinais.length} {sinais.length === 1 ? 'apontamento' : 'apontamentos'}
+            {ultima.recusados > 0 && <> ({ultima.recusados} {ultima.recusados === 1 ? 'recusa' : 'recusas'})</>}.</>}
+    </>
+  );
+
   return (
     <>
-      <h2><Icone nome="recarregar" tamanho={17} /> O que a leitura do outro sistema achou</h2>
-      <p className="sub">
-        A cada 15 minutos o sistema relê o outro e compara. Última leitura às {relogio}:{' '}
-        <strong>{ultima.lidos}</strong> registros lidos
-        {ultima.criados > 0 && <>, <strong>{ultima.criados}</strong> criados</>}
-        {ultima.atualizados > 0 && <>, <strong>{ultima.atualizados}</strong> atualizados</>}
-        {ultima.recusados > 0 && <>, <strong>{ultima.recusados}</strong> recusados</>}.
-      </p>
-
-      {ultima.erro && <Aviso tipo="erro">A última leitura terminou mal: {ultima.erro}</Aviso>}
+      {/* AS FALHAS DO CONECTOR FICAM FORA DO RECOLHIDO, e é de propósito: conector
+          caído é uma das quatro coisas que são vermelhas no sistema, e alarme
+          não se guarda atrás de um clique. */}
+      {ultima.erro && <Aviso tipo="erro">A última leitura do outro sistema terminou mal: {ultima.erro}</Aviso>}
       {ultima.garantia_de_tenant_degradada && (
         <Aviso tipo="erro">
-          A leitura rodou por um caminho degradado de separação entre empresas. Não é para
-          acontecer, e precisa ser olhado antes de confiar no que veio.
-        </Aviso>
-      )}
-      {ultima.credito_conferido === false && (
-        <Aviso tipo="alerta">
-          O sistema não conseguiu conferir quem vendeu cada unidade nesta leitura — a comparação
-          abaixo pode estar incompleta.
+          A leitura do outro sistema rodou por um caminho degradado de separação entre empresas. Não é
+          para acontecer, e precisa ser olhado antes de confiar no que veio.
         </Aviso>
       )}
       {ultima.views_ausentes.length > 0 && (
@@ -621,62 +568,58 @@ function SinaisDoConector() {
         </Aviso>
       )}
 
-      {sinais.length === 0 ? (
-        <p className="sub">Nada a apontar na última leitura.</p>
-      ) : (
-        <>
-          <p className="sub">
-            <strong>{sinais.length}</strong>{' '}
-            {sinais.length === 1 ? 'apontamento' : 'apontamentos'} na última leitura.{' '}
-            {/*
-              ⚠️ A FRASE ANTERIOR DIZIA «eles não impedem nada sozinhos» PARA OS
-              TRÊS TIPOS, e isso é verdade para divergência e FALSO para recusa:
-              recusa quer dizer que nada foi gravado naquela linha — o que mudou
-              do outro lado não chegou aqui, e não vai chegar sozinho.
-
-              O preço da frase única foi medido em 10/09/2026: uma unidade estava
-              sendo recusada a cada 15 minutos DESDE O DIA 4 — 519 vezes, seis
-              dias fora do espelho —, sob um texto que mandava corrigir «no
-              outro, que é o dono do dado». Naquele caso o outro sistema já
-              estava certo: o que estava velho era o vínculo daqui, e a saída é
-              nesta casa, na linha da unidade.
-            */}
-            {ultima.recusados > 0 ? (
-              <>
-                As <strong>recusas</strong> impedem: a linha recusada <strong>não foi gravada</strong>,
-                e o que mudou do outro lado não chega aqui enquanto durar. Quando a recusa for de
-                unidade que trocou de contrato, ela se resolve <strong>aqui</strong> — abra a linha
-                daquela unidade na tela Unidades consumidoras e confira o vínculo. As{' '}
-                <strong>divergências</strong> não impedem nada: são coisas que os dois sistemas
-                dizem diferente, e a correção é feita no outro, que é o dono do dado.
-              </>
-            ) : (
-              <>Eles não impedem nada sozinhos — são coisas que os dois sistemas dizem diferente,
-                e a correção é feita no outro, que é o dono do dado.</>
-            )}
-            {' '}
-            <button type="button" onClick={() => setAberto(!aberto)}>
-              {aberto ? 'esconder' : 'ver quais'}
-            </button>
-          </p>
-          {aberto && (
-            <Tabela cabecalho={<><th>Tipo</th><th>Registro</th><th>O que o sistema achou</th></>}>
-              {sinais.slice(0, 60).map((x, i) => (
-                <tr key={`${x.entidade}-${x.chave}-${i}`}>
-                  <td>
-                    <Marca tom={x.tipo === 'recusa' ? 'pendente' : 'nao_medido'}>{x.tipo}</Marca>
-                  </td>
-                  <td><span className="fraco">{x.entidade}</span> {x.chave}</td>
-                  <td>{x.sinal}</td>
-                </tr>
-              ))}
-            </Tabela>
+      {/*
+        RECOLHIDA, COM O RESUMO À VISTA (30/09/2026, etapa 4a). Aberta, esta
+        seção eram quatro linhas de prosa sobre recusa e divergência e um segundo
+        «ver quais» — lida por todo mundo, toda vez, embaixo do funil. Ela existe
+        para ser CONFERIDA, e o resumo diz se há o que conferir.
+      */}
+      <Recolhido icone="recarregar" titulo="O que a leitura do outro sistema achou" resumo={resumo}>
+        {ultima.credito_conferido === false && (
+          <Aviso tipo="alerta">
+            O sistema não conseguiu conferir quem vendeu cada unidade nesta leitura — a comparação
+            abaixo pode estar incompleta.
+          </Aviso>
+        )}
+        <p className="sub" style={{ marginBottom: 0 }}>
+          A cada 15 minutos o sistema relê o outro e compara: {ultima.lidos} lidos
+          {ultima.criados > 0 && <>, {ultima.criados} criados</>}
+          {ultima.atualizados > 0 && <>, {ultima.atualizados} atualizados</>}
+          {ultima.recusados > 0 && <>, {ultima.recusados} recusados</>}.{' '}
+          {/*
+            ⚠️ A RECUSA IMPEDE E A DIVERGÊNCIA NÃO, e a frase diz as duas coisas
+            desde 10/09/2026: uma unidade foi recusada a cada 15 minutos DESDE O
+            DIA 4 — 519 vezes — sob um texto que mandava corrigir «no outro, que é
+            o dono do dado». Naquele caso o outro sistema já estava certo: o que
+            estava velho era o vínculo daqui, e a saída é na linha da unidade.
+          */}
+          {ultima.recusados > 0 && (
+            <>
+              As <strong>recusas</strong> impedem: a linha recusada não foi gravada. Quando for de
+              unidade que trocou de contrato, abra a linha dela em Unidades consumidoras e confira o
+              vínculo.{' '}
+            </>
           )}
-          {aberto && sinais.length > 60 && (
-            <p className="sub">Mostrando os 60 primeiros de {sinais.length}.</p>
-          )}
-        </>
-      )}
+          As <strong>divergências</strong> não impedem nada: a correção é feita no outro sistema, que
+          é o dono do dado.
+        </p>
+        {sinais.length > 0 && (
+          <Tabela cabecalho={<><th>Tipo</th><th>Registro</th><th>O que o sistema achou</th></>}>
+            {sinais.slice(0, 60).map((x, i) => (
+              <tr key={`${x.entidade}-${x.chave}-${i}`}>
+                <td>
+                  {/* A recusa é falha (a linha não foi gravada); a divergência
+                      e a revisão são coisa a olhar. */}
+                  <Marca tom={x.tipo === 'recusa' ? 'erro' : 'nao_medido'}>{x.tipo}</Marca>
+                </td>
+                <td><span className="fraco">{x.entidade}</span> {x.chave}</td>
+                <td>{x.sinal}</td>
+              </tr>
+            ))}
+          </Tabela>
+        )}
+        {sinais.length > 60 && <p className="sub">Mostrando os 60 primeiros de {sinais.length}.</p>}
+      </Recolhido>
     </>
   );
 }

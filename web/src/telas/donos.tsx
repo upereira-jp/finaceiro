@@ -9,9 +9,10 @@ import { useState } from 'react';
 import { api, type DonoUsina, type Usina } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
-  Pagina, Aviso, Tabela, Campo, Busca, Ferramentas, Filtro, ThOrd, Marca, Icone,
-  useOrdenacao, ordenar, contem,
+  Pagina, Aviso, Tabela, Campo, Busca, Ferramentas, Filtro, ThOrd, Marca, Icone, DetalheTecnico,
+  useOrdenacao, ordenar, contem, BotaoDeCriar, PainelDeCriar,
 } from '../ui.tsx';
+import { Ligacao } from '../rota.tsx';
 
 export function TelaDonos() {
   const donos = useDados<DonoUsina[]>(() => api.get('/donos-usina'));
@@ -23,6 +24,9 @@ export function TelaDonos() {
   const [busca, setBusca] = useState('');
   const [situacao, setSituacao] = useState('');
   const { ordem, alternar } = useOrdenacao('nome');
+  /* LISTAR ANTES DE CRIAR (30/09/2026, etapa 4a): o formulario abria a tela,
+     vazio, acima da lista. «Novo dono» abre o painel logo abaixo do titulo. */
+  const [criando, setCriando] = useState(false);
 
   const todos = donos.dado ?? [];
   const visiveis = ordenar(
@@ -47,37 +51,68 @@ export function TelaDonos() {
       setF({ nome: '', natureza: 'pf', documento_bruto: '', chave_pix: '', email: '' });
       acao.anunciar('Dono cadastrado — agora vincule-o à usina na tela Usinas.');
       donos.recarregar(); semDono.recarregar();
+      setCriando(false);
     }
   }
 
   return (
     <Pagina titulo="Donos de usina"
-            sub="O maior fluxo de dinheiro do sistema. Exige chave Pix ou conta completa — conferido no cadastro, porque no pagamento já é tarde.">
-      {(semDono.dado?.length ?? 0) > 0 && (
-        <Aviso tipo="erro">
-          {semDono.dado!.length} usina(s) sem dono: {semDono.dado!.map((u) => u.codigo_geradora).join(', ')}.
-          O repasse delas fica bloqueado pela R12 quando a primeira fatura for paga.
-        </Aviso>
-      )}
-
-      <div className="cartao secao">
-        <div className="campos">
-          <Campo rotulo="Nome" porqueDe="dono-usina" valor={f.nome} ao={p('nome')} />
-          <Campo rotulo="Natureza" porqueDe="dono-usina" valor={f.natureza} ao={p('natureza')}
-                 opcoes={[{ valor: 'pf', texto: 'Pessoa física' }, { valor: 'pj', texto: 'Pessoa jurídica' }]} />
-          <Campo rotulo="Documento" porqueDe="dono-usina" valor={f.documento_bruto} ao={p('documento_bruto')} dica="CPF ou CNPJ" />
-          <Campo rotulo="Chave Pix" porqueDe="dono-usina" valor={f.chave_pix} ao={p('chave_pix')} />
-          <Campo rotulo="E-mail" porqueDe="dono-usina" valor={f.email} ao={p('email')} />
-          <div style={{ alignSelf: 'end' }}>
+            sub="O maior fluxo de dinheiro do sistema. Exige chave Pix ou conta completa — conferido no cadastro, porque no pagamento já é tarde."
+            acao={<BotaoDeCriar controla="novo-dono" aberto={criando} ao={() => { acao.limpar(); setCriando(!criando); }}>
+              Novo dono
+            </BotaoDeCriar>}>
+      {criando && (
+        <PainelDeCriar id="novo-dono" titulo="Novo dono de usina" aoFechar={() => setCriando(false)}>
+          <div className="campos">
+            <Campo rotulo="Nome" porqueDe="dono-usina" valor={f.nome} ao={p('nome')} />
+            <Campo rotulo="Natureza" porqueDe="dono-usina" valor={f.natureza} ao={p('natureza')}
+                   opcoes={[{ valor: 'pf', texto: 'Pessoa física' }, { valor: 'pj', texto: 'Pessoa jurídica' }]} />
+            <Campo rotulo="Documento" porqueDe="dono-usina" valor={f.documento_bruto} ao={p('documento_bruto')} dica="CPF ou CNPJ" />
+            <Campo rotulo="Chave Pix" porqueDe="dono-usina" valor={f.chave_pix} ao={p('chave_pix')} />
+            <Campo rotulo="E-mail" porqueDe="dono-usina" valor={f.email} ao={p('email')} />
+          </div>
+          <p className="nota-do-painel">
+            Depois de cadastrar, vincule o dono à usina dele na tela Usinas — é o vínculo que faz a
+            parte dele ser repassada.
+          </p>
+          {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
+          <div className="painel-criar-pe">
             <button className="primario" onClick={criar}
                     disabled={acao.ocupado || !f.nome.trim() || !f.documento_bruto.trim()}>
               <Icone nome="acrescentar" tamanho={15} peso="bold" /> Cadastrar
             </button>
+            <button type="button" onClick={() => setCriando(false)}>Cancelar</button>
           </div>
-        </div>
-        {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
-        {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
-      </div>
+        </PainelDeCriar>
+      )}
+      {!criando && acao.sucesso && (
+        <Aviso tipo="ok">
+          {acao.sucesso} <Ligacao para="/usinas?pendencia=sem_dono">Abrir Usinas</Ligacao>
+        </Aviso>
+      )}
+
+      {/*
+        ÂMBAR E NÃO VERMELHO (30/09/2026, etapa 4a). Usina sem dono é cadastro a
+        completar, e não falha: dá para cobrar os clientes dela, e o que trava é
+        o repasse quando o dinheiro entrar. A frase agora diz os dois passos e
+        leva ao segundo; o código da regra foi para o «detalhe técnico».
+      */}
+      {(semDono.dado?.length ?? 0) > 0 && (
+        <Aviso tipo="alerta">
+          <strong>
+            {semDono.dado!.length === 1 ? '1 usina sem dono' : `${semDono.dado!.length} usinas sem dono`}:{' '}
+            {semDono.dado!.map((u) => u.codigo_geradora).join(', ')}.
+          </strong>{' '}
+          Dá para cobrar os clientes dela{semDono.dado!.length === 1 ? '' : 's'}; o que trava é o repasse
+          ao dono quando o dinheiro entrar. Cadastre o dono aqui, em «Novo dono», e depois{' '}
+          <Ligacao para="/usinas?pendencia=sem_dono">vincule-o à usina em Usinas</Ligacao>.
+          <DetalheTecnico>
+            <p style={{ margin: 0 }}>
+              A R12 bloqueia a repartição inteira da liquidação de usina sem dono (AUD-08).
+            </p>
+          </DetalheTecnico>
+        </Aviso>
+      )}
 
       {donos.erro && <Aviso tipo="erro">{donos.erro}</Aviso>}
 
@@ -103,7 +138,7 @@ export function TelaDonos() {
               </>}
               vazio={todos.length
                 ? 'Nenhum dono corresponde à busca ou aos filtros.'
-                : 'Nenhum dono cadastrado — AUD-08.'}>
+                : 'Nenhum dono cadastrado ainda. Use «Novo dono», no alto.'}>
         {visiveis.map((d) => (
           <LinhaDoDono key={d.id} d={d} aoSalvar={() => donos.recarregar()} />
         ))}
@@ -148,7 +183,7 @@ function LinhaDoDono({ d, aoSalvar }: { d: DonoUsina; aoSalvar: () => void }) {
         <td>{d.nome} <span className="fraco">· {d.natureza.toUpperCase()}</span></td>
         <td className="fraco">{d.documento}</td>
         <td className="fraco">{d.chave_pix ?? d.banco ?? '—'}</td>
-        <td><Marca tom={d.ativo ? 'ok' : 'pendente'}>{d.ativo ? 'Ativo' : 'Inativo'}</Marca></td>
+        <td><Marca tom={d.ativo ? 'ok' : 'neutro'}>{d.ativo ? 'Ativo' : 'Inativo'}</Marca></td>
         <td>
           <button type="button" onClick={() => setEditando(!editando)}>
             <Icone nome="confirmar" tamanho={14} /> {editando ? 'Fechar' : 'Corrigir'}

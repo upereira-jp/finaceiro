@@ -15,6 +15,7 @@
 // decisão de `ha_quanto_tempo_segundos` nas automações.
 
 import type { TituloAReceber } from './api.ts';
+import type { TomDoSelo } from './iconografia.ts';
 
 export type { TituloAReceber };
 
@@ -55,11 +56,12 @@ export const ROTULO_DA_FAIXA: Record<FaixaDeAtraso, string> = {
   acima_90: 'Mais de 90 dias',
 };
 
-/** Os três tons do sistema, e só eles: a vencer é `ok` (nada de errado), qualquer
- *  atraso é `pendente` (há trabalho — cobrar). O ícone e o texto carregam a
- *  gravidade; a cor nunca é o único sinal (restrição 3 do tema). */
-export const TOM_DA_FAIXA: Record<FaixaDeAtraso, 'ok' | 'pendente' | 'nao_medido'> = {
-  a_vencer: 'ok', ate_30: 'pendente', ate_60: 'pendente', ate_90: 'pendente', acima_90: 'pendente',
+/** A vencer é `ok` (nada de errado); qualquer atraso é `erro` — a vencida é uma
+ *  das quatro coisas que ficaram vermelhas quando o vermelho passou a ser só da
+ *  falha (30/09/2026, `TomDoSelo`). O ícone e o texto carregam a gravidade; a
+ *  cor nunca é o único sinal (restrição 3 do tema). */
+export const TOM_DA_FAIXA: Record<FaixaDeAtraso, TomDoSelo> = {
+  a_vencer: 'ok', ate_30: 'erro', ate_60: 'erro', ate_90: 'erro', acima_90: 'erro',
 };
 
 export function faixaDeAtraso(vencimentoISO: string, hojeISO: string): FaixaDeAtraso {
@@ -120,13 +122,16 @@ export const ROTULO_DA_SITUACAO: Record<SituacaoDaCobranca, string> = {
   boleto_baixado: 'Boleto baixado no banco',
 };
 
-export const TOM_DA_SITUACAO: Record<SituacaoDaCobranca, 'ok' | 'pendente' | 'nao_medido'> = {
-  sem_boleto: 'pendente',
+/* [30/09, etapa 4a] SO A RECUSA E VERMELHA. Sem boleto e boleto baixado sao
+ * TAREFA — alguem precisa pedir o boleto (de novo) —, e nao falha: `a_fazer`. A
+ * recusa do banco e a falha, e e a unica aqui que fica em `erro`. */
+export const TOM_DA_SITUACAO: Record<SituacaoDaCobranca, TomDoSelo> = {
+  sem_boleto: 'a_fazer',
   boleto_a_caminho: 'nao_medido',
   boleto_no_banco: 'ok',
   boleto_importado: 'ok',
-  boleto_recusado: 'pendente',
-  boleto_baixado: 'pendente',
+  boleto_recusado: 'erro',
+  boleto_baixado: 'a_fazer',
 };
 
 /** Só o título com boleto vivo no banco pode ser pago hoje. */

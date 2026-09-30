@@ -26,8 +26,10 @@ import { api } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
   Pagina, Aviso, Tabela, Campo, Busca, Ferramentas, Filtro, ThOrd, Marca, Icone, DetalheTecnico,
-  Carregando, AjudaDoMes, CampoData, useOrdenacao, ordenar, contem,
+  Carregando, AjudaDoMes, CampoData, useOrdenacao, ordenar, contem, BotaoDeCriar, PainelDeCriar,
 } from '../ui.tsx';
+import { Ligacao } from '../rota.tsx';
+import type { TomDoSelo } from '../iconografia.ts';
 import { emReais, paraCentavos, competenciaISO } from '../dinheiro.ts';
 import {
   saldoCentavos, nomeDoBeneficiario, estaAtrasada, recibo, emBr,
@@ -37,7 +39,8 @@ import {
 } from '../contas-regras.ts';
 import {
   motivoDaEspera, podeRepartirAgora, ordenarPelaEspera, resumoDaEspera, totalCentavos,
-  ROTULO_DO_MOTIVO, EXPLICACAO_DO_MOTIVO, type RepassePendente, type MotivoDaEspera,
+  ROTULO_DO_MOTIVO, ROTULO_CURTO_DO_MOTIVO, EXPLICACAO_DO_MOTIVO, COMO_DESTRAVAR, ORDEM_DOS_MOTIVOS,
+  type RepassePendente, type MotivoDaEspera,
 } from '../repasse-pendente.ts';
 import { mesPorExtenso } from '../vocabulario.ts';
 import { paraCsv, reaisParaPlanilha, nomeDoArquivo, type Coluna } from '../csv.ts';
@@ -53,21 +56,20 @@ type ItemSemConta = {
   split_item_id: string; tipo: string; valor_centavos: number; competencia: string;
 };
 
-/* Os tres tons da `Marca` sao os da PRONTIDAO (`ok`/`pendente`/`nao_medido`), e
- * as quatro situacoes cabem neles: paga e `ok`, aberta e parcial sao `pendente`
- * (ha trabalho a fazer), cancelada e `nao_medido` - nao e boa nem ma, saiu da
- * conta. O icone e quem separa cancelada de aberta, pela mesma razao que
- * `ICONE_DO_STATUS_DA_FATURA` existe. */
-const TOM: Record<ContaAPagar['status'], 'ok' | 'pendente' | 'nao_medido'> = {
-  aberta: 'pendente', parcial: 'pendente', paga: 'ok', cancelada: 'nao_medido',
+/* As quatro situacoes nos tons do selo (`TomDoSelo`): paga e `ok`; aberta e
+ * parcial sao `a_fazer` — ha uma conta a pagar, e isso e trabalho, nao falha —;
+ * cancelada e `neutro`, saiu da conta. [30/09/2026, etapa 4a] Aberta era o
+ * vermelho de «pendente»; o vermelho ficou para a VENCIDA, que e o selo ao lado
+ * da data. */
+const TOM: Record<ContaAPagar['status'], TomDoSelo> = {
+  aberta: 'a_fazer', parcial: 'a_fazer', paga: 'ok', cancelada: 'neutro',
 };
 
-/* AGUARDAR NAO E PENDENCIA, e por isso `aguardando_banco` e `nao_medido` e nao
- * `pendente`: o tom de pendencia diz "ha trabalho a fazer", e ali nao ha - o
- * sistema pergunta ao banco todo dia e resolve sozinho. Pintar de pendente
- * produziria alguem tentando resolver o que nao e resolvivel a mao. */
-const TOM_DA_ESPERA: Record<MotivoDaEspera, 'ok' | 'pendente' | 'nao_medido'> = {
-  sem_dono: 'pendente', aguardando_banco: 'nao_medido', pronto: 'pendente',
+/* AGUARDAR NAO E TAREFA, e por isso `aguardando_banco` e `nao_medido` e nao
+ * `a_fazer`: o sistema pergunta ao banco todo dia e resolve sozinho. Pintar de
+ * tarefa produziria alguem tentando resolver o que nao e resolvivel a mao. */
+const TOM_DA_ESPERA: Record<MotivoDaEspera, TomDoSelo> = {
+  sem_dono: 'a_fazer', aguardando_banco: 'nao_medido', pronto: 'a_fazer',
 };
 
 export function TelaContasAPagar() {
@@ -80,6 +82,11 @@ export function TelaContasAPagar() {
   const [busca, setBusca] = useState('');
   const [situacao, setSituacao] = useState('');
   const { ordem, alternar } = useOrdenacao('vencimento');
+  /* O LANÇAMENTO À MÃO SAIU DO MEIO DA TELA (30/09/2026, etapa 4a). Ele ficava
+     entre o resumo por beneficiário e a lista — um botão, ou um formulário
+     inteiro, cortando a tela ao meio. Agora é o padrão das telas de cadastro:
+     «Nova despesa avulsa» ao lado do título, e o painel logo abaixo dele. */
+  const [lancando, setLancando] = useState(false);
 
   /*
    * `hoje` é calculado UMA vez por render e passado às funções puras, em vez de
@@ -125,7 +132,16 @@ export function TelaContasAPagar() {
 
   return (
     <Pagina titulo="Contas a pagar"
-            sub="O que a empresa deve — a parte do dono da usina, a comissão de quem trouxe o cliente, a concessionária e despesas avulsas. A parte do dono e a comissão nascem sozinhas quando um cliente paga.">
+            sub="O que a empresa deve — a parte do dono da usina, a comissão de quem trouxe o cliente, a concessionária e despesas avulsas. A parte do dono e a comissão nascem sozinhas quando um cliente paga."
+            acao={<BotaoDeCriar controla="nova-despesa" aberto={lancando} ao={() => setLancando(!lancando)}>
+              Nova despesa avulsa
+            </BotaoDeCriar>}>
+      {lancando && (
+        <FormularioDeConta acao={acao} aoFechar={() => setLancando(false)}
+                           aoCriar={() => { contas.recarregar(); resumo.recarregar(); }} />
+      )}
+      {!lancando && acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
+
       {/*
         O FIM DO MÊS DO RATEIO MORA AQUI, do outro lado da barra (30/09/2026). O
         passo 5 do mês — receber e repartir — termina nesta lista: quando o
@@ -171,60 +187,17 @@ export function TelaContasAPagar() {
         * nao existe.
         */}
       {(espera.dado?.length ?? 0) > 0 && (
-        <div className="cartao secao">
-          <h3 style={{ marginTop: 0 }}>
-            <Icone nome="pode_repartir" tamanho={17} /> Dinheiro recebido que ainda não foi repartido
-          </h3>
-          <p className="nota">
-            {resumoDaEspera(espera.dado!)} · somam{' '}
-            <strong>{emReais(totalCentavos(espera.dado!))}</strong>
-          </p>
-          <Tabela cabecalho={<><th>Pago em</th><th>Mês de referência</th><th>Usina</th>
-                              <th className="num">Valor</th><th>Situação</th><th>Ação</th></>}>
-            {ordenarPelaEspera(espera.dado!).map((l) => {
-              const m = motivoDaEspera(l);
-              return (
-                <tr key={l.liquidacao_id}>
-                  <td>{String(l.data_liquidacao).slice(0, 10)}</td>
-                  <td>{mesPorExtenso(String(l.competencia)) || String(l.competencia).slice(0, 7)}</td>
-                  <td>{l.codigo_geradora}</td>
-                  <td className="num"><strong>{emReais(l.valor_liquidado_centavos)}</strong></td>
-                  <td>
-                    <Marca tom={TOM_DA_ESPERA[m]}>{ROTULO_DO_MOTIVO[m]}</Marca>
-                    <div className="nota" style={{ marginTop: 4, maxWidth: '46ch' }}>
-                      {EXPLICACAO_DO_MOTIVO[m]}
-                    </div>
-                  </td>
-                  <td>
-                    {podeRepartirAgora(l) ? (
-                      <button disabled={acao.ocupado}
-                              onClick={async () => {
-                                const ok = await acao.executar(
-                                  () => api.post(`/liquidacoes/${l.liquidacao_id}/repartir`, {}));
-                                if (ok) { espera.recarregar(); contas.recarregar(); resumo.recarregar(); }
-                              }}>
-                        Repartir agora
-                      </button>
-                    ) : <span className="nota">—</span>}
-                  </td>
-                </tr>
-              );
-            })}
-          </Tabela>
-          <DetalheTecnico>
-            <p className="nota">
-              A lista vem de <code>GET /liquidacoes/pendentes-de-split</code>: liquidações sem
-              execução de repasse. «Aguardando o banco confirmar» é baixa de origem
-              <code> webhook_sicoob</code>, que a Sicoob define como intenção de pagamento — a
-              consulta ativa diária confirma e reparte (Q-BAIXAOPER-01). «Falta o dono» é a R12.
-            </p>
-          </DetalheTecnico>
-        </div>
+        <DinheiroParado linhas={espera.dado!} ocupado={acao.ocupado}
+                        repartir={async (l) => {
+                          const ok = await acao.executar(
+                            () => api.post(`/liquidacoes/${l.liquidacao_id}/repartir`, {}));
+                          if (ok) { espera.recarregar(); contas.recarregar(); resumo.recarregar(); }
+                        }} />
       )}
 
       {/* ------------------------------------------------ o resumo por quem recebe */}
       <div className="cartao secao">
-        <h3 style={{ marginTop: 0 }}>
+        <h3 className="cartao-tit">
           <Icone nome="contas_a_pagar" tamanho={17} /> A pagar, por beneficiário
         </h3>
         {resumo.carregando ? <Carregando /> : resumo.erro ? (
@@ -247,15 +220,13 @@ export function TelaContasAPagar() {
                 <td className="num">{emReais(r.pago_centavos)}</td>
                 <td className="num"><strong>{emReais(r.saldo_centavos)}</strong></td>
                 <td className="num">{r.atrasados > 0
-                  ? <Marca tom="pendente" icone="aviso_erro">{r.atrasados}</Marca>
+                  ? <Marca tom="erro" icone="vencidas">{r.atrasados}</Marca>
                   : <span className="nota">—</span>}</td>
               </tr>
             ))}
           </Tabela>
         )}
       </div>
-
-      <FormularioDeConta acao={acao} aoCriar={() => { contas.recarregar(); resumo.recarregar(); }} />
 
       {/* ------------------------------------------------------------ a lista */}
       <Ferramentas contagem={`${visiveis.length} de ${todas.length} · saldo em aberto ${emReais(totalSaldo)}`}>
@@ -322,7 +293,7 @@ function LinhaDeConta(p: {
       <tr>
         <td>
           {String(c.vencimento).slice(0, 10).split('-').reverse().join('/')}
-          {atrasada && <> <Marca tom="pendente" icone="aviso_erro">vencida</Marca></>}
+          {atrasada && <> <Marca tom="erro" icone="vencidas">vencida</Marca></>}
         </td>
         <td>
           <strong>{nomeDoBeneficiario(c)}</strong>
@@ -346,9 +317,7 @@ function LinhaDeConta(p: {
             {r.alerta && <><Icone nome="aviso_alerta" tamanho={12} /> </>}{r.frase}
           </div>
         </td>
-        <td><Marca tom={TOM[c.status]}
-                     icone={c.status === 'paga' ? 'aviso_ok'
-                            : c.status === 'cancelada' ? 'nao' : 'aviso_alerta'}>
+        <td><Marca tom={TOM[c.status]} icone={c.status === 'paga' ? 'confirmar' : undefined}>
           {ROTULO_DO_STATUS[c.status]}
         </Marca></td>
         <td>
@@ -479,8 +448,9 @@ function FormularioDePagamento(p: {
 
 // ------------------------------------------------------- a conta lançada à mão
 
-function FormularioDeConta(p: { acao: ReturnType<typeof useAcao>; aoCriar: () => void }) {
-  const [aberto, setAberto] = useState(false);
+function FormularioDeConta(p: {
+  acao: ReturnType<typeof useAcao>; aoCriar: () => void; aoFechar: () => void;
+}) {
   const [f, setF] = useState({
     descricao: '', beneficiario_nome: '', valor: '', competencia: '', vencimento: '',
   });
@@ -502,34 +472,15 @@ function FormularioDeConta(p: { acao: ReturnType<typeof useAcao>; aoCriar: () =>
       vencimento: f.vencimento,
     }));
     if (ok) {
-      setF({ descricao: '', beneficiario_nome: '', valor: '', competencia: '', vencimento: '' });
       p.acao.anunciar('Conta a pagar lançada.');
       p.aoCriar();
+      p.aoFechar();
     }
   }
 
-  if (!aberto) {
-    return (
-      <div className="secao">
-        <button onClick={() => setAberto(true)}>
-          <Icone nome="acrescentar" tamanho={15} /> Lançar uma conta à mão
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div className="cartao secao">
-      <h3 style={{ marginTop: 0 }}>Lançar conta a pagar</h3>
-      {/* A frase existe porque a ausência do caminho é a regra, e ausência não
-          se explica sozinha — quem procurar "lançar um repasse" precisa achar
-          por que não há. */}
-      <p className="nota">
-        Para despesa avulsa — aluguel, serviço, imposto. <strong>Repasse e comissão não se lançam
-        aqui:</strong> nascem do split, na baixa da fatura, e um segundo caminho provisionaria a
-        mesma despesa duas vezes ao mesmo beneficiário.
-      </p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+    <PainelDeCriar id="nova-despesa" titulo="Nova despesa avulsa" aoFechar={p.aoFechar}>
+      <div className="campos">
         <Campo rotulo="Descrição" valor={f.descricao} ao={campo('descricao')} dica="Aluguel do escritório" />
         <Campo rotulo="Quem recebe" porqueDe="pagar-dono" valor={f.beneficiario_nome} ao={campo('beneficiario_nome')} />
         <Campo rotulo="Valor (R$)" valor={f.valor} ao={campo('valor')} dica="0,00" />
@@ -540,13 +491,123 @@ function FormularioDeConta(p: { acao: ReturnType<typeof useAcao>; aoCriar: () =>
         </div>
         <Campo rotulo="Vencimento" porqueDe="pagar-dono" valor={f.vencimento} ao={campo('vencimento')} tipo="date" />
       </div>
-      {!trava.pode && <p className="nota" style={{ marginBottom: 0 }}>{trava.porque}</p>}
-      <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-        <button className="primario" disabled={!trava.pode} onClick={criar}>
+      {/* A frase existe porque a ausência do caminho é a regra, e ausência não
+          se explica sozinha — quem procurar "lançar um repasse" precisa achar
+          por que não há. */}
+      <p className="nota-do-painel">
+        Para despesa avulsa — aluguel, serviço, imposto. <strong>Repasse e comissão não se lançam
+        aqui:</strong> nascem sozinhos quando o cliente paga, e um segundo caminho lançaria a mesma
+        despesa duas vezes para o mesmo beneficiário.
+      </p>
+      {p.acao.erro && <Aviso tipo="erro">{p.acao.erro}</Aviso>}
+      <div className="painel-criar-pe">
+        <button className="primario" disabled={!trava.pode || p.acao.ocupado} onClick={() => void criar()}>
           <Icone nome="confirmar" tamanho={15} /> Lançar
         </button>
-        <button onClick={() => setAberto(false)}>Cancelar</button>
+        <button type="button" onClick={p.aoFechar}>Cancelar</button>
+        {!trava.pode && <span className="nota">{trava.porque}</span>}
       </div>
+    </PainelDeCriar>
+  );
+}
+
+/* ================================================ o dinheiro que espera
+ *
+ * DINHEIRO QUE ENTROU E AINDA NAO VIROU CONTA A PAGAR — o cartao entrou em
+ * 08/09/2026 e fecha um vao que era invisivel nesta tela: o banco avisa o
+ * pagamento, e o repasse espera a CONFIRMACAO dele. Entre um e outro o dinheiro
+ * existe, e esta tela dizia "nada a pagar". Some quando nao ha espera: fila
+ * vazia e o estado normal.
+ *
+ * [30/09/2026, etapa 4a] A EXPLICACAO E DITA UMA VEZ, POR GRUPO. Em cada uma
+ * das dezesseis linhas havia tres linhas de prosa — a mesma, dezesseis vezes —,
+ * e a tabela passava de uma tela e meia so para repetir que falta o dono. Agora
+ * as linhas se agrupam pelo motivo da espera; o cabecalho do grupo diz o que e
+ * e como destrava (os dois passos de «falta o dono», com os links), e a linha
+ * fica com o estado curto e a acao ou o destino.
+ */
+function DinheiroParado(p: {
+  linhas: readonly RepassePendente[]; ocupado: boolean;
+  repartir: (l: RepassePendente) => Promise<void>;
+}) {
+  const ordenadas = ordenarPelaEspera(p.linhas);
+  const grupos = ORDEM_DOS_MOTIVOS
+    .map((m) => ({
+      motivo: m,
+      linhas: ordenadas.filter((l) => motivoDaEspera(l) === m),
+      /* O último passo do caminho é o que a LINHA oferece: o dono já existe
+         quando alguém chega nela, e o que falta é o vínculo com a usina dela. */
+      ultimoPasso: COMO_DESTRAVAR[m]?.[COMO_DESTRAVAR[m]!.length - 1] ?? null,
+    }))
+    .filter((g) => g.linhas.length > 0);
+
+  return (
+    <div className="cartao secao">
+      <h3 className="cartao-tit">
+        <Icone nome="pode_repartir" tamanho={17} /> Dinheiro recebido que ainda não foi repartido
+      </h3>
+      <p className="nota">
+        {resumoDaEspera(p.linhas).replace(/^./, (c) => c.toUpperCase())}. Somam{' '}
+        <strong>{emReais(totalCentavos(p.linhas))}</strong>.
+      </p>
+      <Tabela cabecalho={<><th>Pago em</th><th>Mês de referência</th><th>Usina</th>
+                          <th className="num">Valor</th><th>Situação</th><th>O que fazer</th></>}>
+        {grupos.flatMap((g) => [
+          <tr key={`grupo:${g.motivo}`} className="grupo-da-tabela">
+            <td colSpan={6}>
+              <h4>
+                <Marca tom={TOM_DA_ESPERA[g.motivo]}>{ROTULO_DO_MOTIVO[g.motivo]}</Marca>
+                <span className="fraco">
+                  {g.linhas.length} {g.linhas.length === 1 ? 'pagamento' : 'pagamentos'},{' '}
+                  {emReais(totalCentavos(g.linhas))}
+                </span>
+              </h4>
+              <p>{EXPLICACAO_DO_MOTIVO[g.motivo]}</p>
+              {COMO_DESTRAVAR[g.motivo] && (
+                <ol className="grupo-passos">
+                  {COMO_DESTRAVAR[g.motivo]!.map((x) => (
+                    <li key={x.destino.endereco}>
+                      {x.ato} em <Ligacao para={x.destino.endereco}>{x.destino.rotulo}</Ligacao>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </td>
+          </tr>,
+          ...g.linhas.map((l) => (
+            <tr key={l.liquidacao_id}>
+              <td>{emBr(String(l.data_liquidacao).slice(0, 10))}</td>
+              <td>{mesPorExtenso(String(l.competencia)) || String(l.competencia).slice(0, 7)}</td>
+              <td>{l.codigo_geradora}</td>
+              <td className="num"><strong>{emReais(l.valor_liquidado_centavos)}</strong></td>
+              <td><Marca tom={TOM_DA_ESPERA[g.motivo]}>{ROTULO_CURTO_DO_MOTIVO[g.motivo]}</Marca></td>
+              <td>
+                {/* A AÇÃO OU O DESTINO: repartir, quando dá; o último passo do
+                    caminho, quando é trabalho de alguém; e a frase de que não há
+                    nada a fazer, quando o banco é que confirma. */}
+                {podeRepartirAgora(l) ? (
+                  <button disabled={p.ocupado} onClick={() => void p.repartir(l)}>Repartir agora</button>
+                ) : g.ultimoPasso ? (
+                  <Ligacao para={g.ultimoPasso.destino.endereco}
+                           rotulo={`Vincular em ${g.ultimoPasso.destino.rotulo} o dono da usina ${l.codigo_geradora}`}>
+                    Vincular em {g.ultimoPasso.destino.rotulo}
+                  </Ligacao>
+                ) : (
+                  <span className="nota">O sistema reparte sozinho</span>
+                )}
+              </td>
+            </tr>
+          )),
+        ])}
+      </Tabela>
+      <DetalheTecnico>
+        <p className="nota">
+          A lista vem de <code>GET /liquidacoes/pendentes-de-split</code>: liquidações sem
+          execução de repasse. «Aguardando o banco confirmar» é baixa de origem
+          <code> webhook_sicoob</code>, que a Sicoob define como intenção de pagamento — a
+          consulta ativa diária confirma e reparte (Q-BAIXAOPER-01). «Falta o dono» é a R12.
+        </p>
+      </DetalheTecnico>
     </div>
   );
 }

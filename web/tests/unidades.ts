@@ -22,7 +22,9 @@ import {
   CAMPOS_DO_ENDERECO, ROTULO_DO_ENDERECO, TOM_DO_ENDERECO,
   type UcParaSituacao, type SituacaoDaUc, type SituacaoDoEndereco,
   tomDoEndereco, rotuloDoEndereco, enderecoEmiteBoleto,
+  faltasDaUc,
 } from '../src/unidades-regras.ts';
+import { FILTROS_DA_TELA } from '../src/destino-da-camada.ts';
 import { CAMPOS_DE_ENDERECO_EXIGIDOS } from '../../src/sicoob/porta.ts';
 
 let falhas = 0;
@@ -212,10 +214,15 @@ console.log('== a situacao de uma UC: duas fontes, um rotulo ==\n');
    * compara uma constante com uma constante escrita por mim nao mede nada — ele
    * congela a minha opiniao do dia. Por isso a E1h agora pergunta ao SERVIDOR.
    * ===================================================================== */
+  /* [30/09, etapa 4a] E NAO E MAIS VERMELHO: a lacuna de cadastro e TAREFA
+   * (`a_fazer`, ambar com o lapis e a palavra do que falta). A garantia de 08/09
+   * continua de pe — nao e `nao_medido`, o ambar da interrogacao que dizia
+   * «pode deixar para depois». O vermelho ficou para a recusa do banco. */
   chk('E1h', tomDoEndereco(completo) === 'ok'
-          && tomDoEndereco({ ...completo, endereco_cep: '' }) === 'pendente'
-          && tomDoEndereco({}) === 'pendente',
-      'endereco que NAO emite e `pendente` (vermelho), e nao `nao_medido` - a Sicoob recusa');
+          && tomDoEndereco({ ...completo, endereco_cep: '' }) === 'a_fazer'
+          && tomDoEndereco({}) === 'a_fazer',
+      'endereco que NAO emite e `a_fazer` (tarefa), e nao `nao_medido` - a Sicoob recusa, e alguem tem '
+      + 'de preencher');
 
   /* O `numero` e o unico campo do formulario que a emissao NAO exige, e isto e
    * o que separa "incompleto" de "nao emite". Uma unidade sem numero conta como
@@ -234,8 +241,8 @@ console.log('== a situacao de uma UC: duas fontes, um rotulo ==\n');
 
   for (const campo of CAMPOS_DE_ENDERECO_EXIGIDOS) {
     const coluna = `endereco_${campo === 'municipio' ? 'municipio' : campo}` as keyof typeof completo;
-    chk('E1h4', tomDoEndereco({ ...completo, [coluna]: '' }) === 'pendente',
-        `sem ${campo} a unidade NAO emite - e a tela pinta de vermelho`);
+    chk('E1h4', tomDoEndereco({ ...completo, [coluna]: '' }) === 'a_fazer',
+        `sem ${campo} a unidade NAO emite - e a tela marca como tarefa a fazer`);
   }
 
   /* O rotulo DIZ O QUE FALTA. "Endereco incompleto" mandava a pessoa abrir a
@@ -249,7 +256,7 @@ console.log('== a situacao de uma UC: duas fontes, um rotulo ==\n');
   const estados: SituacaoDoEndereco[] = ['vazio', 'parcial', 'completo'];
   chk('E1i', estados.every((s) => ROTULO_DO_ENDERECO[s].length > 0 && TOM_DO_ENDERECO[s] !== undefined),
       'os tres estados tem rotulo e tom');
-  chk('E1i2', TOM_DO_ENDERECO.parcial === 'pendente',
+  chk('E1i2', TOM_DO_ENDERECO.parcial === 'a_fazer' && TOM_DO_ENDERECO.vazio === 'a_fazer',
       'a tabela antiga tambem deixou de dizer que incompleto e apenas "nao medido"');
 }
 
@@ -267,6 +274,28 @@ console.log('== a situacao de uma UC: duas fontes, um rotulo ==\n');
       'so cidade e UF sai sem virgula sobrando na frente');
   chk('E2d', enderecoNumaLinha({ endereco_uf: 'GO' }) === 'GO',
       'so a UF tambem nao inventa separador');
+}
+
+// ------------------------------------------- U9 a coluna «O que falta» (etapa 4a)
+// A linha da tabela ficou com a unidade, a situacao, O QUE FALTA e o vencimento;
+// a coluna tem de dizer exatamente o que o filtro «Sem …» mostra.
+{
+  const cheia = {
+    usina_id: 'u1', data_vencimento: '2026-10-10', tarifa_reais_por_kwh: '1.13',
+    endereco_logradouro: 'Rua A', endereco_bairro: 'Centro', endereco_municipio: 'Goiânia',
+    endereco_cep: '74000-000', endereco_uf: 'GO',
+  };
+  chk('U9a', faltasDaUc(cheia).length === 0, 'unidade completa: nada falta');
+  const vazia = faltasDaUc({ usina_id: null, data_vencimento: null, tarifa_reais_por_kwh: null });
+  chk('U9b', vazia.map((f) => f.chave).join(',') === 'sem_usina,sem_vencimento,sem_tarifa,sem_endereco',
+      'unidade vazia: as quatro faltas, na ordem da coluna');
+  chk('U9c', vazia.every((f) => (FILTROS_DA_TELA['/unidades'] as readonly string[]).includes(f.chave)),
+      'toda falta e uma opcao do filtro de pendencia — coluna e filtro falam a mesma lingua');
+  const semCep = faltasDaUc({ ...cheia, endereco_cep: '' });
+  chk('U9d', semCep.length === 1 && semCep[0]!.rotulo === 'endereço (CEP)',
+      'e o endereco diz qual campo falta — o mesmo criterio do servidor (sem numero, emite)');
+  chk('U9e', faltasDaUc({ ...cheia, endereco_numero: '' } as typeof cheia).length === 0,
+      'sem o numero a unidade emite, e a coluna nao acusa nada');
 }
 
 console.log(`\n${falhas === 0 ? 'TODAS PASSARAM' : `${falhas} FALHA(S)`}`);

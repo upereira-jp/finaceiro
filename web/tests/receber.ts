@@ -53,8 +53,8 @@ chk('RC2h', faixaDeAtraso('2026-06-24', HOJE) === 'ate_90', '90 dias -> 61 a 90 
 chk('RC2i', faixaDeAtraso('2026-06-23', HOJE) === 'acima_90', '91 dias -> mais de 90');
 chk('RC2j', FAIXAS.every((f) => ROTULO_DA_FAIXA[f] && TOM_DA_FAIXA[f]),
     'toda faixa tem rotulo e tom');
-chk('RC2k', TOM_DA_FAIXA.a_vencer === 'ok' && FAIXAS.slice(1).every((f) => TOM_DA_FAIXA[f] === 'pendente'),
-    'a vencer e ok; qualquer atraso e pendente - ha trabalho a fazer');
+chk('RC2k', TOM_DA_FAIXA.a_vencer === 'ok' && FAIXAS.slice(1).every((f) => TOM_DA_FAIXA[f] === 'erro'),
+    'a vencer e ok; qualquer atraso e `erro` - a vencida e uma das quatro coisas que ficaram vermelhas');
 
 // ---------------------------------------------------------- RC3 a frase
 
@@ -80,8 +80,10 @@ chk('RC4g', SITUACOES.every((s) => ROTULO_DA_SITUACAO[s] && TOM_DA_SITUACAO[s]),
 chk('RC4h', podeSerPaga('boleto_no_banco') && podeSerPaga('boleto_importado')
          && !podeSerPaga('sem_boleto') && !podeSerPaga('boleto_baixado') && !podeSerPaga('boleto_recusado'),
     'so boleto vivo no banco pode ser pago hoje');
-chk('RC4i', TOM_DA_SITUACAO.sem_boleto === 'pendente' && TOM_DA_SITUACAO.boleto_baixado === 'pendente',
-    'sem boleto e baixado sao PENDENTES: cobranca que nao saiu e trabalho, nao espera');
+chk('RC4i', TOM_DA_SITUACAO.sem_boleto === 'a_fazer' && TOM_DA_SITUACAO.boleto_baixado === 'a_fazer'
+           && TOM_DA_SITUACAO.boleto_recusado === 'erro',
+    'sem boleto e baixado sao TAREFA (`a_fazer`): cobranca que nao saiu e trabalho, nao espera — e a '
+    + 'recusa do banco, que e falha, e a unica vermelha');
 
 // ------------------------------------------------------ RC5 as somas por faixa
 

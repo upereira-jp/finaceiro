@@ -32,8 +32,7 @@ import {
 import {
   situacaoDaUc, ehFaturavel, contarSituacoes,
   ROTULO_DA_SITUACAO, TOM_DA_SITUACAO, ICONE_DA_SITUACAO,
-  situacaoDoEndereco, camposDoEnderecoPreenchidos, enderecoNumaLinha,
-  CAMPOS_DO_ENDERECO, tomDoEndereco, rotuloDoEndereco, enderecoEmiteBoleto,
+  rotuloDoEndereco, enderecoEmiteBoleto, faltasDaUc,
   type SituacaoDaUc,
 } from '../unidades-regras.ts';
 import { decimalTexto, mesDaQuery } from '../dinheiro.ts';
@@ -97,16 +96,17 @@ export function TelaUnidades() {
    */
   const [pendencia, setPendencia] = useState(
     () => filtroDaConsulta(location.search, FILTROS_DA_TELA['/unidades']));
-  /** Qual UC esta com o endereco aberto. Um por vez: sete campos por linha em 41
-   *  linhas seriam 287 caixas de texto desenhadas de uma vez. */
-  const [enderecoAberto, setEnderecoAberto] = useState<string | null>(null);
+  /** Qual UC esta com o DETALHE aberto — a fatia, a tarifa, o endereco e o
+   *  vinculo. Um por vez: sete campos de endereco por linha em 41 linhas seriam
+   *  287 caixas de texto desenhadas de uma vez. */
+  const [aberta, setAberta] = useState<string | null>(null);
   const { ordem, alternar } = useOrdenacao('uc');
 
   const ucDoAlvo = alvo ? (ucs.dado ?? []).find((u) => u.numero_uc.replace(/\D/g, '') === alvo) ?? null : null;
   useEffect(() => {
     if (!ucDoAlvo || alvoAplicado.current) return;
     alvoAplicado.current = true;
-    setEnderecoAberto(ucDoAlvo.id);
+    setAberta(ucDoAlvo.id);
     requestAnimationFrame(() => {
       const painel = document.getElementById(`endereco-${ucDoAlvo.id}`);
       painel?.scrollIntoView({ block: 'center' });
@@ -135,12 +135,11 @@ export function TelaUnidades() {
     ordem,
     {
       uc: (u) => u.numero_uc,
-      distribuidora: (u) => u.distribuidora,
-      usina: (u) => nomeUsina(u.usina_id),
-      rateio: (u) => (u.percentual_rateio == null ? null : parseFloat(u.percentual_rateio)),
       vencimento: (u) => u.data_vencimento,
-      tarifa: (u) => (u.tarifa_reais_por_kwh == null ? null : parseFloat(u.tarifa_reais_por_kwh)),
       situacao: (u) => situacaoDaUc(u),
+      /* Quem mais falta primeiro, na ordem decrescente — «O que falta» e a coluna
+         por onde se trabalha a lista. */
+      falta: (u) => faltasDaUc(u).length,
     },
   );
 
@@ -188,7 +187,7 @@ export function TelaUnidades() {
     const ok = await acao.executar(() => api.patch(`/unidades-consumidoras/${uc.id}`, campos));
     if (ok) {
       acao.anunciar(`Endereço da ${uc.numero_uc} gravado.`);
-      setEnderecoAberto(null);
+      setAberta(null);
       ucs.recarregar();
     }
   }
@@ -252,56 +251,53 @@ export function TelaUnidades() {
           </Aviso>
         )
       )}
-      {semVencimento > 0 && (
-        <Aviso tipo="erro">
-          <strong>{semVencimento} unidade(s) sem dia de vencimento.</strong> Sem ele a cobrança
-          dessas unidades não é gerada — o sistema prefere recusar a escolher uma data por você.{' '}
-          <strong>Preencha o dia do mês</strong> na coluna Vencimento: a cobrança de um mês vence
-          no mês seguinte, nesse mesmo dia.
+      {/*
+        UMA FAIXA SÓ, E ÂMBAR (30/09/2026, etapa 4a). Eram três avisos vermelhos
+        empilhados — vencimento, tarifa e endereço —, cada um com três frases.
+        Faltar cadastro é TAREFA, e não falha: o vermelho ficou para a recusa do
+        banco, que é o que acontece quando a tarefa não é feita. A faixa conta
+        as três lacunas numa lista, e cada linha filtra a tabela nelas.
+
+        O QUE CADA UMA IMPEDE CONTINUA DITO, curto: sem vencimento e sem tarifa a
+        cobrança não é gerada; sem endereço o boleto é recusado. Os códigos da
+        recusa, a questão e o comando em lote seguem no «detalhe técnico».
+      */}
+      {(semVencimento + semTarifa + semEndereco) > 0 && (
+        <Aviso tipo="alerta">
+          <strong>O que falta nas unidades que faturam</strong>
+          <ul className="faixa-lista">
+            {semVencimento > 0 && (
+              <li>
+                <strong>{semVencimento}</strong> sem dia de vencimento — a cobrança delas não é gerada.{' '}
+                <button type="button" className="em-link" onClick={() => setPendencia('sem_vencimento')}>Mostrar só essas</button>
+              </li>
+            )}
+            {semTarifa > 0 && (
+              <li>
+                <strong>{semTarifa}</strong> sem o preço do kWh — a cobrança do mês não pode ser calculada.{' '}
+                <button type="button" className="em-link" onClick={() => setPendencia('sem_tarifa')}>Mostrar só essas</button>
+              </li>
+            )}
+            {semEndereco > 0 && (
+              <li>
+                <strong>{semEndereco}</strong> sem o endereço completo do pagador — o banco recusa o boleto.{' '}
+                <button type="button" className="em-link" onClick={() => setPendencia('sem_endereco')}>Mostrar só essas</button>
+              </li>
+            )}
+          </ul>
           <DetalheTecnico>
-            <p style={{ margin: 0 }}>
-              A composição recusa com <code>sem_vencimento</code>. Quem preenche — por unidade ou
-              por contrato — é a <code>Q-SPEC001-02</code>; não há valor padrão e não vai haver
-              (regra 10).
+            <p style={{ margin: '0 0 6px' }}>
+              Sem vencimento a composição recusa com <code>sem_vencimento</code>; quem preenche — por
+              unidade ou por contrato — é a <code>Q-SPEC001-02</code>, e não há valor padrão (regra 10).
             </p>
-          </DetalheTecnico>
-        </Aviso>
-      )}
-      {semTarifa > 0 && (
-        <Aviso tipo="erro">
-          <strong>{semTarifa} unidade(s) sem o preço do kWh.</strong> É por esse preço que a
-          energia gerada vira valor em reais — sem ele a cobrança do mês não pode ser calculada.{' '}
-          <strong>Preencha na coluna «Tarifa R$/kWh»</strong>, na linha da unidade. O preço é de
-          cada unidade e não da distribuidora: ele muda de cliente para cliente.
-          <DetalheTecnico>
-            <p style={{ margin: 0 }}>
-              A composição do lote <strong>levanta</strong> em vez de faturar por zero (R26). A aba
-              Tarifas saiu em 14/08 porque servia um número só para todas, e a medição mostrou que
-              ele varia por cliente: 35 a 1,130000 · 4 a 1,16 · 2 a 1,180000.
+            <p style={{ margin: '0 0 6px' }}>
+              Sem tarifa a composição do lote <strong>levanta</strong> em vez de faturar por zero (R26).
+              A aba Tarifas saiu em 14/08: o preço varia por cliente (35 a 1,130000 · 4 a 1,16 · 2 a 1,180000).
             </p>
-          </DetalheTecnico>
-        </Aviso>
-      )}
-      {semEndereco > 0 && (
-        /* ERRO E NAO ALERTA, e a troca tem data: 28/08/2026. Ate entao a tela
-           dizia «isto nao impede cobrar», e estava certa — o que a Sicoob exigia
-           de endereco nao estava medido. Passou a estar: os cinco campos sao
-           obrigatorios no modelo `Boleto` e `src/repos/boleto.ts` RECUSA com
-           `PagadorSemEndereco` (422). O texto antigo sobreviveu onze dias
-           mandando a operacao deixar para depois a unica coisa que, hoje, impede
-           o primeiro boleto de sair. */
-        <Aviso tipo="erro">
-          <strong>{semEndereco} unidade(s) não emitem boleto por falta de endereço.</strong>{' '}
-          O banco exige logradouro, bairro, município, CEP e UF do pagador, e a emissão é{' '}
-          <strong>recusada</strong> sem eles — a fatura existe, o boleto não sai. Preencha abrindo
-          a linha da unidade.
-          <DetalheTecnico>
             <p style={{ margin: 0 }}>
-              A recusa é <code>PagadorSemEndereco</code> (422) em <code>src/repos/boleto.ts</code>,
-              e a lista de campos sai de <code>faltamNoEndereco</code> em{' '}
-              <code>src/sicoob/porta.ts</code> — a mesma função que esta tela chama, para as duas
-              metades não divergirem. O número não entra na lista. Para a carteira inteira de uma
-              vez, <code>npm run enderecos</code>.
+              Sem endereço a recusa é <code>PagadorSemEndereco</code> (422) em <code>src/repos/boleto.ts</code>,
+              e a lista de campos sai de <code>faltamNoEndereco</code> em <code>src/sicoob/porta.ts</code> — a
+              mesma função que esta tela chama. O número não entra. Em lote: <code>npm run enderecos</code>.
             </p>
           </DetalheTecnico>
         </Aviso>
@@ -319,8 +315,7 @@ export function TelaUnidades() {
         <Busca valor={busca} ao={setBusca} dica="Buscar pelo número da unidade ou pela distribuidora…" />
         {/* As opcoes saem do vocabulario FECHADO de `unidades-regras`, e nao de
             uma lista escrita aqui: uma situacao nova sem opcao de filtro ficaria
-            invisivel, e `inativa` - que estava nesta lista - nem existe no enum
-            do banco (`ativa | suspensa | cancelada`), entao filtrava por nada. */}
+            invisivel. */}
         <Filtro valor={situacao} ao={setSituacao} rotulo="Filtrar por situação"
                 opcoes={[{ valor: '', texto: 'Todas as situações' },
                          ...(Object.keys(ROTULO_DA_SITUACAO) as SituacaoDaUc[])
@@ -338,53 +333,56 @@ export function TelaUnidades() {
         )}
       </Ferramentas>
 
+      {/*
+        CINCO COLUNAS, E CABEM EM 1120px (30/09/2026, etapa 4a). Eram oito — e a
+        tabela escondia 437px na própria caixa a 1280. Juntaram-se a unidade, a
+        distribuidora e a usina numa coluna só; a fatia do cliente, a tarifa e o
+        endereço foram para o DETALHE da linha, que abre com «Abrir»; e entrou
+        «O que falta», que resume a linha. O vencimento ficou na linha porque é o
+        campo que se preenche em série, uma unidade depois da outra.
+      */}
       <Tabela cabecalho={<>
                 <ThOrd chave="uc" ordem={ordem} ao={alternar}>Unidade</ThOrd>
-                <ThOrd chave="distribuidora" ordem={ordem} ao={alternar}>Distribuidora</ThOrd>
-                <ThOrd chave="usina" ordem={ordem} ao={alternar}>Usina</ThOrd>
-                <ThOrd chave="rateio" ordem={ordem} ao={alternar} num>Fatia do cliente %</ThOrd>
-                <ThOrd chave="tarifa" ordem={ordem} ao={alternar} num>Tarifa R$/kWh</ThOrd>
-                <ThOrd chave="vencimento" ordem={ordem} ao={alternar}>Vencimento</ThOrd>
                 <ThOrd chave="situacao" ordem={ordem} ao={alternar}>Situação</ThOrd>
-                <th>Endereço do pagador</th>
+                <ThOrd chave="falta" ordem={ordem} ao={alternar}>O que falta</ThOrd>
+                <ThOrd chave="vencimento" ordem={ordem} ao={alternar}>Vencimento</ThOrd>
+                <th><span className="so-leitor">Detalhe</span></th>
               </>}
               vazio={todas.length
                 ? 'Nenhuma unidade corresponde à busca ou aos filtros.'
                 : 'Nenhuma unidade consumidora espelhada.'}>
-        {visiveis.map((u) => (
+        {visiveis.map((u) => {
+          const faltas = faltasDaUc(u);
+          const usina = nomeUsina(u.usina_id);
+          const estaAberta = aberta === u.id;
+          return (
           <Fragment key={u.id}>
-          <tr>
-            <td><strong>{u.numero_uc}</strong></td>
-            <td className="fraco">{u.distribuidora}</td>
-            <td className="fraco">{nomeUsina(u.usina_id) ?? <span style={{ color: 'var(--erro)' }}>Sem usina</span>}</td>
-            {/*
-              OS DOIS CAMPOS DA LINHA PARECEM TEXTO ATE RECEBEREM ATENCAO
-              (classe `inline`), e o "OK" virou botao redondo de check. E o pedido
-              de 30/07, e ele conserta um problema real desta tabela: sao 39 linhas
-              com dois inputs e dois botoes cada, e a versao anterior desenhava 156
-              caixas com borda visivel de uma vez. A tela parecia um formulario
-              gigante em vez de uma lista com dois campos editaveis.
-            */}
-            <td className="num" style={{ minWidth: 140 }}>
-              <div className="inline" style={{ justifyContent: 'flex-end' }}>
-                <input value={rateio[u.id] ?? u.percentual_rateio ?? ''}
-                       aria-label={`Rateio da ${u.numero_uc}`}
-                       onChange={(e) => setRateio({ ...rateio, [u.id]: e.target.value })}
-                       placeholder="Ex. 12,5" style={{ width: 82, textAlign: 'right' }} />
-                <BotaoDeIcone icone="confirmar" rotulo={`Gravar a fatia da unidade ${u.numero_uc}`}
-                              ao={() => void salvarRateio(u)}
-                              desabilitado={acao.ocupado || !u.usina_id} />
+          <tr className={estaAberta ? 'linha-aberta' : undefined}>
+            <td>
+              <strong>{u.numero_uc}</strong>
+              <div className="uc-meta">
+                {u.distribuidora}
+                {usina ? <> · usina {usina}</> : null}
               </div>
             </td>
-            <td className="num" style={{ minWidth: 150 }}>
-              <div className="inline" style={{ justifyContent: 'flex-end' }}>
-                <input value={tarifa[u.id] ?? u.tarifa_reais_por_kwh ?? ''}
-                       aria-label={`Tarifa da ${u.numero_uc} em R$ por kWh`}
-                       onChange={(e) => setTarifa({ ...tarifa, [u.id]: e.target.value })}
-                       placeholder="1,185396" style={{ width: 92, textAlign: 'right' }} />
-                <BotaoDeIcone icone="confirmar" rotulo={`Gravar a tarifa da ${u.numero_uc}`}
-                              ao={() => void salvarTarifa(u)} desabilitado={acao.ocupado} />
-              </div>
+            <td>
+              <Marca tom={TOM_DA_SITUACAO[situacaoDaUc(u)]} icone={ICONE_DA_SITUACAO[situacaoDaUc(u)]}>
+                {ROTULO_DA_SITUACAO[situacaoDaUc(u)]}
+              </Marca>
+            </td>
+            {/* O QUE FALTA, em palavras e com o lápis da tarefa — não em vermelho.
+                Vazio é «Nada falta», escrito e apagado: o completo também é
+                informação, mas trinta selos verdes enterrariam as oito linhas
+                âmbar que são o trabalho. */}
+            <td className="uc-falta">
+              {faltas.length === 0
+                ? <span className="fraco">Nada falta</span>
+                : (
+                  <span className="uc-falta-lista">
+                    <Icone nome="a_fazer" tamanho={13} peso="bold" />
+                    <span>Falta {faltas.map((f) => f.rotulo).join(', ')}</span>
+                  </span>
+                )}
             </td>
             <td style={{ minWidth: 180 }}>
               <div className="inline">
@@ -395,48 +393,47 @@ export function TelaUnidades() {
                               ao={() => void salvarVencimento(u)} desabilitado={acao.ocupado} />
               </div>
             </td>
-            <td>
-              <Marca tom={TOM_DA_SITUACAO[situacaoDaUc(u)]} icone={ICONE_DA_SITUACAO[situacaoDaUc(u)]}>
-                {ROTULO_DA_SITUACAO[situacaoDaUc(u)]}
-              </Marca>
-            </td>
-            {/* O ENDERECO E BOTAO E NAO CAMPO, e a razao e a mesma do comentario
-                dos dois inputs acima: sao SETE campos, e desenha-los na linha em
-                41 linhas seriam 287 caixas de texto de uma vez. O botao diz o
-                estado e abre o painel de quem precisa mexer. */}
-            <td style={{ minWidth: 210 }}>
-              <button onClick={() => setEnderecoAberto(enderecoAberto === u.id ? null : u.id)}
-                      aria-expanded={enderecoAberto === u.id}
-                      title={enderecoNumaLinha(u) ?? 'Nenhum campo de endereço preenchido'}>
-                <Icone nome={enderecoAberto === u.id ? 'limpar' : 'unidades'} tamanho={14} />
-                <Marca tom={tomDoEndereco(u)}>
-                  {rotuloDoEndereco(u)}
-                </Marca>
+            <td className="uc-abrir">
+              <button type="button" onClick={() => setAberta(estaAberta ? null : u.id)}
+                      aria-expanded={estaAberta} aria-controls={`detalhe-${u.id}`}
+                      aria-label={`${estaAberta ? 'Fechar' : 'Abrir'} o detalhe da unidade ${u.numero_uc}`}>
+                <Icone nome={estaAberta ? 'abrir_menu' : 'abrir_linha'} tamanho={13} peso="bold" />
+                {estaAberta ? 'Fechar' : 'Abrir'}
               </button>
             </td>
           </tr>
-          {enderecoAberto === u.id && (
-            <tr>
-              {/* `--fundo-recuo` e a terceira superficie da paleta, a mesma que o
-                  painel da aba Faturas usa: sem ela o painel aberto se confunde
-                  com a linha seguinte da tabela. */}
-              <td colSpan={8} id={`endereco-${u.id}`} style={{ background: 'var(--fundo-recuo)' }}>
-                <EnderecoDoPagador uc={u} ocupado={acao.ocupado}
-                                   daConta={daConta.dado?.find((c) => c.numero_uc === u.numero_uc)}
-                                   aoGravar={(campos) => void salvarEndereco(u, campos)} />
+          {estaAberta && (
+            <tr className="linha-detalhe">
+              {/* `--fundo-recuo` e a terceira superficie da paleta: sem ela o
+                  detalhe aberto se confunde com a linha seguinte da tabela. */}
+              <td colSpan={5} id={`detalhe-${u.id}`} style={{ background: 'var(--fundo-recuo)' }}>
+                <UsinaEPreco uc={u} usina={usina} ocupado={acao.ocupado}
+                             rateio={rateio[u.id] ?? u.percentual_rateio ?? ''}
+                             aoMudarRateio={(v) => setRateio({ ...rateio, [u.id]: v })}
+                             aoGravarRateio={() => void salvarRateio(u)}
+                             tarifa={tarifa[u.id] ?? u.tarifa_reais_por_kwh ?? ''}
+                             aoMudarTarifa={(v) => setTarifa({ ...tarifa, [u.id]: v })}
+                             aoGravarTarifa={() => void salvarTarifa(u)} />
+                <hr className="detalhe-regua" />
+                {/* O id `endereco-<uc>` e o do destino de «Completar o endereço»
+                    (Cobranças): o foco cai no primeiro campo vazio DAQUI. */}
+                <div id={`endereco-${u.id}`}>
+                  <h4 className="detalhe-tit">Endereço do pagador</h4>
+                  <EnderecoDoPagador uc={u} ocupado={acao.ocupado}
+                                     daConta={daConta.dado?.find((c) => c.numero_uc === u.numero_uc)}
+                                     aoGravar={(campos) => void salvarEndereco(u, campos)} />
+                </div>
                 {/* O VINCULO VEM DEPOIS DO ENDERECO, e a ordem e de frequencia:
                     endereco e trabalho de cadastro que quase toda linha precisa
-                    uma vez; o vinculo e a pergunta que se faz sobre UMA linha,
-                    quando o aviso de Pendencias a nomeia. Poe-lo em cima faria a
-                    leitura do outro banco acontecer toda vez que alguem abrisse
-                    uma linha para digitar um CEP. */}
-                <hr style={{ border: 0, borderTop: '1px solid var(--borda-suave)', margin: '14px 0' }} />
+                    uma vez; o vinculo e a pergunta que se faz sobre UMA linha. */}
+                <hr className="detalhe-regua" />
                 <VinculoComOutroSistema ucId={u.id} aoDestravar={() => ucs.recarregar()} />
               </td>
             </tr>
           )}
           </Fragment>
-        ))}
+          );
+        })}
       </Tabela>
       <p className="sub" style={{ marginTop: 12 }}>
         O que vale é o <strong>dia</strong>, e ele é o <strong>dia da distribuidora</strong> — não o
@@ -456,6 +453,64 @@ export function TelaUnidades() {
         digitado aqui.
       </p>
     </Pagina>
+  );
+}
+
+/**
+ * A USINA, A FATIA E O PREÇO — no detalhe da linha desde 30/09/2026 (etapa 4a).
+ *
+ * Eram duas colunas com campo e botão em cada uma das 41 linhas, e com elas a
+ * tabela não cabia na tela. São dados que se preenchem UMA vez por unidade — e
+ * quase sempre chegam sozinhos: a fatia vem do outro sistema, e a tarifa o
+ * sistema calcula quando o cadastro traz o consumo em kWh e em reais. A coluna
+ * «O que falta» da linha diz quando algum dos dois está vazio.
+ *
+ * A GRAVAÇÃO É A MESMA DE ANTES, campo a campo, com o mesmo botão de confirmar:
+ * a fatia vai como TEXTO (proporção em escala decimal, regra 1) e só com usina;
+ * a tarifa vai com seis casas (R22).
+ */
+function UsinaEPreco(p: {
+  uc: UnidadeConsumidora; usina: string | null; ocupado: boolean;
+  rateio: string; aoMudarRateio: (v: string) => void; aoGravarRateio: () => void;
+  tarifa: string; aoMudarTarifa: (v: string) => void; aoGravarTarifa: () => void;
+}) {
+  const { uc } = p;
+  return (
+    <div className="detalhe-bloco">
+      <h4 className="detalhe-tit">Usina e preço</h4>
+      <div className="campos detalhe-campos">
+        <div>
+          <label>Usina</label>
+          <p className="detalhe-valor">
+            {p.usina ?? <span className="uc-falta-lista"><Icone nome="a_fazer" tamanho={13} peso="bold" /> Sem usina — ela vem do outro sistema</span>}
+          </p>
+        </div>
+        <div>
+          <label htmlFor={`fatia-${uc.id}`}>Fatia do cliente (%)</label>
+          <div className="inline">
+            <input id={`fatia-${uc.id}`} value={p.rateio}
+                   onChange={(e) => p.aoMudarRateio(e.target.value)}
+                   placeholder="Ex. 12,5" style={{ width: 96, textAlign: 'right' }} />
+            <BotaoDeIcone icone="confirmar" rotulo={`Gravar a fatia da unidade ${uc.numero_uc}`}
+                          ao={p.aoGravarRateio} desabilitado={p.ocupado || !uc.usina_id} />
+          </div>
+        </div>
+        <div>
+          <label htmlFor={`tarifa-${uc.id}`}>Tarifa R$/kWh</label>
+          <div className="inline">
+            <input id={`tarifa-${uc.id}`} value={p.tarifa}
+                   onChange={(e) => p.aoMudarTarifa(e.target.value)}
+                   placeholder="1,185396" style={{ width: 110, textAlign: 'right' }} />
+            <BotaoDeIcone icone="confirmar" rotulo={`Gravar a tarifa da ${uc.numero_uc}`}
+                          ao={p.aoGravarTarifa} desabilitado={p.ocupado} />
+          </div>
+        </div>
+        <div>
+          <label>Distribuidora</label>
+          <p className="detalhe-valor">{uc.distribuidora}</p>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -547,7 +602,11 @@ function EnderecoDoPagador({ uc, ocupado, daConta, aoGravar }: {
             </span>
           </div>
           {cepDaContaErrado && (
-            <p style={{ margin: '8px 0 0', fontSize: 12.5, color: 'var(--erro)' }}>{cepDaContaErrado}</p>
+            /* ÂMBAR (30/09/2026, etapa 4a): é um cuidado ao copiar, não uma falha
+               — o vermelho ficou para a recusa do banco. */
+            <p className="uc-falta-lista" style={{ margin: '8px 0 0', fontSize: 12.5 }}>
+              <Icone nome="aviso_alerta" tamanho={13} peso="bold" /> <span>{cepDaContaErrado}</span>
+            </p>
           )}
           {/* O QUE ESTE BOTÃO NÃO FAZ, dito onde ele está: ele preenche o
               formulário e para. Nada é gravado sem alguém apertar «Gravar

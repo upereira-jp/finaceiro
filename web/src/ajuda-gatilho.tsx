@@ -124,3 +124,19 @@ export function GatilhoDeAjuda(p: GatilhoDeAjuda) {
     </>
   );
 }
+
+/* ==========================================================================
+ * ABRIR A AJUDA DE DENTRO DE UMA TELA (30/09/2026, etapa 4a)
+ * ==========================================================================
+ *
+ * O «Como ler esta tela» da tela Mês saiu da página e virou assunto da central;
+ * na tela ficou um link. Quem o clica precisa do PAINEL aberto, e o estado do
+ * painel mora no `app.tsx` — por isso é um evento, o mesmo gesto que `rota.tsx`
+ * usa para navegar sem passar a navegação de mão em mão. `topico` abre aquele
+ * assunto já expandido.
+ */
+export const EVENTO_ABRIR_AJUDA = 'financeiro:abrir-ajuda';
+
+export function abrirAjuda(topico?: string): void {
+  dispatchEvent(new CustomEvent(EVENTO_ABRIR_AJUDA, { detail: { topico: topico ?? null } }));
+}

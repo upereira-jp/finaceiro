@@ -32,13 +32,19 @@
 //
 //   QUANDO TUDO FECHA, A CAIXA FALA. Uma caixa que some quando o mês acaba tem a
 //   mesma cara de uma caixa que quebrou.
+//
+// [30/09/2026, etapa 4a] O BOLETO DE OUTRO MÊS É UM AVISO, NÃO O DESTAQUE. Ele
+// ganhou uma linha própria logo abaixo da frase do mês, com o link para o mês
+// dele em Cobranças — e deixou de pôr o «Comece aqui» num passo vazio no mês
+// escolhido. Ver `AvisoDeOutrosMeses` em `roteiro-do-mes.ts`.
 
 import { useId, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Ligacao } from './rota.tsx';
 import { Icone } from './ui.tsx';
 import {
   mesNoFunil, ondeEstouNoMes,
-  type ChaveDoPasso, type LeituraDoMes, type PassoDoMes, type PassoNoMapa, type TravaDoPasso,
+  type AvisoDeOutrosMeses, type ChaveDoPasso, type LeituraDoMes, type PassoDoMes, type PassoNoMapa,
+  type TravaDoPasso,
 } from './roteiro-do-mes.ts';
 
 /** Um passo do funil, como aba. O número, o título, a contagem e o risco. */
@@ -62,7 +68,12 @@ function AbaDoPasso({ passo, escolhido, idAba, idPainel, aoEscolher }: {
       </span>
       <span className="roteiro-qtd">{medido ? passo.quantos : '—'}</span>
       <span className="roteiro-rot">{medido ? passo.rotulo : 'não medido'}</span>
-      {passo.contexto && <span className="roteiro-ctx">{passo.contexto}</span>}
+      {passo.contexto && (
+        <span className={`roteiro-ctx${passo.deOutrosMeses ? ' fora' : ''}`}>
+          {passo.deOutrosMeses && <Icone nome="aviso_alerta" tamanho={12} peso="bold" />}
+          {passo.contexto}
+        </span>
+      )}
       {passo.risco && (
         <span className="roteiro-risco">
           <Icone nome="aviso_alerta" tamanho={14} peso="bold" /> {passo.risco.frase}
@@ -87,6 +98,8 @@ function PainelDoPasso({ passo, idAba, idPainel }: { passo: PassoDoMes; idAba: s
         </p>
       )}
 
+      {passo.deOutrosMeses && <AvisoDeFora aviso={passo.deOutrosMeses} />}
+
       <p className="roteiro-painel-oque">{passo.oQueFazer}</p>
 
       {/* O BOTÃO VEM ANTES DO «COMO», e não no fim dele: quem já sabe fazer não
@@ -108,12 +121,26 @@ function PainelDoPasso({ passo, idAba, idPainel }: { passo: PassoDoMes; idAba: s
   );
 }
 
+/** O boleto de outro mês que pede você: uma linha, com o link para o mês dele.
+ *  Peso de aviso, e não de risco — ver `AvisoDeOutrosMeses`. */
+function AvisoDeFora({ aviso }: { aviso: AvisoDeOutrosMeses }) {
+  return (
+    <p className="roteiro-fora">
+      <Icone nome="aviso_alerta" tamanho={14} peso="bold" />
+      <span>
+        {aviso.frase}{' '}
+        <Ligacao para={aviso.endereco}>Abrir Cobranças</Ligacao>
+      </span>
+    </p>
+  );
+}
+
 /** Uma pendência de cadastro: o que é, quantos, e o ato que a resolve. */
 function Trava({ trava }: { trava: TravaDoPasso }) {
   return (
     <li>
       <span className="roteiro-trava-nome">{trava.titulo}</span>
-      {trava.faltam > 0 && <span className="fraco"> · {trava.faltam} {trava.contagem}</span>}
+      {trava.faltam > 0 && <span className="fraco"> ({trava.faltam} {trava.contagem})</span>}
       {' '}
       {trava.endereco && trava.rotuloDoDestino
         ? <Ligacao para={trava.endereco}>{trava.rotuloDoDestino}</Ligacao>
@@ -174,6 +201,9 @@ export function CorpoDoRoteiro({ competencia, ...leitura }: CorpoDoRoteiro) {
           {mes.estado === 'fechado' && <Icone nome="ok" tamanho={16} peso="bold" />}
           {mes.frase}
         </p>
+        {/* O QUE DE OUTROS MESES PEDE VOCÊ, com peso de aviso: abaixo da frase,
+            fora dos passos, e com o link para o mês dele. */}
+        {mes.deOutrosMeses && <AvisoDeFora aviso={mes.deOutrosMeses} />}
       </div>
 
       <div className="roteiro-passos" role="tablist" aria-label="Os cinco passos do mês" onKeyDown={aoTeclar}>
@@ -228,11 +258,13 @@ export function CorpoDoRoteiro({ competencia, ...leitura }: CorpoDoRoteiro) {
 const nomes = (ps: readonly PassoNoMapa[]): string =>
   (ps.length === 1 ? ps[0]!.titulo : `${ps.slice(0, -1).map((p) => p.titulo).join(', ')} e ${ps[ps.length - 1]!.titulo}`);
 
-/** O rótulo da tela onde um passo vizinho acontece, quando não é esta mesma. */
+/** O rótulo da tela onde um passo vizinho acontece, quando não é esta mesma.
+ *  «Antes daqui: o passo 2, Gerar as cobranças, em Contas de luz.» — sem o «·»
+ *  no meio da frase desde 30/09/2026 (etapa 4a). */
 function Vizinho({ passo, rotulo }: { passo: PassoNoMapa; rotulo: string }) {
   return (
     <>
-      {rotulo} <strong>{passo.numero} · {passo.titulo}</strong>
+      {rotulo} o passo {passo.numero}, <strong>{passo.titulo}</strong>
       {passo.destino && <>, em <Ligacao para={passo.destino.endereco}>{passo.destino.rotulo}</Ligacao></>}.
     </>
   );

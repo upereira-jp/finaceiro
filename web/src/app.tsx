@@ -32,7 +32,7 @@ import {
 } from './ui.tsx';
 import { useCaminho, navegar } from './rota.tsx';
 import { telaDoCaminho, funilDoCaminho, funisVisiveis, destinoVisivel } from './navegacao.ts';
-import { GatilhoDeAjuda } from './ajuda-gatilho.tsx';
+import { GatilhoDeAjuda, EVENTO_ABRIR_AJUDA } from './ajuda-gatilho.tsx';
 import { MenuLateral } from './menu-lateral.tsx';
 import { Login } from './telas/login.tsx';
 /*
@@ -147,6 +147,20 @@ export function App() {
    *  que tinha para dizer, e insistir depois disso e o que transforma uma dica em
    *  incomodo. */
   const encerrarAviso = () => { setAvisoDaAjuda(false); marcarAvisoVisto(); };
+
+  /* O ASSUNTO PEDIDO DE DENTRO DE UMA TELA (30/09/2026, etapa 4a): o link «Como
+   * ler esta lista», da tela Mês, abre o painel já nesse assunto. É um evento
+   * porque o estado do painel mora aqui — ver `abrirAjuda`. */
+  const [topicoDaAjuda, setTopicoDaAjuda] = useState<string | null>(null);
+  useEffect(() => {
+    const abrir = (e: Event) => {
+      setTopicoDaAjuda((e as CustomEvent<{ topico: string | null }>).detail?.topico ?? null);
+      setAjudaAberta(true);
+      setAvisoDaAjuda(false); marcarAvisoVisto();
+    };
+    addEventListener(EVENTO_ABRIR_AJUDA, abrir);
+    return () => removeEventListener(EVENTO_ABRIR_AJUDA, abrir);
+  }, []);
 
   /*
    * O SETOR QUE O VÍNCULO NÃO VÊ (30/09/2026). O menu só desenha os setores do
@@ -280,7 +294,7 @@ export function App() {
       */}
       <GatilhoDeAjuda
         aberta={ajudaAberta}
-        aoAbrir={() => { setAjudaAberta(true); encerrarAviso(); }}
+        aoAbrir={() => { setTopicoDaAjuda(null); setAjudaAberta(true); encerrarAviso(); }}
         aviso={avisoDaAjuda && Boolean(s.tenantId)}
         aoFecharAviso={encerrarAviso}
       />
@@ -289,7 +303,7 @@ export function App() {
           piscando por cima da pagina seria mais ruido do que espera. */}
       {ajudaAberta && (
         <Suspense fallback={null}>
-          <PainelDeAjuda rota={tela.rota} aoFechar={() => setAjudaAberta(false)} />
+          <PainelDeAjuda rota={tela.rota} topico={topicoDaAjuda} aoFechar={() => setAjudaAberta(false)} />
         </Suspense>
       )}
     </>

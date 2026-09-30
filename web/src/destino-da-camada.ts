@@ -203,8 +203,9 @@ export const DESTINO_DA_CAMADA: Record<string, DestinoDaCamada> = {
     nota: 'O preço vem impresso na conta da distribuidora e é lido com até seis casas. Esta linha '
       + 'acusa a conta em que ele ficou ZERADO — e zero é recusado de propósito, porque a folha '
       + 'sairia dizendo que o kWh não custa nada. Corrige-se na própria leitura e registra-se de '
-      + 'novo. A coluna «Tarifa R$/kWh» da tela Unidades consumidoras é outra coisa: ela serve o '
-      + 'caminho em lote, que não é o oficial, e o conector continua semeando ela do card.',
+      + 'novo. O campo «Tarifa R$/kWh», no detalhe da unidade em Unidades consumidoras, é outra '
+      + 'coisa: ele serve o caminho em lote, que não é o oficial, e o conector continua semeando ele '
+      + 'do card.',
   },
 
   /*

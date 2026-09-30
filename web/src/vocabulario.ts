@@ -489,15 +489,20 @@ export function tituloDoGrupo(chave: ChaveDoGrupo, competencia: string): string 
 }
 
 /** A frase de baixo. Carrega o NÚMERO de unidades porque é ele que dá tamanho ao
- *  trabalho: «faltam 11» não diz nada sem saber que o total é 29. */
+ *  trabalho: «faltam 11» não diz nada sem saber que o total é 29.
+ *
+ *  [30/09/2026, etapa 4a] É A EXPLICAÇÃO DA LINHA, DITA UMA VEZ. A tela Mês
+ *  tirou a prosa de cada linha e a coluna «Efeito», que repetia o título do
+ *  grupo linha a linha; o que as linhas do grupo travam é dito aqui, curto, e
+ *  a ordem do trabalho — que era um marcador do «Como ler esta tela» — também. */
 export function subDoGrupo(chave: ChaveDoGrupo, unidades: number): string {
   if (chave === 'bloqueia_boleto') {
-    return 'A cobrança existe e pode ser paga por Pix mesmo com estas linhas abertas. O que não '
-         + 'nasce é o boleto — o banco recusa emitir, e a fatura fica sem título.';
+    return 'A cobrança existe e pode ser paga por Pix; o que o banco recusa, com estas linhas '
+         + 'abertas, é o boleto.';
   }
   if (chave !== 'bloqueia_fatura') {
-    return 'A cobrança sai normalmente mesmo com estas linhas abertas. O que fica parado é o '
-         + 'repasse ao dono da usina e a comissão de quem indicou, quando o dinheiro entrar.';
+    return 'A cobrança sai normalmente. O que trava é o repasse ao dono da usina e a comissão de '
+         + 'quem indicou, quando o dinheiro entrar.';
   }
   /*
    * A FRASE NÃO PROMETE MAIS «enquanto qualquer uma estiver aberta, a cobrança
@@ -515,8 +520,9 @@ export function subDoGrupo(chave: ChaveDoGrupo, unidades: number): string {
    * aberta; pela regra 10 não é aqui que ela se decide.
    */
   const n = `${unidades} unidade${unidades === 1 ? '' : 's'} ativa${unidades === 1 ? '' : 's'}`;
-  return `As ${n} deste mês dependem das linhas abaixo. Comece pelas que estão marcadas como `
-       + 'falta preencher, na ordem em que aparecem.';
+  const um = unidades === 1;
+  return `${um ? 'A' : 'As'} ${n} do mês ${um ? 'depende' : 'dependem'} destas linhas, na ordem: `
+       + 'fechar a de cima costuma destravar as de baixo.';
 }
 
 /**

@@ -46,13 +46,14 @@ import {
   horaDaLinha, veioCortada, ehRodadaAutomatica, VERBO,
   type LinhaDaTrilha, type RespostaDaTrilha,
 } from '../historico.ts';
+import type { TomDoSelo } from '../iconografia.ts';
 
-/** O tom de cada operação: criar é ganho, apagar é perda, alterar é neutro. Os
- *  três tons são os mesmos das outras telas — `ok`, `pendente`, `nao_medido` —,
- *  e "pendente" aqui não quer dizer que há trabalho a fazer: quer dizer que a
- *  linha merece um segundo olhar, que é o que apagar merece. */
-const TOM: Record<string, 'ok' | 'pendente' | 'nao_medido'> = {
-  I: 'ok', U: 'nao_medido', D: 'pendente',
+/** O tom de cada operação: criar é ganho, alterar é meio do caminho, apagar é
+ *  `neutro`. [30/09, etapa 4a] Apagar era vermelho, e o vermelho passou a ser só
+ *  da FALHA (`TomDoSelo`): uma exclusão registrada na trilha é um fato, não um
+ *  defeito. O ícone da lixeira e o verbo continuam dizendo o que foi. */
+const TOM: Record<string, TomDoSelo> = {
+  I: 'ok', U: 'nao_medido', D: 'neutro',
 };
 
 const hojeISO = () => new Date().toISOString().slice(0, 10);

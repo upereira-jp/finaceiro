@@ -31,6 +31,8 @@
 // botao que o servidor vai recusar - e o servidor recusa de qualquer forma, o
 // que e a ordem certa: a UI economiza um erro, ela nao autoriza nada.
 
+import type { TomDoSelo } from './iconografia.ts';
+
 /** Status da fatura, como o enum `status_fatura` do banco. */
 export type StatusFatura = 'rascunho' | 'emitida' | 'paga' | 'vencida' | 'cancelada' | 'negociada';
 
@@ -347,10 +349,13 @@ export function conferirTarifas(
   };
 }
 
-/** Tom da marca de status, para a tela nao decidir cor por `if` espalhado. */
-export function tomDoStatusDaFatura(s: StatusFatura): 'ok' | 'pendente' | 'nao_medido' {
+/** Tom da marca de status, para a tela nao decidir cor por `if` espalhado.
+ *  [30/09, etapa 4a] Cancelada saiu do vermelho: cancelar e uma decisao, nao uma
+ *  falha — e `neutro`. Vermelha fica so a vencida (`TomDoSelo`). */
+export function tomDoStatusDaFatura(s: StatusFatura): TomDoSelo {
   if (s === 'paga') return 'ok';
-  if (s === 'vencida' || s === 'cancelada') return 'pendente';
+  if (s === 'vencida') return 'erro';
+  if (s === 'cancelada') return 'neutro';
   return 'nao_medido';
 }
 
