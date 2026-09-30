@@ -236,18 +236,18 @@ export function TelaDocumento() {
         por, deve ser exatamente igual, com bordas iguais, sistema de cores,
         tipografia"*.
 
-        POR QUE UMA CLASSE NA RAIZ E NAO CSS NOVO NAS TELAS. Dentro deste `div`
-        valem outra fonte (Barlow e Barlow Semi Condensed), outra paleta
-        (`--g3ref-*`), raio ZERO e sombra NENHUMA. Fora dele, nada muda — as
-        outras onze telas continuam sendo Inter, raio 12 e a paleta da casa. A
-        ilha e explicita e tem fronteira; se um dia ela virar o padrao, tira-se a
-        classe daqui e sobem-se os tokens para o `:root`. O bloco de CSS esta em
-        `estilo.ts`, na secao "A ABA DOCUMENTO E A REFERENCIA", e o de tokens em
-        `tema.ts`.
+        POR QUE UMA CLASSE NA RAIZ E NAO CSS NOVO NAS TELAS. Ate 30/09 dentro
+        deste `div` valiam outra fonte (Barlow e Barlow Semi Condensed), outra
+        paleta (`--g3ref-*`), raio ZERO e sombra NENHUMA, e fora dele as outras
+        telas eram Inter, raio 12 e a paleta da casa. Este comentario previa o
+        dia seguinte: "se um dia ela virar o padrao, tira-se a classe daqui e
+        sobem-se os tokens para o `:root`".
 
-        E ELE ENVOLVE OS AVISOS TAMBEM, de proposito: um `Aviso` com o raio e a
-        sombra da casa em cima de cartoes quadrados sem sombra e exatamente a
-        costura aparecendo.
+        ESSE DIA FOI 30/09/2026 (etapa 0 do redesenho): os tokens subiram e a
+        paleta propria saiu. A CLASSE FICOU, e agora so da escopo ao que e desta
+        tela — grade de duas colunas, abas de etapa, area de envio, painel navy.
+        Fonte, cor, campo, botao e aviso sao os do sistema. O bloco de CSS esta
+        em `estilo.ts`, secao "A FATURA UNIFICADA E A REFERENCIA".
       */}
       <div className="g3ref">
 

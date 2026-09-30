@@ -790,12 +790,14 @@ function Abas({ atual, ordem, ao, acao }: {
         </Fragment>
       ))}
       <span style={{ flex: 1 }} />
-      {/* `fu-acao` E NAO `fu-aba`, e ate 14/08 era a segunda. Ela pegava o desenho
-          de aba — inclusive o fundo laranja se alguem a marcasse — para um botao
-          que nao seleciona painel nenhum. Na referencia ela e um contorno navy
-          numa faixa propria acima da grade; aqui e o mesmo contorno, no fim da
-          mesma linha, que e a mesma posicao na tela. */}
-      <button type="button" className="fu-acao" onClick={acao.ao}>{acao.texto}</button>
+      {/* BOTAO COMUM E NAO `fu-aba`, e ate 14/08 era a segunda. Ela pegava o
+          desenho de aba — inclusive o fundo laranja se alguem a marcasse — para
+          um botao que nao seleciona painel nenhum. Na referencia ela e um
+          contorno navy numa faixa propria acima da grade; ate 30/09 era a classe
+          `fu-acao`, que copiava esse contorno. Desde a etapa 0 do redesenho ela
+          e o botao comum da casa, que ja fala o g3ref — um desenho de botao a
+          menos, na mesma posicao da tela. */}
+      <button type="button" onClick={acao.ao}>{acao.texto}</button>
     </div>
   );
 }
@@ -917,7 +919,7 @@ function AbaDeLeitura(p: PropsDeLeitura) {
           </label>
           <div className="fu-status solto">{p.statusFatura}</div>
           <div className="fu-status solto">
-            <button type="button" className="fu-acao" onClick={p.digitarConta}>
+            <button type="button" onClick={p.digitarConta}>
               Digitar uma conta sem arquivo
             </button>
           </div>
@@ -946,7 +948,7 @@ function AbaDeLeitura(p: PropsDeLeitura) {
             emissor estão em branco, e nada recusa por isso: o cabeçalho, o campo «Beneficiário» da
             faixa de pagamento e o aviso contra boleto falso somem — é o nome que os sustenta.
             {' '}
-            <button type="button" className="fu-acao"
+            <button type="button"
                     onClick={() => { window.location.hash = FRAGMENTO_DA_ABA_OCULTA; }}>
               Cadastrar quem emite a fatura
             </button>
@@ -1262,14 +1264,14 @@ function FilaDoLote({ itens, ucs, registrando, registrar, conferir, remover, lim
           ele age SO sobre as linhas conferidas, e o numero e a promessa do que
           vai acontecer. "Tudo" prometeria incluir as que tem pendencia. */}
       <div className="fu-status solto" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button type="button" className="fu-acao"
+        <button type="button"
                 disabled={registrando || prontos.length === 0}
                 onClick={() => registrar(prontos)}>
           {registrando
             ? 'Registrando…'
             : `Registrar ${prontos.length} ${prontos.length === 1 ? 'conta conferida' : 'contas conferidas'}`}
         </button>
-        <button type="button" className="fu-acao" disabled={registrando} onClick={limpar}>
+        <button type="button" disabled={registrando} onClick={limpar}>
           Limpar a fila
         </button>
       </div>
@@ -1307,14 +1309,14 @@ function FilaDoLote({ itens, ucs, registrando, registrar, conferir, remover, lim
               <td>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {i.campos && i.estado !== 'registrando' && (
-                    <button type="button" className="fu-acao" onClick={() => conferir(i)}>Conferir</button>
+                    <button type="button" onClick={() => conferir(i)}>Conferir</button>
                   )}
                   {i.estado === 'lido' && !pendencia && (
-                    <button type="button" className="fu-acao" disabled={registrando}
+                    <button type="button" disabled={registrando}
                             onClick={() => registrar([i.id])}>Registrar</button>
                   )}
                   {i.estado !== 'registrando' && (
-                    <button type="button" className="fu-acao" disabled={registrando}
+                    <button type="button" disabled={registrando}
                             onClick={() => remover(i.id)}>Tirar</button>
                   )}
                 </div>
@@ -1489,7 +1491,7 @@ function FaturasRegistradas({ uc, versao, registrar, registrando, statusRegistro
             {/* A 2a VIA VALE SEMPRE, cobrada ou nao: e o documento daquele mes,
                 remontado do que foi gravado. E o unico caminho de volta para a
                 folha depois que a aba fecha. */}
-            <button type="button" className="fu-texto"
+            <button type="button" className="discreto"
                     onClick={() => segundaVia(r.id, r.competencia, r.numero_uc)}>2ª via</button>
             {r.fatura_id ? (
               <span className="fu-registro-val">cobrança gerada</span>
@@ -1498,17 +1500,17 @@ function FaturasRegistradas({ uc, versao, registrar, registrando, statusRegistro
                 {/* O ato só é OFERECIDO quando este banco sabe executá-lo.
                     Oferecer sempre trocaria uma recusa nomeada por um clique
                     que falha, e quem opera não tem como saber a diferença. */}
-                <button type="button" className="fu-texto"
+                <button type="button" className="discreto"
                         onClick={() => void conferirAntes(r)} disabled={ensaiando !== null}>
                   {ensaiando === r.id ? 'conferindo…' : 'conferir antes'}
                 </button>
                 {r.cobranca_disponivel && (
-                  <button type="button" className="fu-texto"
+                  <button type="button" className="discreto"
                           onClick={() => void cobrar(r)} disabled={cobrando !== null}>
                     {cobrando === r.id ? 'gerando…' : 'gerar cobrança'}
                   </button>
                 )}
-                <button type="button" className="fu-texto" onClick={() => void apagar(r)}>excluir</button>
+                <button type="button" className="discreto" onClick={() => void apagar(r)}>excluir</button>
               </>
             )}
           </span>

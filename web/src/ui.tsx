@@ -38,8 +38,12 @@ export { ESTILO } from './estilo.ts';
 // ------------------------------------------------------------------- avisos
 
 /**
- * O AVISO. Faixa lateral de 4px na cor do estado, icone na mesma cor, e o TEXTO
- * em `--texto`.
+ * O AVISO. Fundo tingido do estado, contorno de 1px na mesma matiz, icone
+ * proprio na cor do estado, e o TEXTO em `--texto`.
+ *
+ * [30/09] ATE AQUI O ESTADO ERA UMA FAIXA LATERAL DE 4px, e ela saiu com a
+ * etapa 0 do redesenho: faixa grossa de cor num lado so e o "callout" de
+ * categoria, e o g3ref marca tudo com linha de 1px. Ver a nota em `estilo.ts`.
  *
  * A COR SAIU DO TEXTO DE PROPOSITO, em 30/07. Antes o aviso inteiro era escrito
  * na cor do estado, e a maioria dos avisos deste sistema tem dois paragrafos
@@ -90,14 +94,14 @@ export function DetalheTecnico({ children }: { children: ReactNode }) {
           mais, e você decide se quer» — e dois desenhos para um gesto só fariam
           a pessoa aprender duas vezes. */}
       <button type="button" className="ajuda-pergunta" aria-expanded={aberto}
-              style={{ fontSize: 12, fontWeight: 500, padding: '6px 0' }}
+              style={{ fontSize: 13, fontWeight: 500, padding: '6px 0' }}
               onClick={() => setAberto((x) => !x)}>
         <Icone nome={aberto ? 'subir' : 'descer'} tamanho={11} peso="bold" />
         {aberto ? 'ocultar detalhe técnico' : 'ver detalhe técnico'}
       </button>
       {aberto && (
         <div className="fraco detalhe-tecnico"
-             style={{ fontSize: 12, lineHeight: 1.55, paddingLeft: 19, paddingBottom: 8 }}>
+             style={{ fontSize: 13, lineHeight: 1.55, paddingLeft: 19, paddingBottom: 8 }}>
           {children}
         </div>
       )}
@@ -162,7 +166,7 @@ export function CampoData(p: {
  * primeira vez que alguem a ajustasse.
  */
 export const AjudaDoMes = () => (
-  <div className="fraco" style={{ fontSize: 12, marginTop: 2 }}>
+  <div className="fraco" style={{ fontSize: 13, marginTop: 2 }}>
     o mês do consumo, não o mês em que a fatura é paga
   </div>
 );
@@ -375,8 +379,11 @@ export const Carregando = ({ texto = 'Carregando…' }: { texto?: string }) => (
 // ------------------------------------------------------- cartao de metrica
 
 /**
- * O CARTAO DE METRICA. Borda de 1px, sombra do segundo degrau e o icone como
- * MARCA D'AGUA — grande, em `--acento`, a 11% de opacidade.
+ * O CARTAO DE METRICA. Borda de 1px, canto reto, o numero na condensada e o
+ * icone como MARCA D'AGUA — grande, em `--acento`, a 11% de opacidade.
+ *
+ * [30/09] A SOMBRA DO SEGUNDO DEGRAU SAIU com a etapa 0: no g3ref nada
+ * flutua, e o KPI e um cartao como os outros.
  *
  * A BORDA ESQUERDA DE 3px SAIU. Ela era o sinal de marca do cartao ate 29/07, e
  * o pedido de 30/07 foi exatamente trocar "borda generica grossa" por "borda

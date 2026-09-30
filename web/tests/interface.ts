@@ -20,7 +20,7 @@
 // de apresentacao, que e onde ela nunca tinha chegado neste projeto.
 
 import { ESTILO } from '../src/estilo.ts';
-import { VARIAVEIS_CSS } from '../src/tema.ts';
+import { VARIAVEIS_CSS, TIPOGRAFIA, RITMO } from '../src/tema.ts';
 import {
   ICONES_QUE_SE_MOVEM, ICONE_DO_ESTADO, ICONE_DO_AVISO, ICONE_DO_STATUS_DA_FATURA,
 } from '../src/iconografia.ts';
@@ -156,52 +156,41 @@ chk('I1c', JSON.stringify(achadas) === JSON.stringify(ESPERADAS),
     `no documento impresso, exatamente ${ESPERADAS.join(' ')} — Navy sobre branco, `
     + `independente do tema da tela (achadas: ${achadas.join(' ') || 'nenhuma'})`);
 
-// E O `#8F939D` NAO PODE VOLTAR — COM UMA EXCECAO NOMEADA, desde 14/08 a tarde.
+// E O `#8F939D` NAO PODE VOLTAR — e desde 30/09/2026 SEM EXCECAO NENHUMA.
 //
 // Ele e um valor da paleta entregue pela G3, entao a tentacao de reusa-lo "porque
 // e a cor da marca" e permanente — foi assim que ele chegou aqui. Ele reprova AA
 // nos TRES fundos do papel (3,08:1 no branco, 2,75:1 no creme, 2,31:1 na linha).
 //
-// A EXCECAO E A ILHA `.g3ref`, e ela e decisao do dono, consultado e respondido:
-// *"a referencia exata deve ser g3-fatura-unificada.vercel.app, sem tirar nem
-// por"*, e a pergunta sobre justamente estes dois valores foi feita com os
-// numeros medidos na mao. A aba Documento passa a usar `#8F939D` como tinta
-// apagada e `#E8843C` como tinta, que e o que a referencia usa. Registrado em
-// `QUESTOES.md` como `Q-DOCG3-15`.
+// DE 14/08 A 30/09 HOUVE UMA EXCECAO NOMEADA: a ilha `.g3ref` da aba Documento,
+// decisao do dono (*"a referencia exata ... sem tirar nem por"*, `Q-DOCG3-15`).
+// Estas tres linhas prendiam a fronteira dela — o Gray so dentro da ilha, so em
+// token `--g3ref-*`. Em 30/09 o dono decidiu que o g3ref e a identidade do
+// sistema INTEIRO e, na mesma decisao, que contraste AA e inegociavel ao
+// espalha-lo. A ilha deixou de ter paleta propria, e a excecao fechou.
 //
-// A EXCECAO E ESTREITA E ESTA VERIFICADA COMO TAL, em tres linhas:
+// A FRONTEIRA VIROU PROIBICAO, e a mudanca e de direcao, nao de afrouxamento:
 //
-//   I1d   nas REGRAS — o CSS sem o bloco de variaveis — o Gray continua proibido.
-//         Nenhuma regra pinta com ele; quem pinta e um `var(--g3ref-*)`
-//   I1e   no bloco de variaveis ele so aparece dentro de `.g3ref`, e nunca nos
-//         dois `:root`. Se ele vazar para o `:root` claro, o sistema INTEIRO
-//         volta a ter o Gray reprovado como tinta, que e o defeito de 12/08
-//   I1f   e ele so ocupa tokens `--g3ref-*`. Um `--fraco: #8F939D` dentro do
-//         `.g3ref` seria a mesma coisa por outro nome
+//   I1d   nas REGRAS o Gray continua proibido (sem mudanca)
+//   I1e   no bloco de variaveis ele tambem — em lugar nenhum, nem num escopo
+//   I1f   e nenhum token `--g3ref-*` sobrevive. Era por eles que o Gray (e o
+//         laranja como tinta, e o branco sobre o laranja) entravam; uma paleta
+//         paralela de volta e o caminho de volta dos tres
 //
-// A T7b de `web/tests/tema.ts` continua medindo o par e dizendo o numero. Nada
-// disto o aprova; isto registra ONDE ele vale e prende a fronteira.
+// A T7b de `web/tests/tema.ts` continua medindo o par e dizendo o numero.
 chk('I1d', !REGRAS.includes('#8F939D'),
-    'fora do bloco de variaveis o Gray #8F939D nao pinta nada — quem o carrega e o token '
-    + '--g3ref-apagado, e so dentro da ilha .g3ref');
+    'fora do bloco de variaveis o Gray #8F939D nao pinta nada');
 
-/** O bloco de tokens da ilha, do `.g3ref {` ate o fim do bloco escuro dela. */
-const BLOCO_G3REF = (() => {
-  const i = VARIAVEIS_CSS.indexOf('\n  .g3ref {');
-  return i < 0 ? '' : VARIAVEIS_CSS.slice(i);
-})();
-const VARIAVEIS_SEM_ILHA = BLOCO_G3REF ? VARIAVEIS_CSS.replace(BLOCO_G3REF, '') : VARIAVEIS_CSS;
-
-chk('I1e', BLOCO_G3REF !== '' && !VARIAVEIS_SEM_ILHA.includes('#8F939D'),
-    'o Gray so aparece dentro da ilha .g3ref — nos dois :root ele continua fora, '
-    + 'e --fraco segue sendo o derivado #66686F para as outras onze telas');
+chk('I1e', !VARIAVEIS_CSS.includes('#8F939D'),
+    'e no bloco de variaveis tambem nao — a excecao da ilha (Q-DOCG3-15) fechou em 30/09; '
+    + '--fraco (#66686F, 5,56:1) e a tinta apagada do sistema inteiro');
 
 {
-  /* Toda declaracao do bloco da ilha que carrega o Gray. Se alguma delas nao for
-     um `--g3ref-*`, a excecao deixou de ser estreita. */
-  const donos = [...BLOCO_G3REF.matchAll(/(--[\w-]+):\s*#8F939D/g)].map((m) => m[1]!);
-  chk('I1f', donos.length > 0 && donos.every((d) => d.startsWith('--g3ref-')),
-      `o Gray so ocupa token da ilha — achados: ${donos.join(', ') || 'nenhum'}`);
+  const semComentario = ESTILO.replace(/\/\*[\s\S]*?\*\//g, '');
+  const tokensDaIlha = [...new Set([...semComentario.matchAll(/--g3ref-[\w-]+/g)].map((m) => m[0]))];
+  chk('I1f', tokensDaIlha.length === 0,
+      'nenhum token --g3ref-* e declarado nem lido — a paleta paralela da ilha saiu inteira '
+      + `(achados: ${tokensDaIlha.join(', ') || 'nenhum'})`);
 }
 
 // ------------------------------------------------------- I2 o movimento, fechado
@@ -235,7 +224,8 @@ chk('I3b', /animation-duration:\s*\.?0*1?m?s\s*!important/.test(bloqueio)
 chk('I3c', /transition-duration:\s*\.?0*1?m?s\s*!important/.test(bloqueio),
     'e zera transition-duration tambem: o hover deste arquivo e transicao, nao animacao');
 chk('I3d', /\*,\s*\*::before,\s*\*::after/.test(bloqueio),
-    'e alcanca `*` com os dois pseudo-elementos — o brilho e a ondulacao do botao vivem em ::after e ::before');
+    'e alcanca `*` com os dois pseudo-elementos — o brilho e a ondulacao do botao, que viviam neles, '
+    + 'sairam em 30/09, e o proximo enfeite em ::before/::after ja nasce coberto');
 
 /*
  * I3e — E ZERA O ATRASO, e nao so a duracao.
@@ -605,10 +595,14 @@ for (const base of HOVERS_DE_BOTAO) {
    * fundo de hover. O que a verificacao nao pode deixar passar e a aba ativa
    * voltar a se distinguir SO por cor de texto, que era o defeito original.
    */
+  /* [30/09] O TOKEN TROCOU DE NOME, e a afirmacao ficou: era `--g3ref-laranja`
+   * com tinta `#fff` (2,69:1); e `--acento` com `--acento-texto` (5,93:1) desde
+   * que a paleta da ilha saiu. A tinta passou a ser verificada pelo NOME — branco
+   * sobre o laranja e o par que reprovou duas vezes neste projeto. */
   const a = regraDe('.g3ref .fu-aba[aria-selected="true"]');
-  chk('I7c', /background:\s*var\(--g3ref-laranja\)/.test(a) && /color:\s*var\(/.test(a),
+  chk('I7c', /background:\s*var\(--acento\)/.test(a) && /color:\s*var\(--acento-texto\)/.test(a),
       'a aba selecionada e uma SUPERFICIE cheia com tinta propria, e nao so uma cor de texto '
-      + 'diferente — e a forma da referencia de dizer qual etapa esta aberta');
+      + 'diferente — e a tinta sobre o laranja e o Navy (--acento-texto), nunca o branco');
 }
 
 // O ANEL DE FOCO E SEMPRE `--foco`. Ele e o unico token medido contra 3:1 em toda
@@ -673,9 +667,15 @@ const declaracoes = (bloco: string): Array<[string, string]> =>
   }
   chk('I7d', fora.length > 0 && fora.every((t) => t === 'foco'),
       `fora da ilha, todo "outline" usa var(--foco) — achados: ${[...new Set(fora)].join(', ') || 'nenhum'}`);
-  chk('I7f', dentro.length > 0 && dentro.every((t) => t === 'g3ref-laranja'),
-      'dentro da ilha, todo "outline" e o laranja da referencia — um segundo token de foco aqui '
-      + `seriam dois aneis diferentes na mesma aba (achados: ${[...new Set(dentro)].join(', ') || 'nenhum'})`);
+  /* [30/09] A I7f INVERTEU. Ela prendia o anel da ilha no laranja da referencia
+   * (2,41:1 sobre o creme, abaixo dos 3:1 da 1.4.11), que era parte da excecao
+   * `Q-DOCG3-15`. Com a excecao fechada, a ilha usa o anel do sistema — e o que
+   * esta linha prende agora e que ela continue tendo anel (a area de envio e um
+   * <label> com input invisivel: sem o `:focus-within` ela fica sem sinal) e que
+   * ele seja o mesmo de todo o resto. */
+  chk('I7f', dentro.length > 0 && dentro.every((t) => t === 'foco'),
+      'dentro da ilha, todo "outline" e o mesmo --foco do sistema — um anel so, medido a 3:1 '
+      + `(achados: ${[...new Set(dentro)].join(', ') || 'nenhum'})`);
 }
 
 // E TODO ELEMENTO FOCAVEL POR TECLADO TEM ANEL. `summary` nao e `a`, nao e
@@ -684,69 +684,112 @@ const declaracoes = (bloco: string): Array<[string, string]> =>
 chk('I7e', /summary:focus-visible\s*\{[^}]*outline:/.test(REGRAS),
     'o <summary> do cadastro tem anel de foco proprio — a regra geral so alcanca a/button/th/.interruptor');
 
-// ============================ I8 a aba Documento E a referencia (14/08/2026)
+// ============================ I8 o g3ref E o sistema (30/09/2026)
 //
-// O pedido do dono foi *"a referencia exata deve ser
-// g3-fatura-unificada.vercel.app, sem tirar nem por, deve ser exatamente igual,
-// com bordas iguais, sistema de cores, tipografia"*. Isso e uma afirmacao sobre
-// o produto, e regra 8 diz que afirmacao sem teste e comentario.
+// DE 14/08 A 30/09 ESTA SECAO PRENDIA UMA ILHA. O pedido do dono foi *"a
+// referencia exata deve ser g3-fatura-unificada.vercel.app, sem tirar nem por"*,
+// e a aba Documento ganhou fonte, paleta, raio e sombra proprios dentro de um
+// escopo `.g3ref`. As verificacoes pegavam a EROSAO da ilha: escolhas que
+// contrariavam o resto do sistema (quadrado onde tudo era redondo, sem sombra
+// onde tudo tinha, outra fonte, outra tinta) e que voltariam sozinhas na
+// proxima edicao distraida.
 //
-// O QUE ESTAS VERIFICACOES PEGAM, E ELAS NAO PEGAM "esta igual". Nenhum teste de
-// texto compara duas telas — isso e foto, e a foto foi tirada. O que elas pegam
-// e a EROSAO: a ilha e feita de escolhas que contrariam o resto do sistema
-// (quadrado onde tudo e redondo, sem sombra onde tudo tem, outra fonte, outra
-// tinta), e escolha assim volta sozinha na proxima edicao distraida. Cada uma
-// abaixo e um caminho concreto de volta.
+// EM 30/09 O DONO DECIDIU QUE A ILHA E O SISTEMA (etapa 0 do redesenho). A
+// pergunta mudou de "a aba continua diferente das outras?" para "as quatorze
+// telas continuam falando UMA lingua?" — e o modo de falha e o mesmo, de sinal
+// trocado: uma regra nova com `border-radius: 8px`, um cartao com sombra, um
+// titulo na fonte do corpo, uma segunda regra de botao so para uma tela. Cada
+// verificacao abaixo e um caminho concreto de volta da segunda gramatica.
+//
+// Nenhuma delas afirma "esta igual a referencia" — isso e foto, e a foto e
+// tirada a cada etapa. Elas pegam o que a foto nao pega na proxima edicao.
 
-// --- I8a a ilha existe, e tem tamanho
+// --- I8a a fonte do sistema e a da referencia, nos papeis dela
 {
-  const regrasDaIlha = REGRAS_PARES.filter(([sel]) => sel.includes('.g3ref'));
-  chk('I8a', BLOCO_G3REF !== '' && regrasDaIlha.length >= 40,
-      `a ilha .g3ref tem bloco de tokens e ${regrasDaIlha.length} regras — se este numero desabar, `
-      + 'a aba voltou a ser desenhada pelo sistema e nao pela referencia');
+  chk('I8a', /font:[^;]*var\(--fonte\)/.test(regraDe('body')) && /--fonte:\s*'Barlow'/.test(VARIAVEIS_CSS),
+      'o corpo do sistema INTEIRO e a Barlow — declarada no body, nao num escopo');
+  /* Os papeis da condensada numa regra so: titulo, rotulo caixa-alta, cabecalho
+     de tabela, nome e numero do KPI, selo e aba da barra. */
+  const papeis = REGRAS_PARES.find(([sel]) =>
+    /(^|, )h1, h2, h3\b/.test(sel) && sel.includes('thead th') && sel.includes('.barra-nav a')
+    && sel.includes('.kpi .valor') && sel.includes('.marca'));
+  chk('I8a2', papeis !== undefined && /font-family:\s*var\(--fonte-cond\)/.test(papeis[1]),
+      'titulo, rotulo em caixa alta, cabecalho de tabela, numero do KPI, selo e aba da barra sao a '
+      + 'Barlow Semi Condensed — e numa regra so, por papel');
+  chk('I8a3', /font-family:\s*var\(--fonte-cond\)/.test(regraDe('button'))
+          && /text-transform:\s*uppercase/.test(regraDe('button.primario'))
+          && !/text-transform/.test(regraDe('button')),
+      'o botao e condensado, e SO o primario e caixa alta — e o que o separa dos outros antes da cor');
 }
 
-// --- I8b todo token do claro tem contraparte no escuro
+// --- I8b a ilha HERDA, nao copia
 //
-// E O MODO DE FALHA E O PIOR POSSIVEL: token sem contraparte nao quebra nada, ele
-// HERDA o valor do bloco claro. Um `--g3ref-papel` esquecido no escuro pinta um
-// cartao BRANCO dentro da tela escura, com a tinta clara por cima — texto creme
-// sobre branco, ilegivel, e nenhum erro em lugar nenhum. A decisao do dono foi
-// "acompanha o tema", e e esta linha que faz ela valer.
+// O que a ilha repetia para se diferenciar da casa saiu em 30/09: fonte do
+// escopo, cartao, campo, rotulo, botao comum e primario, aviso, titulos,
+// cabecalho de tabela. Se qualquer um desses seletores voltar, a tela da Fatura
+// unificada volta a ter um segundo desenho do mesmo componente — e a proxima
+// correcao entra num so dos dois.
 {
-  const nomes = (bloco: string) => new Set(
-    [...bloco.matchAll(/(--g3ref-[\w-]+):/g)].map((m) => m[1]!));
-  const iEscuro = BLOCO_G3REF.indexOf(':root[data-tema="escuro"] .g3ref');
-  const claro = nomes(BLOCO_G3REF.slice(0, iEscuro));
-  const escuro = nomes(BLOCO_G3REF.slice(iEscuro));
-  /* A tipografia NAO troca com o tema, e nao deve: a referencia tem uma fonte so,
-     e o tema muda tinta, nao familia. Estes tres sao os unicos isentos. */
-  const SO_NO_CLARO = ['--g3ref-fonte', '--g3ref-fonte-cond', '--g3ref-fonte-mono'];
-  const faltando = [...claro].filter((n) => !escuro.has(n) && !SO_NO_CLARO.includes(n));
-  const sobrando = [...escuro].filter((n) => !claro.has(n));
-  chk('I8b', iEscuro > 0 && faltando.length === 0 && sobrando.length === 0,
-      'todo token de cor da ilha tem valor nos DOIS temas — sem contraparte o escuro herda o '
-      + `literal claro em silencio (faltando: ${faltando.join(', ') || 'nenhum'}; `
-      + `sobrando: ${sobrando.join(', ') || 'nenhum'})`);
+  const DUPLICATAS = [
+    '.g3ref', '.g3ref button', '.g3ref button.primario', '.g3ref button:hover:not(:disabled)',
+    '.g3ref input, .g3ref select, .g3ref textarea', '.g3ref label', '.g3ref h2', '.g3ref h3',
+    '.g3ref thead th', '.g3ref .rolagem', '.g3ref .sub', '.g3ref .fraco',
+    '.g3ref .fu-acao', '.g3ref button.fu-texto',
+  ];
+  const seletores = new Set(REGRAS_PARES.map(([sel]) => sel));
+  const voltaram = DUPLICATAS.filter((d) => seletores.has(d));
+  chk('I8b', voltaram.length === 0,
+      'a ilha nao redesenha nenhum componente geral — cartao, campo, botao, titulo e tabela sao '
+      + `herdados (voltaram: ${voltaram.join(' · ') || 'nenhum'})`);
+  /* A aba de etapa e o painel navy continuam sendo DESTA tela: sem eles a
+     secao teria virado vazia, e o que o `documento.tsx` poe na raiz nao teria o
+     que escopar. */
+  chk('I8b2', seletores.has('.g3ref .fu-aba') && seletores.has('.g3ref .fu-painel')
+          && seletores.has('.g3ref .fu-grade'),
+      'e o que so a Fatura unificada tem continua escopado nela: abas de etapa, grade e painel navy');
 }
 
-// --- I8c a ilha nao tem raio nem sombra
+// --- I8c raio e sombra, no sistema inteiro
 //
-// A referencia nao tem UM canto arredondado e nao tem UMA sombra — a folha A4 tem,
-// e ela nao e da ilha. Como quase toda regra daqui sobrescreve uma regra da casa
-// que TEM raio e sombra, esquecer de zerar os dois e o erro natural, nao o
-// excepcional: some `border-radius: 0` e o cartao volta a ter 12px sozinho.
+// A referencia nao tem UM canto arredondado e nao tem UMA sombra — a folha A4
+// tem, e ela e papel sobre a mesa. Desde 30/09 isso vale para as quatorze telas.
+// Os tres tokens de raio continuam existindo (e por eles que o raio tem nome) e
+// sao presos em no maximo 2px; toda regra fora do papel usa zero ou um deles.
+// As excecoes sao NOMEADAS, e cada uma diz por que:
+//
+//   raio-pilula   as bolhas do balao de ajuda — a cauda de um balao de
+//                 pensamento e redonda por natureza
+//   sombra-3      o que FLUTUA: menu da conta, menu de setor, painel e balao de
+//                 ajuda. Ali a sombra e o que diz "isto esta por cima"
 {
+  const px = (v: string) => (v === '0' ? 0 : /^(\d+(\.\d+)?)px$/.test(v) ? Number.parseFloat(v) : Number.NaN);
+  const tokens = [RITMO.raio, RITMO.raioCartao, RITMO.raioPequeno];
+  chk('I8c', tokens.every((v) => px(v) <= 2),
+      `os tres raios do sistema sao retos ou quase (<= 2px) — hoje ${tokens.join(' / ')}`);
+
+  const RAIO_OK = /^(0|var\(--raio(-cartao|-pequeno)?\))$/;
+  const FLUTUAM = ['.menu-painel', '.setor-painel', '.ajuda-painel', '.ajuda-balao'];
   const ruins: string[] = [];
-  for (const [sel, decl] of REGRAS_PARES) {
-    if (!sel.includes('.g3ref')) continue;
+  const foraDoPapel: Array<[string, string]> =
+    [...foraDoDocumento.replace(/\/\*[\s\S]*?\*\//g, '').replace(/@media[^{]*\{/g, '')
+       .matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+      .map((m) => [m[1]!.trim().replace(/\s+/g, ' '), m[2]!]);
+  for (const [sel, decl] of foraDoPapel) {
     for (const [prop, valor] of declaracoes(decl)) {
-      if (prop === 'border-radius' && valor !== '0') ruins.push(`${sel} { raio ${valor} }`);
-      if (prop === 'box-shadow' && valor !== 'none') ruins.push(`${sel} { sombra ${valor} }`);
+      if (prop === 'border-radius') {
+        const partes = valor.split(/\s+(?![^(]*\))/);
+        const pilula = valor === 'var(--raio-pilula)' && sel.includes('.ajuda-bolha');
+        if (!pilula && !partes.every((p) => RAIO_OK.test(p))) ruins.push(`${sel} { raio ${valor} }`);
+      }
+      if (prop === 'box-shadow' && valor !== 'none') {
+        const flutua = valor === 'var(--sombra-3)' && FLUTUAM.some((f) => sel === f);
+        if (!flutua) ruins.push(`${sel} { sombra ${valor} }`);
+      }
     }
   }
-  chk('I8c', ruins.length === 0,
-      `nenhuma regra da ilha tem raio ou sombra — achadas: ${ruins.join(' · ') || 'nenhuma'}`);
+  chk('I8c2', ruins.length === 0,
+      'fora do papel impresso, nenhuma regra tem raio fora dos tokens nem sombra fora do que flutua '
+      + `— achadas: ${ruins.join(' · ') || 'nenhuma'}`);
 }
 
 // --- I8d a tipografia da referencia esta servida pela nossa origem
@@ -754,8 +797,7 @@ chk('I7e', /summary:focus-visible\s*\{[^}]*outline:/.test(REGRAS),
 // As duas familias, os quatro pesos que a referencia realmente pinta, `swap` em
 // todas e ZERO URL externa. A ultima nao e detalhe: a referencia carrega as
 // fontes do `fonts.gstatic.com`, e copiar isso poria uma dependencia de rede de
-// terceiro no caminho de uma tela de faturamento. E a mesma decisao ja escrita
-// para a Inter, aplicada a uma fonte que veio de fora.
+// terceiro no caminho de uma tela de faturamento — agora de TODAS elas.
 {
   const faces = [...VARIAVEIS_CSS.matchAll(/@font-face\s*\{([^}]*)\}/g)].map((m) => m[1]!);
   const daRef = faces.filter((f) => /font-family:\s*'Barlow/.test(f));
@@ -772,35 +814,46 @@ chk('I7e', /summary:focus-visible\s*\{[^}]*outline:/.test(REGRAS),
   chk('I8f', daRef.length > 0 && daRef.every((f) => /src:\s*url\('\/fontes\//.test(f)),
       'toda face da Barlow vem de /fontes/, da nossa origem — a referencia as puxa do '
       + 'fonts.gstatic.com, e isso nao veio junto');
-  chk('I8g', /--g3ref-fonte:\s*'Barlow'/.test(BLOCO_G3REF)
-          && /--g3ref-fonte-cond:\s*'Barlow Semi Condensed'/.test(BLOCO_G3REF)
-          && /system-ui|sans-serif/.test(BLOCO_G3REF),
-      'as duas familias sao as da ilha e a pilha de sistema fica ATRAS delas — sem o arquivo, '
-      + 'a aba e a de ontem, nao uma aba quebrada');
+  chk('I8g', /--fonte:\s*'Barlow'/.test(VARIAVEIS_CSS)
+          && /--fonte-cond:\s*'Barlow Semi Condensed'/.test(VARIAVEIS_CSS)
+          && TIPOGRAFIA.familia.includes('system-ui') && TIPOGRAFIA.familiaCond.includes('sans-serif'),
+      'as duas familias sao tokens do :root e a pilha de sistema fica ATRAS delas — sem o arquivo, '
+      + 'a tela e a de ontem na fonte do sistema, nao uma tela quebrada');
 }
 
-// --- I8h a tinta da ilha sai dos tokens da ilha
+// --- I8h o laranja cru nunca e TINTA sobre superficie clara
 //
-// A ilha e uma paleta INTEIRA, nao um retoque: misturar `var(--fraco)` no meio
-// dela traz de volta o `#66686F` do sistema ao lado do `#8F939D` da referencia,
-// e os dois sao cinza — ninguem ve a mistura, e ela nao tem contraparte no
-// escuro. AS TRES EXCECOES SAO OS ESTADOS QUE A REFERENCIA NAO TEM: ela so
-// conhece o alerta laranja; erro e sucesso sao nossos (composicao que falhou,
-// fatura registrada) e pinta-los de laranja apagaria a diferenca entre
-// "confira" e "nao deu certo".
+// Era a outra metade da excecao `Q-DOCG3-15`: a ilha escrevia titulo de secao e
+// anel de foco com o `#E8843C` puro, 2,69:1 no branco e 2,41:1 no creme. O
+// laranja cru vale como tinta num lugar so — sobre o NAVY (5,93:1) — e como
+// desenho decorativo sem informacao (a marca d'agua do KPI, a engrenagem do
+// carregando). Em superficie clara, o laranja-texto e `--acento-forte`.
 {
-  const PERMITIDOS = /^(erro|erro-fundo|ok|ok-fundo|alerta|alerta-fundo)$/;
+  const SOBRE_O_NAVY_OU_DECORATIVO = ['.barra', '.setor-gatilho', '.fu-painel', '.marca-dagua', '.marca-girando'];
   const intrusos: string[] = [];
   for (const [sel, decl] of REGRAS_PARES) {
-    if (!sel.includes('.g3ref')) continue;
-    for (const m of decl.matchAll(/var\(--([a-z0-9-]+)\)/g)) {
-      const t = m[1]!;
-      if (!t.startsWith('g3ref-') && !PERMITIDOS.test(t)) intrusos.push(`${sel}: --${t}`);
+    for (const [prop, valor] of declaracoes(decl)) {
+      if (prop === 'color' && valor === 'var(--acento)'
+          && !SOBRE_O_NAVY_OU_DECORATIVO.some((s) => sel.includes(s))) intrusos.push(sel);
     }
   }
   chk('I8h', intrusos.length === 0,
-      `dentro da ilha so entram tokens --g3ref-* (mais os tres estados que a referencia nao tem) `
-      + `— achados: ${intrusos.join(' · ') || 'nenhum'}`);
+      'o laranja cru so e tinta sobre o Navy ou em desenho decorativo — em superficie clara o '
+      + `texto laranja e --acento-forte (achados: ${intrusos.join(' · ') || 'nenhum'})`);
+}
+
+// --- I8i a folha impressa nao herda a fonte da tela
+//
+// A regra 4 da etapa: o papel nao muda de aparencia. Ate 30/09 a folha HERDAVA
+// familia, tamanho, entrelinha e tracking do `.g3ref` em volta; quando o
+// `.g3ref` parou de declara-los, a folha mudaria de medida sem ninguem tocar
+// nela. Os quatro estao cravados no `.g3`, e a familia e literal.
+{
+  const g3 = regraDe('.g3');
+  chk('I8i', /font-family:\s*'Barlow', system-ui, sans-serif/.test(g3) && /font-size:\s*16px/.test(g3)
+          && /line-height:\s*normal/.test(g3) && /letter-spacing:\s*normal/.test(g3),
+      'a folha crava a propria fonte (Barlow literal, 16px, entrelinha e tracking normais) — '
+      + 'o corpo da tela pode mudar sem o papel acompanhar');
 }
 
 // =============== I9 a aba de cadastro esta OCULTA, e continua alcancavel

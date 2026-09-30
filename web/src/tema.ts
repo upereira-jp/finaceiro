@@ -113,6 +113,43 @@
 // preenchido **suave, com ícone e texto dentro**. Os dois nunca aparecem com o
 // mesmo peso, e nenhum estado usa o laranja da marca. Se em uso real ainda ficar
 // confuso, o conserto continua sendo de forma — nunca virar verde.
+//
+// ============================================================================
+// EM 30/09/2026 O G3REF DEIXOU DE SER ILHA E VIROU A IDENTIDADE DO SISTEMA.
+//
+// Decisão do dono, no plano de redesenho por etapas (etapa 0): o desenho da
+// Fatura unificada — Barlow e Barlow Semi Condensed, cantos retos, sem sombra,
+// rótulo condensado em caixa alta, filete fino — passa a ser o das quatorze
+// telas. Até aqui ele morava num bloco `.g3ref` com paleta própria, e o sistema
+// falava duas línguas na mesma barra de navegação (Inter, raio 12 e sombra de um
+// lado; Barlow, raio zero e borda do outro). O que isto mudou AQUI:
+//
+//   1. A FONTE. `Inter` saiu; a Barlow é o corpo e o número, a Barlow Semi
+//      Condensed é título, aba, rótulo e cabeçalho de tabela. Os bytes são os
+//      mesmos que a ilha já servia (ver `FONTE_CSS`).
+//   2. O RAIO. Zero, nos três tokens. Os tokens ficam — é por eles que o raio é
+//      um valor com nome e não um `0` solto em cada regra.
+//   3. A SOMBRA. A escala de três degraus continua, mas as SUPERFÍCIES (cartão,
+//      KPI, tabela, filtro, aviso, botão) deixaram de usá-la: profundidade passa
+//      a ser borda de 1px e fundo, como na referência. Só o que FLUTUA (menu,
+//      painel de ajuda, balão) e a folha A4 na prévia mantêm sombra.
+//   4. DOIS TOKENS NOVOS, `campo` e `bordaForte`, que eram da ilha e agora são
+//      do sistema — ver cada um no tipo.
+//   5. A PALETA DA ILHA (`--g3ref-*`) SAIU INTEIRA. Cada token dela foi mapeado
+//      para o equivalente medido daqui, e três deles NÃO voltam, porque
+//      reprovavam AA e eram a exceção `Q-DOCG3-15` de 14/08:
+//
+//        `#8F939D` como tinta apagada   3,08:1 no branco   ->  --fraco, 5,56:1
+//        `#E8843C` como TINTA           2,69:1 no branco   ->  --acento-forte, 5,60:1
+//        `#fff` sobre o laranja         2,69:1             ->  --acento-texto, 5,93:1
+//
+//      A decisão de 30/09 foi explícita: contraste AA é inegociável ao espalhar
+//      o g3ref. A exceção de 14/08 valia para UMA aba; espalhada, seriam
+//      quatorze telas reprovando.
+//
+// O QUE NÃO MUDOU: nenhum valor de cor da paleta entregue, os dois temas, e a
+// folha impressa — que é literal, não lê token nenhum, e ganhou a própria fonte
+// cravada no `estilo.ts` para não herdar a mudança do corpo.
 
 export type Paleta = {
   fundo: string; fundo2: string; texto: string; fraco: string; borda: string;
@@ -134,6 +171,18 @@ export type Paleta = {
    *  dentro dele. As duas são não-texto e não carregam informação sozinhas: quem
    *  lê a tabela lê o dado, não a linha. */
   bordaSuave: string;
+  /** [30/09, veio da ilha g3ref] A LINHA FORTE — o tracejado da área de envio,
+   *  o contorno do campo de parâmetro e a borda do campo sob o mouse. Na ilha ela
+   *  era `--g3ref-borda-forte #C9C1B1`; subiu ao `:root` porque o hover de campo
+   *  é do sistema inteiro. Não-texto e não é o único sinal de nada (o campo tem
+   *  rótulo, a área de envio tem título): 1.79:1 contra o branco. */
+  bordaForte: string;
+  /** [30/09, veio da ilha g3ref] O FUNDO DO CAMPO. A referência não pinta o
+   *  input de branco sobre o cartão branco: ela o afunda um tom, para o campo se
+   *  anunciar pela superfície e não só pela linha. Era `--g3ref-campo #FBF9F5`.
+   *  Medido: `--texto` 15.19:1, `--fraco` 5.29:1, `--foco` 3.56:1 — é uma das
+   *  superfícies da T1 desde a entrada. */
+  campo: string;
   acento: string;
   /** O texto SOBRE o acento. Separado de propósito: se a marca trouxer um acento
    *  claro, texto branco em cima dele fica ilegível — e um `#fff` cravado no CSS
@@ -241,15 +290,10 @@ export type Paleta = {
    *  popover. Mais opaca que a dos cartões de propósito — a hierarquia de
    *  profundidade é o que diz "isto está sobre tudo e fecha ao clicar fora". */
   sombraForte: string;
-  /** [derivado, 30/07] A COR DA LUZ que atravessa o botão primário no hover.
-   *  Ela precisa de token próprio porque é a única cor do sistema que não é nem
-   *  tinta nem superfície: é um véu por cima do acento. Tentei usar `--fundo2` e
-   *  o resultado expõe o problema — no tema escuro o `--fundo2` é escuro, e a
-   *  faixa de luz virava uma faixa de SOMBRA passando pelo botão laranja.
-   *  Branco translúcido nos dois temas, com alfa menor no escuro, onde o mesmo
-   *  branco pesa mais. Não entra em nenhum par de contraste: não há texto sobre
-   *  ela, e ela dura 700 ms. */
-  brilho: string;
+  /* O `brilho` SAIU EM 30/09. Era a cor da faixa de luz que atravessava o botão
+     primário no hover (700 ms, uma passada). Numa tela de trabalho aquilo era
+     enfeite — o g3ref não tem nenhum —, e o hover do primário voltou a ser só o
+     escurecimento do `--acento-hover`. Sem a faixa, o token não pinta nada. */
   /** [G3] O filete de marca: `--brand-orange` → `--brand-orange-soft`. A própria
    *  paleta reserva o soft para gradiente, e é o único lugar onde ele aparece no
    *  tema claro. Ninguém escreve texto sobre o filete — ele tem 3px. */
@@ -283,6 +327,8 @@ export const CLARO: Paleta = {
   fraco: '#66686F',        // [derivado do Gray #8F939D] o Gray puro dá 2.75:1 — ver a nota
   borda: '#D8D2C6',        // [G3] a linha de contorno
   bordaSuave: '#E4DFD4',   // [G3] a divisória interna · 1.19:1 contra o creme
+  bordaForte: '#C9C1B1',   // [g3ref, 30/09] o tracejado e o campo sob o mouse · 1.79:1 no branco
+  campo: '#FBF9F5',        // [g3ref, 30/09] o fundo do input · texto 15.19:1, fraco 5.29:1
   acento: '#E8843C',       // [G3] Orange — ação: botão primário, navegação ativa, filete
   acentoTexto: '#14213D',  // [G3] Navy sobre o Orange · 5.93:1 (branco daria 2.69:1)
   acentoForte: '#995728',  // [derivado do Orange] o laranja como TEXTO · pior par 4.55:1
@@ -299,7 +345,6 @@ export const CLARO: Paleta = {
   // acinzenta a página inteira, e o creme é o que a paleta tem de mais visível.
   sombra: 'rgba(20, 33, 61, 0.07)',
   sombraForte: 'rgba(20, 33, 61, 0.16)',
-  brilho: 'rgba(255, 255, 255, 0.55)',
   gradiente: 'linear-gradient(90deg, #E8843C, #F4A65A)', // [G3] Orange → Gold
   // [derivado] A G3 não entregou os três estados semânticos. Verificados contra
   // as superfícies NOVAS, inclusive sobre o --acento-suave.
@@ -340,7 +385,16 @@ export const ESCURO: Paleta = {
   fraco: '#999DA8',        // [derivado do Gray] o Gray CLAREADO 7% · pior par 4.54:1
   borda: '#2C3A5C',        // [derivado] a linha, um degrau acima do cartão
   bordaSuave: '#22304F',   // [derivado] a divisória interna · 1.13:1 contra o cartão
-  acento: '#F4A65A',       // [G3] GOLD — e a troca é a mesma lógica de antes, ver a nota
+  // [derivado, 30/09] A linha forte, na mesma distância do cartão que a do claro
+  // (2.08:1 contra o `#1C2C4E`, contra 1.79:1 do `#C9C1B1` no branco). A ilha
+  // usava o `--fraco` aqui, e o tracejado da área de envio ficava mais aceso no
+  // escuro do que no claro — o mesmo papel com dois pesos.
+  bordaForte: '#4E5C80',
+  // [derivado, 30/09] O campo afunda para a PÁGINA, como no claro: é o
+  // mapeamento que a ilha já fazia (`--g3ref-campo: var(--fundo)`), agora com
+  // nome próprio. Mesmo valor do `fundo` — o papel é outro.
+  campo: '#14213D',
+  acento: '#F4A65A',      // [G3] GOLD — e a troca é a mesma lógica de antes, ver a nota
   acentoTexto: '#14213D',  // [G3] Navy sobre o Gold · 7.95:1
   // No escuro o acento NÃO precisa escurecer para virar texto — precisa
   // continuar claro. O token é o mesmo valor, e isso é resposta, não descuido.
@@ -365,7 +419,6 @@ export const ESCURO: Paleta = {
   foco: '#F4A65A',         // [G3] Gold — no escuro ele passa direto, com folga sobre os 3:1
   sombra: 'rgba(0, 0, 0, 0.45)',
   sombraForte: 'rgba(0, 0, 0, 0.65)',
-  brilho: 'rgba(255, 255, 255, 0.30)',
   gradiente: 'linear-gradient(90deg, #E8843C, #F4A65A)', // [G3] o mesmo filete Orange → Gold
   // [derivado] Os três estados. O âmbar puxa para amarelo aqui de propósito,
   // para afastar do laranja do acento — ver a nota de adjacência no cabeçalho.
@@ -380,81 +433,49 @@ export const ESCURO: Paleta = {
 /**
  * A FONTE, SERVIDA POR NÓS.
  *
- * O dono pediu `Inter` ou `Poppins` em 30/07. Entrou a **Inter**, e a escolha é
- * de uso e não de gosto: ela foi desenhada para interface densa — altura de x
- * grande, `1`/`l`/`I` distinguíveis e algarismo tabular de verdade, que é o que
- * uma coluna de dinheiro precisa. Poppins é geométrica e de caixa alta larga:
- * bonita em título, cansativa em tabela de 39 linhas.
+ * DESDE 30/09/2026 ELA É A BARLOW, e a Inter saiu. A Inter entrou em 30/07 a
+ * pedido do dono, e o argumento dela era de uso — algarismo tabular de verdade
+ * para coluna de dinheiro. A Barlow tem o mesmo recurso (`tnum`), e foi ela que o
+ * dono escolheu como identidade: o desenho da Fatura unificada vira o do
+ * sistema. Não são duas fontes de corpo convivendo: é UMA, e a condensada é o
+ * segundo papel, não uma segunda opinião.
  *
- * O ARGUMENTO ANTIGO DESTE ARQUIVO CONTRA WEBFONT CONTINUA VÁLIDO, e é por isso
- * que ele não foi apagado: *"uma tela de operação que trava esperando webfont é
- * uma tela que pisca em toda navegação"*. O que o resolve são três coisas
- * juntas, e nenhuma delas é abrir mão da fonte:
+ * AS DUAS FAMILIAS TEM PAPEIS SEPARADOS, e a separacao e o que faz o desenho
+ * parecer o que parece: a **Barlow** e corpo, campo e valor; a **Barlow Semi
+ * Condensed** e titulo, aba, botao, rotulo em caixa alta e numero grande. Na
+ * referencia sao 61 ocorrencias da condensada contra 1 da Barlow — a condensada
+ * e a fonte de superficie, nao a excecao.
+ *
+ * O ARGUMENTO ANTIGO DESTE ARQUIVO CONTRA WEBFONT CONTINUA VÁLIDO: *"uma tela de
+ * operação que trava esperando webfont é uma tela que pisca em toda
+ * navegação"*. O que o resolve são três coisas juntas, e as três seguem aqui:
  *
  *   1. **Servida pela nossa origem**, de `web/public/fontes/`. Sem CDN de
- *      terceiro: uma origem só (o mesmo argumento do proxy do Vite), sem DNS
- *      nem TLS extra, e sem mandar o IP de quem opera para fora.
+ *      terceiro: uma origem só, sem DNS nem TLS extra, e sem mandar o IP de
+ *      quem opera para fora. A referencia puxa do `fonts.gstatic.com`, e isso
+ *      nao veio;
  *   2. **`font-display: swap`** — o texto aparece imediatamente na fonte de
- *      sistema e troca quando a Inter chega. O pisca que o comentário antigo
- *      descrevia é o do `font-display: block`, que esconde o texto esperando.
+ *      sistema e troca quando a Barlow chega;
  *   3. **A pilha de sistema INTEIRA continua atrás.** Se o arquivo não chegar, a
- *      tela é exatamente a de ontem — não é uma tela quebrada.
+ *      tela é a de ontem na fonte do sistema — não é uma tela quebrada.
  *
- * É UM ARQUIVO SÓ, 48 KB: `wght` variável (100–900) no subconjunto latino. Um
- * peso fixo por arquivo custaria três requisições para o mesmo resultado.
+ * OS BYTES SAO OS DA PROPRIA REFERENCIA, desempacotados do manifesto `__bundler`
+ * do commit `36e964e` — nao um download novo do Google. Conferido em 14/08 contra
+ * o que o Google serve (`/s/barlow/v13`, `/s/barlowsemicondensed/v16`): **mesma
+ * versao 1.408, mesmos 272 glifos, mesmas larguras** em A/a/M/m/0/R/$ e espaco.
  *
- * ITÁLICO NÃO ENTROU, e é decisão medida em uso: `<em>` aparece em quatro
- * lugares no sistema inteiro. Um segundo arquivo de 52 KB para quatro palavras
- * não se paga; o browser inclina a upright, e é o suficiente.
+ * A VERSAO VIAJA NO NOME (`-v1.408`): o `public/` do Vite nao recebe hash e o
+ * `servirEstatico` manda `immutable, max-age=31536000` para tudo que nao e o
+ * `index.html` — sem a versao no nome, trocar a fonte deixaria um ano de
+ * browsers com a antiga. A licenca (OFL 1.1) esta em `LICENSE-barlow.txt`.
  *
- * O NOME DO ARQUIVO CARREGA A VERSÃO (`v5.3.0`) de propósito. O `servirEstatico`
- * manda `immutable, max-age=31536000` para tudo que não é o `index.html`, e o
- * `public/` do Vite **não** recebe hash no nome — sem a versão no nome, trocar a
- * fonte deixaria um ano de browsers com a antiga. A licença (OFL 1.1) viaja ao
- * lado, em `LICENSE-inter.txt`, porque a OFL exige que ela acompanhe o arquivo.
+ * SO `latin` E `latin-ext`. O `vietnamese` da referencia sao 47 KB que nenhuma
+ * tela em portugues alcanca — e `unicode-range` faz o browser baixar so o
+ * subconjunto que a pagina realmente pinta.
+ *
+ * O ARQUIVO DA INTER FICOU EM `web/public/fontes/` e nenhuma regra o pede mais:
+ * sem `@font-face` apontando para ele, o browser nunca o baixa.
  */
-export const FONTE_CSS = `
-  @font-face {
-    font-family: 'Inter';
-    font-style: normal;
-    font-weight: 100 900;
-    font-display: swap;
-    src: url('/fontes/inter-var-latin-v5.3.0.woff2') format('woff2');
-    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
-      U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
-      U+2212, U+2215, U+FEFF, U+FFFD;
-  }
-`;
-
-// ------------------------------------------------------- a fonte da referencia
-//
-// BARLOW E BARLOW SEMI CONDENSED, e elas servem UMA aba: a Documento. Pedido do
-// dono em 14/08/2026 — *"a referencia exata deve ser g3-fatura-unificada.vercel.app,
-// sem tirar nem por, deve ser exatamente igual, com bordas iguais, sistema de
-// cores, tipografia"*. A Inter continua sendo a fonte do sistema; quem troca de
-// familia e o escopo `.g3ref`, e so ele.
-//
-// AS DUAS FAMILIAS TEM PAPEIS SEPARADOS na referencia, e a separacao e o que faz
-// o desenho parecer o que parece: a **Barlow** e corpo e valor; a **Barlow Semi
-// Condensed** e TODO rotulo em caixa alta, todo botao e todo numero grande. Sao
-// 61 ocorrencias de `font-family` no template contra 1 da Barlow — a condensada
-// e a fonte de superficie, nao a excecao.
-//
-// OS BYTES SAO OS DA PROPRIA REFERENCIA, desempacotados do manifesto `__bundler`
-// do commit `36e964e` — nao um download novo do Google. Conferido em 14/08 contra
-// o que o Google serve hoje (`/s/barlow/v13`, `/s/barlowsemicondensed/v16`):
-// **mesma versao 1.408, mesmos 272 glifos, mesmas larguras** em A/a/M/m/0/R/$ e
-// espaco. Os arquivos daqui sao ~30% menores porque o empacotador recomprimiu o
-// woff2; o contorno e o mesmo, e portanto a linha quebra no mesmo lugar.
-//
-// A VERSAO VIAJA NO NOME (`-v1.408`) pelo motivo ja escrito acima para a Inter:
-// `public/` nao recebe hash do Vite e o `servirEstatico` manda `immutable`.
-// A licenca (OFL 1.1, como a da Inter) esta em `LICENSE-barlow.txt`.
-//
-// SO `latin` E `latin-ext`. O `vietnamese` da referencia sao 47 KB que nenhuma
-// fatura em portugues alcanca — e `unicode-range` faz o browser baixar so o
-// subconjunto que a pagina realmente pinta, entao o corte nao muda uma letra do
-// que aparece na tela. Tirar peso que nao desenha nada nao e "tirar" nada.
 
 /** Os dois `unicode-range` sao os da folha do Google Fonts que a referencia
  *  carrega, copiados sem alteracao — recorta-los seria mudar QUAL arquivo o
@@ -472,7 +493,8 @@ const FAIXAS_BARLOW = {
 
 /** Os quatro pesos que a referencia realmente pinta — medidos no template e no
  *  `renderVals()`: 400, 500, 600 e 700. Nao ha 300 nem italico em lugar nenhum
- *  dela, e por isso nenhum dos dois viajou. */
+ *  dela, e por isso nenhum dos dois viajou. (`<em>` aparece em quatro lugares do
+ *  sistema; o browser inclina a upright, e e o suficiente.) */
 const PESOS_BARLOW = [400, 500, 600, 700] as const;
 
 const FAMILIAS_BARLOW = [
@@ -482,7 +504,7 @@ const FAMILIAS_BARLOW = [
 
 /** As dezesseis `@font-face`, geradas. Escritas a mao seriam dezesseis blocos
  *  quase iguais, e a proxima diferenca entre dois deles seria invisivel. */
-export const FONTE_G3REF_CSS = FAMILIAS_BARLOW.flatMap((f) =>
+export const FONTE_CSS = FAMILIAS_BARLOW.flatMap((f) =>
   PESOS_BARLOW.flatMap((peso) =>
     (Object.keys(FAIXAS_BARLOW) as Array<keyof typeof FAIXAS_BARLOW>).map((sub) => `
   @font-face {
@@ -497,52 +519,98 @@ export const FONTE_G3REF_CSS = FAMILIAS_BARLOW.flatMap((f) =>
 /**
  * Tipografia e ritmo.
  *
- * A pilha de sistema segue logo depois da Inter, e não é decoração: é o que
+ * A pilha de sistema segue logo depois da Barlow, e não é decoração: é o que
  * torna a webfont uma melhoria em vez de uma dependência. Ver `FONTE_CSS`.
  */
 export const TIPOGRAFIA = {
-  familia: "'Inter', ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+  familia: "'Barlow', ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+  /** [30/09] A condensada: título, aba, botão, rótulo em caixa alta, cabeçalho
+   *  de tabela e número grande. A Barlow vem logo atrás dela de propósito — se o
+   *  arquivo condensado falhar e o normal não, o título sai na família certa e só
+   *  mais largo, em vez de cair direto na fonte do sistema. */
+  familiaCond: "'Barlow Semi Condensed', 'Barlow', ui-sans-serif, system-ui, sans-serif",
   /** [30/07] Monoespaçada com nome. `<code>` carrega linha digitável, BR Code e
    *  `credencial_ref` — coisas que se conferem dígito a dígito —, e até aqui ela
    *  era o default do browser, que muda de máquina para máquina. */
   familiaMono: "ui-monospace, SFMono-Regular, \"SF Mono\", Menlo, Consolas, monospace",
+  /** [30/09] 15px de Barlow e não 16. A Barlow tem altura de x MENOR que a Inter
+   *  (0,50 contra 0,55 do corpo), então 15px dela ocupam na tela o que ocupavam
+   *  13,7px de Inter — e o sistema inteiro estava calibrado em 13,5px de Inter.
+   *  15px devolve a MESMA largura de coluna com letra maior; 16px empurraria as
+   *  tabelas largas (Unidades já estoura os 1160px) para a rolagem lateral. */
   base: '15px',
   linha: '1.5',
   /** Tabular para número: coluna de dinheiro desalinhada é difícil de conferir,
    *  e conferir é o que a operação faz aqui. */
   numero: 'tabular-nums',
-  /** [30/07] O ajuste que a Inter pede em corpo de texto: ela é desenhada com
-   *  tracking neutro para tamanho grande, e em 15px fica larga. -0.011em é o
-   *  valor que o próprio projeto da fonte recomenda para tamanho de interface. */
-  tracking: '-0.011em',
+  /** [30/09] ZERO. O `-0.011em` era o ajuste que a Inter pede em corpo; a Barlow
+   *  é desenhada para tracking neutro, e a referência não declara
+   *  `letter-spacing` fora dos rótulos em caixa alta. */
+  tracking: 'normal',
   /**
-   * [14/08] O RÓTULO EM CAIXA ALTA, e ele é token porque **eram cinco**.
+   * [14/08] O RÓTULO EM CAIXA ALTA, e ele é token porque **eram cinco** — o
+   * mesmo papel (nome de seção, cabeçalho de coluna, legenda de cartão) escrito
+   * com cinco combinações de peso e tracking, medidas na auditoria de 14/08.
    *
-   * O mesmo papel — nome de seção, cabeçalho de coluna, legenda de cartão —
-   * estava escrito com cinco combinações diferentes de peso e tracking, medidas
-   * na auditoria de 14/08:
-   *
-   *   `thead th`             11px · 650 · .07em     (todo cabeçalho de tabela)
-   *   `.kpi .nome`           11px · 650 · .07em
-   *   `.menu-painel .titulo` 11px · 650 · .06em
-   *   `.fu-rotulo`           11px · 600 · .10em
-   *   `.fu-painel-rot`       11px · 600 · .12em
-   *
-   * Nenhum dos cinco saía de lugar nenhum — não havia valor em `RITMO` nem aqui,
-   * então cada regra nova escolhia de novo. `.07em` com peso 650 é o que já
-   * cobria dois dos cinco e é o de mais uso (o cabeçalho de tabela aparece em
-   * todas as telas de lista), então é ele que vira o token.
+   * [30/09] ELE PASSOU A SER O DA REFERÊNCIA, NA CONDENSADA. A ilha escrevia
+   * 12px · 400 · .14em em cinza puro; a casa, 11px · 650 · .07em. O de hoje é
+   * 12px · 500 · .1em: o tamanho e a família são os da referência, o peso sobe
+   * um degrau porque a tinta desceu do Gray puro (3,08:1) para o `--fraco`
+   * (5,56:1) e a condensada a 400 nesse cinza fica fina demais, e o tracking cai
+   * um pouco porque cabeçalho de tabela com .14em alarga colunas que já não
+   * cabem.
    */
-  rotuloTamanho: '11px',
-  rotuloPeso: '650',
-  rotuloTracking: '.07em',
+  rotuloTamanho: '12px',
+  rotuloPeso: '500',
+  rotuloTracking: '.1em',
+};
+
+/**
+ * [30/09] A ESCALA DE CORPO, por PAPEL e não por valor.
+ *
+ * Até aqui cada regra escolhia o seu: 11, 11.5, 12, 12.5, 13, 13.5, 14, 15.5,
+ * 16px — nove tamanhos para quatro papéis. A escala abaixo tem SETE degraus e
+ * cada um tem um dono. Passos de ~1.1 a ~1.2, que é o que tela de operação
+ * pede: muito elemento de texto, e contraste exagerado entre eles vira ruído.
+ *
+ *   rotulo   12    só CAIXA ALTA condensada (cabeçalho, legenda de cartão, selo).
+ *                  Nada de texto corrido aqui: caixa alta de 12px tem a letra
+ *                  mais alta que o minúsculo de 13px
+ *   meta     13.5  rótulo de campo, dica, contagem, nota ao pé — o piso do
+ *                  texto corrido (o pedido é "nada abaixo de 13")
+ *   ui       14    menu, aviso, botão de texto
+ *   corpo    15    parágrafo, tabela, campo, botão
+ *   h3       17
+ *   h2       20
+ *   h1       30
+ *
+ * O número grande do KPI (28) mora na própria regra: é um papel só, e token de
+ * um uso só é o que o `extract` manda não criar.
+ */
+export const ESCALA = {
+  rotulo: '12px',
+  meta: '13.5px',
+  ui: '14px',
+  corpo: '15px',
+  h3: '17px',
+  h2: '20px',
+  h1: '30px',
 };
 
 export const RITMO = {
-  raio: '8px',
-  raioCartao: '12px',
-  /** [30/07] Para o que é pequeno e clicável: botão de ícone, pílula, chip. */
-  raioPequeno: '6px',
+  /**
+   * [30/09] O RAIO É ZERO, nos três. A referência não tem um canto arredondado
+   * — nem cartão, nem campo, nem botão, nem aviso — e a identidade dela passou a
+   * ser a do sistema. Os tokens ficam, e o motivo é o mesmo de terem nascido em
+   * 30/07: raio é um valor com NOME, e o próximo `border-radius: 6px` escrito à
+   * mão numa regra nova é justamente a volta da segunda gramática. A suíte de
+   * interface (I8c) prende os três em no máximo 2px.
+   */
+  raio: '0',
+  raioCartao: '0',
+  raioPequeno: '0',
+  /** O que é REDONDO por natureza e não por acabamento: as duas bolhas do balão
+   *  de ajuda (a cauda de um balão de pensamento). É a exceção nomeada na I8c. */
   raioPilula: '999px',
   gap: '12px',
   /**
@@ -574,6 +642,15 @@ export const RITMO = {
  * Cada degrau é duas camadas: um contato curto (1px) que desenha a aresta, e um
  * halo largo e deslocado que dá o volume. Uma sombra só, larga, borra a aresta;
  * uma sombra só, curta, parece borda dupla.
+ *
+ * [30/09] OS DEGRAUS 1 E 2 FICARAM SEM SUPERFÍCIE. O g3ref separa cartão de
+ * página por borda de 1px e por fundo, e nenhuma superfície apoiada tem sombra —
+ * cartão, KPI, tabela, filtro, aviso e botão perderam a dela. O 3 continua sendo
+ * o que FLUTUA (menu, painel de ajuda, balão), porque ali a sombra não é
+ * acabamento: é o que diz "isto está por cima e fecha ao clicar fora". O 2
+ * sobrevive num lugar só, a folha A4 na prévia — papel sobre a mesa, que é a
+ * única sombra da própria referência. Os três ficam com nome pelo mesmo motivo
+ * dos raios: a próxima sombra escrita à mão é a volta da segunda gramática.
  */
 export const SOMBRAS = {
   um: '0 1px 2px var(--sombra), 0 1px 3px -1px var(--sombra)',
@@ -584,13 +661,14 @@ export const SOMBRAS = {
 const variaveis = (p: Paleta) => `
     --fundo: ${p.fundo}; --fundo2: ${p.fundo2}; --fundo-recuo: ${p.fundoRecuo};
     --fundo-hover: ${p.fundoHover}; --texto: ${p.texto}; --fraco: ${p.fraco};
-    --borda: ${p.borda}; --borda-suave: ${p.bordaSuave};
+    --borda: ${p.borda}; --borda-suave: ${p.bordaSuave}; --borda-forte: ${p.bordaForte};
+    --campo: ${p.campo};
     --acento: ${p.acento}; --acento-texto: ${p.acentoTexto};
     --acento-forte: ${p.acentoForte}; --acento-hover: ${p.acentoHover}; --acento-suave: ${p.acentoSuave};
     --foco: ${p.foco}; --sombra: ${p.sombra}; --sombra-forte: ${p.sombraForte};
     --topo: ${p.topo}; --topo-texto: ${p.topoTexto}; --topo-fraco: ${p.topoFraco};
     --topo-veu: ${p.topoVeu}; --topo-veu-forte: ${p.topoVeuForte}; --topo-ativo: ${p.topoAtivo};
-    --brilho: ${p.brilho}; --gradiente: ${p.gradiente};
+    --gradiente: ${p.gradiente};
     --erro: ${p.erro}; --erro-fundo: ${p.erroFundo};
     --ok: ${p.ok}; --ok-fundo: ${p.okFundo};
     --alerta: ${p.alerta}; --alerta-fundo: ${p.alertaFundo};`;
@@ -602,121 +680,48 @@ const variaveis = (p: Paleta) => `
  * decidir sozinha em 29/07. Quem grava o atributo é `aplicarModo` abaixo; sem
  * atributo nenhum (primeiro paint, JS ainda carregando) vale o claro, que é o
  * padrão do sistema desde a mesma decisão.
- */
-/**
+ *
  * ==========================================================================
- * A PALETA DA REFERENCIA, escopada em `.g3ref` — 14/08/2026.
+ * O BLOCO `.g3ref { --g3ref-* }` SAIU EM 30/09, e o que ele era fica registrado.
  *
- * O PEDIDO E O QUE ELE CUSTA. *"A referencia exata deve ser
- * g3-fatura-unificada.vercel.app, sem tirar nem por, deve ser exatamente igual,
- * com bordas iguais, sistema de cores, tipografia."* Os valores abaixo sao os
- * medidos no template desempacotado do commit `36e964e` — nao aproximacoes, nao
- * "o token mais parecido". Onde a referencia escreve `#E4DED2`, esta lista
- * escreve `#E4DED2`.
+ * De 14/08 a 30/09 a aba Documento (hoje Fatura unificada) tinha uma paleta
+ * inteira própria, medida no template da referência `g3-fatura-unificada` e com
+ * um bloco escuro que remapeava cada token para o equivalente da casa. Com o
+ * g3ref virando o sistema, as duas paletas passaram a dizer a mesma coisa com
+ * valores quase iguais (`#E4DED2` contra `#E4DFD4`, `#DDD6C8` contra `#D8D2C6`)
+ * — e duas paletas quase iguais são o pior caso: ninguém vê a diferença, e a
+ * próxima correção entra numa só. Cada `--g3ref-*` virou o token daqui:
  *
- * DUAS DELAS REVERTEM DECISAO MEDIDA DESTE REPOSITORIO, e a reversao e do dono,
- * consultado e respondido em 14/08 ("Exato: #8F939D e #E8843C"):
+ *   papel, fundo, campo          --fundo2, --fundo, --campo
+ *   borda, borda-campo           --borda
+ *   borda-forte, regua           --borda-forte, --borda-suave
+ *   tinta, tinta-invertida       --texto, --fundo
+ *   apagado  #8F939D             --fraco           (AA: 3,08 -> 5,56:1)
+ *   laranja como tinta           --acento-forte    (AA: 2,69 -> 5,60:1)
+ *   laranja-tinta  #fff          --acento-texto    (AA: 2,69 -> 5,93:1)
+ *   laranja, laranja-hover       --acento, --acento-hover
+ *   alerta-fundo  #FBF1E4        --alerta-fundo    (ver a nota no estilo.ts)
+ *   navy, navy-tinta             --topo, --topo-texto
+ *   navy-apagado, navy-legenda   --topo-fraco
+ *   navy-regua, navy-rotulo      --topo-veu-forte, --acento
+ *   fonte, fonte-cond            --fonte, --fonte-cond
  *
- *   `#8F939D` como tinta apagada sobre branco   mede 3,08:1   AA pede 4,5
- *   `#E8843C` como TINTA sobre branco           mede 2,69:1   AA pede 4,5
- *   `#fff` sobre o `#E8843C` do botao           mede 2,69:1   AA pede 4,5
- *
- * Em 14/08 de manha o projeto tinha trocado os dois por `#66686F` (4,52:1) e
- * `#995728` (4,55:1), e o invariante I1d proibia o Gray de reaparecer. A troca
- * vale AQUI DENTRO e so aqui: `--fraco` e `--acento-forte` continuam sendo o que
- * as outras onze telas usam, e o I1d continua valendo para elas — ver a excecao
- * nomeada em `web/tests/interface.ts`. Registrado como `Q-DOCG3-15`.
- *
- * O ESCURO NAO E A REFERENCIA, e nao ha como ser: ela nao tem tema escuro. A
- * decisao do dono na mesma consulta foi *"acompanha o tema"*, entao o bloco
- * escuro remapeia CADA token para o equivalente ja medido da casa. A GEOMETRIA
- * nao muda com o tema — borda, espaco, raio zero e tipografia sao os mesmos nos
- * dois; o que troca e so a tinta. Uma aba clara cravada dentro de um sistema
- * escuro seria um retangulo branco de 1180px na cara de quem escolheu o escuro.
- *
- * E POR QUE TOKEN, se a decisao foi "literal exato": porque literal exato e o
- * valor do tema CLARO, nao a ausencia de camada. Sem os tokens, cada uma das ~70
- * regras da secao `fu-` precisaria de um par claro/escuro proprio, e o proximo
- * `#E4DED2` escrito a mao no meio delas nao teria contraparte no escuro.
+ * O ANEL DE FOCO DA ILHA TAMBÉM SAIU: era o laranja cru (2,41:1 sobre o creme,
+ * abaixo dos 3:1 da WCAG 1.4.11). O sistema tem UM anel, `--foco`.
  */
-const G3REF_CSS = `
-  .g3ref {
-    /* superficies */
-    --g3ref-papel: #fff;             /* o cartao */
-    --g3ref-fundo: #F6F2EA;          /* o creme da pagina, sob a area tracejada */
-    --g3ref-campo: #FBF9F5;          /* o fundo do input */
-    --g3ref-solta-hover: #FBF7F0;    /* a area de envio sob o mouse */
-    /* linhas — a referencia usa TRES espessuras da mesma familia, e a distancia
-       entre elas e o que separa cartao de campo de divisoria interna */
-    --g3ref-borda: #E4DED2;          /* contorno do cartao */
-    --g3ref-borda-campo: #DDD6C8;    /* contorno do input e do chip */
-    --g3ref-borda-forte: #C9C1B1;    /* o tracejado e o input de parametro */
-    --g3ref-regua: #EFEAE0;          /* divisoria dentro do cartao */
-    /* tinta */
-    --g3ref-tinta: #14213D;
-    /* A TINTA QUE POUSA SOBRE "--g3ref-tinta", e ela existe por um defeito que so
-       a foto do tema escuro entregou. Os dois botoes de contorno invertem no
-       hover — fundo vira a tinta, tinta vira o claro —, e os dois escreviam
-       "--g3ref-navy-tinta" no lugar deste token. No claro dava certo por
-       coincidencia (as duas sao o mesmo creme); no ESCURO "--g3ref-tinta" e o
-       creme e "--g3ref-navy-tinta" tambem, e o botao ficava creme sobre creme:
-       o rotulo sumia ao passar o mouse. Nenhum invariante pegaria — os dois
-       tokens existem nos dois temas, so significam coisas diferentes. */
-    --g3ref-tinta-invertida: #F6F2EA;
-    --g3ref-apagado: #8F939D;
-    --g3ref-laranja: #E8843C;
-    --g3ref-laranja-hover: #D3742F;
-    --g3ref-laranja-tinta: #fff;     /* sobre o laranja cheio */
-    --g3ref-alerta-fundo: #FBF1E4;
-    /* o painel navy */
-    --g3ref-navy: #14213D;
-    --g3ref-navy-hover: #1C2C4E;     /* o botao de imprimir sob o mouse */
-    --g3ref-navy-tinta: #F6F2EA;
-    --g3ref-navy-apagado: #B6BBC7;   /* o subtitulo do painel */
-    --g3ref-navy-legenda: #8F939D;   /* a legenda das duas colunas */
-    --g3ref-navy-regua: #2C3A56;
-    --g3ref-navy-rotulo: #F4A65A;    /* "BOLETO A GERAR NO BANCO" */
-    /* tipografia */
-    --g3ref-fonte: 'Barlow', system-ui, sans-serif;
-    --g3ref-fonte-cond: 'Barlow Semi Condensed', sans-serif;
-    --g3ref-fonte-mono: ui-monospace, 'SF Mono', Menlo, monospace;
-  }
-  :root[data-tema="escuro"] .g3ref {
-    --g3ref-papel: var(--fundo2);
-    --g3ref-fundo: var(--fundo);
-    --g3ref-campo: var(--fundo);
-    --g3ref-solta-hover: var(--fundo-hover);
-    --g3ref-borda: var(--borda);
-    --g3ref-borda-campo: var(--borda);
-    --g3ref-borda-forte: var(--fraco);
-    --g3ref-regua: var(--borda-suave);
-    --g3ref-tinta: var(--texto);
-    --g3ref-tinta-invertida: var(--fundo);
-    --g3ref-apagado: var(--fraco);
-    --g3ref-laranja: var(--acento);
-    --g3ref-laranja-hover: var(--acento-hover);
-    --g3ref-laranja-tinta: var(--acento-texto);
-    --g3ref-alerta-fundo: var(--alerta-fundo);
-    --g3ref-navy: var(--topo);
-    --g3ref-navy-hover: var(--fundo-hover);
-    --g3ref-navy-tinta: var(--topo-texto);
-    --g3ref-navy-apagado: var(--topo-fraco);
-    --g3ref-navy-legenda: var(--topo-fraco);
-    --g3ref-navy-regua: var(--topo-veu-forte);
-    --g3ref-navy-rotulo: var(--acento);
-  }
-`;
-
 export const VARIAVEIS_CSS = `
   ${FONTE_CSS}
-  ${FONTE_G3REF_CSS}
   :root {${variaveis(CLARO)}
     --raio: ${RITMO.raio}; --raio-cartao: ${RITMO.raioCartao};
     --raio-pequeno: ${RITMO.raioPequeno}; --raio-pilula: ${RITMO.raioPilula};
     --gap: ${RITMO.gap}; --gap-secao: ${RITMO.gapSecao};
     --largura: ${RITMO.larguraMaxima};
     --sombra-1: ${SOMBRAS.um}; --sombra-2: ${SOMBRAS.dois}; --sombra-3: ${SOMBRAS.tres};
+    --fonte: ${TIPOGRAFIA.familia};
+    --fonte-cond: ${TIPOGRAFIA.familiaCond};
     --fonte-mono: ${TIPOGRAFIA.familiaMono};
+    --t-rotulo: ${ESCALA.rotulo}; --t-meta: ${ESCALA.meta}; --t-ui: ${ESCALA.ui};
+    --t-corpo: ${ESCALA.corpo}; --t-h3: ${ESCALA.h3}; --t-h2: ${ESCALA.h2}; --t-h1: ${ESCALA.h1};
     --rotulo-tamanho: ${TIPOGRAFIA.rotuloTamanho};
     --rotulo-peso: ${TIPOGRAFIA.rotuloPeso};
     --rotulo-tracking: ${TIPOGRAFIA.rotuloTracking};
@@ -725,7 +730,6 @@ export const VARIAVEIS_CSS = `
   :root[data-tema="escuro"] {${variaveis(ESCURO)}
     color-scheme: dark;
   }
-  ${G3REF_CSS}
 `;
 
 // ------------------------------------------------------------------ o modo

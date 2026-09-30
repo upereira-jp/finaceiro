@@ -36,6 +36,30 @@
 // O QUE NÃO MUDOU, de propósito: a estrutura. Mesmas doze telas, mesma ordem,
 // mesma tabela nos mesmos lugares. O pedido foi acabamento, e trocar a estrutura
 // junto teria custado a familiaridade de quem já opera isto.
+//
+// ============================================================================
+// EM 30/09/2026 O DESENHO DA FATURA UNIFICADA VIROU O DO SISTEMA (etapa 0 do
+// redesenho). O que era a ilha `.g3ref` passou a ser a fundação, e cada regra
+// geral abaixo foi reescrita na língua dela — não copiada de lá:
+//
+//   fonte     Inter -> Barlow no corpo, Barlow Semi Condensed em título, aba,
+//             botão, rótulo em caixa alta e cabeçalho de tabela
+//   raio      12/8/6px -> zero (os tokens continuam, valendo 0)
+//   sombra    cartão, KPI, tabela, filtro, aviso e botão ficam SEM; a
+//             profundidade é borda de 1px e fundo. Menu e painel que flutuam
+//             mantêm o terceiro degrau
+//   botões    primário laranja com tinta Navy e rótulo condensado em caixa
+//             alta; o comum é contorno fino com tinta Navy; o brilho que
+//             atravessava o primário e a ondulação do clique saíram
+//   aviso     o filete lateral de 4px saiu — o estado é dito por fundo
+//             tingido, contorno de 1px da mesma matiz e o ícone próprio
+//
+// E A ILHA ENCOLHEU PARA O QUE SÓ ELA TEM: a grade da Fatura unificada, o painel
+// navy, a área de envio, as abas de etapa. Tudo o mais que ela repetia — cartão,
+// campo, rótulo, botão, aviso, tabela — ela agora HERDA daqui, sem cópia.
+//
+// A FOLHA IMPRESSA NÃO MUDA. Ela nunca leu token; o que ela herdava era a FONTE
+// do `.g3ref` em volta, e essa herança foi cortada: o `.g3` crava a própria.
 
 import { VARIAVEIS_CSS, TIPOGRAFIA } from './tema.ts';
 
@@ -46,11 +70,16 @@ export const ESTILO = `
   * { box-sizing: border-box; }
   body {
     margin: 0; background: var(--fundo); color: var(--texto);
-    font: ${TIPOGRAFIA.base}/${TIPOGRAFIA.linha} ${TIPOGRAFIA.familia};
+    font: ${TIPOGRAFIA.base}/${TIPOGRAFIA.linha} var(--fonte);
     letter-spacing: ${TIPOGRAFIA.tracking};
     -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
   }
-  ::selection { background: var(--acento-suave); }
+  /* AS SUPERFICIES QUE O NAVEGADOR DESENHA SOZINHO tambem falam a paleta: a
+     selecao, o cursor de texto, a barra de rolagem e o controle nativo (caixa de
+     marcar, radio). Sem isto elas saem no azul do sistema operacional - a unica
+     cor da tela que nao e da G3. */
+  ::selection { background: var(--acento-suave); color: var(--texto); }
+  :root { accent-color: var(--acento-forte); scrollbar-color: var(--borda-forte) var(--fundo); }
   /* --acento-forte, e nao --acento: link e TEXTO, e o laranja da marca como texto
      reprova a restricao 1 do tema em qualquer superficie clara - 2.35:1 no branco
      com o laranja de 28/07, 2.41:1 no creme com o Orange de 06/08.
@@ -70,8 +99,23 @@ export const ESTILO = `
   a:hover { color: var(--texto); text-decoration-thickness: 2px; }
   code, pre, .mono { font-family: var(--fonte-mono); font-size: .92em; }
   /* Numero em qualquer lugar sai tabular. Fora da tabela tambem: valor que muda
-     de largura enquanto atualiza e valor que a pessoa le duas vezes. */
-  .num, .valor, td.num, th.num { font-variant-numeric: ${TIPOGRAFIA.numero}; }
+     de largura enquanto atualiza e valor que a pessoa le duas vezes.
+
+     [30/09] A TABELA INTEIRA E O CAMPO ENTRARAM. Com a Inter isto era quase
+     indiferente - o algarismo dela ja nasce de largura fixa. O da Barlow nasce
+     PROPORCIONAL (o "1" e mais estreito que o "0"), e uma coluna de vencimentos
+     ou de kWh sem o "tnum" sai com as casas desencontradas linha a linha. */
+  .num, .valor, table, input, .marca { font-variant-numeric: ${TIPOGRAFIA.numero}; }
+
+  /* O ROTULO CAIXA-ALTA E O TITULO saem da condensada. Uma regra por PAPEL, e as
+     regras de cada lugar herdam dela em vez de repetir a familia. O botao nao
+     esta aqui: a regra dele comeca por "font: inherit", que zeraria esta - ele
+     declara a condensada na propria regra, logo depois. */
+  h1, h2, h3, .rot-alta, thead th, .kpi .nome, .kpi .valor, .menu-painel .titulo,
+  .setor-painel .titulo, .ajuda-secao h3, .marca, .barra-nav a, .marca-app,
+  .fu-rotulo, .fu-painel-rot, .fu-secao-tit {
+    font-family: var(--fonte-cond);
+  }
 
   /* O ICONE ACOMPANHA O TEXTO. 'block' evita o descolamento de linha de base que
      um svg inline ganha por ser tratado como caractere; o alinhamento fica com o
@@ -116,9 +160,11 @@ export const ESTILO = `
     background: var(--topo-veu-forte); color: var(--topo-texto);
     border-color: var(--topo-veu-forte);
   }
+  /* A MARCA NA CONDENSADA, e um degrau acima do corpo: e o nome do sistema, e
+     ele pesa como o titulo de um cartao da referencia. */
   .marca-app {
     display: inline-flex; align-items: center; gap: 9px;
-    font-weight: 680; font-size: 15.5px; letter-spacing: -0.02em;
+    font-weight: 600; font-size: 18px; letter-spacing: .01em;
   }
   .marca-app .logotipo { flex: none; }
   /* O SELETOR DE SETOR (27/09/2026), no desenho de migalha do Supabase:
@@ -143,7 +189,7 @@ export const ESTILO = `
   .barra .setor-gatilho {
     gap: 7px; padding: 5px 8px 5px 9px;
     background: transparent; border-color: transparent; box-shadow: none;
-    color: var(--topo-texto); font-size: 14px; font-weight: 620; letter-spacing: -0.01em;
+    color: var(--topo-texto); font-size: 17px; font-weight: 600; letter-spacing: .01em;
   }
   .barra .setor-gatilho:hover:not(:disabled), .barra .setor-gatilho[aria-expanded="true"] {
     background: var(--topo-veu); border-color: var(--topo-veu-forte);
@@ -182,8 +228,8 @@ export const ESTILO = `
     border-radius: var(--raio-pequeno); background: var(--acento-suave); color: var(--acento-forte);
   }
   .setor-texto { display: grid; gap: 1px; min-width: 0; }
-  .setor-texto strong { font-size: 13.5px; font-weight: 620; }
-  .setor-texto span { font-size: 12px; color: var(--fraco); }
+  .setor-texto strong { font-size: var(--t-corpo); font-weight: 600; }
+  .setor-texto span { font-size: var(--t-meta); color: var(--fraco); }
   .setor-marca { margin-left: auto; flex: none; color: var(--acento-forte); }
   /* AS DUAS PASTAS DO MENU (30/09/2026): «Setores financeiros» e «Administração da
      plataforma». A segunda se separa por uma linha suave e pelo proprio titulo -
@@ -196,7 +242,7 @@ export const ESTILO = `
     .setor { position: static; }
     .setor-painel { left: 16px; right: 16px; width: auto; top: calc(100% + 6px); }
   }
-  .sessao { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 13px; }
+  .sessao { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: var(--t-meta); }
   .sessao .campo-caixa select { width: auto; max-width: 260px; padding: 5px 30px 5px 10px; }
   /* O nome de quem esta logado sai em tela estreita: o icone do menu continua
      clicavel e o nome esta dentro dele, no bloco de identidade. */
@@ -205,17 +251,25 @@ export const ESTILO = `
   /* A NAVEGACAO. O item ativo nao e uma aba: e um filete de marca embaixo mais um
      esfumado do --acento-suave subindo do rodape do item. A borda inferior de
      2px existe em TODOS os itens, transparente nos inativos - sem isso o ativo
-     empurraria os vizinhos 2px para cima ao trocar de tela. */
+     empurraria os vizinhos 2px para cima ao trocar de tela.
+
+     [30/09] A ABA FALA COMO AS ABAS DE ETAPA DA REFERENCIA: condensada, caixa
+     alta, tracking aberto. A sombra de baixo saiu - a faixa se separa do creme
+     pela propria cor, que e o que ela faz na referencia. 13px e nao os 15px da
+     aba de etapa: aqui sao nove abas numa linha, e caixa alta e mais larga que
+     minusculo. A medida foi tirada, nao escolhida: com 13.5px e tracking .05em a
+     barra do Rateio passava 49px da tela de 1280 e rolava para o lado; com 13px e
+     .04em ela cabe nos 1280 como cabia com a Inter. */
   .barra-nav {
     display: flex; align-items: stretch; gap: 1px; overflow-x: auto;
     padding: 0 12px; background: var(--topo);
-    border-bottom: 1px solid var(--borda); box-shadow: var(--sombra-1);
-    scrollbar-width: thin;
+    border-bottom: 1px solid var(--borda);
+    scrollbar-width: thin; scrollbar-color: var(--topo-veu-forte) transparent;
   }
   .barra-nav a {
     display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
-    padding: 9px 11px; text-decoration: none; color: var(--topo-fraco);
-    font-size: 13.5px; font-weight: 500;
+    padding: 10px 10px 9px; text-decoration: none; color: var(--topo-fraco);
+    font-size: 13px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
     border-bottom: 2px solid transparent; border-radius: var(--raio-pequeno) var(--raio-pequeno) 0 0;
     transition: color .16s ease, background-color .16s ease, border-color .16s ease;
   }
@@ -227,7 +281,7 @@ export const ESTILO = `
      junto: sobre escuro ele virava borrao, e quem carrega o sinal sao a cor e o
      filete de 2px. */
   .barra-nav a.ativo {
-    color: var(--acento); font-weight: 600;
+    color: var(--acento);
     border-bottom-color: var(--acento);
     background: var(--topo-ativo);
   }
@@ -256,7 +310,8 @@ export const ESTILO = `
     display: flex; align-items: center; gap: 9px; width: 100%;
     padding: 8px 10px; border: 0; border-radius: var(--raio-pequeno);
     background: none; box-shadow: none; color: var(--texto);
-    font: inherit; font-size: 13.5px; text-align: left; cursor: pointer;
+    font: inherit; font-size: var(--t-corpo); letter-spacing: normal; text-transform: none;
+    text-align: left; cursor: pointer;
   }
   .menu-painel button:hover:not(:disabled) {
     background: var(--fundo-hover); color: var(--texto); border-color: transparent; transform: none;
@@ -266,8 +321,8 @@ export const ESTILO = `
   .menu-painel .ao-fim { margin-left: auto; }
   /* O bloco de identidade no alto do menu: quem esta logado e em qual empresa. */
   .menu-painel .quem { padding: 4px 10px 8px; }
-  .menu-painel .quem strong { display: block; font-size: 13.5px; }
-  .menu-painel .quem span { font-size: 12px; color: var(--fraco); }
+  .menu-painel .quem strong { display: block; font-size: var(--t-corpo); }
+  .menu-painel .quem span { font-size: var(--t-meta); color: var(--fraco); }
 
   /* ------------------------------------------- o gatilho da central de ajuda
      O BOTAO DESCEU DA BARRA DO TOPO PARA O CANTO INFERIOR DIREITO em 21/08/2026,
@@ -281,15 +336,24 @@ export const ESTILO = `
                      tudo que fica atras de um dialogo;
        bottom 22px   o .conteudo ja reservava 80px de respiro no rodape, entao
                      o botao nao tapa a ultima linha de nenhuma tabela;
-       primario      herda o laranja da marca, o brilho do hover e a expansao do
-                     clique do resto do sistema. Ver o cabecalho do componente. */
+       primario      herda o laranja da marca e o hover do resto do sistema.
+                     Ver o cabecalho do componente.
+
+     [30/09] QUADRADO E SEM SOMBRA, como tudo que o g3ref desenha. Era um circulo
+     de 54px com a sombra do terceiro degrau - a unica bolha flutuante da tela, e
+     o que mais denunciava "outro sistema" ao lado dos cartoes quadrados. O que o
+     separa do conteudo embaixo agora e o bloco cheio de laranja com o contorno
+     Navy de 1px, que se le sobre o creme, sobre o branco e sobre a faixa. A regra
+     de hover antiga pedia "box-shadow: var(--sombra-forte)", que e uma COR e nao
+     uma sombra: a declaracao era invalida e nunca valeu. */
   .ajuda-gatilho {
     position: fixed; right: 22px; bottom: 22px; z-index: 30;
-    width: 54px; height: 54px; padding: 0;
-    border-radius: var(--raio-pilula);
-    box-shadow: var(--sombra-3);
+    width: 48px; height: 48px; padding: 0;
   }
-  .ajuda-gatilho:hover:not(:disabled) { box-shadow: var(--sombra-forte); }
+  /* A especificidade e a do primario MAIS UMA classe: o contorno Navy tem de
+     vencer o "border-color: var(--acento)" dele nos dois estados. */
+  button.primario.ajuda-gatilho,
+  button.primario.ajuda-gatilho:hover:not(:disabled) { border-color: var(--acento-texto); }
 
   /* O BALAO DE PRIMEIRA VISITA. Um icone sozinho num canto e mudo, e quem entra
      pela primeira vez nao tem por que saber que aquele desenho responde
@@ -297,7 +361,7 @@ export const ESTILO = `
      nao impede clicar em nada atras — um aviso que interrompe o trabalho para
      dizer "existe ajuda" e o contrario de ajudar. */
   .ajuda-balao {
-    position: fixed; right: 22px; bottom: 100px; z-index: 31;
+    position: fixed; right: 22px; bottom: 90px; z-index: 31;
     width: min(258px, calc(100vw - 40px));
     padding: 11px 26px 12px 13px;
     background: var(--fundo); color: var(--texto);
@@ -308,15 +372,15 @@ export const ESTILO = `
        faz o balao parecer SUBIR DELE em vez de aparecer solto no ar. */
     transform-origin: bottom right;
   }
-  .ajuda-balao strong { display: block; font-size: 13.5px; }
-  .ajuda-balao p { margin: 3px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--fraco); }
+  .ajuda-balao strong { display: block; font-size: var(--t-ui); }
+  .ajuda-balao p { margin: 3px 0 0; font-size: var(--t-meta); line-height: 1.5; color: var(--fraco); }
   /* O "x" BEM PEQUENO, no canto superior direito — pedido ao pe da letra. Mesmo
      pequeno ele tem 20px de alvo e nome acessivel: um alvo minusculo sem nome e
      enfeite, nao botao de fechar. */
   .ajuda-balao-x {
     position: absolute; top: 3px; right: 3px;
     width: 20px; height: 20px; padding: 0; flex: none;
-    border-radius: var(--raio-pilula); border-color: transparent;
+    border-radius: var(--raio); border-color: transparent;
     background: none; box-shadow: none; color: var(--fraco);
   }
   .ajuda-balao-x:hover:not(:disabled) {
@@ -338,8 +402,10 @@ export const ESTILO = `
     background: var(--acento); border-radius: var(--raio-pilula);
     animation: ajuda-subir .3s ease-out both;
   }
-  .ajuda-bolha-1 { right: 40px; bottom: 79px; width: 8px; height: 8px; animation-delay: .05s; }
-  .ajuda-bolha-2 { right: 32px; bottom: 88px; width: 12px; height: 12px; animation-delay: .13s; }
+  /* As bolhas sao a EXCECAO NOMEADA do raio zero (I8c): a cauda de um balao de
+     pensamento e redonda por natureza, e quadrada ela deixaria de ser cauda. */
+  .ajuda-bolha-1 { right: 36px; bottom: 73px; width: 8px; height: 8px; animation-delay: .05s; }
+  .ajuda-bolha-2 { right: 28px; bottom: 81px; width: 12px; height: 12px; animation-delay: .13s; }
 
   @keyframes ajuda-subir {
     from { opacity: 0; transform: translateY(10px) scale(.92); }
@@ -381,10 +447,10 @@ export const ESTILO = `
   .ajuda-corpo { overflow-y: auto; padding: 14px 16px 40px; }
   .ajuda-secao { margin-top: 20px; }
   .ajuda-secao h3 {
-    font-size: 12px; font-weight: 650; text-transform: uppercase;
-    letter-spacing: .06em; color: var(--fraco); margin: 0 0 9px;
+    font-size: var(--rotulo-tamanho); font-weight: var(--rotulo-peso); text-transform: uppercase;
+    letter-spacing: var(--rotulo-tracking); color: var(--fraco); margin: 0 0 9px;
   }
-  .ajuda-nota { font-size: 12.5px; line-height: 1.55; margin: 0 0 10px; }
+  .ajuda-nota { font-size: var(--t-meta); line-height: 1.55; margin: 0 0 10px; }
 
   /* O ESTADO AO VIVO. Uma linha por pendencia real do mes, com o numero dentro
      da frase - "11 de 29 pendentes" - e o botao que leva ao lugar de resolver. */
@@ -394,18 +460,20 @@ export const ESTILO = `
     padding: 10px 12px; border: 1px solid var(--borda);
     border-radius: var(--raio-pequeno); background: var(--fundo2);
   }
-  .ajuda-frase { font-size: 13px; line-height: 1.45; flex: 1 1 200px; }
+  .ajuda-frase { font-size: var(--t-ui); line-height: 1.45; flex: 1 1 200px; }
   .ajuda-efeito {
-    font-size: 11px; padding: 2px 8px; border-radius: var(--raio-pilula);
+    font-size: var(--rotulo-tamanho); padding: 2px 8px; border-radius: var(--raio-pequeno);
     background: var(--alerta-fundo); color: var(--alerta); white-space: nowrap;
   }
   .ajuda-ir {
     display: inline-flex; align-items: center; gap: 5px;
-    padding: 5px 10px; font-size: 12.5px; font-weight: 600;
+    padding: 5px 10px; font-size: var(--t-ui); font-weight: 600;
     border: 1px solid var(--borda); border-radius: var(--raio-pequeno);
     background: var(--fundo); color: var(--acento-forte); cursor: pointer;
   }
-  .ajuda-ir:hover { background: var(--acento-suave); border-color: var(--acento); }
+  /* ":hover:not(:disabled)" e nao ":hover": o hover do botao generico e (0,2,1) e
+     ganharia desta, trocando a tinta laranja pelo Navy. Ver a I7 da suite. */
+  .ajuda-ir:hover:not(:disabled) { background: var(--acento-suave); border-color: var(--acento-forte); color: var(--acento-forte); }
   /* A seta do botao aponta para a DIREITA: o desenho reusado e o "descer" do
      resto do sistema, girado - um icone proprio so para isto seria mais um nome
      na uniao fechada para dizer a mesma coisa. */
@@ -416,8 +484,8 @@ export const ESTILO = `
      so APARECE. Pintar os dois iguais mandaria alguem procurar em Usinas um
      campo de energia gerada que nao existe la - nem em lugar nenhum, porque
      aquele numero e espelhado do CRM. */
-  .ajuda-ir-ver { color: var(--fraco); font-weight: 550; }
-  .ajuda-ir-ver:hover { color: var(--acento-forte); }
+  .ajuda-ir-ver { color: var(--fraco); font-weight: 500; }
+  .ajuda-ir-ver:hover:not(:disabled) { color: var(--acento-forte); }
 
   /* Os botoes de caminho quebram linha em vez de esticarem a coluna: um rotulo
      como "Antes: confirmar o CPF ou CNPJ" nao cabe ao lado de outro em 460px. */
@@ -425,7 +493,7 @@ export const ESTILO = `
 
   .ajuda-tudo-certo {
     display: flex; align-items: center; gap: 8px;
-    font-size: 13px; color: var(--ok); margin: 0;
+    font-size: var(--t-ui); color: var(--ok); margin: 0;
   }
 
   /* UM ASSUNTO. Fechado por padrao para a lista ser varrivel - quem reconhece a
@@ -443,19 +511,22 @@ export const ESTILO = `
     display: flex; align-items: flex-start; justify-content: flex-start;
     gap: 8px; width: 100%;
     padding: 10px 2px; border: 0; background: none; box-shadow: none;
-    color: var(--texto); font: inherit; font-size: 13.5px; font-weight: 600;
-    text-align: left; cursor: pointer;
+    color: var(--texto); font: inherit; font-size: var(--t-corpo); font-weight: 600;
+    letter-spacing: normal; text-transform: none; text-align: left; cursor: pointer;
   }
-  .ajuda-pergunta:hover { color: var(--acento-forte); transform: none; }
+  .ajuda-pergunta:hover:not(:disabled) { color: var(--acento-forte); }
   .ajuda-pergunta .ic { margin-top: 3px; flex: none; }
-  .ajuda-resposta { padding: 0 2px 14px 22px; font-size: 13px; line-height: 1.6; }
+  .ajuda-resposta { padding: 0 2px 14px 22px; font-size: var(--t-ui); line-height: 1.6; }
   .ajuda-resposta p { margin: 0 0 10px; color: var(--fraco); }
   .ajuda-resposta ol { margin: 0 0 12px; padding-left: 18px; display: grid; gap: 6px; }
   /* O PORQUE E VISUALMENTE DIFERENTE DO RESTO, e nao por enfeite: ele responde
-     outra pergunta que a resposta e os passos. A barra a esquerda o separa sem
-     pedir uma cor propria - o painel ja tem cores demais disputando atencao. */
+     outra pergunta que a resposta e os passos. A linha a esquerda o separa sem
+     pedir uma cor propria - o painel ja tem cores demais disputando atencao.
+     [30/09] 1px da linha forte, e nao mais 2px da comum: o filete fino e o da
+     referencia, e o tom um degrau acima devolve a presenca que a espessura
+     levou. */
   .ajuda-porque {
-    border-left: 2px solid var(--borda);
+    border-left: 1px solid var(--borda-forte);
     padding: 2px 0 2px 10px;
     margin: 0 0 12px !important;
   }
@@ -464,14 +535,17 @@ export const ESTILO = `
   /* O PORQUE DENTRO DO CAMPO. O botao mora no <label> e por isso o label vira
      flex - sem isso o icone cai numa linha propria e o rotulo parece quebrado. */
   label:has(.campo-porque-botao) { display: inline-flex; align-items: center; gap: 6px; }
+  /* [30/09] O HOVER PINTAVA "--acento" SOBRE O CARTAO CLARO: 2,69:1, abaixo dos
+     3:1 que icone de controle pede (WCAG 1.4.11). E o fundo pedia
+     "--fundo-suave", um token que nunca existiu - a declaracao caia inteira. */
   .campo-porque-botao {
     display: inline-flex; align-items: center; justify-content: center;
     width: 18px; height: 18px; padding: 0;
     border: none; background: none; cursor: pointer;
-    color: var(--fraco); border-radius: 50%; flex: none;
+    color: var(--fraco); border-radius: var(--raio); flex: none;
   }
-  .campo-porque-botao:hover { color: var(--acento); background: var(--fundo-suave); }
-  .campo-porque-botao[aria-expanded="true"] { color: var(--acento); }
+  .campo-porque-botao:hover:not(:disabled) { color: var(--acento-forte); background: var(--fundo-hover); }
+  .campo-porque-botao[aria-expanded="true"] { color: var(--acento-forte); }
   /* O caminho que SAI do sistema: sublinhado ao passar, para parecer link e nao
      botao, e sem o tom de acao primaria - ele leva para fora, nao resolve aqui. */
   /* A LIGACAO PARA O OUTRO SISTEMA DENTRO DE UMA TABELA. Discreta por padrao e
@@ -485,44 +559,57 @@ export const ESTILO = `
   .ligacao-crm {
     display: inline-flex; align-items: center; gap: 3px;
     margin-left: 8px; padding: 1px 5px;
-    font-size: 11px; color: var(--fraco); text-decoration: none;
-    border: 1px solid var(--borda); border-radius: 3px; vertical-align: middle;
+    font-size: var(--rotulo-tamanho); color: var(--fraco); text-decoration: none;
+    border: 1px solid var(--borda); border-radius: var(--raio-pequeno); vertical-align: middle;
   }
-  .ligacao-crm:hover { color: var(--acento); border-color: var(--acento); }
+  .ligacao-crm:hover { color: var(--acento-forte); border-color: var(--acento-forte); }
   .ligacao-crm-texto { letter-spacing: .02em; }
   .ajuda-ir-crm { text-decoration: none; }
   .ajuda-ir-crm:hover { text-decoration: underline; }
   .campo-porque {
     margin: 6px 0 0; padding: 8px 10px;
-    font-size: 12px; line-height: 1.55; color: var(--fraco);
-    background: var(--fundo-suave); border-left: 2px solid var(--borda); border-radius: 3px;
+    font-size: var(--t-meta); line-height: 1.55; color: var(--fraco);
+    background: var(--fundo-recuo); border-left: 1px solid var(--borda-forte); border-radius: var(--raio);
   }
 
   .ajuda-termo { padding: 9px 0; border-bottom: 1px solid var(--borda-suave); }
   .ajuda-termo:last-child { border-bottom: 0; }
-  .ajuda-termo strong { display: block; font-size: 13.5px; }
-  .ajuda-termo p { margin: 4px 0 0; font-size: 13px; line-height: 1.6; color: var(--fraco); }
+  .ajuda-termo strong { display: block; font-size: var(--t-corpo); }
+  .ajuda-termo p { margin: 4px 0 0; font-size: var(--t-ui); line-height: 1.6; color: var(--fraco); }
 
   @keyframes entrar-da-direita { from { transform: translateX(16px); opacity: 0; } }
   @keyframes surgir { from { opacity: 0; } }
 
   /* --------------------------------------------------- conteudo e tipografia
      O titulo ganhou peso e corpo (24 -> 27px, 650 -> 700) e a descricao encolheu
-     e ficou mais discreta: era o pedido de hierarquia de 30/07. */
-  .conteudo { max-width: var(--largura); margin: 0 auto; padding: 26px 20px 80px; }
-  h1 { font-size: 27px; font-weight: 700; margin: 0 0 5px; letter-spacing: -0.025em; }
+     e ficou mais discreta: era o pedido de hierarquia de 30/07.
+
+     [30/09] OS TRES TITULOS SAO DA CONDENSADA, a 600 - o peso que a referencia usa
+     no titulo do cartao ("Conferencia dos dados", 22px). A condensada a 700 em
+     30px vira cartaz; a 600 continua sendo titulo de tela de trabalho. Tracking
+     neutro: a Barlow nao pede o aperto que a Inter pedia em tamanho grande.
+
+     A DESCRICAO VOLTOU AO CORPO (13.5 -> 15px) e ganhou medida de leitura. Ela e
+     a unica prosa de toda tela, e o pedido desta etapa foi texto corrido nunca
+     abaixo de 13px; o "82ch" antigo, com a Barlow mais estreita, passava de 90
+     caracteres por linha. */
+  .conteudo { max-width: var(--largura); margin: 0 auto; padding: 28px 20px 80px; }
+  h1 { font-size: var(--t-h1); font-weight: 600; line-height: 1.1; margin: 0 0 6px; letter-spacing: 0; }
   h2 {
-    font-size: 16px; font-weight: 650; margin: 30px 0 11px; letter-spacing: -0.01em;
+    font-size: var(--t-h2); font-weight: 600; line-height: 1.2; margin: 30px 0 11px; letter-spacing: 0;
     display: flex; align-items: center; gap: 8px;
   }
-  h3 { font-size: 14px; font-weight: 650; margin: 0 0 8px; }
-  .sub { color: var(--fraco); margin: 0 0 20px; font-size: 13.5px; max-width: 82ch; }
+  h3 { font-size: var(--t-h3); font-weight: 600; line-height: 1.25; margin: 0 0 8px; }
+  .sub { color: var(--fraco); margin: 0 0 22px; font-size: var(--t-corpo); max-width: 72ch; }
   .fraco { color: var(--fraco); }
 
-  /* ---------------------------------------------------------- superficies */
+  /* ---------------------------------------------------------- superficies
+     [30/09] O CARTAO DA REFERENCIA: branco sobre o creme, 1px de linha, canto reto
+     e nenhuma sombra. O respiro subiu de 16 para 20px - a referencia usa 22 e 26,
+     e esta e a medida que ainda cabe tela de lista. */
   .cartao {
-    border: 1px solid var(--borda); border-radius: var(--raio-cartao); padding: 16px;
-    background: var(--fundo2); box-shadow: var(--sombra-1);
+    border: 1px solid var(--borda); border-radius: var(--raio-cartao); padding: 20px;
+    background: var(--fundo2);
   }
   /* O RITMO ENTRE SECOES SAI DE UM TOKEN desde 14/08. Ele era o literal
      "style={{ marginBottom: 20 }}" escrito a mao DEZESSETE vezes em dez telas, e
@@ -532,23 +619,26 @@ export const ESTILO = `
   .secao { margin-bottom: var(--gap-secao); }
   .rolagem {
     overflow-x: auto; border: 1px solid var(--borda); border-radius: var(--raio-cartao);
-    background: var(--fundo2); box-shadow: var(--sombra-1);
+    background: var(--fundo2); scrollbar-color: var(--borda-forte) transparent;
   }
-  .vazio { padding: 40px 32px; text-align: center; color: var(--fraco); font-size: 13.5px; }
+  .vazio { padding: 40px 32px; text-align: center; color: var(--fraco); font-size: var(--t-corpo); }
 
   /* -------------------------------------------------------------- tabela
      LINHA VERTICAL NENHUMA, e a horizontal e a --borda-suave (1.16:1 contra o
      branco): ela separa sem desenhar grade. O cabecalho nao se separa por linha
      e sim por SUPERFICIE - o --fundo-recuo, que e a terceira cor da paleta da G3
      e ate 29/07 estava sem uso. */
-  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  table { width: 100%; border-collapse: collapse; font-size: var(--t-corpo); }
   th, td { text-align: left; vertical-align: top; }
   /* O ROTULO CAIXA-ALTA SAI DE UM TOKEN SO desde 14/08. Eram cinco combinacoes de
      peso e tracking para o mesmo papel - ver a nota de "rotuloTamanho" no
-     "tema.ts". Esta e a definicao; as outras quatro regras a herdam. */
-  .rot-alta, thead th, .kpi .nome, .menu-painel .titulo, .fu-rotulo, .fu-painel-rot {
+     "tema.ts". Esta e a definicao; as outras regras a herdam.
+     [30/09] A secao da Fatura unificada (".fu-secao-tit") e a legenda da ajuda
+     entraram na lista: eram o mesmo papel com o tamanho e o tracking escritos a
+     mao na ilha. */
+  .rot-alta, thead th, .kpi .nome, .menu-painel .titulo, .fu-rotulo, .fu-painel-rot, .fu-secao-tit {
     font-size: var(--rotulo-tamanho); font-weight: var(--rotulo-peso);
-    text-transform: uppercase; letter-spacing: var(--rotulo-tracking);
+    text-transform: uppercase; letter-spacing: var(--rotulo-tracking); line-height: 1.3;
   }
   thead th {
     padding: 10px 14px; background: var(--fundo-recuo); color: var(--fraco);
@@ -578,12 +668,17 @@ export const ESTILO = `
   th[aria-sort] .ordenar .ic { color: var(--acento-forte); }
 
   /* ---------------------------------------------------------- formulario */
-  .campos { display: grid; gap: var(--gap); grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
-  label { display: block; font-size: 12.5px; font-weight: 550; color: var(--fraco); margin-bottom: 5px; }
+  /* [30/09] O CAMPO DA REFERENCIA. Rotulo em Barlow, tinta apagada, sem caixa
+     alta - o rotulo de campo nao e o de secao. O campo afunda um tom do cartao
+     ("--campo") em vez de ser branco sobre branco: e o fundo que o anuncia, e a
+     linha de 1px so o contorna. Sem raio. */
+  .campos { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+  label { display: block; font-size: var(--t-meta); font-weight: 500; color: var(--fraco); margin-bottom: 5px; }
   input, select, textarea {
-    width: 100%; padding: 8px 11px; border: 1px solid var(--borda); border-radius: var(--raio);
-    background: var(--fundo2); color: var(--texto); font: inherit; font-size: 13.5px;
-    transition: border-color .14s ease, box-shadow .14s ease, background-color .14s ease;
+    width: 100%; padding: 8px 10px; border: 1px solid var(--borda); border-radius: var(--raio);
+    background: var(--campo); color: var(--texto); font: inherit; font-size: var(--t-corpo);
+    line-height: 1.3; caret-color: var(--acento-forte);
+    transition: border-color .14s ease, background-color .14s ease;
   }
   /* SEM "opacity". O "--fraco" sozinho da 5,56:1 no claro e 5,10:1 no escuro e
      passa; com o alfa de 0,75 ele caia para 3,28:1 e 3,54:1, e placeholder e
@@ -595,10 +690,14 @@ export const ESTILO = `
      foco e faltava no hover e no desabilitado - e as tres caixas da aba Documento
      (instrucoes, linha digitavel, PIX copia-e-cola) sao textareas. */
   input:hover:not(:disabled), select:hover:not(:disabled), textarea:hover:not(:disabled) {
-    border-color: var(--fraco);
+    border-color: var(--borda-forte);
   }
+  /* O FOCO E O DA REFERENCIA - 2px cheios, rente a borda, sem o halo de 3px em
+     "box-shadow" que a casa usava - mas na cor do sistema: "--foco", o unico
+     token medido a 3:1 contra toda superficie (T2). A referencia desenha este
+     anel com o laranja cru, 2,41:1 sobre o creme. */
   input:focus, select:focus, textarea:focus {
-    outline: none; border-color: var(--foco); box-shadow: 0 0 0 3px var(--acento-suave);
+    outline: 2px solid var(--foco); outline-offset: 0; border-color: var(--borda);
   }
   /* DESABILITADO E TOKEN, E NAO OPACIDADE. "opacity: .55" sobre o cartao dava
      3,70:1; e no botao primario, onde o alfa cai sobre o proprio acento, dava
@@ -609,7 +708,7 @@ export const ESTILO = `
   input:disabled, select:disabled, textarea:disabled {
     background: var(--fundo-recuo); color: var(--fraco); cursor: default;
   }
-  input[type="file"] { padding: 6px 8px; font-size: 13px; }
+  input[type="file"] { padding: 6px 8px; font-size: var(--t-ui); }
   /* O BOTAO DO SELETOR DE ARQUIVO era a ultima peca nativa da tela: "Choose File /
      No file chosen", com desenho e IDIOMA do sistema operacional - aparecia em
      ingles num sistema em portugues. O texto continua sendo do browser (nao ha
@@ -617,12 +716,10 @@ export const ESTILO = `
   input[type="file"]::file-selector-button {
     margin-right: 10px; padding: 6px 12px; border-radius: var(--raio-pequeno);
     border: 1px solid var(--borda); background: var(--fundo2); color: var(--texto);
-    font: inherit; font-size: 13px; font-weight: 550; cursor: pointer;
-    box-shadow: var(--sombra-1); transition: border-color .14s ease, color .14s ease;
+    font: inherit; font-family: var(--fonte-cond); font-size: var(--t-ui); font-weight: 600; cursor: pointer;
+    transition: border-color .14s ease, color .14s ease;
   }
-  input[type="file"]::file-selector-button:hover {
-    border-color: var(--acento); color: var(--acento-forte);
-  }
+  input[type="file"]::file-selector-button:hover { border-color: var(--texto); }
 
   /* O SELECT PERDE A SETA DO SISTEMA e recebe a do Phosphor, posicionada pelo
      .campo-caixa. A seta nativa e o que mais denuncia formulario nao estilizado -
@@ -634,7 +731,7 @@ export const ESTILO = `
     color: var(--fraco); pointer-events: none;
   }
   .campo-caixa .adorno-esquerda {
-    position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+    position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
     color: var(--fraco); pointer-events: none;
   }
   .campo-caixa .com-adorno-esquerda { padding-left: 34px; }
@@ -665,7 +762,7 @@ export const ESTILO = `
     border-color: var(--borda); background: var(--fundo2);
   }
   .inline input:focus, .inline select:focus {
-    border-color: var(--foco); background: var(--fundo2); box-shadow: 0 0 0 3px var(--acento-suave);
+    border-color: var(--borda); background: var(--fundo2); box-shadow: none;
   }
   .inline { display: flex; align-items: center; gap: 4px; }
   /* O campo de data DENTRO da linha: precisa reservar a direita para o botao do
@@ -679,7 +776,7 @@ export const ESTILO = `
   .interruptor {
     display: inline-flex; align-items: center; gap: 9px; padding: 3px;
     border: 0; background: none; box-shadow: none; cursor: pointer;
-    font: inherit; font-size: 13.5px; color: var(--texto);
+    font: inherit; font-size: var(--t-corpo); letter-spacing: normal; color: var(--texto);
   }
   .interruptor:hover:not(:disabled) { background: none; border-color: transparent; transform: none; color: var(--texto); }
   /* O CONTORNO DO TRILHO E "--fraco", E NAO "--borda". Medido em 14/08: a
@@ -688,22 +785,27 @@ export const ESTILO = `
      tema claro NENHUM dos dois estados chegava la (ligado dava 2,69:1). Dois
      interruptores deste sistema decidem "sandbox" e "ativo" do conector de
      cobranca, que e onde um clique errado emite cobranca de verdade. */
+  /* [30/09] QUADRADO, e o pino deixou de ser um disco branco com sombra: sem
+     sombra, branco sobre o recuo daria 1,2:1 e o pino sumiria. Desligado, o pino
+     e um bloco "--fraco" (4,52:1 sobre o recuo); ligado, e o Navy sobre o
+     laranja - o mesmo par do botao primario, 5,93:1. Os dois estados continuam
+     ditos pela POSICAO do pino, e nao so pela cor. */
   .interruptor .trilho {
     width: 38px; height: 22px; flex: none; padding: 3px;
-    border-radius: var(--raio-pilula); background: var(--fundo-recuo);
+    border-radius: var(--raio); background: var(--fundo-recuo);
     border: 1px solid var(--fraco); display: flex; align-items: center;
     transition: background-color .2s ease, border-color .2s ease;
   }
   .interruptor .pino {
-    width: 16px; height: 16px; border-radius: var(--raio-pilula);
-    background: var(--fundo2); box-shadow: var(--sombra-1);
-    transition: transform .2s cubic-bezier(.4, 0, .2, 1);
+    width: 14px; height: 14px; border-radius: var(--raio);
+    background: var(--fraco);
+    transition: transform .2s cubic-bezier(.4, 0, .2, 1), background-color .2s ease;
   }
   /* Ligado: o preenchimento continua sendo o acento - e o sinal da marca -, e
      quem carrega os 3:1 do CONTORNO e o "--acento-forte", que e o token que
      existe para o laranja em superficie clara (5,60:1 claro, 6,88:1 escuro). */
   .interruptor[aria-checked="true"] .trilho { background: var(--acento); border-color: var(--acento-forte); }
-  .interruptor[aria-checked="true"] .pino { transform: translateX(16px); }
+  .interruptor[aria-checked="true"] .pino { transform: translateX(16px); background: var(--acento-texto); }
   .interruptor:disabled { opacity: .55; cursor: default; }
 
   /* A CAIXA DE MARCAR, nativa de proposito (30/09/2026). O dono pediu "checkbox"
@@ -728,17 +830,17 @@ export const ESTILO = `
   .usuario-perfil { min-width: 164px; }
   .usuario-th-setor { display: inline-flex; align-items: center; gap: 5px; }
   .usuario-nome { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .usuario-email { font-size: 12.5px; margin-top: 2px; }
+  .usuario-email { font-size: var(--t-meta); margin-top: 2px; }
   tr.usuario-desligado td { color: var(--fraco); }
-  tr.usuario-desligado strong { font-weight: 550; }
+  tr.usuario-desligado strong { font-weight: 500; }
   tr.usuario-retorno td { padding-top: 0; }
   tr.usuario-retorno:hover { background: none; }
   .usuario-novo h2, .usuario-pronto h2 { display: flex; align-items: center; gap: 8px; margin-top: 0; }
   .usuario-senha { display: flex; gap: 6px; align-items: center; }
   .usuario-senha input { font-family: var(--fonte-mono); }
-  .usuario-dica { display: flex; align-items: center; gap: 5px; margin: 6px 0 0; font-size: 12px; color: var(--fraco); }
+  .usuario-dica { display: flex; align-items: center; gap: 5px; margin: 6px 0 0; font-size: var(--t-meta); color: var(--fraco); }
   .usuario-grupo { border: 0; padding: 0; margin: 18px 0 0; min-width: 0; }
-  .usuario-grupo legend { padding: 0; margin-bottom: 8px; font-size: 12.5px; font-weight: 550; color: var(--fraco); }
+  .usuario-grupo legend { padding: 0; margin-bottom: 8px; font-size: var(--t-meta); font-weight: 500; color: var(--fraco); }
   .usuario-opcoes { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
   /* A OPCAO E UM CARTAO CLICAVEL INTEIRO: o "label" envolve a caixa, entao
      clicar no texto marca. A marcada ganha a borda e o fundo do acento - o mesmo
@@ -746,69 +848,72 @@ export const ESTILO = `
   .opcao {
     display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 10px 12px;
     border: 1px solid var(--borda); border-radius: var(--raio); background: var(--fundo2);
-    color: var(--texto); font-size: 13.5px; font-weight: 400; cursor: pointer;
+    color: var(--texto); font-size: var(--t-corpo); font-weight: 400; cursor: pointer;
     transition: border-color .14s ease, background-color .14s ease;
   }
   .opcao input { margin-top: 1px; }
-  .opcao:hover { border-color: var(--fraco); }
+  .opcao:hover { border-color: var(--borda-forte); }
   .opcao.marcada { border-color: var(--acento-forte); background: var(--acento-suave); }
   .opcao.travada { cursor: not-allowed; background: var(--fundo-recuo); color: var(--fraco); }
   .opcao.travada:hover { border-color: var(--borda); }
   .opcao-texto { display: grid; gap: 2px; min-width: 0; }
-  .opcao-texto strong { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 620; }
-  .opcao-texto span { font-size: 12.5px; color: var(--fraco); }
+  .opcao-texto strong { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-corpo); font-weight: 600; }
+  .opcao-texto span { font-size: var(--t-meta); color: var(--fraco); }
   .usuario-acoes { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
   .usuario-mensagem {
     margin: 0 0 4px; padding: 12px 14px; white-space: pre-wrap; user-select: all;
     background: var(--fundo-recuo); border: 1px solid var(--borda-suave); border-radius: var(--raio);
-    font-size: 13px; color: var(--texto);
+    font-size: var(--t-ui); color: var(--texto);
   }
   .usuario-rodape { margin-top: 12px; }
 
   /* ---------------------------------------------------------- botoes
-     O botao ganhou sombra do primeiro degrau e sobe 1px no hover. O "sobe" e o
-     que da a leitura tatil sem animacao nenhuma tocando o layout: transform nao
-     reflui a pagina. */
+     [30/09] OS BOTOES DA REFERENCIA, em tres pesos e nada entre eles:
+
+       primario   bloco laranja, tinta Navy (5,93:1; o branco da referencia dava
+                  2,69:1), rotulo condensado em CAIXA ALTA. E o unico em caixa
+                  alta, e isso e o que o separa dos outros antes da cor
+       comum      contorno de 1px da linha da casa, tinta Navy, condensada em
+                  caixa de sentenca. No hover a linha escurece ate o Navy - e o
+                  gesto do "Nova fatura" da referencia, sem a inversao inteira,
+                  que numa coluna de vinte "Boleto e baixa" piscaria a tabela
+       discreto   so texto, na Barlow e nao na condensada: e o "excluir" e o
+                  "2a via" da lista de registros, acao miuda dentro de uma linha
+
+     O QUE SAIU, e por que. A sombra do primeiro degrau (o botao nao flutua sobre
+     nada), a subida de 1px no hover (movimento que so diz "sou clicavel", o que
+     o cursor ja diz), o BRILHO que atravessava o primario em 700ms e a ONDULACAO
+     que crescia do clique. Os quatro eram enfeite numa tela de trabalho, e o
+     g3ref nao tem nenhum. O que ficou e sobrio e e estado: o hover muda a linha
+     ou escurece o laranja, o clique afunda o fundo um tom. */
   button {
-    position: relative; overflow: hidden;
+    position: relative;
     padding: 8px 14px; border-radius: var(--raio); border: 1px solid var(--borda);
-    background: var(--fundo2); color: var(--texto); font: inherit; font-size: 13.5px;
-    font-weight: 550; cursor: pointer; box-shadow: var(--sombra-1);
+    background: var(--fundo2); color: var(--texto);
+    font: inherit; font-family: var(--fonte-cond); font-size: var(--t-corpo); font-weight: 600;
+    letter-spacing: .01em; line-height: 1.2; cursor: pointer;
     display: inline-flex; align-items: center; gap: 7px; justify-content: center;
-    transition: border-color .14s ease, color .14s ease, background-color .14s ease,
-                box-shadow .16s ease, transform .12s ease;
+    transition: border-color .14s ease, color .14s ease, background-color .14s ease;
   }
-  button:hover:not(:disabled) {
-    border-color: var(--acento); color: var(--acento-forte);
-    box-shadow: var(--sombra-2); transform: translateY(-1px);
-  }
-  button:active:not(:disabled) { transform: translateY(0) scale(.985); box-shadow: var(--sombra-1); }
+  button:hover:not(:disabled) { border-color: var(--texto); color: var(--texto); }
+  /* O CLIQUE AFUNDA O FUNDO, e o seletor tem a especificidade do "button" puro
+     de proposito (o ":where" zera a do resto). Assim ele vale para o botao comum
+     e PERDE para todo botao que desenha o proprio fundo - o da faixa navy, o do
+     menu, a aba, o discreto. Com a especificidade normal, apertar o botao da
+     conta na faixa pintaria de creme um botao de tinta creme. */
+  button:where(:active:not(:disabled)) { background: var(--fundo-recuo); }
   button.primario {
     background: var(--acento); border-color: var(--acento); color: var(--acento-texto);
-    font-weight: 650; box-shadow: var(--sombra-2);
+    text-transform: uppercase; letter-spacing: .06em;
   }
   /* O hover do botao primario ESCURECE (--acento-hover), nunca clareia: clarear
      derruba o contraste do texto e "apaga" o botao - e a regra documentada no
-     proprio token, vinda da pesquisa de 29/07. */
+     proprio token, vinda da pesquisa de 29/07. O clique acende o contorno Navy:
+     e a unica diferenca entre "sob o ponteiro" e "apertado", e ela nao move nada. */
   button.primario:hover:not(:disabled) {
     background: var(--acento-hover); border-color: var(--acento-hover); color: var(--acento-texto);
   }
-  /* O BRILHO QUE ATRAVESSA o botao primario uma vez, no hover. Uma faixa de luz
-     inclinada, 700ms, uma passada - e nao um loop: chamar atencao para onde o
-     ponteiro ja esta seria ruido. */
-  button.primario::after {
-    content: ""; position: absolute; inset: 0; pointer-events: none;
-    background: linear-gradient(105deg, transparent 35%, var(--brilho) 50%, transparent 65%);
-    opacity: 0; transform: translateX(-120%);
-  }
-  button.primario:hover:not(:disabled)::after { animation: atravessar .7s ease-out; }
-  /* A EXPANSAO TATIL do clique: um anel que cresce do centro e se apaga. */
-  button.primario::before {
-    content: ""; position: absolute; left: 50%; top: 50%; width: 8px; height: 8px;
-    margin: -4px 0 0 -4px; border-radius: var(--raio-pilula); pointer-events: none;
-    background: var(--acento-texto); opacity: 0;
-  }
-  button.primario:active:not(:disabled)::before { animation: ondular .45s ease-out; }
+  button.primario:active:not(:disabled) { background: var(--acento-hover); border-color: var(--acento-texto); }
   /* DESABILITADO E TOKEN, pelo mesmo motivo dos campos acima. "opacity: .5" no
      botao PRIMARIO fazia o alfa cair sobre o proprio acento: 2,83:1 no claro e
      **1,85:1** no escuro, medido em 14/08. Um botao desabilitado tem de parecer
@@ -817,19 +922,21 @@ export const ESTILO = `
      nao entra: a regra vem depois da do primario e tem a classe a mais. */
   button:disabled, button.primario:disabled {
     background: var(--fundo-recuo); color: var(--fraco); border-color: var(--borda);
-    cursor: default; box-shadow: none; opacity: 1; transform: none;
+    cursor: default; opacity: 1;
   }
-  /* E os dois enfeites do primario nao acontecem quando ele esta desabilitado. */
-  button.primario:disabled::after, button.primario:disabled::before { display: none; }
-  button.discreto { border-color: transparent; background: none; box-shadow: none; color: var(--fraco); }
+  button.discreto {
+    border-color: transparent; background: none; color: var(--fraco);
+    padding: 4px 6px; font-family: var(--fonte); font-size: var(--t-ui); font-weight: 500; letter-spacing: normal;
+  }
   button.discreto:hover:not(:disabled) { background: var(--fundo-hover); color: var(--texto); border-color: transparent; }
+  button.discreto:disabled { background: none; border-color: transparent; }
 
-  /* O BOTAO DE ICONE - o que era "OK" ao lado do input da tabela. Redondo, 30px,
-     sombra do primeiro degrau. Ele SEMPRE leva 'aria-label', senao o botao fica
+  /* O BOTAO DE ICONE - o que era "OK" ao lado do input da tabela. Quadrado, 30px,
+     o contorno do botao comum. Ele SEMPRE leva 'aria-label', senao o botao fica
      sem nome para quem usa leitor de tela: ver 'BotaoDeIcone' no ui.tsx. */
   button.so-icone {
     width: 30px; height: 30px; padding: 0; flex: none;
-    border-radius: var(--raio-pilula);
+    border-radius: var(--raio);
   }
   button.so-icone.grande { width: 34px; height: 34px; }
 
@@ -838,32 +945,60 @@ export const ESTILO = `
   }
 
   /* ------------------------------------------------------------- avisos
-     A FAIXA LATERAL GROSSA no lugar do retangulo colorido inteiro. O que era
-     "banner rosa" virou superficie de cartao com 4px de cor na borda esquerda,
-     icone na cor do estado e o TEXTO em --texto: aviso de erro com dois
-     paragrafos escritos em vermelho e mais difícil de ler que o proprio erro. */
-  .aviso {
-    display: flex; align-items: flex-start; gap: 11px;
-    padding: 12px 14px; margin: 12px 0; font-size: 13.5px;
-    background: var(--fundo2); border: 1px solid var(--borda);
-    border-left: 4px solid currentColor; border-radius: var(--raio);
-    box-shadow: var(--sombra-1);
-  }
-  .aviso > .ic { margin-top: 2px; }
-  .aviso .corpo { color: var(--texto); flex: 1; min-width: 0; }
-  .aviso.erro { color: var(--erro); background: var(--erro-fundo); }
-  .aviso.ok { color: var(--ok); background: var(--ok-fundo); }
-  .aviso.alerta { color: var(--alerta); background: var(--alerta-fundo); }
+     O TEXTO CONTINUA EM --texto, e essa decisao de 30/07 fica: aviso de erro com
+     dois paragrafos escritos em vermelho e mais dificil de ler que o proprio
+     erro. A cor mora no que chama atencao sem atravancar.
 
-  /* ------------------------------------------------------- pilula de estado
-     PREENCHIDA SUAVE desde 30/07, com icone e texto dentro. A separacao do
+     [30/09] O FILETE LATERAL SAIU, nos dois lugares que o tinham - 4px aqui e
+     3px na ilha da Fatura unificada. Faixa grossa de cor num lado so e o
+     "callout" de categoria (o detector acusa, e o craft-floor recusa acima de
+     1px), e ela era o UNICO sinal que a caixa dava de longe. O estado agora e
+     dito por TRES coisas, nenhuma delas o filete:
+
+       1. o FUNDO tingido do estado - a caixa inteira, e nao uma aresta;
+       2. o CONTORNO de 1px na mesma matiz, misturado ao fundo, para a caixa ter
+          aresta sem sombra (o g3ref separa por linha, nunca por volume);
+       3. o ICONE proprio de cada estado, na cor dele - forma, e nao so cor
+          (restricao 3 do tema). As tres tintas passam AA sobre o proprio fundo
+          (T1b), entao o icone se le em qualquer um dos dois temas.
+
+     14px e nao o corpo: o aviso e nota ao lado do trabalho, e com dois
+     paragrafos ele nao pode pesar como o conteudo da tela. */
+  .aviso {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 11px 14px; margin: 12px 0; font-size: var(--t-ui); line-height: 1.5;
+    background: var(--fundo2); border: 1px solid var(--borda); border-radius: var(--raio);
+  }
+  .aviso > .ic { margin-top: 1px; flex: none; }
+  .aviso .corpo { color: var(--texto); flex: 1; min-width: 0; }
+  .aviso.erro {
+    color: var(--erro); background: var(--erro-fundo);
+    border-color: color-mix(in srgb, var(--erro) 30%, var(--erro-fundo));
+  }
+  .aviso.ok {
+    color: var(--ok); background: var(--ok-fundo);
+    border-color: color-mix(in srgb, var(--ok) 30%, var(--ok-fundo));
+  }
+  .aviso.alerta {
+    color: var(--alerta); background: var(--alerta-fundo);
+    border-color: color-mix(in srgb, var(--alerta) 30%, var(--alerta-fundo));
+  }
+
+  /* ------------------------------------------------------- selo de estado
+     PREENCHIDO SUAVE desde 30/07, com icone e texto dentro. A separacao do
      acento passou a ser de PESO (o acento e preenchido solido) e nao mais de
-     contorno - a nota de adjacencia do tema.ts registra a troca. */
+     contorno - a nota de adjacencia do tema.ts registra a troca.
+
+     [30/09] DEIXOU DE SER PILULA E VIROU O CHIP DA REFERENCIA: canto reto e o
+     rotulo condensado em caixa alta. E subiu de 11,5 para 12px - o detector
+     mediu o de antes como texto miudo -, e a caixa alta ajuda mais que o meio
+     ponto: a letra maiuscula de 12px e mais alta que o minusculo de 13. */
   .marca {
     display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
-    font-size: 11.5px; font-weight: 600; padding: 3px 9px 3px 7px;
-    border-radius: var(--raio-pilula); border: 1px solid transparent;
-    transition: transform .14s ease;
+    font-size: var(--rotulo-tamanho); font-weight: 600; line-height: 1.3;
+    text-transform: uppercase; letter-spacing: .05em;
+    padding: 3px 8px 3px 6px;
+    border-radius: var(--raio-pequeno); border: 1px solid transparent;
   }
   .marca.ok { background: var(--ok-fundo); color: var(--ok); }
   .marca.pendente { background: var(--erro-fundo); color: var(--erro); }
@@ -873,33 +1008,37 @@ export const ESTILO = `
 
   /* ------------------------------------------------------ busca e filtros
      A AREA DE FILTRO E UMA SUPERFICIE, nao um punhado de campos soltos: cartao
-     proprio, borda fina e sombra do primeiro degrau. Foi o pedido de "usar
-     sombras sutis para destacar a area de filtros". */
+     proprio e borda fina. A sombra que o pedido de 30/07 pos aqui saiu em 30/09
+     com todas as outras de superficie - a faixa branca sobre o creme ja e o que
+     a destaca. */
   .ferramentas {
     display: flex; gap: 9px; align-items: center; flex-wrap: wrap; margin: 0 0 14px;
     padding: 10px 12px; background: var(--fundo2);
     border: 1px solid var(--borda); border-radius: var(--raio-cartao);
-    box-shadow: var(--sombra-1);
   }
   .ferramentas select, .ferramentas .campo-caixa select { width: auto; }
-  .ferramentas .contagem { margin-left: auto; font-size: 12.5px; color: var(--fraco); }
+  .ferramentas .contagem { margin-left: auto; font-size: var(--t-meta); color: var(--fraco); }
   .busca { position: relative; }
   .busca input { padding-left: 34px; width: 260px; }
-  .busca .adorno-esquerda { position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+  .busca .adorno-esquerda { position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
     color: var(--fraco); pointer-events: none; }
   .busca input:focus + .adorno-esquerda { color: var(--acento-forte); }
 
   /* ------------------------------------------------- cartoes de metrica
-     A BORDA GROSSA SAIU. Era 'border-left: 3px solid var(--acento)', e o pedido
-     de 30/07 foi trocar borda generica por borda finissima mais sombra, para o
-     cartao FLUTUAR. A presenca de marca migrou para o icone de fundo: grande,
-     em --acento, com 10% de opacidade. */
+     A BORDA GROSSA SAIU em 30/07 (era uma faixa de 3px do acento num lado so) e
+     a presenca de marca migrou para o icone de fundo: grande, em --acento, com
+     10% de opacidade.
+
+     [30/09] E A SOMBRA DO SEGUNDO DEGRAU SAIU TAMBEM. O pedido de 30/07 era o
+     cartao FLUTUAR; o de 30/09 e o g3ref, onde nada flutua - o KPI e um cartao
+     como os outros, 1px de linha sobre o creme. O que ele ganhou no lugar e
+     tipografico: o numero na condensada a 700, que e o "numero grande" da
+     referencia (o valor a pagar do painel navy e a mesma letra a 52px). */
   .kpis { display: grid; gap: var(--gap); grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin: 0 0 18px; }
   .kpi {
     position: relative; overflow: hidden;
     border: 1px solid var(--borda); border-radius: var(--raio-cartao);
-    background: var(--fundo2); padding: 14px 16px; box-shadow: var(--sombra-2);
-    transition: box-shadow .18s ease, transform .18s ease;
+    background: var(--fundo2); padding: 14px 18px 16px;
   }
   /* O HOVER DO CARTAO SAIU EM 14/08, e o motivo e que ele MENTIA. "Kpi" renderiza
      um "<div>" sem "onClick", sem "href", sem "tabIndex" e sem "role" - nao ha o
@@ -912,16 +1051,16 @@ export const ESTILO = `
     position: absolute; right: 10px; bottom: 6px; color: var(--acento);
     opacity: .11; pointer-events: none;
   }
-  .kpi .nome { color: var(--fraco); margin-bottom: 3px; }
-  .kpi .valor { font-size: 23px; font-weight: 680; letter-spacing: -0.02em; position: relative; }
-  .kpi .valor.sim-nao { display: flex; align-items: center; gap: 8px; font-size: 20px; }
+  .kpi .nome { color: var(--fraco); margin-bottom: 4px; }
+  .kpi .valor { font-size: 28px; font-weight: 700; line-height: 1.1; letter-spacing: 0; position: relative; }
+  .kpi .valor.sim-nao { display: flex; align-items: center; gap: 8px; font-size: 24px; }
 
   /* --------------------------------------------------------- carregando
      A ENGRENAGEM COM O SOL DA G3 DENTRO. Foi o pedido literal de 30/07 para o
      feedback de carga, e o desenho e o que ele descreve: a engrenagem gira, o
      sol fica parado no centro. Um dos dois em movimento le como mecanismo; os
      dois girando le como defeito. */
-  .carregando { display: inline-flex; align-items: center; gap: 10px; color: var(--fraco); font-size: 13.5px; }
+  .carregando { display: inline-flex; align-items: center; gap: 10px; color: var(--fraco); font-size: var(--t-ui); }
   .marca-girando { position: relative; width: 26px; height: 26px; flex: none; color: var(--acento); }
   .marca-girando .ic-engrenagem { position: absolute; inset: 0; }
   .marca-girando .logotipo { position: absolute; left: 50%; top: 50%; margin: -6px 0 0 -6px; }
@@ -949,15 +1088,6 @@ export const ESTILO = `
     60% { opacity: 1; transform: scale(1.15) rotate(0deg); }
     to { opacity: 1; transform: scale(1) rotate(0deg); }
   }
-  @keyframes atravessar {
-    from { opacity: 0; transform: translateX(-120%); }
-    30% { opacity: .5; }
-    to { opacity: 0; transform: translateX(120%); }
-  }
-  @keyframes ondular {
-    from { opacity: .35; transform: scale(1); }
-    to { opacity: 0; transform: scale(22); }
-  }
   @keyframes descer-suave {
     from { opacity: 0; transform: translateY(-5px); }
     to { opacity: 1; transform: translateY(0); }
@@ -970,177 +1100,141 @@ export const ESTILO = `
   .ic-sim { animation: traco-do-check .5s ease-out; }
   .ic-nao { animation: traco-do-check .5s ease-out; }
 
-  /* ======================= A ABA DOCUMENTO É A REFERÊNCIA (14/08/2026)
-     PEDIDO DO DONO, literal: *"quero ajustar o layout da interface da aba
-     documentos. A referência exata deve ser g3-fatura-unificada.vercel.app, sem
-     tirar nem por, deve ser exatamente igual, com bordas iguais, sistema de
+  /* ======================= A FATURA UNIFICADA E A REFERENCIA (14/08/2026)
+     PEDIDO DO DONO, literal, em 14/08: *"quero ajustar o layout da interface da
+     aba documentos. A referência exata deve ser g3-fatura-unificada.vercel.app,
+     sem tirar nem por, deve ser exatamente igual, com bordas iguais, sistema de
      cores, tipografia"*.
 
      DE ONDE SAEM OS NÚMEROS. Do template desempacotado do commit "36e964e" — o
-     mesmo bundle que a Vercel serve —, não de olhar a página renderizada. O
-     repositório da referência é "index.html" com o app inteiro em base64 gzipado
-     dentro de um manifesto "__bundler"; o desempacotamento devolve 16 KB de DOM
-     com "style" inline em cada elemento, e é dele que vem cada "padding", cada
-     "1px solid" e cada "letter-spacing" abaixo. É a mesma fonte de "REFERENCIA-
-     fatura-unificada-2026-08-13.md".
+     mesmo bundle que a Vercel serve —, não de olhar a página renderizada. É dele
+     que vem cada "padding", cada grade e cada tamanho de título abaixo. É a
+     mesma fonte de "REFERENCIA-fatura-unificada-2026-08-13.md".
 
-     ============================ O QUE MUDA EM RELAÇÃO AO RESTO DO SISTEMA
-     Esta seção é uma ILHA, e ela é declarada: tudo aqui é prefixado por ".g3ref",
-     que "documento.tsx" põe uma vez, em volta da aba inteira. Nenhuma regra
-     escapa para as outras onze telas — e é por isso que as diferenças abaixo
-     podem existir sem virar duas gramáticas no mesmo sistema:
+     ============================ O QUE MUDOU EM 30/09 — A ILHA VIROU A FUNDAÇÃO
+     De 14/08 a 30/09 esta seção era uma ILHA declarada: outra fonte, outra
+     paleta ("--g3ref-*"), raio zero e sombra nenhuma, tudo prefixado por
+     ".g3ref" para não escapar para as outras telas. Em 30/09 o dono decidiu que
+     o desenho dela é o do sistema INTEIRO, e as regras gerais do começo deste
+     arquivo passaram a ser escritas na língua dela.
 
-       raio          12/8/6px  ->  ZERO. A referência não tem um canto arredondado
-       sombra        3 degraus ->  NENHUMA. Só a folha A4 tem sombra, e ela já tinha
-       fonte         Inter     ->  Barlow + Barlow Semi Condensed (ver "tema.ts")
-       entrelinha    1.5       ->  "normal". A referência não declara nenhuma, e
-                                   "normal" na Barlow é ~1,2 — o texto fecha mais
-       tinta apagada o derivado ->  o Gray puro da referência (ver "tema.ts")
+     Consequência aqui: o que a ilha repetia para se diferenciar da casa SAIU —
+     fonte do escopo, cartão, rótulo de campo, campo, placeholder, foco, botão
+     comum, botão primário, aviso, cabeçalho de tabela, h2, h3, ".sub". Tudo isso
+     é herdado agora, sem cópia. O que FICOU é o que só esta tela tem: a grade de
+     duas colunas, as abas de etapa, a área de envio, o painel navy, as grades
+     fixas de campos, o histórico em fichas, a lista de registros e os botões de
+     largura cheia e de imprimir.
 
-     ============================ O QUE **NÃO** VEIO, e são três, todas nomeadas
-     "Sem tirar nem por" vale para desenho. Estas três não são desenho:
+     E TRÊS DECISÕES DE 14/08 FORAM DESFEITAS, POR CONTRASTE. A referência pinta
+     o rótulo apagado com o Gray puro (3,08:1), o título de seção com o laranja
+     cru (2,69:1), a tinta do botão laranja de branco (2,69:1) e o anel de foco
+     com o laranja cru (2,41:1). Na ilha isso era a exceção nomeada "Q-DOCG3-15";
+     espalhado pelo sistema seriam quatorze telas reprovando AA. Os quatro usam
+     agora "--fraco", "--acento-forte", "--acento-texto" e "--foco".
+
+     O QUE CONTINUA NÃO TENDO VINDO, e as razões de 14/08 seguem valendo:
 
        1. O ÍCONE DO ".fu-status" e do ".aviso" FICA. A referência diz sucesso e
           falha com 13px de texto colorido e mais nada — quem não separa laranja
-          de verde lê as duas iguais. É a restrição 3 do tema ("cor nunca é o
-          único sinal"), e ela não é sobre borda, cor nem tipografia.
-       2. O ANEL DE FOCO DE BOTÃO FICA. A referência desenha foco só em "input" e
-          "textarea"; botão fica sem sinal nenhum para quem navega por teclado. O
-          anel daqui usa o laranja DELA, então não introduz cor nova.
-       3. A BARRA NAVY DA REFERÊNCIA NÃO ENTROU — decisão do dono na mesma
-          consulta ("Só o conteúdo"). Ela carrega logo, assinatura e as abas de
-          etapa, e o sistema já tem uma faixa navy no topo com logo e as doze
-          abas. Duas faixas navy empilhadas seriam a referência copiada e a tela
-          piorada. As abas de etapa herdaram o desenho dela; o resto, não.
+          de verde lê as duas iguais (restrição 3 do tema).
+       2. O ANEL DE FOCO DE BOTÃO FICA — a referência não desenha nenhum.
+       3. A BARRA NAVY DA REFERÊNCIA NÃO ENTROU — decisão do dono ("Só o
+          conteúdo"): o sistema já tem uma faixa navy no topo.
 
-     O PREFIXO "fu-" CONTINUA, e não virou "g3ref-": ele nomeia o que a esteira de
-     conferência É (fatura unificada), e ".g3ref" nomeia de onde o DESENHO vem.
-     São duas perguntas diferentes e a segunda é a que pode mudar de resposta. */
-
-  /* --------------------------------------------------------------- o escopo */
-  .g3ref {
-    font-family: var(--g3ref-fonte);
-    color: var(--g3ref-tinta);
-    /* A Inter pede "-0.011em" em corpo de texto e a Barlow não pede nada — a
-       referência não declara "letter-spacing" em lugar nenhum fora dos rótulos
-       em caixa alta. Herdar o tracking da Inter apertaria a Barlow inteira. */
-    letter-spacing: normal;
-    /* 16px é o padrão do browser, e é o que a referência usa: o "body" dela não
-       declara "font-size". O sistema usa 15px. A diferença aparece só onde nem
-       ela nem nós damos tamanho explícito — que é quase lugar nenhum. */
-    font-size: 16px;
-    line-height: normal;
-  }
+     O PREFIXO "fu-" CONTINUA: ele nomeia o que a esteira de conferência É
+     (fatura unificada). E ".g3ref" continua sendo a classe da raiz da tela,
+     posta uma vez em "documento.tsx" — hoje ela só dá escopo às regras que são
+     desta tela, e não troca mais fonte nem paleta. */
 
   /* -------------------------------------------------- as abas de etapa
      O DESENHO É O DA BARRA NAVY DA REFERÊNCIA, com uma troca obrigatória: lá as
-     abas pousam sobre o navy e a inativa é o cinza-claro dela, que sobre o creme desta
-     página daria 1,6:1 — ilegível. A inativa aqui é a tinta apagada da própria
-     referência ("--g3ref-apagado"); a ATIVA é idêntica, laranja cheio e tinta branca.
-     Mesma decisão para o traço separador: o dela é navy-sobre-navy. */
+     abas pousam sobre o navy, e aqui sobre o creme da página. A inativa é a
+     tinta apagada do sistema ("--fraco", 4,98:1 no creme); a ATIVA é o bloco
+     laranja cheio — com tinta NAVY, e não a branca da referência (2,69:1). */
   .g3ref .fu-abas {
     display: flex; align-items: center; gap: 10px;
     border-bottom: 0; padding-bottom: 0; margin-bottom: 22px;
   }
   /* A ESPECIFICIDADE FOI DEFEITO MEDIDO EM 14/08 e continua valendo aqui:
      "button:hover:not(:disabled)" lá em cima é (0,2,1), e uma regra de aba com
-     (0,2,0) perde para ela — a aba pegava sombra e "translateY". Com ".g3ref"
-     na frente estas são (0,3,x) e ganham. O invariante I7 prende isto. */
+     (0,2,0) perde para ela. Com ".g3ref" na frente estas são (0,3,x) e ganham.
+     O invariante I7 prende isto. */
   .g3ref .fu-aba {
-    background: transparent; border: none; border-radius: 0; box-shadow: none;
+    background: transparent; border: none; border-radius: var(--raio); box-shadow: none;
     padding: 9px 16px; margin-bottom: 0;
-    font-family: var(--g3ref-fonte-cond); font-size: 15px; font-weight: 600;
-    letter-spacing: 0.06em; text-transform: uppercase;
-    color: var(--g3ref-apagado); cursor: pointer;
+    font-size: var(--t-corpo); font-weight: 600;
+    letter-spacing: .06em; text-transform: uppercase;
+    color: var(--fraco); cursor: pointer;
     transition: background-color .16s ease, color .16s ease;
   }
+  /* "box-shadow: none" e "transform: none" continuam escritos mesmo com o botão
+     geral sem sombra e sem subida: a I7b os exige, e é ela que impede a aba de
+     voltar a flutuar no dia em que alguém devolver sombra ao botão. */
   .g3ref .fu-aba:hover:not(:disabled) {
-    background: transparent; color: var(--g3ref-tinta);
+    background: transparent; color: var(--texto);
     border-color: transparent; box-shadow: none; transform: none;
   }
-  .g3ref .fu-aba:active:not(:disabled) { transform: none; box-shadow: none; }
   .g3ref .fu-aba[aria-selected="true"] {
-    background: var(--g3ref-laranja); color: var(--g3ref-laranja-tinta);
+    background: var(--acento); color: var(--acento-texto);
     border-color: transparent;
   }
   .g3ref .fu-aba[aria-selected="true"]:hover:not(:disabled) {
-    background: var(--g3ref-laranja-hover); color: var(--g3ref-laranja-tinta);
+    background: var(--acento-hover); color: var(--acento-texto);
   }
-  .g3ref .fu-aba-traco { width: 26px; height: 1px; background: var(--g3ref-borda-campo); }
-
-  /* "NOVA FATURA" — na referência ela mora numa faixa própria, encostada à
-     direita, logo acima da grade. Aqui ela fica no fim da mesma linha das abas,
-     que é a MESMA posição na tela; o desenho é o dela, sem tirar nem pôr. */
-  .g3ref .fu-acao {
-    background: transparent; border: 1px solid var(--g3ref-tinta); border-radius: 0;
-    color: var(--g3ref-tinta); padding: 11px 20px; box-shadow: none;
-    font-family: var(--g3ref-fonte-cond); font-size: 15px; font-weight: 600;
-    letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer;
-  }
-  .g3ref .fu-acao:hover:not(:disabled) {
-    background: var(--g3ref-tinta); color: var(--g3ref-tinta-invertida);
-    border-color: var(--g3ref-tinta); box-shadow: none; transform: none;
-  }
+  .g3ref .fu-aba-traco { width: 26px; height: 1px; background: var(--borda); }
 
   /* ------------------------------------------------------------- a grade
      "380px 1fr" é literal da referência, e o 380 é o que faz a coluna da
-     esquerda caber o painel navy com "R$ 1.234,56" em 52px sem quebrar. A nossa
-     ".conteudo" tem 1120px de caixa útil contra os 1124px dela — 4px, e a coluna
-     fixa é idêntica. Abaixo de 1100px as duas empilham, a esquerda primeiro,
-     que é por onde o trabalho começa. */
+     esquerda caber o painel navy com "R$ 1.234,56" em 52px sem quebrar. Abaixo
+     de 1100px as duas empilham, a esquerda primeiro, que é por onde o trabalho
+     começa. */
   .g3ref .fu-grade { display: grid; grid-template-columns: 380px 1fr; gap: 24px; align-items: start; }
   .g3ref .fu-coluna { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
   @media (max-width: 1100px) { .g3ref .fu-grade { grid-template-columns: 1fr; } }
 
   /* ----------------------------------------------------------- o cartão
-     22px na esquerda, 26px na direita — são os dois valores da referência, e a
-     diferença não é descuido dela: a coluna da direita é a que se lê campo a
-     campo e ganha 4px de respiro. Zero raio, zero sombra: o cartão se separa do
-     creme pelo branco e por uma linha de 1px, e é só. */
-  .g3ref .cartao {
-    background: var(--g3ref-papel); border: 1px solid var(--g3ref-borda);
-    border-radius: 0; box-shadow: none; padding: 22px;
-  }
+     Superfície, linha e canto são os do cartão geral desde 30/09. O que fica
+     aqui é o RESPIRO da referência: 22px na esquerda, 26px na direita — a coluna
+     da direita é a que se lê campo a campo e ganha 4px. */
+  .g3ref .cartao { padding: 22px; }
   .g3ref .fu-grade > .cartao { padding: 26px; }
   .g3ref .secao { margin-bottom: 18px; }
+  /* A NOTA DENTRO DO CARTAO. Nesta tela ".sub" nao e a descricao da pagina (essa
+     mora fora do ".g3ref", no "Pagina"): e a nota miuda sob um grupo de campos
+     ("Padrao do cadastro...", "Saem na grade do cliente..."). A referencia a
+     escreve a 12px colada no campo; aqui ela sobe ao piso do texto corrido
+     (13.5px, "--t-meta") e mantem a margem de cima da referencia - com o ".sub"
+     geral ela viraria corpo de 15px com 22px de ar embaixo, e o cartao de
+     parametros cresceria um terco. */
+  .g3ref .cartao .sub { font-size: var(--t-meta); line-height: 1.5; margin: 10px 0 0; }
 
   /* ---------------------------------------------------- o rótulo em caixa alta
-     A referência escreve "font-family: 'Barlow Semi Condensed'" sessenta e uma
-     vezes contra UMA da Barlow: a condensada é a fonte de superfície dela, não a
-     exceção. Peso 400 porque ela não declara peso nenhum nestes rótulos — e a
-     regra ".rot-alta, thead th, …, .fu-rotulo" lá em cima é (0,1,0), então esta,
-     com ".g3ref" na frente, ganha sem "!important". */
-  .g3ref .fu-rotulo, .g3ref .fu-painel-rot {
-    font-family: var(--g3ref-fonte-cond); font-size: 12px; font-weight: 400;
-    text-transform: uppercase; letter-spacing: 0.14em;
-    color: var(--g3ref-apagado); margin-bottom: 14px;
-  }
+     Tamanho, peso, caixa, tracking e família saem do token geral (".rot-alta" e
+     irmãos, lá em cima). Aqui fica só o que é desta tela: a distância até o
+     conteúdo e a tinta do painel navy. */
+  .g3ref .fu-rotulo { color: var(--fraco); margin-bottom: 14px; }
 
   /* A LEGENDA MIÚDA — "Instruções do boleto", "Linha digitável", "PIX copia e
-     cola". Na referência elas NÃO são rótulo em caixa alta: são 13px de Barlow
-     apagada, com margem "14px 0 3px". Eram ".fu-rotulo" aqui até hoje, e por
-     isso saíam em caixa alta condensada, que é outra coisa. */
+     cola". Na referência elas NÃO são rótulo em caixa alta: são texto corrido
+     apagado, com margem "14px 0 3px". O trecho complementar (" · uma por
+     linha") era a linha forte como TINTA — 1,79:1 no branco; passou ao --fraco,
+     e o ponto do meio é o que o separa. */
   .g3ref .fu-legenda {
-    font-family: var(--g3ref-fonte); font-size: 13px; font-weight: 400;
+    font-size: var(--t-meta); font-weight: 400;
     text-transform: none; letter-spacing: normal;
-    color: var(--g3ref-apagado); margin: 14px 0 3px;
+    color: var(--fraco); margin: 14px 0 3px;
   }
-  .g3ref .fu-legenda .fraco { color: var(--g3ref-borda-forte); }
 
   /* ------------------------------------------------------- a área de envio
      "<label>" e não "<div onClick>": o input de arquivo mora dentro dela, então
      clicar na área é clicar no input, sem uma linha de JavaScript no meio.
 
-     A BORDA VOLTOU A 1px TRACEJADO, que é a da referência. Em 14/08 ela tinha
-     virado "2px dashed var(--fraco)" por medição de contraste (1.4.11 pede 3:1
-     para contorno de controle, e a "--borda" dava 1,50:1). A borda forte da
-     referência sobre o creme dá 1,66:1 e reprova pelo mesmo critério — entra
-     junto com o resto da decisão de tinta exata do dono, e está em "Q-DOCG3-15".
-     O que segura a área continua existindo e não é a borda: são os 19px do
-     título e o anel de foco laranja. */
+     A BORDA É 1px TRACEJADO, o da referência, na linha forte do sistema. O que
+     segura a área não é a borda: são os 19px do título e o anel de foco. */
   .g3ref .fu-solta {
-    display: block; border: 1px dashed var(--g3ref-borda-forte); border-radius: 0;
-    background: var(--g3ref-fundo); padding: 24px 18px; text-align: center; cursor: pointer;
+    display: block; border: 1px dashed var(--borda-forte); border-radius: var(--raio);
+    background: var(--fundo); padding: 24px 18px; text-align: center; cursor: pointer;
     transition: border-color .15s ease, background .15s ease;
   }
   /* A da fatura tem 24px de padding e título 19px; a do boleto, 20px e 18px. São
@@ -1151,26 +1245,25 @@ export const ESTILO = `
    * O INPUT DE ARQUIVO É INVISÍVEL E FOCÁVEL, e "display: none" não serve: sai
    * da ordem de tabulação E da árvore de acessibilidade, e o "<label>" também
    * não é focável — as duas áreas de envio ficariam inalcançáveis sem mouse, e a
-   * regra ":focus-within" abaixo nunca dispararia. A referência usa "display:
-   * none" e tem esse defeito; ele não é desenho, e por isso não veio.
+   * regra ":focus-within" abaixo nunca dispararia.
    */
   .g3ref .fu-solta input[type="file"] {
     position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
     overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
   }
-  .g3ref .fu-solta:hover { border-color: var(--g3ref-laranja); background: var(--g3ref-solta-hover); }
-  .g3ref .fu-solta:focus-within { border-color: var(--g3ref-laranja); outline: 2px solid var(--g3ref-laranja); outline-offset: 0; }
-  .g3ref .fu-solta-titulo { font-family: var(--g3ref-fonte-cond); font-size: 19px; font-weight: 600; }
+  .g3ref .fu-solta:hover { border-color: var(--acento); background: var(--fundo-hover); }
+  .g3ref .fu-solta:focus-within { border-color: var(--acento); outline: 2px solid var(--foco); outline-offset: 0; }
+  .g3ref .fu-solta-titulo { font-family: var(--fonte-cond); font-size: 19px; font-weight: 600; }
   .g3ref .fu-solta.curta .fu-solta-titulo { font-size: 18px; }
-  .g3ref .fu-solta-sub { font-size: 13px; color: var(--g3ref-apagado); margin-top: 4px; }
+  .g3ref .fu-solta-sub { font-size: var(--t-meta); color: var(--fraco); margin-top: 4px; }
 
   /* ------------------------------------------------------------- o status
-     13px apagado, como na referência. O ÍCONE FICA — ver a nota 1 do cabeçalho
-     desta seção. As três margens são as dela: 12px depois do envio da fatura,
-     10px no caso geral, 6px colado no campo que acabou de ser digitado. */
+     Texto apagado miúdo, como na referência. O ÍCONE FICA — ver a nota 1 do
+     cabeçalho desta seção. As três margens são as dela: 12px depois do envio da
+     fatura, 10px no caso geral, 6px colado no campo que acabou de ser digitado. */
   .g3ref .fu-status {
     display: flex; align-items: flex-start; gap: 6px;
-    font-size: 13px; color: var(--g3ref-apagado); margin-top: 10px; line-height: 1.45;
+    font-size: var(--t-meta); color: var(--fraco); margin-top: 10px; line-height: 1.45;
   }
   .g3ref .fu-status > .ic { margin-top: 2px; }
   .g3ref .fu-status.solto { margin-top: 12px; }
@@ -1181,269 +1274,172 @@ export const ESTILO = `
   /* ------------------------------------------------------ o painel navy
      O único bloco de fundo cheio da tela, e o motivo é de uso: quem opera abre a
      aba, sobe o PDF e precisa deste número para digitar no internet banking — ele
-     não pode estar no meio de trinta campos. 52px é o tamanho da referência, e é
-     três vezes o do valor ao lado; era 30px aqui.
+     não pode estar no meio de trinta campos. 52px é o tamanho da referência.
 
-     OS TOKENS "--g3ref-navy-*" EXISTEM PARA O TEMA ESCURO. No claro eles são o
-     navy literal da referência; no escuro viram "--topo", que é a superfície
-     dominante da marca no escuro e já carrega tinta medida. Sem isso o painel
-     seria um retângulo navy dentro de uma tela navy. */
+     É A SUPERFÍCIE DOMINANTE DO SISTEMA, a mesma da faixa do topo ("--topo"), e
+     por isso sobrevive ao tema escuro sem par próprio. A legenda e o subtítulo
+     são a tinta apagada que pousa nela ("--topo-fraco", 5,89:1), e o rótulo é o
+     laranja sobre o navy — o mesmo par da aba ativa, 5,93:1. */
   .g3ref .fu-painel {
-    background: var(--g3ref-navy); color: var(--g3ref-navy-tinta);
-    border-radius: 0; box-shadow: none; padding: 24px;
+    background: var(--topo); color: var(--topo-texto);
+    border-radius: var(--raio); padding: 24px;
   }
-  .g3ref .fu-painel-rot { color: var(--g3ref-navy-rotulo); margin-bottom: 0; }
+  .g3ref .fu-painel-rot { color: var(--acento); margin-bottom: 0; }
   .g3ref .fu-painel-total {
-    font-family: var(--g3ref-fonte-cond); font-size: 52px; font-weight: 700;
+    font-family: var(--fonte-cond); font-size: 52px; font-weight: 700;
     line-height: 1.05; margin-top: 6px;
   }
-  .g3ref .fu-painel-sub { font-size: 14px; color: var(--g3ref-navy-apagado); margin-top: 4px; }
+  .g3ref .fu-painel-sub { font-size: var(--t-ui); color: var(--topo-fraco); margin-top: 4px; }
   .g3ref .fu-painel-par {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 13px;
-    margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--g3ref-navy-regua);
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: var(--t-meta);
+    margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--topo-veu-forte);
   }
-  .g3ref .fu-painel-cap { color: var(--g3ref-navy-legenda); }
+  .g3ref .fu-painel-cap { color: var(--topo-fraco); }
   .g3ref .fu-painel-val { font-size: 17px; font-weight: 600; }
 
-  /* --------------------------------------------- o cabeçalho do cartão grande */
+  /* --------------------------------------------- o cabeçalho do cartão grande
+     O título é o "h2" geral (condensada, 600) — era a mesma letra escrita de
+     novo aqui a 22px. */
   .g3ref .fu-cabeca {
     display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
     margin-bottom: 6px;
   }
-  .g3ref .fu-cabeca h2 {
-    margin: 0; font-family: var(--g3ref-fonte-cond); font-size: 22px; font-weight: 600;
-    letter-spacing: normal;
-  }
-  .g3ref .fu-cabeca .fraco { font-size: 13px; color: var(--g3ref-apagado); }
+  .g3ref .fu-cabeca h2 { margin: 0; }
+  .g3ref .fu-cabeca .fraco { font-size: var(--t-meta); }
 
   /* ------------------------------------------------------------ as seções
      DUAS FORMAS, e a referência usa as duas em lugares diferentes. No cartão da
      direita a seção se anuncia por um título LARANJA com régua EMBAIXO; no
-     cartão do boleto ("Conferência do boleto") ela se separa por uma régua EM
-     CIMA e o título é apagado. Eram a mesma classe aqui. */
+     cartão do boleto ela se separa por uma régua EM CIMA e o título é apagado.
+
+     O LARANJA DO TÍTULO É O DE TEXTO ("--acento-forte", 5,60:1 no branco) e não
+     o cru da referência (2,69:1): é texto de 12px, e o critério é o de texto. */
   .g3ref .fu-secao { margin-top: 22px; padding-top: 0; border-top: 0; }
   .g3ref .fu-secao-tit {
-    font-family: var(--g3ref-fonte-cond); font-size: 12px; font-weight: 400;
-    text-transform: uppercase; letter-spacing: 0.14em;
-    color: var(--g3ref-laranja);
-    padding-bottom: 8px; border-bottom: 1px solid var(--g3ref-regua); margin-bottom: 0;
+    color: var(--acento-forte);
+    padding-bottom: 8px; border-bottom: 1px solid var(--borda-suave); margin-bottom: 0;
   }
   .g3ref .fu-secao.com-regua {
-    margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--g3ref-regua);
+    margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--borda-suave);
   }
   .g3ref .fu-secao.com-regua > .fu-rotulo { margin-bottom: 8px; }
 
   /* -------------------------------------------------------- os formulários
      TRÊS COLUNAS FIXAS no cartão da direita, "1fr 1fr" no par do boleto e nos
      parâmetros, "1fr" sozinho no "Nosso número". São as quatro grades da
-     referência, e o "auto-fit minmax(190px, 1fr)" daqui produzia duas ou quatro
-     conforme a largura — nunca as três dela. */
+     referência. Rótulo, campo, foco e placeholder são os gerais desde 30/09. */
   .g3ref .campos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 14px; }
   .g3ref .campos.duas { grid-template-columns: 1fr 1fr; gap: 12px; }
   .g3ref .campos.uma { grid-template-columns: 1fr; gap: 12px; margin-top: 12px; }
   .g3ref .campos.parametros { grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 0; }
 
-  .g3ref label {
-    display: block; font-family: var(--g3ref-fonte); font-size: 12px; font-weight: 400;
-    letter-spacing: normal; color: var(--g3ref-apagado); margin-bottom: 4px;
-  }
-  /* No bloco de conferência do boleto a referência sobe o rótulo para 13px e
-     encurta a margem para 3px — é o único lugar dela em que isso acontece. */
-  .g3ref .campos.duas label, .g3ref .campos.uma label { font-size: 13px; margin-bottom: 3px; }
-
-  .g3ref input, .g3ref select, .g3ref textarea {
-    width: 100%; border: 1px solid var(--g3ref-borda-campo); border-radius: 0;
-    background: var(--g3ref-campo); color: var(--g3ref-tinta);
-    font-family: var(--g3ref-fonte); font-size: 15px; padding: 8px 10px;
-    line-height: normal; box-shadow: none;
-    transition: border-color .14s ease, background-color .14s ease;
-  }
   /* Os dois parâmetros são os únicos campos da referência com a borda forte e o
-     fundo creme — eles não são dado lido da fatura, são decisão de quem opera. */
-  .g3ref .campos.parametros input {
-    border-color: var(--g3ref-borda-forte); background: var(--g3ref-fundo);
-  }
-  .g3ref input::placeholder, .g3ref textarea::placeholder { color: var(--g3ref-apagado); }
-  /* A REFERÊNCIA NÃO TEM HOVER DE CAMPO. Tinha aqui (a borda escurecia), e sair
-     é "sem pôr" — o campo já se anuncia pelo fundo próprio contra o cartão. */
-  .g3ref input:hover:not(:disabled), .g3ref select:hover:not(:disabled),
-  .g3ref textarea:hover:not(:disabled) { border-color: var(--g3ref-borda-campo); }
-  .g3ref .campos.parametros input:hover:not(:disabled) { border-color: var(--g3ref-borda-forte); }
-  /* O FOCO É O DELA, exatamente: 2px sólidos do laranja, sem deslocamento.
-     Sai o anel de 3px em "box-shadow" e a troca de cor da borda. */
-  .g3ref input:focus, .g3ref select:focus, .g3ref textarea:focus {
-    outline: 2px solid var(--g3ref-laranja); outline-offset: 0;
-    border-color: var(--g3ref-borda-campo); box-shadow: none;
-  }
-  .g3ref input:disabled, .g3ref select:disabled, .g3ref textarea:disabled {
-    background: var(--g3ref-fundo); color: var(--g3ref-apagado); cursor: default;
-  }
-  .g3ref textarea, .g3ref .fu-area { padding: 10px; font-size: 13px; line-height: 1.5; resize: vertical; }
+     fundo da página — eles não são dado lido da fatura, são decisão de quem
+     opera. */
+  .g3ref .campos.parametros input { border-color: var(--borda-forte); background: var(--fundo); }
+  .g3ref .campos.parametros input:hover:not(:disabled) { border-color: var(--fraco); }
+  .g3ref textarea, .g3ref .fu-area { padding: 10px; font-size: var(--t-ui); line-height: 1.5; resize: vertical; }
   .g3ref .fu-area.mono {
-    font-family: var(--g3ref-fonte-mono); font-size: 13px; word-break: break-all;
+    font-family: var(--fonte-mono); font-size: 13px; word-break: break-all;
   }
   /* O PIX é 12px na referência e a linha digitável 13px: o payload EMV tem três
-     vezes mais caracteres e ela abriu mão de um ponto para ele caber. */
+     vezes mais caracteres e ela abriu mão de um ponto para ele caber. É dado
+     para copiar, não texto para ler. */
   .g3ref .fu-area.mono.miudo { font-size: 12px; }
 
   /* ------------------------------------------------------ o histórico editável
      É o campo que o extrator mais erra: a tabela lateral da Equatorial é
      desenhada em cinza claro, treze linhas altas. Na referência são fichas em
-     "flex-wrap" com largura de conteúdo — 54px para o mês, 62px para o número,
-     encostados —, e não uma grade de colunas iguais. */
+     "flex-wrap" com largura de conteúdo — 54px para o mês, 62px para o número. */
   .g3ref .fu-hist-edit { display: flex; flex-wrap: wrap; gap: 10px; }
   .g3ref .fu-hist-item {
     display: flex; align-items: center; gap: 6px;
-    border: 1px solid var(--g3ref-borda-campo); background: var(--g3ref-campo); padding: 6px 8px;
+    border: 1px solid var(--borda); background: var(--campo); padding: 6px 8px;
   }
-  .g3ref .fu-hist-mes { font-size: 12px; color: var(--g3ref-apagado); width: 54px; flex: none; }
+  .g3ref .fu-hist-mes {
+    font-size: var(--rotulo-tamanho); color: var(--fraco); width: 54px; flex: none;
+    text-transform: uppercase;
+  }
   .g3ref .fu-hist-kwh {
     width: 62px; flex: none; border: none; background: transparent; padding: 0;
-    font-size: 15px; color: var(--g3ref-tinta); text-align: right;
-    font-variant-numeric: tabular-nums;
+    font-size: var(--t-corpo); color: var(--texto); text-align: right;
   }
-  .g3ref .fu-hist-un { font-size: 12px; color: var(--g3ref-apagado); flex: none; }
+  .g3ref .fu-hist-un { font-size: var(--rotulo-tamanho); color: var(--fraco); flex: none; }
 
   /* ----------------------------------------------------- as faturas registradas
-     O CARTÃO QUE FALTAVA. A referência lista as faturas já registradas na UC com
-     mês, total e um "excluir" por linha, e é dali que sai a economia acumulada
-     impressa na folha 2. As três rotas já existiam ("GET", "POST" e "DELETE" de
-     "/faturas/unificada/registros") e nenhuma tela chamava as duas primeiras. */
+     A referência lista as faturas já registradas na UC com mês, total e as ações
+     miúdas por linha, e é dali que sai a economia acumulada impressa na folha 2.
+     As ações são o botão "discreto" geral desde 30/09 (eram "fu-texto", um
+     quarto desenho de botão que só existia aqui). */
   .g3ref .fu-registro {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 8px 0; border-bottom: 1px solid var(--g3ref-regua); font-size: 14px;
+    padding: 8px 0; border-bottom: 1px solid var(--borda-suave); font-size: var(--t-ui);
   }
   .g3ref .fu-registro-dir { display: flex; align-items: center; gap: 14px; }
-  .g3ref .fu-registro-val { color: var(--g3ref-apagado); }
+  .g3ref .fu-registro-val { color: var(--fraco); }
 
   /* ------------------------------------------------------------- os botões
-     QUATRO FORMAS NA REFERÊNCIA, e a de repouso é a mais discreta das quatro: o
-     botão comum dela é Barlow 14px, caixa BAIXA, borda de campo e tinta
-     apagada. Só o primário e os de largura cheia são condensados em caixa alta. */
-  .g3ref button {
-    border-radius: 0; box-shadow: none;
-    font-family: var(--g3ref-fonte); font-size: 14px; font-weight: 400;
-    letter-spacing: normal; text-transform: none;
-    background: none; border: 1px solid var(--g3ref-borda-campo);
-    color: var(--g3ref-apagado); padding: 13px 18px; cursor: pointer;
-  }
-  .g3ref button:hover:not(:disabled) {
-    color: var(--g3ref-tinta); border-color: var(--g3ref-tinta);
-    background: none; box-shadow: none; transform: none;
-  }
-  .g3ref button:active:not(:disabled) { transform: none; box-shadow: none; }
-  .g3ref button:focus-visible { outline: 2px solid var(--g3ref-laranja); outline-offset: 2px; }
-  .g3ref button:disabled { cursor: default; }
-
-  .g3ref button.primario {
-    background: var(--g3ref-laranja); color: var(--g3ref-laranja-tinta); border: none;
-    padding: 13px 22px;
-    font-family: var(--g3ref-fonte-cond); font-size: 16px; font-weight: 600;
-    letter-spacing: 0.06em; text-transform: uppercase;
-  }
-  .g3ref button.primario:hover:not(:disabled) {
-    background: var(--g3ref-laranja-hover); color: var(--g3ref-laranja-tinta); border: none;
-  }
+     Primário, comum e discreto são os gerais desde 30/09 — inclusive o "Nova
+     fatura" e o "Conferir" das linhas, que eram "fu-acao" (contorno navy em
+     caixa alta) e passaram a ser o botão comum da casa. Ficam aqui os TRÊS que
+     só esta tela tem: largura cheia, contorno navy e imprimir. */
   /* Largura cheia dentro do cartão da esquerda: "Ler boleto com IA" (laranja) e
-     "Registrar este mês" (contorno navy). 15px condensado nos dois. */
+     "Registrar este mês" (contorno navy). Condensados em caixa alta nos dois. */
   .g3ref button.fu-largo {
     width: 100%; padding: 12px; margin-top: 12px;
-    font-family: var(--g3ref-fonte-cond); font-size: 15px; font-weight: 600;
-    letter-spacing: 0.06em; text-transform: uppercase;
+    letter-spacing: .06em; text-transform: uppercase;
   }
-  .g3ref button.fu-largo.primario { padding: 12px; font-size: 15px; }
+  /* O CONTORNO NAVY é o botão secundário FORTE da referência, e só este cartão o
+     tem: "Registrar este mês" é o ato que fecha a conta, e ao lado do laranja de
+     "Ler boleto" um contorno claro sumiria. No hover ele inverte — fundo vira a
+     tinta, tinta vira o fundo da página (o par que sobrevive aos dois temas). */
   .g3ref button.fu-contorno {
-    border: 1px solid var(--g3ref-tinta); background: var(--g3ref-papel);
-    color: var(--g3ref-tinta); padding: 11px; margin-top: 16px;
+    border: 1px solid var(--texto); background: var(--fundo2);
+    color: var(--texto); padding: 11px; margin-top: 16px;
   }
   .g3ref button.fu-contorno:hover:not(:disabled) {
-    background: var(--g3ref-tinta); color: var(--g3ref-tinta-invertida); border-color: var(--g3ref-tinta);
+    background: var(--texto); color: var(--fundo); border-color: var(--texto);
   }
-  /* O pé do cartão da direita: o primário e o "Nova fatura" discreto, 26px
-     abaixo do último campo. "flex-wrap" é nosso — os rótulos em português são
-     mais longos que os da referência e num monitor estreito eles se tocariam. */
+  .g3ref button.fu-contorno:disabled { background: var(--fundo-recuo); color: var(--fraco); border-color: var(--borda); }
+  /* O pé do cartão da direita: o primário e o "Nova fatura", 26px abaixo do
+     último campo. "flex-wrap" é nosso — os rótulos em português são mais longos
+     que os da referência e num monitor estreito eles se tocariam. */
   .g3ref .fu-pe { display: flex; gap: 12px; margin-top: 26px; flex-wrap: wrap; }
 
-  /* O "excluir" de cada registro: sem caixa, 13px, apagado até o mouse chegar. */
-  .g3ref button.fu-texto {
-    border: none; background: none; color: var(--g3ref-apagado);
-    font-family: var(--g3ref-fonte); font-size: 13px; font-weight: 400;
-    letter-spacing: normal; text-transform: none; padding: 2px 4px;
-  }
-  .g3ref button.fu-texto:hover:not(:disabled) {
-    color: var(--g3ref-tinta); border: none; background: none;
-  }
-
   /* ----------------------------------------------------------- o aviso
-     A CAIXA É A DELA — creme alaranjado, filete de 3px à esquerda, 9px 11px, 13px de
-     texto, entrelinha 1,45. A COR DO FILETE continua variando por estado, e a
-     razão é que a referência só tem UM estado: tudo nela é alerta laranja. Erro
-     e sucesso são nossos (composição que falhou, fatura registrada), e pintá-los
-     de laranja apagaria a diferença entre "confira" e "não deu certo". */
-  .g3ref .aviso {
-    background: var(--g3ref-alerta-fundo); border: 0;
-    border-left: 3px solid var(--g3ref-laranja); border-radius: 0;
-    padding: 9px 11px; font-size: 13px; line-height: 1.45;
-    color: var(--g3ref-tinta); margin: 0 0 8px; box-shadow: none;
-  }
-  .g3ref .aviso.erro { background: var(--erro-fundo); border-left-color: var(--erro); }
-  .g3ref .aviso.ok { background: var(--ok-fundo); border-left-color: var(--ok); }
+     Fundo, contorno, ícone e tinta são os do aviso geral desde 30/09 — o filete
+     de 3px da referência saiu junto com o de 4px da casa. Fica a margem da
+     referência: dentro do cartão o aviso encosta no que vem depois. */
+  .g3ref .aviso { margin: 0 0 8px; }
 
   /* ------------------------------------------------------------ a barra da aba 2
      Na referência ela tem a LARGURA DA FOLHA (210mm) e fica solta sobre o creme —
-     sem cartão, sem borda, sem sombra —, porque o que precisa de moldura ali
-     embaixo é o papel. Era um cartão com borda e sombra aqui. */
+     sem cartão, sem borda —, porque o que precisa de moldura ali embaixo é o
+     papel. */
   .g3ref .fu-barra {
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
     max-width: 210mm; margin: 22px auto 14px; padding: 0;
-    background: none; border: 0; border-radius: 0; box-shadow: none;
+    background: none; border: 0; border-radius: var(--raio);
   }
-  .g3ref .fu-barra .fraco { font-size: 14px; color: var(--g3ref-apagado); }
-  /* "Voltar ao painel" é o único botão de contorno da referência com tinta CHEIA
-     em vez de apagada, e a razão é de peso: ao lado do navy sólido de imprimir,
-     um cinza claro sumiria. Padding 11px, contra os 13px do pé do cartão. */
-  .g3ref .fu-barra button { color: var(--g3ref-tinta); padding: 11px 18px; }
+  .g3ref .fu-barra .fraco { font-size: var(--t-ui); }
+  /* "Voltar ao painel" ganha a altura do botão de imprimir ao lado. */
+  .g3ref .fu-barra button { padding: 11px 18px; }
+  /* IMPRIMIR É O BLOCO NAVY, a superfície dominante como botão: é o último ato
+     da aba e não compete com o laranja de nenhuma outra. O hover clareia o navy
+     misturando a própria tinta dele, e isso vale igual nos dois temas. */
   .g3ref button.fu-imprimir {
-    background: var(--g3ref-navy); color: var(--g3ref-navy-tinta); border: none;
-    padding: 11px 22px;
-    font-family: var(--g3ref-fonte-cond); font-size: 15px; font-weight: 600;
-    letter-spacing: 0.06em; text-transform: uppercase;
+    background: var(--topo); color: var(--topo-texto); border-color: var(--topo);
+    padding: 11px 22px; letter-spacing: .06em; text-transform: uppercase;
   }
   .g3ref button.fu-imprimir:hover:not(:disabled) {
-    background: var(--g3ref-navy-hover); color: var(--g3ref-navy-tinta); border: none;
+    background: color-mix(in srgb, var(--topo) 86%, var(--topo-texto));
+    border-color: color-mix(in srgb, var(--topo) 86%, var(--topo-texto)); color: var(--topo-texto);
   }
 
   /* ------------------------------------------- o que a aba 3 (Cadastro) herda
      O cadastro é markup da casa — ".cartao.secao", "h2", "h3", ".sub", tabela.
-     Dentro do escopo ele passa a falar a língua da referência, e isso é
-     deliberado: uma aba com duas gramáticas seria pior que qualquer uma das duas.
-     "h2" é o título de 22px do cartão da direita; "h3", o rótulo laranja de seção. */
-  .g3ref h2 {
-    font-family: var(--g3ref-fonte-cond); font-size: 22px; font-weight: 600;
-    letter-spacing: normal; margin: 26px 0 6px; gap: 8px;
-  }
-  .g3ref h3 {
-    font-family: var(--g3ref-fonte-cond); font-size: 12px; font-weight: 400;
-    text-transform: uppercase; letter-spacing: 0.14em;
-    color: var(--g3ref-laranja); margin: 0 0 10px;
-  }
-  /* A MEDIDA DE LINHA FICA. A referencia nao tem "max-width" porque a unica prosa
-     dela e a nota de uma linha dos parametros; a aba 3 tem paragrafos de cinco
-     linhas explicando o que a folha imprime, e 12px correndo por 1120px de
-     largura e o tipo de texto que ninguem le. Onde a referencia tem opiniao —
-     tamanho, tinta, entrelinha — vale a dela; onde ela nao tem, vale a nossa. */
-  .g3ref .sub { font-size: 12px; color: var(--g3ref-apagado); margin: 10px 0 0; line-height: 1.5; max-width: 82ch; }
-  .g3ref .fraco { color: var(--g3ref-apagado); }
-  .g3ref .rolagem { border: 1px solid var(--g3ref-borda); border-radius: 0; background: var(--g3ref-papel); box-shadow: none; }
-  .g3ref table { font-size: 14px; }
-  .g3ref thead th {
-    font-family: var(--g3ref-fonte-cond); font-size: 12px; font-weight: 400;
-    text-transform: uppercase; letter-spacing: 0.14em;
-    background: none; color: var(--g3ref-apagado);
-    padding: 8px 10px; border-bottom: 1px solid var(--g3ref-regua);
-  }
-  .g3ref tbody td { padding: 8px 10px; border-bottom: 1px solid var(--g3ref-regua); }
-  .g3ref tbody tr:hover { background: var(--g3ref-fundo); }
+     Até 30/09 este bloco o traduzia para a língua da referência regra a regra;
+     desde então a casa JÁ fala essa língua, e a tradução saiu inteira. */
 
   /* O CADASTRO DEIXOU DE SER UM "details" EM 14/08 e virou a terceira ABA.
      Dobrado no pe da aba 1, ele parecia rodape de uma tela de conferencia - e
@@ -1521,9 +1517,19 @@ export const ESTILO = `
      2,75:1 contra o creme - e nao os "4,02:1" que este comentario afirmava. Ele
      saiu, e entrou o "#66686F", que e o valor que a INTERFACE ja usava como
      "--fraco" e que passa nos dois fundos do papel (5,56:1 e 4,98:1). */
+  /* A FONTE DA FOLHA E CRAVADA AQUI desde 30/09, e isso e o que protege o papel
+     da etapa 0 do redesenho. Ate entao a folha nao declarava familia, tamanho,
+     entrelinha nem tracking: HERDAVA os quatro do ".g3ref" em volta (Barlow,
+     16px, "normal", "normal"). Quando o g3ref virou o sistema, o ".g3ref" parou
+     de declara-los e o corpo passou a 15px com entrelinha 1,5 - e a folha, que
+     so herdava, mudaria de medida sem ninguem tocar nela. Os quatro valores
+     abaixo sao exatamente os que ela herdava, e a familia e LITERAL, como as
+     tintas: o papel nao le token. */
   .g3 {
     width: 210mm; min-height: 297mm; padding: 13mm 15mm;
     background: #fff; color: #14213D;
+    font-family: 'Barlow', system-ui, sans-serif; font-size: 16px; font-weight: 400;
+    line-height: normal; letter-spacing: normal;
     display: flex; flex-direction: column;
     box-shadow: var(--sombra-2); border: 1px solid var(--borda);
   }
@@ -1918,9 +1924,11 @@ export const ESTILO = `
   /* FIM-DOCUMENTO-IMPRESSO */
 
   /* -------------------------------------------------------------- login
-     O centro da tela, com o brilho quente da marca no alto. */
+     O centro da tela. Ate 30/09 com um brilho radial do laranja subindo do alto;
+     o g3ref nao tem gradiente de enfeite (o unico e o filete de marca de 3px), e
+     o cartao branco sobre o creme ja e a pagina inteira. */
   .central {
     min-height: 100dvh; display: grid; place-items: center; padding: 20px;
-    background: radial-gradient(70% 50% at 50% 0%, var(--acento-suave), transparent 70%);
+    background: var(--fundo);
   }
 `;

@@ -95,8 +95,12 @@ chk('T0c', Math.abs(contraste('#FFFFFF', '#F39200') - 2.35) < 0.02,
 // TODO PAR QUE PODE APARECER NA TELA, não só os que eu lembrei de anotar. As
 // quatro superfícies são as quatro em que texto de fato pousa; o `--acento-suave`
 // entra porque a navegação ativa e a linha em destaque o usam como fundo.
+//
+// [30/09] E O `--campo` ENTROU, com o g3ref virando o sistema: todo input passou
+// a afundar um tom do cartão, e o que se digita, o placeholder e o anel de foco
+// pousam nele. Entrou medido — 15.19, 5.29 e 3.56:1 no claro.
 
-const SUPERFICIES = ['fundo', 'fundo2', 'fundoRecuo', 'fundoHover', 'acentoSuave'] as const;
+const SUPERFICIES = ['fundo', 'fundo2', 'fundoRecuo', 'fundoHover', 'acentoSuave', 'campo'] as const;
 const TINTAS = ['texto', 'fraco', 'acentoForte', 'erro', 'ok', 'alerta'] as const;
 
 for (const [nome, p] of [['claro', CLARO], ['escuro', ESCURO]] as Array<[string, Paleta]>) {
@@ -244,8 +248,16 @@ chk('T5', /font-display:\s*swap/.test(FONTE_CSS),
     '@font-face declara font-display: swap — o texto aparece antes da fonte chegar');
 chk('T5b', !/font-display:\s*(block|auto)/.test(FONTE_CSS),
     'e não `block` nem `auto`, que são os dois que escondem o texto esperando');
-chk('T5c', TIPOGRAFIA.familia.startsWith("'Inter'"),
-    'a Inter é a primeira da pilha — é ela que se vê quando o arquivo chega');
+// [30/09] A PRIMEIRA DA PILHA TROCOU DE NOME e a verificação ficou: era a Inter,
+// é a Barlow desde que o g3ref virou a identidade do sistema. O que se prende é
+// o mesmo — a fonte servida é a primeira, e a de sistema vem atrás (T5d).
+chk('T5c', TIPOGRAFIA.familia.startsWith("'Barlow'")
+        && TIPOGRAFIA.familiaCond.startsWith("'Barlow Semi Condensed'"),
+    'a Barlow é a primeira da pilha do corpo e a Semi Condensed a da condensada — são elas que se '
+    + 'veem quando o arquivo chega');
+chk('T5f', !/font-family:\s*'Inter'/.test(FONTE_CSS) && !TIPOGRAFIA.familia.includes('Inter'),
+    'e a Inter saiu inteira: nenhum @font-face e nenhum lugar na pilha — duas fontes de corpo '
+    + 'era exatamente a segunda gramática que a etapa 0 tirou');
 chk('T5d', TIPOGRAFIA.familia.includes('ui-sans-serif') && TIPOGRAFIA.familia.includes('system-ui'),
     'e a pilha de sistema continua ATRÁS: sem o arquivo, a tela é a de ontem, não uma tela quebrada');
 chk('T5e', FONTE_CSS.includes('/fontes/') && !/https?:\/\//.test(FONTE_CSS),
