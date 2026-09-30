@@ -84,6 +84,11 @@ aplicar fin_auditoria
 suite fin_auditoria tests/auditoria.sql
 
 echo
+echo "=== administracao da plataforma: setores, a lista e o cadastro (banco fin_admin)"
+aplicar fin_admin
+suite fin_admin tests/administracao.sql
+
+echo
 echo "=== carteira: fatura, boleto, liquidacao e a invariante do centavo (banco fin_carteira)"
 aplicar fin_carteira
 suite fin_carteira tests/carteira.sql

@@ -491,9 +491,18 @@ BEGIN
     -- que roda como `auditor_financeiro`. Ela NAO afrouxa a R2 — nao le nada, e
     -- o tenant sai de `app.current_tenant_id()` e RECUSA fora de contexto, entao
     -- nao ha assinatura por onde escolher em nome de quem gravar.
+    --
+    -- `usuarios_do_tenant` e `vincular_usuario` entram em 30/09/2026 (migration
+    -- 41, a Administracao da plataforma). A primeira porque a policy de `usuario`
+    -- esconde o membro DESLIGADO, e a tela que desliga precisa mostra-lo para
+    -- religar; a segunda porque a policy de `usuario` so deixa inserir o tier
+    -- `plataforma_admin`, e o administrador de uma empresa nao tem tier. As duas
+    -- reimpoem a autoridade (`app.administra_a_plataforma()`), tiram o tenant do
+    -- contexto e RECUSAM com 42501 — `tests/administracao.sql` prende as tres.
     AND p.proname NOT IN ('membros_do_tenant','tem_vinculo_no_tenant',
                           'resolver_login','auditar','exigir_trilha_de_plataforma',
-                          'resolver_credencial_cobranca','registrar_ato_externo');
+                          'resolver_credencial_cobranca','registrar_ato_externo',
+                          'usuarios_do_tenant','vincular_usuario');
   IF txt IS NULL THEN RAISE NOTICE 'ok   G4   inv.19 nenhum SECURITY DEFINER fora da lista branca';
   ELSE RAISE WARNING 'FALHA G4 inv.19 fora da lista: %', txt; falhas := falhas + 1; END IF;
 

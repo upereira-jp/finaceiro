@@ -48,6 +48,7 @@ const MIGRATION_37 = '20260909233000_ato_externo_log';
 const MIGRATION_38 = '20260910001500_ato_externo_sem_returning';
 const MIGRATION_39 = '20260910010000_limpar_ensaio_da_trilha';
 const MIGRATION_40 = '20260910160000_chave_do_vendedor_no_crm';
+const MIGRATION_41 = '20260930120000_administracao_da_plataforma';
 
 class ConferenciaFalhou extends Error {}
 
@@ -60,6 +61,7 @@ const DIRETORIO: Record<string, string> = {
   'migration-38': MIGRATION_38,
   'migration-39': MIGRATION_39,
   'migration-40': MIGRATION_40,
+  'migration-41': MIGRATION_41,
 };
 
 /**
@@ -125,7 +127,7 @@ if (!url || !url.trim()) {
 }
 
 const modo = process.argv[2] ?? '';
-const MODOS = ['identidade', 'migration-32', 'migration-35', 'migration-36', 'migration-37', 'migration-38', 'migration-39', 'migration-40'];
+const MODOS = ['identidade', 'migration-32', 'migration-35', 'migration-36', 'migration-37', 'migration-38', 'migration-39', 'migration-40', 'migration-41'];
 if (!MODOS.includes(modo)) {
   console.error(`modo desconhecido: ${JSON.stringify(modo)}. Conheco: ${MODOS.join(', ')}.`);
   process.exit(1);
@@ -520,9 +522,69 @@ async function migration40(): Promise<void> {
   console.log('migration 40 OK — o originador ganhou a chave do vendedor no CRM, e ela e unica por tenant.');
 }
 
+/**
+ * A 41 CONFERE QUATRO COISAS, e a mais importante e a que nao aparece na tela.
+ *
+ *   1. a coluna `usuario_tenant.setores` e as TRES constraints dela;
+ *   2. as tres funcoes novas (`administra_a_plataforma`, `usuarios_do_tenant`,
+ *      `vincular_usuario`);
+ *   3. ⚠️ o `resolver_login` DEVOLVE `setores` **e continua executavel por
+ *      `app_financeiro`**. A migration o recria com DROP + CREATE, e o CREATE
+ *      nasce sem o GRANT: se a linha do GRANT faltasse, o login de TODO MUNDO
+ *      parava no deploy seguinte — com a migration "verde". E por isso a
+ *      pergunta e ao catalogo de privilegio, e nao a existencia da funcao;
+ *   4. ALGUEM tem a Administracao. A regra do bootstrap (papel `admin` de quem
+ *      tem tier `plataforma_admin`) nao nomeia ninguem; se ela casasse zero
+ *      linhas, a pasta nasceria sem dono e ninguem conseguiria dar a
+ *      Administracao a ninguem pela tela. Contar e a unica forma de saber.
+ */
+async function migration41(): Promise<void> {
+  await migration40();
+
+  const { rows: [r] } = await cliente.query<{
+    coluna: string; checks: string; funcoes: string; login_setores: boolean;
+    login_grant: boolean; administram: string; registro: string;
+  }>(`
+    SELECT (SELECT count(*) FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'usuario_tenant'
+               AND column_name = 'setores' AND data_type = 'ARRAY' AND is_nullable = 'NO') AS coluna,
+           (SELECT count(*) FROM pg_constraint
+             WHERE conrelid = 'public.usuario_tenant'::regclass AND contype = 'c'
+               AND conname IN ('usuario_tenant_setores_conhecidos',
+                               'usuario_tenant_ao_menos_um_setor',
+                               'usuario_tenant_administracao_so_admin'))               AS checks,
+           (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+             WHERE n.nspname = 'app'
+               AND p.proname IN ('administra_a_plataforma', 'usuarios_do_tenant',
+                                 'vincular_usuario'))                                  AS funcoes,
+           (SELECT pg_get_function_result('app.resolver_login(uuid)'::regprocedure)
+                   LIKE '%setores text[]%')                                             AS login_setores,
+           has_function_privilege('app_financeiro', 'app.resolver_login(uuid)', 'EXECUTE') AS login_grant,
+           (SELECT count(*) FROM usuario_tenant
+             WHERE ativo AND 'administracao' = ANY (setores))                          AS administram,
+           (SELECT count(*) FROM _prisma_migrations
+             WHERE migration_name = '${MIGRATION_41}'
+               AND finished_at IS NOT NULL AND rolled_back_at IS NULL)                 AS registro`);
+
+  const faltando = [
+    Number(r!.coluna) === 1 ? null : 'a coluna usuario_tenant.setores (text[] NOT NULL)',
+    Number(r!.checks) === 3 ? null : `as 3 constraints de setores (achei ${r!.checks})`,
+    Number(r!.funcoes) === 3 ? null : `as 3 funcoes da administracao (achei ${r!.funcoes})`,
+    r!.login_setores ? null : 'a coluna setores no retorno de app.resolver_login',
+    r!.login_grant ? null : 'o EXECUTE de app_financeiro em app.resolver_login — SEM ELE NINGUEM LOGA',
+    Number(r!.administram) >= 1 ? null : 'ao menos um vinculo ativo com a Administracao (o bootstrap casou zero)',
+    Number(r!.registro) === 1 ? null : `o registro de ${MIGRATION_41} em _prisma_migrations`,
+  ].filter(Boolean);
+
+  if (faltando.length) throw new ConferenciaFalhou(`a migration 41 nao esta completa no banco. Falta: ${faltando.join('; ')}.`);
+  console.log(`migration 41 OK — setores no vinculo, as tres funcoes, o login devolve setores e segue `
+    + `executavel, e ${r!.administram} vinculo(s) com a Administracao.`);
+}
+
 try {
   await cliente.connect();
   if (modo === 'identidade') await identidade();
+  else if (modo === 'migration-41') await migration41();
   else if (modo === 'migration-40') await migration40();
   else if (modo === 'migration-39') await migration39();
   else if (modo === 'migration-38') await migration38();
