@@ -89,3 +89,69 @@ export function ladoDoQr(svg: string): number | null {
   return Number.isFinite(l) && l > 0 && l === Number(altura[1]) ? l : null;
 }
 
+
+/* ============================================================================
+ * A FOLHA QUE NAO CABE EM 297 MM (30/09/2026)
+ *
+ * A folha da fatura unificada tem ALTURA FIXA de uma pagina A4 (ver ".g3" no
+ * `estilo.ts`). Quando o conteudo passa disso, a folha NAO recorta: ela sobe um
+ * degrau de APERTO por vez, mede de novo e so para quando cabe. O defeito que
+ * trouxe isto e medido: o endereco da Equatorial numa coluna de 1/4 da grade do
+ * cliente quebrava em seis linhas, e a folha 1 ia a 301 mm.
+ *
+ *   0  nada muda — e o caso de quase toda fatura, e ele sai identico ao de antes;
+ *   1  a grade do cliente da a cada campo a largura que ele pede: o campo longo
+ *      ocupa duas colunas, e o endereco longo uma linha propria no alto;
+ *   2  compacta: espacamentos e entrelinhas do detalhamento, dos cartoes e do
+ *      historico diminuem, e as barras do grafico baixam;
+ *   3  aperta mais: as barras baixam de novo e a nota explicativa dos cartoes sai.
+ *      So aqui o grafico do historico ganha licenca de encolher sozinho.
+ *
+ * NENHUM DEGRAU TOCA a faixa de pagamento por dentro das vias: codigo de barras
+ * (13 mm), linha digitavel e QR (30 mm) saem sempre inteiros e no tamanho. E a
+ * linha «Total» do detalhamento nunca esta numa regiao que encolhe.
+ *
+ * AS REGRAS SAO PURAS e moram aqui, e nao no `.tsx`, pelo motivo de sempre: o
+ * runner do `web/` nao le JSX, e decisao que nao se testa e comentario.
+ * ========================================================================== */
+
+export const NIVEL_MAXIMO_DO_APERTO = 3;
+
+/**
+ * O proximo degrau, dado o que o navegador mediu na folha. `scrollHeight` maior
+ * que `clientHeight` e conteudo passando do pe; 1 px de folga absorve o
+ * arredondamento de subpixel, que nao vira pagina.
+ */
+export function proximoNivelDoAperto(nivel: number, alturaDoConteudo: number, alturaDaFolha: number): number {
+  if (nivel >= NIVEL_MAXIMO_DO_APERTO) return NIVEL_MAXIMO_DO_APERTO;
+  return alturaDoConteudo > alturaDaFolha + 1 ? nivel + 1 : nivel;
+}
+
+/** As classes de um degrau. Cumulativas: o degrau 2 inclui o 1, o 3 inclui os dois. */
+export function classesDoAperto(nivel: number): string {
+  return [
+    nivel >= 1 ? 'aperto-grade' : '',
+    nivel >= 2 ? 'aperto-compacta' : '',
+    nivel >= 3 ? 'aperto-maximo' : '',
+  ].filter(Boolean).join(' ');
+}
+
+/**
+ * QUANTAS COLUNAS DA GRADE DO CLIENTE um campo pede, quando a folha aperta.
+ *
+ * Os numeros sao medidos na folha: a coluna tem ~39 mm, e nela cabem ~20
+ * caracteres do valor (10pt) e ~19 do rotulo (7,5pt, caixa-alta espacada). Passou
+ * disso, o campo quebra e a LINHA INTEIRA da grade cresce junto — e o que faz
+ * duas colunas pedirem a altura de um campo so. Acima de 44 caracteres nem duas
+ * colunas bastam (o endereco da Equatorial tem 60 a 120), e o campo ganha a
+ * largura toda.
+ *
+ * Só vale no degrau 1 em diante: com a folha cabendo, a grade e a de sempre.
+ */
+export function larguraDoCampoDaFolha(rotulo: string, valor: string): 'meta-inteira' | 'meta-dupla' | 'meta-simples' {
+  const r = rotulo.trim().length;
+  const v = valor.trim().length;
+  if (v > 44) return 'meta-inteira';
+  if (v > 20 || r > 19) return 'meta-dupla';
+  return 'meta-simples';
+}
