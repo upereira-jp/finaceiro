@@ -1521,11 +1521,42 @@ export const ESTILO = `
      2,75:1 contra o creme - e nao os "4,02:1" que este comentario afirmava. Ele
      saiu, e entrou o "#66686F", que e o valor que a INTERFACE ja usava como
      "--fraco" e que passa nos dois fundos do papel (5,56:1 e 4,98:1). */
+  /* A ALTURA E FIXA, E NAO MINIMA — conserto de 30/09/2026, medido.
+
+     Era "min-height: 297mm", e isso so garantia o PISO. Com conteudo real
+     (endereco longo da Equatorial na grade de quatro colunas, nome em duas
+     linhas, campos do tenant) a folha 1 media 301 mm: os 4 mm que sobravam
+     iam para uma pagina propria, e o corte "uma folha por pagina" mandava a
+     folha 2 para a TERCEIRA. O dono via tres paginas, a do meio quase em
+     branco. Em qualquer navegador que nao honre o corte forcado dentro do
+     "#documento" absoluto, o mesmo excesso desloca a folha 2 inteira e a
+     quebra cai no meio da faixa de pagamento.
+
+     Com a altura cravada, cada folha e EXATAMENTE uma pagina A4 e nada dela
+     transborda para outra. Quem cede quando o conteudo nao cabe e o que e
+     elastico - o detalhamento na folha 1 e o grafico do historico na folha 2,
+     ver as duas regras abaixo -, e o resto, a faixa de pagamento em primeiro
+     lugar, nao encolhe. Quando o conteudo cabe, nada muda: o "margin-top: auto"
+     dos rodapes absorve a sobra como antes. Vale tambem na tela, e de proposito:
+     a previa ja recortava em 297 mm, entao o que se ve continua sendo o que sai. */
   .g3 {
-    width: 210mm; min-height: 297mm; padding: 13mm 15mm;
+    width: 210mm; height: 297mm; overflow: hidden; padding: 13mm 15mm;
     background: #fff; color: #14213D;
     display: flex; flex-direction: column;
     box-shadow: var(--sombra-2); border: 1px solid var(--borda);
+  }
+  /* NADA DA FOLHA ENCOLHE POR PADRAO - o "flex-shrink: 1" de fabrica espremeria a
+     faixa de pagamento junto com o resto. So os dois blocos elasticos cedem, e
+     cedem ate zero: "min-height: 0" desliga o piso automatico do flex, que e o
+     proprio conteudo, e o recorte apara o que nao coube em vez de pinta-lo por
+     cima do bloco de baixo. O recorte e "clip" com 1pt de folga, e nao "hidden"
+     seco, por MEDIDA: o "hidden" arredondava a borda de 0,4pt da ultima barra do
+     historico e a afinava mesmo com tudo cabendo (1 coluna de pixel de diferenca
+     a 150 dpi). "hidden" fica antes so como reserva para navegador sem "clip". */
+  .g3 > * { flex-shrink: 0; }
+  .g3 > .g3-det, .g3 > .g3-hist {
+    flex-shrink: 1; min-height: 0;
+    overflow: hidden; overflow: clip; overflow-clip-margin: 1pt;
   }
   .g3-topo {
     display: flex; align-items: flex-end; justify-content: space-between; gap: 12pt;
@@ -1676,13 +1707,18 @@ export const ESTILO = `
 
   /* O GRAFICO DE CONSUMO. Barras em "flex" com altura percentual - a proporcao vem
      do SERVIDOR ja calculada ("altura_pct"), e a tela nao divide nada. */
-  .g3-hist { margin-top: 11pt; }
+  /* O HISTORICO E UMA COLUNA FLEX para que, quando a folha 2 aperta, quem encolha
+     seja a AREA DAS BARRAS - titulo e meses ficam inteiros. Com o conteudo
+     cabendo, a coluna empilha igual ao bloco de antes (nenhuma margem aqui
+     dependia de colapso). Ver ".g3 > .g3-hist" no alto da folha. */
+  .g3-hist { margin-top: 11pt; display: flex; flex-direction: column; }
   .g3-hist-tit {
     font-size: 10.5pt; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
-    padding-bottom: 5pt; border-bottom: 1px solid #14213D;
+    padding-bottom: 5pt; border-bottom: 1px solid #14213D; flex: none;
   }
   .g3-hist-barras {
     display: flex; align-items: flex-end; gap: 2pt; height: 34mm; margin-top: 7pt;
+    flex: 0 1 auto; min-height: 0;
   }
   .g3-hist-col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
   .g3-hist-num {
@@ -1706,7 +1742,7 @@ export const ESTILO = `
   .g3-hist-barra { background: #E4DFD4; min-height: 1.5pt; border: 0.4pt solid #14213D; }
   .g3-hist-barra.atual { background: #E8843C; }
   .g3-hist-meses {
-    display: flex; gap: 2pt; margin-top: 2.5pt;
+    display: flex; gap: 2pt; margin-top: 2.5pt; flex: none;
     border-top: 1px solid #E4DFD4; padding-top: 2.5pt;
   }
   .g3-hist-meses > div { flex: 1; font-size: 6pt; text-align: center; color: #66686F; }
@@ -1728,7 +1764,7 @@ export const ESTILO = `
   /* A ALTURA DA BARRA E FIXA EM MILIMETRO e a largura estica: leitor otico le a
      PROPORCAO entre estreita e larga na horizontal, e a altura so precisa dar
      margem para o feixe. 13mm e o minimo confortavel para leitura de balcao. */
-  .faixa-pgto-barras { height: 13mm; width: 100%; }
+  .faixa-pgto-barras { height: 13mm; width: 100%; flex: none; }
   .faixa-pgto-barras svg { width: 100%; height: 100%; display: block; }
 
   .g3-rodape-2 {
@@ -1798,10 +1834,17 @@ export const ESTILO = `
      aqui.
 
      A CAIXA NAO PODE QUEBRAR NO MEIO: "break-inside: avoid" vale para o dia em que
-     o documento tiver mais de uma folha. Hoje ele tem uma, e a regra nao custa. */
+     o documento tiver mais de uma folha. Hoje ele tem uma, e a regra nao custa.
+
+     "flex: none" E NAO MAIS "height: 100%" (30/09/2026). Enquanto a folha tinha so
+     altura minima, o "100%" nao resolvia contra nada e valia "auto". Com a folha em
+     297 mm cravados ele passaria a valer a folha inteira e empurraria tudo para
+     fora. A faixa tem a altura do proprio conteudo e NAO ENCOLHE: codigo de barras,
+     linha digitavel e QR precisam sair inteiros e no tamanho, para ler no caixa e
+     na camera. */
   .faixa-pgto {
     border: 1px solid #14213D; display: flex; flex-direction: column;
-    break-inside: avoid; page-break-inside: avoid; height: 100%;
+    break-inside: avoid; page-break-inside: avoid; flex: none;
   }
   .faixa-pgto-topo {
     background: #14213D; color: #F6F2EA;
@@ -1877,8 +1920,20 @@ export const ESTILO = `
     body *:not(:has(#documento)):not(#documento):not(#documento *) { display: none !important; }
     #documento .naoimprime, .naoimprime { display: none !important; }
     #documento {
-      position: absolute; left: 0; top: 0; width: 100%;
+      position: absolute; left: 0; top: 0; width: 100%; margin: 0;
       border: none; border-radius: 0; padding: 0; max-width: none; box-shadow: none;
+    }
+    /* O "top: 0" TEM DE SER O TOPO DA PAGINA (30/09/2026). Ele so e se nenhum
+       ancestral do documento for bloco de contencao: com um "position: relative",
+       "transform", "filter", "contain" ou "will-change" no caminho, o documento
+       passaria a contar a partir DELE, e o padding que os ancestrais guardam
+       (o "main" tem 26 px) desceria as duas folhas e mandaria o pe da segunda
+       para uma terceira pagina. Medido hoje: nenhum ancestral posicionado e o
+       documento em 0 mm. A regra e para continuar assim quando alguem mexer na
+       casca da aplicacao. */
+    body *:has(#documento) {
+      position: static !important; transform: none !important; filter: none !important;
+      contain: none !important; will-change: auto !important;
     }
     /* A folha imprime em tamanho REAL: a escala e da tela, nunca do papel. */
     #documento .g3 { border: none; box-shadow: none; }

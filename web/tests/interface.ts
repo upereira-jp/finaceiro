@@ -879,6 +879,59 @@ chk('I9g', ordemDasAbas(true).every((a) => (ROTULO_DA_ABA[a] ?? '').trim() !== '
       + 'sem deixar buraco nas vizinhas');
 }
 
+// ============================================================================
+// I11 — A FATURA UNIFICADA SAI EM DUAS PAGINAS, SEMPRE (30/09/2026)
+// ============================================================================
+//
+// O dono imprimiu uma fatura com boleto e recebeu TRES paginas: a folha tinha so
+// altura MINIMA de 297 mm, e com endereco longo e campos do tenant a folha 1
+// media 301 mm. Os 4 mm sobrando viravam uma pagina propria e o corte "uma folha
+// por pagina" empurrava a folha 2 para a terceira. MEDIDO no espelho com o build
+// de producao: 3 paginas antes, 2 depois, nos dois modos de PDF.
+//
+// ESTAS LINHAS PRENDEM AS TRES METADES DO CONSERTO. Nenhuma delas se ve olhando a
+// tela com um caso que cabe — e justamente o caso das suites e do espelho antigo,
+// que dava 2 paginas e deixou o defeito passar.
+{
+  const g3 = regraDe('.g3');
+  chk('I11a', /(^|[\s;{])height:\s*297mm/.test(g3) && !/min-height/.test(g3) && /overflow:\s*hidden/.test(g3),
+      'a folha tem ALTURA FIXA de 297 mm e apara o que sobra — "min-height" so garantia o piso, e o '
+      + 'excesso virava uma terceira pagina');
+
+  const inicioPrint = REGRAS.indexOf('@media print');
+  const fimPrint = REGRAS.indexOf(MARCA_FIM, inicioPrint);
+  const print = inicioPrint > 0 && fimPrint > inicioPrint ? REGRAS.slice(inicioPrint, fimPrint) : '';
+  const regrasDaFolhaNoPapel = print.match(/\.g3\s*\{[^}]*\}/g) ?? [];
+  chk('I11b', print !== '' && regrasDaFolhaNoPapel.length > 0
+      && regrasDaFolhaNoPapel.every((r) => !/(min-|max-)?height|overflow/.test(r)),
+      'e nenhuma regra de impressao devolve a folha a altura livre — a altura fixa vale no papel');
+
+  chk('I11c', /flex-shrink:\s*0/.test(regraDe('.g3 > *'))
+      && /flex-shrink:\s*1/.test(regraDe('.g3 > .g3-det, .g3 > .g3-hist'))
+      && /min-height:\s*0/.test(regraDe('.g3 > .g3-det, .g3 > .g3-hist'))
+      && /overflow:\s*clip/.test(regraDe('.g3 > .g3-det, .g3 > .g3-hist')),
+      'nada da folha encolhe por padrao; so o detalhamento e o historico cedem quando nao cabe');
+
+  const faixa = regraDe('.faixa-pgto');
+  chk('I11d', /flex:\s*none/.test(faixa) && !/height:\s*100%/.test(faixa)
+      && /break-inside:\s*avoid/.test(faixa),
+      'a faixa de pagamento NAO ENCOLHE e nao quebra — e "height: 100%" contra a folha fixa a '
+      + 'esticaria ate o pe e empurraria o resto para fora');
+
+  chk('I11e', /height:\s*13mm/.test(regraDe('.faixa-pgto-barras')) && /flex:\s*none/.test(regraDe('.faixa-pgto-barras'))
+      && /width:\s*30mm;\s*height:\s*30mm/.test(regraDe('.faixa-pgto-qr')) && /flex:\s*none/.test(regraDe('.faixa-pgto-qr')),
+      'codigo de barras (13 mm) e QR (30 mm) tem tamanho cravado e nao cedem — precisam ler no '
+      + 'caixa e na camera');
+
+  chk('I11f', /\.folha-item \+ \.folha-item\s*\{\s*break-before:\s*page/.test(print)
+      && /#documento\s*\{[^}]*position:\s*absolute;\s*left:\s*0;\s*top:\s*0/.test(print),
+      'o corte continua sendo um por folha, e o documento continua preso ao topo da pagina');
+
+  chk('I11g', /body \*:has\(#documento\)\s*\{[^}]*position:\s*static !important;[^}]*transform:\s*none !important/.test(print),
+      'e nenhum ancestral pode virar referencia do "top: 0" — um "position: relative" na casca '
+      + 'desceria as folhas e mandaria o pe da segunda para outra pagina');
+}
+
 console.log();
 if (falhas > 0) { console.log(`--- interface: ${falhas} FALHA(S)`); process.exit(1); }
 console.log(`--- interface (estilo, movimento e navegacao): ${feitas} verificacoes, 0 falhas`);
