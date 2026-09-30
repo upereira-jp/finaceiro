@@ -348,3 +348,37 @@ export function filtroDaConsulta(busca: string, aceitos: readonly string[]): str
   const v = new URLSearchParams(busca).get(CHAVE_DO_FILTRO) ?? '';
   return aceitos.includes(v) ? v : '';
 }
+
+/* ==========================================================================
+ * A UNIDADE PEDIDA PELO ENDERECO — `/unidades?uc=<numero>` (30/09/2026, etapa 2)
+ * ==========================================================================
+ *
+ * O FILTRO ACIMA LEVA A UMA LISTA; ESTE LEVA A UMA LINHA. A recusa de boleto por
+ * endereco (`PagadorSemEndereco`) e sempre sobre UMA unidade, e o que a tela de
+ * Emissao e cobranca oferece e «Completar o endereço» DELA. Cair na lista das
+ * que nao emitem e procurar o numero de novo e o trabalho que o botao existe
+ * para tirar: a tela de Unidades abre ja filtrada nessa unidade, com o endereco
+ * aberto, e oferece a volta para o mes de onde a pessoa saiu.
+ *
+ * SEM A UNIDADE (a recusa chegou sem numero), o destino cai no filtro das que nao
+ * emitem — que continua sendo o lugar certo, so menos exato.
+ */
+export const CHAVE_DA_UNIDADE = 'uc';
+/** O mes de onde a pessoa veio, para a volta. Mesmo formato do `?mes=` que a
+ *  tela de Emissao e cobranca ja honra (`mesDaQuery`). */
+export const CHAVE_DO_MES_DE_VOLTA = 'mes';
+
+export function destinoDoEndereco(numeroUc: string | null, mes: string | null): string {
+  const uc = (numeroUc ?? '').replace(/\D/g, '');
+  if (!uc) return `/unidades?${CHAVE_DO_FILTRO}=sem_endereco`;
+  const volta = mes && /^\d{4}-(0[1-9]|1[0-2])$/.test(mes) ? `&${CHAVE_DO_MES_DE_VOLTA}=${mes}` : '';
+  return `/unidades?${CHAVE_DA_UNIDADE}=${uc}${volta}`;
+}
+
+/** O numero da unidade pedido pela consulta, so digitos; `null` quando nao veio.
+ *  Um numero que nao existe na lista nao quebra nada: a busca fica com ele e a
+ *  tabela diz que nenhuma unidade corresponde, que e a verdade. */
+export function unidadeDaConsulta(busca: string): string | null {
+  const v = (new URLSearchParams(busca).get(CHAVE_DA_UNIDADE) ?? '').replace(/\D/g, '');
+  return v || null;
+}

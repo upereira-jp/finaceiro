@@ -14,7 +14,7 @@
 //
 //   «Fatura unificada»      enviar as contas · «Conferir» · «Registrar» ·
 //                           «conferir antes» · «Gerar N cobranças»
-//   «Emissão e cobrança»    «Emitir as N em rascunho» · o botão do boleto
+//   «Emissão e cobrança»    «Emitir N cobranças» · «Pedir os N boletos»
 //
 // E há uma armadilha a mais, que sozinha justifica este arquivo: a tela
 // **«Faturamento»** parece ser onde o mês nasce, pelo nome, e é o **caminho
@@ -187,9 +187,15 @@ export const MOLDES: readonly Molde[] = [
       'Fechar o valor dos rascunhos. Depois de emitida, a cobrança vale e o valor dela não muda '
       + 'mais sozinho.',
     comoFazer: [
-      'Abra «Emissão e cobrança» e escolha o mês no campo do alto.',
-      'Confira as linhas que estão em rascunho — valor, unidade e vencimento.',
-      'Clique «Emitir as N em rascunho» para fechar todas de uma vez, ou «Emitir» em cada linha.',
+      /* [30/09, etapa 2] A TELA ABRE NO MÊS DO TRABALHO, e o botão mudou de
+       * nome: «Emitir as N em rascunho» (sem peso nenhum, ao lado de «Exportar
+       * CSV», com um `confirm` do navegador) virou «Emitir N cobranças», o
+       * laranja da tela, com uma revisão na própria tela antes do ato. */
+      'Abra «Emissão e cobrança». Ela abre no mês mais recente com cobrança por emitir, e os '
+      + 'rascunhos vêm no topo da lista.',
+      'Clique «Emitir N cobranças». Um resumo mostra unidade, cliente, vencimento e valor de cada '
+      + 'uma, e a soma; tire da lista o que ainda não deve sair e confirme em «Sim, emitir as N».',
+      'Para emitir uma só, use «Emitir» na linha dela.',
     ],
     destino: EMISSAO,
     trava: null,
@@ -201,9 +207,12 @@ export const MOLDES: readonly Molde[] = [
       'Pedir ao banco o boleto de cada cobrança emitida e entregar ao cliente a folha com o boleto '
       + 'e o Pix. É o passo em que o cliente finalmente recebe algo.',
     comoFazer: [
-      'Em «Emissão e cobrança», peça o boleto na linha de cada cobrança emitida.',
-      'Se o banco recusar, a própria linha diz o motivo. O mais comum é faltar o endereço do '
-      + 'pagador na unidade — e ele costuma vir na conta que você já leu.',
+      'Em «Emissão e cobrança», clique «Pedir os N boletos»: os pedidos vão um de cada vez, e cada '
+      + 'linha diz se o boleto foi registrado ou por que o banco recusou. Para um só, «Pedir o '
+      + 'boleto» na linha dele.',
+      'O motivo mais comum de recusa é faltar o endereço do pagador. A linha mostra «Completar o '
+      + 'endereço», que abre Unidades consumidoras já na unidade certa — e o endereço costuma vir '
+      + 'na conta que você já leu. Grave e peça o boleto de novo.',
       'Boleto pedido que não registrou volta sozinho na fila, a cada 5 minutos. Não adianta ficar '
       + 'clicando: a lista mostra quantas tentativas já houve.',
       'A folha do cliente se imprime em «Fatura unificada», na aba «2 · Folha do cliente» — e a '

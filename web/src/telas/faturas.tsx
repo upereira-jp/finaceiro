@@ -18,49 +18,160 @@
 // DUAS COISAS QUE PARECEM DETALHE E SAO DINHEIRO:
 //
 //   - o boleto pedido sem conector volta 412 NOMEADO, e sem certificado A1 volta
-//     503 NOMEADO. A tela mostra a frase do servidor inteira, porque ela foi
-//     escrita para quem opera. Trocar por "erro ao gerar" jogaria fora a unica
-//     informacao util;
+//     503 NOMEADO. A tela mostra a frase do servidor quando nao a conhece, porque
+//     ela foi escrita para quem opera; quando conhece (`emissao-regras.ts`), diz
+//     o que falta e leva ate onde se resolve, e a frase crua fica no detalhe;
 //   - a baixa manual e o UNICO gatilho de split que funciona hoje (PRD 5.2), e
-//     ela exige o valor ao CENTavo. O total esperado e pre-enchido por
+//     ela exige o valor ao CENtavo. O total esperado e pre-enchido por
 //     `totalEsperadoDaBaixa`, soma de inteiros, para que o caminho normal nao
 //     seja um erro de servidor. E ela pede confirmacao: reparte dinheiro.
+//
+// ============================================================================
+// O QUE MUDOU EM 30/09/2026 (etapa 2 do redesenho, critica de 30/09 P1 n. 2)
+//
+// A tela tinha o ciclo inteiro e escondia o passo de hoje. Medido no espelho:
+// nenhum botao primario («Emitir as N em rascunho» pesava o mesmo que «Exportar
+// CSV»), a confirmacao era um `window.confirm` com `npm run tarifas` no texto, os
+// cinco rascunhos — as unicas linhas com «Emitir» — no FIM de uma tabela de
+// vinte, a tela aberta no mes corrente enquanto o trabalho estava no mes da
+// conta, e «PagadorSemEndereco» cru ao lado de um «Gerar boleto» laranja que o
+// servidor ia recusar de novo.
+//
+//   A ORDEM PADRAO E A DO QUE PRECISA DE ACAO (`emissao-regras.ts`): rascunho,
+//   sem boleto ou recusada, vencida, emitida, paga, cancelada. As colunas
+//   continuam ordenaveis; a de acao e a padrao e o nome dela esta na tela.
+//
+//   «EMITIR N COBRANCAS» E O LARANJA quando ha rascunho, e abre uma REVISAO na
+//   propria tela — unidade, cliente, vencimento, valor, a soma e a tarifa que
+//   falta dita em portugues —, com as chamadas em serie e a situacao por linha.
+//   Terminada, o proximo passo aparece como ato: «Pedir os N boletos».
+//
+//   A RECUSA TEM SAIDA: «Falta o endereco do pagador» com «Completar o
+//   endereco», que abre Unidades ja na linha da unidade. O codigo cru fica atras
+//   do «ver detalhe tecnico». Vale na linha, no painel dela e na lista do que nao
+//   chegou ao banco.
+//
+//   O MES ABRE ONDE HA TRABALHO, e diz por que abriu ali.
+//
+//   A LINHA TEM UMA ACAO SO; «Cancelar» foi para o menu da linha e o motivo e
+//   pedido na propria linha. O painel da linha tem duas secoes (Boleto · Baixa
+//   manual), e «Registrar pagamento» passa por um resumo que se confirma.
+//
+//   ABAIXO DE 900px CADA LINHA VIRA UM CARTAO, como na Fatura unificada: Total e
+//   a acao nunca saem da tela, e o painel aberto nao fica preso numa rolagem
+//   lateral. 900 e nao 720 porque esta tabela tem sete colunas e uma delas e de
+//   botoes — entre 720 e 900 ela ja nao cabia sem rolar.
 
-import { useState } from 'react';
+import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
 import {
-  api, type Fatura, type Boleto, type UnidadeConsumidora, type PosicaoDaCarteira,
-  type BoletoLido, type ConferenciaDoBoletoImportado,
+  api, ErroDaApi, type Fatura, type Boleto, type UnidadeConsumidora, type PosicaoDaCarteira,
+  type Cliente, type BoletoLido, type ConferenciaDoBoletoImportado,
 } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
   Pagina, Aviso, Tabela, Marca, rotulo, linha, useOrdenacao, ordenar, ThOrd, Kpi,
-  Icone, CampoData, Carregando, AjudaDoMes, DetalheTecnico } from '../ui.tsx';
-import { competenciaISO, emReais, paraCentavos, mesDaQuery } from '../dinheiro.ts';
+  Icone, CampoData, Carregando, AjudaDoMes, DetalheTecnico, Menu } from '../ui.tsx';
+import { competenciaISO, emReais, paraCentavos, mesDaQuery, kwhEmBr } from '../dinheiro.ts';
 import { paraCsv, reaisParaPlanilha, nomeDoArquivo } from '../csv.ts';
 import { baixarCsv } from '../baixar.ts';
 import { lerBase64, mimeDo, reenviavel, naMensagem } from '../arquivo.ts';
 import {
-  podeEmitirFatura, podeGerarBoleto, podeBaixarManual, podeImportarBoleto, podeBaixarNoBanco,
+  podeGerarBoleto, podeBaixarManual, podeImportarBoleto, podeBaixarNoBanco,
   podeLancarTarifaDaDistribuidora,
   motivoDaTravaDaImportacao, podeImportarAgora, DIGITOS_DA_LINHA,
-  totalEsperadoDaBaixa, tomDoStatusDaFatura, conferirTarifas,
+  totalEsperadoDaBaixa, conferirTarifas,
   type MotivoDeTravaDaImportacao,
 } from '../cobranca-regras.ts';
-import { ICONE_DO_STATUS_DA_FATURA } from '../iconografia.ts';
+import {
+  chaveDaOrdemDeAcao, acaoDaLinha, notaDaSituacao, recusaDaLinha, tipoDaRecusa, paraPedirBoleto,
+  candidatosDoMes, mesSemTrabalho, fraseDaOrigem, lerMesLembrado, lembrarMes, MESES_A_CONFERIR,
+  type EstadoDaVez, type OrigemDoMes, type RecusaLida,
+} from '../emissao-regras.ts';
+import {
+  SituacaoDaCobranca, RecusaNaTela, BotaoDaSaida, RevisaoDaSerie, ConfirmacaoNaLinha, ResumoDaBaixa,
+  dataEmBr, type LinhaDaSerie,
+} from '../emissao-corpo.tsx';
 import { PainelDaEmissao } from '../emissao-travada-corpo.tsx';
-import type { EmissaoTravadaNaTela } from '../emissao-travada.ts';
+import type { EmissaoTravadaNaTela, LinhaNaTela } from '../emissao-travada.ts';
 import { FaixaDoPasso } from '../roteiro-corpo.tsx';
+import { rotuloDoMes } from '../registradas-regras.ts';
+
+type EscolhaDoMes = { mes: string; origem: OrigemDoMes; certo?: boolean };
+type DaSessao = { nome: string | null; texto: string };
+type Serie = {
+  tipo: 'emitir' | 'boletos';
+  /** As linhas COMO ESTAVAM quando a rodada comecou: a tabela recarrega e
+   *  reordena no fim, e o placar nao pode perder a linha que mudou de grupo. */
+  linhas: LinhaDaSerie[];
+  estados: Record<string, EstadoDaVez>;
+  rodando: boolean;
+};
+
+/** O armazenamento do navegador, ou nada. Acessar `localStorage` levanta em
+ *  alguns navegadores com o armazenamento bloqueado. */
+function armazem(): Storage | null {
+  try { return window.localStorage; } catch { return null; }
+}
+
+/** O mes de hoje no RELOGIO LOCAL (`toISOString` e UTC: na noite do ultimo dia
+ *  do mes, em Goiania, ja seria o mes seguinte). */
+function mesDeHoje(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/**
+ * EM QUE MES A TELA ABRE — ver a ordem em `emissao-regras.ts` (secao 5).
+ *
+ * O que ja se sabe sem ler nada (`/emissao/travada`, que a tela busca de
+ * qualquer jeito) decide sozinho; o mes que so PODE ter rascunho e lido antes de
+ * a tela abrir nele — no maximo `MESES_A_CONFERIR`, em serie. Qualquer leitura
+ * que falhe so tira aquele candidato: o pior caso e a tela abrir no mes
+ * lembrado ou no de hoje, que e o que ela fazia antes.
+ */
+async function procurarMes(travadas: readonly LinhaNaTela[]): Promise<EscolhaDoMes> {
+  let carteira: PosicaoDaCarteira[] = [];
+  try { carteira = await api.get<PosicaoDaCarteira[]>('/carteira'); } catch { /* segue so com a lista do banco */ }
+  let lidos = 0;
+  for (const c of candidatosDoMes(carteira, travadas)) {
+    if (c.certo) return { mes: c.mes, origem: 'trabalho', certo: true };
+    if (lidos >= MESES_A_CONFERIR) continue;
+    lidos++;
+    try {
+      const l = await api.get<Fatura[]>(`/faturamento/${competenciaISO(c.mes)}`);
+      if (l.some((f) => f.status === 'rascunho')) return { mes: c.mes, origem: 'trabalho', certo: false };
+    } catch { /* mes que nao se le nao e aberto por palpite */ }
+  }
+  return mesSemTrabalho(lerMesLembrado(armazem()), carteira, mesDeHoje());
+}
 
 export function TelaFaturas() {
   /* O MES VEM DO ENDERECO QUANDO ALGUEM O PEDIU (`?mes=2026-08`) — e o que faz
-   * «Ver na emissao», em Contas a receber, abrir ESTA tela ja no mes da fatura,
-   * e nao no mes corrente. Sem pedido, o mes corrente, como sempre. */
-  const [mes, setMes] = useState(() => mesDaQuery(location.search) ?? new Date().toISOString().slice(0, 7));
-  const [aberta, setAberta] = useState<string | null>(null);
+   * «Ver na emissao», em Contas a receber, abrir ESTA tela ja no mes da fatura.
+   * Sem pedido, ele e PROCURADO (ver `procurarMes`), e ate a resposta a tabela
+   * diz que esta procurando em vez de mostrar o mes errado por um instante. */
+  const [escolha, setEscolha] = useState<EscolhaDoMes | null>(() => {
+    const q = mesDaQuery(location.search);
+    return q ? { mes: q, origem: 'endereco' } : null;
+  });
+  const mes = escolha?.mes ?? null;
   const acao = useAcao();
-  const { ordem, alternar } = useOrdenacao('vencimento');
-
-  const faturas = useDados<Fatura[]>(() => api.get(`/faturamento/${competenciaISO(mes)}`), [mes]);
+  /* A ORDEM PADRAO E A DE ACAO, e ela e uma coluna como as outras: clicar em
+     «Vencimento» troca, e «Voltar a ordem de acao» (ou o cabecalho «Situacao»)
+     volta. */
+  const { ordem, alternar } = useOrdenacao('acao');
+  const [aberta, setAberta] = useState<string | null>(null);
+  const [cancelando, setCancelando] = useState<string | null>(null);
+  const [cancelandoOcupado, setCancelandoOcupado] = useState(false);
+  const [erroDoCancelamento, setErroDoCancelamento] = useState<string | null>(null);
+  const [revisando, setRevisando] = useState<'emitir' | 'boletos' | null>(null);
+  const [serie, setSerie] = useState<Serie | null>(null);
+  /* A RECUSA QUE ACABOU DE VOLTAR, por fatura. `PagadorSemEndereco` e recusado
+   * ANTES de criar a linha do boleto (`repos/boleto.ts`), entao ela nao fica em
+   * `ultimo_erro`: sem guardar aqui, a linha voltaria a dizer «Boleto ainda nao
+   * pedido» logo depois de o banco dizer por que nao. */
+  const [daSessao, setDaSessao] = useState<Record<string, DaSessao>>({});
+  const [pedindo, setPedindo] = useState<string | null>(null);
 
   /*
    * O QUE NAO CHEGOU AO BANCO — e ela NAO depende do mes do seletor, de
@@ -68,9 +179,20 @@ export function TelaFaturas() {
    * MAI que nunca virou boleto continua sendo dinheiro parado em SET, e amarra-la
    * ao seletor faria a lista sumir quando alguem trocasse o mes para conferir
    * outra coisa — que e a maneira mais silenciosa de perder justamente o caso
-   * antigo.
+   * antigo. [30/09] Ela tambem e o que diz, sem ler nada a mais, quais meses tem
+   * cobranca sem boleto — a primeira pergunta de `procurarMes`.
    */
   const emissao = useDados<EmissaoTravadaNaTela>(() => api.get('/emissao/travada'));
+
+  useEffect(() => {
+    if (escolha || emissao.carregando) return;
+    let vivo = true;
+    void procurarMes(emissao.dado?.linhas ?? []).then((e) => { if (vivo) setEscolha(e); });
+    return () => { vivo = false; };
+  }, [escolha, emissao.carregando]);
+
+  const faturas = useDados<Fatura[] | null>(
+    () => (mes ? api.get(`/faturamento/${competenciaISO(mes)}`) : Promise.resolve(null)), [mes]);
 
   /*
    * OS QUATRO NUMEROS DO MES — quanto foi faturado, quanto entrou, quanto falta
@@ -78,47 +200,154 @@ export function TelaFaturas() {
    *
    * VIERAM DA ABA «Faturamento» EM 10/09/2026, quando ela foi removida. Eram a
    * unica coisa util daquela tela: o resto era o caminho aposentado de compor em
-   * lote. Nao existiam em nenhum outro lugar do sistema, e some-los junto com a
-   * tela teria trocado um problema por outro.
-   *
-   * E AQUI ELES SEGUEM O SELETOR, o que la nao acontecia: a tela antiga lia
-   * `/carteira` inteira e mostrava a competencia mais recente, entao os numeros
-   * do topo podiam falar de um mes e a tabela de baixo de outro. Aqui os dois
+   * lote. E AQUI ELES SEGUEM O SELETOR: os numeros do topo e a tabela de baixo
    * respondem a mesma pergunta sobre o mesmo mes.
    */
-  const carteira = useDados<PosicaoDaCarteira[]>(
-    () => api.get(`/carteira?competencia=${competenciaISO(mes)}`), [mes]);
+  const carteira = useDados<PosicaoDaCarteira[] | null>(
+    () => (mes ? api.get(`/carteira?competencia=${competenciaISO(mes)}`) : Promise.resolve(null)), [mes]);
   const posicaoDoMes = carteira.dado?.[0] ?? null;
 
-  /* O MESMO caminho de escrita do painel de uma fatura (`POST .../boleto`), e a
-   * repeticao aqui e so o gatilho: `registrar()` reaproveita a linha que existe
-   * e conta a tentativa, entao pedir daqui e pedir de la. */
-  const pedirBoleto = async (faturaId: string) => {
-    const ok = await acao.executar(() => api.post(`/faturas/${faturaId}/boleto`));
-    if (ok) { acao.anunciar('Boleto registrado.'); emissao.recarregar(); faturas.recarregar(); }
-  };
   const ucs = useDados<UnidadeConsumidora[]>(() => api.get('/unidades-consumidoras?limite=500'));
+  /* O NOME DO CLIENTE, que a fatura nao traz. Uma leitura so, como a das
+   * unidades — a revisao antes de emitir mostra unidade E cliente, porque numero
+   * de unidade nao se reconhece de cabeca. Falhar aqui so tira o nome. */
+  const clientes = useDados<Cliente[]>(() => api.get('/clientes?limite=500'));
 
   // O NUMERO DA UC NAO VEM NA FATURA, e ele e a unica coluna que quem opera
   // reconhece: a fatura carrega `unidade_consumidora_id`, um uuid. O mapa e
   // montado aqui em vez de por uma requisicao por linha - com 39 UCs, 39
   // requisicoes prenderiam 39 conexoes do pool transacional (ver `emLotes`).
-  const numeroDaUc = new Map((ucs.dado ?? []).map((u) => [u.id, u.numero_uc]));
+  const ucPorId = useMemo(() => new Map((ucs.dado ?? []).map((u) => [u.id, u])), [ucs.dado]);
+  const ucPorNumero = useMemo(() => new Map((ucs.dado ?? []).map((u) => [u.numero_uc, u])), [ucs.dado]);
+  const nomeDoCliente = useMemo(() => new Map((clientes.dado ?? []).map((c) => [c.id, c.nome])), [clientes.dado]);
+  const travadaPorFatura = useMemo(
+    () => new Map((emissao.dado?.linhas ?? []).map((l) => [l.fatura_id, l])), [emissao.dado]);
+
+  const numeroDaUc = (id: string): string | undefined => ucPorId.get(id)?.numero_uc;
+  const unidadeDe = (f: Fatura): string => numeroDaUc(f.unidade_consumidora_id) ?? f.unidade_consumidora_id.slice(0, 8);
+  const clienteDe = (f: Fatura): string | null => {
+    const u = ucPorId.get(f.unidade_consumidora_id);
+    return (u && nomeDoCliente.get(u.cliente_id)) ?? travadaPorFatura.get(f.id)?.cliente ?? null;
+  };
+  const recusaDe = (f: Fatura): RecusaLida | null => recusaDaLinha({
+    daSessao: daSessao[f.id] ?? null,
+    ultimoErro: travadaPorFatura.get(f.id)?.boleto?.ultimo_erro ?? null,
+    uc: ucPorId.get(f.unidade_consumidora_id) ?? null,
+    mes,
+  });
+  const recusaDaLista = (l: LinhaNaTela): RecusaLida | null => recusaDaLinha({
+    daSessao: daSessao[l.fatura_id] ?? null,
+    ultimoErro: l.boleto?.ultimo_erro ?? null,
+    uc: ucPorNumero.get(l.unidade) ?? null,
+    mes: String(l.competencia).slice(0, 7),
+  });
 
   const lista = ordenar(faturas.dado ?? [], ordem, {
-    uc: (f) => numeroDaUc.get(f.unidade_consumidora_id) ?? null,
-    status: (f) => f.status,
+    acao: (f) => chaveDaOrdemDeAcao(f, travadaPorFatura.has(f.id)),
+    uc: (f) => numeroDaUc(f.unidade_consumidora_id) ?? null,
     vencimento: (f) => f.vencimento,
     total: (f) => f.valor_total_centavos,
     consumo: (f) => Number(f.consumo_kwh ?? 0),
   });
 
-  const recarregar = () => { faturas.recarregar(); };
+  const recarregar = () => { faturas.recarregar(); emissao.recarregar(); carteira.recarregar(); };
 
-  const emitir = (f: Fatura) => async () => {
+  function escolherMes(v: string) {
+    if (!/^\d{4}-\d{2}$/.test(v)) return;
+    setEscolha({ mes: v, origem: 'escolhido' });
+    lembrarMes(armazem(), v);
+    setAberta(null); setCancelando(null); setRevisando(null); setSerie(null);
+    acao.limpar();
+  }
+
+  /** Uma so, pela linha. Sem pergunta: o valor esta na propria linha, e emitir
+   *  uma de cada vez e o caminho de quem quer olhar uma por uma. */
+  async function emitirUma(f: Fatura) {
     const ok = await acao.executar(() => api.post(`/faturas/${f.id}/emitir`));
-    if (ok) { acao.anunciar(`Cobrança da unidade ${numeroDaUc.get(f.unidade_consumidora_id) ?? ''} emitida.`); recarregar(); }
-  };
+    if (ok) { acao.anunciar(`Cobrança da unidade ${unidadeDe(f)} emitida.`); recarregar(); }
+  }
+
+  /* O MESMO caminho de escrita do painel de uma fatura (`POST .../boleto`), e a
+   * repeticao aqui e so o gatilho: `registrar()` reaproveita a linha que existe
+   * e conta a tentativa, entao pedir daqui e pedir de la. A recusa volta NOMEADA
+   * (`ErroDaApi.nome`) e e guardada para a linha mostrar a saida dela. */
+  async function pedirBoleto(faturaId: string) {
+    const f = (faturas.dado ?? []).find((x) => x.id === faturaId);
+    const unidade = f ? unidadeDe(f) : travadaPorFatura.get(faturaId)?.unidade ?? '';
+    setPedindo(faturaId);
+    acao.limpar();
+    try {
+      await api.post(`/faturas/${faturaId}/boleto`);
+      setDaSessao((s) => { const x = { ...s }; delete x[faturaId]; return x; });
+      acao.anunciar(`Boleto da unidade ${unidade} registrado no banco.`);
+    } catch (e) {
+      const nome = e instanceof ErroDaApi ? e.nome : null;
+      const texto = naMensagem(e);
+      setDaSessao((s) => ({ ...s, [faturaId]: { nome, texto } }));
+    } finally {
+      setPedindo(null);
+      recarregar();
+    }
+  }
+
+  /** «Emitir N» e «Pedir os N boletos», UMA CHAMADA DE CADA VEZ. Ver a secao 4
+   *  de `emissao-regras.ts` para o porque da serie. */
+  async function rodar(tipo: 'emitir' | 'boletos', ids: string[]) {
+    const porId = new Map(lista.map((f) => [f.id, f]));
+    const escolhidas = ids.map((id) => porId.get(id)).filter((f): f is Fatura => f !== undefined);
+    if (escolhidas.length === 0) return;
+    const marcar = (id: string, e: EstadoDaVez) =>
+      setSerie((s) => (s ? { ...s, estados: { ...s.estados, [id]: e } } : s));
+    setSerie({
+      tipo, linhas: escolhidas.map(linhaDaSerie),
+      estados: Object.fromEntries(escolhidas.map((f) => [f.id, { estado: 'na_vez' } as EstadoDaVez])),
+      rodando: true,
+    });
+    acao.limpar();
+    try {
+      for (const f of escolhidas) {
+        marcar(f.id, { estado: 'andando' });
+        try {
+          await api.post(tipo === 'emitir' ? `/faturas/${f.id}/emitir` : `/faturas/${f.id}/boleto`);
+          if (tipo === 'boletos') setDaSessao((s) => { const x = { ...s }; delete x[f.id]; return x; });
+          marcar(f.id, { estado: 'feita' });
+        } catch (e) {
+          const nome = e instanceof ErroDaApi ? e.nome : null;
+          const texto = naMensagem(e);
+          let recusa: RecusaLida | null = null;
+          if (tipo === 'boletos') {
+            setDaSessao((s) => ({ ...s, [f.id]: { nome, texto } }));
+            recusa = recusaDaLinha({ daSessao: { nome, texto }, uc: ucPorId.get(f.unidade_consumidora_id) ?? null, mes });
+          }
+          marcar(f.id, { estado: 'recusada', motivo: texto, recusa });
+        }
+      }
+    } finally {
+      setSerie((s) => (s ? { ...s, rodando: false } : s));
+      recarregar();
+    }
+  }
+
+  function abrirRevisao(tipo: 'emitir' | 'boletos') {
+    setSerie(null);
+    setRevisando(tipo);
+    setAberta(null);
+    setCancelando(null);
+    acao.limpar();
+  }
+
+  function fecharRevisao() {
+    setRevisando(null);
+    setSerie(null);
+    requestAnimationFrame(() => document.getElementById('em-mes-titulo')?.focus());
+  }
+
+  function linhaDaSerie(f: Fatura): LinhaDaSerie {
+    return {
+      id: f.id, unidade: unidadeDe(f), cliente: clienteDe(f),
+      vencimento: f.vencimento, valor_centavos: f.valor_total_centavos,
+    };
+  }
 
   /*
    * CANCELAR — o botao que faltava, e o sistema mandava usa-lo.
@@ -129,52 +358,41 @@ export function TelaFaturas() {
    * refazer"), a pergunta do lote, e a recusa `registro_ja_faturado`, cujo texto
    * diz literalmente *"Para refazer, cancele a fatura primeiro"*.
    *
-   * O CUSTO DISSO E MAIOR NA PRIMEIRA FATURA, que e a mais provavel de sair
-   * errada — unidade trocada, competencia trocada, valor conferido depois. O
-   * unico por (unidade, competencia) trancava a segunda tentativa, e o
-   * destravamento era `curl` com token. E o defeito historico deste projeto na
-   * ferramenta mais critica que ele tem.
-   *
    * O MOTIVO E OBRIGATORIO na rota (422 sem ele), entao ele e perguntado aqui em
-   * vez de descoberto no erro. E o texto do `confirm` diz o que o cancelamento
-   * FAZ alem de mudar o status: solta a conta lida, que volta a ser faturavel —
-   * comportamento novo de 08/09, e sem ele a pessoa nao sabe que pode refazer.
+   * vez de descoberto no erro. [30/09] A pergunta saiu do `prompt()` e foi para
+   * a propria linha, logo abaixo da cobranca que ela cancela — e o texto dela
+   * diz o que o cancelamento FAZ alem de mudar o status: solta a conta lida, que
+   * volta a ser faturavel.
    */
-  const cancelar = (f: Fatura) => async () => {
-    const uc = numeroDaUc.get(f.unidade_consumidora_id) ?? '';
-    const motivo = prompt(
-      `Cancelar a cobrança da unidade ${uc}?\n\n`
-      + 'A fatura fica registrada como cancelada, com o motivo e a data — ela não some. '
-      + 'A conta lida que a originou é SOLTA e volta a poder virar cobrança de novo.\n\n'
-      + 'Motivo (obrigatório):');
-    if (motivo === null) return;
-    if (!motivo.trim()) { acao.anunciar('Cancelamento não feito: o motivo é obrigatório.'); return; }
-    const ok = await acao.executar(() => api.post(`/faturas/${f.id}/cancelar`, { motivo: motivo.trim() }));
-    if (ok) { acao.anunciar(`Cobrança da unidade ${uc} cancelada. A conta lida voltou a ser faturável.`); recarregar(); }
-  };
+  async function cancelar(f: Fatura, motivo: string) {
+    setCancelandoOcupado(true);
+    setErroDoCancelamento(null);
+    try {
+      await api.post(`/faturas/${f.id}/cancelar`, { motivo });
+      setCancelando(null);
+      acao.anunciar(`Cobrança da unidade ${unidadeDe(f)} cancelada. A conta lida voltou a ser faturável.`);
+      recarregar();
+      requestAnimationFrame(() => document.getElementById('em-mes-titulo')?.focus());
+    } catch (e) {
+      setErroDoCancelamento(naMensagem(e));
+    } finally { setCancelandoOcupado(false); }
+  }
 
-  const emitirLote = async () => {
-    const rascunhos = lista.filter((f) => podeEmitirFatura(f.status)).length;
-    if (!rascunhos) return;
-    // A tarifa que falta entra na PERGUNTA, e nao so no aviso da tela: o aviso
-    // fica acima da tabela e some quando alguem rola. Este texto e o ultimo lugar
-    // antes do ato que obriga a cancelar para desfazer.
-    const t = conferirTarifas(lista, (id) => numeroDaUc.get(id));
-    if (!confirm(
-      `Emitir ${rascunhos} fatura(s) de ${mes} de uma vez?\n\n` +
-      'Emitir é o ato que fecha o valor: depois dele a fatura não muda mais de valor, ' +
-      'e é a partir daí que ela pode virar boleto.' +
-      (t.semTarifa === 0 ? '' :
-        `\n\n⚠ ${t.semTarifa} de ${t.rascunhos} sairão SEM tarifa da concessionária — ` +
-        'cobrando só o crédito injetado. Lançar as tarifas (`npm run tarifas`) só é ' +
-        'possível em rascunho; depois de emitida a correção é cancelar e recompor.'))) return;
-    const ok = await acao.executar(() => api.post(`/faturamento/${competenciaISO(mes)}/emitir`));
-    if (ok) { acao.anunciar(`${rascunhos} fatura(s) emitida(s).`); recarregar(); }
-  };
+  function pedirCancelamento(id: string | null) {
+    const antes = cancelando;
+    setCancelando(id);
+    setErroDoCancelamento(null);
+    /* «MANTER» DEVOLVE O FOCO ao menu que abriu a pergunta. */
+    if (id === null && antes) {
+      requestAnimationFrame(() =>
+        document.querySelector<HTMLElement>(`[data-menu-da-linha="${antes}"] .menu > button`)?.focus());
+    }
+  }
 
   const exportar = () => {
+    if (!mes) return;
     const csv = paraCsv<Fatura>([
-      { titulo: 'Unidade', de: (f) => numeroDaUc.get(f.unidade_consumidora_id) ?? f.unidade_consumidora_id },
+      { titulo: 'Unidade', de: (f) => numeroDaUc(f.unidade_consumidora_id) ?? f.unidade_consumidora_id },
       { titulo: 'Mes de referencia', de: (f) => String(f.competencia).slice(0, 7) },
       { titulo: 'Status', de: (f) => f.status },
       { titulo: 'Vencimento', de: (f) => String(f.vencimento).slice(0, 10) },
@@ -191,8 +409,59 @@ export function TelaFaturas() {
     baixarCsv(nomeDoArquivo('faturas', mes), csv);
   };
 
-  const rascunhos = lista.filter((f) => podeEmitirFatura(f.status)).length;
-  const tarifas = conferirTarifas(lista, (id) => numeroDaUc.get(id));
+  // -------------------------------------------------------- o que o mes pede
+  const rascunhos = lista.filter((f) => f.status === 'rascunho');
+  const { pedir, deFora } = paraPedirBoleto(lista, (id) => travadaPorFatura.get(id), recusaDe);
+  const semBoleto = lista.filter((f) => (f.status === 'emitida' || f.status === 'vencida') && travadaPorFatura.has(f.id)).length;
+  const vencidas = lista.filter((f) => f.status === 'vencida').length;
+  const pagas = lista.filter((f) => f.status === 'paga').length;
+  const tarifas = conferirTarifas(lista, (id) => numeroDaUc(id));
+  const deOutrosMeses = (emissao.dado?.linhas ?? []).filter((l) => String(l.competencia).slice(0, 7) !== mes).length;
+  const rotuloDoPedido = (n: number) => (n === 1 ? 'Pedir 1 boleto' : `Pedir os ${n} boletos`);
+  const cobrancas = (n: number) => `${n} ${n === 1 ? 'cobrança' : 'cobranças'}`;
+  const mesPorExtenso = mes ? rotuloDoMes(mes) : '';
+
+  const resumo = !faturas.dado ? null : [
+    cobrancas(lista.length),
+    rascunhos.length > 0 && `${rascunhos.length} em rascunho`,
+    semBoleto > 0 && `${semBoleto} sem boleto no banco`,
+    vencidas > 0 && `${vencidas} ${vencidas === 1 ? 'vencida' : 'vencidas'}`,
+    pagas > 0 && `${pagas} ${pagas === 1 ? 'paga' : 'pagas'}`,
+  ].filter(Boolean).join(' · ');
+
+  /*
+   * A TARIFA DA CONCESSIONARIA QUE NAO FOI LANCADA — `Q-TARIFA-CONC-01`.
+   *
+   * Isto conta, e nao decide: um mes pode legitimamente nao levar tarifa da
+   * distribuidora, e essa pergunta tem dono e nao e esta tela. O que nao pode
+   * continuar e a ausencia ser INVISIVEL — `valor_total_centavos` e coluna
+   * gerada, a parcela ausente vale zero, e a fatura sai menor sem erro, sem log
+   * e sem recusa. [30/09] Ele aparece TAMBEM dentro da revisao, que e o ultimo
+   * lugar antes do ato que obriga a cancelar para desfazer — e la ele e dito em
+   * portugues, sem o comando de terminal que ninguem aqui tem.
+   */
+  const avisoDaTarifa = tarifas.semTarifa > 0 && (
+    <Aviso tipo="alerta">
+      <strong>{tarifas.semTarifa} de {tarifas.rascunhos} {tarifas.rascunhos === 1 ? 'rascunho' : 'rascunhos'} sem
+      a tarifa da distribuidora</strong> — {tarifas.semTarifa === 1 ? 'ela sairia' : 'elas sairiam'} cobrando
+      só a energia injetada. Se o mês leva tarifa, lance antes, em «Tarifa», na linha de cada
+      unidade: depois de emitida, corrigir é cancelar e refazer. Se o mês não leva, emitir está certo.
+      <br />
+      <span className="fraco">
+        Unidades: {tarifas.ucsSemTarifa.slice(0, 12).join(', ')}
+        {tarifas.ucsSemTarifa.length > 12 ? `, +${tarifas.ucsSemTarifa.length - 12}` : ''}
+      </span>
+      <DetalheTecnico>
+        <p style={{ margin: 0 }}>
+          A ordem é <strong>compor → <code>npm run tarifas</code> → emitir</strong>: lançar
+          tarifa só é possível em rascunho. Se o mês não leva tarifa da distribuidora, é a
+          pergunta (a) da <code>Q-TARIFA-CONC-01</code>.
+        </p>
+      </DetalheTecnico>
+    </Aviso>
+  );
+
+  const colunas = 7;
 
   return (
     <Pagina titulo="Emissão e cobrança"
@@ -202,6 +471,28 @@ export function TelaFaturas() {
           depois. A faixa é derivada do mesmo `MOLDES` que monta o roteiro em
           Pendências, então as duas não têm como discordar. */}
       <FaixaDoPasso rota="/faturas" />
+
+      {/* O MÊS PRIMEIRO, e depois os números dele: a faixa diz QUAL mês, e por
+          que a tela abriu nele. Até 30/09 os números vinham antes do seletor que
+          os governa. */}
+      <div className="cartao secao em-mes">
+        <div className="em-mes-campo">
+          <label>Mês de referência</label>
+          {mes
+            ? <CampoData mes valor={mes} ao={escolherMes} rotuloAcessivel="Mês de referência" style={{ width: 'auto' }} />
+            : <span className="em-mes-procurando">Procurando…</span>}
+          <AjudaDoMes />
+        </div>
+        {escolha && escolha.origem !== 'escolhido' && (
+          <p className="em-mes-porque" role="status">
+            <Icone nome="calendario" tamanho={15} />
+            <span>{fraseDaOrigem(escolha.origem)}</span>
+          </p>
+        )}
+        <button type="button" className="discreto em-mes-csv" onClick={exportar} disabled={!lista.length}>
+          <Icone nome="baixar" tamanho={15} /> Exportar CSV
+        </button>
+      </div>
 
       {/* SO DESENHA COM LINHA NO BANCO. Um mes sem fatura nenhuma nao tem linha
           na `posicao_da_carteira`, e quatro zeros seriam uma afirmacao sobre um
@@ -217,178 +508,320 @@ export function TelaFaturas() {
         </div>
       )}
 
-      <div className="cartao secao">
-        <div style={{ ...linha, gap: 12 }}>
-          <div>
-            <label>Mês de referência</label>
-            <CampoData mes valor={mes} ao={setMes} rotuloAcessivel="Mês de referência" style={{ width: 'auto' }} /><AjudaDoMes />
+      <section className="em-bloco secao" aria-labelledby="em-mes-titulo">
+        <div className="em-bloco-topo">
+          <div className="em-bloco-titulo">
+            <h2 id="em-mes-titulo" tabIndex={-1}>
+              {mes ? `Cobranças de ${mesPorExtenso}` : 'Cobranças do mês'}
+            </h2>
+            {resumo && <p className="em-bloco-resumo">{resumo}</p>}
           </div>
-          <div style={{ alignSelf: 'end', display: 'flex', gap: 8 }}>
-            <button onClick={() => void emitirLote()} disabled={acao.ocupado || !rascunhos}>
-              <Icone nome="emitir" tamanho={15} /> Emitir as {rascunhos} em rascunho
-            </button>
-            <button onClick={exportar} disabled={!lista.length}>
-              <Icone nome="baixar" tamanho={15} /> Exportar CSV
-            </button>
-          </div>
+          {/* O LARANJA SEGUE O PASSO DO MÊS: com rascunho, é «Emitir N»; sem,
+              passa para «Pedir os N boletos». Os dois ao mesmo tempo quando há
+              os dois trabalhos — o do passo anterior é o laranja. Durante a
+              revisão eles somem: a pergunta está aberta logo abaixo. */}
+          {!revisando && (rascunhos.length > 0 || pedir.length > 0) && (
+            <div className="em-bloco-acoes">
+              {pedir.length > 0 && (
+                <button type="button" className={rascunhos.length > 0 ? undefined : 'primario'}
+                        disabled={acao.ocupado || pedindo !== null} onClick={() => abrirRevisao('boletos')}>
+                  <Icone nome="boleto" tamanho={15} /> {rotuloDoPedido(pedir.length)}
+                </button>
+              )}
+              {rascunhos.length > 0 && (
+                <button type="button" className="primario" disabled={acao.ocupado}
+                        onClick={() => abrirRevisao('emitir')}>
+                  <Icone nome="emitir" tamanho={15} peso="bold" /> Emitir {cobrancas(rascunhos.length)}
+                </button>
+              )}
+            </div>
+          )}
         </div>
+
+        <p className="em-ordem">
+          {ordem.chave === 'acao' && !ordem.desc
+            ? 'Na ordem do que precisa de você: rascunho, sem boleto, vencida, emitida e paga.'
+            : <>
+                Ordem trocada pelo cabeçalho da tabela.{' '}
+                <button type="button" className="em-link" onClick={() => alternar('acao')}>
+                  Voltar à ordem do que precisa de você
+                </button>
+              </>}
+          {deOutrosMeses > 0 && (
+            <>
+              {' '}
+              <a href="#em-banco" className="em-outros">
+                {deOutrosMeses === 1
+                  ? 'Há 1 cobrança de outro mês sem boleto no banco'
+                  : `Há ${deOutrosMeses} cobranças de outros meses sem boleto no banco`}
+              </a>, na lista logo abaixo da tabela.
+            </>
+          )}
+        </p>
+
         {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
         {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
+        {!revisando && avisoDaTarifa}
+
+        {revisando === 'emitir' && mes && (
+          <RevisaoDaSerie key="emitir" tipo="emitir" mes={mesPorExtenso}
+                          linhas={serie?.tipo === 'emitir' ? serie.linhas : rascunhos.map(linhaDaSerie)}
+                          estados={serie?.tipo === 'emitir' ? serie.estados : {}}
+                          emRodada={serie?.tipo === 'emitir'} rodando={serie?.rodando ?? false}
+                          alerta={avisoDaTarifa || undefined}
+                          aoConfirmar={(ids) => void rodar('emitir', ids)} aoFechar={fecharRevisao}
+                          proxima={pedir.length > 0
+                            ? { rotulo: rotuloDoPedido(pedir.length), ao: () => abrirRevisao('boletos') }
+                            : null} />
+        )}
+        {revisando === 'boletos' && mes && (
+          <RevisaoDaSerie key="boletos" tipo="boletos" mes={mesPorExtenso}
+                          linhas={serie?.tipo === 'boletos' ? serie.linhas : pedir.map(linhaDaSerie)}
+                          estados={serie?.tipo === 'boletos' ? serie.estados : {}}
+                          emRodada={serie?.tipo === 'boletos'} rodando={serie?.rodando ?? false}
+                          deFora={deFora.map(({ f, recusa }) => ({ id: f.id, unidade: unidadeDe(f), cliente: clienteDe(f), recusa }))}
+                          aoConfirmar={(ids) => void rodar('boletos', ids)} aoFechar={fecharRevisao} />
+        )}
 
         {/*
-          A TARIFA DA CONCESSIONARIA QUE NAO FOI LANCADA — `Q-TARIFA-CONC-01`.
-
-          Isto conta, e nao decide: um mês pode legitimamente não levar
-          tarifa da distribuidora, e essa pergunta tem dono e não é esta tela. O
-          que não pode continuar é a ausência ser INVISÍVEL — `valor_total_centavos`
-          é coluna gerada, a parcela ausente vale zero, e a fatura sai menor sem
-          erro, sem log e sem recusa.
+          OS TRES ESTADOS DO VAZIO, distinguidos. E a licao da tela de Contratos
+          (28/07): "nenhuma fatura" durante a carga, ou depois de uma falha de
+          leitura, e a mesma mentira que um `catch` vazio conta.
         */}
-        {tarifas.semTarifa > 0 && (
-          <Aviso tipo="alerta">
-            <strong>{tarifas.semTarifa} de {tarifas.rascunhos} rascunho(s) sem a tarifa da
-            distribuidora.</strong> Assim eles sairiam cobrando <strong>só o crédito
-            injetado</strong>. <strong>Lance as tarifas antes de emitir</strong>: depois de
-            emitida, corrigir exige cancelar e refazer, com o motivo registrado.
-            <br />
-            <span className="fraco" style={{ fontSize: 12 }}>
-              Unidades: {tarifas.ucsSemTarifa.slice(0, 12).join(', ')}
-              {tarifas.ucsSemTarifa.length > 12 ? `, +${tarifas.ucsSemTarifa.length - 12}` : ''}
-              {' · '}Se este mês realmente não leva tarifa da distribuidora, emitir está certo.
-            </span>
-            <DetalheTecnico>
-              <p style={{ margin: 0 }}>
-                A ordem é <strong>compor → <code>npm run tarifas</code> → emitir</strong>: lançar
-                tarifa só é possível em rascunho. Se o mês não leva tarifa da distribuidora, é a
-                pergunta (a) da <code>Q-TARIFA-CONC-01</code>.
-              </p>
-            </DetalheTecnico>
+        {faturas.erro && (
+          <Aviso tipo="erro">
+            Não foi possível ler as faturas: {faturas.erro} — esta lista não está vazia,
+            ela é <strong>desconhecida</strong>.
           </Aviso>
         )}
-      </div>
+        {ucs.erro && (
+          <Aviso tipo="alerta">
+            Falha ao ler as unidades consumidoras: {ucs.erro} — a coluna Unidade abaixo mostra o
+            identificador interno em vez do número, e a tela não consegue prever a recusa por endereço.
+          </Aviso>
+        )}
+
+        <div className="em-tabela">
+          <Tabela cabecalho={<>
+                    <th className="c-abrir"><span className="so-leitor">Abrir</span></th>
+                    <ThOrd chave="uc" ordem={ordem} ao={alternar}>Unidade</ThOrd>
+                    <ThOrd chave="acao" ordem={ordem} ao={alternar}>Situação</ThOrd>
+                    <ThOrd chave="vencimento" ordem={ordem} ao={alternar}>Vencimento</ThOrd>
+                    <ThOrd chave="consumo" ordem={ordem} ao={alternar} num>Consumo kWh</ThOrd>
+                    <ThOrd chave="total" ordem={ordem} ao={alternar} num>Total</ThOrd>
+                    <th><span className="so-leitor">Ações</span></th>
+                  </>}
+                  vazio={!mes || faturas.carregando
+                    ? <Carregando texto={mes ? 'Lendo o mês…' : 'Procurando o mês com trabalho…'} />
+                    : faturas.erro
+                      ? 'Lista desconhecida — o aviso acima diz por quê.'
+                      /* O TEXTO MANDAVA PARA O CAMINHO APOSENTADO, e citava um
+                         rotulo que a barra nao usa desde 21/08 ("Carteira"). A
+                         fatura do caminho oficial nasce na competencia da CONTA
+                         — e desde 30/09 a tela ja abre nesse mes quando ha
+                         trabalho, entao o vazio aqui e um mes escolhido sem
+                         cobranca, e o texto diz onde elas nascem. */
+                      : `Nenhuma cobrança em ${mesPorExtenso}. A cobrança nasce no mês da CONTA da `
+                        + 'distribuidora — troque o mês acima. Ela é gerada na aba Fatura unificada, '
+                        + 'em «Gerar N cobranças».'}>
+            {lista.map((f) => {
+              const t = travadaPorFatura.get(f.id);
+              const recusa = recusaDe(f);
+              const sessao = daSessao[f.id];
+              /* A RECUSA DESCONHECIDA que acabou de voltar tambem e dita na linha,
+                 com as palavras do banco: sem traducao, e a unica informacao. */
+              const nota = notaDaSituacao(f.status, t, recusa)
+                ?? (sessao && !tipoDaRecusa(sessao.nome, sessao.texto)
+                  ? { texto: `O banco recusou agora: ${sessao.texto}`, alerta: true } : null);
+              return (
+                <LinhaDaCobranca key={f.id} f={f} unidade={unidadeDe(f)} cliente={clienteDe(f)}
+                                 colunas={colunas}
+                                 nota={nota} acaoDaLinha={acaoDaLinha(f.status, t, recusa)}
+                                 aberta={aberta === f.id}
+                                 abrir={() => { setAberta(aberta === f.id ? null : f.id); setCancelando(null); }}
+                                 ocupado={acao.ocupado || Boolean(serie?.rodando)}
+                                 pedindo={pedindo === f.id}
+                                 emitir={() => void emitirUma(f)}
+                                 pedirBoleto={() => void pedirBoleto(f.id)}
+                                 cancelando={cancelando === f.id}
+                                 temBoletoNoBanco={Boolean(emissao.dado) && !emissao.erro
+                                   && (emissao.dado!.total <= emissao.dado!.linhas.length)
+                                   && (f.status === 'emitida' || f.status === 'vencida') && !t}
+                                 cancelandoOcupado={cancelandoOcupado}
+                                 erroDoCancelamento={erroDoCancelamento}
+                                 pedirCancelamento={pedirCancelamento}
+                                 cancelar={(motivo) => void cancelar(f, motivo)}
+                                 painel={
+                                   <PainelDaFatura f={f} unidade={unidadeDe(f)}
+                                                   uc={ucPorId.get(f.unidade_consumidora_id) ?? null}
+                                                   mes={mes} daSessao={sessao ?? null}
+                                                   ultimoErroDaLista={t?.boleto?.ultimo_erro ?? null}
+                                                   pedirBoleto={() => pedirBoleto(f.id)} pedindo={pedindo === f.id}
+                                                   recarregar={recarregar} />
+                                 } />
+              );
+            })}
+          </Tabela>
+        </div>
+      </section>
 
       {/*
-        A LISTA VEM ANTES DA TABELA DO MES, e a ordem e de consequencia: a tabela
-        abaixo mostra o que este mes tem; esta lista mostra quem, em qualquer
-        mes, ficou sem receber cobranca. A segunda pergunta e mais alta — uma
-        fatura emitida que nunca virou boleto e um cliente que nao recebeu nada,
-        e ela nao aparece em nenhuma coluna da tabela.
+        A LISTA DO QUE NAO CHEGOU AO BANCO DESCEU PARA DEPOIS DA TABELA em
+        30/09/2026. Ela vinha antes porque a tabela nao mostrava a ausencia —
+        "uma fatura emitida que nunca virou boleto nao aparece em nenhuma coluna
+        da tabela". Agora aparece: a ordem de acao poe a sem-boleto logo depois
+        do rascunho, com o porque na segunda linha da situacao, e a tela abre no
+        mes que tem esse trabalho. O que a lista continua dizendo e o que a
+        tabela do mes nao alcanca — os outros meses —, e a linha acima da tabela
+        avisa quando ha algum, com o numero.
       */}
       <PainelDaEmissao dados={emissao.dado} erro={emissao.erro}
-                       pedirBoleto={(id) => void pedirBoleto(id)} ocupado={acao.ocupado} />
-
-      {/*
-        OS TRES ESTADOS DO VAZIO, distinguidos. E a licao da tela de Contratos
-        (28/07): "nenhuma fatura" durante a carga, ou depois de uma falha de
-        leitura, e a mesma mentira que um `catch` vazio conta.
-      */}
-      {faturas.erro && (
-        <Aviso tipo="erro">
-          Não foi possível ler as faturas: {faturas.erro} — esta lista não está vazia,
-          ela é <strong>desconhecida</strong>.
-        </Aviso>
-      )}
-      {ucs.erro && (
-        <Aviso tipo="alerta">
-          Falha ao ler as unidades consumidoras: {ucs.erro} — a coluna UC abaixo mostra o
-          identificador interno em vez do número.
-        </Aviso>
-      )}
-
-      <Tabela cabecalho={<>
-                <ThOrd chave="uc" ordem={ordem} ao={alternar}>Unidade</ThOrd>
-                <ThOrd chave="status" ordem={ordem} ao={alternar}>Status</ThOrd>
-                <ThOrd chave="vencimento" ordem={ordem} ao={alternar}>Vencimento</ThOrd>
-                <ThOrd chave="consumo" ordem={ordem} ao={alternar} num>Consumo kWh</ThOrd>
-                <ThOrd chave="total" ordem={ordem} ao={alternar} num>Total</ThOrd>
-                <th>Ações</th>
-              </>}
-              vazio={faturas.carregando
-                ? <Carregando texto="Lendo o mês…" />
-                : faturas.erro
-                  ? 'Lista desconhecida — o aviso acima diz por quê.'
-                  /* O TEXTO MANDAVA PARA O CAMINHO APOSENTADO, e citava um
-                     rotulo que a barra nao usa desde 21/08 ("Carteira"). Pior: a
-                     tela abre no mes CORRENTE, e a fatura do caminho oficial
-                     nasce na competencia da CONTA (MAI/2026, JUN/2026 — quase
-                     nunca o mes de hoje). Entao o vazio era o estado NORMAL logo
-                     depois de gerar a cobranca, e o texto mandava desfazer o
-                     acerto indo compor pelo legado — que trava a mesma unidade
-                     no caminho oficial com `uc_ja_faturada`. */
-                  : `Nenhuma fatura em ${mes}. A cobrança nasce na competência da CONTA da `
-                    + 'distribuidora, que quase nunca é o mês de hoje — troque o mês acima. '
-                    + 'Ela é gerada na aba Fatura unificada, em «Gerar N cobranças».'}>
-        {lista.map((f) => (
-          <FaturaLinha key={f.id} f={f} uc={numeroDaUc.get(f.unidade_consumidora_id)}
-                       aberta={aberta === f.id} abrir={() => setAberta(aberta === f.id ? null : f.id)}
-                       emitir={emitir(f)} cancelar={cancelar(f)} recarregar={recarregar} acao={acao} />
-        ))}
-      </Tabela>
+                       pedirBoleto={(id) => void pedirBoleto(id)} ocupado={acao.ocupado || pedindo !== null}
+                       recusaDe={recusaDaLista} />
     </Pagina>
   );
 }
 
 // ------------------------------------------------------------- a linha e o painel
 
-function FaturaLinha(p: {
-  f: Fatura; uc: string | undefined; aberta: boolean; abrir: () => void;
-  emitir: () => Promise<void>; cancelar: () => Promise<void>; recarregar: () => void;
-  acao: ReturnType<typeof useAcao>;
+function LinhaDaCobranca(p: {
+  f: Fatura; unidade: string; cliente: string | null; colunas: number;
+  nota: { texto: string; alerta: boolean } | null;
+  acaoDaLinha: ReturnType<typeof acaoDaLinha>;
+  aberta: boolean; abrir: () => void;
+  ocupado: boolean; pedindo: boolean;
+  emitir: () => void; pedirBoleto: () => void;
+  cancelando: boolean; temBoletoNoBanco: boolean; cancelandoOcupado: boolean;
+  erroDoCancelamento: string | null;
+  pedirCancelamento: (id: string | null) => void;
+  cancelar: (motivo: string) => void;
+  painel: ReactNode;
 }) {
-  const { f, acao } = p;
+  const { f } = p;
+  const a = p.acaoDaLinha;
+  /* CANCELAR SO ONDE A ROTA ACEITA (`rascunho`, `emitida`, `vencida`) —
+     oferece-lo numa fatura paga seria oferecer o que o servidor recusa, e numa
+     ja cancelada seria oferecer duas vezes o mesmo. */
+  const cancelavel = f.status === 'rascunho' || f.status === 'emitida' || f.status === 'vencida';
+  const oQueAbre = f.status === 'rascunho' ? 'a tarifa' : 'o boleto e a baixa';
+
   return (
     <>
-      <tr>
-        <td><strong>{p.uc ?? f.unidade_consumidora_id.slice(0, 8)}</strong></td>
-        <td>
-          <Marca tom={tomDoStatusDaFatura(f.status)} icone={ICONE_DO_STATUS_DA_FATURA[f.status]}>
-            {rotulo(f.status)}
-          </Marca>
+      <tr className={p.aberta ? 'em-aberta' : undefined}>
+        <td className="c-abrir">
+          {/* O TRIANGULO ABRE O PAINEL DA LINHA. Era «Boleto e baixa» escrito em
+              vinte botoes com o peso do «Emitir»; o nome continua no leitor de
+              tela e, no celular, ao lado do triangulo. */}
+          <button type="button" className="em-abrir" onClick={p.abrir} aria-expanded={p.aberta}
+                  aria-controls={`em-painel-${f.id}`}
+                  aria-label={`${p.aberta ? 'Fechar' : 'Abrir'} ${oQueAbre} da unidade ${p.unidade}`}
+                  title={p.aberta ? 'Fechar' : f.status === 'rascunho' ? 'Tarifa' : 'Boleto e baixa'}>
+            <Icone nome={p.aberta ? 'abrir_menu' : 'abrir_linha'} tamanho={14} peso="bold" />
+            <span className="em-abrir-texto">{f.status === 'rascunho' ? 'Tarifa' : 'Boleto e baixa'}</span>
+          </button>
         </td>
-        <td>{String(f.vencimento).slice(0, 10).split('-').reverse().join('/')}</td>
-        <td className="num">{f.consumo_kwh ?? '—'}</td>
-        <td className="num"><strong>{emReais(f.valor_total_centavos)}</strong></td>
-        <td>
-          <div style={{ ...linha, gap: 6 }}>
-            {podeEmitirFatura(f.status) && (
-              <button onClick={() => void p.emitir()} disabled={acao.ocupado}>
+        <td className="c-uc">
+          <strong>{p.unidade}</strong>
+          <span className="em-cliente" title={p.cliente ?? undefined}>{p.cliente || '—'}</span>
+        </td>
+        <td className="c-sit"><SituacaoDaCobranca status={f.status} nota={p.nota} /></td>
+        <td className="c-ven" data-rotulo="Vencimento">{dataEmBr(f.vencimento)}</td>
+        <td className="c-kwh num" data-rotulo="Consumo kWh">{kwhEmBr(f.consumo_kwh)}</td>
+        <td className="c-tot num" data-rotulo="Total"><strong>{emReais(f.valor_total_centavos)}</strong></td>
+        <td className="c-aco">
+          <div className="em-acoes">
+            {a.tipo === 'emitir' && (
+              <button type="button" onClick={p.emitir} disabled={p.ocupado}
+                      aria-label={`Emitir a cobrança da unidade ${p.unidade}`}>
                 <Icone nome="emitir" tamanho={14} /> Emitir
               </button>
             )}
-            <button onClick={p.abrir} aria-expanded={p.aberta}>
-              <Icone nome="boleto" tamanho={14} />
-              {p.aberta ? 'Fechar' : 'Boleto e baixa'}
-            </button>
-            {/* CANCELAR VEM POR ULTIMO e sem `primario`: e o ato que desfaz, e
-                nao o do dia. Aparece nos tres estados em que a rota aceita
-                (`rascunho`, `emitida`, `vencida`) — mostra-lo numa fatura paga
-                seria oferecer o que o servidor recusa, e numa ja cancelada seria
-                oferecer duas vezes o mesmo. */}
-            {['rascunho', 'emitida', 'vencida'].includes(f.status) && (
-              <button onClick={() => void p.cancelar()} disabled={acao.ocupado}>
-                <Icone nome="remover" tamanho={14} /> Cancelar
+            {a.tipo === 'pedir_boleto' && (
+              <button type="button" onClick={p.pedirBoleto} disabled={p.ocupado || p.pedindo}
+                      aria-label={`Pedir o boleto da unidade ${p.unidade}`}>
+                <Icone nome={p.pedindo ? 'carregando' : 'boleto'} tamanho={14} />
+                {p.pedindo ? 'Pedindo…' : 'Pedir o boleto'}
               </button>
             )}
+            {a.tipo === 'resolver' && a.recusa.saida && (
+              <BotaoDaSaida saida={a.recusa.saida}
+                            rotuloAcessivel={`${a.recusa.saida.rotulo} da unidade ${p.unidade}`} />
+            )}
+            {cancelavel ? (
+              <span data-menu-da-linha={f.id} style={{ display: 'contents' }}>
+                <Menu soIcone className="em-menu" rotulo={`Mais ações da unidade ${p.unidade}`}
+                      gatilho={<Icone nome="mais_acoes" tamanho={18} peso="bold" />}>
+                  <button type="button" role="menuitem" onClick={() => p.pedirCancelamento(f.id)}>
+                    <Icone nome="remover" tamanho={16} /> Cancelar esta cobrança…
+                  </button>
+                </Menu>
+              </span>
+            ) : <span className="em-menu-vazio" aria-hidden="true" />}
           </div>
         </td>
       </tr>
+      {p.cancelando && (
+        <tr className="em-linha-confirma">
+          <td colSpan={p.colunas}>
+            {p.temBoletoNoBanco ? (
+              /* A ORDEM DOS DOIS ATOS, dita antes da tentativa errada: desde
+                 10/09/2026 o servidor RECUSA cancelar a cobranca enquanto o
+                 titulo estiver vivo no banco. A tela ja sabe (a cobranca emitida
+                 que nao esta na lista do que nao chegou ao banco TEM boleto la),
+                 entao ela diz em vez de colher a recusa. */
+              <ConfirmacaoNaLinha rotulo="Cancelar a cobrança" manter="Voltar"
+                                  confirmar="Abrir o boleto desta linha"
+                                  aoManter={() => p.pedirCancelamento(null)}
+                                  aoConfirmar={() => { p.pedirCancelamento(null); if (!p.aberta) p.abrir(); }}>
+                A cobrança da unidade <strong>{p.unidade}</strong> tem boleto registrado no banco.
+                Enquanto ele valer, o cliente consegue pagar por ele — cancele o boleto primeiro, no
+                painel da linha, e depois a cobrança.
+              </ConfirmacaoNaLinha>
+            ) : (
+              <ConfirmacaoNaLinha rotulo="Confirmar o cancelamento" perigo
+                                  motivo={{ rotulo: 'Motivo do cancelamento', dica: 'Ex.: conta lida de novo, valor corrigido' }}
+                                  manter="Manter a cobrança" confirmar="Cancelar a cobrança"
+                                  ocupado={p.cancelandoOcupado} erro={p.erroDoCancelamento}
+                                  aoManter={() => p.pedirCancelamento(null)} aoConfirmar={p.cancelar}>
+                Cancelar a cobrança da unidade <strong>{p.unidade}</strong> ({emReais(f.valor_total_centavos)})?
+                Ela fica registrada como cancelada, com o motivo e a data — não some. A conta lida que
+                a originou volta a poder virar cobrança.
+              </ConfirmacaoNaLinha>
+            )}
+          </td>
+        </tr>
+      )}
       {p.aberta && (
-        <tr>
+        <tr className="em-linha-painel">
           {/* O painel aberto recua para a terceira superficie da paleta: sem isso
               ele se confunde com a linha seguinte da tabela. `--fundo-suave` era
               um token que NAO EXISTIA - o fallback `transparent` estava em uso
               desde 29/07 sem ninguem notar. O nome certo e `--fundo-recuo`. */}
-          <td colSpan={6} style={{ background: 'var(--fundo-recuo)' }}>
-            <PainelDaFatura f={f} recarregar={p.recarregar} />
-          </td>
+          <td colSpan={p.colunas} id={`em-painel-${f.id}`}>{p.painel}</td>
         </tr>
       )}
     </>
   );
 }
 
-function PainelDaFatura({ f, recarregar }: { f: Fatura; recarregar: () => void }) {
+/**
+ * O PAINEL DA LINHA — duas secoes, e um laranja por secao.
+ *
+ * ATE 30/09 ERA UMA MINI-TELA DE ~800px com quatro subtarefas soltas (tarifa,
+ * boleto, importar, baixa), o laranja do «Gerar boleto» mesmo depois de uma
+ * recusa garantida e o outro laranja no «Registrar pagamento», que nao se
+ * desfaz. Agora: «Boleto» (o laranja e o proximo passo dele — pedir, ou a saida
+ * da recusa), e «Baixa manual» (sem laranja ate o resumo; o laranja e o «Sim»
+ * do resumo). Importar o boleto emitido no site do banco fica dobrado dentro de
+ * «Boleto»: e o caminho de quem ja emitiu por fora, nao o de todo dia.
+ */
+function PainelDaFatura({ f, unidade, uc, mes, daSessao, ultimoErroDaLista, pedirBoleto, pedindo, recarregar }: {
+  f: Fatura; unidade: string; uc: UnidadeConsumidora | null; mes: string | null;
+  daSessao: DaSessao | null; ultimoErroDaLista: string | null;
+  pedirBoleto: () => Promise<void>; pedindo: boolean; recarregar: () => void;
+}) {
   const acao = useAcao();
+  const ids = useId();
   // O 404 aqui e RESPOSTA - "esta fatura nao tem boleto" -, e o `useDados` poe
   // qualquer outro erro na tela. Mesma distincao da tela de Cobranca.
   const boleto = useDados<Boleto | null>(async () => {
@@ -399,6 +832,11 @@ function PainelDaFatura({ f, recarregar }: { f: Fatura; recarregar: () => void }
   const [juros, setJuros] = useState('0');
   const [multa, setMulta] = useState('0');
   const [observacao, setObservacao] = useState('');
+  const hoje = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
+  const [data, setData] = useState(hoje);
+  const [conferindoBaixa, setConferindoBaixa] = useState(false);
+  const [cancelandoBoleto, setCancelandoBoleto] = useState(false);
+  const [importando, setImportando] = useState(false);
   /* A TARIFA DA DISTRIBUIDORA, digitada — o campo que nao existia. Nasce com o
      que a fatura ja tem: zero e um valor legitimo («este mes nao levou tarifa»),
      e um campo vazio faria «gravar» sem digitar nada apagar a parcela sem
@@ -412,7 +850,19 @@ function PainelDaFatura({ f, recarregar }: { f: Fatura; recarregar: () => void }
   let jurosCent = 0, multaCent = 0, valorInvalido: string | null = null;
   try { jurosCent = juros.trim() ? paraCentavos(juros) : 0; } catch (e: any) { valorInvalido = e.message; }
   try { multaCent = multa.trim() ? paraCentavos(multa) : 0; } catch (e: any) { valorInvalido = e.message; }
+  if (!valorInvalido && (jurosCent < 0 || multaCent < 0)) valorInvalido = 'Juros e multa não podem ser negativos.';
+  const dataInvalida = !/^\d{4}-\d{2}-\d{2}$/.test(data)
+    ? 'Escolha a data em que o dinheiro entrou.'
+    : data > hoje ? 'A data do pagamento não pode ser depois de hoje.' : null;
   const totalEsperado = totalEsperadoDaBaixa(f, jurosCent, multaCent);
+
+  const statusDoBoleto = boleto.dado?.status ?? null;
+  const podePedir = podeGerarBoleto(f.status, statusDoBoleto);
+  const ultimoErro = boleto.dado?.ultimo_erro ?? ultimoErroDaLista;
+  const recusa = podePedir ? recusaDaLinha({ daSessao, ultimoErro, uc, mes }) : null;
+  /* A ULTIMA RECUSA JA RESOLVIDA: o banco recusou por endereco, e o endereco foi
+     completado depois. Ela deixa de ser a acao e vira historia, dita uma vez. */
+  const superada = podePedir && !recusa && ultimoErro && tipoDaRecusa(null, ultimoErro) === 'endereco';
 
   const lancarTarifa = async () => {
     let centavos: number;
@@ -423,10 +873,7 @@ function PainelDaFatura({ f, recarregar }: { f: Fatura; recarregar: () => void }
     if (ok) { acao.anunciar('Tarifa da distribuidora lançada.'); recarregar(); }
   };
 
-  const gerarBoleto = async () => {
-    const ok = await acao.executar(() => api.post(`/faturas/${f.id}/boleto`));
-    if (ok) { acao.anunciar('Boleto registrado.'); boleto.recarregar(); recarregar(); }
-  };
+  const pedir = async () => { await pedirBoleto(); boleto.recarregar(); };
 
   /*
    * CANCELAR O BOLETO NO BANCO — o botao que faltava, e a falta era dinheiro.
@@ -440,26 +887,15 @@ function PainelDaFatura({ f, recarregar }: { f: Fatura; recarregar: () => void }
    *
    * O MOTIVO E OBRIGATORIO no servidor, e a tela pede em vez de inventar um: e a
    * mesma disciplina do cancelamento da fatura, e a trilha de auditoria responde
-   * "o que" com o que a pessoa escreveu.
+   * "o que" com o que a pessoa escreveu. [30/09] Pedido na propria tela, nao
+   * mais num `prompt()`.
    */
-  const cancelarNoBanco = async () => {
-    const motivo = prompt(
-      'Cancelar este boleto no banco?\n\n'
-      + 'O cliente deixa de conseguir pagar por esta linha digitável. Escreva o motivo — ele fica '
-      + 'registrado com o seu nome.');
-    if (motivo === null) return;
-    if (!motivo.trim()) { acao.anunciar('Cancelamento não feito: o motivo é obrigatório.'); return; }
-    const ok = await acao.executar(() => api.post(`/faturas/${f.id}/boleto/baixar`, { motivo: motivo.trim() }));
-    if (ok) { acao.anunciar('Boleto cancelado no banco.'); boleto.recarregar(); recarregar(); }
+  const cancelarNoBanco = async (motivo: string) => {
+    const ok = await acao.executar(() => api.post(`/faturas/${f.id}/boleto/baixar`, { motivo }));
+    if (ok) { setCancelandoBoleto(false); acao.anunciar('Boleto cancelado no banco.'); boleto.recarregar(); recarregar(); }
   };
 
   const baixar = async () => {
-    if (!confirm(
-      `Registrar o pagamento de ${emReais(totalEsperado)} nesta cobrança?\n\n` +
-      'Ao registrar, o dinheiro é dividido na mesma hora — quando dá: a comissão de quem trouxe ' +
-      'o cliente e a parte do dono da usina. Se faltar o cadastro do dono, a cobrança fica paga ' +
-      'e a divisão fica pendente, e a tela avisa qual foi o caso. ' +
-      'NÃO existe como desfazer isso pelo sistema.')) return;
     /*
      * A RESPOSTA E LIDA, e ate 08/09/2026 ela era descartada.
      *
@@ -484,10 +920,11 @@ function PainelDaFatura({ f, recarregar }: { f: Fatura; recarregar: () => void }
           juros_centavos: jurosCent,
           multa_centavos: multaCent,
           observacao: observacao.trim() || null,
-          data_liquidacao: new Date().toISOString().slice(0, 10),
+          data_liquidacao: data,
         });
     });
     if (ok) {
+      setConferindoBaixa(false);
       const bloqueio = (resposta as { split_bloqueado?: string | null } | null)?.split_bloqueado;
       acao.anunciar(bloqueio
         ? `Pagamento registrado — mas o dinheiro NÃO foi dividido: ${bloqueio}. `
@@ -498,180 +935,218 @@ function PainelDaFatura({ f, recarregar }: { f: Fatura; recarregar: () => void }
   };
 
   return (
-    <div style={{ padding: '12px 4px', display: 'grid', gap: 16 }}>
+    <div className="em-painel">
       {/* ------------------------------------------ tarifa da distribuidora */}
       {podeLancarTarifaDaDistribuidora(f.status) && (
-        <div>
-          <h3><Icone nome="carteira" tamanho={16} /> Tarifa da distribuidora</h3>
-          <p className="sub" style={{ marginTop: 0 }}>
+        <section className="em-painel-secao" aria-labelledby={`${ids}-tarifa`}>
+          <h3 id={`${ids}-tarifa`}><Icone nome="carteira" tamanho={16} /> Tarifa da distribuidora</h3>
+          <p className="em-painel-nota">
             É a parte da conta da distribuidora que entra nesta cobrança. Quando a conta é lida
             na aba Fatura unificada, ela vem de lá e não precisa ser digitada. Só entra em
             rascunho: depois de emitida, o valor já foi para o documento e para o boleto.
           </p>
           <div style={{ ...linha, gap: 8 }}>
             <input value={tarifaConc} onChange={(e) => setTarifaConc(e.target.value)}
-                   aria-label="Tarifa da distribuidora em reais"
+                   aria-label="Tarifa da distribuidora em reais" inputMode="decimal"
                    placeholder="0,00" style={{ width: 120, textAlign: 'right' }} />
-            <button onClick={() => void lancarTarifa()} disabled={acao.ocupado}>
+            <button type="button" onClick={() => void lancarTarifa()} disabled={acao.ocupado}>
               <Icone nome="confirmar" tamanho={15} /> Lançar
             </button>
             <span className="fraco">
-              Total da fatura hoje: <strong>{emReais(f.valor_total_centavos)}</strong>
+              Total da cobrança hoje: <strong>{emReais(f.valor_total_centavos)}</strong>
             </span>
           </div>
-        </div>
+        </section>
       )}
 
       {/* ------------------------------------------------------------- boleto */}
-      <div>
-        <h3><Icone nome="boleto" tamanho={16} /> Boleto</h3>
-        {boleto.erro && <Aviso tipo="erro">Falha ao ler o boleto: {boleto.erro}</Aviso>}
-        {/*
-          AS QUATRO RECUSAS, ESCRITAS ANTES DE ACONTECEREM — e ate 08/09/2026 a
-          tela so conhecia duas.
-
-          O texto antigo nomeava 412 (sem conector) e 503 (sem certificado), que
-          sao as duas do BANCO. As que vao disparar primeiro sao as outras duas,
-          do CADASTRO, e nenhuma delas aparecia aqui:
-
-            documento do pagador   e a PRIMEIRA camada que bloqueia a fatura na
-                                   tela de Pendencias;
-            endereco do pagador    faltava em 11 das 29 unidades em 08/09/2026, e
-                                   recusa desde 28/08.
-
-          O botao acende para todas elas — quem pede o boleto so descobre no
-          erro. Dizer antes custa quatro linhas e evita a pessoa concluir que o
-          sistema quebrou quando ele esta recusando certo.
-        */}
-        {!boleto.carregando && !boleto.dado && podeGerarBoleto(f.status, null) && (
-          <p className="sub" style={{ margin: '0 0 8px' }}>
-            O que faz a emissão ser recusada, e todas antes de falar com o banco:{' '}
-            <strong>CPF/CNPJ do cliente</strong> em branco · <strong>endereço do pagador</strong>{' '}
-            incompleto (logradouro, bairro, município, CEP e UF) · fatura que fecha em{' '}
-            <strong>R$ 0,00</strong> · e a conexão com o banco ainda não configurada.
-          </p>
-        )}
-        {!boleto.carregando && !boleto.erro && !boleto.dado && (
-          <p className="sub" style={{ margin: '0 0 8px' }}>
-            Esta fatura não tem boleto. {podeGerarBoleto(f.status, null)
-              ? 'Pedir o boleto confere primeiro o cadastro e só então chama o banco. As quatro recusas são nomeadas e nenhuma delas envia nada ao banco.'
-              : `Só fatura emitida ganha boleto, e esta está em "${rotulo(f.status)}".`}
-          </p>
-        )}
-        {boleto.dado && (
-          <div style={{ display: 'grid', gap: 6, fontSize: 14 }}>
-            <div style={{ ...linha, gap: 10 }}>
-              <Marca tom={boleto.dado.status === 'liquidado' ? 'ok' : boleto.dado.status === 'erro' ? 'pendente' : 'nao_medido'}>
-                {rotulo(boleto.dado.status)}
-              </Marca>
-              {/*
-                A ORIGEM AO LADO DO STATUS, e nao escondida no detalhe: "registrado"
-                sozinho nao diz se o titulo esta na carteira de cobranca do banco
-                por conta nossa ou porque uma pessoa o emitiu no portal. Quem
-                precisa conferir um boleto no internet banking precisa saber qual
-                dos dois - e a baixa pela API nao vale para o importado.
-              */}
-              {boleto.dado.origem === 'importado' && (
-                <Marca tom="nao_medido" icone="baixar">emitido no banco</Marca>
-              )}
-              <span className="fraco">nosso número {boleto.dado.nosso_numero ?? '—'}</span>
-              <span className="fraco">{emReais(boleto.dado.valor_registrado_centavos)}</span>
-              {boleto.dado.tentativas > 0 && <span className="fraco">{boleto.dado.tentativas} tentativa(s)</span>}
-            </div>
-            {boleto.dado.linha_digitavel && (
-              <CampoCopiavel rotuloTexto="Linha digitável" valor={boleto.dado.linha_digitavel} />
-            )}
-            {boleto.dado.pix_copia_e_cola && (
-              <CampoCopiavel rotuloTexto="Pix copia e cola" valor={boleto.dado.pix_copia_e_cola} />
-            )}
-            {boleto.dado.ultimo_erro && (
-              <Aviso tipo="erro">
-                Último erro do banco: {boleto.dado.ultimo_erro}
+      {f.status !== 'rascunho' && f.status !== 'cancelada' && (
+        <section className="em-painel-secao" aria-labelledby={`${ids}-boleto`}>
+          <h3 id={`${ids}-boleto`}><Icone nome="boleto" tamanho={16} /> Boleto</h3>
+          {boleto.carregando && <Carregando texto="Lendo o boleto…" />}
+          {boleto.erro && <Aviso tipo="erro">Falha ao ler o boleto: {boleto.erro}</Aviso>}
+          {boleto.dado && (
+            <div className="em-boleto">
+              <div style={{ ...linha, gap: 10 }}>
+                <Marca tom={boleto.dado.status === 'liquidado' ? 'ok' : boleto.dado.status === 'erro' ? 'pendente' : 'nao_medido'}>
+                  {rotulo(boleto.dado.status)}
+                </Marca>
                 {/*
-                  A FALHA DE REGISTRO COMMITA de proposito (repos/boleto.ts): sem
-                  isso a tentativa desapareceria e ninguem saberia que houve.
+                  A ORIGEM AO LADO DO STATUS, e nao escondida no detalhe: "registrado"
+                  sozinho nao diz se o titulo esta na carteira de cobranca do banco
+                  por conta nossa ou porque uma pessoa o emitiu no portal. Quem
+                  precisa conferir um boleto no internet banking precisa saber qual
+                  dos dois - e a baixa pela API nao vale para o importado.
                 */}
-              </Aviso>
-            )}
-          </div>
-        )}
-        {podeGerarBoleto(f.status, boleto.dado?.status ?? null) && (
-          <button className="primario" style={{ marginTop: 8 }}
-                  onClick={() => void gerarBoleto()} disabled={acao.ocupado}>
-            {acao.ocupado
-              ? <Icone nome="carregando" tamanho={15} />
-              : <Icone nome="boleto" tamanho={15} peso="bold" />}
-            Gerar boleto
-          </button>
-        )}
-        {/* CANCELAR O TITULO NO BANCO. Sem `primario`: e o ato que desfaz, como
-            o cancelamento da fatura. Aparece so onde o servidor aceita - boleto
-            `registrado` que NOS registramos; o importado se baixa no portal onde
-            foi emitido, e o proprio servidor recusa por escrito. */}
-        {podeBaixarNoBanco(boleto.dado?.status ?? null, boleto.dado?.origem ?? null) && (
-          <button style={{ marginTop: 8, marginLeft: 8 }}
-                  onClick={() => void cancelarNoBanco()} disabled={acao.ocupado}>
-            <Icone nome="remover" tamanho={15} /> Cancelar o boleto no banco
-          </button>
-        )}
-        {/* A ORDEM DOS DOIS ATOS, dita ANTES de alguem tentar a errada: desde
-            10/09/2026 o servidor RECUSA cancelar a fatura enquanto o titulo
-            estiver vivo no banco, e uma recusa que chega sem aviso parece
-            defeito. Aqui ela chega como instrucao. */}
-        {podeBaixarNoBanco(boleto.dado?.status ?? null, boleto.dado?.origem ?? null) && (
-          <p className="sub" style={{ marginTop: 8, marginBottom: 0 }}>
-            Para cancelar esta fatura, cancele o boleto no banco primeiro. Enquanto o título
-            estiver registrado, o cliente ainda consegue pagar por ele — e um pagamento que
-            chegasse depois do cancelamento não teria como ser registrado aqui.
-          </p>
-        )}
-      </div>
+                {boleto.dado.origem === 'importado' && (
+                  <Marca tom="nao_medido" icone="baixar">emitido no banco</Marca>
+                )}
+                <span className="fraco">nosso número {boleto.dado.nosso_numero ?? '—'}</span>
+                <span className="fraco">{emReais(boleto.dado.valor_registrado_centavos)}</span>
+                {boleto.dado.tentativas > 0 && (
+                  <span className="fraco">
+                    {boleto.dado.tentativas} {boleto.dado.tentativas === 1 ? 'tentativa' : 'tentativas'}
+                  </span>
+                )}
+              </div>
+              {boleto.dado.linha_digitavel && (
+                <CampoCopiavel rotuloTexto="Linha digitável" valor={boleto.dado.linha_digitavel} />
+              )}
+              {boleto.dado.pix_copia_e_cola && (
+                <CampoCopiavel rotuloTexto="Pix copia e cola" valor={boleto.dado.pix_copia_e_cola} />
+              )}
+            </div>
+          )}
 
-      {/* ------------------------------------- o boleto emitido no banco (17/08) */}
-      {podeImportarBoleto(f.status, boleto.dado?.status ?? null) && (
-        <ImportarBoleto fatura={f} aoImportar={() => { boleto.recarregar(); recarregar(); }} />
+          {podePedir && !boleto.carregando && (
+            recusa ? (
+              /* A RECUSA COM SAIDA E O LARANJA DAQUI. «Pedir o boleto» some: o
+                 servidor recusaria de novo pelo mesmo motivo (A FALHA DE REGISTRO
+                 COMMITA de proposito em `repos/boleto.ts` — a tentativa fica, e
+                 e ela que a tela le aqui). */
+              <RecusaNaTela recusa={recusa} primario unidade={unidade} />
+            ) : (
+              <>
+                {superada && (
+                  <p className="em-painel-nota">
+                    A última recusa do banco foi por falta de endereço, e o endereço já foi
+                    completado. Peça o boleto de novo.
+                  </p>
+                )}
+                {!superada && ultimoErro && <RecusaNaTela recusa={null} bruto={ultimoErro} />}
+                {!ultimoErro && !boleto.dado && (
+                  /*
+                    AS RECUSAS, ESCRITAS ANTES DE ACONTECEREM — e ate 08/09/2026 a
+                    tela so conhecia duas. O documento do pagador e o endereco sao
+                    as que disparam primeiro, e nenhuma delas envia nada ao banco.
+                    Dizer antes custa uma linha e evita a pessoa concluir que o
+                    sistema quebrou quando ele esta recusando certo.
+                  */
+                  <p className="em-painel-nota">
+                    Esta cobrança ainda não tem boleto. Pedir confere primeiro o cadastro — CPF ou
+                    CNPJ do cliente, endereço do pagador, valor acima de zero — e só então chama o banco.
+                  </p>
+                )}
+                <div className="em-acoes em-acoes-esq">
+                  <button type="button" className="primario" onClick={() => void pedir()} disabled={pedindo}>
+                    <Icone nome={pedindo ? 'carregando' : 'boleto'} tamanho={15} peso="bold" />
+                    {statusDoBoleto === 'erro' || statusDoBoleto === 'pendente' ? 'Pedir o boleto de novo' : 'Pedir o boleto'}
+                  </button>
+                </div>
+              </>
+            )
+          )}
+          {!podePedir && !boleto.dado && !boleto.carregando && !boleto.erro && (
+            <p className="em-painel-nota">
+              Esta cobrança não tem boleto. Só cobrança emitida ganha boleto, e esta está em
+              «{rotulo(f.status)}».
+            </p>
+          )}
+
+          {/* CANCELAR O TITULO NO BANCO. Sem laranja: e o ato que desfaz, como
+              o cancelamento da fatura. Aparece so onde o servidor aceita - boleto
+              `registrado` que NOS registramos; o importado se baixa no portal onde
+              foi emitido, e o proprio servidor recusa por escrito. A ORDEM DOS
+              DOIS ATOS e dita antes de alguem tentar a errada: desde 10/09/2026 o
+              servidor RECUSA cancelar a fatura enquanto o titulo estiver vivo. */}
+          {podeBaixarNoBanco(statusDoBoleto, boleto.dado?.origem ?? null) && (
+            cancelandoBoleto ? (
+              <ConfirmacaoNaLinha rotulo="Cancelar o boleto no banco" perigo
+                                  motivo={{ rotulo: 'Motivo do cancelamento do boleto', dica: 'Ex.: cobrança refeita com outro valor' }}
+                                  manter="Manter o boleto" confirmar="Cancelar o boleto no banco"
+                                  ocupado={acao.ocupado} erro={acao.erro}
+                                  aoManter={() => setCancelandoBoleto(false)}
+                                  aoConfirmar={(m) => void cancelarNoBanco(m)}>
+                Cancelar este boleto no banco? O cliente deixa de conseguir pagar por esta linha
+                digitável. Para cancelar a cobrança, este é o primeiro passo.
+              </ConfirmacaoNaLinha>
+            ) : (
+              <p className="em-painel-nota">
+                Para cancelar esta cobrança, cancele o boleto no banco primeiro: enquanto o título
+                estiver registrado, o cliente ainda consegue pagar por ele.{' '}
+                <button type="button" className="em-link" onClick={() => { acao.limpar(); setCancelandoBoleto(true); }}>
+                  Cancelar o boleto no banco
+                </button>
+              </p>
+            )
+          )}
+
+          {/* ------------------------------- o boleto emitido no banco (17/08) */}
+          {podeImportarBoleto(f.status, statusDoBoleto) && (
+            <div className="em-importar">
+              <button type="button" className="discreto" aria-expanded={importando}
+                      onClick={() => setImportando((v) => !v)}>
+                <Icone nome={importando ? 'abrir_menu' : 'abrir_linha'} tamanho={12} peso="bold" />
+                Já emitiu este boleto no site do banco? Importar a linha digitável
+              </button>
+              {importando && (
+                <ImportarBoleto fatura={f} aoImportar={() => { setImportando(false); boleto.recarregar(); recarregar(); }} />
+              )}
+            </div>
+          )}
+        </section>
       )}
 
       {/* -------------------------------------------------------- baixa manual */}
       {podeBaixarManual(f.status) && (
-        <div>
-          <h3><Icone nome="recebido" tamanho={16} /> Baixa manual</h3>
-          <p className="sub" style={{ margin: '0 0 8px' }}>
+        <section className="em-painel-secao" aria-labelledby={`${ids}-baixa`}>
+          <h3 id={`${ids}-baixa`}><Icone nome="recebido" tamanho={16} /> Baixa manual</h3>
+          <p className="em-painel-nota">
             Para o dinheiro que entrou sem passar pelo boleto — Pix direto, transferência,
-            conciliação na mão. O servidor exige o valor <strong>ao centavo</strong>:
-            consumo + concessionária + juros + multa.
+            conciliação na mão. O valor tem de bater <strong>ao centavo</strong>: energia, tarifa da
+            distribuidora, juros e multa.
           </p>
-          <div style={{ ...linha, gap: 12 }}>
-            <div>
-              <label>Juros (R$)</label>
-              <input value={juros} onChange={(e) => setJuros(e.target.value)} style={{ width: 110 }} />
-            </div>
-            <div>
-              <label>Multa (R$)</label>
-              <input value={multa} onChange={(e) => setMulta(e.target.value)} style={{ width: 110 }} />
-            </div>
-            <div style={{ flex: '1 1 220px' }}>
-              <label>Observação</label>
-              <input value={observacao} onChange={(e) => setObservacao(e.target.value)}
-                     placeholder="quem pagou, por qual meio" />
-            </div>
-            <div style={{ alignSelf: 'end' }}>
-              <button className="primario" onClick={() => void baixar()}
-                      disabled={acao.ocupado || valorInvalido !== null}>
+          {conferindoBaixa ? (
+            <ResumoDaBaixa unidade={unidade}
+                           consumo_centavos={f.valor_consumo_centavos}
+                           tarifas_centavos={f.valor_tarifas_concessionaria_centavos}
+                           juros_centavos={jurosCent} multa_centavos={multaCent}
+                           total_centavos={totalEsperado} data={data} observacao={observacao}
+                           ocupado={acao.ocupado} erro={acao.erro}
+                           aoVoltar={() => { setConferindoBaixa(false); acao.limpar(); }}
+                           aoConfirmar={() => void baixar()} />
+          ) : (
+            <>
+              <div className="em-baixa-campos">
+                <div>
+                  <label htmlFor={`${ids}-data`}>Recebido em</label>
+                  <input id={`${ids}-data`} type="date" value={data} max={hoje}
+                         onChange={(e) => setData(e.target.value)} />
+                </div>
+                <div>
+                  <label htmlFor={`${ids}-juros`}>Juros (R$)</label>
+                  <input id={`${ids}-juros`} value={juros} inputMode="decimal"
+                         onChange={(e) => setJuros(e.target.value)} />
+                </div>
+                <div>
+                  <label htmlFor={`${ids}-multa`}>Multa (R$)</label>
+                  <input id={`${ids}-multa`} value={multa} inputMode="decimal"
+                         onChange={(e) => setMulta(e.target.value)} />
+                </div>
+                <div className="em-baixa-obs">
+                  <label htmlFor={`${ids}-obs`}>Observação</label>
+                  <input id={`${ids}-obs`} value={observacao} onChange={(e) => setObservacao(e.target.value)}
+                         placeholder="quem pagou, por qual meio" />
+                </div>
+              </div>
+              <div className="em-baixa-pe">
+                <span>Total a registrar: <strong>{valorInvalido ? '—' : emReais(totalEsperado)}</strong></span>
                 {/* "Registrar pagamento" e nao "Baixar": na mesma tela ha
                     "Exportar CSV", e "baixar" ali quer dizer TRANSFERIR ARQUIVO.
-                    O mesmo verbo para dois atos opostos — um recebe dinheiro, o
-                    outro salva um arquivo — na mesma barra de acoes. E o nome
-                    que a aba Contas a pagar ja usava para o ato equivalente. */}
-                <Icone nome="confirmar" tamanho={15} peso="bold" /> Registrar pagamento de {emReais(totalEsperado)}
-              </button>
-            </div>
-          </div>
-          {valorInvalido && <Aviso tipo="erro">{valorInvalido}</Aviso>}
-        </div>
+                    [30/09] SEM LARANJA: o botao abre o resumo, e o laranja e o
+                    «Sim» de la, depois de ver o valor aberto e a data. */}
+                <button type="button" disabled={acao.ocupado || valorInvalido !== null || dataInvalida !== null}
+                        onClick={() => { acao.limpar(); setConferindoBaixa(true); }}>
+                  <Icone nome="confirmar" tamanho={15} /> Registrar pagamento
+                </button>
+              </div>
+              {(valorInvalido || dataInvalida) && <Aviso tipo="erro">{valorInvalido ?? dataInvalida}</Aviso>}
+            </>
+          )}
+        </section>
       )}
 
-      {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
+      {!conferindoBaixa && !cancelandoBoleto && acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
       {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
     </div>
   );
@@ -681,7 +1156,7 @@ function PainelDaFatura({ f, recarregar }: { f: Fatura; recarregar: () => void }
 //
 // POR QUE ESTE BLOCO EXISTE, e por que ele fica AQUI e não na aba Documento.
 //
-// "Gerar boleto" logo acima chama a Sicoob pela porta de cobrança, e a porta
+// "Pedir o boleto" logo acima chama a Sicoob pela porta de cobrança, e a porta
 // depende do certificado A1 — a única pendência do projeto, e compra externa. Sem
 // ele a resposta é 503 nomeado, e a operação faz o que já fazia: emite o boleto à
 // mão no internet banking da cooperativa e manda o PDF ao cliente. Esse boleto é
@@ -699,6 +1174,10 @@ function PainelDaFatura({ f, recarregar }: { f: Fatura; recarregar: () => void }
 // verificadores, a remontagem dos 44 e a leitura do valor e do vencimento de
 // dentro deles moram em `src/dominio/`. A tela conta dígitos — só isso — e mostra
 // o que `POST /faturas/:id/boleto/conferir` respondeu.
+//
+// [30/09] ELE NASCE DOBRADO, atrás de «Já emitiu este boleto no site do banco?»:
+// é o caminho de quem já emitiu por fora, e aberto em toda linha ele era a maior
+// parte do painel.
 
 const EXPLICACAO_DA_TRAVA: Record<MotivoDeTravaDaImportacao, string> = {
   ocupado: 'Trabalhando…',
@@ -778,9 +1257,9 @@ function ImportarBoleto({ fatura, aoImportar }: { fatura: Fatura; aoImportar: ()
   }
 
   return (
-    <div>
-      <h3><Icone nome="baixar" tamanho={16} /> Importar boleto emitido no banco</h3>
-      <p className="sub" style={{ margin: '0 0 8px' }}>
+    <div className="em-importar-corpo">
+      <h4>Importar o boleto emitido no site do banco</h4>
+      <p className="em-painel-nota">
         Para o boleto que <strong>já existe</strong> — emitido à mão no portal da cooperativa
         enquanto o certificado A1 não chega. Nada aqui fala com a Sicoob: o título já está
         registrado lá, e o que entra é a transcrição dele. Depois de importado ele aparece no
@@ -801,7 +1280,7 @@ function ImportarBoleto({ fatura, aoImportar }: { fatura: Fatura; aoImportar: ()
             : 'Opcional — a leitura por imagem é uma chamada paga. Com a linha à mão, digite.'}
         </span>
       </div>
-      {status && <p className="sub" style={{ margin: '0 0 8px' }}>{status}</p>}
+      {status && <p className="em-painel-nota">{status}</p>}
 
       <div style={{ display: 'grid', gap: 8 }}>
         <div>
@@ -810,7 +1289,7 @@ function ImportarBoleto({ fatura, aoImportar }: { fatura: Fatura; aoImportar: ()
                  onChange={(e) => setLinhaDigitavel(e.target.value)}
                  onBlur={() => { if (digitos.length === DIGITOS_DA_LINHA) void conferir(); }}
                  placeholder="75691.50043 01727.686907 00000.130013 1 15410000059669" />
-          <span className="fraco" style={{ fontSize: 12 }}>
+          <span className="fraco" style={{ fontSize: 13 }}>
             {digitos.length === 0
               ? `${DIGITOS_DA_LINHA} dígitos — os pontos e espaços não contam.`
               : `${digitos.length} de ${DIGITOS_DA_LINHA} dígitos.`}
@@ -849,21 +1328,22 @@ function ImportarBoleto({ fatura, aoImportar }: { fatura: Fatura; aoImportar: ()
         )
       )}
 
-      <div style={{ marginTop: 10 }}>
-        <button className="primario" onClick={() => void importar()}
-                disabled={!podeImportarAgora(estado)}>
+      {/* SEM LARANJA desde 30/09: dentro do painel da linha o laranja e o do
+          proximo passo do boleto, e importar e o caminho alternativo. */}
+      <div className="em-acoes em-acoes-esq" style={{ marginTop: 10 }}>
+        <button type="button" onClick={() => void importar()} disabled={!podeImportarAgora(estado)}>
           <Icone nome={acao.ocupado ? 'carregando' : 'confirmar'} tamanho={15} peso="bold" />
           Importar boleto
         </button>
         {motivo && (
-          <span className="fraco" style={{ marginLeft: 10, fontSize: 13 }}>
+          <span className="fraco" style={{ fontSize: 13 }}>
             {motivo === 'digitos_de_menos'
               ? `Faltam ${DIGITOS_DA_LINHA - digitos.length} dígito(s) para a linha ficar completa.`
               : EXPLICACAO_DA_TRAVA[motivo]}
           </span>
         )}
         {motivo === 'nao_conferida' && !conferindo && (
-          <button style={{ marginLeft: 8 }} onClick={() => void conferir()}>
+          <button type="button" onClick={() => void conferir()}>
             <Icone nome="buscar" tamanho={14} /> Conferir
           </button>
         )}
@@ -880,10 +1360,10 @@ function ImportarBoleto({ fatura, aoImportar }: { fatura: Fatura; aoImportar: ()
 function CampoCopiavel({ rotuloTexto, valor }: { rotuloTexto: string; valor: string }) {
   const [copiado, setCopiado] = useState(false);
   return (
-    <div style={{ ...linha, gap: 8 }}>
-      <span className="fraco" style={{ minWidth: 120 }}>{rotuloTexto}</span>
-      <code style={{ wordBreak: 'break-all', flex: '1 1 240px' }}>{valor}</code>
-      <button onClick={() => {
+    <div className="em-copiavel">
+      <span className="fraco">{rotuloTexto}</span>
+      <code>{valor}</code>
+      <button type="button" onClick={() => {
         void navigator.clipboard?.writeText(valor);
         setCopiado(true);
         setTimeout(() => setCopiado(false), 1500);

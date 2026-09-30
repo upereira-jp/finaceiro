@@ -1577,6 +1577,23 @@ export const ESTILO = `
     display: flex; align-items: center; justify-content: space-between; gap: 8px 16px;
     flex-wrap: wrap; font-size: var(--t-ui);
   }
+  /* [30/09, etapa 2] A 2a VIA PERGUNTA NA LINHA, em ambar: nada sai do banco,
+     o que sai da tela e o rascunho em edicao. */
+  .g3ref .fu-tabela tr.fu-confirma-aviso td { background: var(--alerta-fundo); }
+  /* A PERGUNTA NA BARRA — «Limpar a fila» e «Nova fatura» deixaram de ser
+     "window.confirm". Ela ocupa o lugar do botao que a abriu: a frase e os dois
+     atos, com o foco em «Manter». */
+  .g3ref .fu-pergunta {
+    display: flex; align-items: center; justify-content: flex-end; gap: 8px 14px; flex-wrap: wrap;
+    padding: 8px 10px; background: var(--erro-fundo);
+    border: 1px solid color-mix(in srgb, var(--erro) 30%, var(--erro-fundo));
+  }
+  .g3ref .fu-pergunta-texto { font-size: var(--t-ui); line-height: 1.45; max-width: 60ch; }
+  .g3ref .fu-abas > .fu-pergunta { margin-left: auto; }
+  @media (max-width: 720px) {
+    .g3ref .fu-pergunta { justify-content: flex-start; width: 100%; }
+    .g3ref .fu-bloco-acoes.fu-pergunta { flex-direction: row; align-items: center; }
+  }
   .g3ref button.fu-perigo { border-color: var(--erro); color: var(--erro); }
   .g3ref button.fu-perigo:hover:not(:disabled) { background: var(--erro); border-color: var(--erro); color: var(--fundo2); }
 
@@ -1777,6 +1794,313 @@ export const ESTILO = `
      "summary" NAO E ALCANCADO pela regra geral de foco (a/button/th/.interruptor),
      e quem navega por Tab chegava nele sem sinal nenhum na tela. */
   summary:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px; }
+
+  /* ====================== EMISSÃO E COBRANÇA (30/09/2026, etapa 2 do redesenho)
+     A tela ganhou os padroes que a etapa 1 criou para a Fatura unificada — a
+     revisao antes do ato em serie, a confirmacao na propria linha, o cartao em
+     que cada linha vira no celular — e eles moram aqui FORA do ".g3ref", com o
+     prefixo "em-". Sao o mesmo desenho, nao uma segunda gramatica: mesma linha
+     de 1px, mesmo contorno laranja-texto na revisao, mesmo vermelho so no que
+     desfaz. A etapa 4 junta os dois ("fu-" e "em-") num padrao da casa. */
+
+  /* O LINK COM CARA DE BOTAO. «Completar o endereço» leva a outra tela, e o que
+     leva e link — botao do meio e «abrir em outra aba» funcionam. O desenho e o
+     do botao comum (e do primario, com a classe), para ele ser lido como o ATO
+     da linha, e nao como uma palavra sublinhada no meio do texto. */
+  a.botao {
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    padding: 8px 14px; border: 1px solid var(--borda); border-radius: var(--raio);
+    background: var(--fundo2); color: var(--texto); text-decoration: none; white-space: nowrap;
+    font-family: var(--fonte-cond); font-size: var(--t-corpo); font-weight: 600;
+    letter-spacing: .01em; line-height: 1.2;
+    transition: border-color .14s ease, background-color .14s ease;
+  }
+  a.botao:hover { border-color: var(--texto); color: var(--texto); text-decoration: none; }
+  a.botao.primario {
+    background: var(--acento); border-color: var(--acento); color: var(--acento-texto);
+    text-transform: uppercase; letter-spacing: .06em;
+  }
+  a.botao.primario:hover { background: var(--acento-hover); border-color: var(--acento-hover); color: var(--acento-texto); }
+
+  /* O botao que se le como link: texto sublinhado, sem caixa. A tinta e a do
+     texto, e o laranja-texto aparece sob o ponteiro e no foco. */
+  button.em-link {
+    display: inline; padding: 0; border: 0; background: none; box-shadow: none;
+    font: inherit; font-weight: 500; letter-spacing: normal; color: var(--texto);
+    text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px;
+    text-decoration-color: var(--borda-forte);
+  }
+  button.em-link:hover:not(:disabled) {
+    background: none; border-color: transparent; color: var(--acento-forte);
+    text-decoration-color: currentColor; text-decoration-thickness: 2px;
+  }
+
+  /* O MES: o campo, o porque de a tela estar nele, e o CSV no canto. */
+  .em-mes {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center;
+    gap: 10px 22px; padding: 14px 18px;
+  }
+  .em-mes-campo label { margin-bottom: 4px; }
+  .em-mes-procurando { display: block; padding: 8px 0; color: var(--fraco); font-size: var(--t-corpo); }
+  .em-mes-porque {
+    display: flex; align-items: flex-start; gap: 8px; margin: 0;
+    font-size: var(--t-ui); line-height: 1.45; color: var(--texto); max-width: 60ch;
+  }
+  .em-mes-porque > .ic { margin-top: 2px; flex: none; color: var(--fraco); }
+  @media (max-width: 720px) {
+    .em-mes { grid-template-columns: minmax(0, 1fr); padding: 12px 14px; }
+    .em-mes-csv { justify-self: start; }
+  }
+
+  /* O BLOCO DO MES: titulo e resumo a esquerda, o ato a direita, e a revisao e
+     a tabela embaixo. Ritmo de dois passos, como na aba 1 da Fatura unificada:
+     12px dentro do bloco, o respiro da secao fora. */
+  .em-bloco-topo {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 10px 20px; flex-wrap: wrap; margin-bottom: 6px;
+  }
+  .em-bloco-titulo { min-width: 0; }
+  .em-bloco-titulo h2 { margin: 0; }
+  .em-bloco-resumo { margin: 3px 0 0; font-size: var(--t-ui); color: var(--fraco); }
+  .em-bloco-acoes { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .em-ordem { margin: 0 0 12px; font-size: var(--t-meta); color: var(--fraco); line-height: 1.5; }
+  .em-ordem a.em-outros { color: var(--acento-forte); font-weight: 600; }
+  .em-bloco > .aviso { margin: 0 0 12px; }
+  /* O titulo que recebe foco por programa (depois de fechar a revisao ou de
+     cancelar) nao desenha anel: nao e controle. O leitor anuncia do mesmo jeito. */
+  .em-bloco-titulo h2[tabindex="-1"]:focus, .em-revisao h3[tabindex="-1"]:focus { outline: none; }
+  @media (max-width: 720px) {
+    .em-bloco-acoes { flex-direction: column-reverse; align-items: stretch; width: 100%; }
+  }
+
+  /* A TABELA DO MES. Sem rolagem lateral em largura nenhuma: acima de 900px as
+     sete colunas cabem (o cliente trunca), abaixo cada linha vira cartao. E o
+     que deixa o menu da linha e o painel aberto FORA de um "overflow" que os
+     cortaria. */
+  .em-tabela .rolagem { overflow: visible; }
+  .em-tabela thead th { padding: 10px 10px; }
+  .em-tabela tbody td { padding: 11px 10px; vertical-align: middle; }
+  .em-tabela thead th:first-child, .em-tabela tbody td:first-child { padding-left: 8px; padding-right: 0; }
+  .em-tabela thead th:last-child, .em-tabela tbody td:last-child { padding-right: 12px; }
+  .em-tabela td { white-space: nowrap; }
+  .em-tabela td.c-uc { white-space: normal; max-width: 0; width: 30%; }
+  .em-tabela td.c-sit { white-space: normal; min-width: 150px; max-width: 260px; }
+  .em-tabela .c-abrir { width: 34px; }
+  .em-cliente {
+    display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: var(--t-meta); color: var(--fraco); margin-top: 2px;
+  }
+  .em-nota {
+    display: flex; align-items: flex-start; gap: 5px; margin-top: 5px;
+    font-size: var(--t-meta); line-height: 1.4; color: var(--fraco);
+  }
+  .em-nota > span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .em-nota > .ic { margin-top: 2px; flex: none; }
+  .em-nota.alerta { color: var(--alerta); }
+  .em-acoes { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
+  .em-acoes-esq { justify-content: flex-start; }
+  .em-tabela .em-acoes { flex-wrap: nowrap; }
+  .em-tabela .em-acoes > button, .em-tabela .em-acoes > a.botao { padding: 6px 11px; font-size: var(--t-ui); }
+  .em-menu-vazio { display: inline-block; width: 30px; flex: none; }
+  /* OS TRES PONTOS SEM CAIXA ate o ponteiro ou o foco: vinte quadrados
+     contornados numa coluna eram a coluna mais pesada da tabela, para o ato
+     menos usado dela. */
+  .em-menu > button.so-icone { border-color: transparent; background: none; color: var(--fraco); }
+  .em-menu > button.so-icone:hover:not(:disabled),
+  .em-menu > button.so-icone[aria-expanded="true"] { border-color: var(--borda); color: var(--texto); }
+  /* O TRIANGULO DA LINHA: 30px de alvo, sem caixa ate o ponteiro chegar. */
+  button.em-abrir {
+    width: 30px; height: 30px; padding: 0; border-color: transparent; background: none; color: var(--fraco);
+  }
+  button.em-abrir:hover:not(:disabled) { border-color: var(--borda); color: var(--texto); background: none; }
+  button.em-abrir[aria-expanded="true"] { color: var(--texto); }
+  .em-abrir-texto { display: none; }
+  .em-tabela tr.em-aberta td { background: var(--fundo-hover); border-bottom-color: transparent; }
+  .em-tabela tr.em-linha-painel td,
+  .em-tabela tr.em-linha-confirma td { white-space: normal; max-width: none; padding: 0; }
+  .em-tabela tr.em-linha-painel:hover, .em-tabela tr.em-linha-confirma:hover { background: none; }
+  .em-tabela tr.em-linha-painel td { background: var(--fundo-recuo); }
+
+  /* O PAINEL DA LINHA: secoes separadas por linha, nao por caixa. */
+  .em-painel { padding: 4px 18px 16px 44px; }
+  .em-painel-secao { padding: 14px 0; border-bottom: 1px solid var(--borda-suave); }
+  .em-painel-secao:last-of-type { border-bottom: 0; }
+  .em-painel-secao h3 { display: flex; align-items: center; gap: 7px; margin: 0 0 8px; }
+  .em-painel-secao h4 { font-family: var(--fonte-cond); font-size: var(--t-corpo); font-weight: 600; margin: 12px 0 6px; }
+  .em-painel-nota { margin: 0 0 10px; font-size: var(--t-ui); line-height: 1.5; color: var(--fraco); max-width: 80ch; }
+  .em-painel > .aviso { margin: 10px 0 0; }
+  .em-boleto { display: grid; gap: 8px; margin-bottom: 12px; font-size: var(--t-ui); }
+  .em-copiavel { display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap; }
+  .em-copiavel > .fraco { min-width: 120px; }
+  .em-copiavel > code { flex: 1 1 240px; word-break: break-all; }
+  .em-importar { margin-top: 8px; }
+  .em-importar > button.discreto { justify-content: flex-start; text-align: left; }
+  .em-importar-corpo { padding: 4px 0 0 18px; }
+  .em-baixa-campos {
+    display: grid; gap: 12px; grid-template-columns: 170px 120px 120px minmax(0, 1fr); align-items: end;
+  }
+  .em-baixa-pe { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; margin-top: 12px; font-size: var(--t-corpo); }
+
+  /* A RECUSA: o que falta e o que fazer, em texto, e a saida como o ato. */
+  .em-recusa { display: grid; gap: 8px; margin: 0 0 10px; }
+  .em-recusa-frase { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-size: var(--t-ui); line-height: 1.5; max-width: 80ch; }
+  .em-recusa-frase > .ic { margin-top: 3px; flex: none; color: var(--alerta); }
+  .em-recusa-acoes { justify-content: flex-start; }
+
+  /* A REVISAO ANTES DO ATO: uma caixa so, contornada no laranja-texto — e a
+     decisao pendente da tela. A lista rola dentro dela: com trinta linhas ela
+     nao empurra a tabela para fora da tela, e a soma e o «Sim» ficam a vista. */
+  .em-revisao {
+    margin: 0 0 12px; padding: 16px 18px; background: var(--fundo2);
+    border: 1px solid var(--acento-forte);
+  }
+  .em-revisao h3 { margin: 0; }
+  .em-revisao-nota { margin: 4px 0 12px; font-size: var(--t-ui); color: var(--fraco); max-width: 80ch; }
+  .em-revisao > .aviso { margin: 0 0 12px; }
+  .em-revisao-lista {
+    list-style: none; margin: 0; padding: 0; max-height: 320px; overflow-y: auto;
+    border-top: 1px solid var(--borda-suave); border-bottom: 1px solid var(--borda-suave);
+  }
+  .em-revisao-lista li {
+    display: grid; grid-template-columns: 22px 130px minmax(0, 1fr) 130px 110px minmax(0, 170px);
+    gap: 4px 14px; align-items: center; padding: 7px 2px;
+    border-bottom: 1px solid var(--borda-suave); font-size: var(--t-ui);
+  }
+  .em-revisao-lista li:last-child { border-bottom: 0; }
+  .em-revisao-lista li.em-rev-tirada .r-uc, .em-revisao-lista li.em-rev-tirada .r-cli,
+  .em-revisao-lista li.em-rev-tirada .r-ven, .em-revisao-lista li.em-rev-tirada .r-val {
+    color: var(--fraco); text-decoration: line-through;
+  }
+  .em-revisao-lista .r-sel input { width: 17px; height: 17px; margin: 0; display: block; }
+  .em-revisao-lista .r-uc { font-weight: 600; }
+  .em-revisao-lista .r-cli { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .em-revisao-lista .r-ven { color: var(--fraco); }
+  .em-revisao-lista .r-val { text-align: right; }
+  .em-revisao-lista .r-motivo { grid-column: 2 / -1; }
+  .em-revisao-lista .r-motivo .em-recusa { margin: 2px 0 4px; }
+  .em-revisao-pe {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px 16px;
+    flex-wrap: wrap; margin-top: 12px;
+  }
+  .em-defora { margin-top: 12px; font-size: var(--t-ui); }
+  .em-defora-titulo { margin: 0 0 6px; font-weight: 600; }
+  .em-defora ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .em-defora li {
+    display: grid; grid-template-columns: 130px minmax(0, 200px) minmax(0, 1fr) auto;
+    gap: 4px 14px; align-items: center;
+  }
+  .em-defora .r-uc { font-weight: 600; }
+  .em-defora .r-cli { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fraco); }
+  .em-defora .r-frase { color: var(--alerta); }
+
+  /* A CONFIRMACAO NA LINHA. Fundo do erro so quando desfaz (cancelar); o resumo
+     do pagamento e a pergunta comum ficam sobre o cartao, contornados. */
+  .em-confirma {
+    display: grid; gap: 10px; padding: 14px 18px 14px 44px; font-size: var(--t-ui);
+    background: var(--fundo2); border-top: 1px solid var(--borda); border-bottom: 1px solid var(--borda);
+  }
+  .em-confirma.perigo { background: var(--erro-fundo); }
+  .em-painel .em-confirma { padding: 14px 16px; border: 1px solid var(--borda); }
+  .em-painel .em-confirma.perigo { border-color: color-mix(in srgb, var(--erro) 30%, var(--erro-fundo)); }
+  .em-confirma-texto { line-height: 1.5; max-width: 80ch; }
+  .em-confirma-motivo { display: grid; gap: 4px; max-width: 560px; }
+  .em-confirma-motivo label { margin: 0; color: var(--texto); font-weight: 600; }
+  .em-confirma-motivo textarea { resize: vertical; min-height: 56px; }
+  .em-confirma-dica { font-size: var(--t-meta); color: var(--fraco); }
+  .em-confirma .em-acoes { justify-content: flex-start; }
+  .em-confirma > .aviso { margin: 0; }
+  button.em-perigo { border-color: var(--erro); color: var(--erro); }
+  button.em-perigo:hover:not(:disabled) { background: var(--erro); border-color: var(--erro); color: var(--fundo2); }
+  button.em-perigo:disabled { color: var(--fraco); border-color: var(--borda); }
+  .em-resumo { border: 1px solid var(--acento-forte); }
+  .em-painel .em-resumo { border-color: var(--acento-forte); }
+  .em-resumo-pergunta { margin: 0 0 8px; font-size: var(--t-corpo); }
+  .em-resumo-contas { display: grid; gap: 2px; margin: 0 0 10px; max-width: 420px; }
+  .em-resumo-contas > div { display: flex; justify-content: space-between; gap: 16px; padding: 3px 0; border-bottom: 1px solid var(--borda-suave); }
+  .em-resumo-contas dt { color: var(--fraco); }
+  .em-resumo-contas dd { margin: 0; }
+  .em-resumo-contas .em-resumo-total { border-bottom: 0; font-weight: 700; }
+  .em-resumo-contas .em-resumo-total dt { color: var(--texto); }
+  .em-resumo-efeito { margin: 0; max-width: 80ch; }
+
+  /* ABAIXO DE 900px CADA LINHA VIRA UM CARTAO — o mesmo HTML, como na Fatura
+     unificada. Total e o ato ficam sempre a vista; o triangulo ganha o nome
+     escrito («Boleto e baixa»), porque no dedo um icone sozinho e adivinhacao. */
+  @media (max-width: 900px) {
+    .em-tabela .rolagem { border: 0; background: none; }
+    .em-tabela table, .em-tabela tbody, .em-tabela thead { display: block; }
+    .em-tabela thead { display: none; }
+    .em-tabela tbody tr {
+      display: grid; gap: 6px 12px; margin-bottom: 8px; padding: 12px 14px;
+      background: var(--fundo2); border: 1px solid var(--borda);
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+      grid-template-areas: "uc uc sit" "ven kwh tot" "abrir aco aco";
+    }
+    .em-tabela tbody td,
+    .em-tabela tbody td:first-child, .em-tabela tbody td:last-child {
+      display: block; padding: 0; border: 0; width: auto; max-width: none; min-width: 0; white-space: normal;
+    }
+    .em-tabela td[data-rotulo]::before {
+      content: attr(data-rotulo); display: block; margin-bottom: 1px;
+      font-family: var(--fonte-cond); font-size: var(--rotulo-tamanho); font-weight: var(--rotulo-peso);
+      text-transform: uppercase; letter-spacing: var(--rotulo-tracking); color: var(--fraco);
+    }
+    .em-tabela td.num { text-align: left; }
+    .em-tabela td.c-uc, .em-tabela td.c-sit { max-width: none; width: auto; min-width: 0; }
+    .em-tabela .c-uc { grid-area: uc; }
+    .em-tabela .c-sit { grid-area: sit; justify-self: end; text-align: right; max-width: 200px; }
+    .em-tabela .c-sit .em-nota { justify-content: flex-end; }
+    .em-tabela .c-ven { grid-area: ven; }
+    .em-tabela .c-kwh { grid-area: kwh; }
+    .em-tabela .c-tot { grid-area: tot; text-align: right; }
+    .em-tabela .c-abrir { grid-area: abrir; align-self: center; width: auto; }
+    .em-tabela .c-aco { grid-area: aco; align-self: center; }
+    .em-tabela .em-acoes { flex-wrap: wrap; }
+    button.em-abrir { width: auto; height: auto; padding: 6px 8px 6px 4px; gap: 6px; color: var(--texto); border-color: transparent; }
+    .em-abrir-texto { display: inline; font-size: var(--t-ui); }
+    .em-tabela tr.em-aberta { border-bottom-color: transparent; margin-bottom: 0; }
+    .em-tabela tr.em-aberta td { background: none; }
+    .em-tabela tr.em-linha-painel, .em-tabela tr.em-linha-confirma {
+      display: block; padding: 0; margin: -1px 0 8px; grid-template-areas: none;
+      border: 1px solid var(--borda); border-top: 0;
+    }
+    .em-tabela tr.em-linha-painel td, .em-tabela tr.em-linha-confirma td { display: block; }
+    .em-painel { padding: 4px 14px 14px; }
+    .em-confirma { padding: 12px 14px; border: 0; }
+    .em-baixa-campos { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .em-baixa-obs { grid-column: 1 / -1; }
+    .em-importar-corpo { padding-left: 0; }
+    .em-revisao { padding: 14px; }
+    .em-revisao-lista li {
+      grid-template-columns: 22px minmax(0, 1fr) auto;
+      grid-template-areas: "sel uc val" "sel cli cli" "sel ven est" "sel mot mot";
+    }
+    .em-revisao-lista .r-sel { grid-area: sel; align-self: start; padding-top: 2px; }
+    .em-revisao-lista .r-uc { grid-area: uc; }
+    .em-revisao-lista .r-val { grid-area: val; }
+    .em-revisao-lista .r-cli { grid-area: cli; }
+    .em-revisao-lista .r-ven { grid-area: ven; }
+    .em-revisao-lista .r-est { grid-area: est; justify-self: end; }
+    .em-revisao-lista .r-motivo { grid-area: mot; grid-column: auto; }
+    .em-defora li { grid-template-columns: minmax(0, 1fr) auto; }
+    .em-defora .r-frase { grid-column: 1 / -1; }
+  }
+  @media (max-width: 480px) {
+    /* No telefone o ato da linha ganha a largura toda, e «Boleto e baixa» desce
+       para o pe do cartao: lado a lado, os dois quebravam em duas linhas cada. */
+    .em-tabela tbody tr {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-areas: "uc uc uc" "sit sit sit" "ven kwh tot" "aco aco aco" "abrir abrir abrir";
+    }
+    .em-tabela .c-aco .em-acoes { justify-content: flex-start; flex-wrap: nowrap; }
+    .em-tabela .c-aco .em-menu { margin-left: auto; }
+    .em-tabela .em-menu-vazio { display: none; }
+    .em-tabela .c-abrir { border-top: 1px solid var(--borda-suave); padding-top: 4px; }
+    .em-tabela .c-sit { justify-self: start; text-align: left; max-width: none; }
+    .em-tabela .c-sit .em-nota { justify-content: flex-start; }
+    .em-baixa-campos { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .em-baixa-campos > div:first-child { grid-column: 1 / -1; }
+  }
 
   @media (prefers-reduced-motion: reduce) {
     /* WCAG 2.3.3. Nao e cortesia: ha gente para quem movimento na tela e

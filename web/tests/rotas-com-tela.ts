@@ -92,6 +92,17 @@ const EXCECOES: Record<string, string> = {
     + 'maior: a cobranca composta aqui TRAVA a mesma unidade no caminho oficial com '
     + '`uc_ja_faturada`, e desfazer e cancelar uma a uma.',
 
+  /* [30/09/2026, etapa 2 do redesenho] A TELA PAROU DE CHAMA-LA, e de proposito.
+   * «Emitir N cobrancas» abre uma revisao em que a pessoa pode TIRAR linhas da
+   * rodada, e depois mostra a situacao de cada uma. A rota em lote emite TODOS
+   * os rascunhos da competencia de uma vez e devolve so a contagem: ela nao
+   * respeita a linha tirada e nao diz qual falhou. A tela chama
+   * `POST /faturas/:id/emitir`, uma de cada vez — a mesma escrita, por linha. */
+  'POST /faturamento/:competencia/emitir':
+    'a tela emite em serie por `POST /faturas/:id/emitir` desde 30/09/2026: a revisao deixa tirar '
+    + 'linhas da rodada e mostra a situacao de cada uma, e a rota em lote emitiria todos os '
+    + 'rascunhos do mes devolvendo so a contagem. O ato continua com tela - por linha.',
+
   'POST /carteira/marcar-vencidas':
     'o status `vencida` e registro do ATO, e a leitura do fato e a view '
     + '`posicao_da_carteira`, que calcula "vencidas em aberto" pela data. Nenhum numero de tela '

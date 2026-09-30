@@ -29,6 +29,13 @@ import {
   podeBaixarNoBanco,
   type EstadoDoConector, type StatusFatura, type FaturaConferivel,
 } from '../src/cobranca-regras.ts';
+import {
+  grupoDeAcao, chaveDaOrdemDeAcao, tipoDaRecusa, lerRecusa, recusaPrevista, recusaDaLinha,
+  acaoDaLinha, notaDaSituacao, paraPedirBoleto, placarDaSerie, candidatosDoMes, mesSemTrabalho,
+  lerMesLembrado, lembrarMes, CHAVE_DO_MES_LEMBRADO, type StatusDaCobranca,
+} from '../src/emissao-regras.ts';
+import { decimalEmBr, kwhEmBr } from '../src/dinheiro.ts';
+import { destinoDoEndereco, unidadeDaConsulta } from '../src/destino-da-camada.ts';
 
 let falhas = 0;
 let feitas = 0;
@@ -333,6 +340,166 @@ const chk = (id: string, cond: boolean, d: string) => {
   chk('B13e', /podeBaixarNoBanco\(/.test(tela) && /boleto\/baixar/.test(tela),
       'e a tela de emissao USA a regra e CHAMA a rota - sem esta linha, a rota volta a existir '
       + 'sem nenhum caminho de tela, que e como ela passou seis semanas');
+}
+
+// ============================================================================
+// B14–B21 — EMISSÃO E COBRANÇA (30/09/2026, etapa 2 do redesenho)
+// ============================================================================
+//
+// A critica de 30/09 mediu na tela: os rascunhos no FIM de uma tabela ordenada
+// por vencimento, «PagadorSemEndereco» cru ao lado de um «Gerar boleto» que o
+// servidor ia recusar de novo, a tela aberta no mes de hoje com o trabalho no
+// mes da conta, e o kWh em "2545.00" ao lado de "R$ 2.062,89". O que decide
+// cada uma dessas coisas mora em `emissao-regras.ts`, e e aqui que se prende.
+
+// ------------------------------------------------ B14 a ordem do que precisa de acao
+{
+  const f = (id: string, status: StatusDaCobranca, vencimento: string) => ({ id, status, vencimento });
+  const lista = [
+    f('paga', 'paga', '2026-09-18'), f('venc', 'vencida', '2026-09-22'), f('emit', 'emitida', '2026-10-05'),
+    f('semb', 'emitida', '2026-10-19'), f('rasc2', 'rascunho', '2026-10-31'), f('rasc1', 'rascunho', '2026-10-23'),
+    f('canc', 'cancelada', '2026-09-01'),
+  ];
+  const semBoleto = new Set(['semb']);
+  const ordem = [...lista].sort((a, b) =>
+    chaveDaOrdemDeAcao(a, semBoleto.has(a.id)).localeCompare(chaveDaOrdemDeAcao(b, semBoleto.has(b.id)), 'pt-BR', { numeric: true }))
+    .map((x) => x.id).join(',');
+  chk('B14a', ordem === 'rasc1,rasc2,semb,venc,emit,paga,canc',
+      `a ordem padrao e a do trabalho — rascunho, sem boleto, vencida, emitida, paga, cancelada; dentro, o vencimento (veio: ${ordem})`);
+  chk('B14b', grupoDeAcao('vencida', true) === 'boleto' && grupoDeAcao('negociada', false) === 'emitida',
+      'a vencida SEM boleto sobe com as sem boleto; a negociada anda com a emitida');
+}
+
+// ------------------------------------------------ B15 a recusa conhecida, traduzida
+{
+  chk('B15a', tipoDaRecusa('PagadorSemEndereco') === 'endereco'
+          && tipoDaRecusa(null, 'PagadorSemEndereco: o banco recusa emitir sem logradouro') === 'endereco'
+          && tipoDaRecusa('CobrancaNaoConfigurada') === 'sem_conexao',
+      'o codigo vale pelo NOME do erro da API e pelo comeco do texto gravado em `ultimo_erro`');
+  chk('B15b', tipoDaRecusa(null, 'documento do pagador invalido') === null && tipoDaRecusa('CobrancaFalhou') === null,
+      'resposta do banco que nao esta na lista NAO e traduzida — inventar traducao e pior que mostrar a original');
+  const r = lerRecusa({ nome: 'PagadorSemEndereco', texto: 'A UC 123 nao tem cep…', numeroUc: '000401269001287', mes: '2026-09' })!;
+  chk('B15c', r.frase.startsWith('Falta o endereço do pagador') && r.saida?.rotulo === 'Completar o endereço'
+          && r.saida.destino === '/unidades?uc=000401269001287&mes=2026-09' && r.original === 'A UC 123 nao tem cep…',
+      '«Completar o endereço» leva a Unidades ja na unidade, com a volta; o texto cru vai para o detalhe tecnico');
+  const d = lerRecusa({ nome: 'PagadorSemDocumento' })!;
+  chk('B15d', d.saida?.rotulo === 'Completar o documento' && d.saida.destino === '/clientes?pendencia=sem_documento',
+      'a recusa por documento tambem tem saida: Clientes, filtrada pelas que faltam');
+  chk('B15e', lerRecusa({ nome: 'FaturaSemValorParaBoleto' })!.saida === null,
+      'e a de valor zero nao inventa saida: nao ha campo que resolva, ha uma conta a conferir');
+}
+
+// --------------------------------------- B16 a recusa que o cadastro ja anuncia
+{
+  const uc = (over = {}) => ({ numero_uc: '000401269001287', endereco_logradouro: 'Rua A', endereco_bairro: 'Centro',
+    endereco_municipio: 'Goiânia', endereco_uf: 'GO', endereco_cep: '74000000', ...over });
+  chk('B16a', recusaPrevista(uc(), '2026-09') === null,
+      'endereco completo, nada previsto');
+  const p = recusaPrevista(uc({ endereco_bairro: null, endereco_cep: '' }), '2026-09')!;
+  chk('B16b', p.prevista && p.tipo === 'endereco' && /bairro e CEP/.test(p.frase),
+      'faltando bairro e CEP, a tela ja sabe que o banco recusa — pela MESMA funcao que o servidor usa');
+  chk('B16c', recusaDaLinha({ ultimoErro: 'PagadorSemEndereco: …', uc: uc(), mes: '2026-09' }) === null,
+      'a recusa por endereco SUPERADA some: o endereco foi completado depois, e mandar completar de novo seria mentira');
+  chk('B16d', recusaDaLinha({ daSessao: { nome: 'PagadorSemDocumento', texto: '…' }, uc: uc(), mes: '2026-09' })?.tipo === 'documento',
+      'a recusa que acabou de voltar vale antes de tudo');
+}
+
+// ------------------------------------------------------- B17 a acao de cada linha
+{
+  const endereco = lerRecusa({ nome: 'PagadorSemEndereco', numeroUc: '1', mes: '2026-09' });
+  chk('B17a', acaoDaLinha('rascunho', undefined, null).tipo === 'emitir'
+          && acaoDaLinha('emitida', { nivel: 'nao_pedido' }, null).tipo === 'pedir_boleto'
+          && acaoDaLinha('emitida', { nivel: 'esperando' }, null).tipo === 'esperar',
+      'rascunho emite, emitida sem boleto pede, e a que o sistema ja esta retentando nao pede clique');
+  chk('B17b', acaoDaLinha('emitida', { nivel: 'insistindo' }, endereco).tipo === 'resolver'
+          && acaoDaLinha('emitida', { nivel: 'esperando' }, endereco).tipo === 'resolver',
+      'com recusa por endereco, a acao e a SAIDA — mesmo em «esperando»: a espera nao resolve, o endereco resolve');
+  chk('B17c', acaoDaLinha('vencida', { nivel: 'parado' }, endereco).tipo === 'nenhuma'
+          && acaoDaLinha('emitida', undefined, endereco).tipo === 'nenhuma'
+          && acaoDaLinha('paga', undefined, null).tipo === 'nenhuma',
+      'vencida nao ganha boleto (so emitida), emitida com boleto no banco nao pede nada, paga tambem nao');
+  chk('B17d', notaDaSituacao('emitida', { nivel: 'nao_pedido' }, null)?.texto === 'Boleto ainda não pedido.'
+          && notaDaSituacao('emitida', { nivel: 'insistindo' }, endereco)?.alerta === true
+          && notaDaSituacao('paga', undefined, null) === null,
+      'a segunda linha da situacao diz o porque curto, e cala onde o selo ja diz tudo');
+}
+
+// ------------------------------------------------ B18 o que «Pedir os N boletos» leva
+{
+  const lista = [
+    { id: 'a', status: 'emitida' as const }, { id: 'b', status: 'emitida' as const },
+    { id: 'c', status: 'emitida' as const }, { id: 'd', status: 'vencida' as const },
+    { id: 'e', status: 'emitida' as const }, { id: 'f', status: 'rascunho' as const },
+  ];
+  const nivel: Record<string, 'nao_pedido' | 'esperando' | 'insistindo' | 'parado'> =
+    { a: 'nao_pedido', b: 'insistindo', c: 'esperando', d: 'parado', e: 'nao_pedido' };
+  const endereco = lerRecusa({ nome: 'PagadorSemEndereco' })!;
+  const r = paraPedirBoleto(lista, (id) => (nivel[id] ? { nivel: nivel[id]! } : undefined),
+    (f) => (f.id === 'e' ? endereco : null));
+  chk('B18a', r.pedir.map((x) => x.id).join() === 'a,b' && r.deFora.map((x) => x.f.id).join() === 'e',
+      'leva a emitida sem boleto num nivel pedivel; a com recusa conhecida fica DE FORA, nomeada; a que o sistema ja '
+      + 'retenta, a vencida e o rascunho nem entram');
+  chk('B18b', JSON.stringify(placarDaSerie({ a: { estado: 'feita' }, b: { estado: 'recusada', motivo: 'x', recusa: null }, c: { estado: 'na_vez' } }))
+          === JSON.stringify({ total: 3, feitas: 1, recusadas: 1, faltam: 1 }),
+      'o placar da serie soma: feitas + recusadas + faltam = total');
+}
+
+// ------------------------------------------------------ B19 o mes em que a tela abre
+{
+  const carteira = [
+    { competencia: '2026-09-01', faturas: 20, emitidas: 9, liquidadas: 4 },
+    { competencia: '2026-08-01', faturas: 33, emitidas: 0, liquidadas: 29 },
+    { competencia: '2026-07-01', faturas: 30, emitidas: 0, liquidadas: 30 },
+  ];
+  const c = candidatosDoMes(carteira, [{ competencia: '2026-08-01' }]);
+  chk('B19a', JSON.stringify(c) === JSON.stringify([{ mes: '2026-09', certo: false }, { mes: '2026-08', certo: true }]),
+      'setembro PODE ter rascunho (nem emitida nem paga) e e conferido; agosto tem emitida sem boleto e e certo; julho '
+      + `fechado nao entra (veio ${JSON.stringify(c)})`);
+  chk('B19b', JSON.stringify(mesSemTrabalho('2026-06', carteira, '2026-10')) === JSON.stringify({ mes: '2026-06', origem: 'lembrado' })
+          && JSON.stringify(mesSemTrabalho(null, carteira, '2026-10')) === JSON.stringify({ mes: '2026-09', origem: 'recente' })
+          && JSON.stringify(mesSemTrabalho(null, [], '2026-10')) === JSON.stringify({ mes: '2026-10', origem: 'hoje' }),
+      'sem trabalho: o ultimo mes escolhido, senao o mais recente com cobranca, senao o de hoje');
+  const quebrado = { getItem: () => { throw new Error('bloqueado'); }, setItem: () => { throw new Error('bloqueado'); } };
+  let guardado = '';
+  const bom = { getItem: (k: string) => (k === CHAVE_DO_MES_LEMBRADO ? guardado : null), setItem: (_k: string, v: string) => { guardado = v; } };
+  lembrarMes(bom, '2026-08'); lembrarMes(bom, 'lixo');
+  chk('B19c', lerMesLembrado(quebrado) === null && (() => { lembrarMes(quebrado, '2026-08'); return true; })()
+          && lerMesLembrado(bom) === '2026-08' && lerMesLembrado(null) === null,
+      'o armazenamento do navegador que levanta nao derruba a tela, e so mes valido e guardado');
+}
+
+// ------------------------------------------------ B20 kWh e decimal em portugues
+{
+  chk('B20a', decimalEmBr('2545.00') === '2.545,00' && decimalEmBr('1234567.891') === '1.234.567,891'
+          && decimalEmBr(null) === '—' && decimalEmBr('abc') === 'abc',
+      'a grandeza decimal sai em portugues, por texto — sem float, e o que nao e numero volta como veio');
+  chk('B20b', kwhEmBr('2545.00') === '2.545' && kwhEmBr('2545.50') === '2.545,50' && kwhEmBr('947') === '947',
+      'o kWh sem a casa decimal toda zero, como a conta da distribuidora imprime; a casa que carrega fica');
+}
+
+// ------------------------------------------- B21 a unidade pedida pelo endereco
+{
+  chk('B21a', destinoDoEndereco('0004.0126-9001287', '2026-09') === '/unidades?uc=000401269001287&mes=2026-09'
+          && destinoDoEndereco(null, '2026-09') === '/unidades?pendencia=sem_endereco'
+          && destinoDoEndereco('123', 'lixo') === '/unidades?uc=123',
+      'o destino leva a unidade (so digitos) e o mes da volta; sem unidade, a lista das que nao emitem');
+  chk('B21b', unidadeDaConsulta('?uc=000401269001287&mes=2026-09') === '000401269001287'
+          && unidadeDaConsulta('?pendencia=sem_endereco') === null && unidadeDaConsulta('?uc=') === null,
+      'e a tela de Unidades le a unidade do endereco');
+
+  /* NENHUMA PERGUNTA DO NAVEGADOR sobrou nas telas desta etapa. Comentario sai
+     antes de procurar (a armadilha do `SD-12`). */
+  const semComentario = (t: string) => t
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ');
+  const fonte = (arq: string) => semComentario(readFileSync(new URL(`../src/${arq}`, import.meta.url), 'utf8'));
+  const comPergunta = ['telas/faturas.tsx', 'telas/fatura-unificada.tsx', 'fatura-lote-corpo.tsx', 'emissao-corpo.tsx']
+    .filter((a) => /\b(window\.)?(confirm|prompt)\(/.test(fonte(a)));
+  chk('B21c', comPergunta.length === 0,
+      'Emissao e cobranca e Fatura unificada nao usam confirm() nem prompt() — toda pergunta acontece na tela '
+      + `(achados: ${comPergunta.join(', ') || 'nenhum'})`);
+  chk('B21d', !/emitirLote|\/faturamento\/\$\{[^}]*\}\/emitir/.test(fonte('telas/faturas.tsx'))
+          && /\/faturas\/\$\{f\.id\}\/emitir/.test(fonte('telas/faturas.tsx')),
+      'a emissao em serie usa a rota POR LINHA — a de lote emitiria tambem o que a pessoa tirou da revisao');
 }
 
 console.log();

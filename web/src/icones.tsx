@@ -83,6 +83,9 @@ import { Briefcase } from '@phosphor-icons/react/Briefcase';
 import { ShieldCheck } from '@phosphor-icons/react/ShieldCheck';
 import { UserGear } from '@phosphor-icons/react/UserGear';
 import { Key } from '@phosphor-icons/react/Key';
+import { DotsThree } from '@phosphor-icons/react/DotsThree';
+import { CaretRight } from '@phosphor-icons/react/CaretRight';
+import { ArrowRight } from '@phosphor-icons/react/ArrowRight';
 
 import type { NomeDeIcone } from './iconografia.ts';
 
@@ -207,6 +210,9 @@ const DESENHO: Record<NomeDeIcone, Icon> = {
   senha: Key,
   ajuda: Lifebuoy,
   abrir_externo: ArrowSquareOut,
+  mais_acoes: DotsThree,
+  abrir_linha: CaretRight,
+  ir_para: ArrowRight,
 
   // cobrança e documento
   boleto: Barcode,

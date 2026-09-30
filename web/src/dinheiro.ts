@@ -110,6 +110,44 @@ export function decimalTexto(bruto: string, casas: number): string {
   return s;
 }
 
+/**
+ * A GRANDEZA DECIMAL NA TELA, em portugues: `"2545.00"` -> `"2.545,00"`.
+ *
+ * E O CAMINHO DE VOLTA DE `decimalTexto`, e pelo mesmo motivo POR TEXTO: o
+ * `numeric` do Postgres chega como string, e `Number(v).toLocaleString()` poria
+ * o float de volta na exibicao de um valor que a regra 1 manda manter decimal.
+ * Aqui se separa inteiro de decimal, agrupa-se o milhar com ponto e troca-se o
+ * separador — nenhum digito e recalculado.
+ *
+ * NASCEU EM 30/09/2026 na tela de Emissao e cobranca, onde o consumo saia
+ * "2545.00" ao lado de "R$ 2.062,89" — dois sistemas de numero na mesma linha.
+ * A etapa 4 do redesenho generaliza para as outras telas.
+ *
+ * O que nao for numero decimal volta como veio: um valor estranho na tela e
+ * informacao, e um "NaN" no lugar dele seria a tela inventando.
+ */
+export function decimalEmBr(v: string | number | null | undefined): string {
+  if (v == null || String(v).trim() === '') return '—';
+  const s = String(v).trim();
+  const m = /^(-?)(\d+)(?:\.(\d+))?$/.exec(s);
+  if (!m) return s;
+  const inteiro = m[2]!.replace(/^0+(?=\d)/, '').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `${m[1]}${inteiro}${m[3] ? `,${m[3]}` : ''}`;
+}
+
+/**
+ * kWh NA TELA: como `decimalEmBr`, e SEM a casa decimal quando ela e toda zero
+ * — `"2545.00"` -> `"2.545"`, `"2545.50"` -> `"2.545,50"`.
+ *
+ * A conta da distribuidora imprime kWh inteiro, e e com ela na mao que se
+ * confere a coluna. O ",00" em vinte linhas era ruido que nao carregava nada; a
+ * casa que carrega (",50") continua la.
+ */
+export function kwhEmBr(v: string | number | null | undefined): string {
+  const t = decimalEmBr(v);
+  return /,0+$/.test(t) ? t.replace(/,0+$/, '') : t;
+}
+
 /** Data ISO (AAAA-MM-DD) a partir do <input type="date">, ou null. */
 export const dataOuNull = (v: string): string | null => (v.trim() ? v.trim() : null);
 

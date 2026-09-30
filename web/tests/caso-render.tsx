@@ -45,6 +45,8 @@ import { TabelaDaFila, TabelaDasRegistradas, GavetaDaConta, type PropsDasRegistr
 import type { ItemDoLote } from '../src/lote-de-contas.ts';
 import { CAMPOS_DA_FATURA_VAZIOS, type RegistroDeFatura } from '../src/api.ts';
 import { filtrarRegistradas } from '../src/registradas-regras.ts';
+import { RevisaoDaSerie, RecusaNaTela, ConfirmacaoNaLinha, ResumoDaBaixa, SituacaoDaCobranca } from '../src/emissao-corpo.tsx';
+import { lerRecusa, recusaPrevista } from '../src/emissao-regras.ts';
 
 let falhas = 0;
 let feitas = 0;
@@ -1061,6 +1063,135 @@ const desenharRoteiro = (leitura: Parameters<typeof CorpoDoRoteiro>[0]): string 
       'a gaveta e um dialogo modal de verdade, com nome — o titulo dela');
   chk('R21e', gaveta.includes('aria-label="Fechar a conferência"') && /data-foco-inicial/.test(gaveta),
       'fechar tem nome, e o foco sabe onde nascer');
+}
+
+// ============================================================================
+// R22–R26 — EMISSÃO E COBRANÇA (30/09/2026, etapa 2 do redesenho)
+// ============================================================================
+//
+// Os quatro estados que a crítica de 30/09 pediu, montados: a revisão antes de
+// emitir (no lugar do `window.confirm` com `npm run tarifas`), a recusa que diz
+// «Completar o endereço» (no lugar de «PagadorSemEndereco» cru e do «Gerar
+// boleto» laranja), a confirmação do cancelamento com motivo (no lugar do
+// `prompt()`) e o resumo do pagamento (no lugar do `confirm` de um parágrafo).
+{
+  const nada = () => {};
+  const linhas = [
+    { id: 'a', unidade: '000401269001287', cliente: 'Ana Souza', vencimento: '2026-10-05', valor_centavos: 123_456 },
+    { id: 'b', unidade: '000401269001288', cliente: 'Bruno Lima', vencimento: '2026-10-07', valor_centavos: 10_000 },
+  ];
+  const antes = renderToStaticMarkup(
+    <RevisaoDaSerie tipo="emitir" mes="setembro de 2026" linhas={linhas} estados={{}} emRodada={false} rodando={false}
+                    alerta={<div className="aviso alerta">1 de 2 rascunhos sem a tarifa da distribuidora</div>}
+                    aoConfirmar={nada} aoFechar={nada} />);
+  const ta = texto(antes);
+  chk('R22a', /Emitir 2 cobranças de setembro de 2026\?/.test(ta) && /Ana Souza/.test(ta) && /Bruno Lima/.test(ta)
+          && /vence 05\/10\/2026/.test(ta) && /R\$ 1\.234,56/.test(ta),
+      'a revisao da emissao lista unidade, cliente, vencimento e valor — a primeira emissao da empresa e vista antes');
+  chk('R22b', /Soma: R\$ 1\.334,56 em 2 cobranças/.test(ta),
+      'e a soma, inteiro com inteiro');
+  chk('R22c', /<button[^>]*class="primario"[^>]*>Sim, emitir as 2<\/button>/.test(antes) && /sem a tarifa/.test(ta)
+          && !/npm run/.test(ta),
+      'o «Sim» e o laranja, o alerta da tarifa vem antes dele, e em portugues — sem comando de terminal');
+  chk('R22d', (antes.match(/type="checkbox"[^>]*checked=""/g) ?? []).length === 2,
+      'cada linha pode sair da rodada: todas nascem marcadas');
+
+  const placar = renderToStaticMarkup(
+    <RevisaoDaSerie tipo="emitir" mes="setembro de 2026" linhas={linhas} emRodada rodando={false}
+                    estados={{ a: { estado: 'feita' }, b: { estado: 'recusada', motivo: 'só rascunho pode ser emitida', recusa: null } }}
+                    aoConfirmar={nada} aoFechar={nada}
+                    proxima={{ rotulo: 'Pedir os 3 boletos', ao: nada }} />);
+  chk('R22e', /1 de 2 emitidas/.test(texto(placar)) && /só rascunho pode ser emitida/.test(texto(placar))
+          && /<button[^>]*class="primario"[^>]*>Pedir os 3 boletos<\/button>/.test(placar)
+          && !/Sim, emitir/.test(texto(placar)),
+      'no fim, o placar, o motivo de cada recusa e o PROXIMO PASSO como o laranja: «Pedir os N boletos»');
+
+  // ----------------------------------------------------- a recusa com saida
+  const recusa = lerRecusa({ texto: 'PagadorSemEndereco: o banco recusa emitir sem logradouro…', numeroUc: '000401269001287', mes: '2026-09' })!;
+  const rec = renderToStaticMarkup(<RecusaNaTela recusa={recusa} primario unidade="000401269001287" />);
+  chk('R23a', /Falta o endereço do pagador/.test(texto(rec)) && !/PagadorSemEndereco/.test(texto(rec)),
+      'a recusa por endereco vira frase; o codigo cru fica atras do «ver detalhe tecnico», fechado');
+  chk('R23b', /<a href="\/unidades\?uc=000401269001287&amp;mes=2026-09"[^>]*class="botao primario"/.test(rec)
+          && /Completar o endereço/.test(texto(rec)) && /ver detalhe técnico/.test(texto(rec)),
+      '«Completar o endereço» e a acao, e leva a Unidades JA na linha da unidade, com a volta para o mes');
+
+  const deFora = renderToStaticMarkup(
+    <RevisaoDaSerie tipo="boletos" mes="setembro de 2026" linhas={[linhas[1]!]} estados={{}} emRodada={false} rodando={false}
+                    deFora={[{ id: 'a', unidade: '000401269001287', cliente: 'Ana Souza', recusa }]}
+                    aoConfirmar={nada} aoFechar={nada} />);
+  chk('R23c', /Pedir 1 boleto ao banco\?/.test(texto(deFora)) && /Fica de fora, porque o banco recusaria/.test(texto(deFora))
+          && /Completar o endereço/.test(texto(deFora)) && /Sim, pedir o boleto/.test(texto(deFora)),
+      '«Pedir os N boletos» leva so o que o banco aceita, e diz o que ficou de fora com a saida de cada um');
+
+  const prevista = recusaPrevista({ numero_uc: '000401269001287', endereco_logradouro: 'Rua A', endereco_bairro: null,
+    endereco_municipio: 'Goiânia', endereco_uf: 'GO', endereco_cep: null }, '2026-09');
+  const tp = texto(renderToStaticMarkup(<RecusaNaTela recusa={prevista} />));
+  chk('R23d', /O banco vai recusar este boleto/.test(tp) && /bairro e CEP/.test(tp),
+      'a recusa que o cadastro ja anuncia e dita ANTES do pedido, nomeando o que falta');
+
+  // painel «O que ainda não chegou ao banco»: a recusa por endereço troca o botão pela saída
+  const comEndereco = (extra: Partial<LinhaNaTela> = {}): LinhaNaTela => ({
+    ...linhaDaEmissao('insistindo'),
+    boleto: { status: 'erro', tentativas: 4, ultimo_erro: 'PagadorSemEndereco: o banco recusa emitir sem endereço.',
+              ultima_tentativa_em: null, proxima_tentativa_em: null },
+    ...extra,
+  });
+  const painel = renderToStaticMarkup(<PainelDaEmissao dados={conjuntoDaEmissao([comEndereco()])} pedirBoleto={nada} />);
+  chk('R23e', /Completar o endereço/.test(texto(painel)) && !/Pedir o boleto/.test(texto(painel))
+          && !/O banco respondeu: PagadorSemEndereco/.test(texto(painel)),
+      'na lista do que nao chegou ao banco, a recusa por endereco oferece «Completar o endereço» e NAO '
+      + '«Pedir o boleto» — o servidor recusaria de novo pelo mesmo motivo');
+  chk('R23f', /<h2[^>]*>.*O que ainda não chegou ao banco<\/h2>/.test(painel),
+      'e a lista e uma secao h2 da pagina — o salto h1 → h3 saiu');
+
+  // ------------------------------------------------ a situacao na linha
+  const sit = texto(renderToStaticMarkup(
+    <SituacaoDaCobranca status="emitida" nota={{ texto: 'Falta o endereço do pagador.', alerta: true }} />));
+  chk('R24a', /Emitida/.test(sit) && /Falta o endereço do pagador/.test(sit),
+      'o selo «Emitida» ganha o porque embaixo quando a cobranca nao chegou ao banco');
+
+  // --------------------------------- a confirmacao do cancelamento, na linha
+  const canc = renderToStaticMarkup(
+    <ConfirmacaoNaLinha rotulo="Confirmar o cancelamento" perigo motivo={{ rotulo: 'Motivo do cancelamento' }}
+                        manter="Manter a cobrança" confirmar="Cancelar a cobrança" aoManter={nada} aoConfirmar={nada}>
+      Cancelar a cobrança da unidade 000401269001287?
+    </ConfirmacaoNaLinha>);
+  chk('R25a', /<textarea/.test(canc) && /Motivo do cancelamento/.test(canc),
+      'o motivo do cancelamento e pedido num campo da propria linha — nao num prompt()');
+  chk('R25b', /<button[^>]*class="em-perigo"[^>]*disabled=""[^>]*>Cancelar a cobrança<\/button>/.test(canc)
+          && /Manter a cobrança/.test(texto(canc)),
+      'e o ato que desfaz nasce travado ate o motivo existir (o servidor recusa sem ele), contornado no vermelho');
+
+  // ------------------------------------------------ o resumo do pagamento
+  const baixa = renderToStaticMarkup(
+    <ResumoDaBaixa unidade="000401269001287" consumo_centavos={100_000} tarifas_centavos={12_345} juros_centavos={1_000}
+                   multa_centavos={500} total_centavos={113_845} data="2026-09-29" observacao="Pix direto"
+                   aoVoltar={nada} aoConfirmar={nada} />);
+  const tb = texto(baixa);
+  chk('R26a', /Registrar o pagamento de R\$ 1\.138,45/.test(tb) && /29\/09\/2026/.test(tb)
+          && /Tarifa da distribuidora/.test(tb) && /R\$ 123,45/.test(tb) && /Juros/.test(tb) && /Multa/.test(tb),
+      'o pagamento passa por um resumo: valor aberto em parcelas, a data e a observacao');
+  chk('R26b', /Não há como desfazer/.test(tb) && /<button[^>]*class="primario"[^>]*>Sim, registrar o pagamento<\/button>/.test(baixa)
+          && /Voltar/.test(tb),
+      'ele diz que nao se desfaz, e o laranja e o «Sim» DAQUI — nao mais o botao do painel');
+
+  // ---------------------- a Fatura unificada: as perguntas que eram confirm()
+  const regs: RegistroDeFatura[] = [{
+    id: 'r1', numero_uc: '000000000000101', competencia: '2026-09-01', cliente_nome: 'Ana Souza', vencimento: '2026-10-10',
+    compensada_kwh: '1', tarifa_kwh: '1', desconto_centavos: 500, total_centavos: 1000, fatura_id: 'f1',
+    cobranca_disponivel: true, criado_em: '', atualizado_em: '',
+  }];
+  const filtro = { mes: '2026-09', soSemCobranca: false, unidade: null };
+  const segunda = renderToStaticMarkup(
+    <TabelaDasRegistradas lista={regs} visiveis={regs} erro={null} filtro={filtro} meses={['2026-09']} parcial={false}
+                          aoFiltrar={nada} desmarcadas={new Set()} aoMarcar={nada} aoMarcarTodas={nada} principal
+                          revisando={false} aoRevisar={nada} rodada={{}} rodadaIds={[]} rodando={false} aoGerar={nada}
+                          ensaio={{}} ensaiando={null} aoEnsaiar={nada} aoEnsaiarTodas={nada} aoSegundaVia={nada}
+                          emEdicao="unidade 101" confirmandoSegundaVia="r1" aoPedirSegundaVia={nada}
+                          excluindo={null} aoPedirExclusao={nada} aoExcluir={nada} aoVerUnidade={nada} />);
+  chk('R27a', /Abrir a 2ª via de\s+09\/2026\s+da unidade\s+000000000000101\s*\?/.test(texto(segunda))
+          && /unidade 101/.test(texto(segunda)) && /Manter a edição/.test(texto(segunda)),
+      'a 2a via pergunta NA LINHA, dizendo qual conta em edicao sai da tela — nao mais um window.confirm');
 }
 
 export const resultado = () => ({ falhas, feitas });

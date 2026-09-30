@@ -28,6 +28,8 @@ import {
   faixaDaEmissaoTravada, fraseDaLinha, haQuantoTempo, resumoDaEmissao, avisoDeTruncagem,
   type EmissaoTravadaNaTela, type LinhaNaTela,
 } from './emissao-travada.ts';
+import { acaoDaLinha, lerRecusa, type RecusaLida, type StatusDaCobranca } from './emissao-regras.ts';
+import { RecusaNaTela } from './emissao-corpo.tsx';
 
 export type CorpoDaEmissao = {
   /** `null` enquanto a leitura não voltou, e ausência de resposta não é resposta:
@@ -39,12 +41,28 @@ export type CorpoDaEmissao = {
    *  as duas: uma lista vazia é exatamente a cara de uma lista que diz que não
    *  há nada pendente. */
   erro?: string | null;
-  /** O que fazer quando alguém clica em «Pedir o boleto agora». Ausente na
+  /** O que fazer quando alguém clica em «Pedir o boleto». Ausente na
    *  montagem de teste e em qualquer lugar onde a ação não faz sentido — e aí o
    *  botão não é desenhado, em vez de existir sem efeito. */
   pedirBoleto?: (faturaId: string) => void;
   /** Trava os botões enquanto uma ação está em voo, como no resto da casa. */
   ocupado?: boolean;
+  /**
+   * A RECUSA QUE A TELA CONHECE para a linha (30/09, etapa 2). A tela de emissão
+   * sabe mais que a lista: tem o endereço de cada unidade e a recusa que acabou
+   * de voltar. Sem esta função, a lista lê só o que o banco gravou
+   * (`ultimo_erro`), e já traduz os códigos conhecidos.
+   */
+  recusaDe?: (l: LinhaNaTela) => RecusaLida | null;
+};
+
+/** A recusa que a própria linha carrega, quando o código é conhecido. */
+const recusaGravada = (l: LinhaNaTela): RecusaLida | null =>
+  lerRecusa({ texto: l.boleto?.ultimo_erro, numeroUc: l.unidade, mes: String(l.competencia).slice(0, 7) });
+
+const mesCurto = (v: string): string => {
+  const m = /^(\d{4})-(\d{2})/.exec(String(v));
+  return m ? `${m[2]}/${m[1]}` : '';
 };
 
 const dataBr = (v: string): string => String(v).slice(0, 10).split('-').reverse().join('/');
@@ -69,7 +87,7 @@ export function FaixaDaEmissao({ dados }: CorpoDaEmissao) {
  * Ordenar por gravidade poria em cima o que grita mais alto, e não o que dói há
  * mais tempo.
  */
-export function PainelDaEmissao({ dados, erro, pedirBoleto, ocupado }: CorpoDaEmissao) {
+export function PainelDaEmissao({ dados, erro, pedirBoleto, ocupado, recusaDe }: CorpoDaEmissao) {
   if (erro) {
     return (
       <Aviso tipo="alerta">
@@ -83,10 +101,12 @@ export function PainelDaEmissao({ dados, erro, pedirBoleto, ocupado }: CorpoDaEm
   const truncou = avisoDeTruncagem(dados);
 
   return (
-    <div className="cartao secao">
-      <h3 style={{ marginTop: 0 }}>
-        <Icone nome="boleto" tamanho={16} /> O que ainda não chegou ao banco
-      </h3>
+    <section className="cartao secao" id="em-banco" aria-labelledby="em-banco-titulo">
+      {/* H2 E NÃO H3 (30/09): a lista é uma seção da página, irmã da tabela do
+          mês — e o salto h1 → h3 era um dos achados da crítica. */}
+      <h2 id="em-banco-titulo" style={{ marginTop: 0 }}>
+        <Icone nome="boleto" tamanho={17} /> O que ainda não chegou ao banco
+      </h2>
       {/*
         A AFIRMAÇÃO VEM MESMO VAZIA, e é a lição de 10/09/2026 uma camada acima:
         «nenhuma linha» e «a leitura quebrou» têm a mesma cara quando a tela cala,
@@ -101,23 +121,33 @@ export function PainelDaEmissao({ dados, erro, pedirBoleto, ocupado }: CorpoDaEm
         <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 12 }}>
           {dados.linhas.map((l, i) => (
             <LinhaDaEmissao key={l.fatura_id} l={l} primeira={i === 0}
-                            pedirBoleto={pedirBoleto} ocupado={ocupado} />
+                            pedirBoleto={pedirBoleto} ocupado={ocupado}
+                            recusa={(recusaDe ?? recusaGravada)(l)} />
           ))}
         </ul>
       )}
-    </div>
+    </section>
   );
 }
 
-function LinhaDaEmissao({ l, primeira, pedirBoleto, ocupado }: {
+function LinhaDaEmissao({ l, primeira, pedirBoleto, ocupado, recusa }: {
   l: LinhaNaTela; primeira: boolean;
   pedirBoleto?: (faturaId: string) => void; ocupado?: boolean;
+  recusa: RecusaLida | null;
 }) {
   const f = fraseDaLinha(l);
-  /* Pedir o boleto só faz sentido onde o servidor aceita: `parado` é justamente
-     a linha que ele recusa, e oferecer o botão ali seria oferecer o que já se
-     sabe que volta com erro. As outras quatro passam pela mesma rota. */
-  const podePedir = pedirBoleto && l.nivel !== 'parado';
+  /*
+   * A AÇÃO É A MESMA DA TABELA DO MÊS (`acaoDaLinha`), e até 30/09 não era.
+   *
+   * O botão «Pedir o boleto agora» aparecia em toda linha menos a `parado` —
+   * inclusive na recusada por ENDEREÇO, que o servidor recusa de novo, pelo
+   * mesmo motivo, até alguém completar o endereço em outra tela. Agora a recusa
+   * conhecida troca o botão pela SAÍDA dela («Completar o endereço», já na
+   * linha da unidade), e a linha que o sistema está retentando sozinho
+   * (`esperando`) não oferece clique — a frase dela já diz que não é preciso.
+   */
+  const acao = acaoDaLinha(l.status_fatura as StatusDaCobranca, l, recusa);
+  const conhecida = recusa && l.status_fatura === 'emitida' ? recusa : null;
 
   return (
     <li style={{
@@ -132,23 +162,40 @@ function LinhaDaEmissao({ l, primeira, pedirBoleto, ocupado }: {
         <Icone nome={f.grave ? 'pendente' : 'calendario'} tamanho={15} peso="bold" />
         <strong>{l.unidade}</strong>
         <span>{l.cliente}</span>
+        {mesCurto(l.competencia) && <span className="fraco">mês {mesCurto(l.competencia)}</span>}
         <span className="fraco">vence {dataBr(l.vencimento)}</span>
         <span className="fraco">{emReais(l.valor_total_centavos)}</span>
         {haQuantoTempo(l) && <span className="fraco">{haQuantoTempo(l)}</span>}
         {f.tentativas && <span className="fraco">{f.tentativas}</span>}
       </div>
-      <div style={{ lineHeight: 1.55 }}>
-        {f.estado} <span className="fraco">{f.oQueFazer}</span>
-      </div>
-      {f.respostaDoBanco && (
-        <div className="fraco" style={{ lineHeight: 1.5 }}>
-          O banco respondeu: {f.respostaDoBanco}
-        </div>
+      {conhecida ? (
+        /* A RECUSA CONHECIDA SUBSTITUI a frase genérica do nível: «o banco vem
+           recusando» não diz o que fazer, e «falta o endereço do pagador» diz. */
+        <RecusaNaTela recusa={conhecida} unidade={l.unidade} />
+      ) : (
+        <>
+          <div style={{ lineHeight: 1.55 }}>
+            {f.estado} <span className="fraco">{f.oQueFazer}</span>
+          </div>
+          {/* A cobrança vencida saiu do estado que aceita boleto: a recusa não
+              tem mais saída aqui, mas ela é dita traduzida quando conhecida — o
+              código cru só atrás do detalhe técnico, como em toda a tela. */}
+          {recusa ? (
+            <div className="fraco" style={{ lineHeight: 1.5 }}>
+              A última recusa do banco foi: {recusa.frase}
+            </div>
+          ) : f.respostaDoBanco && (
+            <div className="fraco" style={{ lineHeight: 1.5 }}>
+              O banco respondeu: {f.respostaDoBanco}
+            </div>
+          )}
+        </>
       )}
-      {podePedir && (
+      {acao.tipo === 'pedir_boleto' && pedirBoleto && (
         <div>
-          <button onClick={() => pedirBoleto!(l.fatura_id)} disabled={ocupado}>
-            <Icone nome="boleto" tamanho={14} peso="bold" /> Pedir o boleto agora
+          <button type="button" onClick={() => pedirBoleto(l.fatura_id)} disabled={ocupado}
+                  aria-label={`Pedir o boleto da unidade ${l.unidade}`}>
+            <Icone nome="boleto" tamanho={14} peso="bold" /> Pedir o boleto
           </button>
         </div>
       )}

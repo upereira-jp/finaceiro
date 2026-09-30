@@ -850,14 +850,15 @@ export const TOPICOS: readonly Topico[] = [
     resposta: 'Na aba Emissão e cobrança. Emitir fecha o valor da fatura — o boleto e a baixa vêm '
       + 'depois, cada um no seu botão.',
     passos: [
-      'Abra a aba Emissão e cobrança e escolha o mês.',
+      'Abra a aba Emissão e cobrança. Ela abre no mês que tem cobrança por emitir.',
       /* O BOTÃO NÃO SE CHAMA «Emitir em lote», e nunca se chamou nesta tela: o
-       * rótulo é «Emitir as N em rascunho», com o número dentro. Instrução que
-       * nomeia botão inexistente faz a pessoa duvidar de si — a mesma regra que
-       * `RM13` prende no roteiro do mês. Corrigido em 10/09/2026. */
-      'Clique em «Emitir as N em rascunho» para fechar todos os rascunhos de uma vez, ou emita '
-        + 'linha por linha.',
-      'Depois de emitida, a fatura ganha os botões de boleto e de baixa.',
+       * rótulo tem o número dentro. Instrução que nomeia botão inexistente faz a
+       * pessoa duvidar de si — a mesma regra que `RM13` prende no roteiro do
+       * mês. Corrigido em 10/09/2026, e de novo em 30/09 (etapa 2), quando
+       * «Emitir as N em rascunho» virou «Emitir N cobranças», com revisão. */
+      'Clique em «Emitir N cobranças», confira a lista e a soma e confirme em «Sim, emitir as N». '
+        + 'Para uma só, use «Emitir» na linha dela.',
+      'Emitidas, o próximo passo aparece no mesmo lugar: «Pedir os N boletos».',
     ],
     caminhos: [ir('/faturas', 'Abrir Emissão e cobrança'),
                ir('/documento', 'Antes: gerar as cobranças em Fatura unificada')],
@@ -872,14 +873,19 @@ export const TOPICOS: readonly Topico[] = [
   {
     id: 'gerar-boleto',
     pergunta: 'Cadê o boleto? Como gero o boleto de uma fatura?',
-    resposta: 'Na linha da fatura, na aba Emissão e cobrança, depois de emitida. O botão só funciona '
-      + 'com a conexão do banco configurada; sem ela, dá para cobrar por Pix ou importar um boleto '
-      + 'emitido no site do banco.',
+    resposta: 'Na aba Emissão e cobrança, depois de emitida: «Pedir os N boletos» pede os do mês de uma '
+      + 'vez, e «Pedir o boleto» pede o de uma linha. Só funciona com a conexão do banco configurada; '
+      + 'sem ela, dá para cobrar por Pix ou importar um boleto emitido no site do banco.',
     passos: [
-      'Abra a aba Emissão e cobrança e ache a fatura.',
-      'Emita a fatura, se ela ainda estiver em rascunho.',
-      'Clique em gerar o boleto na linha dela.',
-      'Não funcionou? Confira a aba Conector Sicoob: sem a credencial cadastrada o sistema não emite sozinho.',
+      'Abra a aba Emissão e cobrança.',
+      'Emita a cobrança, se ela ainda estiver em rascunho.',
+      /* UM NOME SÓ PARA PEDIR O BOLETO (30/09): eram três — «Gerar boleto» no
+       * painel da linha, «Pedir o boleto agora» na lista e «gerar o boleto»
+       * aqui. */
+      'Clique em «Pedir os N boletos», ou em «Pedir o boleto» na linha dela.',
+      'Recusou por falta de endereço? A linha mostra «Completar o endereço», que abre a unidade '
+        + 'certa em Unidades consumidoras. Grave o endereço e peça o boleto de novo.',
+      'Não funcionou por outro motivo? Confira a aba Conector Sicoob: sem a credencial cadastrada o sistema não emite sozinho.',
     ],
     caminhos: [
       ir('/faturas', 'Abrir Emissão e cobrança'),
@@ -897,8 +903,8 @@ export const TOPICOS: readonly Topico[] = [
     resposta: 'Na linha da fatura, colando a linha digitável. O sistema confere o valor e a data '
       + 'dentro do próprio código antes de aceitar — se não bater com a fatura, ele recusa.',
     passos: [
-      'Abra a aba Emissão e cobrança e ache a fatura.',
-      'Cole a linha digitável do boleto no campo da linha.',
+      'Abra a aba Emissão e cobrança e abra a linha da cobrança — o triângulo no começo dela.',
+      'Em «Boleto», clique em «Já emitiu este boleto no site do banco?» e cole a linha digitável.',
       'Clique em conferir: o sistema lê o valor e o vencimento de dentro do código.',
       'Se bater, importe. Se não bater, ele diz o que está diferente.',
     ],
@@ -915,8 +921,9 @@ export const TOPICOS: readonly Topico[] = [
       + 'ao cliente.',
     passos: [
       'Abra a aba Emissão e cobrança e ache a fatura emitida.',
-      'Copie o código de pagamento na linha dela — o botão de copiar evita errar um dígito.',
-      'Mande ao cliente. Quando ele pagar, dê baixa na mesma linha.',
+      'Abra a linha dela — o triângulo no começo — e copie o código de pagamento: o botão de '
+        + 'copiar evita errar um dígito.',
+      'Mande ao cliente. Quando ele pagar, registre o pagamento em «Baixa manual», na mesma linha.',
     ],
     caminhos: [ir('/faturas', 'Abrir Emissão e cobrança')],
     camada: null,
@@ -929,9 +936,12 @@ export const TOPICOS: readonly Topico[] = [
     resposta: 'Na aba Emissão e cobrança, na linha da própria fatura. É a baixa que dispara a '
       + 'divisão do dinheiro: a parte do dono da usina e a comissão de quem indicou nascem dela.',
     passos: [
-      'Abra a aba Emissão e cobrança.',
-      'Encontre a fatura do cliente.',
-      'Clique em «Registrar pagamento» na linha dela.',
+      'Abra a aba Emissão e cobrança e abra a linha da cobrança do cliente — o triângulo no começo.',
+      'Em «Baixa manual», confira a data, os juros e a multa e clique em «Registrar pagamento».',
+      /* [30/09] O PAGAMENTO PASSA POR UM RESUMO: ele não se desfaz, e o botão
+       * deixou de ser o laranja do painel. */
+      'Confira o resumo — o valor aberto em parcelas e a data — e confirme em «Sim, registrar o '
+        + 'pagamento». Isto não se desfaz pelo sistema.',
       'O que a empresa passa a dever aparece sozinho na aba Contas a pagar.',
     ],
     caminhos: [ir('/faturas', 'Abrir Emissão e cobrança'), ver('/contas-a-pagar', 'Depois: o que a empresa deve')],
@@ -953,8 +963,9 @@ export const TOPICOS: readonly Topico[] = [
       /* «gere o mês de novo na aba Faturamento» saiu em 10/09/2026 com a aba. E
        * o conserto real nunca foi «gerar de novo»: a cobrança já existe, e o
        * caminho é cancelá-la para a conta lida voltar a ser faturável. */
-      'Corrigido o cadastro, cancele a cobrança errada na aba Emissão e cobrança — a conta lida '
-        + 'volta a ser faturável — e gere de novo na aba Fatura unificada.',
+      'Corrigido o cadastro, cancele a cobrança errada na aba Emissão e cobrança — no menu de três '
+        + 'pontos da linha, «Cancelar esta cobrança…», com o motivo. A conta lida volta a ser '
+        + 'faturável, e você gera de novo na aba Fatura unificada.',
     ],
     caminhos: [
       ir('/unidades', 'Conferir preço do kWh e fatia'),

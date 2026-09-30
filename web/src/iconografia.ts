@@ -63,6 +63,13 @@ export type NomeDeIcone =
    * mesmo desenho significando "abre outro sistema em outra aba" seria a pessoa
    * descobrindo a diferenca depois do clique. */
   | 'abrir_externo'
+  /* A LINHA DA TABELA DE EMISSÃO (30/09, etapa 2). `mais_acoes` são os três
+   * pontos do menu da linha — onde mora o que desfaz («Cancelar esta
+   * cobrança»), fora da linha principal. `abrir_linha` é o triângulo de abrir o
+   * painel da linha, que vira `abrir_menu` (para baixo) quando ela está aberta.
+   * `ir_para` é a seta do ato que LEVA a outra tela («Completar o endereço»):
+   * quem clica precisa saber antes que vai sair daqui. */
+  | 'mais_acoes' | 'abrir_linha' | 'ir_para'
   // cobrança e documento
   | 'boleto' | 'pix' | 'certificado'
   // movimento: as duas que existem para ANIMAR, não para informar

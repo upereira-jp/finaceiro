@@ -707,13 +707,13 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
    * de sempre. Não há segunda montagem da folha.
    *
    * Sobrescreve o que está em edição, então pergunta antes — pelo mesmo motivo
-   * que `novaFatura` pergunta.
+   * que `novaFatura` pergunta. [30/09, etapa 2] A pergunta saiu do
+   * `window.confirm` e foi para a linha da lista que pediu a 2ª via
+   * (`TabelaDasRegistradas`), e só acontece quando HÁ conta em edição: sem ela,
+   * não há o que substituir.
    */
   async function carregarSegundaVia(r: RegistroDeFatura) {
     const mes = mesCurto(mesDoRegistro(r));
-    if (!window.confirm(
-      `Abrir a 2ª via de ${mes} da unidade ${r.numero_uc}?\n\n`
-      + 'O que estiver em edição agora será substituído.')) return;
     /* A FALHA SOBE PARA QUEM PEDIU: o pedido nasce na lista de registradas, com
      * a gaveta fechada, e e la que a frase tem de aparecer. */
     {
@@ -750,8 +750,8 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
    * abas que mostram a conta em edição.
    */
   function novaFatura() {
-    if (!window.confirm('Começar uma nova fatura? Os dados em edição serão apagados. '
-                      + 'As faturas já registradas ficam.')) return;
+    /* [30/09, etapa 2] SEM `window.confirm`: a pergunta, quando há o que
+       perder, acontece na própria barra das abas (`Abas`, prop `confirmar`). */
     setCampos(CAMPOS_DA_FATURA_VAZIOS);
     setBoleto(BOLETO_LIDO_VAZIO);
     esquecerParametros();
@@ -790,6 +790,12 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
     }
   }
 
+  /** A conta em edição, dita como a pessoa a reconhece — ou `null` quando não
+   *  há nenhuma, e aí «Nova fatura» e «2ª via» não têm o que perder nem por que
+   *  perguntar. */
+  const contaEmEdicao = campos.unidade_consumidora.trim()
+    ? `unidade ${campos.unidade_consumidora.trim()}`
+    : campos.cliente.trim() || null;
   const resumo = useMemo(() => resumoDoLote(lote, ucsDoCadastro), [lote, ucsDoCadastro]);
   const vizinhos = vizinhosNaFila(lote, ucsDoCadastro, abertoId);
   const itemAberto = abertoId ? lote.find((i) => i.id === abertoId) ?? null : null;
@@ -801,7 +807,7 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
   return (
     <>
       <Abas atual={aba} ao={irPara}
-            acao={aba === 'cadastro' ? null : { texto: 'Nova fatura', ao: novaFatura }} />
+            acao={aba === 'cadastro' ? null : { texto: 'Nova fatura', ao: novaFatura, confirmar: contaEmEdicao }} />
 
       <div id={`fu-painel-${aba}`} role="tabpanel" aria-labelledby={`fu-aba-${aba}`}>
         {aba === 'leitura' && (
@@ -828,7 +834,7 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
                    nada a registrar — o passo seguinte do mes. */
                 principal={resumo.prontos === 0}
                 unidade={unidadeDaLista} aoMudarUnidade={verUnidadeNaLista}
-                segundaVia={carregarSegundaVia}
+                segundaVia={carregarSegundaVia} emEdicao={contaEmEdicao}
                 aoMudar={() => {
                   setRegistrosVersao((v) => v + 1);
                   /* A folha 2 imprime a economia acumulada: apagar um registro a
@@ -929,8 +935,12 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
  */
 function Abas({ atual, ao, acao }: {
   atual: Aba;
-  ao: (a: Aba) => void; acao: { texto: string; ao: () => void } | null;
+  ao: (a: Aba) => void;
+  /** `confirmar`: o que se perde — a pergunta acontece NA BARRA, com o foco em
+   *  «Manter», e só quando há algo a perder. */
+  acao: { texto: string; ao: () => void; confirmar?: string | null } | null;
 }) {
+  const [perguntando, setPerguntando] = useState(false);
   /* Setas andam, Home e End vao aos extremos — o padrao WAI-ARIA de `tablist`. */
   const teclado = (e: React.KeyboardEvent) => {
     const i = ABAS.indexOf(atual);
@@ -968,7 +978,26 @@ function Abas({ atual, ao, acao }: {
       {/* BOTAO COMUM E NAO `fu-aba`: ele nao seleciona painel nenhum. Fica FORA
           do `tablist` desde 30/09 — dentro dele, a seta do teclado o pularia e o
           leitor de tela o contaria como quarta aba. */}
-      {acao && <button type="button" onClick={acao.ao}>{acao.texto}</button>}
+      {acao && !perguntando && (
+        <button type="button" onClick={() => (acao.confirmar ? setPerguntando(true) : acao.ao())}>{acao.texto}</button>
+      )}
+      {/* [30/09, etapa 2] A PERGUNTA DO «Nova fatura», no lugar do
+          `window.confirm`: ela fica na barra onde o botão estava, diz o que sai
+          (a conta em edição) e o que fica (as registradas). */}
+      {acao && perguntando && (
+        <div className="fu-pergunta" role="group" aria-label="Confirmar a nova fatura"
+             onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); setPerguntando(false); } }}>
+          <span className="fu-pergunta-texto">
+            Apagar a conta em edição ({acao.confirmar}) e começar outra? As contas registradas ficam.
+          </span>
+          <span className="fu-acoes">
+            <button type="button" autoFocus onClick={() => setPerguntando(false)}>Manter</button>
+            <button type="button" className="fu-perigo" onClick={() => { setPerguntando(false); acao.ao(); }}>
+              Começar outra
+            </button>
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -1493,14 +1522,16 @@ function SerieDaUnidade({ uc, mes, versao, verNaLista }: {
  * quem sabe se falta contrato, geracao ou vencimento e a triagem, e duplicar a
  * decisao aqui daria duas respostas para a mesma pergunta.
  */
-function ContasRegistradas({ versao, principal, unidade, aoMudarUnidade, segundaVia, aoMudar }: {
+function ContasRegistradas({ versao, principal, unidade, aoMudarUnidade, segundaVia, emEdicao, aoMudar }: {
   versao: number;
   principal: boolean;
   unidade: string | null;
   aoMudarUnidade: (uc: string | null) => void;
   segundaVia: (r: RegistroDeFatura) => Promise<void>;
+  emEdicao: string | null;
   aoMudar: () => void;
 }) {
+  const [confirmandoSegundaVia, setConfirmandoSegundaVia] = useState<string | null>(null);
   const [lista, setLista] = useState<RegistroDeFatura[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   /** `undefined`: ninguem escolheu, vale o padrao (`mesPadrao`). `null`: todos. */
@@ -1661,6 +1692,19 @@ function ContasRegistradas({ versao, principal, unidade, aoMudarUnidade, segunda
       aoEnsaiar={(r) => void ensaiar(r)} aoEnsaiarTodas={() => void ensaiarTodas()}
       aoSegundaVia={(r) => {
         segundaVia(r).catch((e) => setErro(`Não foi possível abrir a 2ª via: ${naMensagem(e)}`));
+      }}
+      emEdicao={emEdicao} confirmandoSegundaVia={confirmandoSegundaVia}
+      aoPedirSegundaVia={(id) => {
+        const antes = confirmandoSegundaVia;
+        setConfirmandoSegundaVia(id);
+        /* «Manter a edição» devolve o foco ao «2ª via» que abriu a pergunta. */
+        if (id === null && antes) {
+          const r = todas.find((x) => x.id === antes);
+          if (r) {
+            const rotulo = `2ª via de ${mesCurto(mesDoRegistro(r))} da unidade ${r.numero_uc}`;
+            requestAnimationFrame(() => document.querySelector<HTMLElement>(`button[aria-label="${rotulo}"]`)?.focus());
+          }
+        }
       }}
       excluindo={excluindo} aoPedirExclusao={pedirExclusao} aoExcluir={(r) => void excluir(r)}
       aoVerUnidade={aoMudarUnidade}

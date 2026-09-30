@@ -20,7 +20,7 @@
 // deixou de estar aberto. A tela pergunta a MESMA funcao do servidor
 // (`faltamNoEndereco`), entao ela nao pode mais discordar dele.
 
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { api, type UnidadeConsumidora, type Usina } from '../api.ts';
 import { PainelDoVinculo } from '../vinculo-do-crm-corpo.tsx';
 import type { VinculoNaTela } from '../vinculo-do-crm.ts';
@@ -36,8 +36,9 @@ import {
   CAMPOS_DO_ENDERECO, tomDoEndereco, rotuloDoEndereco, enderecoEmiteBoleto,
   type SituacaoDaUc,
 } from '../unidades-regras.ts';
-import { decimalTexto } from '../dinheiro.ts';
-import { FILTROS_DA_TELA, filtroDaConsulta } from '../destino-da-camada.ts';
+import { decimalTexto, mesDaQuery } from '../dinheiro.ts';
+import { FILTROS_DA_TELA, filtroDaConsulta, unidadeDaConsulta } from '../destino-da-camada.ts';
+import { Ligacao } from '../rota.tsx';
 import { separarEndereco, completarVazios, faltamNaProposta, avisoDoCepDaConta } from '../endereco-da-conta.ts';
 import { cepDeOutraUf } from '../../../src/dominio/cep.ts';
 
@@ -64,7 +65,23 @@ export function TelaUnidades() {
   const [rateio, setRateio] = useState<Record<string, string>>({});
   const [tarifa, setTarifa] = useState<Record<string, string>>({});
 
-  const [busca, setBusca] = useState('');
+  /*
+   * A UNIDADE PEDIDA PELO ENDERECO (`/unidades?uc=<numero>&mes=AAAA-MM`) —
+   * 30/09/2026, etapa 2 do redesenho.
+   *
+   * E o destino de «Completar o endereço», na tela de Emissao e cobranca: a
+   * recusa de boleto por endereco e sobre UMA unidade, e cair numa lista de 41
+   * linhas para procurar o numero de novo era o trabalho que o botao existe para
+   * tirar. A lista abre JA buscada nesse numero, com o endereco da linha aberto
+   * e o primeiro campo vazio com o foco; o `mes` e o da volta.
+   *
+   * LIDO SO NA MONTAGEM, como o filtro de pendencia: depois disso quem manda e a
+   * busca, e apaga-la mostra a lista inteira de novo.
+   */
+  const [alvo] = useState(() => unidadeDaConsulta(location.search));
+  const [mesDeVolta] = useState(() => mesDaQuery(location.search));
+  const alvoAplicado = useRef(false);
+  const [busca, setBusca] = useState(() => alvo ?? '');
   const [situacao, setSituacao] = useState('');
   /*
    * A PENDENCIA PODE VIR NO ENDERECO, e e por ela que a tela de Pendencias
@@ -84,6 +101,19 @@ export function TelaUnidades() {
    *  linhas seriam 287 caixas de texto desenhadas de uma vez. */
   const [enderecoAberto, setEnderecoAberto] = useState<string | null>(null);
   const { ordem, alternar } = useOrdenacao('uc');
+
+  const ucDoAlvo = alvo ? (ucs.dado ?? []).find((u) => u.numero_uc.replace(/\D/g, '') === alvo) ?? null : null;
+  useEffect(() => {
+    if (!ucDoAlvo || alvoAplicado.current) return;
+    alvoAplicado.current = true;
+    setEnderecoAberto(ucDoAlvo.id);
+    requestAnimationFrame(() => {
+      const painel = document.getElementById(`endereco-${ucDoAlvo.id}`);
+      painel?.scrollIntoView({ block: 'center' });
+      const vazio = [...(painel?.querySelectorAll<HTMLInputElement>('.campos input') ?? [])].find((i) => !i.value.trim());
+      (vazio ?? painel?.querySelector<HTMLInputElement>('.campos input'))?.focus({ preventScroll: true });
+    });
+  }, [ucDoAlvo]);
 
   const nomeUsina = (id: string | null) =>
     usinas.dado?.find((u) => u.id === id)?.codigo_geradora ?? (id ? '—' : null);
@@ -201,6 +231,27 @@ export function TelaUnidades() {
         Antes, os três terminavam num identificador interno, que é onde a leitura
         para para quem não conhece o projeto.
       */}
+      {/* DE ONDE A PESSOA VEIO, e como volta. Some o pedido quando o endereco
+          fica completo: a frase passa a ser a da volta, com o boleto como o
+          proximo passo. */}
+      {alvo && ucDoAlvo && (
+        enderecoEmiteBoleto(ucDoAlvo) ? (
+          <Aviso tipo="ok">
+            O endereço da unidade <strong>{ucDoAlvo.numero_uc}</strong> está completo — o banco já
+            aceita o boleto dela.{' '}
+            <Ligacao para={mesDeVolta ? `/faturas?mes=${mesDeVolta}` : '/faturas'}>Voltar à Emissão e cobrança</Ligacao>{' '}
+            e peça o boleto.
+          </Aviso>
+        ) : (
+          <Aviso tipo="alerta">
+            O boleto da unidade <strong>{ucDoAlvo.numero_uc}</strong> é recusado por falta de endereço
+            ({rotuloDoEndereco(ucDoAlvo).replace(/^Falta /, 'falta ')}). Complete logo abaixo e grave;
+            depois,{' '}
+            <Ligacao para={mesDeVolta ? `/faturas?mes=${mesDeVolta}` : '/faturas'}>volte à Emissão e cobrança</Ligacao>{' '}
+            e peça o boleto de novo.
+          </Aviso>
+        )
+      )}
       {semVencimento > 0 && (
         <Aviso tipo="erro">
           <strong>{semVencimento} unidade(s) sem dia de vencimento.</strong> Sem ele a cobrança
@@ -369,7 +420,7 @@ export function TelaUnidades() {
               {/* `--fundo-recuo` e a terceira superficie da paleta, a mesma que o
                   painel da aba Faturas usa: sem ela o painel aberto se confunde
                   com a linha seguinte da tabela. */}
-              <td colSpan={8} style={{ background: 'var(--fundo-recuo)' }}>
+              <td colSpan={8} id={`endereco-${u.id}`} style={{ background: 'var(--fundo-recuo)' }}>
                 <EnderecoDoPagador uc={u} ocupado={acao.ocupado}
                                    daConta={daConta.dado?.find((c) => c.numero_uc === u.numero_uc)}
                                    aoGravar={(campos) => void salvarEndereco(u, campos)} />

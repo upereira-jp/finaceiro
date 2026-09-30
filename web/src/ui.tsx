@@ -26,7 +26,7 @@
 // `Carregando` (a engrenagem com o sol da G3).
 
 import { useEffect, useRef, useState } from 'react';
-import type { ReactNode, CSSProperties } from 'react';
+import type { ReactNode, CSSProperties, KeyboardEvent as EventoDeTecla } from 'react';
 import { lerModo, aplicarModo, type ModoTema } from './tema.ts';
 import { Icone, Logotipo } from './icones.tsx';
 import { ICONE_DO_ESTADO, ICONE_DO_AVISO, type NomeDeIcone } from './iconografia.ts';
@@ -528,31 +528,94 @@ export const Ferramentas = ({ children, contagem }: { children: ReactNode; conta
  * gruda na tela: sem clique fora a pessoa precisa achar o gatilho de novo, sem
  * `Escape` quem usa teclado fica preso, e sem fechar ao escolher o menu tapa o
  * efeito da propria escolha.
+ *
+ * [30/09, etapa 2] O TECLADO ANDA DENTRO DELE. A critica de 30/09 mediu o que
+ * faltava para quem nao usa mouse: o menu abria e o foco ficava no gatilho, as
+ * setas nao faziam nada e o `Escape` fechava deixando o foco solto. Agora e o
+ * padrao de menu da WAI-ARIA, o mesmo que o seletor de setor ja fazia:
+ *
+ *   - abrir leva o foco ao primeiro item (ou ao marcado, num grupo de radio);
+ *   - seta para baixo/para cima anda e da a volta; Home e End vao as pontas;
+ *   - seta para baixo no gatilho FECHADO abre;
+ *   - `Escape` fecha e DEVOLVE o foco ao gatilho; Tab para fora fecha.
+ *
+ * Os itens sao os `button` com `role` de item de menu dentro do painel — quem
+ * monta o menu ja os escrevia assim.
+ *
+ * `soIcone` e para o menu de uma LINHA de tabela («mais acoes»): o gatilho vira
+ * o quadrado de 30px do `BotaoDeIcone`, e o `rotulo` e o nome dele para o leitor
+ * de tela e para o `title`.
  */
-export function Menu(p: { gatilho: ReactNode; rotulo: string; children: ReactNode }) {
+export function Menu(p: {
+  gatilho: ReactNode; rotulo: string; children: ReactNode;
+  soIcone?: boolean; className?: string;
+}) {
   const [aberto, setAberto] = useState(false);
   const caixa = useRef<HTMLDivElement>(null);
+  const botao = useRef<HTMLButtonElement>(null);
+
+  const itens = (): HTMLButtonElement[] => Array.from(
+    caixa.current?.querySelectorAll<HTMLButtonElement>(
+      '.menu-painel [role="menuitem"]:not(:disabled), .menu-painel [role="menuitemradio"]:not(:disabled)') ?? []);
+
+  const fechar = (devolverFoco: boolean) => {
+    setAberto(false);
+    if (devolverFoco) botao.current?.focus();
+  };
 
   useEffect(() => {
     if (!aberto) return;
+    const lista = itens();
+    (lista.find((b) => b.getAttribute('aria-checked') === 'true') ?? lista[0])?.focus();
     const fora = (e: MouseEvent) => {
       if (!caixa.current?.contains(e.target as Node)) setAberto(false);
     };
-    const tecla = (e: KeyboardEvent) => { if (e.key === 'Escape') setAberto(false); };
+    const tecla = (e: KeyboardEvent) => { if (e.key === 'Escape') fechar(true); };
     addEventListener('mousedown', fora);
     addEventListener('keydown', tecla);
     return () => { removeEventListener('mousedown', fora); removeEventListener('keydown', tecla); };
   }, [aberto]);
 
+  const aoTeclar = (e: EventoDeTecla<HTMLDivElement>) => {
+    const lista = itens();
+    if (lista.length === 0) return;
+    const i = lista.indexOf(document.activeElement as HTMLButtonElement);
+    const ir = (j: number) => { e.preventDefault(); lista[(j + lista.length) % lista.length]?.focus(); };
+    if (e.key === 'ArrowDown') ir(i + 1);
+    else if (e.key === 'ArrowUp') ir(i < 0 ? lista.length - 1 : i - 1);
+    else if (e.key === 'Home') ir(0);
+    else if (e.key === 'End') ir(lista.length - 1);
+  };
+
   return (
-    <div className="menu" ref={caixa}>
-      <button type="button" aria-haspopup="menu" aria-expanded={aberto} aria-label={p.rotulo}
-              onClick={() => setAberto((v) => !v)}>
+    <div className={`menu${p.className ? ` ${p.className}` : ''}`} ref={caixa}
+         onBlur={(e) => {
+           /* O foco saiu da caixa (Tab depois do ultimo item): fecha. So com
+              destino, pelo mesmo motivo escrito no seletor de setor. */
+           if (aberto && e.relatedTarget && !caixa.current?.contains(e.relatedTarget as Node)) setAberto(false);
+         }}>
+      <button ref={botao} type="button" aria-haspopup="menu" aria-expanded={aberto} aria-label={p.rotulo}
+              title={p.soIcone ? p.rotulo : undefined}
+              className={p.soIcone ? 'so-icone' : undefined}
+              onClick={() => setAberto((v) => !v)}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowDown' && !aberto) { e.preventDefault(); setAberto(true); }
+              }}>
         {p.gatilho}
-        <Icone nome="abrir_menu" tamanho={12} peso="bold" />
+        {!p.soIcone && <Icone nome="abrir_menu" tamanho={12} peso="bold" />}
       </button>
       {aberto && (
-        <div className="menu-painel" role="menu" onClick={() => setAberto(false)}>
+        <div className="menu-painel" role="menu" aria-label={p.rotulo} onKeyDown={aoTeclar}
+             onClick={(e) => {
+               /* Escolher fecha. O foco volta ao gatilho so se o item nao o
+                  levou para outro lugar (uma confirmacao que se abre, por ex.). */
+               if ((e.target as Element).closest('[role^="menuitem"]')) {
+                 setAberto(false);
+                 requestAnimationFrame(() => {
+                   if (!document.activeElement || document.activeElement === document.body) botao.current?.focus();
+                 });
+               }
+             }}>
           {p.children}
         </div>
       )}

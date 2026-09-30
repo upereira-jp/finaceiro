@@ -33,7 +33,7 @@
 //   «UC» NAO APARECE ESCRITO. A suite de vocabulario das telas recusa a sigla;
 //   a tela diz «unidade».
 
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { RegistroDeFatura } from './api.ts';
 import { Aviso, BotaoDeIcone, Filtro, Icone, Interruptor, Marca, Tabela } from './ui.tsx';
 import { Ligacao } from './rota.tsx';
@@ -103,12 +103,18 @@ export type PropsDaFila = {
  * primeira dobra da tela mais usada do sistema.
  */
 export function TabelaDaFila(p: PropsDaFila) {
+  /* [30/09, etapa 2] «LIMPAR A FILA» PERGUNTA — na propria barra, e so quando
+     ha o que perder. Ate aqui ela tirava tudo num clique, inclusive contas lidas
+     e conferidas que ainda nao tinham sido registradas: cada uma delas custou
+     uma leitura paga, e voltar exigia enviar e ler de novo. */
+  const [confirmandoLimpeza, setConfirmandoLimpeza] = useState(false);
   const repetidas = chavesRepetidas(p.itens);
   const resumo = resumoDoLote(p.itens, p.ucs);
   const ordenados = ordemDaFila(p.itens, p.ucs);
   const prontos = ordenados.filter((i) => podeRegistrar(i, p.ucs, repetidas)).map((i) => i.id);
 
   if (p.itens.length === 0) return null;
+  const naoRegistradas = p.itens.filter((i) => i.estado !== 'registrado').length;
 
   const partes = [
     `${resumo.total} ${resumo.total === 1 ? 'arquivo' : 'arquivos'}`,
@@ -125,21 +131,41 @@ export function TabelaDaFila(p: PropsDaFila) {
           <h2 id="fu-fila-titulo">Fila deste mês</h2>
           <p className="fu-bloco-resumo">{partes.join(' · ')}</p>
         </div>
-        <div className="fu-bloco-acoes">
-          <button type="button" className="discreto" disabled={p.registrando} onClick={p.limpar}>
-            Limpar a fila
-          </button>
-          {/* O BOTAO DIZ QUANTAS, e nao "registrar tudo": ele age SO sobre as
-              linhas conferidas, e o numero e a promessa do que vai acontecer. */}
-          <button type="button" className={p.principal ? 'primario' : undefined}
-                  disabled={p.registrando || prontos.length === 0}
-                  onClick={() => p.registrar(prontos)}>
-            {p.registrando && <Icone nome="carregando" tamanho={15} />}
-            {p.registrando
-              ? 'Registrando…'
-              : `Registrar ${prontos.length} ${prontos.length === 1 ? 'conta conferida' : 'contas conferidas'}`}
-          </button>
-        </div>
+        {confirmandoLimpeza ? (
+          <div className="fu-bloco-acoes fu-pergunta" role="group" aria-label="Confirmar a limpeza da fila"
+               onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); setConfirmandoLimpeza(false); } }}>
+            <span className="fu-pergunta-texto">
+              {naoRegistradas === 1
+                ? 'Limpar a fila? 1 conta lida ainda não foi registrada e precisaria ser enviada de novo.'
+                : `Limpar a fila? ${naoRegistradas} contas lidas ainda não foram registradas e precisariam ser enviadas de novo.`}
+              {' '}As registradas ficam.
+            </span>
+            <span className="fu-acoes">
+              <button type="button" autoFocus onClick={() => setConfirmandoLimpeza(false)}>Manter a fila</button>
+              <button type="button" className="fu-perigo"
+                      onClick={() => { setConfirmandoLimpeza(false); p.limpar(); }}>Limpar a fila</button>
+            </span>
+          </div>
+        ) : (
+          <div className="fu-bloco-acoes">
+            {/* SO PERGUNTA QUANDO HA O QUE PERDER: com tudo registrado, limpar
+                a fila nao tira nada que nao esteja gravado. */}
+            <button type="button" className="discreto" disabled={p.registrando}
+                    onClick={() => (naoRegistradas > 0 ? setConfirmandoLimpeza(true) : p.limpar())}>
+              Limpar a fila
+            </button>
+            {/* O BOTAO DIZ QUANTAS, e nao "registrar tudo": ele age SO sobre as
+                linhas conferidas, e o numero e a promessa do que vai acontecer. */}
+            <button type="button" className={p.principal ? 'primario' : undefined}
+                    disabled={p.registrando || prontos.length === 0}
+                    onClick={() => p.registrar(prontos)}>
+              {p.registrando && <Icone nome="carregando" tamanho={15} />}
+              {p.registrando
+                ? 'Registrando…'
+                : `Registrar ${prontos.length} ${prontos.length === 1 ? 'conta conferida' : 'contas conferidas'}`}
+            </button>
+          </div>
+        )}
       </div>
 
       {resumo.comPendencia > 0 && (
@@ -239,6 +265,13 @@ export type PropsDasRegistradas = {
   aoEnsaiar: (r: RegistroDeFatura) => void;
   aoEnsaiarTodas: () => void;
   aoSegundaVia: (r: RegistroDeFatura) => void;
+  /** [30/09, etapa 2] A conta em edicao que a 2a via substituiria («unidade
+   *  1234»), ou `null` quando nao ha nenhuma — e ai a 2a via abre sem perguntar,
+   *  porque nao ha nada a perder. */
+  emEdicao?: string | null;
+  /** A linha cuja 2a via espera confirmacao, na propria linha. */
+  confirmandoSegundaVia?: string | null;
+  aoPedirSegundaVia?: (id: string | null) => void;
   excluindo: string | null;
   aoPedirExclusao: (id: string | null) => void;
   aoExcluir: (r: RegistroDeFatura) => void;
@@ -421,7 +454,8 @@ export function TabelaDasRegistradas(p: PropsDasRegistradas) {
                         mes, remontado do que foi gravado. */}
                     <button type="button" className="discreto"
                             aria-label={`2ª via de ${mes} da unidade ${r.numero_uc}`}
-                            onClick={() => p.aoSegundaVia(r)}>2ª via</button>
+                            onClick={() => (p.emEdicao && p.aoPedirSegundaVia
+                              ? p.aoPedirSegundaVia(r.id) : p.aoSegundaVia(r))}>2ª via</button>
                     {semCobranca(r) && (
                       <button type="button" className="discreto"
                               disabled={p.ensaiando !== null || p.rodando}
@@ -443,6 +477,32 @@ export function TabelaDasRegistradas(p: PropsDasRegistradas) {
                 </td>
               </tr>
             );
+            if (p.confirmandoSegundaVia === r.id && p.emEdicao) {
+              /* A 2a VIA SUBSTITUI A CONTA EM EDICAO, e a pergunta mora na linha
+                 que a pediu — ate 30/09 era um `window.confirm`. Ambar e nao
+                 vermelho: nada e apagado do banco, o que sai e o rascunho da
+                 tela. O foco nasce em «Manter a edição». */
+              return [linha, (
+                <tr key={`${r.id}-segunda-via`} className="fu-confirma fu-confirma-aviso">
+                  <td colSpan={colunas + 1}>
+                    <div className="fu-confirma-caixa" role="group" aria-label="Confirmar a 2ª via"
+                         onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); p.aoPedirSegundaVia?.(null); } }}>
+                      <span>
+                        Abrir a 2ª via de <strong>{mes}</strong> da unidade <strong>{r.numero_uc}</strong>?
+                        {' '}A conta em edição agora ({p.emEdicao}) sai da tela — o que nela não foi
+                        registrado se perde.
+                      </span>
+                      <span className="fu-acoes">
+                        <button type="button" autoFocus onClick={() => p.aoPedirSegundaVia?.(null)}>Manter a edição</button>
+                        <button type="button" onClick={() => { p.aoPedirSegundaVia?.(null); p.aoSegundaVia(r); }}>
+                          Abrir a 2ª via
+                        </button>
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              )];
+            }
             if (p.excluindo !== r.id) return [linha];
             return [linha, (
               <tr key={`${r.id}-excluir`} className="fu-confirma">
