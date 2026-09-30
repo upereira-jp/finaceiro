@@ -1344,6 +1344,46 @@ reprova nada que está no ar.
 
 ---
 
+## 2.u Decisões técnicas de 30/09/2026 — a pasta «Administração da plataforma»: cadastrar gente e marcar os setores de cada um
+
+**Dono: o implementador** (§2.b), salvo o que está marcado como do dono.
+
+### O que motivou
+
+Pedido do dono em 30/09: *"o sistema financeiro está sem configurações de admin como: adicionar usuário [...] onde
+existe o seletor que separa para setores financeiros, crie uma nova pasta, que ao invés de setores financeiros é
+Administração da plataforma, nela coloque as telas de funções de admin. o que preciso nesse momento é de adicionar
+usuários ao sistema. e uma configuração de quais setores eles podem visualizar, isso deve ser marcado por
+checkbox."* E, na mesma conversa: *"os administradores são o jppereirraworkspace e vinicius leal"*.
+
+Medido no mesmo dia: **zero rotas de gestão de usuário**. Cadastrar a segunda pessoa era
+`scripts/provisionar-usuario.sql` com a `DIRECT_URL` de dono, mais o painel do Supabase para a conta de login.
+
+### As decisões
+
+| # | Decisão | Por quê |
+|:--:|---|---|
+| 1 | **`usuario_tenant.setores text[]`** (migration 41), com três CHECKs: setor conhecido (`rateio`, `empresa`, `administracao`), ao menos um, e **`administracao` só com papel `admin`** | O que a pessoa VÊ mora no vínculo, porque é decisão de cada empresa. O papel continua dizendo o que ela pode FAZER (PRD §3). Ver a pasta sem poder administrar seria tela que recusa todo clique |
+| 2 | **Administrar exige as duas coisas**: papel `admin` **e** a pasta marcada (`app.administra_a_plataforma()`), conferido no repositório e de novo dentro das funções do banco | A G3 tem três pessoas `admin` (só `admin` escreve cadastro) e o dono nomeou **duas** para administrar. Papel sozinho daria a pasta à terceira |
+| 3 | **Nenhum uuid de pessoa na migration.** Quem começa com a pasta é quem já administra a plataforma hoje: papel `admin` de quem tem tier `plataforma_admin` — em produção, **só o Vinicius** | A migration 40 já registrou que migration com uuid de um tenant mente sobre ser schema. O João Pedro recebe a pasta por **uma caixa marcada pelo Vinicius** na tela nova. A alternativa ("todo admin ganha, depois se desmarca") mostraria a pasta à Renata por um tempo, contra o que o dono disse |
+| 4 | **Duas funções SECURITY DEFINER novas** (`usuarios_do_tenant`, `vincular_usuario`), na lista fechada da inv. 19 com motivo | A policy de `usuario` esconde o membro **desligado** (a tela que desliga precisa mostrá-lo para religar) e só deixa **inserir** o tier `plataforma_admin`. As duas tiram o tenant do contexto e recusam com 42501 — `tests/administracao.sql` (23 verificações) |
+| 5 | **A conta de login é criada pela API administrativa do Supabase Auth**, com e-mail já confirmado, usando a chave secreta do projeto em `SUPABASE_SERVICE_ROLE_KEY` (segredo de plataforma, regra 5) | O signup público deixaria a conta sem confirmação (o projeto tem `mailer_autoconfirm: false`) e o SMTP padrão só manda e-mail para a equipe do projeto. Sem a chave o processo sobe e só o botão de cadastrar responde 503 nomeado |
+| 6 | **As chamadas ao Supabase Auth ficam fora de transação**, em três unidades curtas, com `pedido`/`feito`/`falhou` em `ato_externo_log` (`criar_conta_de_acesso`) | A lição do leitor da fatura (14/08). Se o vínculo falhar depois da conta criada, tentar de novo acha a conta pelo e-mail e liga. A senha não vai para trilha, log nem resposta |
+| 7 | **Conta que já existia no Auth sem nunca ter tido acesso** recebe a senha digitada; **conta de quem já usa o sistema** guarda a senha dela | Sem vínculo o login é recusado, então ninguém pode estar usando aquela senha. Trocar a senha de quem trabalha em outra empresa seria surpresa |
+| 8 | **Ninguém tira de si mesmo** a pasta, o papel `admin` nem o acesso (422) | O banco aceitaria, e a pasta sumiria no próximo clique. Como toda mudança exige alguém que administra e esse alguém nunca se remove, sempre sobra um |
+| 9 | **A conta de serviço do conector Sicoob fica travada** na tela e no servidor (`ContaDeServico`, 422) | É por ela que o webhook de liquidação entra. Desligá-la faria os pagamentos deixarem de ser baixados |
+| 10 | **Cada caixa grava sozinha** (PATCH na hora); a caixa que não pode mudar aparece travada e diz por quê | É uma matriz pessoa × setor, e o pedido foi "marcado por checkbox". Um «salvar» a mais é um passo para esquecer |
+
+### O que fica aberto
+
+- **`Q-SETOR-DADO-01` 🟡 (dono: o implementador).** O setor governa a **tela** — menu, barra e o desvio de um
+  endereço de setor oculto. O **dado** continua governado pelo papel, como sempre foi: uma pessoa `financeiro`
+  sem o setor Rateio ainda recebe 200 se chamar a API de clientes à mão. Fechar isso no servidor exige mapear as
+  ~120 rotas por setor, e várias servem aos dois lados (Contas a receber lê faturas). Fica registrado em vez de
+  meio-feito.
+- **Do dono:** pôr `SUPABASE_SERVICE_ROLE_KEY` em `/etc/financeiro.env` antes do deploy (sem ela, o botão
+  «Criar acesso» avisa e não cria); e, depois do deploy, marcar a caixa «Administração» do João Pedro.
+
 ## 3. F0 — o que falta para fechar
 
 Entregas da F0 conforme `PRD-v2.2` §10:

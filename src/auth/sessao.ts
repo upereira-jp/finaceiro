@@ -16,8 +16,13 @@ import {
   withTenantEm, withTenantRelatorioEm, registrarAcessoDePlataforma,
   TenantNaoEncontrado, type Identidade, type Tier, type ClientTx,
 } from '../db/contexto.ts';
+import { setoresDoLogin, type Setor } from '../dominio/acesso.ts';
 
-export type VinculoDaSessao = { tenantId: string; razaoSocial: string; papel: string };
+/**
+ * `setores` entrou em 30/09/2026 (migration 41): o que o vinculo VE na tela. O
+ * papel continua sendo o que ele PODE FAZER — ver `src/dominio/acesso.ts`.
+ */
+export type VinculoDaSessao = { tenantId: string; razaoSocial: string; papel: string; setores: Setor[] };
 
 export type Sessao = {
   usuarioId: string;
@@ -56,16 +61,29 @@ type Executor = { $queryRaw: (...a: any[]) => Promise<any> } & Record<string, an
  * Medido em 26/07: a forma ingenua devolvia zero linhas, e o login era impossivel.
  */
 export async function resolverLogin(executor: Executor, authUserId: string): Promise<Sessao> {
+  /*
+   * `SELECT *`, e nao a lista de colunas, DE PROPOSITO e so aqui (30/09/2026).
+   *
+   * A migration 41 acrescentou `setores` ao retorno. Os timers do ciclo carregam
+   * ESTE arquivo da arvore de trabalho e fazem login a cada tique — sem esperar
+   * deploy nem migration. Com a coluna nomeada, o codigo salvo antes da
+   * migration derrubaria o ciclo com "column setores does not exist", o mesmo
+   * incidente do `P2022` de 10/09. Com `*`, o banco velho devolve sete colunas,
+   * o novo devolve oito, e `setoresDoLogin` trata a ausencia como os dois
+   * setores financeiros — o que todo vinculo via ate entao.
+   */
   const linhas: any[] = await executor.$queryRaw`
-    SELECT usuario_id, nome, email, tier, tenant_id, tenant_razao_social, papel
-    FROM app.resolver_login(${authUserId}::uuid)`;
+    SELECT * FROM app.resolver_login(${authUserId}::uuid)`;
 
   if (linhas.length === 0) throw new UsuarioNaoProvisionado();
 
   const p = linhas[0];
   const tenants: VinculoDaSessao[] = linhas
     .filter((l) => l.tenant_id != null && l.papel != null)
-    .map((l) => ({ tenantId: l.tenant_id, razaoSocial: l.tenant_razao_social, papel: l.papel }));
+    .map((l) => ({
+      tenantId: l.tenant_id, razaoSocial: l.tenant_razao_social, papel: l.papel,
+      setores: setoresDoLogin(l.setores),
+    }));
 
   return {
     usuarioId: p.usuario_id,

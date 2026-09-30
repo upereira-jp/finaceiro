@@ -23,6 +23,9 @@ type Estado = {
   sessao: Sessao | null;
   tenantId: string | null;
   escolherTenant: (id: string) => void;
+  /** Pede a sessão de novo ao servidor. Existe para a tela «Usuários»: quem muda
+   *  os PRÓPRIOS setores precisa ver o menu mudar sem sair e entrar. */
+  recarregarSessao: () => void;
   sair: () => Promise<void>;
   carregando: boolean;
   erro: string | null;
@@ -50,6 +53,7 @@ export function ProvedorDeSessao({ children }: { children: ReactNode }) {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [motivoDeSaida, setMotivoDeSaida] = useState<string | null>(null);
+  const [versaoDaSessao, setVersaoDaSessao] = useState(0);
 
   // O contexto que a camada de API le. Ligado por FUNCAO, e nao por valor, para
   // ela sempre ver o token corrente - inclusive o que o supabase-js renovou
@@ -137,11 +141,12 @@ export function ProvedorDeSessao({ children }: { children: ReactNode }) {
       }
     })();
     return () => { vivo = false; };
-  }, [sessaoAuth]);
+  }, [sessaoAuth, versaoDaSessao]);
 
   const valor = useMemo<Estado>(() => ({
     cliente, sessaoAuth, sessao, tenantId, carregando, erro, motivoDeSaida,
     escolherTenant: (id) => { localStorage.setItem(CHAVE_TENANT, id); setTenantId(id); },
+    recarregarSessao: () => setVersaoDaSessao((v) => v + 1),
     sair: async () => {
       localStorage.removeItem(CHAVE_TENANT);
       setTenantId(null);

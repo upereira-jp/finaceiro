@@ -185,6 +185,10 @@ export const ESTILO = `
   .setor-texto strong { font-size: 13.5px; font-weight: 620; }
   .setor-texto span { font-size: 12px; color: var(--fraco); }
   .setor-marca { margin-left: auto; flex: none; color: var(--acento-forte); }
+  /* AS DUAS PASTAS DO MENU (30/09/2026): «Setores financeiros» e «Administração da
+     plataforma». A segunda se separa por uma linha suave e pelo proprio titulo -
+     nenhuma cor nova: e a mesma lista, com outro assunto. */
+  .setor-pasta + .setor-pasta { border-top: 1px solid var(--borda-suave); margin-top: 6px; padding-top: 4px; }
   /* EM TELA ESTREITA A LISTA OCUPA A LARGURA DA FAIXA. Presa ao gatilho, que
      fica a uns 180px da borda, ela passaria da tela num celular de 375px. */
   @media (max-width: 600px) {
@@ -701,6 +705,65 @@ export const ESTILO = `
   .interruptor[aria-checked="true"] .trilho { background: var(--acento); border-color: var(--acento-forte); }
   .interruptor[aria-checked="true"] .pino { transform: translateX(16px); }
   .interruptor:disabled { opacity: .55; cursor: default; }
+
+  /* A CAIXA DE MARCAR, nativa de proposito (30/09/2026). O dono pediu "checkbox"
+     para os setores de cada pessoa, e o nativo e o que todo leitor de tela, todo
+     teclado e todo zoom ja sabem usar. O que muda e so o tamanho (a regra geral de
+     "input" daria 100% de largura e padding) e a cor da marca, pelo "accent-color". */
+  input.caixa, .opcao input[type="radio"] {
+    width: 18px; height: 18px; padding: 0; margin: 0; flex: none;
+    accent-color: var(--acento-forte); cursor: pointer; vertical-align: middle;
+  }
+  input.caixa:disabled { cursor: not-allowed; }
+
+  /* ---------------------------------------------------------- usuarios
+     A matriz pessoa x setor: as colunas de caixa sao estreitas e centradas, para a
+     marca ser lida como coluna e nao como texto solto. */
+  .usuario-coluna-setor { text-align: center; width: 1%; white-space: nowrap; }
+  /* A LINHA CENTRA NA VERTICAL: nome e e-mail ocupam duas linhas, e caixa, perfil
+     e interruptor presos ao topo pareciam pertencer so ao nome. */
+  tr.usuario-linha td { vertical-align: middle; }
+  /* O PERFIL NAO ENCOLHE: em tela estreita a tabela rola para o lado (o
+     ".rolagem") em vez de esmagar o seletor ate ele mostrar "Ad". */
+  .usuario-perfil { min-width: 164px; }
+  .usuario-th-setor { display: inline-flex; align-items: center; gap: 5px; }
+  .usuario-nome { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .usuario-email { font-size: 12.5px; margin-top: 2px; }
+  tr.usuario-desligado td { color: var(--fraco); }
+  tr.usuario-desligado strong { font-weight: 550; }
+  tr.usuario-retorno td { padding-top: 0; }
+  tr.usuario-retorno:hover { background: none; }
+  .usuario-novo h2, .usuario-pronto h2 { display: flex; align-items: center; gap: 8px; margin-top: 0; }
+  .usuario-senha { display: flex; gap: 6px; align-items: center; }
+  .usuario-senha input { font-family: var(--fonte-mono); }
+  .usuario-dica { display: flex; align-items: center; gap: 5px; margin: 6px 0 0; font-size: 12px; color: var(--fraco); }
+  .usuario-grupo { border: 0; padding: 0; margin: 18px 0 0; min-width: 0; }
+  .usuario-grupo legend { padding: 0; margin-bottom: 8px; font-size: 12.5px; font-weight: 550; color: var(--fraco); }
+  .usuario-opcoes { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+  /* A OPCAO E UM CARTAO CLICAVEL INTEIRO: o "label" envolve a caixa, entao
+     clicar no texto marca. A marcada ganha a borda e o fundo do acento - o mesmo
+     par da aba ativa -, e a caixa continua la dentro dizendo o estado sem cor. */
+  .opcao {
+    display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 10px 12px;
+    border: 1px solid var(--borda); border-radius: var(--raio); background: var(--fundo2);
+    color: var(--texto); font-size: 13.5px; font-weight: 400; cursor: pointer;
+    transition: border-color .14s ease, background-color .14s ease;
+  }
+  .opcao input { margin-top: 1px; }
+  .opcao:hover { border-color: var(--fraco); }
+  .opcao.marcada { border-color: var(--acento-forte); background: var(--acento-suave); }
+  .opcao.travada { cursor: not-allowed; background: var(--fundo-recuo); color: var(--fraco); }
+  .opcao.travada:hover { border-color: var(--borda); }
+  .opcao-texto { display: grid; gap: 2px; min-width: 0; }
+  .opcao-texto strong { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 620; }
+  .opcao-texto span { font-size: 12.5px; color: var(--fraco); }
+  .usuario-acoes { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+  .usuario-mensagem {
+    margin: 0 0 4px; padding: 12px 14px; white-space: pre-wrap; user-select: all;
+    background: var(--fundo-recuo); border: 1px solid var(--borda-suave); border-radius: var(--raio);
+    font-size: 13px; color: var(--texto);
+  }
+  .usuario-rodape { margin-top: 12px; }
 
   /* ---------------------------------------------------------- botoes
      O botao ganhou sombra do primeiro degrau e sobe 1px no hover. O "sobe" e o

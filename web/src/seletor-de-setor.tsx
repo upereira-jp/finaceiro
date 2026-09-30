@@ -38,9 +38,27 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { Icone } from './icones.tsx';
 import { Ligacao } from './rota.tsx';
-import { FUNIS, primeiraTelaDoFunil, type Funil } from './navegacao.ts';
+import { PASTAS, TELAS, primeiraTelaDoFunil, type Funil } from './navegacao.ts';
 
-export function SeletorDeSetor({ atual }: { atual: Funil }) {
+// ============================================================================
+// A SEGUNDA PASTA (30/09/2026): «ADMINISTRAÇÃO DA PLATAFORMA»
+//
+// O menu passou a ter dois blocos, cada um com o seu título: os setores
+// financeiros (itens = SETORES, que levam à primeira tela de cada um) e a
+// administração (itens = as TELAS dela, porque ali se vai a uma função). Um
+// bloco sem nada que o vínculo veja não é desenhado — nem o título: quem não
+// administra não fica sabendo, pelo menu, que a pasta existe.
+//
+// QUEM VÊ O QUÊ chega pronto em `visiveis` (`funisVisiveis(setores)` no
+// `app.tsx`). Este componente não conhece sessão.
+
+export function SeletorDeSetor({ atual, visiveis, rotaAtual }: {
+  atual: Funil;
+  /** Os funis que o vínculo vê, na ordem de `FUNIS`. */
+  visiveis: readonly Funil[];
+  /** A rota aberta — marca a tela atual dentro da pasta de administração. */
+  rotaAtual: string;
+}) {
   const [aberto, setAberto] = useState(false);
   const caixa = useRef<HTMLDivElement>(null);
   const gatilho = useRef<HTMLButtonElement>(null);
@@ -95,8 +113,8 @@ export function SeletorDeSetor({ atual }: { atual: Funil }) {
          }}>
       <button ref={gatilho} type="button" className="setor-gatilho"
               aria-expanded={aberto} aria-controls={idDaLista}
-              aria-label={`Setor financeiro: ${atual.rotulo}. Trocar de setor`}
-              title="Trocar de setor financeiro"
+              aria-label={`${atual.pasta === 'setores' ? 'Setor financeiro' : 'Pasta'}: ${atual.nome}. Trocar`}
+              title="Trocar de setor ou abrir a administração"
               onClick={() => setAberto((v) => !v)}
               onKeyDown={(e) => {
                 if (e.key === 'ArrowDown' && !aberto) { e.preventDefault(); setAberto(true); }
@@ -111,28 +129,53 @@ export function SeletorDeSetor({ atual }: { atual: Funil }) {
              // Escolher um setor fecha a lista e devolve o foco ao gatilho — que
              // agora mostra o setor novo, e é o que o teclado precisa confirmar.
              onClick={(e) => { if ((e.target as Element).closest('.setor-item')) fechar(true); }}>
-          <div className="titulo rot-alta">Setores financeiros</div>
-          <ul>
-            {FUNIS.map((f) => {
-              const ativo = f.chave === atual.chave;
-              return (
-                <li key={f.chave}>
-                  {/* `aria-current="true"`, e não "page": o item é o SETOR em
-                      que a pessoa está, e o link leva à primeira tela dele — que
-                      pode não ser a tela aberta agora. */}
-                  <Ligacao para={primeiraTelaDoFunil(f.chave).rota} atual={ativo ? 'true' : false}
-                           className="setor-item">
-                    <span className="setor-selo"><Icone nome={f.icone} tamanho={17} /></span>
-                    <span className="setor-texto">
-                      <strong>{f.rotulo}</strong>
-                      <span>{f.resumo}</span>
-                    </span>
-                    {ativo && <Icone nome="ok" tamanho={14} peso="bold" className="setor-marca" />}
-                  </Ligacao>
-                </li>
-              );
-            })}
-          </ul>
+          {PASTAS.map((pasta) => {
+            const funis = visiveis.filter((f) => f.pasta === pasta.chave);
+            if (funis.length === 0) return null;
+            return (
+              <div key={pasta.chave} className="setor-pasta">
+                <div className="titulo rot-alta">{pasta.titulo}</div>
+                <ul>
+                  {pasta.chave === 'setores'
+                    ? funis.map((f) => {
+                        const ativo = f.chave === atual.chave;
+                        return (
+                          <li key={f.chave}>
+                            {/* `aria-current="true"`, e não "page": o item é o SETOR em
+                                que a pessoa está, e o link leva à primeira tela dele — que
+                                pode não ser a tela aberta agora. */}
+                            <Ligacao para={primeiraTelaDoFunil(f.chave).rota} atual={ativo ? 'true' : false}
+                                     className="setor-item">
+                              <span className="setor-selo"><Icone nome={f.icone} tamanho={17} /></span>
+                              <span className="setor-texto">
+                                <strong>{f.rotulo}</strong>
+                                <span>{f.resumo}</span>
+                              </span>
+                              {ativo && <Icone nome="ok" tamanho={14} peso="bold" className="setor-marca" />}
+                            </Ligacao>
+                          </li>
+                        );
+                      })
+                    : TELAS.filter((t) => funis.some((f) => f.chave === t.funil)).map((t) => {
+                        // Aqui o item É a tela: "página atual" é verdade.
+                        const ativo = t.rota === rotaAtual;
+                        return (
+                          <li key={t.rota}>
+                            <Ligacao para={t.rota} atual={ativo} className="setor-item">
+                              <span className="setor-selo"><Icone nome={t.icone} tamanho={17} /></span>
+                              <span className="setor-texto">
+                                <strong>{t.titulo}</strong>
+                                {t.resumo && <span>{t.resumo}</span>}
+                              </span>
+                              {ativo && <Icone nome="ok" tamanho={14} peso="bold" className="setor-marca" />}
+                            </Ligacao>
+                          </li>
+                        );
+                      })}
+                </ul>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

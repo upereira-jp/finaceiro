@@ -170,7 +170,23 @@ export const api = {
 
 export type Sessao = {
   usuarioId: string; nome: string; email: string; tier: string | null;
-  tenants: Array<{ tenantId: string; razaoSocial: string; papel: string }>;
+  /** `setores` desde 30/09/2026 (migration 41): as pastas do menu que o vinculo
+   *  ve. Opcional porque um servidor sem a migration nao o manda — e ai a barra
+   *  mostra os dois setores financeiros (`funisVisiveis`). */
+  tenants: Array<{ tenantId: string; razaoSocial: string; papel: string; setores?: string[] }>;
+};
+
+/** Uma linha da tela «Usuários» (`GET /administracao/usuarios`). */
+export type UsuarioDoTenant = {
+  usuario_id: string;
+  nome: string;
+  email: string;
+  papel: 'admin' | 'financeiro' | 'cobranca' | 'leitura';
+  setores: string[];
+  ativo: boolean;
+  criado_em: string;
+  /** A linha e de quem esta logado. */
+  voce: boolean;
 };
 
 /**

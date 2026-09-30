@@ -80,6 +80,9 @@ import { SpinnerGap } from '@phosphor-icons/react/SpinnerGap';
 import { Gear } from '@phosphor-icons/react/Gear';
 import { ChartPieSlice } from '@phosphor-icons/react/ChartPieSlice';
 import { Briefcase } from '@phosphor-icons/react/Briefcase';
+import { ShieldCheck } from '@phosphor-icons/react/ShieldCheck';
+import { UserGear } from '@phosphor-icons/react/UserGear';
+import { Key } from '@phosphor-icons/react/Key';
 
 import type { NomeDeIcone } from './iconografia.ts';
 
@@ -131,6 +134,11 @@ const DESENHO: Record<NomeDeIcone, Icon> = {
    * TEMPO PASSADO. `Clock` sozinho ja e "a receber" — o que ainda vai vencer —, e
    * a trilha e o contrario disso: o que ja aconteceu e nao muda mais. */
   historico: ClockCounterClockwise,
+
+  /* A PESSOA COM A ENGRENAGEM: é a tela onde se CONFIGURA quem entra, e não a
+   * lista de quem paga — `clientes` já é o grupo de pessoas (`UsersFour`), e o
+   * mesmo desenho nas duas faria «Usuários» parecer outro nome para «Clientes». */
+  usuarios: UserGear,
 
   // os três estados da prontidão — glifo nu, porque a pílula já é a moldura
   ok: Check,
@@ -191,6 +199,11 @@ const DESENHO: Record<NomeDeIcone, Icon> = {
   /* O MESMO DESENHO DE `ordem_nenhuma`, e os dois significam a mesma coisa: "há
    * mais de uma posição aqui, escolha". */
   trocar_setor: CaretUpDown,
+  /* ADMINISTRAÇÃO É O ESCUDO: a pasta decide quem entra, e o escudo com o ✓ é
+   * o gesto de "acesso conferido". Não é a engrenagem — essa ficou com o
+   * `Carregando` da marca. */
+  setor_administracao: ShieldCheck,
+  senha: Key,
   ajuda: Lifebuoy,
   abrir_externo: ArrowSquareOut,
 

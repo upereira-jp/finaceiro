@@ -26,7 +26,7 @@ export type NomeDeIcone =
   // tela e seguem aqui porque cartões de resumo ainda os desenham)
   | 'prontidao' | 'clientes' | 'unidades' | 'contratos' | 'usinas' | 'donos' | 'vigencia'
   | 'carteira' | 'faturas' | 'cobranca' | 'documento' | 'relatorios'
-  | 'contas_a_receber' | 'contas_a_pagar' | 'historico'
+  | 'contas_a_receber' | 'contas_a_pagar' | 'historico' | 'usuarios'
   // os três estados da prontidão
   | 'ok' | 'pendente' | 'nao_medido'
   // os três avisos
@@ -46,6 +46,9 @@ export type NomeDeIcone =
    * lista. `trocar_setor` NÃO reusa `abrir_menu`: a seta única é "abre um menu
    * de ações" (a conta); as duas setas são "troca o lugar em que você está". */
   | 'setor_rateio' | 'setor_empresa' | 'trocar_setor'
+  /* A PASTA «Administração da plataforma» (30/09/2026) — o escudo, e a senha
+   * provisória da pessoa nova (a chave). */
+  | 'setor_administracao' | 'senha'
   /* A ajuda tem desenho PRÓPRIO e não reusa o ponto de interrogação: aquele já é
    * o `nao_medido` da tabela de Pendências, e o mesmo desenho significando
    * "estado desta linha" num lugar e "peça ajuda" noutro é a cor sendo o único

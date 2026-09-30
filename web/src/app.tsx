@@ -24,13 +24,15 @@
 // irregulares em tela media. Agora: identidade, funil e sessao em cima,
 // navegacao embaixo, com rolagem horizontal quando nao couber.
 
-import { lazy, Suspense, useState, type ReactElement } from 'react';
+import { lazy, Suspense, useEffect, useState, type ReactElement } from 'react';
 import { useSessao } from './sessao.tsx';
 import {
   Aviso, Logotipo, Icone, Menu, ItensDeTema, Escolha, Carregando, ESTILO,
 } from './ui.tsx';
-import { useCaminho, Ligacao } from './rota.tsx';
-import { telaDoCaminho, telasDoFunil, funilDoCaminho, divisoriasDe } from './navegacao.ts';
+import { useCaminho, Ligacao, navegar } from './rota.tsx';
+import {
+  telaDoCaminho, telasDoFunil, funilDoCaminho, divisoriasDe, funisVisiveis, destinoVisivel,
+} from './navegacao.ts';
 import { GatilhoDeAjuda } from './ajuda-gatilho.tsx';
 import { SeletorDeSetor } from './seletor-de-setor.tsx';
 import { Login } from './telas/login.tsx';
@@ -72,6 +74,7 @@ const TelaDocumento = lazy(() => import('./telas/documento.tsx').then((m) => ({ 
 const TelaContasAReceber = lazy(() => import('./telas/contas-a-receber.tsx').then((m) => ({ default: m.TelaContasAReceber })));
 const TelaContasAPagar = lazy(() => import('./telas/contas-a-pagar.tsx').then((m) => ({ default: m.TelaContasAPagar })));
 const TelaHistorico = lazy(() => import('./telas/historico.tsx').then((m) => ({ default: m.TelaHistorico })));
+const TelaUsuarios = lazy(() => import('./telas/usuarios.tsx').then((m) => ({ default: m.TelaUsuarios })));
 
 /*
  * A AJUDA TAMBEM CHEGA SOB DEMANDA, e pela mesma razao das telas: ela carrega a
@@ -130,6 +133,7 @@ const RENDER: Record<string, () => ReactElement> = {
   '/contas-a-pagar': () => <TelaContasAPagar />,
   '/historico': () => <TelaHistorico />,
   '/relatorios': () => <TelaRelatorios />,
+  '/usuarios': () => <TelaUsuarios />,
 };
 
 export function App() {
@@ -144,6 +148,23 @@ export function App() {
    *  que tinha para dizer, e insistir depois disso e o que transforma uma dica em
    *  incomodo. */
   const encerrarAviso = () => { setAvisoDaAjuda(false); marcarAvisoVisto(); };
+
+  /*
+   * O SETOR QUE O VÍNCULO NÃO VÊ (30/09/2026). A barra só desenha os setores do
+   * vínculo, mas o endereço pode chegar de um favorito, de um link da ajuda ou
+   * de antes de alguém desmarcar a caixa. O desvio troca o ENDEREÇO — o setor
+   * ativo é derivado dele, e um segundo estado diria outra coisa. `replaceState`
+   * e não `pushState`: o «voltar» não deve devolver a pessoa a um lugar que a
+   * manda embora de novo.
+   *
+   * Só depois de a sessão chegar: sem ela, `setores` é desconhecido, e desviar
+   * no escuro mandaria todo mundo para o Rateio a cada recarga.
+   */
+  const vinculoAtual = s.sessao?.tenants.find((t) => t.tenantId === s.tenantId);
+  const destino = vinculoAtual ? destinoVisivel(caminho, vinculoAtual.setores) : null;
+  useEffect(() => {
+    if (destino) navegar(destino, true);
+  }, [destino]);
 
   if (s.carregando) {
     return <><style>{ESTILO}</style><div className="conteudo"><Carregando /></div></>;
@@ -172,7 +193,8 @@ export function App() {
   const funil = funilDoCaminho(caminho);
   const telasDaBarra = telasDoFunil(funil.chave);
   const divisorias = new Set(divisoriasDe(telasDaBarra));
-  const vinculo = s.sessao?.tenants.find((t) => t.tenantId === s.tenantId);
+  const vinculo = vinculoAtual;
+  const visiveis = funisVisiveis(vinculo?.setores);
   const varios = Boolean(s.sessao && s.sessao.tenants.length > 1);
 
   return (
@@ -193,7 +215,7 @@ export function App() {
             diz quanto vai entrar).
           */}
           <span className="migalha" aria-hidden="true" />
-          <SeletorDeSetor atual={funil} />
+          <SeletorDeSetor atual={funil} visiveis={visiveis} rotaAtual={tela.rota} />
 
           <div className="sessao">
             {/*
@@ -268,7 +290,9 @@ export function App() {
       </header>
 
       <main className="conteudo">
-        {!s.tenantId ? (
+        {destino ? (
+          <Carregando texto="Abrindo o seu setor…" />
+        ) : !s.tenantId ? (
           <Aviso tipo="erro">
             Escolha a empresa na barra acima. Nenhuma tela carrega sem isso — e o servidor recusaria
             de qualquer forma: com mais de um vínculo, ele não escolhe por você.

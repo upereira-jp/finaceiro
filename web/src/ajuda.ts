@@ -998,7 +998,9 @@ export const TOPICOS: readonly Topico[] = [
     resposta: 'São os dois setores financeiros do sistema, e a barra de abas muda conforme o setor '
       + 'escolhido. Rateio é o dinheiro que entra dos clientes: usinas, unidades, contratos, a conta '
       + 'lida, a fatura, o boleto e a cobrança. Empresa é o caixa da G3: o que há para receber, o que '
-      + 'há para pagar, o banco e o histórico. Nenhuma aba sumiu — ela está no outro setor.',
+      + 'há para pagar, o banco e o histórico. Nenhuma aba sumiu — ela está no outro setor. Se um '
+      + 'setor não aparece no menu, ele não foi liberado para você: quem administra a plataforma '
+      + 'marca isso na tela Usuários.',
     passos: [
       'No alto, ao lado de «Financeiro G3», está o nome do setor aberto agora. Clique nele — no '
         + 'ícone de duas setas, ⌃⌄ — para ver a lista dos setores.',
@@ -1016,6 +1018,38 @@ export const TOPICOS: readonly Topico[] = [
     termos: ['financeiro rateio', 'financeiro empresa', 'aba rateio', 'aba empresa', 'as duas metades',
              'o outro lado', 'onde foi a aba', 'sumiu a aba', 'nao acho a aba', 'barra mudou',
              'funil', 'funis', 'setor', 'setores', 'setor financeiro', 'mudar de setor', 'duas setas'],
+  },
+  {
+    /*
+     * A PASTA «ADMINISTRAÇÃO DA PLATAFORMA» (30/09/2026). Até esse dia cadastrar
+     * uma pessoa era terminal e painel do Supabase — não havia o que ensinar
+     * aqui. «senha» NÃO entra nos termos: é do assunto de quem foi desconectado
+     * (`sessao-expirou`), que é a pergunta de quem digita só essa palavra.
+     */
+    id: 'dar-acesso',
+    pergunta: 'Como dou acesso a uma pessoa nova, e escolho o que ela vê?',
+    resposta: 'Na tela Usuários, dentro da pasta «Administração da plataforma» do menu ⌃⌄ no alto. '
+      + 'Ali se cadastra a pessoa com uma senha provisória e se marca, por caixa, quais setores '
+      + 'aparecem para ela. Só quem tem o perfil Administrador e a pasta marcada vê essa tela.',
+    porque: 'Cada pessoa entra com o próprio login para a trilha dizer quem fez o quê. Uma conta '
+      + 'dividida entre duas pessoas grava o nome errado em todo registro do Histórico — e ali é '
+      + 'onde se procura quem mexeu num dado, meses depois.',
+    passos: [
+      'Abra o menu ⌃⌄ no alto e escolha «Usuários», em «Administração da plataforma».',
+      'Clique em «Adicionar pessoa», preencha nome e e-mail — a senha provisória já vem gerada.',
+      'Escolha o perfil: ele diz o que a pessoa pode FAZER (Administrador, Financeiro, Cobrança ou Só leitura).',
+      'Marque os setores que ela pode VER. A Administração só aparece para o perfil Administrador.',
+      'Clique em «Criar acesso» e envie a mensagem que aparece — ela traz o endereço, o e-mail e a senha.',
+      'Para mudar depois, marque ou desmarque as caixas na linha da pessoa: gravam na hora. Para tirar '
+        + 'o acesso, desligue o interruptor da linha.',
+    ],
+    caminhos: [ir('/usuarios', 'Abrir Usuários')],
+    camada: null,
+    telas: ['/usuarios'],
+    termos: ['dar acesso', 'novo usuario', 'adicionar usuario', 'cadastrar usuario', 'criar usuario',
+             'criar login', 'usuario novo', 'funcionario novo', 'liberar acesso', 'tirar acesso',
+             'desligar usuario', 'bloquear usuario', 'permissao', 'permissoes', 'perfil de acesso',
+             'quem pode ver', 'esconder setor', 'administracao da plataforma', 'administrador'],
   },
   {
     id: 'contas-a-receber',
@@ -1439,6 +1473,11 @@ export const PALAVRAS_DA_TELA: Record<string, readonly string[]> = {
   '/relatorios': ['relatorio', 'relatorios', 'numeros', 'planilha', 'exportar'],
   '/historico': ['historico', 'trilha', 'auditoria', 'quem alterou', 'quem mudou', 'quem fez',
                  'o que mudou', 'quem cancelou', 'quem apagou', 'log'],
+  /* A PASTA DE ADMINISTRAÇÃO (30/09/2026). «usuario» e não «pessoa»: «pessoa»
+     também é o cliente pessoa física, e mandaria a pergunta de cadastro de cliente
+     para cá. */
+  '/usuarios': ['usuario', 'usuarios', 'acesso', 'acessos', 'login', 'permissao', 'perfil',
+                'administracao', 'administrador'],
 };
 
 /** O nome da tela como a barra de navegação a chama. Sem ele o botão diria

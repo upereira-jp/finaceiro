@@ -46,6 +46,10 @@ import { comporFolhas, BOLETO_VAZIO, TEXTOS_PADRAO,
   type DadosDoBoleto, type TextosDoModelo } from '../dominio/folha-unificada.ts';
 import type { TranscricaoDoBoleto } from '../dominio/boleto-importado.ts';
 import { prontidao } from '../repos/prontidao.ts';
+import * as usuarios from '../repos/usuario.ts';
+import { registrarAto, registrarDesfecho } from '../repos/ato-externo.ts';
+import { lerPessoaNova } from '../dominio/acesso.ts';
+import { CadastroDeLoginIndisponivel } from '../auth/contas-de-acesso.ts';
 
 /** O que existe ANTES de haver sessao. Rota `publica` recebe so isto - nao ha
  *  `req.sessao` para ela ler por engano, e o tipo e que garante. */
@@ -522,7 +526,152 @@ export const ROTAS: Rota[] = [
     handler: async (req) => ok({
       usuarioId: req.sessao.usuarioId, nome: req.sessao.nome, email: req.sessao.email,
       tier: req.sessao.tier,
-      tenants: req.sessao.tenants.map((t) => ({ tenantId: t.tenantId, razaoSocial: t.razaoSocial, papel: t.papel })),
+      // `setores` desde 30/09/2026: a barra do topo so mostra as pastas que o
+      // vinculo ve (migration 41). O que a pessoa pode FAZER continua no papel.
+      tenants: req.sessao.tenants.map((t) => ({
+        tenantId: t.tenantId, razaoSocial: t.razaoSocial, papel: t.papel, setores: t.setores,
+      })),
+    }),
+  },
+
+  // ------------------------------------------- administracao da plataforma
+  /*
+   * A PASTA «ADMINISTRACAO DA PLATAFORMA» — pedido do dono em 30/09/2026:
+   * *"adicionar usuarios ao sistema, e uma configuracao de quais setores eles
+   * podem visualizar, marcado por checkbox"*.
+   *
+   * A AUTORIDADE mora no repositorio (`exigirAdministracao`) e no banco (as
+   * funcoes da migration 41 reimpoem o predicado). Estas rotas so escolhem a
+   * unidade de trabalho — e, no cadastro, a ORDEM entre o nosso banco e o de
+   * terceiro, que e o que elas tem de proprio.
+   */
+  {
+    metodo: 'GET', padrao: '/administracao/usuarios',
+    handler: (req, app) => emTenant(app, req, async () => ok({
+      usuarios: await usuarios.listar(),
+      // O botao de cadastrar depende da chave do Supabase no servidor; a lista
+      // e os setores, nao. A tela avisa ANTES do clique em vez de depois.
+      podeCadastrarLogin: app.contas !== null,
+    })),
+  },
+  {
+    /*
+     * CADASTRAR E UM ATO EM TERCEIRO SEGUIDO DE UM ATO NOSSO, e as chamadas ao
+     * Supabase Auth ficam FORA de transacao — a licao de 14/08 com o leitor da
+     * fatura: esperar API de terceiro com conexao do pool aberta e P2028 no
+     * primeiro dia lento. Sao tres unidades de trabalho curtas:
+     *
+     *   1. autoridade, e-mail ja cadastrado AQUI (409 antes de criar conta a
+     *      toa) e o `pedido` na trilha de ato externo — commita;
+     *   2. a conta no Supabase Auth, sem transacao;
+     *   3. o vinculo (`app.vincular_usuario`) — commita;
+     *   e o desfecho na trilha, melhor esforco, como em `ato-externo.ts`.
+     *
+     * SE A 3 FALHAR, A CONTA FICA CRIADA SEM VINCULO, e isso e recuperavel por
+     * construcao: tentar de novo acha a conta pelo e-mail (`jaExistia`) e liga.
+     * A trilha registra `falhou` com o motivo — um `pedido` sem par diria menos.
+     *
+     * A SENHA NAO VAI PARA A TRILHA, nem para log, nem volta na resposta.
+     */
+    metodo: 'POST', padrao: '/administracao/usuarios',
+    handler: async (req, app) => {
+      const pessoa = lerPessoaNova(req.corpo);
+      const ATO = { ato: 'criar_conta_de_acesso', contraparte: 'supabase_auth' } as const;
+      const logar = (m: string) => console.error(m);
+      const desfecho = async (fase: 'feito' | 'falhou', detalhe: unknown) => {
+        try {
+          await app.withTenant(req.sessao, req.tenantProposto,
+            () => registrarDesfecho({ ...ATO, fase, detalhe }, logar));
+        } catch (e: any) {
+          logar(`[financeiro] a trilha do desfecho de ${ATO.ato} nao abriu: ${String(e?.message ?? e)}`);
+        }
+      };
+
+      // 1.
+      const pedido = await app.withTenant(req.sessao, req.tenantProposto, async () => {
+        const ja = await usuarios.acharPorEmail(pessoa.email);
+        if (ja) {
+          throw Object.assign(new Error(
+            `${ja.nome} já usa este e-mail nesta empresa${ja.ativo ? '' : ' (com o acesso desligado)'}. `
+            + 'Para mudar o que a pessoa vê ou religar o acesso, use «Editar acesso» na linha dela.'),
+            { status: 409, name: 'JaTemAcesso' });
+        }
+        if (!app.contas) throw new CadastroDeLoginIndisponivel();
+        return registrarAto({ ...ATO, fase: 'pedido', detalhe: {
+          email: pessoa.email, nome: pessoa.nome, papel: pessoa.papel, setores: pessoa.setores,
+        } });
+      });
+
+      // 2.
+      let conta;
+      try {
+        conta = await app.contas!.criarOuAchar(pessoa);
+      } catch (e: any) {
+        await desfecho('falhou', { pedido_id: pedido, etapa: 'conta', erro: String(e?.message ?? e) });
+        throw e;
+      }
+
+      // 3.
+      let vinculo;
+      try {
+        vinculo = await app.withTenant(req.sessao, req.tenantProposto, () => usuarios.vincular({
+          authUserId: conta.authUserId, nome: pessoa.nome, email: pessoa.email,
+          papel: pessoa.papel, setores: pessoa.setores,
+        }));
+      } catch (e: any) {
+        await desfecho('falhou', {
+          pedido_id: pedido, etapa: 'vinculo', auth_user_id: conta.authUserId,
+          conta_ja_existia: conta.jaExistia, erro: String(e?.message ?? e),
+        });
+        throw e;
+      }
+
+      /*
+       * A CONTA JA EXISTIA NO AUTH, MAS NUNCA TEVE ACESSO AO FINANCEIRO (nao
+       * havia `usuario` para ela): ninguem pode estar usando essa senha — o
+       * login e recusado sem vinculo —, entao a senha que quem administra acabou
+       * de digitar passa a valer. Quem JA usa o sistema em outra empresa guarda
+       * a senha dele; trocar a senha de alguem por tabela seria o pior tipo de
+       * surpresa.
+       */
+      let senhaDefinida = !conta.jaExistia;
+      let aviso: string | null = null;
+      if (conta.jaExistia && !vinculo.usuarioJaExistia) {
+        try {
+          await app.contas!.redefinirSenha(conta.authUserId, pessoa.senha);
+          senhaDefinida = true;
+        } catch (e: any) {
+          aviso = 'O acesso foi criado, mas a senha provisória não foi aplicada: este e-mail já tinha um '
+            + 'login antigo, sem uso, e o Supabase recusou trocar a senha dele. Peça a quem cuida do '
+            + 'servidor para redefinir a senha no painel do Supabase.';
+          logar(`[financeiro] ${ATO.ato}: redefinir a senha da conta ${conta.authUserId} falhou: ${String(e?.message ?? e)}`);
+        }
+      }
+
+      await desfecho('feito', {
+        pedido_id: pedido, auth_user_id: conta.authUserId, usuario_id: vinculo.usuarioId,
+        conta_ja_existia: conta.jaExistia, usuario_ja_existia: vinculo.usuarioJaExistia,
+        senha_definida: senhaDefinida,
+      });
+
+      return criado({
+        usuarioId: vinculo.usuarioId,
+        contaJaExistia: conta.jaExistia,
+        senhaDefinida,
+        aviso,
+      });
+    },
+  },
+  {
+    metodo: 'PATCH', padrao: '/administracao/usuarios/:id',
+    handler: (req, app) => emTenant(app, req, async () => {
+      // uuid malformado e "nao existe", nao 500 de cast no banco.
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id!)) {
+        return { status: 404, corpo: { erro: 'NaoEncontrado', mensagem: 'Esta pessoa não tem acesso a esta empresa.' } };
+      }
+      return ok(await usuarios.alterarAcesso(req.params.id!, {
+        papel: req.corpo?.papel, setores: req.corpo?.setores, ativo: req.corpo?.ativo,
+      }));
     }),
   },
 

@@ -25,7 +25,8 @@ import {
   ICONES_QUE_SE_MOVEM, ICONE_DO_ESTADO, ICONE_DO_AVISO, ICONE_DO_STATUS_DA_FATURA,
 } from '../src/iconografia.ts';
 import {
-  TELAS, FUNIS, telaDoCaminho, telasDoFunil, primeiraTelaDoFunil, funilDoCaminho, divisoriasDe,
+  TELAS, FUNIS, PASTAS, telaDoCaminho, telasDoFunil, primeiraTelaDoFunil, funilDoCaminho, divisoriasDe,
+  funisDaPasta, funisVisiveis, destinoVisivel,
 } from '../src/navegacao.ts';
 import {
   ABAS_VISIVEIS, ABA_OCULTA, ROTULO_DA_ABA, FRAGMENTO_DA_ABA_OCULTA,
@@ -281,7 +282,10 @@ chk('I3e', /animation-delay:\s*0s?\s*!important/.test(bloqueio)
  * funis: a carteira INTEIRA em aberto, por vencimento, para a vertente da
  * empresa. Ate entao «quanto os clientes devem ao todo» so tinha resposta por
  * mes, e a fatura antiga sumia atras do mes corrente. */
-chk('I4', TELAS.length === 13, `sao 13 telas (contadas: ${TELAS.length})`);
+/* QUATORZE desde 30/09/2026 - entrou «Usuarios», a primeira tela da pasta
+ * «Administracao da plataforma» (pedido do dono: cadastrar pessoas e marcar, por
+ * caixa, os setores que cada uma ve). */
+chk('I4', TELAS.length === 14, `sao 14 telas (contadas: ${TELAS.length})`);
 chk('I4b', new Set(TELAS.map((t) => t.rota)).size === TELAS.length,
     'nenhuma rota repetida — rota repetida faz a segunda tela ser inalcancavel');
 chk('I4c', new Set(TELAS.map((t) => t.titulo)).size === TELAS.length,
@@ -313,9 +317,23 @@ chk('I4f', TELAS[0]!.funil === 'rateio' && TELAS[0]!.grupo === 'cadastro' && TEL
       + 'contam a mesma historia');
   chk('I4g2', TELAS.every((t) => FUNIS.some((f) => f.chave === t.funil)),
       'toda tela pertence a um funil declarado');
+  /* A REGRA DO NOME VALE PARA OS SETORES FINANCEIROS, e a pasta de administracao
+   * e a excecao declarada (30/09/2026): ela NAO e financeira - e quem entra e o
+   * que cada um ve -, e chama-la "Financeiro Administracao" seria o nome mentindo
+   * sobre o conteudo. Ela se prende a outra regra: o nome dela E o titulo da
+   * pasta no menu, letra por letra. */
+  const setoresFinanceiros = funisDaPasta('setores');
+  const daPlataforma = funisDaPasta('plataforma');
   chk('I4g3', new Set(FUNIS.map((f) => f.rotulo)).size === FUNIS.length
-           && FUNIS.every((f) => f.rotulo.length <= 10 && f.nome.startsWith('Financeiro ')),
-      'os rotulos dos funis sao unicos e curtos, e o nome inteiro comeca por "Financeiro"');
+           && setoresFinanceiros.every((f) => f.rotulo.length <= 10 && f.nome.startsWith('Financeiro '))
+           && daPlataforma.every((f) => f.rotulo.length <= 14
+                && f.nome === PASTAS.find((p) => p.chave === 'plataforma')!.titulo),
+      'os rotulos dos funis sao unicos e curtos; o setor financeiro comeca por "Financeiro", e a '
+      + 'administracao se chama como a pasta do menu');
+  chk('I4g6', FUNIS.every((f) => PASTAS.some((p) => p.chave === f.pasta))
+           && PASTAS[0]!.chave === 'setores' && setoresFinanceiros.length === 2
+           && daPlataforma.map((f) => f.chave).join() === 'administracao',
+      'duas pastas no menu, setores financeiros primeiro; a de administracao tem so o funil dela');
   // O MENU DE SETORES (27/09/2026). Cada setor tem desenho proprio, e ele nao
   // repete o de uma tela nem o `empresa` do seletor de tenant, que fica na mesma
   // faixa: o mesmo desenho dizendo "qual setor" e "qual CNPJ" e ler um pelo outro.
@@ -329,7 +347,10 @@ chk('I4f', TELAS[0]!.funil === 'rateio' && TELAS[0]!.grupo === 'cadastro' && TEL
       'o resumo de cada setor cabe numa linha do menu (ate 40 caracteres) e nao e a descricao da ajuda');
 }
 
-for (const f of FUNIS) {
+/* A DIVISORIA E REGRA DE SETOR FINANCEIRO. A pasta de administracao tem uma
+ * tela so (30/09/2026), e uma fronteira interna numa barra de um item seria uma
+ * linha sem nada de um lado. Quando ela ganhar a segunda tela, a pergunta volta. */
+for (const f of funisDaPasta('setores')) {
   const telas = telasDoFunil(f.chave);
   const div = divisoriasDe(telas);
   // Grupo contiguo: o numero de divisorias e o numero de grupos distintos menos um.
@@ -341,8 +362,32 @@ for (const f of FUNIS) {
 }
 
 chk('I4l', primeiraTelaDoFunil('rateio').rota === '/pendencias'
-        && primeiraTelaDoFunil('empresa').rota === '/contas-a-receber',
-    'trocar de funil leva a tela que abre cada lado: o que falta (Rateio) e o que vai entrar (Empresa)');
+        && primeiraTelaDoFunil('empresa').rota === '/contas-a-receber'
+        && primeiraTelaDoFunil('administracao').rota === '/usuarios',
+    'trocar de funil leva a tela que abre cada lado: o que falta (Rateio), o que vai entrar (Empresa) '
+    + 'e quem entra (Administracao)');
+
+/*
+ * QUEM VE O QUE (30/09/2026). A barra so desenha os setores do vinculo, e o
+ * endereco de um setor oculto desvia para a primeira tela visivel. As duas
+ * pontas que importam: o servidor SEM a migration 41 (setores ausentes) mostra o
+ * que todo mundo via ate entao - nunca a Administracao -, e o desvio nunca manda
+ * para um setor que tambem esta oculto.
+ */
+chk('I4n', funisVisiveis(undefined).map((f) => f.chave).join() === 'rateio,empresa'
+        && funisVisiveis([]).map((f) => f.chave).join() === 'rateio,empresa'
+        && funisVisiveis(['empresa', 'administracao']).map((f) => f.chave).join() === 'empresa,administracao',
+    'setores ausentes ou vazios: os dois financeiros e nunca a Administracao; presentes: so eles, na ordem do menu');
+chk('I4n2', destinoVisivel('/usuarios', ['rateio', 'empresa']) === '/pendencias'
+        && destinoVisivel('/faturas', ['empresa']) === '/contas-a-receber'
+        && destinoVisivel('/', ['empresa']) === '/contas-a-receber'
+        && destinoVisivel('/historico', ['empresa']) === null
+        && destinoVisivel('/usuarios', ['rateio', 'administracao']) === null
+        && destinoVisivel('/usuarios', undefined) === '/pendencias',
+    'endereco de setor oculto desvia para a primeira tela visivel; endereco visivel fica onde esta');
+chk('I4n3', TELAS.filter((t) => funisDaPasta('plataforma').some((f) => f.chave === t.funil))
+          .every((t) => (t.resumo ?? '').length > 0 && t.resumo!.length <= 40),
+    'toda tela da pasta de administracao tem a linha de resumo do menu, e ela cabe numa linha (40)');
 chk('I4m', funilDoCaminho('/faturas').chave === 'rateio'
         && funilDoCaminho('/contas-a-pagar').chave === 'empresa'
         && funilDoCaminho('/nao-existe').chave === 'rateio'

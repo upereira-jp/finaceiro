@@ -46,9 +46,37 @@
 // unificada) → emitir, boleto e baixa (Emissão e cobrança) → conferir
 // (Relatórios). Na Empresa: o que entra, o que sai, o banco, o histórico.
 
+// ============================================================================
+// A TERCEIRA PASTA, «ADMINISTRAÇÃO DA PLATAFORMA» (30/09/2026)
+//
+// Pedido do dono: *«onde existe o seletor que separa para setores financeiros,
+// crie uma nova pasta, que ao invés de setores financeiros é Administração da
+// plataforma, nela coloque as telas de funções de admin»*. No menu ⌃⌄ ela é um
+// segundo bloco, com título próprio, abaixo dos setores financeiros — e dentro
+// dela ficam as TELAS (hoje, «Usuários»), e não um resumo: quem abre a pasta de
+// administração vai a uma função, e não a um setor.
+//
+// NO DADO ELA É UM FUNIL A MAIS, com `pasta: 'plataforma'`. A barra de baixo, a
+// migalha e o «caminho desconhecido cai na primeira tela» continuam valendo sem
+// um segundo mecanismo; o que muda é o menu, que agrupa por `pasta`.
+//
+// E QUEM VÊ CADA PASTA É DO VÍNCULO, desde o mesmo dia: `setores` na sessão
+// (migration 41), marcado por caixa na tela de Usuários. A barra só desenha o
+// que o vínculo vê, e um endereço de setor oculto leva à primeira tela visível
+// (`destinoVisivel`). Isto é o que a pessoa VÊ; o que ela pode FAZER continua no
+// papel, conferido no servidor.
+
 import type { NomeDeIcone } from './iconografia.ts';
 
-export type ChaveDoFunil = 'rateio' | 'empresa';
+export type ChaveDoFunil = 'rateio' | 'empresa' | 'administracao';
+
+/** Os dois blocos do menu ⌃⌄. */
+export type PastaDoMenu = 'setores' | 'plataforma';
+
+export const PASTAS: ReadonlyArray<{ chave: PastaDoMenu; titulo: string }> = [
+  { chave: 'setores', titulo: 'Setores financeiros' },
+  { chave: 'plataforma', titulo: 'Administração da plataforma' },
+];
 
 export type Funil = {
   chave: ChaveDoFunil;
@@ -63,6 +91,8 @@ export type Funil = {
   resumo: string;
   /** O desenho do setor, no gatilho e no menu. */
   icone: NomeDeIcone;
+  /** Em qual bloco do menu ⌃⌄ ele aparece. */
+  pasta: PastaDoMenu;
 };
 
 export const FUNIS: readonly Funil[] = [
@@ -71,14 +101,26 @@ export const FUNIS: readonly Funil[] = [
     descricao: 'O dinheiro que entra dos clientes: usinas, unidades, contratos, a conta lida, '
              + 'a fatura, o boleto e a cobrança.',
     resumo: 'Usinas, clientes, faturas e cobrança',
-    icone: 'setor_rateio',
+    icone: 'setor_rateio', pasta: 'setores',
   },
   {
     chave: 'empresa', rotulo: 'Empresa', nome: 'Financeiro Empresa',
     descricao: 'O caixa da empresa: o que há para receber, o que há para pagar, o banco e o '
              + 'histórico do que foi feito.',
     resumo: 'A receber, a pagar, banco e histórico',
-    icone: 'setor_empresa',
+    icone: 'setor_empresa', pasta: 'setores',
+  },
+  /*
+   * NÃO É «FINANCEIRO» NENHUM, e o nome diz isso de propósito: aqui não há
+   * dinheiro, há quem entra e o que cada um vê. O rótulo da migalha é curto
+   * («Administração»); o título da pasta no menu é o inteiro.
+   */
+  {
+    chave: 'administracao', rotulo: 'Administração', nome: 'Administração da plataforma',
+    descricao: 'Quem entra no sistema e o que cada pessoa vê: cadastrar alguém, escolher os setores '
+             + 'de cada uma e desligar um acesso.',
+    resumo: 'Quem entra e o que cada um vê',
+    icone: 'setor_administracao', pasta: 'plataforma',
   },
 ] as const;
 
@@ -95,6 +137,9 @@ export type Tela = {
   titulo: string;
   icone: NomeDeIcone;
   grupo: GrupoDeTela;
+  /** A linha de baixo quando a TELA aparece no menu ⌃⌄ — so as da pasta
+   *  «Administração da plataforma», que lista telas e não setores. */
+  resumo?: string;
 };
 
 export const TELAS: readonly Tela[] = [
@@ -176,6 +221,15 @@ export const TELAS: readonly Tela[] = [
    * (21.917 registros) e não havia leitor.
    */
   { funil: 'empresa', rota: '/historico',        titulo: 'Histórico', icone: 'historico', grupo: 'apoio' },
+
+  // ============================================ ADMINISTRAÇÃO DA PLATAFORMA
+  /*
+   * UMA TELA SÓ, e ela faz as duas coisas pedidas em 30/09/2026: cadastrar
+   * pessoa e marcar, por caixa, os setores de cada uma. «Usuários», e não
+   * «Pessoas» nem «Acessos»: é a palavra do pedido do dono.
+   */
+  { funil: 'administracao', rota: '/usuarios', titulo: 'Usuários', icone: 'usuarios', grupo: 'apoio',
+    resumo: 'Cadastrar e escolher o que cada um vê' },
 ] as const;
 
 /** A tela de um caminho. Caminho desconhecido — inclusive `/` — cai na primeira,
@@ -196,6 +250,35 @@ export const primeiraTelaDoFunil = (funil: ChaveDoFunil): Tela => telasDoFunil(f
  *  verdade é como eles passam a discordar. */
 export const funilDoCaminho = (caminho: string): Funil =>
   FUNIS.find((f) => f.chave === telaDoCaminho(caminho).funil)!;
+
+/** Os funis de uma pasta do menu, na ordem declarada. */
+export const funisDaPasta = (pasta: PastaDoMenu): readonly Funil[] =>
+  FUNIS.filter((f) => f.pasta === pasta);
+
+/**
+ * OS FUNIS QUE O VÍNCULO VÊ. `setores` vem da sessão; ausente (servidor sem a
+ * migration 41, ou vínculo ainda não escolhido) é o que todo vínculo via até
+ * então — os dois setores financeiros, nunca a Administração. Lista que não
+ * casa nada também cai aí: uma barra vazia não é estado que a tela saiba
+ * desenhar.
+ */
+export function funisVisiveis(setores: readonly string[] | undefined | null): readonly Funil[] {
+  const vistos = FUNIS.filter((f) => setores?.includes(f.chave));
+  return vistos.length ? vistos : FUNIS.filter((f) => f.chave === 'rateio' || f.chave === 'empresa');
+}
+
+/**
+ * PARA ONDE O ENDEREÇO LEVA quem não vê o setor dele: a primeira tela do
+ * primeiro setor visível. `null` quando o endereço já é visível — e aí nada
+ * muda. O endereço é a verdade do funil ativo (`funilDoCaminho`), então o
+ * desvio acontece NO endereço, e não num estado paralelo que diria outra coisa.
+ */
+export function destinoVisivel(caminho: string, setores: readonly string[] | undefined | null): string | null {
+  const visiveis = funisVisiveis(setores);
+  const atual = funilDoCaminho(caminho);
+  if (visiveis.some((f) => f.chave === atual.chave)) return null;
+  return primeiraTelaDoFunil(visiveis[0]!.chave).rota;
+}
 
 /**
  * Onde a barra desenha divisória: os índices, DENTRO da lista dada, em que o

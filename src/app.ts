@@ -22,6 +22,7 @@ import {
 import { COBRANCA_NAO_CONFIGURADA, type PortaDeCobranca } from './sicoob/porta.ts';
 import { CobrancaSicoob } from './sicoob/http.ts';
 import { cofreDoVault } from './sicoob/cofre.ts';
+import { contasDoAmbiente, type PortaDeContas } from './auth/contas-de-acesso.ts';
 
 export class RoleDeRuntimeInsegura extends Error {
   constructor(usuario: string, motivo: string) {
@@ -136,7 +137,14 @@ export type App = ReturnType<typeof criarApp>;
  * sistema - composicao, emissao, baixa manual, split - roda inteiro. A F2 nao
  * fica bloqueada esperando um certificado, e tambem nao emite boleto de mentira.
  */
-export function criarApp(connectionString: string, cobranca: PortaDeCobranca = COBRANCA_NAO_CONFIGURADA) {
+export function criarApp(
+  connectionString: string,
+  cobranca: PortaDeCobranca = COBRANCA_NAO_CONFIGURADA,
+  /** A porta que cria contas de login no Supabase Auth (Administracao da
+   *  plataforma, 30/09/2026). `null` = o servidor nao tem a chave, e so o botao
+   *  de cadastrar responde 503 — ver `auth/contas-de-acesso.ts`. */
+  contas: PortaDeContas | null = null,
+) {
   const pools = criarPools(connectionString);
 
   // Dois clients porque sao dois pools. O de relatorio tem teto e timeout
@@ -266,6 +274,7 @@ export function criarApp(connectionString: string, cobranca: PortaDeCobranca = C
     conferirRoleDeRuntime,
     conferirClienteGerado,
     cobranca,
+    contas,
 
     /** R1-c: a unica chamada feita fora de contexto de tenant. */
     login: (authUserId: string): Promise<Sessao> => resolverLogin(protegido as any, authUserId),
@@ -336,7 +345,7 @@ export function app(): App {
   if (!instancia) {
     const url = process.env.DATABASE_URL;
     if (!url) throw new SemDatabaseUrl();
-    instancia = criarApp(url, cobrancaDoAmbiente());
+    instancia = criarApp(url, cobrancaDoAmbiente(), contasDoAmbiente());
   }
   return instancia;
 }

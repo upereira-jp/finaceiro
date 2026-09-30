@@ -15,9 +15,15 @@ import type { ReactNode, CSSProperties } from 'react';
 // pushState não dispara popstate — o evento próprio avisa os hooks da mesma aba.
 const EVENTO = 'financeiro:navegou';
 
-export function navegar(caminho: string): void {
+/**
+ * `substituir` (30/09/2026) troca a entrada atual do histórico em vez de empilhar
+ * uma nova. É para o DESVIO — o endereço de um setor que o vínculo não vê —, em
+ * que o «voltar» não pode devolver a pessoa ao lugar que a manda embora de novo.
+ */
+export function navegar(caminho: string, substituir = false): void {
   const hashAntes = location.hash;
-  history.pushState(null, '', caminho);
+  if (substituir) history.replaceState(null, '', caminho);
+  else history.pushState(null, '', caminho);
   dispatchEvent(new Event(EVENTO));
 
   /*
