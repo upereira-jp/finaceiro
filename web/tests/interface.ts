@@ -32,6 +32,9 @@ import {
   ABAS_VISIVEIS, ABA_OCULTA, ROTULO_DA_ABA, FRAGMENTO_DA_ABA_OCULTA,
   ordemDasAbas, revelaAbaOculta, abaVigente,
 } from '../src/abas-da-fatura.ts';
+import {
+  NIVEL_MAXIMO_DO_APERTO, proximoNivelDoAperto, classesDoAperto, larguraDoCampoDaFolha,
+} from '../src/layout-regras.ts';
 
 let falhas = 0;
 /*
@@ -892,6 +895,11 @@ chk('I9g', ordemDasAbas(true).every((a) => (ROTULO_DA_ABA[a] ?? '').trim() !== '
 // ESTAS LINHAS PRENDEM AS TRES METADES DO CONSERTO. Nenhuma delas se ve olhando a
 // tela com um caso que cabe — e justamente o caso das suites e do espelho antigo,
 // que dava 2 paginas e deixou o defeito passar.
+//
+// E A SEGUNDA RODADA DO MESMO DIA: a primeira versao fazia o detalhamento
+// encolher com recorte, e no caso real a barra «Total» saia cortada ao meio. O
+// conserto passou a ser na CAUSA (o endereco ganha a largura que pede) e, quando
+// ainda nao cabe, a folha COMPACTA em degraus medidos em vez de recortar.
 {
   const g3 = regraDe('.g3');
   chk('I11a', /(^|[\s;{])height:\s*297mm/.test(g3) && !/min-height/.test(g3) && /overflow:\s*hidden/.test(g3),
@@ -906,11 +914,22 @@ chk('I9g', ordemDasAbas(true).every((a) => (ROTULO_DA_ABA[a] ?? '').trim() !== '
       && regrasDaFolhaNoPapel.every((r) => !/(min-|max-)?height|overflow/.test(r)),
       'e nenhuma regra de impressao devolve a folha a altura livre — a altura fixa vale no papel');
 
+  /* Sem comentarios: um comentario com "overflow" ou "{" no meio nao pode virar regra. */
+  const SO_REGRAS = REGRAS.replace(/\/\*[\s\S]*?\*\//g, '');
+  const encolhe = (SO_REGRAS.match(/[^{}]*\{[^}]*flex-shrink:\s*1[^}]*\}/g) ?? [])
+    .filter((r) => /\.g3\b/.test(r)).map((r) => r.slice(0, r.indexOf('{')).trim());
   chk('I11c', /flex-shrink:\s*0/.test(regraDe('.g3 > *'))
-      && /flex-shrink:\s*1/.test(regraDe('.g3 > .g3-det, .g3 > .g3-hist'))
-      && /min-height:\s*0/.test(regraDe('.g3 > .g3-det, .g3 > .g3-hist'))
-      && /overflow:\s*clip/.test(regraDe('.g3 > .g3-det, .g3 > .g3-hist')),
-      'nada da folha encolhe por padrao; so o detalhamento e o historico cedem quando nao cabe');
+      && encolhe.length === 1 && encolhe[0] === '.g3.aperto-maximo > .g3-hist'
+      && /min-height:\s*0/.test(regraDe('.g3.aperto-maximo > .g3-hist'))
+      && /overflow:\s*clip/.test(regraDe('.g3.aperto-maximo > .g3-hist')),
+      'nada da folha encolhe sozinho; so o grafico do historico, e so no ultimo degrau — '
+      + `achadas: ${encolhe.join(' | ') || 'nenhuma'}`);
+
+  const regrasDoDet = (SO_REGRAS.match(/[^{}]*\.g3-det[^{}]*\{[^}]*\}/g) ?? []);
+  chk('I11c2', /flex:\s*none/.test(regraDe('.g3 > .g3-det'))
+      && regrasDoDet.every((r) => !/overflow|flex-shrink:\s*1|max-height/.test(r)),
+      'o detalhamento NUNCA encolhe nem recorta — a barra «Total» saia cortada ao meio na '
+      + 'primeira versao deste conserto');
 
   const faixa = regraDe('.faixa-pgto');
   chk('I11d', /flex:\s*none/.test(faixa) && !/height:\s*100%/.test(faixa)
@@ -930,6 +949,39 @@ chk('I9g', ordemDasAbas(true).every((a) => (ROTULO_DA_ABA[a] ?? '').trim() !== '
   chk('I11g', /body \*:has\(#documento\)\s*\{[^}]*position:\s*static !important;[^}]*transform:\s*none !important/.test(print),
       'e nenhum ancestral pode virar referencia do "top: 0" — um "position: relative" na casca '
       + 'desceria as folhas e mandaria o pe da segunda para outra pagina');
+
+  // ---- os degraus de aperto
+  chk('I11h', proximoNivelDoAperto(0, 1123, 1123) === 0 && proximoNivelDoAperto(0, 1124, 1123) === 0
+      && proximoNivelDoAperto(0, 1138, 1123) === 1 && proximoNivelDoAperto(2, 1200, 1123) === 3
+      && proximoNivelDoAperto(NIVEL_MAXIMO_DO_APERTO, 9999, 1123) === NIVEL_MAXIMO_DO_APERTO,
+      'a folha so sobe de degrau quando o conteudo passa do pe (1 px de folga para o subpixel), '
+      + 'um por vez, e para no ultimo');
+
+  chk('I11i', classesDoAperto(0) === '' && classesDoAperto(1) === 'aperto-grade'
+      && classesDoAperto(2) === 'aperto-grade aperto-compacta'
+      && classesDoAperto(3) === 'aperto-grade aperto-compacta aperto-maximo',
+      'o degrau 0 nao poe classe nenhuma — a fatura que cabe sai identica — e os degraus acumulam');
+
+  const ENDERECO_DA_EQUATORIAL = 'RUA DAS ORQUÍDEAS DO CERRADO QD 147 LT 22 CASA 02, RESIDENCIAL '
+    + 'JARDINS DO LAGO III, APARECIDA DE GOIÂNIA-GO, 74968-510';
+  chk('I11j', larguraDoCampoDaFolha('Endereço', ENDERECO_DA_EQUATORIAL) === 'meta-inteira'
+      && larguraDoCampoDaFolha('Consultor responsável', 'Leonard Rateio de Souza') === 'meta-dupla'
+      && larguraDoCampoDaFolha('Vencimento na conta da Equatorial', '07/10/2026') === 'meta-dupla'
+      && larguraDoCampoDaFolha('Unidade consumidora', '5507447721') === 'meta-simples'
+      && larguraDoCampoDaFolha('Mês de referência', '09/2026') === 'meta-simples',
+      'no aperto, o endereco da Equatorial ganha linha propria e o campo que quebraria ganha duas '
+      + 'colunas — a causa medida dos 301 mm era o endereco em 1/4 da grade');
+
+  chk('I11k', /grid-column:\s*1 \/ -1/.test(regraDe('.g3.aperto-grade .g3-meta > .meta-inteira'))
+      && /grid-column:\s*span 2/.test(regraDe('.g3.aperto-grade .g3-meta > .meta-dupla'))
+      && /grid-auto-flow:\s*row dense/.test(regraDe('.g3.aperto-grade .g3-meta')),
+      'e a grade obedece: linha inteira, duas colunas, e "dense" para nao deixar buraco');
+
+  const doAperto = (SO_REGRAS.match(/[^{}]*\.aperto-[a-z]+[^{}]*\{[^}]*\}/g) ?? []);
+  chk('I11l', doAperto.length >= 10
+      && doAperto.every((r) => !/faixa-pgto-(barras|qr|linha|codigo)|font-size/.test(r)),
+      'nenhum degrau toca codigo de barras, QR, linha digitavel nem copia-e-cola, e nenhum reduz '
+      + 'corpo de letra — compactar e espacamento e entrelinha');
 }
 
 console.log();

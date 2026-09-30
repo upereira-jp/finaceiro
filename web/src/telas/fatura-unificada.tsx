@@ -22,7 +22,7 @@
 // composicao so sai 400 ms depois da ultima tecla. Digitar um valor inteiro
 // dispara uma chamada, nao oito.
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   api, CAMPOS_DA_FATURA_VAZIOS, PARAMETROS_PADRAO, BOLETO_LIDO_VAZIO,
   type CamposDaFatura, type ParametrosDaEmissao, type BoletoLido,
@@ -31,7 +31,10 @@ import {
 } from '../api.ts';
 import { Aviso, Campo, Icone, Marca, Tabela } from '../ui.tsx';
 import { TrianguloDeAviso } from '../icones.tsx';
-import { escalaDaPrevia, regraDaPagina, PX_POR_MM } from '../layout-regras.ts';
+import {
+  escalaDaPrevia, regraDaPagina, PX_POR_MM,
+  proximoNivelDoAperto, classesDoAperto, larguraDoCampoDaFolha,
+} from '../layout-regras.ts';
 import { emReais } from '../dinheiro.ts';
 import { useLargura } from '../medir-largura.ts';
 import {
@@ -1655,7 +1658,7 @@ function AbaDeEmissao({ composicao, logoUrl, irParaPainel }: {
       <div id="documento">
         {/* ------------------------------------------------------- folha 1 */}
         <Palco>
-          <div className="g3">
+          <Folha chave={composicao}>
             <div className="g3-topo">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4pt' }}>
                 <img src={logoUrl ?? LOGO_G3_DATA_URI} alt="" />
@@ -1678,7 +1681,7 @@ function AbaDeEmissao({ composicao, logoUrl, irParaPainel }: {
               </div>
               <div className="g3-meta">
                 {folha1.cliente.meta.map((m) => (
-                  <div key={m.rotulo}>
+                  <div key={m.rotulo} className={larguraDoCampoDaFolha(m.rotulo, m.valor)}>
                     <div className="g3-rot">{m.rotulo}</div>
                     <div className="g3-meta-val">{m.valor}</div>
                   </div>
@@ -1735,12 +1738,12 @@ function AbaDeEmissao({ composicao, logoUrl, irParaPainel }: {
               <span>{folha1.rodape.emissor ?? ''}</span>
               <span style={{ whiteSpace: 'nowrap' }}>{folha1.rodape.paginacao}</span>
             </div>
-          </div>
+          </Folha>
         </Palco>
 
         {/* ------------------------------------------------------- folha 2 */}
         <Palco>
-          <div className="g3 g3-segunda">
+          <Folha chave={composicao} segunda>
             <div className="g3-topo-curto">
               <img src={logoUrl ?? LOGO_G3_DATA_URI} alt="" />
               {/* Igual a folha 1: sem logo do tenant, cai na marca da G3. Antes
@@ -1813,7 +1816,7 @@ function AbaDeEmissao({ composicao, logoUrl, irParaPainel }: {
                 {folha2.rodape.informacoes.map((t) => <div key={t}>{t}</div>)}
               </div>
             </div>
-          </div>
+          </Folha>
         </Palco>
       </div>
     </>
@@ -1841,6 +1844,59 @@ function Palco({ children }: { children: ReactNode }) {
       </div>
     </div>
   );
+}
+
+/**
+ * A FOLHA QUE SE MEDE — conserto de 30/09/2026.
+ *
+ * A folha tem 297 mm cravados (`.g3` no `estilo.ts`). Depois de pintar, ela mede
+ * se o conteudo passou do pe e, se passou, sobe um degrau de aperto e mede de
+ * novo — as regras e os degraus estao em `layout-regras.ts`, onde o runner
+ * alcanca. E `useLayoutEffect` de proposito: a subida acontece ANTES de o
+ * navegador pintar, entao a tela nunca mostra a folha estourada nem pisca.
+ *
+ * A PREVIA E A IMPRESSAO SAO O MESMO DOM, e a medida da tela vale para o papel:
+ * a folha e milimetro fixo nos dois, e na tela ela ainda tem 1 px de borda de
+ * cada lado que o papel nao tem — a tela mede com MENOS espaco, entao o que cabe
+ * nela cabe no papel. `document.fonts` refaz a conta quando a fonte chega,
+ * porque a mesma frase muda de largura (e de numero de linhas) com a fonte.
+ *
+ * `data-aperto` fica no DOM para quem confere a folha poder ler o degrau.
+ */
+function Folha({ chave, segunda = false, children }: {
+  chave: unknown; segunda?: boolean; children: ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [nivel, setNivel] = useState(0);
+  const [rodada, setRodada] = useState(0);
+  const visto = useRef({ chave, rodada });
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    /* COMPOSICAO NOVA OU FONTE NOVA: a conta recomeca do zero, e nao do degrau
+       em que a folha anterior parou — uma fatura curta depois de uma longa tem
+       de sair sem aperto nenhum. */
+    if (visto.current.chave !== chave || visto.current.rodada !== rodada) {
+      visto.current = { chave, rodada };
+      if (nivel !== 0) { setNivel(0); return; }
+    }
+    const proximo = proximoNivelDoAperto(nivel, el.scrollHeight, el.clientHeight);
+    if (proximo !== nivel) setNivel(proximo);
+  });
+
+  useEffect(() => {
+    const fontes = typeof document !== 'undefined' ? document.fonts : undefined;
+    if (!fontes) return;
+    let vivo = true;
+    const refazer = () => { if (vivo) setRodada((r) => r + 1); };
+    void fontes.ready.then(refazer);
+    fontes.addEventListener('loadingdone', refazer);
+    return () => { vivo = false; fontes.removeEventListener('loadingdone', refazer); };
+  }, []);
+
+  const classes = ['g3', segunda ? 'g3-segunda' : '', classesDoAperto(nivel)].filter(Boolean).join(' ');
+  return <div ref={ref} className={classes} data-aperto={nivel}>{children}</div>;
 }
 
 function Detalhamento({ d }: { d: NonNullable<ComposicaoUnificada['folha1']['detalhamento']> }) {

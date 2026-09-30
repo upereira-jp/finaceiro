@@ -1533,31 +1533,31 @@ export const ESTILO = `
      quebra cai no meio da faixa de pagamento.
 
      Com a altura cravada, cada folha e EXATAMENTE uma pagina A4 e nada dela
-     transborda para outra. Quem cede quando o conteudo nao cabe e o que e
-     elastico - o detalhamento na folha 1 e o grafico do historico na folha 2,
-     ver as duas regras abaixo -, e o resto, a faixa de pagamento em primeiro
-     lugar, nao encolhe. Quando o conteudo cabe, nada muda: o "margin-top: auto"
-     dos rodapes absorve a sobra como antes. Vale tambem na tela, e de proposito:
-     a previa ja recortava em 297 mm, entao o que se ve continua sendo o que sai. */
+     transborda para outra. Quando o conteudo nao cabe, a folha NAO RECORTA: ela
+     se mede e sobe um degrau de aperto por vez ("Folha" em
+     "fatura-unificada.tsx", regras em "layout-regras.ts", classes "aperto-*"
+     mais abaixo) - primeiro a grade do cliente da ao endereco a largura que ele
+     pede, depois os espacamentos compactam. Quando o conteudo cabe, nada muda: o
+     "margin-top: auto" dos rodapes absorve a sobra como antes. Vale tambem na
+     tela, e de proposito: a previa ja recortava em 297 mm, entao o que se ve
+     continua sendo o que sai. O "overflow: hidden" daqui e so a ultima rede. */
   .g3 {
     width: 210mm; height: 297mm; overflow: hidden; padding: 13mm 15mm;
     background: #fff; color: #14213D;
     display: flex; flex-direction: column;
     box-shadow: var(--sombra-2); border: 1px solid var(--borda);
   }
-  /* NADA DA FOLHA ENCOLHE POR PADRAO - o "flex-shrink: 1" de fabrica espremeria a
-     faixa de pagamento junto com o resto. So os dois blocos elasticos cedem, e
-     cedem ate zero: "min-height: 0" desliga o piso automatico do flex, que e o
-     proprio conteudo, e o recorte apara o que nao coube em vez de pinta-lo por
-     cima do bloco de baixo. O recorte e "clip" com 1pt de folga, e nao "hidden"
-     seco, por MEDIDA: o "hidden" arredondava a borda de 0,4pt da ultima barra do
-     historico e a afinava mesmo com tudo cabendo (1 coluna de pixel de diferenca
-     a 150 dpi). "hidden" fica antes so como reserva para navegador sem "clip". */
+  /* NADA DA FOLHA ENCOLHE SOZINHO - o "flex-shrink: 1" de fabrica espremeria a
+     faixa de pagamento junto com o resto, e esconderia da medida da "Folha" que o
+     conteudo passou do pe (o encolhimento absorveria o excesso antes de ele
+     aparecer no "scrollHeight").
+
+     O DETALHAMENTO E "flex: none" E NAO ELASTICO, e isto e o conserto de uma
+     primeira versao deste mesmo dia: ele encolhia com recorte, e numa fatura com
+     endereco longo a barra «Total» saia cortada ao meio. Numa fatura de cliente
+     isso nao passa. O detalhamento agora so COMPACTA (degraus 2 e 3), inteiro. */
   .g3 > * { flex-shrink: 0; }
-  .g3 > .g3-det, .g3 > .g3-hist {
-    flex-shrink: 1; min-height: 0;
-    overflow: hidden; overflow: clip; overflow-clip-margin: 1pt;
-  }
+  .g3 > .g3-det { flex: none; }
   .g3-topo {
     display: flex; align-items: flex-end; justify-content: space-between; gap: 12pt;
     padding-bottom: 10pt; border-bottom: 2px solid #14213D;
@@ -1710,7 +1710,7 @@ export const ESTILO = `
   /* O HISTORICO E UMA COLUNA FLEX para que, quando a folha 2 aperta, quem encolha
      seja a AREA DAS BARRAS - titulo e meses ficam inteiros. Com o conteudo
      cabendo, a coluna empilha igual ao bloco de antes (nenhuma margem aqui
-     dependia de colapso). Ver ".g3 > .g3-hist" no alto da folha. */
+     dependia de colapso). Ver ".g3.aperto-maximo > .g3-hist" nos degraus. */
   .g3-hist { margin-top: 11pt; display: flex; flex-direction: column; }
   .g3-hist-tit {
     font-size: 10.5pt; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
@@ -1773,6 +1773,52 @@ export const ESTILO = `
     font-size: 7pt; color: #66686F; line-height: 1.45;
   }
   .g3-tel-num { font-size: 13pt; font-weight: 700; color: #14213D; }
+
+  /* ------------------------------------------ os degraus de aperto (30/09/2026)
+     Aplicados pela "Folha" (fatura-unificada.tsx) SO quando o conteudo passa de
+     297 mm, um degrau por vez, medindo entre um e outro. As regras e o porque de
+     cada degrau estao em "layout-regras.ts". Nenhum deles mexe em codigo de
+     barras, linha digitavel ou QR, e nenhum encolhe texto de valor.
+
+     DEGRAU 1 - A GRADE DO CLIENTE DA A CADA CAMPO A LARGURA QUE ELE PEDE. E a
+     causa do defeito medido: o endereco da Equatorial numa coluna de 1/4 quebrava
+     em seis linhas, e a linha da grade inteira crescia com ele. O campo longo
+     ocupa duas colunas; o que nem em duas cabe ganha uma linha propria, no alto -
+     que e onde o servidor ja poe o endereco. "dense" preenche o buraco que o campo
+     largo deixaria no fim da linha anterior. */
+  .g3.aperto-grade .g3-meta { grid-auto-flow: row dense; }
+  .g3.aperto-grade .g3-meta > .meta-dupla { grid-column: span 2; }
+  .g3.aperto-grade .g3-meta > .meta-inteira { grid-column: 1 / -1; order: -1; }
+  /* DEGRAU 2 - COMPACTA: espacamento e entrelinha, nunca corpo de letra. */
+  .g3.aperto-compacta .g3-cliente { padding: 7pt 12pt; }
+  .g3.aperto-compacta .g3-cliente-topo { padding-bottom: 6pt; }
+  .g3.aperto-compacta .g3-meta { gap: 4pt 14pt; padding-top: 5pt; }
+  .g3.aperto-compacta .g3-cartoes { margin-top: 7pt; }
+  .g3.aperto-compacta .g3-total { margin-top: 8pt; padding: 10pt 14pt; }
+  .g3.aperto-compacta .g3-aviso { padding: 7pt 12pt; }
+  .g3.aperto-compacta .g3-det { margin-top: 7pt; }
+  .g3.aperto-compacta .g3-det-cab { padding: 1.5pt 0; }
+  .g3.aperto-compacta .g3-det-linha,
+  .g3.aperto-compacta .g3-det-secao { padding-top: 1.2pt; padding-bottom: 1.2pt; line-height: 1.2; }
+  .g3.aperto-compacta .g3-rodape { padding-top: 6pt; }
+  .g3.aperto-compacta .g3-hist { margin-top: 7pt; }
+  .g3.aperto-compacta .g3-hist-barras { height: 24mm; margin-top: 5pt; }
+  .g3.aperto-compacta .g3-indicadores { margin-top: 6pt; }
+  .g3.aperto-compacta .g3-ind { padding: 5pt 9pt; }
+  .g3.aperto-compacta .faixa-pgto-instr { line-height: 1.25; padding-top: 1.5mm; padding-bottom: 1.5mm; }
+  .g3.aperto-compacta .g3-rodape-2 { padding-top: 6pt; }
+  /* DEGRAU 3 - A NOTA EXPLICATIVA DOS CARTOES SAI (nao e valor, e o valor esta
+     nos cartoes), as barras baixam de novo e, SO AQUI, o grafico ganha licenca de
+     encolher sozinho: e o unico bloco da folha cujo recorte nao corta numero -
+     encolhe a area das barras, e titulo e meses ficam. O recorte e "clip" com 1pt
+     de folga e nao "hidden" seco: medido, o "hidden" afinava a borda de 0,4pt da
+     ultima barra. */
+  .g3.aperto-maximo .g3-cartao-nota { display: none; }
+  .g3.aperto-maximo .g3-hist-barras { height: 16mm; }
+  .g3.aperto-maximo > .g3-hist {
+    flex-shrink: 1; min-height: 0;
+    overflow: hidden; overflow: clip; overflow-clip-margin: 1pt;
+  }
 
   /* O QUE FALTA, DITO NA TELA E NUNCA NO PAPEL. "naoimprime" nao basta como
      intencao: esta caixa e conferencia de quem opera, e imprimi-la entregaria ao
