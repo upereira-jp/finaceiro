@@ -275,6 +275,17 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
    * rascunho recuperado, segunda via carregada, ou alguem digitando no campo.
    * Enquanto for `false`, o padrao CADASTRADO manda — ver o bloco em `compor`. */
   const parametrosTocados = useRef(rascunho?.parametros != null);
+  /* A CONTA QUE ENTRA NA GAVETA NASCE SEM OPINIAO SOBRE PARAMETROS, e ate
+   * 30/09/2026 so a «Nova fatura» fazia isso. «Conferir» outra linha da fila,
+   * «Anterior»/«Proxima» e «Digitar uma conta» trocavam os campos e deixavam o
+   * desconto da conta anterior no painel — e «Registrar este mes» manda
+   * `parametros`, entao a conta B era gravada com o desconto que alguem digitou
+   * para a A. O painel diz "vale so para esta conta"; agora vale. */
+  function esquecerParametros() {
+    parametrosTocados.current = false;
+    setParametros(PARAMETROS_PADRAO);
+    setPersonalizados({});
+  }
   const [boleto, setBoleto] = useState<BoletoLido>(rascunho?.boleto ?? BOLETO_LIDO_VAZIO);
   const [personalizados, setPersonalizados] = useState<Record<string, string>>(
     rascunho?.campos_personalizados ?? {});
@@ -482,6 +493,7 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
   function abrirConta(item: ItemDoLote) {
     if (!item.campos) return;
     if (!gaveta) gatilho.current = document.activeElement as HTMLElement | null;
+    if (item.id !== abertoId) esquecerParametros();
     setCampos(item.campos);
     setBoleto(BOLETO_LIDO_VAZIO);
     setStatusFatura(`Conferindo «${item.nome}». O que você corrigir aqui vale também para a linha da fila.`);
@@ -494,6 +506,7 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
    *  das UCs cuja conta ninguem tem em PDF — 11 delas em 08/09/2026. */
   function digitarConta() {
     gatilho.current = document.activeElement as HTMLElement | null;
+    esquecerParametros();
     setCampos(CAMPOS_DA_FATURA_VAZIOS);
     setBoleto(BOLETO_LIDO_VAZIO);
     setStatusFatura('Conta sem arquivo — preencha os campos e registre.');
@@ -741,12 +754,7 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
                       + 'As faturas já registradas ficam.')) return;
     setCampos(CAMPOS_DA_FATURA_VAZIOS);
     setBoleto(BOLETO_LIDO_VAZIO);
-    /* Fatura nova volta a NAO TER OPINIAO: a proxima composicao readota o padrao
-     * do cadastro. Sem isto, quem editasse o desconto uma vez o levaria para
-     * todas as contas da sessao. */
-    parametrosTocados.current = false;
-    setParametros(PARAMETROS_PADRAO);
-    setPersonalizados({});
+    esquecerParametros();
     setComposicao(null);
     setAbertoId(null);
     setStatusFatura('Nenhum arquivo enviado.');
