@@ -26,7 +26,7 @@ import { api, type ContasAReceber, type TituloAReceber } from '../api.ts';
 import { useDados } from '../dados.ts';
 import {
   Pagina, Aviso, Tabela, Kpi, Marca, Busca, Ferramentas, Filtro, ThOrd, Icone, Carregando,
-  DetalheTecnico, useOrdenacao, ordenar, contem, linha,
+  DetalheTecnico, useOrdenacao, ordenar, contem, linha, DIRECOES_DA_SITUACAO,
 } from '../ui.tsx';
 import { Ligacao } from '../rota.tsx';
 import { emReais } from '../dinheiro.ts';
@@ -38,8 +38,9 @@ import {
   type FaixaDeAtraso, type SituacaoDaCobranca,
 } from '../receber-regras.ts';
 import { paraCsv, reaisParaPlanilha, nomeDoArquivo, type Coluna } from '../csv.ts';
-import { SELO_DO_ATRASO, SELO_DO_BOLETO, seloDaFaixa } from '../tom-do-estado.ts';
+import { SELO_DO_ATRASO, SELO_DO_BOLETO, seloDaFaixa, pesoDoSelo } from '../tom-do-estado.ts';
 import { baixarCsv } from '../baixar.ts';
+import { FaixaDoPasso } from '../roteiro-corpo.tsx';
 
 const MAIS_DEVEDORES = 8;
 
@@ -65,10 +66,11 @@ export function TelaContasAReceber() {
       vencimento: (t) => t.vencimento,
       atraso: (t) => diasDeAtraso(t.vencimento, hoje),
       cliente: (t) => t.cliente,
-      unidade: (t) => t.unidade,
       competencia: (t) => t.competencia,
       valor: (t) => t.valor_total_centavos,
-      cobranca: (t) => situacaoDaCobranca(t.boleto),
+      /* O peso do tom (etapa 7c): a recusa, o que falta pedir, o que esta a
+         caminho e, por ultimo, o que ja esta no banco. */
+      cobranca: (t) => pesoDoSelo(SELO_DO_BOLETO[situacaoDaCobranca(t.boleto)]),
     },
   );
 
@@ -90,7 +92,12 @@ export function TelaContasAReceber() {
 
   return (
     <Pagina titulo="Contas a receber"
-            sub="Tudo o que os clientes ainda devem, de qualquer mês: quanto venceu, quanto vence nos próximos dias e se cada título tem boleto para ser pago. Cobrar — emitir, pedir o boleto, dar baixa — continua na tela Cobranças, no setor Rateio.">
+            sub="O que os clientes ainda devem, de qualquer mês, por vencimento.">
+      {/* [01/10/2026, etapa 7c] A METADE «RECEBER» DO PASSO 5. O funil da tela
+          Mês já mandava para cá quando o passo tinha vencida, e esta tela não
+          dizia de que mês era parte; agora a faixa diz, como em Contas a
+          pagar, onde o passo termina. */}
+      <FaixaDoPasso rota="/contas-a-receber" />
 
       {carga.erro && (
         <Aviso tipo="erro">
@@ -225,15 +232,23 @@ export function TelaContasAReceber() {
         </button>
       </Ferramentas>
 
+      {/* [01/10/2026, etapa 7c] A UNIDADE DESCEU PARA DEBAIXO DO CLIENTE, e a
+          coluna dela saiu. A 1440 com o menu aberto a tabela tem 1118px para
+          oito colunas, e era o nome do cliente — quem se procura e para quem se
+          liga — que pagava: «Henrique Rezende Sampaio» em três linhas, ao lado
+          de uma coluna de selos com metade vazia. A unidade continua na linha,
+          na busca e no CSV; o link «Ver em Cobranças» não quebra mais, e o selo
+          longo («Boleto recusado pelo banco») quebra dentro dele
+          (`.lista-de-caixa`, em `estilo.ts`). */}
+      <div className="lista-de-caixa">
       <Tabela
         cabecalho={<>
           <ThOrd chave="vencimento" ordem={ordem} ao={alternar}>Vencimento</ThOrd>
           <ThOrd chave="atraso" ordem={ordem} ao={alternar}>Atraso</ThOrd>
           <ThOrd chave="cliente" ordem={ordem} ao={alternar}>Cliente</ThOrd>
-          <ThOrd chave="unidade" ordem={ordem} ao={alternar}>Unidade</ThOrd>
           <ThOrd chave="competencia" ordem={ordem} ao={alternar}>Mês de ref.</ThOrd>
           <ThOrd chave="valor" ordem={ordem} ao={alternar} num>Valor</ThOrd>
-          <ThOrd chave="cobranca" ordem={ordem} ao={alternar}>Cobrança</ThOrd>
+          <ThOrd chave="cobranca" ordem={ordem} ao={alternar} direcoes={DIRECOES_DA_SITUACAO}>Cobrança</ThOrd>
           <th></th>
         </>}
         vazio={carga.carregando ? <Carregando />
@@ -255,12 +270,14 @@ export function TelaContasAReceber() {
                   {fraseDoAtraso(dias)}
                 </Marca>
               </td>
-              <td className="c-id"><strong>{t.cliente}</strong></td>
-              <td>{t.unidade}</td>
+              <td className="c-id">
+                <strong>{t.cliente}</strong>
+                <div className="nota">unidade {t.unidade}</div>
+              </td>
               <td>{mesEmBr(t.competencia)}</td>
               <td className="num c-val">{emReais(t.valor_total_centavos)}</td>
               <td className="c-sit"><Marca selo={SELO_DO_BOLETO[sit]}>{ROTULO_DA_SITUACAO[sit]}</Marca></td>
-              <td>
+              <td className="c-aco">
                 {/* Abre Cobrancas JA NO MES da fatura — sem isso a pessoa cai no
                     mes corrente e o titulo antigo some de novo. «Ver em
                     Cobranças», e nao «Ver na emissao», desde 30/09/2026: o nome
@@ -274,6 +291,7 @@ export function TelaContasAReceber() {
           );
         })}
       </Tabela>
+      </div>
 
       <DetalheTecnico>
         <p>

@@ -351,12 +351,15 @@ chk('I4f', TELAS[0]!.funil === 'rateio' && TELAS[0]!.grupo === 'abertura' && TEL
    * na ordem do mes — de cima para baixo, e do Rateio para a Empresa. */
   const comPassos = TELAS.filter((t) => t.passos && t.passos.length > 0);
   const sequencia = comPassos.flatMap((t) => [...t.passos!]);
+  /* [01/10/2026, etapa 7c] O PASSO 5 E DIVIDIDO: Contas a receber hospeda a
+     metade «receber» e Contas a pagar a «repartir», onde o mes termina — as
+     duas mostram «5», e a sequencia passa a ser so «nunca volta». */
   chk('I4o5', comPassos.map((t) => `${t.titulo} ${rotuloDosPassos(t.passos)}`).join(' | ')
-                === 'Contas de luz 1\u20132 | Cobranças 3\u20134 | Contas a pagar 5'
-          && sequencia.every((n, i) => i === 0 || n > sequencia[i - 1]!)
+                === 'Contas de luz 1\u20132 | Cobranças 3\u20134 | Contas a receber 5 | Contas a pagar 5'
+          && sequencia.every((n, i) => i === 0 || n >= sequencia[i - 1]!)
           && fraseDosPassos([1, 2]) === 'passos 1 e 2 do mês' && fraseDosPassos([5]) === 'passo 5 do mês',
-      'o menu mostra os passos do mes nas telas onde eles acontecem, em ordem crescente de cima para baixo: '
-      + '«1–2», «3–4», «5»');
+      'o menu mostra os passos do mes nas telas onde eles acontecem, em ordem de cima para baixo: '
+      + '«1–2», «3–4», e o «5» nas duas telas que dividem o passo 5');
 }
 
 {
@@ -1176,7 +1179,7 @@ chk('I9g', ABAS.every((a) => (ROTULO_DA_ABA[a] ?? '').trim() !== ''),
 // O que a etapa 5 prometeu no CSS e que um ajuste distraido desfaz sem nenhum
 // teste de tela perceber: a tabela vira cartao pela largura DELA, o alvo de
 // toque e de 44px no celular, a regiao viva vazia continua na arvore de
-// acessibilidade, e o botao da ajuda sobe para a faixa do topo onde ela existe.
+// acessibilidade, e o gatilho da ajuda mora no pe do menu e na faixa do topo.
 {
   const LIMPO = REGRAS.replace(/\/\*[\s\S]*?\*\//g, '');
   const bloco = (abre: string): string => {
@@ -1205,11 +1208,19 @@ chk('I9g', ABAS.every((a) => (ROTULO_DA_ABA[a] ?? '').trim() !== ''),
   chk('I12d', /\.regiao-viva:empty\s*\{[^}]*clip-path:\s*inset\(50%\)/.test(LIMPO)
       && !/\.regiao-viva:empty\s*\{[^}]*display:\s*none/.test(LIMPO),
       'a regiao viva vazia e RECORTADA, e nao display:none — sumida da arvore ela nao anunciaria a frase que chega');
+  /* [01/10/2026, etapa 7c] O CANTO SAIU: o gatilho da ajuda e um item do pe do
+     menu, sem fundo e sem laranja, e no celular um botao de desenho de 44px no
+     fim da faixa do topo. Nada dele e "position: fixed" — nada flutua sobre a
+     ultima coluna das tabelas. */
   const faixa = bloco(`@media (max-width: ${MENU_VIRA_GAVETA - 0.02}px) {\n    .faixa-celular-linha { padding-right`);
-  chk('I12e', /\.ajuda-gatilho\s*\{[^}]*top:\s*6px[^}]*bottom:\s*auto[^}]*width:\s*44px/.test(faixa)
-      && /\.ajuda-balao\s*\{[^}]*top:/.test(faixa) && /\.ajuda-gatilho\s*\{[^}]*right:\s*22px;\s*bottom:\s*22px/.test(LIMPO),
-      'no computador o botao da ajuda fica no canto de baixo (pedido de 21/08); onde ha a faixa do topo, ele sobe '
-      + 'para ela com 44px, e o balao desce dele');
+  chk('I12e', !/\.ajuda-gatilho\s*\{/.test(LIMPO) && !/primario\.ajuda-gatilho/.test(LIMPO)
+      && /button\.lateral-ajuda\s*\{[^}]*background:\s*none/.test(LIMPO)
+      && /button\.faixa-celular-ajuda\s*\{[^}]*width:\s*44px;\s*height:\s*44px/.test(faixa)
+      && /\.ajuda-no-faixa \.ajuda-balao\s*\{[^}]*top:/.test(faixa)
+      && /\.ajuda-no-menu \.ajuda-balao, \.ajuda-no-menu \.ajuda-bolha\s*\{\s*display:\s*none/.test(faixa)
+      && /\.ajuda-balao\s*\{[^}]*position:\s*absolute/.test(LIMPO),
+      'a ajuda nao flutua mais no canto (pedido de 21/08, revisto pelo dono em 01/10): e um item sem laranja no pe '
+      + 'do menu e, onde ha a faixa do topo, um botao de 44px nela; o balao sai do gatilho que se ve');
   chk('I12f', /th \.ordenar\s*\{\s*min-height:\s*24px/.test(LIMPO) && /\.campo-porque-botao\s*\{\s*width:\s*24px;\s*height:\s*24px/.test(LIMPO)
       && /\.ajuda-balao-x\s*\{\s*width:\s*24px;\s*height:\s*24px/.test(LIMPO),
       'em qualquer largura nada se aperta com menos de 24px: a seta de ordenar, o porque do campo e o x do balao');

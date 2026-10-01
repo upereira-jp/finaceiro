@@ -10,7 +10,7 @@ import { api, type DonoUsina, type Usina } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
   Pagina, Aviso, RetornoDoAto, Tabela, Campo, Busca, Ferramentas, Filtro, ThOrd, Marca, Icone, DetalheTecnico,
-  useOrdenacao, ordenar, contem, BotaoDeCriar, PainelDeCriar,
+  useOrdenacao, ordenar, contem, BotaoDeCriar, PainelDeCriar, DIRECOES_DO_ATIVO,
 } from '../ui.tsx';
 import { Ligacao } from '../rota.tsx';
 import { SELO_DO_CADASTRO } from '../tom-do-estado.ts';
@@ -58,7 +58,7 @@ export function TelaDonos() {
 
   return (
     <Pagina titulo="Donos de usina"
-            sub="O maior fluxo de dinheiro do sistema. Exige chave Pix ou conta completa — conferido no cadastro, porque no pagamento já é tarde."
+            sub="Quem recebe a parte da usina. Exige chave Pix ou conta completa."
             acao={<BotaoDeCriar controla="novo-dono" aberto={criando} ao={() => { acao.limpar(); setCriando(!criando); }}>
               Novo dono
             </BotaoDeCriar>}>
@@ -132,7 +132,7 @@ export function TelaDonos() {
                 <ThOrd chave="nome" ordem={ordem} ao={alternar}>Nome</ThOrd>
                 <ThOrd chave="documento" ordem={ordem} ao={alternar}>Documento</ThOrd>
                 <ThOrd chave="pix" ordem={ordem} ao={alternar}>Pix</ThOrd>
-                <ThOrd chave="situacao" ordem={ordem} ao={alternar}>Situação</ThOrd>
+                <ThOrd chave="situacao" ordem={ordem} ao={alternar} direcoes={DIRECOES_DO_ATIVO}>Situação</ThOrd>
                 <th>Ações</th>
               </>}
               vazio={todos.length

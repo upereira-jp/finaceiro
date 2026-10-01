@@ -329,14 +329,15 @@ export function TelaProntidao() {
             Até aqui cada linha trazia 120 a 260px de prosa — o que falta, em
             frase, e a consequência — e a coluna «Efeito» repetia, linha a linha,
             o título do grupo em que ela estava. A coluna saiu; a linha ficou com
-            o fato curto: o que falta, quantas e onde resolver. A consequência
-            de cada uma continua a um clique, no «ver detalhe técnico», e na
-            Central de Ajuda.
+            o fato curto: o que falta, quantas e onde resolver. [01/10/2026,
+            etapa 7c] A frase simples e a consequência de cada uma voltaram à
+            vista, curtas, debaixo do nome (`OQueFalta`): atrás do «ver detalhe
+            técnico» elas escondiam justamente o que não é técnico.
 
             UMA TABELA SÓ, e não três: as colunas são as mesmas e três tabelas
             desalinhariam «Quantos», que é a coluna que se compara de relance.
           */}
-          <Tabela cabecalho={<><th>O que falta</th><th>Situação</th><th className="num">Quantos</th><th>Onde resolver</th></>}
+          <Tabela cabecalho={<><th>O que falta</th><th className="c-sit-estreita">Situação</th><th className="num">Quantos</th><th>Onde resolver</th></>}
                   vazio={
                     /* A LISTA VAZIA AQUI E BOA NOTICIA, e por isso ela FALA — com a
                        frase do mês, a mesma do alto da tela e da Central de Ajuda. */
@@ -387,7 +388,18 @@ export function TelaProntidao() {
 }
 
 /**
- * O QUE FALTA — o nome, e o resto atrás de um clique.
+ * O QUE FALTA — o nome, a explicação simples à vista, e o técnico atrás de um
+ * clique.
+ *
+ * [01/10/2026, etapa 7c] A EXPLICAÇÃO SIMPLES SAIU DE TRÁS DO «ver detalhe
+ * técnico». A crítica de 01/10 mediu o contrário do que o botão promete: o que
+ * ele escondia primeiro era a frase em português de quem opera — o que falta e
+ * o que acontece se ficar para depois —, e só depois o técnico. Quem abre o Mês
+ * para decidir «posso deixar isto para amanhã?» tinha de abrir seis detalhes
+ * técnicos para saber. Agora o `simples` e a `consequencia` são uma linha curta
+ * debaixo do nome, só nas linhas em aberto; atrás do botão ficou o que é de
+ * quem cuida do servidor: a explicação que o servidor manda, a nota do mapa, o
+ * comando e a chave.
  *
  * [30/09/2026, etapa 4a] A LINHA FICOU COM O FATO CURTO. Até aqui a superfície
  * trazia o nome, a frase do que falta e a CONSEQUÊNCIA — 120 a 260px de prosa
@@ -396,9 +408,9 @@ export function TelaProntidao() {
  * quantas; a explicação do que o grupo trava mora no cabeçalho dele, uma vez.
  *
  * NADA FOI JOGADO FORA — a decisão do dono de 21/08 continua valendo: «esconder,
- * não remover». A frase e a consequência de cada linha abrem primeiro no
- * «ver detalhe técnico», e atrás delas o texto de engenharia que o servidor manda
- * (`c.explicacao`, o dono, a questão e o comando em lote), como antes.
+ * não remover». Atrás do «ver detalhe técnico» está o texto de engenharia que o
+ * servidor manda (`c.explicacao`, o dono, a questão, a chave e o comando em
+ * lote), como antes.
  */
 function OQueFalta({ camada: c }: { camada: Camada }) {
   const v = VERBETE_DA_CAMADA[c.camada];
@@ -410,19 +422,17 @@ function OQueFalta({ camada: c }: { camada: Camada }) {
           impede que chegue aqui. */}
       <strong>{v?.titulo ?? c.camada}</strong>
 
+      {/* A LINHA SIMPLES, só em quem ainda não fechou: numa linha resolvida
+          ela seria um aviso sobre um problema que não há. */}
+      {v && c.situacao !== 'ok' && (
+        <p className="mes-oque-simples">{v.simples} {v.consequencia}</p>
+      )}
+
       {/* O TOGGLE É O `DetalheTecnico` DO `ui.tsx` desde 21/08/2026: um padrão
           que cada tela reimplementa é um padrão que a maioria não implementa.
           [01/10/2026, etapa 7a] E ELE DIZ DE QUAL LINHA É: eram seis «ver
           detalhe técnico» com o mesmo nome para o leitor de tela. */}
       <DetalheTecnico de={v?.titulo ?? c.camada}>
-        {v && (
-          <p style={{ margin: '0 0 6px' }}>
-            {v.simples}{' '}
-            {/* A consequência só em quem ainda não fechou: numa linha resolvida
-                ela seria um aviso sobre um problema que não há. */}
-            {c.situacao !== 'ok' && v.consequencia}
-          </p>
-        )}
         <p style={{ margin: '0 0 6px' }}>{c.explicacao}</p>
         {d?.nota && <p style={{ margin: '0 0 6px' }}>{d.nota}</p>}
         {/* [01/10/2026, etapa 7b] O COMANDO É DE QUEM CUIDA DO SERVIDOR, e a

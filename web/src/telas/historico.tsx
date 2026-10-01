@@ -98,7 +98,7 @@ export function TelaHistorico() {
 
   return (
     <Pagina titulo="Histórico"
-            sub="Tudo o que foi criado, alterado ou apagado neste sistema — quem fez, quando, e o que mudou.">
+            sub="Quem criou, alterou ou apagou o quê neste sistema, e quando.">
 
       <Ferramentas contagem={trilha.dado ? `${visiveis.length} de ${linhas.length}` : undefined}>
         <Busca valor={busca} ao={setBusca} dica="quem fez, o que foi tocado…" />

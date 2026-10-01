@@ -38,7 +38,7 @@ export function TelaRelatorios() {
 
   return (
     <Pagina titulo="Relatórios"
-            sub="Quanto a G3 deve a cada dono de usina, quanto sai de comissão e quanto da usina foi usado. Sem escolher o mês, mostra o histórico inteiro.">
+            sub="Quanto cabe a cada dono de usina, a comissão e o uso de cada usina.">
       <div className="cartao secao">
         <div style={{ ...linha, gap: 12 }}>
           <div>

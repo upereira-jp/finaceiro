@@ -98,7 +98,7 @@ export function CorpoDaAjuda(p: CorpoDaAjuda) {
    * [01/10/2026, etapa 5] E O `aria-modal` PASSOU A SER CUMPRIDO, e não só
    * declarado: o Tab dá a volta dentro do painel (antes ele saía para a tela
    * de trás, coberta pelo véu, e o foco sumia de vista), e ao fechar o foco
-   * VOLTA a quem abriu — o botão da ajuda, ou o «Como ler esta lista» da tela
+   * VOLTA a quem abriu — o gatilho da ajuda, ou o «Como ler esta lista» da tela
    * Mês. Antes ele caía no `body`, e o próximo Tab recomeçava do alto da
    * página. O mesmo desenho da gaveta de Contas de luz (`GavetaDaConta`).
    *
@@ -125,12 +125,17 @@ export function CorpoDaAjuda(p: CorpoDaAjuda) {
     caixa.current?.querySelector('input')?.focus();
     return () => {
       removeEventListener('keydown', tecla);
-      /* Quem abriu pode ter saído da tela (ir para outra tela fecha o painel):
-         aí o foco vai ao botão da ajuda, que existe em toda tela. Um frame
-         depois, para o painel já ter saído do documento. */
+      /* Quem abriu pode ter saído da tela (ir para outra tela fecha o painel),
+         ou pode não haver quem (a tecla `?` com o foco em lugar nenhum): aí o
+         foco vai ao gatilho da ajuda, que existe em toda tela. [01/10/2026,
+         etapa 7c] São DOIS no DOM — o do pé do menu e o da faixa do celular —,
+         e só um está à vista em cada largura: o foco vai ao que se vê. Um
+         frame depois, para o painel já ter saído do documento. */
       requestAnimationFrame(() => {
+        const visivel = Array.from(document.querySelectorAll<HTMLElement>('.ajuda-gatilho'))
+          .find((b) => b.getClientRects().length > 0 && getComputedStyle(b).visibility !== 'hidden');
         const destino = quemAbriu && quemAbriu.isConnected && quemAbriu !== document.body
-          ? quemAbriu : document.querySelector<HTMLElement>('.ajuda-gatilho');
+          ? quemAbriu : visivel;
         destino?.focus();
       });
     };

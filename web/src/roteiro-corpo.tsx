@@ -48,7 +48,7 @@
 
 import { useId, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Ligacao } from './rota.tsx';
-import { Icone } from './ui.tsx';
+import { Icone, Recolhido } from './ui.tsx';
 import { ICONE_DO_AVISO } from './iconografia.ts';
 import { tipoDoAviso } from './tom-do-estado.ts';
 import {
@@ -102,6 +102,9 @@ function AbaDoPasso({ passo, escolhido, idAba, idPainel, aoEscolher }: {
   );
 }
 
+/** Onde o navegador lembra se o «Como fazer» do funil fica aberto. */
+export const CHAVE_DO_COMO_FAZER = 'financeiro.mes.como-fazer';
+
 /** O painel do passo escolhido: o que é, o botão, e como se faz. */
 function PainelDoPasso({ passo, idAba, idPainel }: { passo: PassoDoMes; idAba: string; idPainel: string }) {
   return (
@@ -133,11 +136,21 @@ function PainelDoPasso({ passo, idAba, idPainel }: { passo: PassoDoMes; idAba: s
       </p>
 
       {/* NUMERADO E NÃO EM MARCADORES: são atos em ordem, e a ordem é o que a
-          pessoa precisa. Uma lista de marcadores convida a escolher. */}
-      <h4 className="roteiro-como-tit">Como fazer</h4>
-      <ol className="roteiro-como">
-        {passo.comoFazer.map((l) => <li key={l}>{l}</li>)}
-      </ol>
+          pessoa precisa. Uma lista de marcadores convida a escolher.
+
+          [01/10/2026, etapa 7c] RECOLHIDO, E LEMBRADO. As quatro linhas do
+          «como fazer» eram a maior prosa da tela Mês, e ficavam abertas para
+          sempre — também para quem já fez o mês dez vezes. Agora ele nasce
+          aberto na primeira visita deste computador e, fechado uma vez, fica
+          fechado (em qualquer passo: a escolha é de quem lê, não do passo).
+          `leve`: ele mora dentro do cartão do funil, e cartão dentro de
+          cartão é o que o g3ref recusa. */}
+      <Recolhido className="leve roteiro-como-fazer" titulo="Como fazer" lembrar={CHAVE_DO_COMO_FAZER} aberto
+                 resumo={`${passo.comoFazer.length} ${passo.comoFazer.length === 1 ? 'passo' : 'passos'}, em ordem`}>
+        <ol className="roteiro-como">
+          {passo.comoFazer.map((l) => <li key={l}>{l}</li>)}
+        </ol>
+      </Recolhido>
     </div>
   );
 }
@@ -291,6 +304,11 @@ function Vizinho({ passo, rotulo }: { passo: PassoNoMapa; rotulo: string }) {
   );
 }
 
+/* [01/10/2026, etapa 7c] AS DUAS FRASES LADO A LADO no computador (`estilo.ts`,
+ * `.faixa-do-passo`): o que esta tela é, à esquerda; o antes, o depois e o mês
+ * inteiro, à direita. Empilhadas, cada uma presa a 62 caracteres, a faixa tinha
+ * cinco linhas antes da primeira coisa da tela. */
+
 /** Desenha `null` para tela que não hospeda passo nenhum — e `null` é a resposta:
  *  uma faixa dizendo «esta tela não é passo nenhum» seria ruído em toda tela de
  *  cadastro do sistema. */
@@ -313,14 +331,24 @@ export function FaixaDoPasso({ rota }: { rota: string }) {
           {onde.aqui.map((p) => p.numero).join(' e ')} de {onde.total} {doMes}:
         </strong>{' '}
         {nomes(onde.aqui)}.
-        {!onde.depois && <> É aqui que o mês termina: quando o cliente paga, a parte do dono da usina e a
-          comissão nascem nesta lista.</>}
+        {/* [01/10/2026, etapa 7c] O PASSO DIVIDIDO: Contas a receber hospeda a
+            metade «receber» do passo 5, e diz isso — e diz onde o mês termina. */}
+        {onde.parte && onde.outra
+          ? <> Aqui fica {onde.parte}; o mês termina em <Ligacao para={onde.outra.endereco}>{onde.outra.rotulo}</Ligacao>.</>
+          : !onde.depois && <> É aqui que o mês termina: quando o cliente paga, a parte do dono da usina e a
+              comissão nascem nesta lista.</>}
       </p>
 
       <p className="fraco">
-        {onde.antes && <Vizinho passo={onde.antes} rotulo="Antes daqui:" />}
-        {onde.antes && onde.depois && ' '}
-        {onde.depois && <Vizinho passo={onde.depois} rotulo="Depois daqui:" />}
+        {/* OS VIZINHOS SAEM NO TELEFONE (`.faixa-vizinhos`, etapa 7c): lá eles
+            eram quatro linhas antes da primeira coisa da tela, e o menu já
+            diz o número de cada tela. Fica o «Ver o mês inteiro». */}
+        <span className="faixa-vizinhos">
+          {onde.antes && <Vizinho passo={onde.antes} rotulo="Antes daqui:" />}
+          {onde.antes && onde.depois && ' '}
+          {onde.depois && <Vizinho passo={onde.depois} rotulo="Depois daqui:" />}
+          {!onde.parte && onde.outra && <> Quem ainda deve: <Ligacao para={onde.outra.endereco}>{onde.outra.rotulo}</Ligacao>.</>}
+        </span>
         {' '}<Ligacao para="/pendencias">
           {onde.deOutroSetor ? 'Ver o mês inteiro, na tela Mês do Rateio' : 'Ver o mês inteiro'}
         </Ligacao>

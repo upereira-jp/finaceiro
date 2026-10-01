@@ -21,7 +21,7 @@
 import { useEffect, useState } from 'react';
 import { api, ErroDaApi, type ConectorCobranca } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
-import { Pagina, Aviso, RetornoDoAto, Campo, Marca, linha, Interruptor, Icone, DetalheTecnico, Tabela } from '../ui.tsx';
+import { Pagina, Aviso, RetornoDoAto, Campo, Marca, linha, Interruptor, Icone, DetalheTecnico, Tabela, Recolhido } from '../ui.tsx';
 import { podeReligarNaTela } from '../saude-do-dinheiro.ts';
 import { SELO_DO_DEGRAU } from '../tom-do-estado.ts';
 import { diaEmBr, contagem } from '../formato.ts';
@@ -177,7 +177,7 @@ export function TelaCobranca() {
 
   return (
     <Pagina titulo="Conector Sicoob"
-            sub="A credencial do banco — pela referência, nunca pelo segredo. Cobrar um cliente é na tela Cobranças, no setor Rateio; aqui só se cadastra por onde o boleto sairia.">
+            sub="A credencial do banco, guardada pela referência e nunca pelo segredo.">
 
       {/* ------------------------------------------------ o estado de hoje */}
       {cert.erro && (
@@ -318,14 +318,17 @@ export function TelaCobranca() {
         </Aviso>
       )}
 
-      {/* ---------------------------------------- o que esta tela nao resolve */}
-      <div className="cartao secao">
-        <h2 style={{ marginTop: 0 }}>Antes de preencher: onde mora o segredo</h2>
-        <p className="sub" style={{ marginBottom: 8 }}>
-          O campo abaixo guarda um <strong>apelido</strong> que aponta para o cofre onde a senha e o
-          certificado do banco ficam guardados. Ele <strong>não</strong> guarda a senha em si —
-          nunca cole aqui certificado, senha ou token.
-        </p>
+      {/* ---------------------------------------- o que esta tela nao resolve
+        [01/10/2026, etapa 7c] RECOLHIDO, com a regra que importa no resumo. Era
+        um cartão aberto de dois parágrafos antes do formulário, em toda visita
+        — e quem volta a esta tela já sabe onde mora o segredo. Fechado, o
+        resumo diz o essencial (o campo é o apelido, nunca o segredo); aberto,
+        o resto. O aviso de quem cola o segredo por engano continua no próprio
+        campo, logo abaixo. */}
+      <Recolhido secao icone="certificado" titulo="Onde mora o segredo"
+                 resumo="O campo abaixo guarda o apelido do cofre — nunca a senha, o certificado ou o token.">
+        {/* O PRIMEIRO PARÁGRAFO VIROU O RESUMO, à vista com o recolhido fechado
+            — dizê-lo de novo aqui dentro seria a mesma frase duas vezes. */}
         <p className="sub" style={{ marginBottom: 0 }}>
           <strong>O cofre já existe</strong>, desde 27/08/2026, e o sistema já sabe conversar com o
           Sicoob. O que ainda falta para sair boleto por aqui está <strong>fora do sistema</strong>:
@@ -346,7 +349,7 @@ export function TelaCobranca() {
             mesma transação da leitura (regra 9).
           </p>
         </DetalheTecnico>
-      </div>
+      </Recolhido>
 
       {/* -------------------------------------------------------- o formulario */}
       <div className="cartao">

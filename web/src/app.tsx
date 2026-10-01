@@ -25,14 +25,14 @@
 // LATERAL, a pedido do dono — ver `menu-lateral.tsx`. O que ficou aqui e o que
 // liga a casca a sessao: quem esta logado, em qual empresa, e o que o vinculo ve.
 
-import { lazy, Suspense, useEffect, useState, type ReactElement } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, type ReactElement } from 'react';
 import { useSessao } from './sessao.tsx';
 import {
   Aviso, Icone, Menu, ItensDeTema, Escolha, Carregando, DetalheTecnico, ESTILO,
 } from './ui.tsx';
 import { useCaminho, navegar } from './rota.tsx';
 import { telaDoCaminho, funilDoCaminho, funisVisiveis, destinoVisivel } from './navegacao.ts';
-import { GatilhoDeAjuda, EVENTO_ABRIR_AJUDA } from './ajuda-gatilho.tsx';
+import { GatilhoDeAjuda, EVENTO_ABRIR_AJUDA, ehOAtalhoDaAjuda } from './ajuda-gatilho.tsx';
 import { MenuLateral } from './menu-lateral.tsx';
 import { Login } from './telas/login.tsx';
 /*
@@ -94,8 +94,13 @@ const PainelDeAjuda = lazy(() => import('./ajuda-painel.tsx').then((m) => ({ def
  *
  * POR QUE NAO NO SERVIDOR: guardar isto no perfil custaria uma coluna, uma rota
  * e uma escrita — para uma dica de interface. E ficaria PIOR: quem entra de uma
- * maquina nova, onde o botao esta num canto que ela nunca viu, e exatamente quem
+ * maquina nova, onde o botao esta num lugar que ela nunca viu, e exatamente quem
  * precisa da dica, e o perfil diria que ela ja foi vista.
+ *
+ * [01/10/2026, etapa 7c] A MESMA MARCA, O LUGAR NOVO: o gatilho saiu do canto e
+ * foi para o pe do menu, e o balao aponta para la. A chave nao mudou de
+ * proposito — quem ja viu o balao do canto nao precisa ve-lo de novo para
+ * aprender que a ajuda mudou de lugar: o item novo tem o nome escrito.
  *
  * O `try` NAO E PARANOIA: navegador em janela anonima com armazenamento
  * bloqueado LANCA ao ler `localStorage`, e uma dica de ajuda derrubando a
@@ -160,6 +165,25 @@ export function App() {
     };
     addEventListener(EVENTO_ABRIR_AJUDA, abrir);
     return () => removeEventListener(EVENTO_ABRIR_AJUDA, abrir);
+  }, []);
+
+  /* A TECLA `?` (01/10/2026, etapa 7c): abre a central de qualquer tela, menos
+   * quando o foco esta num campo de texto — a regra inteira e `ehOAtalhoDaAjuda`.
+   * So com alguem dentro: na tela de login nao ha central, e abrir o estado
+   * ali faria o painel saltar na cara de quem acabou de entrar. A referencia
+   * evita reinstalar o ouvinte a cada desenho. */
+  const dentro = useRef(false);
+  dentro.current = Boolean(s.sessaoAuth && s.tenantId);
+  useEffect(() => {
+    const tecla = (e: KeyboardEvent) => {
+      if (!dentro.current || !ehOAtalhoDaAjuda(e)) return;
+      e.preventDefault();
+      setTopicoDaAjuda(null);
+      setAjudaAberta(true);
+      setAvisoDaAjuda(false); marcarAvisoVisto();
+    };
+    addEventListener('keydown', tecla);
+    return () => removeEventListener('keydown', tecla);
   }, []);
 
   /*
@@ -231,9 +255,9 @@ export function App() {
    * Recolhido, o menu mostra so o desenho da conta — o nome da empresa continua
    * no alto da lista dela.
    *
-   * O GATILHO DA AJUDA NAO ESTA AQUI, e o motivo e o de 21/08 (`ajuda-gatilho.tsx`):
-   * ele desceu para o canto inferior direito por pedido do dono, e o balao de
-   * primeira visita aponta para la.
+   * O GATILHO DA AJUDA MORA LOGO ACIMA DA CONTA desde 01/10/2026 (etapa 7c),
+   * mas nao e desenhado aqui: o menu o pede por lugar (`ajuda`, abaixo), porque
+   * no celular ele tambem aparece na faixa do topo.
    */
   const pe = (recolhido: boolean) => (
     <>
@@ -278,30 +302,32 @@ export function App() {
       */}
       <MenuLateral funil={funil} visiveis={visiveis} tela={tela} pe={pe}
                    forcarAberto={varios && !s.tenantId}
-                   ajuda={
+                   ajuda={(lugar) => (
                      /*
-                       O BOTAO DA AJUDA e o balao que ensina que ele existe. Ele
+                       O GATILHO DA AJUDA e o balao que ensina que ele existe. Ele
                        NAO e `lazy`: precisa estar em toda tela desde o primeiro
                        desenho, porque quem trava nao sabe que vai travar. O que
                        chega sob demanda e o painel — a base de assuntos e o
                        glossario inteiro.
 
-                       ONDE ELE APARECE e do CSS: no canto inferior direito no
-                       computador (pedido do dono, 21/08), na faixa do topo no
-                       celular (01/10, etapa 5). O DOM e um so, entre a faixa e
-                       o conteudo — ver `ajuda` em `menu-lateral.tsx`.
+                       ONDE ELE APARECE [01/10/2026, etapa 7c]: no pe do menu,
+                       logo acima da conta, em toda largura; e, no celular, tambem
+                       na faixa do topo, para a gaveta fechada. O menu pede os
+                       dois lugares, e o CSS mostra um por largura — o balao vai
+                       junto, e aponta para o que se ve.
 
                        O BALAO SO APARECE COM EMPRESA ESCOLHIDA. Sem ela a tela
                        ja mostra um aviso pedindo para escolher, e dois avisos ao
                        mesmo tempo fazem a pessoa ler o menos importante primeiro.
                      */
                      <GatilhoDeAjuda
+                       lugar={lugar}
                        aberta={ajudaAberta}
                        aoAbrir={() => { setTopicoDaAjuda(null); setAjudaAberta(true); encerrarAviso(); }}
                        aviso={avisoDaAjuda && Boolean(s.tenantId)}
                        aoFecharAviso={encerrarAviso}
                      />
-                   }>
+                   )}>
         {destino ? (
           <Carregando texto="Abrindo o seu setor…" />
         ) : !s.tenantId ? (

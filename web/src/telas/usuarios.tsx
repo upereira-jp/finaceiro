@@ -60,7 +60,7 @@ export function TelaUsuarios() {
 
   return (
     <Pagina titulo="Usuários"
-            sub="Quem entra no Financeiro G3 e o que cada pessoa vê. O perfil diz o que a pessoa pode fazer; as caixas, quais setores aparecem no menu dela.">
+            sub="Quem entra no sistema, o que pode fazer e quais setores vê.">
       {carga.erro && <Aviso tipo="erro">{carga.erro}</Aviso>}
 
       {pronto && (

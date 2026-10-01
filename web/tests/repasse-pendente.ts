@@ -15,10 +15,11 @@
 import {
   motivoDaEspera, podeRepartirAgora, contarPorMotivo, totalCentavos,
   ordenarPelaEspera, resumoDaEspera, ROTULO_DO_MOTIVO, EXPLICACAO_DO_MOTIVO,
-  ROTULO_CURTO_DO_MOTIVO, COMO_DESTRAVAR, ORDEM_DOS_MOTIVOS,
+  ROTULO_CURTO_DO_MOTIVO, COMO_DESTRAVAR, ORDEM_DOS_MOTIVOS, agruparPorUsina,
   type RepassePendente, type MotivoDaEspera,
 } from '../src/repasse-pendente.ts';
 import { TELAS } from '../src/navegacao.ts';
+import { readFileSync } from 'node:fs';
 
 let falhas = 0;
 let feitas = 0;
@@ -151,6 +152,44 @@ chk('R7', resumoDaEspera([]) === '',
   const curtos = Object.values(ROTULO_CURTO_DO_MOTIVO);
   chk('R11c', curtos.length === 3 && curtos.every((t) => t.length > 0 && t.length <= 20),
       'a linha diz o estado em ate vinte letras — a explicacao longa e do cabecalho do grupo');
+}
+
+// ----------------------------------------- R12 uma linha por usina (01/10/2026, etapa 7c)
+{
+  /* O CASO MEDIDO NO ESPELHO: dezesseis pagamentos de duas usinas sem dono eram
+     dezesseis linhas «Sem dono · Vincular em Usinas». Agora sao duas. */
+  const semDono = (i: number, usina: string, dia: string, mes = '2026-08-01') => linha({
+    liquidacao_id: `s${i}`, usina_sem_dono: true, codigo_geradora: usina, data_liquidacao: dia,
+    competencia: mes, valor_liquidado_centavos: 1_000 * (i + 1),
+  });
+  const ls = [
+    ...Array.from({ length: 9 }, (_, i) => semDono(i, '0003', `2026-09-${String(25 - i).padStart(2, '0')}`)),
+    ...Array.from({ length: 7 }, (_, i) => semDono(9 + i, '0004', `2026-09-${String(10 + i).padStart(2, '0')}`,
+      i === 6 ? '2026-09-01' : '2026-08-01')),
+    linha({ liquidacao_id: 'b1', codigo_geradora: '0001', origem: 'webhook_sicoob', data_liquidacao: '2026-09-17' }),
+    linha({ liquidacao_id: 'p1', codigo_geradora: '0001', origem: 'manual', data_liquidacao: '2026-09-18' }),
+  ];
+  const g = agruparPorUsina(ls);
+  chk('R12', g.length === 4 && g.filter((u) => u.motivo === 'sem_dono').length === 2,
+      `16 pagamentos sem dono de 2 usinas viram 2 linhas, e a usina com dono aparece uma vez em cada espera (veio: ${g.length})`);
+  const u3 = g.find((u) => u.codigo_geradora === '0003')!;
+  const u4 = g.find((u) => u.codigo_geradora === '0004')!;
+  chk('R12b', u3.pagamentos.length === 9 && u4.pagamentos.length === 7
+          && u3.totalCentavos === totalCentavos(ls.filter((l) => l.codigo_geradora === '0003'))
+          && u3.desde === '2026-09-17' && u3.ate === '2026-09-25'
+          && u3.pagamentos.map((p) => p.data_liquidacao).join() === [...u3.pagamentos.map((p) => p.data_liquidacao)].sort().join(),
+      'cada usina leva quantos pagamentos, a soma deles, o primeiro e o ultimo dia — e os pagamentos do mais antigo ao mais recente');
+  chk('R12c', u4.meses.join() === '2026-08,2026-09' && u3.meses.join() === '2026-08',
+      'os meses de referencia aparecem uma vez cada, em ordem');
+  chk('R12d', g.map((u) => `${u.motivo}:${u.codigo_geradora}`).join() === 'pronto:0001,sem_dono:0004,sem_dono:0003,aguardando_banco:0001',
+      'a ordem e a dos motivos (quem exige acao primeiro) e, dentro do motivo, o dinheiro parado ha mais tempo');
+  chk('R12e', g.reduce((a, u) => a + u.pagamentos.length, 0) === ls.length,
+      'nenhum pagamento some nem se repete no agrupamento');
+  const tela = readFileSync(new URL('../src/telas/contas-a-pagar.tsx', import.meta.url), 'utf8')
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ');
+  chk('R12f', /agruparPorUsina\(p\.linhas\)/.test(tela) && (tela.match(/Vincular em \{g\.ultimoPasso\.destino\.rotulo\}/g) ?? []).length === 1
+          && /aria-expanded=\{aberta\}/.test(tela),
+      'a tela agrupa por usina, oferece «Vincular em Usinas» num lugar so (a linha da usina) e abre os pagamentos num expansor');
 }
 
 console.log(`\n--- repasse pendente (a fila onde o dinheiro espera): ${feitas} verificacoes, ${falhas} falha(s)`);

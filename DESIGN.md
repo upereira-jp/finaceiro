@@ -94,6 +94,7 @@ spacing:
   pagina-topo: "28px"
   pagina-lado: "20px"
   largura-maxima: "1160px"
+  largura-lista: "1320px"
   menu-lateral: "248px"
   menu-recolhido: "64px"
   toque: "44px"
@@ -207,7 +208,11 @@ components:
      fonte de verdade continua sendo o código — mudou lá, regenere aqui.
      Etapa 7b (01/10/2026): o tom de cada estado passou a morar em
      `web/src/tom-do-estado.ts`, com suíte (`web/tests/tom-do-estado.ts`); as
-     seções Estados, Selos, Abas, Perigo, Funil e Vocabulário foram reescritas. -->
+     seções Estados, Selos, Abas, Perigo, Funil e Vocabulário foram reescritas.
+     Etapa 7c (01/10/2026): a ajuda saiu do canto para o pé do menu (com a
+     tecla ?), a explicação simples ficou à vista, o «Como fazer» recolhe e
+     lembra, as telas de lista alargam na janela grande, e o passo 5 passou a
+     ser dividido entre Contas a receber e Contas a pagar. -->
 
 ## Overview
 
@@ -215,7 +220,7 @@ components:
 
 O Financeiro é a mesa de trabalho do mês de uma geradora solar: ler cinquenta contas de luz, gerar e emitir as cobranças, pedir os boletos, dar baixa e repartir o dinheiro entre o dono da usina e quem trouxe o cliente. O desenho é o da referência **g3ref** — a folha que o cliente recebe — levado para o sistema inteiro em 30/09/2026: Barlow e a condensada dela, canto reto, linha de 1px em vez de sombra, o navy da marca como tinta e como faixa, o creme como papel, e o laranja guardado para o ato. É uma ferramenta de **Operate**: quem abre está no meio de uma tarefa, e a tela tem de sumir dentro dela.
 
-A densidade é de livro-caixa, não de painel de vendas. Tabelas inteiras, sem paginação escondida; números em colunas tabulares que se conferem de cima a baixo; a prosa explicativa existe (o dono pediu que a tela dissesse o porquê), mas fecha atrás de «ver detalhe técnico» e de seções recolhidas. A ordem das coisas é a ordem do trabalho: o menu lateral lista o mês, depois os cadastros na ordem em que um depende do outro, depois os passos do mês numerados, depois o resultado.
+A densidade é de livro-caixa, não de painel de vendas. Tabelas inteiras, sem paginação escondida; números em colunas tabulares que se conferem de cima a baixo; a prosa explicativa existe (o dono pediu que a tela dissesse o porquê), mas curta: cada tela abre com UMA linha de subtítulo, a explicação simples fica à vista numa linha, e o técnico (chave, comando, texto do servidor) fecha atrás de «ver detalhe técnico»; o resto mora na Central de Ajuda da tela e em seções recolhidas. A ordem das coisas é a ordem do trabalho: o menu lateral lista o mês, depois os cadastros na ordem em que um depende do outro, depois os passos do mês numerados, depois o resultado.
 
 O que o sistema recusa: sombra flutuando sob cartão, canto arredondado, filete colorido de 4px no lado de um aviso, ícone de outra família, vermelho para o que é só lacuna de cadastro, laranja em dois botões da mesma área, data em ISO na tela.
 
@@ -283,7 +288,7 @@ O escuro parte do navy como superfície (`navy` → `cartao-escuro` → `hover-e
 
 **The In-Flight Is Neutral Rule.** O que está em curso sem você é neutro: a cobrança emitida, o boleto a caminho, a linha na vez. Um sexto tom «em curso» foi considerado e recusado em 01/10/2026: numa tela de trabalho a cor se gasta com o que pede alguém. O que separa a emitida da cancelada, as duas cinza, é o desenho, a palavra e o lugar na lista.
 
-**The One Orange Rule.** Um botão laranja por contexto (a página, a gaveta, a revisão em série, a pergunta na tela). O segundo ato da mesma área é o botão comum, de contorno. Seleção não é ato: a aba ativa de Contas de luz é a tinta forte com o sublinhado de 2px (era o bloco laranja cheio, até 01/10/2026). O realce do passo em destaque no funil e o item ativo do menu lateral continuam laranja — são lugar, não botão, e não disputam com o ato da página.
+**The One Orange Rule.** Um botão laranja por contexto (a página, a gaveta, a revisão em série, a pergunta na tela). O segundo ato da mesma área é o botão comum, de contorno. Seleção não é ato: a aba ativa de Contas de luz é a tinta forte com o sublinhado de 2px (era o bloco laranja cheio, até 01/10/2026). A ajuda também não é laranja: até 01/10/2026 ela era o quadrado laranja fixo no canto de baixo — o segundo laranja de toda tela, e cobria a última coluna das tabelas —; hoje é um item comum do pé do menu. O realce do passo em destaque no funil e o item ativo do menu lateral continuam laranja — são lugar, não botão, e não disputam com o ato da página.
 
 **The AA Floor Rule.** Texto ≥ 4,5:1 em toda superfície dos dois temas; ≥ 3:1 só para o anel de foco e a borda de controle. Cor nova entra com o par medido escrito ao lado do token em `tema.ts`.
 
@@ -311,11 +316,11 @@ O escuro parte do navy como superfície (`navy` → `cartao-escuro` → `hover-e
 
 ## Layout
 
-- **Casca:** menu lateral fixo à esquerda (248px; 64px recolhido), conteúdo com no máximo 1160px, 28px de respiro no alto e 20px dos lados. Abaixo de **900px** o menu vira gaveta com foco preso, aberta pelo «Menu» da faixa do topo; a ajuda sobe para essa faixa.
+- **Casca:** menu lateral fixo à esquerda (248px; 64px recolhido), conteúdo com no máximo 1160px, 28px de respiro no alto e 20px dos lados. As **telas de lista** (`Tela.larga`: Clientes, Unidades, Contratos, Cobranças, Relatórios, Contas a receber, Contas a pagar, Histórico) vão até **1320px** quando a janela tem 1600px ou mais com o menu aberto (1400 com ele recolhido); a prosa delas não alarga (o subtítulo fica a 72ch, o texto do aviso a 96ch). Abaixo de **900px** o menu vira gaveta com foco preso, aberta pelo «Menu» da faixa do topo; a faixa tem também o botão de desenho da ajuda, para a gaveta fechada.
 - **Ritmo:** 12px entre elementos de um grupo (`gap`), 20px entre seções (`secao`) e dentro do cartão. Cartões de resumo (KPI) em grade `auto-fit` de 180px; no telefone, dois por linha.
 - **Tabela → cartões:** a medida é a da **própria tabela** (`container query`), não a da janela. Abaixo de **720px de tabela** cada linha vira cartão: identificação no alto, situação e valor logo abaixo, a ação no pé, e o nome de cada coluna escrito na célula. A tabela curta de resumo (`cartoes="estreita"`) só vira cartão abaixo de **440px**; Cobranças tem o cartão próprio abaixo de 860px. A ordenação do cartão é **um** seletor «Ordenar por» com coluna e direção.
 - **Celular:** nenhuma tela rola para o lado; todo controle tem 44px de altura e o campo usa 16px de letra (o Safari não dá zoom). Em qualquer largura nenhum alvo tem menos de 24px.
-- **Ordem da página:** título e frase de apoio, o ato da tela no canto do título («Novo …» dos cadastros), avisos do que falta, ferramentas (busca, filtros, contagem «N de M»), a lista. Listar antes de criar.
+- **Ordem da página:** título e frase de apoio (UMA linha), o ato da tela no canto do título («Novo …» dos cadastros), a faixa do passo (nas telas que são passo do mês: o que a tela é, à esquerda; o antes, o depois e o mês inteiro, à direita), avisos do que falta, ferramentas (busca, filtros, contagem «N de M»), a lista. Listar antes de criar; o que se confere de vez em quando (a geração do mês em Usinas, «Onde mora o segredo» no Conector Sicoob) é `Recolhido`, depois da lista ou antes do formulário.
 
 ## Elevation & Depth
 
@@ -354,7 +359,7 @@ Canto reto em tudo: `--raio`, `--raio-cartao` e `--raio-pequeno` valem 0 e conti
 ### Cards / Containers
 - **Cartão (`.cartao`):** branco sobre o creme, 1px de `borda`, canto reto, 20px de respiro, sem sombra.
 - **KPI (`Kpi`):** o mesmo cartão com o rótulo caixa-alta e o ícone de 14px no alto e o número grande embaixo; a cor do número só muda para `ok`/`erro`/`alerta` quando o número É o estado (vencido em vermelho, recebido em verde).
-- **Recolhido (`Recolhido`):** `<details>` nativo com título e o resumo de uma linha sempre à vista — o que se confere de vez em quando.
+- **Recolhido (`Recolhido`):** `<details>` nativo com título e o resumo de uma linha sempre à vista — o que se confere de vez em quando. Com `lembrar` ele guarda no navegador o último clique (nasce como `aberto` na primeira vez); `leve` tira a superfície para o recolhido que mora dentro de um cartão; `secao` faz do título um `h2`, para o recolhido que é seção da página.
 
 ### Inputs / Fields
 - **Campo (`Campo`):** rótulo em Barlow 13,5px na tinta fraca, ligado ao controle por `htmlFor`; o campo afunda um tom (`campo`), 1px de borda, canto reto. O teclado do celular sai do rótulo (decimal, numérico, e-mail, telefone).
@@ -365,15 +370,17 @@ Canto reto em tudo: `--raio`, `--raio-cartao` e `--raio-pequeno` valem 0 e conti
 ### Tabela (`Tabela`)
 - Sem linha vertical; divisória horizontal `borda-suave`; cabeçalho no `recuo` com rótulo caixa-alta. Coluna ordenável com a seta no cabeçalho (`ThOrd`, `aria-sort`).
 - Linha com controle alinha pelo meio; linha só de texto, pelo topo.
-- Vira lista de cartões pela largura da própria tabela (ver Layout), com o seletor «Ordenar por» no lugar do cabeçalho.
+- Vira lista de cartões pela largura da própria tabela (ver Layout), com o seletor «Ordenar por» no lugar do cabeçalho. A coluna de **estado** diz a ordem com palavras — «Situação: o que precisa de você primeiro» / «… o que já fechou primeiro» — e ordena pelo peso do tom (`pesoDoSelo`: falha, tarefa, não medido, em curso, fechado); as outras, «(crescente)» / «(decrescente)».
+- Nas listas de caixa (`.lista-de-caixa`, Contas a receber e Contas a pagar) o ato da linha não quebra e o selo longo quebra dentro dele; a largura que sobra vai para o nome e a descrição.
 
 ### Avisos (`Aviso`, `RetornoDoAto`)
 - **Style:** fundo tingido do estado, contorno de 1px da mesma matiz, ícone na cor do estado e o **texto em navy** (parágrafo em vermelho é mais difícil de ler que o erro).
 - **Fala:** erro é `role="alert"`; ok e alerta são `role="status"`. O retorno de um ato que deu certo entra numa região viva que já existia antes do texto (`RetornoDoAto`).
 
 ### Navigation — o menu lateral (`MenuLateral`)
-- **Style:** faixa navy de 248px, itens em condensada com ícone Phosphor na `topo-fraco`; o ativo ganha o lastro laranja translúcido e a tinta laranja. O seletor de setor (Rateio | Empresa | Administração) no alto, a conta da pessoa no pé.
-- **A ordem é a do trabalho:** Mês; os cadastros na ordem em que um depende do outro (Donos de usina → Usinas → Clientes → Unidades consumidoras → Contratos); os passos do mês com o número de cada um (Contas de luz `1–2`, Cobranças `3–4`); Relatórios. No setor Empresa: Contas a receber, Contas a pagar (`5`), Conector Sicoob, Histórico.
+- **Style:** faixa navy de 248px, itens em condensada com ícone Phosphor na `topo-fraco`; o ativo ganha o lastro laranja translúcido e a tinta laranja. O seletor de setor (Rateio | Empresa | Administração) no alto; no pé, a **Ajuda** (item comum, sem laranja, com a tecla `?` desenhada à direita — o atalho que abre a central de qualquer tela, menos com o foco num campo de texto) e, logo abaixo, a conta da pessoa. Recolhido, a ajuda é só o desenho, com a dica «Ajuda · tecla ?».
+- **A ordem é a do trabalho:** Mês; os cadastros na ordem em que um depende do outro (Donos de usina → Usinas → Clientes → Unidades consumidoras → Contratos); os passos do mês com o número de cada um (Contas de luz `1–2`, Cobranças `3–4`); Relatórios. No setor Empresa: Contas a receber (`5`), Contas a pagar (`5`), Conector Sicoob, Histórico — o passo 5 é dividido: a metade «receber» (quem ainda deve) e a «repartir», onde o mês termina.
+- **O balão de primeira visita** (`financeiro.ajuda.apresentada`, uma vez por computador) sai do item da ajuda, à direita do menu, com as duas bolhas; no celular, desce do botão da faixa.
 - **Recolhe** para 64px nas telas de desenho; **vira gaveta** abaixo de 900px.
 
 ### Página (`Pagina`) e o painel de criar (`PainelDeCriar`)
@@ -385,6 +392,8 @@ Canto reto em tudo: `--raio`, `--raio-cartao` e `--raio-pequeno` valem 0 e conti
 
 ### O funil do mês (`roteiro-corpo.tsx`)
 - Os cinco passos lado a lado com o número em quadro, a contagem do que falta em número grande e o «de N» embaixo; UM passo ganha o realce laranja, e a palavra em cima diz por quê: «Mais urgente agora» quando é o risco (a recusa do banco, a vencida), «Próximo passo» quando é só o trabalho mais perto do dinheiro. (Era «Comece aqui» nos dois casos, e lia como ordem.) O risco sai na tinta do tom dele — a recusa e a vencida em vermelho, com o octógono; o boleto só parado, em âmbar. No celular, um passo por linha.
+- O «Como fazer» do passo é um `Recolhido` leve e lembrado: nasce aberto na primeira visita deste computador e, fechado uma vez, fica fechado.
+- Nas conferências do mês, cada linha em aberto mostra à vista a frase simples e a consequência (curtas, de `VERBETE_DA_CAMADA`); só a explicação do servidor, a nota do mapa, o comando e a chave ficam atrás de «ver detalhe técnico».
 
 ### As abas de Contas de luz (`Abas`, em `fatura-unificada.tsx`)
 - **Sem número:** «Leitura e cálculo», «Folha do cliente», «Dados de quem cobra». A tela já numera os passos do mês (1 e 2), e uma segunda numeração nas abas não casava com a primeira. A terceira guarda quem cobra — razão social, CNPJ, contato, logo, chave Pix, modelo e campos da folha —, e por isso não se chama mais «Cadastro da fatura».
@@ -411,7 +420,8 @@ Canto reto em tudo: `--raio`, `--raio-cartao` e `--raio-pequeno` valem 0 e conti
 - **Do** manter o dinheiro em centavos inteiros e o decimal (percentual, kWh, tarifa) como texto, do banco à tela (regra 1).
 - **Do** escrever o nome do botão e do link letra por letra igual ao rótulo da tela a que ele leva («Abrir Cobranças» leva a «Cobranças»; RM12/RM13 em `web/tests/roteiro-do-mes.ts`).
 - **Do** listar antes de criar: a lista é a tela, o «Novo …» fica no canto do título.
-- **Do** pôr o jargão (código de questão, nome de coluna, comando) atrás de `DetalheTecnico`.
+- **Do** pôr o jargão (código de questão, nome de coluna, comando) atrás de `DetalheTecnico` — e deixar à vista a explicação simples. Um detalhe técnico que esconde o português de quem opera está escondendo a coisa errada.
+- **Do** dizer cada coisa num lugar só: o ato de uma cobrança mora na linha dela (o resumo «N deste mês sem boleto no banco · M de outros meses» não repete as linhas), e o ato de uma usina, uma vez por usina («Vincular em Usinas», com os pagamentos num expansor).
 
 ### Don't:
 - **Don't** arredondar canto nem pôr sombra em superfície parada.

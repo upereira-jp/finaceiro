@@ -11,12 +11,12 @@ import { usinaNoCrm } from '../crm.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
   Pagina, Aviso, RetornoDoAto, Tabela, Campo, Busca, Ferramentas, Filtro, ThOrd, Marca, Escolha, Icone, MostrandoSo,
-  useOrdenacao, ordenar, contem, rotulo, linha, CampoData, BotaoDeCriar, PainelDeCriar,
+  useOrdenacao, ordenar, contem, rotulo, linha, CampoData, BotaoDeCriar, PainelDeCriar, Recolhido,
 } from '../ui.tsx';
 import { naMensagem } from '../arquivo.ts';
 import { SELO_DO_CADASTRO, SELO_DA_GERACAO } from '../tom-do-estado.ts';
 import { decimalTexto } from '../dinheiro.ts';
-import { diaEmBr, mesEmBr, mesDeHojeEmSP } from '../formato.ts';
+import { diaEmBr, mesEmBr, mesDeHojeEmSP, mesPorExtenso } from '../formato.ts';
 import { divisaoEmPalavras, parteDaG3, parteDaG3ComComissao, comVirgula } from '../repasse-regras.ts';
 import { FILTROS_DA_TELA, filtroDaConsulta, rotuloDoRecorte, esquecerORecorte } from '../destino-da-camada.ts';
 
@@ -102,7 +102,7 @@ export function TelaUsinas() {
 
   return (
     <Pagina titulo="Usinas"
-            sub="Espelhadas do CRM. O dono e o percentual de repasse são preenchidos aqui — e sem eles dá para cobrar o cliente, mas não dá para repartir o dinheiro que entrar."
+            sub="Espelhadas do CRM. Aqui se escolhem o dono e o percentual de repasse."
             acao={<BotaoDeCriar controla="nova-usina" aberto={criando} ao={() => { acao.limpar(); setCriando(!criando); }}>
               Nova usina
             </BotaoDeCriar>}>
@@ -171,13 +171,11 @@ export function TelaUsinas() {
         )}
       </Ferramentas>
 
-      <GeracaoLancada usinas={usinas.dado ?? []} />
-
       <Tabela cabecalho={<>
                 <ThOrd chave="codigo" ordem={ordem} ao={alternar}>Código</ThOrd>
                 <ThOrd chave="distribuidora" ordem={ordem} ao={alternar}>Distribuidora</ThOrd>
                 <ThOrd chave="dono" ordem={ordem} ao={alternar}>Dono</ThOrd>
-                <ThOrd chave="situacao" ordem={ordem} ao={alternar}>Situação</ThOrd>
+                <ThOrd chave="situacao" ordem={ordem} ao={alternar} direcoes={['ativas primeiro', 'inativas primeiro']}>Situação</ThOrd>
               </>}
               vazio={todas.length ? 'Nenhuma usina corresponde à busca ou aos filtros.' : 'Nenhuma usina espelhada.'}>
         {visiveis.map((u) => (
@@ -220,6 +218,10 @@ export function TelaUsinas() {
           </tr>
         ))}
       </Tabela>
+
+      {/* [01/10/2026, etapa 7c] A GERAÇÃO DO MÊS DESCEU PARA DEPOIS DA LISTA, e
+          recolhida: ela ficava entre a busca e a tabela que a busca filtra. */}
+      <GeracaoLancada usinas={usinas.dado ?? []} />
 
       <h2>Percentual de repasse, por vigência</h2>
       <div className="cartao">
@@ -318,9 +320,24 @@ function GeracaoLancada({ usinas }: { usinas: Usina[] }) {
   if (ativas.length === 0) return null;
 
   const semNumero = ativas.filter((u) => porUsina[u.id] && !porUsina[u.id]!.includes(mes));
+  const lidas = ativas.filter((u) => porUsina[u.id] !== undefined).length;
+  const doMes = mesPorExtenso(`${mes}-01`) || mes;
+  /* O RESUMO É O QUE FICA À VISTA, fechado: quantas usinas estão sem o número
+     do mês escolhido, ou que todas têm. Lendo ainda, diz isso — «0 sem número»
+     antes de a leitura voltar seria uma afirmação sobre nada. */
+  const resumo = erro ? 'não foi possível ler a geração agora'
+    : lidas < ativas.length ? 'lendo…'
+    : semNumero.length > 0
+      ? `${semNumero.length} de ${ativas.length} ${ativas.length === 1 ? 'usina' : 'usinas'} sem o número de ${doMes} — sem ele, a cobrança dessas usinas não sai`
+      : `${ativas.length === 1 ? 'a usina tem' : `as ${ativas.length} usinas têm`} o número de ${doMes}`;
 
   return (
-    <div className="cartao secao">
+    /* [01/10/2026, etapa 7c] RECOLHIDO, com o resumo de uma linha. Era um cartão
+       aberto com um parágrafo de explicação, a tabela de todas as usinas e um
+       segundo parágrafo — antes da lista de usinas, que é a tela. O que se
+       confere de vez em quando fica fechado, e a linha de cima diz se há o que
+       conferir. */
+    <Recolhido icone="calendario" titulo="Geração lançada" resumo={resumo}>
       <div style={{ ...linha, gap: 12, marginBottom: 8 }}>
         <div>
           <label htmlFor="geracao-mes">Geração lançada em</label>
@@ -329,8 +346,7 @@ function GeracaoLancada({ usinas }: { usinas: Usina[] }) {
         </div>
       </div>
       <p className="sub" style={{ marginTop: 0 }}>
-        O número é lançado no outro sistema e chega aqui sozinho, em até 15 minutos. Sem ele, a
-        cobrança daquele mês é recusada — e aqui dá para ver quais faltam sem abrir uma a uma.
+        O número é lançado no outro sistema e chega aqui sozinho, em até 15 minutos.
       </p>
 
       {erro && <Aviso tipo="alerta">Não foi possível ler a geração: {erro}</Aviso>}
@@ -366,12 +382,6 @@ function GeracaoLancada({ usinas }: { usinas: Usina[] }) {
         })}
       </Tabela>
 
-      {semNumero.length > 0 && (
-        <p className="sub">
-          <strong>{semNumero.length} de {ativas.length}</strong> sem o número deste mês. Depois de
-          lançar no outro sistema, o número chega aqui em até 15 minutos.
-        </p>
-      )}
-    </div>
+    </Recolhido>
   );
 }

@@ -28,7 +28,7 @@
 // em quando fica fechado, com o resumo de uma linha a vista).
 
 import { Children, Fragment, isValidElement, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
-import type { ReactNode, CSSProperties, KeyboardEvent as EventoDeTecla } from 'react';
+import type { ReactNode, CSSProperties, KeyboardEvent as EventoDeTecla, SyntheticEvent } from 'react';
 import { lerModo, aplicarModo, type ModoTema } from './tema.ts';
 import { Icone, Logotipo } from './icones.tsx';
 import { ICONE_DO_AVISO, type NomeDeIcone } from './iconografia.ts';
@@ -582,20 +582,69 @@ export function PainelDeCriar(p: {
  */
 export function Recolhido(p: {
   titulo: ReactNode; resumo: ReactNode; icone?: NomeDeIcone; aberto?: boolean; children: ReactNode;
+  /**
+   * LEMBRAR A ESCOLHA, nesta chave do navegador (01/10/2026, etapa 7c). Sem
+   * ela, o recolhido abre como `aberto` manda e esquece o clique ao sair da
+   * tela — o certo para o que se confere de vez em quando. Com ela, `aberto` é
+   * só o jeito de NASCER, na primeira vez; depois vale o último clique da
+   * pessoa, neste computador. Nasceu para o «Como fazer» do funil do mês: quem
+   * já sabe fazer fecha uma vez e não lê de novo a cada tela, e quem chega pela
+   * primeira vez encontra aberto.
+   */
+  lembrar?: string;
+  /** Uma classe a mais — `leve` tira a superfície, para o recolhido que mora
+   *  DENTRO de um cartão (cartão dentro de cartão é o que o g3ref recusa). */
+  className?: string;
+  /** O título é um `<h2>` — para o recolhido que é SEÇÃO da página e não pode
+   *  sumir da lista de títulos do leitor de tela (o «Onde mora o segredo» do
+   *  Conector Sicoob, que era um cartão com h2). O `<summary>` aceita um título
+   *  dentro, e ele continua sendo o botão que abre. */
+  secao?: boolean;
 }) {
+  const [escolha, setEscolha] = useState<boolean | null>(() => (p.lembrar ? lerEscolhaDoRecolhido(p.lembrar) : null));
+  const aberto = escolha ?? p.aberto;
+  /* O `toggle` do `<details>` chega também quando o React escreve o `open` do
+     primeiro desenho — e aí o estado já é o que o navegador diz, e nada se
+     grava. Só a mudança de verdade vira escolha. */
+  const aoAlternar = (e: SyntheticEvent<HTMLDetailsElement>) => {
+    if (!p.lembrar) return;
+    const agora = e.currentTarget.open;
+    if (agora === Boolean(aberto)) return;
+    setEscolha(agora);
+    try { localStorage.setItem(p.lembrar, agora ? '1' : '0'); } catch { /* sem armazenamento, sem memória */ }
+  };
   return (
-    <details className="recolhido" open={p.aberto}>
+    <details className={p.className ? `recolhido ${p.className}` : 'recolhido'} open={aberto}
+             onToggle={p.lembrar ? aoAlternar : undefined}>
       <summary>
-        <span className="recolhido-tit">
-          {p.icone && <Icone nome={p.icone} tamanho={16} />}
-          {p.titulo}
-        </span>
+        {p.secao ? (
+          <h2 className="recolhido-tit">
+            {p.icone && <Icone nome={p.icone} tamanho={16} />}
+            {p.titulo}
+          </h2>
+        ) : (
+          <span className="recolhido-tit">
+            {p.icone && <Icone nome={p.icone} tamanho={16} />}
+            {p.titulo}
+          </span>
+        )}
         <span className="recolhido-resumo">{p.resumo}</span>
         <Icone nome="abrir_menu" tamanho={13} peso="bold" className="recolhido-seta" />
       </summary>
       <div className="recolhido-corpo">{p.children}</div>
     </details>
   );
+}
+
+/** A escolha lembrada de um `Recolhido` (`lembrar`): aberto, fechado, ou `null`
+ *  — nunca escolheu, ou o navegador não deixa ler (janela anônima com o
+ *  armazenamento bloqueado LANÇA ao ler, e a ajuda de um passo não pode
+ *  derrubar a tela). */
+export function lerEscolhaDoRecolhido(chave: string): boolean | null {
+  try {
+    const v = localStorage.getItem(chave);
+    return v === '1' ? true : v === '0' ? false : null;
+  } catch { return null; }
 }
 
 /**
@@ -839,9 +888,21 @@ export function ordenar<T>(
   });
 }
 
+/**
+ * AS DUAS DIREÇÕES DITAS COMO ORDEM (01/10/2026, etapa 7c), para a coluna de
+ * estado — «Situação (crescente)» não diz o que vem primeiro. A chave da coluna
+ * tem de ser o peso do tom (`pesoDoSelo`), ou a ordem dita na opção mentiria.
+ */
+export const DIRECOES_DA_SITUACAO = ['o que precisa de você primeiro', 'o que já fechou primeiro'] as const;
+/** As do cadastro que só é ativo ou inativo (a chave põe o ativo antes). */
+export const DIRECOES_DO_ATIVO = ['ativos primeiro', 'inativos primeiro'] as const;
+
 export function ThOrd(p: {
   chave: string; ordem: Ordem; ao: (chave: string) => void;
   num?: boolean; children: ReactNode;
+  /** O nome das duas direções no «Ordenar por» do cartão — crescente e
+   *  decrescente, nessa ordem. Sem ele, «(crescente)» e «(decrescente)». */
+  direcoes?: readonly [string, string];
 }) {
   const ativa = p.ordem.chave === p.chave;
   return (
@@ -869,9 +930,14 @@ export function ThOrd(p: {
  *
  * A DIRECAO E «crescente» E «decrescente» em toda coluna, e nao «de A a Z» ou
  * «mais antigo primeiro»: varias colunas ordenam por uma CHAVE que nao e o
- * texto que se ve (a Situacao de Cobrancas poe primeiro o que precisa de
- * voce), e uma palavra que descreve o texto mentiria nelas. E e o mesmo nome
- * da seta do computador (`ordem_crescente`).
+ * texto que se ve, e uma palavra que descreve o texto mentiria nelas. E e o
+ * mesmo nome da seta do computador (`ordem_crescente`).
+ *
+ * [01/10/2026, etapa 7c] MENOS NA COLUNA DE ESTADO, que diz a ordem com
+ * palavras («Situação: o que precisa de você primeiro» / «… o que já fechou
+ * primeiro»): «Situação (crescente)» nao dizia nada a ninguem. A coluna passa
+ * `direcoes`, e a chave dela e o peso do tom (`pesoDoSelo`), para a palavra e a
+ * ordem serem a mesma coisa.
  *
  * NAO HA UM SEGUNDO ESTADO: a escolha chama o MESMO `ao` dos cabecalhos, com o
  * contrato de `useOrdenacao().alternar` — coluna nova comeca crescente, a
@@ -882,7 +948,7 @@ export function ThOrd(p: {
  * Cobrancas, `.em-tabela`, o mostram); na tabela, a ordem continua na seta do
  * cabecalho.
  */
-export type ColunaOrdenavel = { chave: string; texto: string };
+export type ColunaOrdenavel = { chave: string; texto: string; direcoes?: readonly [string, string] };
 
 /** O texto visivel de um no (o nome de uma coluna ordenavel). */
 function textoDoNo(n: ReactNode): string {
@@ -906,7 +972,7 @@ export function colunasOrdenaveis(cabecalho: ReactNode): {
       if (!isValidElement(filho)) return;
       if (filho.type === ThOrd) {
         const p = filho.props as Parameters<typeof ThOrd>[0];
-        colunas.push({ chave: p.chave, texto: textoDoNo(p.children).replace(/\s+/g, ' ').trim() });
+        colunas.push({ chave: p.chave, texto: textoDoNo(p.children).replace(/\s+/g, ' ').trim(), direcoes: p.direcoes });
         ordem = p.ordem; ao = p.ao;
       } else if (filho.type === Fragment) {
         visitar((filho.props as { children?: ReactNode }).children);
@@ -915,6 +981,13 @@ export function colunasOrdenaveis(cabecalho: ReactNode): {
   };
   visitar(cabecalho);
   return colunas.length && ordem && ao ? { colunas, ordem, ao } : null;
+}
+
+/** O texto de uma opção do «Ordenar por»: «Vencimento (crescente)», ou, na
+ *  coluna que diz a ordem, «Situação: o que precisa de você primeiro». */
+export function rotuloDaDirecao(c: ColunaOrdenavel, desc: boolean): string {
+  if (c.direcoes) return `${c.texto}: ${c.direcoes[desc ? 1 : 0]}`;
+  return `${c.texto} (${desc ? 'decrescente' : 'crescente'})`;
 }
 
 export function OrdenarPor(p: { colunas: ColunaOrdenavel[]; ordem: Ordem; ao: (chave: string) => void }) {
@@ -937,8 +1010,8 @@ export function OrdenarPor(p: { colunas: ColunaOrdenavel[]; ordem: Ordem; ao: (c
       <div className="campo-caixa">
         <select id={id} value={valor} onChange={(e) => escolher(e.target.value)}>
           {p.colunas.flatMap((c) => [
-            <option key={`${c.chave}:asc`} value={`${c.chave}:asc`}>{c.texto} (crescente)</option>,
-            <option key={`${c.chave}:desc`} value={`${c.chave}:desc`}>{c.texto} (decrescente)</option>,
+            <option key={`${c.chave}:asc`} value={`${c.chave}:asc`}>{rotuloDaDirecao(c, false)}</option>,
+            <option key={`${c.chave}:desc`} value={`${c.chave}:desc`}>{rotuloDaDirecao(c, true)}</option>,
           ])}
         </select>
         <span className="adorno"><Icone nome="abrir_menu" tamanho={13} /></span>

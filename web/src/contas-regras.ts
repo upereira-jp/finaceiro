@@ -154,7 +154,11 @@ export function podeCriar(e: {
  *  NAO COMPILA aqui sem alguem escolher como ele se chama na tela. */
 export const ROTULO_DO_STATUS: Record<ContaAPagar['status'], string> = {
   aberta: 'Em aberto',
-  parcial: 'Parcialmente paga',
+  /* [01/10/2026, etapa 7c] «Paga em parte», e não «Parcialmente paga»: o mesmo
+     dito em palavras curtas. A palavra longa sozinha decidia a largura da
+     coluna «Situação» na tabela de 1440 — e quem pagava eram a descrição e o
+     beneficiário, que quebravam em cinco linhas. */
+  parcial: 'Paga em parte',
   paga: 'Paga',
   cancelada: 'Cancelada',
 };

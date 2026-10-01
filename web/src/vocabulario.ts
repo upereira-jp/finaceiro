@@ -65,6 +65,13 @@ export type Verbete = {
 /**
  * CAMADA -> COMO SE DIZ ISSO EM PORTUGUÊS.
  *
+ * [01/10/2026, etapa 7c] A CONSEQUÊNCIA FICOU CURTA, porque passou a ficar À
+ * VISTA: na tela Mês, o `simples` e a `consequencia` de cada conferência em
+ * aberto são a linha debaixo do nome (até ali eles moravam atrás do «ver
+ * detalhe técnico», e eram três ou quatro frases). Cada uma diz o mesmo de
+ * antes numa frase — o que trava e até onde —; o porquê longo de cada dado
+ * continua na Central de Ajuda (`porque` de cada assunto, em `ajuda.ts`).
+ *
  * As chaves são as de `src/repos/prontidao.ts`. Camada nova no servidor sem
  * verbete aqui FALHA na suíte, em vez de aparecer na tela com o nome da coluna.
  *
@@ -74,23 +81,21 @@ export const VERBETE_DA_CAMADA: Record<string, Verbete> = {
   documento_do_cliente: {
     titulo: 'CPF ou CNPJ do cliente',
     simples: 'Tem cliente sem o CPF ou o CNPJ confirmado aqui no sistema.',
-    consequencia: 'Sem esse número conferido, o contrato dele não pode ser ativado — e sem contrato '
-      + 'ativo não existe cobrança para enviar.',
+    consequencia: 'Sem ele conferido, o contrato não ativa — e sem contrato ativo não há cobrança.',
     contagem: { singular: 'cliente', plural: 'clientes' },
   },
 
   contrato_ativo: {
     titulo: 'Contrato ativo',
     simples: 'Tem unidade de cliente sem contrato ativo no sistema.',
-    consequencia: 'A cobrança nasce do contrato. Sem ele, essa unidade fica de fora do mês inteiro.',
+    consequencia: 'A cobrança nasce do contrato: sem ele, a unidade fica de fora do mês inteiro.',
     contagem: { singular: 'unidade', plural: 'unidades' },
   },
 
   rateio: {
     titulo: 'Usina e fatia do cliente',
     simples: 'Tem unidade sem usina ligada a ela, ou sem a fatia (o percentual) que cabe ao cliente.',
-    consequencia: 'É a fatia que diz quanta energia daquela usina é desse cliente. Sem ela não há '
-      + 'como calcular o desconto, e a conta não fecha.',
+    consequencia: 'É a fatia que diz quanto da usina é do cliente; sem ela, o desconto não se calcula.',
     contagem: { singular: 'unidade', plural: 'unidades' },
   },
 
@@ -124,18 +129,15 @@ export const VERBETE_DA_CAMADA: Record<string, Verbete> = {
   geracao_da_competencia: {
     titulo: 'Energia gerada no mês',
     simples: 'Tem usina que ainda não teve a energia deste mês lançada.',
-    consequencia: 'O valor cobrado não sai daqui: ele vem da conta da distribuidora. Este número é '
-      + 'o registro do mês da usina, e é contra ele que se confere depois quanto o dono tem a '
-      + 'receber. Enquanto ele não chegar, a cobrança do mês não é gerada para nenhum cliente '
-      + 'dessa usina.',
+    consequencia: 'O valor vem da conta da distribuidora, não daqui — mas sem este número a cobrança '
+      + 'do mês não é gerada para nenhum cliente dessa usina.',
     contagem: { singular: 'usina', plural: 'usinas' },
   },
 
   conta_lida_da_competencia: {
     titulo: 'Conta da distribuidora do mês',
     simples: 'Tem unidade sem a conta da distribuidora lida e registrada neste mês.',
-    consequencia: 'É dessa conta que sai o valor a cobrar. Sem ela registrada, a cobrança do mês '
-      + 'não tem de onde nascer.',
+    consequencia: 'É dela que sai o valor a cobrar: sem ela, a cobrança do mês não nasce.',
     contagem: { singular: 'unidade', plural: 'unidades' },
   },
 
@@ -143,73 +145,66 @@ export const VERBETE_DA_CAMADA: Record<string, Verbete> = {
     titulo: 'Dia de vencimento',
     simples: 'Tem unidade cuja conta do mês veio sem a data de vencimento e que também não tem o '
       + 'dia preenchido no cadastro.',
-    consequencia: 'Quando a conta traz a data, ela vale e não há nada a preencher. Quando não '
-      + 'traz, o dia do cadastro é o que salva a cobrança — e o sistema não escolhe uma data por '
-      + 'você.',
+    consequencia: 'Sem a data na conta, vale o dia do cadastro — e o sistema não escolhe um por você.',
     contagem: { singular: 'conta lida', plural: 'contas lidas' },
   },
 
   tarifa_na_conta: {
     titulo: 'Preço do kWh na conta lida',
     simples: 'Tem conta lida em que o preço do kWh ficou zerado.',
-    consequencia: 'É por esse preço que a energia vira dinheiro na folha do cliente. Zerado, a '
-      + 'cobrança sairia dizendo que o kWh não custa nada — por isso ela é recusada.',
+    consequencia: 'Zerado, a cobrança diria que o kWh não custa nada — por isso ela é recusada.',
     contagem: { singular: 'conta lida', plural: 'contas lidas' },
   },
 
   emissor_da_fatura: {
     titulo: 'Dados de quem cobra',
     simples: 'A razão social e o CNPJ da empresa que cobra ainda não foram preenchidos.',
-    consequencia: 'A folha sai assim mesmo, e é esse o risco: ela vai ao cliente sem dizer quem '
-      + 'está cobrando, o campo do beneficiário fica em branco e o aviso «confira sempre se o '
-      + 'beneficiário é...» some da página — justamente o aviso que protege contra boleto falso.',
+    consequencia: 'A folha sai assim mesmo, sem dizer quem cobra — e sem o aviso que protege o '
+      + 'cliente de boleto falso.',
     contagem: { singular: 'empresa', plural: 'empresas' },
   },
 
   endereco_do_pagador: {
     titulo: 'Endereço do pagador',
     simples: 'Tem unidade com contrato ativo e sem o endereço completo do pagador.',
-    consequencia: 'A cobrança existe e pode ser paga por Pix. O que não sai é o boleto: o banco '
-      + 'recusa emitir sem logradouro, bairro, município, CEP e UF. O número não é exigido.',
+    consequencia: 'Dá para pagar por Pix; o boleto o banco recusa sem logradouro, bairro, município, '
+      + 'CEP e UF.',
     contagem: { singular: 'unidade', plural: 'unidades' },
   },
 
   dono_da_usina: {
     titulo: 'Dono da usina',
     simples: 'Tem usina sem dono cadastrado.',
-    consequencia: 'Dá para cobrar o cliente normalmente. O que trava é depois: quando o dinheiro '
-      + 'entrar, não há para quem repassar a parte do dono.',
+    consequencia: 'Dá para cobrar; quando o dinheiro entrar, não há para quem repassar a parte do dono.',
     contagem: { singular: 'usina', plural: 'usinas' },
   },
 
   regra_de_repasse: {
     titulo: 'Quanto o dono da usina recebe',
     simples: 'Tem usina sem o percentual de repasse valendo para este mês.',
-    consequencia: 'Dá para cobrar. O que trava é a divisão do dinheiro que entrar — sem o '
-      + 'percentual, o sistema não sabe quanto é do dono.',
+    consequencia: 'Dá para cobrar; sem o percentual, o sistema não sabe quanto do dinheiro é do dono.',
     contagem: { singular: 'usina', plural: 'usinas' },
   },
 
   originador_do_contrato: {
     titulo: 'Quem trouxe o cliente',
     simples: 'Tem contrato ativo sem dizer quem trouxe aquele cliente.',
-    consequencia: 'Dá para cobrar. O que trava é a comissão: sem saber quem trouxe o cliente, não há a quem '
-      + 'pagar quando o dinheiro entrar.',
+    consequencia: 'Dá para cobrar; sem saber quem trouxe o cliente, a comissão não tem a quem ser paga.',
     contagem: { singular: 'contrato', plural: 'contratos' },
   },
 
   regra_de_comissao: {
     titulo: 'Valor da comissão',
     simples: 'Tem contrato cuja comissão ainda não tem valor definido para a data em que foi fechado.',
-    consequencia: 'Dá para cobrar. A comissão é que não pode ser calculada quando o dinheiro entrar.',
+    consequencia: 'Dá para cobrar; a comissão é que não se calcula quando o dinheiro entrar.',
     contagem: { singular: 'tipo de parceiro', plural: 'tipos de parceiro' },
   },
 
   cobranca_sicoob: {
     titulo: 'Conexão com o banco',
     simples: 'A conexão com o Sicoob ainda não está configurada.',
-    consequencia: 'A cobrança até existe e pode ser paga por Pix, e um boleto emitido no site do '
-      + 'banco pode ser importado aqui. O que não dá é o sistema emitir o boleto sozinho.',
+    consequencia: 'Dá para cobrar por Pix e importar o boleto do site do banco; o sistema só não o '
+      + 'emite sozinho.',
     contagem: { singular: 'conexão', plural: 'conexões' },
   },
 };

@@ -27,7 +27,7 @@ import { fileURLToPath } from 'node:url';
 import {
   MAPA_DE_SELOS, SELO_DA_COBRANCA, SELO_DO_BOLETO_DA_COBRANCA, SELO_DO_BOLETO, SELO_DO_ATRASO,
   SELO_DA_FAIXA_VAZIA, SELO_DA_CONTA_A_PAGAR, SELO_DA_UNIDADE, SELO_DA_TRILHA, TENTANDO_DE_NOVO,
-  seloDaFaixa, seloDoStatusDoBoleto, seloDoContrato, tipoDoAviso, type Selo,
+  seloDaFaixa, seloDoStatusDoBoleto, seloDoContrato, tipoDoAviso, pesoDoSelo, type Selo,
 } from '../src/tom-do-estado.ts';
 import { ICONE_DO_ESTADO, TONS_DO_SELO, type TomDoSelo } from '../src/iconografia.ts';
 import { notaDaSituacao, notaDaRecusaCrua, seloDaRecusa, lerRecusa, recusaPrevista } from '../src/emissao-regras.ts';
@@ -314,6 +314,28 @@ const FONTES = todosOsArquivos(SRC).map((f) => [f, semComentario(readFileSync(SR
     && /(?:Record<[^>]*,\s*TomDoSelo>|:\s*TomDoSelo\s*=>)/.test(t)).map(([f]) => f);
   chk('T4b', tons.length === 0,
       `nenhum outro arquivo monta um mapa de estado para tom${tons.length ? ` — ACHADO: ${tons.join(', ')}` : ''}`);
+}
+
+/* ==========================================================================
+ * T5 — a coluna de estado ordena pela pergunta do mapa (01/10/2026, etapa 7c)
+ * ========================================================================== */
+{
+  const ordem = [...TONS_DO_SELO].sort((a, b) => pesoDoSelo({ tom: a }) - pesoDoSelo({ tom: b }));
+  chk('T5a', ordem.join(',') === 'erro,a_fazer,nao_medido,neutro,ok',
+      `«o que precisa de você primeiro» é a falha, a tarefa, o não sabido, o em curso e o fechado, nessa ordem (veio: ${ordem.join(',')})`);
+  const pagar = SELO_DA_CONTA_A_PAGAR;
+  chk('T5b', pesoDoSelo(pagar.vencida) < pesoDoSelo(pagar.aberta) && pesoDoSelo(pagar.aberta) < pesoDoSelo(pagar.cancelada)
+          && pesoDoSelo(pagar.cancelada) < pesoDoSelo(pagar.paga)
+          && pesoDoSelo(SELO_DO_BOLETO.boleto_recusado) < pesoDoSelo(SELO_DO_BOLETO.sem_boleto)
+          && pesoDoSelo(SELO_DO_BOLETO.sem_boleto) < pesoDoSelo(SELO_DO_BOLETO.boleto_no_banco),
+      'em Contas a pagar a vencida vem antes da em aberto, que vem antes da cancelada e da paga; em Contas a '
+      + 'receber a recusa vem antes do boleto a pedir, que vem antes do que já está no banco');
+  const telas = ['contas-a-pagar', 'contas-a-receber', 'contratos', 'unidades']
+    .map((t) => [t, semComentario(readFileSync(new URL(`../src/telas/${t}.tsx`, import.meta.url), 'utf8'))] as const);
+  const sem = telas.filter(([, t]) => !/pesoDoSelo\(/.test(t) || !/direcoes=\{DIRECOES_DA_SITUACAO\}/.test(t)).map(([n]) => n);
+  chk('T5c', sem.length === 0,
+      'as colunas de estado que dizem «o que precisa de você primeiro» ordenam pelo peso do tom — a palavra e a '
+      + `ordem são a mesma coisa${sem.length ? ` — FALTA EM: ${sem.join(', ')}` : ''}`);
 }
 
 console.log();

@@ -241,6 +241,15 @@ type Molde = {
    *  `FILTROS_DA_TELA` — a suíte confere (RM26). */
   recorte?: string;
   automatico?: boolean;
+  /**
+   * A OUTRA TELA QUE TAMBÉM HOSPEDA O PASSO, com a parte dele que mora lá
+   * (01/10/2026, etapa 7c). Só o passo 5 tem: «Receber e repartir» termina em
+   * Contas a pagar (o `destino`), mas a metade RECEBER — quem ainda deve, e há
+   * quanto tempo — mora em Contas a receber, que já era para onde o risco do
+   * passo levava (`destinoDoRisco`). A faixa de cada tela, o número do menu e
+   * o funil passam a dizer o mesmo das duas (`RM25`).
+   */
+  tambemEm?: { destino: Destino; parte: string };
 };
 
 /* OS RÓTULOS SÃO OS DA BARRA, letra por letra (`RM13`). Mudaram em 30/09/2026:
@@ -332,7 +341,7 @@ export const MOLDES: readonly Molde[] = [
       + 'endereço», que abre Unidades consumidoras já na unidade certa — e o endereço costuma vir '
       + 'na conta que você já leu. Grave e peça o boleto de novo.',
       'Boleto pedido que não registrou volta sozinho na fila, a cada 5 minutos. Não adianta ficar '
-      + 'clicando: a lista mostra quantas tentativas já houve.',
+      + 'clicando: «Boleto e baixa», na linha, mostra quantas tentativas já houve.',
       'A folha do cliente — a Fatura unificada — se imprime em «Contas de luz», na aba «Folha do '
       + 'cliente», e a «2ª via» de qualquer mês já registrado sai pelo botão de mesmo nome.',
     ],
@@ -358,6 +367,7 @@ export const MOLDES: readonly Molde[] = [
     ],
     destino: A_PAGAR,
     destinoDoRisco: A_RECEBER,
+    tambemEm: { destino: A_RECEBER, parte: 'o receber: quem ainda deve, e há quanto tempo' },
     automatico: true,
   },
 ];
@@ -770,6 +780,15 @@ export type OndeEstouNoMes = {
   /** A tela é de outro setor que o do mês (Contas a pagar mora na Empresa): a
    *  frase precisa dizer de QUE mês ela é o fim. */
   deOutroSetor: boolean;
+  /**
+   * O PASSO É DIVIDIDO COM OUTRA TELA (01/10/2026, etapa 7c — `Molde.tambemEm`).
+   * `parte` é a metade que mora AQUI quando esta é a tela de apoio do passo
+   * («o receber: quem ainda deve…»), e `outra` é a tela que divide o passo com
+   * esta — a principal, vista da de apoio, ou a de apoio, vista da principal.
+   * Os dois `null` no passo que mora numa tela só.
+   */
+  parte: string | null;
+  outra: Destino | null;
 };
 
 const noMapa = (i: number): PassoNoMapa => ({
@@ -788,17 +807,22 @@ const SETOR_DO_MES = funilDoCaminho(MOLDES[0]!.destino.endereco).chave;
  */
 export function ondeEstouNoMes(rota: string): OndeEstouNoMes | null {
   const indices = MOLDES
-    .map((m, i) => (m.destino.endereco === rota ? i : -1))
+    .map((m, i) => (m.destino.endereco === rota || m.tambemEm?.destino.endereco === rota ? i : -1))
     .filter((i) => i >= 0);
   if (indices.length === 0) return null;
 
   const primeiro = indices[0]!;
   const ultimo = indices[indices.length - 1]!;
+  /* A divisão do passo só existe num passo (o 5), e é o último daqui. */
+  const m = MOLDES[ultimo]!;
+  const deApoio = m.tambemEm?.destino.endereco === rota;
   return {
     aqui: indices.map(noMapa),
     total: MOLDES.length,
     antes: primeiro > 0 ? noMapa(primeiro - 1) : null,
     depois: ultimo < MOLDES.length - 1 ? noMapa(ultimo + 1) : null,
     deOutroSetor: funilDoCaminho(rota).chave !== SETOR_DO_MES,
+    parte: deApoio ? m.tambemEm!.parte : null,
+    outra: m.tambemEm ? (deApoio ? m.destino : m.tambemEm.destino) : null,
   };
 }

@@ -348,6 +348,23 @@ export function tipoDoAviso(s: Pick<Selo, 'tom'>): 'erro' | 'alerta' | 'ok' {
 }
 
 /* ==========================================================================
+ * O PESO DE UM ESTADO, para a coluna «Situação» ordenar (01/10/2026, etapa 7c)
+ * ==========================================================================
+ *
+ * «Ordenar por: Situação (crescente)» não dizia nada: a coluna ordenava pelo
+ * TEXTO do estado («aberta» < «cancelada» < «paga» < «parcial»), e crescente
+ * de um estado não é uma ordem que alguém procura. A ordem que se procura é a
+ * da pergunta do mapa — «o que isto pede de você?» —, e por isso o peso sai do
+ * TOM, aqui, e não de uma lista de estados escrita em cada tela: a falha
+ * primeiro, depois a tarefa, o que não se sabe, o que está em curso sem você,
+ * e por último o que fechou. Ao contrário, «o que já fechou primeiro».
+ */
+const PESO_DO_TOM: Readonly<Record<TomDoSelo, number>> = { erro: 0, a_fazer: 1, nao_medido: 2, neutro: 3, ok: 4 };
+
+/** O peso de um selo na ordem «o que precisa de você primeiro»: menor vem antes. */
+export const pesoDoSelo = (s: Pick<Selo, 'tom'>): number => PESO_DO_TOM[s.tom];
+
+/* ==========================================================================
  * O MAPA INTEIRO, para quem precisa percorrê-lo (a suíte, o DESIGN.md)
  * ========================================================================== */
 

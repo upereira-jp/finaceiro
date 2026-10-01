@@ -30,7 +30,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CorpoDaAjuda } from '../src/ajuda-corpo.tsx';
 import { CorpoDaSaude } from '../src/saude-corpo.tsx';
-import { CorpoDoRoteiro, FaixaDoPasso } from '../src/roteiro-corpo.tsx';
+import { CorpoDoRoteiro, FaixaDoPasso, CHAVE_DO_COMO_FAZER } from '../src/roteiro-corpo.tsx';
 import { FaixasDasAutomacoes, PainelDasAutomacoes } from '../src/automacoes-corpo.tsx';
 import { PainelDaEmissao } from '../src/emissao-travada-corpo.tsx';
 import { PainelDoVinculo } from '../src/vinculo-do-crm-corpo.tsx';
@@ -39,7 +39,7 @@ import type { LinhaNaTela, NivelDaEmissao, EmissaoTravadaNaTela } from '../src/e
 import type { NivelDaRodada, ChaveDaAutomacao, RodadaNaTela } from '../src/automacoes.ts';
 import type { NivelDoAviso } from '../src/saude-do-dinheiro.ts';
 import type { EstadoDoCertificado } from '../src/cobranca-regras.ts';
-import { GatilhoDeAjuda } from '../src/ajuda-gatilho.tsx';
+import { GatilhoDeAjuda, ehOAtalhoDaAjuda } from '../src/ajuda-gatilho.tsx';
 import { MenuLateral } from '../src/menu-lateral.tsx';
 import { FUNIS, telaDoCaminho } from '../src/navegacao.ts';
 import { passosDoEstado, type CamadaLida } from '../src/ajuda.ts';
@@ -49,7 +49,10 @@ import { CAMPOS_DA_FATURA_VAZIOS, type RegistroDeFatura } from '../src/api.ts';
 import { filtrarRegistradas } from '../src/registradas-regras.ts';
 import { RevisaoDaSerie, RecusaNaTela, ResumoDaBaixa, SituacaoDaCobranca } from '../src/emissao-corpo.tsx';
 import { PerguntaNaTela } from '../src/serie.tsx';
-import { Campo, Aviso, RetornoDoAto, Tabela, Pagina, DetalheTecnico, MostrandoSo, nomeDoDetalhe } from '../src/ui.tsx';
+import {
+  Campo, Aviso, RetornoDoAto, Tabela, Pagina, DetalheTecnico, MostrandoSo, nomeDoDetalhe, ThOrd,
+  DIRECOES_DA_SITUACAO, lerEscolhaDoRecolhido,
+} from '../src/ui.tsx';
 import { lerRecusa, recusaPrevista, notaDaSituacao } from '../src/emissao-regras.ts';
 
 let falhas = 0;
@@ -77,10 +80,12 @@ const desenhar = (p: Partial<CorpoDaAjuda> = {}): string =>
     />,
   );
 
-/** Monta o gatilho — o botao do canto e o balao de primeira visita. */
+/** Monta o gatilho — o item do pe do menu (ou o botao da faixa do celular) e
+ *  o balao de primeira visita. */
 const desenharGatilho = (p: Partial<GatilhoDeAjuda> = {}): string =>
   renderToStaticMarkup(
     <GatilhoDeAjuda
+      lugar={p.lugar ?? 'menu'}
       aberta={p.aberta ?? false}
       aviso={p.aviso ?? false}
       aoAbrir={() => {}}
@@ -402,16 +407,26 @@ const camada = (p: Partial<CamadaLida>): CamadaLida =>
       'e a tela parada, sem busca, tambem monta sem erro');
 }
 
-// ================================= R11 o gatilho do canto e o balao que o apresenta
+// ======================= R11 o gatilho da ajuda e o balao que o apresenta
+// [01/10/2026, etapa 7c] O GATILHO SAIU DO CANTO: era o quadrado laranja fixo no
+// canto de baixo (pedido de 21/08), e o dono o mandou para o pe do menu, com o
+// nome escrito. No celular ha tambem o botao de desenho da faixa do topo.
 {
   const html = desenharGatilho();
-  chk('R11', html.includes('class="primario ajuda-gatilho"'),
-      'o botao da ajuda existe e mora na classe do canto inferior direito');
-  chk('R11b', html.includes('aria-label="Abrir a central de ajuda"')
-           && html.includes('aria-haspopup="dialog"'),
-      'com nome acessivel e dizendo que abre um dialogo — um icone sozinho e um botao mudo');
+  chk('R11', /<button type="button" class="ajuda-gatilho lateral-ajuda"/.test(html)
+          && /<span class="lateral-rotulo">Ajuda<\/span>/.test(html) && !/primario/.test(html),
+      'a ajuda e um ITEM do pe do menu, com o nome «Ajuda» escrito — e nao o quadrado laranja do canto '
+      + '(o segundo laranja da tela, que cobria a ultima coluna das tabelas)');
+  chk('R11b', html.includes('aria-haspopup="dialog"') && !/aria-label=/.test(html.slice(0, html.indexOf('</button>')))
+           && /aria-keyshortcuts="\?"/.test(html) && /<kbd class="lateral-tecla" aria-hidden="true">\?<\/kbd>/.test(html),
+      'o nome acessivel e o que esta escrito («Ajuda»), diz que abre um dialogo, e a tecla do atalho esta '
+      + 'desenhada no item e declarada em aria-keyshortcuts — atalho sem aviso e atalho que ninguem descobre');
   chk('R11c', !html.includes('ajuda-balao'),
       'e SEM balao quando ninguem pediu: ele e de primeira visita, nao de toda visita');
+  const faixa = desenharGatilho({ lugar: 'faixa' });
+  chk('R11m', /class="ajuda-gatilho faixa-celular-ajuda"/.test(faixa) && faixa.includes('aria-label="Abrir a central de ajuda"')
+          && !/primario/.test(faixa) && /class="ajuda-lugar ajuda-no-faixa"/.test(faixa),
+      'na faixa do celular e um botao de desenho, com nome acessivel, e tambem nao e laranja');
 }
 
 {
@@ -450,6 +465,38 @@ chk('R11k', !desenharGatilho({ aviso: true, aberta: true }).includes('ajuda-bala
 
 chk('R11l', desenharGatilho({ aberta: true }).includes('aria-expanded="true"'),
     'e o botao continua no DOM com o painel aberto — sumir com ele largaria o foco do teclado no nada');
+
+{
+  /* O BALAO APONTA PARA O LUGAR NOVO: ele mora no `.ajuda-lugar` do gatilho, e
+     o CSS o abre a direita do pe do menu (ou abaixo do botao da faixa). O do
+     menu ensina a tecla; o da faixa, nao — o celular nao tem `?` a um toque. */
+  const menu = desenharGatilho({ aviso: true });
+  const faixa = desenharGatilho({ aviso: true, lugar: 'faixa' });
+  chk('R11n', /^<div class="ajuda-lugar ajuda-no-menu"[^>]*>[\s\S]*class="ajuda-balao"/.test(menu)
+          && /tecla\s*<kbd>\?<\/kbd>/.test(menu) && !/<kbd>/.test(faixa) && /A ajuda mora aqui/.test(texto(faixa)),
+      'o balao de primeira visita sai do proprio gatilho — no pe do menu, ensinando a tecla ?; na faixa do '
+      + 'celular, sem a tecla');
+  chk('R11o', /data-dica="Ajuda · tecla \?"/.test(menu),
+      'e o menu recolhido mostra «Ajuda · tecla ?» na dica, como mostra o nome de cada tela');
+}
+
+// ============================ R11p a tecla `?` abre a ajuda — fora dos campos
+{
+  const ev = (key: string, alvo: Record<string, unknown> | null, extra: Record<string, boolean> = {}) =>
+    ehOAtalhoDaAjuda({ key, target: alvo as unknown as EventTarget, ...extra });
+  chk('R11p', ev('?', { tagName: 'BODY' }) && ev('?', { tagName: 'BUTTON' }) && ev('?', null)
+          && ev('?', { tagName: 'INPUT', type: 'checkbox' }),
+      'a tecla ? abre a central com o foco na pagina, num botao ou numa caixa de marcar');
+  chk('R11q', !ev('?', { tagName: 'INPUT', type: 'text' }) && !ev('?', { tagName: 'INPUT' })
+          && !ev('?', { tagName: 'INPUT', type: 'search' }) && !ev('?', { tagName: 'TEXTAREA' })
+          && !ev('?', { tagName: 'SELECT' }) && !ev('?', { tagName: 'DIV', isContentEditable: true }),
+      'e NAO abre com o cursor num campo de texto, numa area de texto, numa lista ou num texto editavel — '
+      + 'ali ? e uma letra (a busca da propria central e um campo)');
+  chk('R11r', !ev('?', { tagName: 'BODY' }, { ctrlKey: true }) && !ev('?', { tagName: 'BODY' }, { metaKey: true })
+          && !ev('?', { tagName: 'BODY' }, { altKey: true }) && !ev('/', { tagName: 'BODY' })
+          && !ev('?', { tagName: 'BODY' }, { isComposing: true }) && !ev('?', { tagName: 'BODY' }, { defaultPrevented: true }),
+      'so o ? sozinho: com Ctrl, Alt ou ⌘ a tecla e de outro dono, e a barra sem Shift nao e o atalho');
+}
 
 // ============================================================================
 // R12 — A FAIXA DO CAMINHO DO DINHEIRO APARECE DE VERDADE
@@ -669,68 +716,76 @@ const conjuntoDaEmissao = (linhas: LinhaNaTela[], total = linhas.length): Emissa
   linhas, total, pedem_gente: linhas.filter((l) => l.pede_gente).length,
 });
 
-const desenharLista = (d: EmissaoTravadaNaTela | null, erro: string | null = null): string =>
-  renderToStaticMarkup(<PainelDaEmissao dados={d} erro={erro} pedirBoleto={() => {}} />);
+const desenharLista = (d: EmissaoTravadaNaTela | null, erro: string | null = null, mes: string | null = '2026-09'): string =>
+  renderToStaticMarkup(<PainelDaEmissao dados={d} erro={erro} mes={mes} />);
 /* A FAIXA DE ALARME (`FaixaDaEmissao`) SAIU EM 30/09/2026 (etapa 4a) com o
  * caso dela nesta suite: ela nao era montada em tela nenhuma desde a etapa 3,
  * quando o passo 4 do funil passou a contar as cobrancas sem boleto. O que ela
- * garantia mora no funil (`RM2`, `RM10`, `R16j`). */
+ * garantia mora no funil (`RM2`, `RM10`, `R16j`).
+ *
+ * [01/10/2026, etapa 7c] A LISTA VIROU O RESUMO DE UMA LINHA. Ela repetia,
+ * embaixo da tabela de Cobrancas, cada linha-problema que a tabela ja mostra
+ * com o porque e o botao. As garantias de antes que eram do PAINEL continuam
+ * aqui (o vazio fala, a falha diz que ninguem sabe, a espera nao desenha); as
+ * que eram da LINHA — a frase do nivel, a resposta do banco, o botao que so
+ * existe onde pedir adianta — moram na linha da tabela (`R23*`, `R24*`, e
+ * `EM-*` para as frases). */
 
 {
   // ---------------------------------------------- o vazio FALA, e nao fica mudo
   const vazio = desenharLista(conjuntoDaEmissao([]));
   chk('R14a', vazio !== '' && /j[aá] t[eê]m boleto/i.test(texto(vazio)),
-      'sem nenhuma pendencia a lista AFIRMA que todas as faturas emitidas tem boleto no banco - '
-      + 'uma lista que some quando esta tudo certo e indistinguivel de uma lista que quebrou');
+      'sem nenhuma pendencia o resumo AFIRMA que todas as cobrancas emitidas tem boleto no banco - '
+      + 'uma linha que some quando esta tudo certo e indistinguivel de uma linha que quebrou');
 
-  // ------------------------------------------------ as cinco linhas desenham
-  const todas = desenharLista(conjuntoDaEmissao([
-    linhaDaEmissao('esquecido'), linhaDaEmissao('insistindo'), linhaDaEmissao('esperando'),
-    linhaDaEmissao('nao_pedido'), linhaDaEmissao('parado'),
+  // ----------------------------------- uma linha: as do mes e as de outros meses
+  const doMes = (nivel: NivelDaEmissao, extra: Partial<LinhaNaTela> = {}) =>
+    linhaDaEmissao(nivel, { fatura_id: `m-${nivel}`, competencia: '2026-09-01', ...extra });
+  const misto = desenharLista(conjuntoDaEmissao([
+    doMes('esquecido'), doMes('insistindo'), doMes('esperando'),
+    linhaDaEmissao('nao_pedido', { fatura_id: 'a1', competencia: '2026-08-01' }),
+    linhaDaEmissao('parado', { fatura_id: 'j1', competencia: '2026-07-01' }),
+    linhaDaEmissao('esquecido', { fatura_id: 'a2', competencia: '2026-08-01' }),
   ]));
-  const t = texto(todas);
-  chk('R14c', /ningu[eé]m pediu/i.test(t) && /banco recusou/i.test(t)
-           && /parou de tentar/i.test(t) && t.includes('000401269001287'),
-      'os cinco niveis montam e cada um chega com a SUA frase - o `.map` que renderiza um estado '
-      + 'so passaria no `tsc` e mostraria a mesma linha cinco vezes');
+  const t = texto(misto);
+  chk('R14c', /3 cobranças deste mês sem boleto no banco · 3 de outros meses: 2 em agosto de 2026\s*, 1 em julho de 2026/.test(t),
+      'o resumo e UMA linha: quantas deste mes, quantas de outros meses, e cada outro mes com quantas — do '
+      + `mais recente ao mais antigo (veio: «${t}»)`);
+  chk('R14d', misto.includes('href="/faturas?mes=2026-08"') && misto.includes('href="/faturas?mes=2026-07"')
+          && !misto.includes('href="/faturas?mes=2026-09"'),
+      'cada OUTRO mes e um link para Cobrancas naquele mes, onde as linhas dele estao com as mesmas acoes; o '
+      + 'mes a vista nao tem link — o detalhe dele esta na tabela logo acima');
+  chk('R14e', !/<button/.test(misto) && !/Pedir o boleto|Completar o endereço|O banco respondeu|Cliente de Ensaio|000401269001287/.test(t)
+          && (misto.match(/<p[ >]/g) ?? []).length === 1,
+      'e NAO repete as linhas: nem cliente, nem unidade, nem a resposta do banco, nem «Pedir o boleto» ou '
+      + '«Completar o endereço» — o ato mora na linha da tabela, um lugar so para cada coisa');
 
-  chk('R14d', t.includes('R$') && /vence 20\/09\/2026/.test(t),
-      'a linha carrega valor e vencimento em portugues - sem eles, quem le sabe que falta cobrar '
-      + 'e nao sabe quanto nem para quando');
+  const soDoMes = texto(desenharLista(conjuntoDaEmissao([doMes('esquecido')])));
+  const nenhumDoMes = texto(desenharLista(conjuntoDaEmissao([linhaDaEmissao('esquecido', { competencia: '2026-08-01' })])));
+  chk('R14f', /^1 cobrança deste mês sem boleto no banco · nenhuma de outros meses$/.test(soDoMes)
+          && /^Nenhuma cobrança deste mês sem boleto no banco · 1 de outros meses: 1 em agosto de 2026$/.test(nenhumDoMes),
+      `o singular e o «nenhuma» saem por inteiro (veio: «${soDoMes}» e «${nenhumDoMes}»)`);
 
-  chk('R14e', t.includes('documento do pagador invalido'),
-      'o que o banco respondeu aparece na propria linha - era isso que exigia abrir 29 paineis, '
-      + 'um de cada vez, para descobrir');
-
-  // ------------------------------------------- o botao existe, e nao no `parado`
-  const so = (n: NivelDaEmissao) => desenharLista(conjuntoDaEmissao([linhaDaEmissao(n)]));
-  const botoes = (html: string) => (html.match(/<button/g) ?? []).length;
-  chk('R14f', botoes(so('esquecido')) === 1 && botoes(so('nao_pedido')) === 1
-           && botoes(so('parado')) === 0,
-      'quem pode ser pedido ganha botao e o `parado` NAO ganha - oferecer o clique que o servidor '
-      + 'ja recusa e mandar a pessoa colher um erro que a tela ja sabia');
-
-  chk('R14g', renderToStaticMarkup(<PainelDaEmissao dados={conjuntoDaEmissao([linhaDaEmissao('esquecido')])} />)
-        .includes('<button') === false,
-      'e sem o `pedirBoleto` o botao nao e desenhado: botao que existe sem efeito e pior que '
-      + 'botao nenhum');
+  chk('R14g', /2 cobranças emitidas sem boleto no banco/.test(texto(desenharLista(conjuntoDaEmissao([doMes('esquecido'), linhaDaEmissao('parado')]), null, null))),
+      'sem mes na tela (ainda procurando), o resumo conta todas, sem dizer «deste mes»');
 
   // ------------------------------------------------- a leitura que falhou fala
   const falhou = texto(desenharLista(null, 'a rede caiu'));
   chk('R14i', /ningu[eé]m sabe/.test(falhou) && falhou.includes('a rede caiu'),
-      'quando a leitura falha, a lista diz que NAO SABE, com o motivo - calar seria a mesma cara '
+      'quando a leitura falha, o resumo diz que NAO SABE, com o motivo - calar seria a mesma cara '
       + 'de dizer que esta tudo em dia');
 
   chk('R14j', desenharLista(null) === '',
-      'e enquanto a resposta nao voltou a lista nao desenha nada: ausencia de resposta nao e '
-      + 'resposta');
+      'e enquanto a resposta nao voltou nada se desenha: ausencia de resposta nao e resposta');
 
   // ------------------------------------------------------------- a superficie
-  /* A licao do `R13k`, aplicada antes de o dono precisar ver: nesta casa dado
-   * mora sobre superficie, e uma lista de estado desenhada como paragrafo le
-   * como legenda de rodape. */
-  chk('R14k', vazio.includes('class="cartao secao"') && todas.includes('class="cartao secao"'),
-      'a lista desenha sobre a superficie da casa (`cartao secao`), cheia ou vazia');
+  chk('R14k', vazio.includes('class="cartao em-banco"') && misto.includes('id="em-banco"')
+          && misto.includes('aria-label="O que ainda não chegou ao banco"'),
+      'a linha desenha sobre a superficie da casa, e a regiao continua com o nome de antes para o leitor de tela');
+
+  const cortado = texto(desenharLista(conjuntoDaEmissao([doMes('esquecido')], 340)));
+  chk('R14m', /Mostrando as 1 de vencimento mais antigo, de 340 ao todo/.test(cortado),
+      'e quando a lista veio com teto, o resumo diz que contou o que veio');
 
   // ------------------------------- nenhuma palavra proibida chega ao HTML final
   for (const regra of [/npm run/, /\bQ-[A-Z]/, /snake_case/, /\bUC\b/]) {
@@ -937,6 +992,30 @@ const LEITURA_VAZIA = {
       'em agosto, sem nada sem boleto no mês, o de setembro que pede você aparece como AVISO com o '
       + 'link para Cobranças em setembro — e o destaque não cai no passo 4 vazio');
 
+  // ------------- o «Como fazer» recolhe, nasce aberto e lembra (01/10/2026, etapa 7c)
+  chk('R16m', /<details class="recolhido leve roteiro-como-fazer" open="">/.test(html)
+          && /<summary>[\s\S]*?Como fazer[\s\S]*?passos, em ordem[\s\S]*?<\/summary>/.test(html),
+      'o «Como fazer» é um recolhido leve (sem cartão dentro do cartão), com o resumo à vista, e na primeira '
+      + 'visita — nada guardado — nasce ABERTO');
+  {
+    const g = globalThis as { localStorage?: unknown };
+    const antes = g.localStorage;
+    const guardado: Record<string, string> = { [CHAVE_DO_COMO_FAZER]: '0' };
+    g.localStorage = { getItem: (k: string) => guardado[k] ?? null, setItem: (k: string, v: string) => { guardado[k] = v; } };
+    const fechado = desenharRoteiro({ competencia: 'julho de 2026', ...LEITURA_VAZIA, camadas });
+    guardado[CHAVE_DO_COMO_FAZER] = '1';
+    const reaberto = desenharRoteiro({ competencia: 'julho de 2026', ...LEITURA_VAZIA, camadas });
+    g.localStorage = { getItem: () => { throw new Error('armazenamento bloqueado'); }, setItem: () => {} };
+    const bloqueado = desenharRoteiro({ competencia: 'julho de 2026', ...LEITURA_VAZIA, camadas });
+    const leu = lerEscolhaDoRecolhido(CHAVE_DO_COMO_FAZER);
+    g.localStorage = antes;
+    chk('R16n', /<details class="recolhido leve roteiro-como-fazer">/.test(fechado) && /Baixe do portal da distribuidora/.test(fechado)
+            && /<details class="recolhido leve roteiro-como-fazer" open="">/.test(reaberto)
+            && /<details class="recolhido leve roteiro-como-fazer" open="">/.test(bloqueado) && leu === null,
+        'fechado uma vez, ele nasce FECHADO nas próximas (e o texto continua no HTML); reaberto, nasce aberto; e '
+        + 'com o armazenamento bloqueado a tela não cai — nasce aberto, como na primeira vez');
+  }
+
   const semMedida = desenharRoteiro({ competencia: 'julho de 2026', ...LEITURA_VAZIA, camadas, cobrancas: null });
   chk('R16k', /não medido/.test(texto(semMedida)) && semMedida.includes('>—<'),
       'e a leitura que não chegou aparece como «—» e «não medido», nunca como zero');
@@ -997,6 +1076,16 @@ const LEITURA_VAZIA = {
       'Contas a pagar diz que é o passo 5 e o FIM do mês do Rateio, aponta o passo 4 em Cobranças e '
       + 'volta para o mês inteiro — até 30/09 o roteiro mandava para cá e a tela não sabia de que mês '
       + 'era o fim');
+
+  /* [01/10/2026, etapa 7c] O PASSO 5 DIVIDIDO: Contas a receber é a metade
+     «receber», e as duas faixas apontam uma para a outra. */
+  const cr = renderToStaticMarkup(<FaixaDoPasso rota="/contas-a-receber" />);
+  chk('R17h', /Passo 5 de 5 do mês do Rateio/.test(texto(cr)) && /Aqui fica o receber/.test(texto(cr))
+              && !/É aqui que o mês termina/.test(texto(cr)) && cr.includes('href="/contas-a-pagar"')
+              && cr.includes('href="/faturas"') && cr.includes('href="/pendencias"')
+              && /Quem ainda deve:/.test(texto(cp)) && cp.includes('href="/contas-a-receber"'),
+      'Contas a receber diz que é a metade «receber» do passo 5 e que o mês termina em Contas a pagar; '
+      + 'Contas a pagar aponta de volta quem ainda deve — o funil mandava para lá e a tela não dizia de que mês era');
 }
 
 // ============================================================================
@@ -1214,21 +1303,10 @@ const LEITURA_VAZIA = {
   chk('R23d', /O banco vai recusar este boleto/.test(tp) && /bairro e CEP/.test(tp),
       'a recusa que o cadastro ja anuncia e dita ANTES do pedido, nomeando o que falta');
 
-  // painel «O que ainda não chegou ao banco»: a recusa por endereço troca o botão pela saída
-  const comEndereco = (extra: Partial<LinhaNaTela> = {}): LinhaNaTela => ({
-    ...linhaDaEmissao('insistindo'),
-    boleto: { status: 'erro', tentativas: 4, ultimo_erro: 'PagadorSemEndereco: o banco recusa emitir sem endereço.',
-              ultima_tentativa_em: null, proxima_tentativa_em: null },
-    ...extra,
-  });
-  const painel = renderToStaticMarkup(<PainelDaEmissao dados={conjuntoDaEmissao([comEndereco()])} pedirBoleto={nada} />);
-  chk('R23e', /Completar o endereço/.test(texto(painel)) && !/Pedir o boleto/.test(texto(painel))
-          && !/O banco respondeu: PagadorSemEndereco/.test(texto(painel)),
-      'na lista do que nao chegou ao banco, a recusa por endereco oferece «Completar o endereço» e NAO '
-      + '«Pedir o boleto» — o servidor recusaria de novo pelo mesmo motivo');
-  chk('R23f', /<h2[^>]*>.*O que ainda não chegou ao banco<\/h2>/.test(painel),
-      'e a lista e uma secao h2 da pagina — o salto h1 → h3 saiu');
-
+  /* [01/10/2026, etapa 7c] O PAINEL «O que ainda não chegou ao banco» virou o
+     resumo de uma linha (`R14*`): a recusa por endereço com «Completar o
+     endereço» em vez de «Pedir o boleto» mora na LINHA da tabela — `R23b` e
+     `R24*` —, que é onde se age. */
   // ------------------------------------------------ a situacao na linha
   const sit = texto(renderToStaticMarkup(
     <SituacaoDaCobranca status="emitida" nota={notaDaSituacao('emitida', { nivel: 'nao_pedido' }, prevista)} />));
@@ -1332,8 +1410,10 @@ const LEITURA_VAZIA = {
           && /class="lateral-passos" aria-hidden="true"[^>]*>3–4</.test(aberto),
       'Contas de luz mostra «1–2» e Cobrancas «3–4», e o leitor de tela ouve «passos 1 e 2 do mes», nao «um traco dois»');
   chk('R28e', aberto.indexOf('class="pular"') < aberto.indexOf('class="lateral"')
-          && /<main id="conteudo" class="conteudo" tabindex="-1"><h1>Conteudo da tela<\/h1><\/main>/.test(aberto),
-      '«Pular para o conteudo» e a primeira parada, e a tela entra inteira no <main> — o menu nao toca nela');
+          && /<main id="conteudo" class="conteudo larga" tabindex="-1"><h1>Conteudo da tela<\/h1><\/main>/.test(aberto)
+          && /<main id="conteudo" class="conteudo" tabindex="-1">/.test(menu('/documento')),
+      '«Pular para o conteudo» e a primeira parada, e a tela entra inteira no <main> — o menu nao toca nela; a tela '
+      + 'de lista (Unidades) leva a classe que alarga na janela grande, e a de trabalho com prosa (Contas de luz), nao');
   chk('R28f', /aria-label="Recolher o menu"[^>]*title="Recolher o menu/.test(aberto) && /pe aberto/.test(aberto),
       'o botao de recolher tem nome e dica, e o pe recebe o estado aberto');
 
@@ -1405,16 +1485,45 @@ const LEITURA_VAZIA = {
           && /<h2 class="ajuda-titulo"[^>]*>/.test(ajuda),
       `o painel de ajuda abre com h2 («Ajuda») e as secoes sao h3 — sem salto (veio: ${niveis.join(' → ')})`);
 
+  /* [01/10/2026, etapa 7c] O GATILHO SAIU DE ENTRE A FAIXA E O CONTEUDO (onde ele
+     flutuava no canto): o menu o pede por lugar, e ele entra no PE DO MENU, antes
+     da conta, e no FIM DA FAIXA do celular, antes do conteudo. */
   const casca = renderToStaticMarkup(
-    <MenuLateral funil={FUNIS[0]!} visiveis={FUNIS} tela={telaDoCaminho('/clientes')} pe={() => null}
-                 ajuda={<button type="button" className="primario ajuda-gatilho">?</button>}>
+    <MenuLateral funil={FUNIS[0]!} visiveis={FUNIS} tela={telaDoCaminho('/clientes')}
+                 pe={() => <span className="teste-pe">conta</span>}
+                 ajuda={(lugar) => <GatilhoDeAjuda lugar={lugar} aberta={false} aviso={false} aoAbrir={() => {}} aoFecharAviso={() => {}} />}>
       <Pagina titulo="Clientes"><p>conteudo</p></Pagina>
     </MenuLateral>);
-  const iFaixa = casca.indexOf('class="faixa-celular"');
-  const iAjuda = casca.indexOf('ajuda-gatilho');
+  const iNav = casca.indexOf('</nav>');
+  const iPe = casca.indexOf('class="lateral-pe"');
+  const iAjudaMenu = casca.indexOf('class="ajuda-gatilho lateral-ajuda"');
+  const iConta = casca.indexOf('class="teste-pe"');
+  const iSetor = casca.indexOf('class="faixa-celular-setor"');
+  const iAjudaFaixa = casca.indexOf('class="ajuda-gatilho faixa-celular-ajuda"');
   const iMain = casca.indexOf('<main');
-  chk('R29j', iFaixa > 0 && iAjuda > iFaixa && iMain > iAjuda,
-      'o botao da ajuda fica entre a faixa do celular e o conteudo: a ordem do Tab bate com a vista nas duas larguras');
+  chk('R29j', iNav > 0 && iPe > iNav && iAjudaMenu > iPe && iConta > iAjudaMenu
+          && iSetor > 0 && iAjudaFaixa > iSetor && iMain > iAjudaFaixa
+          && (casca.match(/class="ajuda-gatilho /g) ?? []).length === 2,
+      'a ajuda mora no pe do menu, logo antes da conta, e no fim da faixa do celular, antes do conteudo — '
+      + 'cada largura mostra um, e a ordem do Tab bate com a vista nas duas');
+}
+
+/* ==========================================================================
+ * R31 — «ORDENAR POR» DIZ A ORDEM NA COLUNA DE ESTADO (01/10/2026, etapa 7c)
+ * ==========================================================================
+ * «Situação (crescente)» não dizia nada: crescente de um estado não é ordem
+ * que alguém procura. A coluna de estado diz a ordem com palavras. */
+{
+  const ordem = { chave: 'situacao', desc: false };
+  const html = renderToStaticMarkup(
+    <Tabela cabecalho={<>
+      <ThOrd chave="vencimento" ordem={ordem} ao={() => {}}>Vencimento</ThOrd>
+      <ThOrd chave="situacao" ordem={ordem} ao={() => {}} direcoes={DIRECOES_DA_SITUACAO}>Situação</ThOrd>
+    </>}><tr><td>01/10/2026</td><td>Paga</td></tr></Tabela>);
+  const opcoes = [...html.matchAll(/<option[^>]*>([^<]*)<\/option>/g)].map((m) => m[1]);
+  chk('R31', opcoes.join(' | ') === 'Vencimento (crescente) | Vencimento (decrescente) | '
+                + 'Situação: o que precisa de você primeiro | Situação: o que já fechou primeiro',
+      `a coluna de estado diz a ordem («o que precisa de você primeiro»), e a de data continua crescente/decrescente (veio: ${opcoes.join(' | ')})`);
 }
 
 /* ==========================================================================

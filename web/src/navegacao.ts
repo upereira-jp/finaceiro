@@ -95,8 +95,9 @@
 //   Resultado                Relatórios — a apuração do que o mês produziu.
 //
 // Na Empresa, a mesma lógica: primeiro o dinheiro que entra (Contas a receber),
-// depois o que se reparte e se paga (Contas a pagar — o passo 5, onde o mês do
-// Rateio termina), e por último o apoio (Conector Sicoob, Histórico).
+// depois o que se reparte e se paga (Contas a pagar), e por último o apoio
+// (Conector Sicoob, Histórico). As duas primeiras são o passo 5 — a metade
+// «receber» e a metade «repartir», onde o mês do Rateio termina (etapa 7c).
 //
 // O NÚMERO DO PASSO APARECE NO ITEM («1–2», «3–4», «5»), e ele não é escrito
 // duas vezes: `passos` abaixo é conferido contra `ondeEstouNoMes` do roteiro
@@ -252,6 +253,15 @@ export type Tela = {
    * os MESMOS moldes que montam o funil e a faixa de cada tela.
    */
   passos?: readonly number[];
+  /**
+   * A TELA DE LISTA LARGA (01/10/2026, etapa 7c): na janela grande o conteúdo
+   * dela vai até 1320px em vez de 1160. As tabelas de sete e oito colunas
+   * (Contas a receber, Contas a pagar, Cobranças…) quebravam o nome do cliente
+   * e a descrição em três a cinco linhas com 1160px de conteúdo — e numa janela
+   * de 1920 sobravam 500px de creme dos lados. As telas de prosa e de
+   * formulário continuam na medida de leitura. O CSS é `.conteudo.larga`.
+   */
+  larga?: boolean;
 };
 
 export const TELAS: readonly Tela[] = [
@@ -305,11 +315,11 @@ export const TELAS: readonly Tela[] = [
    * fluxo de dinheiro do sistema —, e "dono de usina" é o termo do `GLOSSARIO`. */
   { funil: 'rateio', rota: '/donos',      titulo: 'Donos de usina', icone: 'donos', grupo: 'cadastro' },
   { funil: 'rateio', rota: '/usinas',     titulo: 'Usinas',     icone: 'usinas',    grupo: 'cadastro' },
-  { funil: 'rateio', rota: '/clientes',   titulo: 'Clientes',   icone: 'clientes',  grupo: 'cadastro' },
+  { funil: 'rateio', rota: '/clientes',   titulo: 'Clientes',   icone: 'clientes',  grupo: 'cadastro', larga: true },
   /* "Unidades" sozinho, ao lado de "Usinas", troca o PONTO DE CONSUMO pelo
    * GERADOR. O termo do `GLOSSARIO` é "UC / unidade consumidora". */
-  { funil: 'rateio', rota: '/unidades',   titulo: 'Unidades consumidoras', icone: 'unidades', grupo: 'cadastro' },
-  { funil: 'rateio', rota: '/contratos',  titulo: 'Contratos',  icone: 'contratos', grupo: 'cadastro' },
+  { funil: 'rateio', rota: '/unidades',   titulo: 'Unidades consumidoras', icone: 'unidades', grupo: 'cadastro', larga: true },
+  { funil: 'rateio', rota: '/contratos',  titulo: 'Contratos',  icone: 'contratos', grupo: 'cadastro', larga: true },
   /*
    * «CONTAS DE LUZ», E ANTES «FATURA UNIFICADA» (17/08) E «DOCUMENTO». É a tela
    * dos passos 1 e 2: a conta da distribuidora entra, é conferida, registrada e
@@ -326,11 +336,11 @@ export const TELAS: readonly Tela[] = [
    * A rota `/cobranca` é OUTRA tela (Conector Sicoob, na Empresa) — a do
    * endereço não é a do nome, e fica assim para nenhum link antigo quebrar.
    */
-  { funil: 'rateio', rota: '/faturas',    titulo: 'Cobranças', icone: 'faturas', grupo: 'passos', passos: [3, 4] },
+  { funil: 'rateio', rota: '/faturas',    titulo: 'Cobranças', icone: 'faturas', grupo: 'passos', passos: [3, 4], larga: true },
   /* Repasse por dono, comissão por originador e uso da usina: é a APURAÇÃO do
    * rateio. O que a empresa DEVE por causa deles aparece do outro lado, em
    * Contas a pagar — provisionado pela divisão do dinheiro, nunca digitado. */
-  { funil: 'rateio', rota: '/relatorios', titulo: 'Relatórios', icone: 'relatorios', grupo: 'resultado' },
+  { funil: 'rateio', rota: '/relatorios', titulo: 'Relatórios', icone: 'relatorios', grupo: 'resultado', larga: true },
 
   // ====================================================== FINANCEIRO EMPRESA
   /*
@@ -340,12 +350,17 @@ export const TELAS: readonly Tela[] = [
    * tem botão de cobrar — cobrar é ato do Rateio, e a tela aponta para lá.
    * Entrou em 22/09/2026 junto com os funis.
    */
-  { funil: 'empresa', rota: '/contas-a-receber', titulo: 'Contas a receber', icone: 'contas_a_receber', grupo: 'caixa' },
+  /* [01/10/2026, etapa 7c] E TAMBÉM O PASSO 5 — a metade «receber» dele. O
+   * funil já mandava para cá quando o passo 5 tinha risco (a vencida), e a tela
+   * não dizia que era parte do mês: o menu não tinha número e a faixa não
+   * aparecia. Agora o menu, a faixa e o funil dizem o mesmo (`RM25`), e o
+   * passo termina em Contas a pagar, logo abaixo. */
+  { funil: 'empresa', rota: '/contas-a-receber', titulo: 'Contas a receber', icone: 'contas_a_receber', grupo: 'caixa', passos: [5], larga: true },
   /* Só tem linha depois de a primeira fatura ser liquidada — a divisão do
    * dinheiro as provisiona. O vazio aqui tem significado, e a tela o diz.
    * É o PASSO 5 do mês do Rateio — o último —, e por isso vem depois de Contas a
    * receber: primeiro o que entra, depois o que se reparte e se paga. */
-  { funil: 'empresa', rota: '/contas-a-pagar',   titulo: 'Contas a pagar', icone: 'contas_a_pagar', grupo: 'caixa', passos: [5] },
+  { funil: 'empresa', rota: '/contas-a-pagar',   titulo: 'Contas a pagar', icone: 'contas_a_pagar', grupo: 'caixa', passos: [5], larga: true },
   /*
    * "COBRANÇA" DIZIA O CONTRÁRIO DO QUE A TELA FAZ: aqui se cadastra a CREDENCIAL
    * do banco — agência, conta, convênio, validade do A1 e a `credencial_ref`. O
@@ -360,7 +375,7 @@ export const TELAS: readonly Tela[] = [
    * alguém procurar. Entrou em 10/09/2026: o dado existia desde a primeira semana
    * (21.917 registros) e não havia leitor.
    */
-  { funil: 'empresa', rota: '/historico',        titulo: 'Histórico', icone: 'historico', grupo: 'apoio' },
+  { funil: 'empresa', rota: '/historico',        titulo: 'Histórico', icone: 'historico', grupo: 'apoio', larga: true },
 
   // ============================================ ADMINISTRAÇÃO DA PLATAFORMA
   /*

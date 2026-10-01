@@ -565,7 +565,7 @@ export const ESTILO = `
   /* NO TOQUE, 44px DE ALVO em todo item, em qualquer largura: um notebook com
      tela de toque tem o menu aberto e o dedo de um celular. */
   @media (pointer: coarse) {
-    .lateral-item, .lateral-conta > button, .lateral-recolher button { min-height: 44px; }
+    .lateral-item, .lateral-conta > button, .lateral-recolher button, button.lateral-ajuda { min-height: 44px; }
   }
 
   /* -------------------------------------------------- o menu suspenso
@@ -617,57 +617,70 @@ export const ESTILO = `
      "Cadastros" da barra do topo, que o menu lateral substituiu. */
 
   /* ------------------------------------------- o gatilho da central de ajuda
-     O BOTAO DESCEU DA BARRA DO TOPO PARA O CANTO INFERIOR DIREITO em 21/08/2026,
-     por pedido do dono. O motivo inteiro esta no cabecalho de ajuda-gatilho.tsx; o que
-     importa aqui e a mecanica:
+     [01/10/2026, etapa 7c] NO PE DO MENU, logo acima da conta, e nao mais no
+     canto de baixo da tela. O motivo inteiro esta no cabecalho de
+     ajuda-gatilho.tsx: o quadrado laranja fixo era o segundo laranja de toda
+     tela (One Orange) e cobria a ultima coluna das tabelas. Aqui fica a
+     mecanica.
 
-       z-index 30    acima do conteudo e do menu da conta, ABAIXO do veu do
-                     painel (40) e do painel (41). Aberto o painel, o botao
-                     continua no DOM — sumir com ele largaria o foco do teclado
-                     no nada — e some sob o veu, que e o comportamento normal de
-                     tudo que fica atras de um dialogo;
-       bottom 22px   o .conteudo ja reservava 80px de respiro no rodape, entao
-                     o botao nao tapa a ultima linha de nenhuma tabela;
-       primario      herda o laranja da marca e o hover do resto do sistema.
-                     Ver o cabecalho do componente.
-
-     [30/09] QUADRADO E SEM SOMBRA, como tudo que o g3ref desenha. Era um circulo
-     de 54px com a sombra do terceiro degrau - a unica bolha flutuante da tela, e
-     o que mais denunciava "outro sistema" ao lado dos cartoes quadrados. O que o
-     separa do conteudo embaixo agora e o bloco cheio de laranja com o contorno
-     Navy de 1px, que se le sobre o creme, sobre o branco e sobre a faixa. A regra
-     de hover antiga pedia "box-shadow: var(--sombra-forte)", que e uma COR e nao
-     uma sombra: a declaracao era invalida e nunca valeu. */
-  .ajuda-gatilho {
-    position: fixed; right: 22px; bottom: 22px; z-index: 30;
-    width: 48px; height: 48px; padding: 0;
+     O ITEM TEM O DESENHO DO «RECOLHER O MENU»: sem contorno, sem fundo, o
+     desenho na tinta apagada da faixa e o nome no creme dos itens de tela —
+     porque e um destino, como eles. A tecla do atalho fica a direita, no
+     mesmo quadro fino do numero do passo. NENHUM LARANJA: o laranja do menu e
+     o «voce esta aqui», e a ajuda nao e lugar. */
+  .ajuda-lugar { position: relative; }
+  button.lateral-ajuda {
+    width: 100%; justify-content: flex-start; gap: 11px; padding: 8px 10px;
+    background: none; border-color: transparent; box-shadow: none; color: var(--topo-texto);
+    font-size: var(--t-ui); font-weight: 500; white-space: nowrap; overflow: hidden;
   }
-  /* A especificidade e a do primario MAIS UMA classe: o contorno Navy tem de
-     vencer o "border-color: var(--acento)" dele nos dois estados. */
-  button.primario.ajuda-gatilho,
-  button.primario.ajuda-gatilho:hover:not(:disabled) { border-color: var(--acento-texto); }
+  button.lateral-ajuda .ic { color: var(--topo-fraco); }
+  button.lateral-ajuda:hover:not(:disabled), button.lateral-ajuda[aria-expanded="true"] {
+    background: var(--topo-veu); border-color: transparent; color: var(--topo-texto); transform: none;
+  }
+  button.lateral-ajuda:hover:not(:disabled) .ic { color: var(--topo-texto); }
+  button.lateral-ajuda:focus-visible { outline-offset: -2px; }
+  /* A TECLA na tinta do nome, e nao na apagada: e uma letra a ser lida («?»),
+     e o cinza-azulado da faixa sobre o navy e cinza sobre cor — o detector de
+     01/10 o apontou. Quem a faz discreta e o quadro fino, nao a tinta. */
+  .lateral-tecla {
+    flex: none; margin-left: auto; min-width: 20px; padding: 0 5px; text-align: center;
+    border: 1px solid var(--topo-veu-forte); color: var(--topo-texto); background: none;
+    font-family: var(--fonte-cond); font-size: 12px; font-weight: 600; line-height: 18px;
+  }
+  .recolhida button.lateral-ajuda { justify-content: center; padding: 8px 0; }
+  .recolhida .lateral-tecla { display: none; }
 
-  /* O BALAO DE PRIMEIRA VISITA. Um icone sozinho num canto e mudo, e quem entra
-     pela primeira vez nao tem por que saber que aquele desenho responde
-     perguntas. NAO E MODAL de proposito: nao escurece a tela, nao prende foco e
-     nao impede clicar em nada atras — um aviso que interrompe o trabalho para
-     dizer "existe ajuda" e o contrario de ajudar. */
+  /* O BALAO DE PRIMEIRA VISITA. Um gatilho que mudou de lugar e mudo para quem
+     entra pela primeira vez. NAO E MODAL de proposito: nao escurece a tela, nao
+     prende foco e nao impede clicar em nada atras — um aviso que interrompe o
+     trabalho para dizer "existe ajuda" e o contrario de ajudar.
+
+     [01/10/2026, etapa 7c] ELE SAI DO ITEM, PARA O LADO: preso ao gatilho
+     ("position: absolute" no ".ajuda-lugar"), ele abre a direita do menu, com
+     a base na altura do item, aberto ou recolhido — o menu nao corta o que
+     transborda. A "color" e declarada porque ele mora dentro do navy, e
+     herdaria o creme. */
   .ajuda-balao {
-    position: fixed; right: 22px; bottom: 90px; z-index: 31;
+    position: absolute; left: calc(100% + 44px); bottom: -6px; z-index: 31;
     width: min(258px, calc(100vw - 40px));
-    padding: 11px 26px 12px 13px;
+    padding: 11px 26px 12px 13px; text-align: left; white-space: normal;
     background: var(--fundo); color: var(--texto);
     border: 1px solid var(--borda); border-radius: var(--raio-cartao);
     box-shadow: var(--sombra-3);
-    animation: ajuda-subir .32s ease-out both;
-    /* A ORIGEM E O CANTO DE BAIXO A DIREITA, que e onde o botao esta: e o que
-       faz o balao parecer SUBIR DELE em vez de aparecer solto no ar. */
-    transform-origin: bottom right;
+    animation: ajuda-do-lado .32s ease-out both;
+    /* A ORIGEM E O CANTO DE BAIXO A ESQUERDA, que e o lado do item: e o que
+       faz o balao parecer SAIR DELE em vez de aparecer solto no ar. */
+    transform-origin: bottom left;
   }
   .ajuda-balao strong { display: block; font-size: var(--t-ui); }
   .ajuda-balao p { margin: 3px 0 0; font-size: var(--t-meta); line-height: 1.5; color: var(--fraco); }
+  .ajuda-balao kbd {
+    padding: 0 4px; border: 1px solid var(--borda); background: var(--fundo-recuo); color: var(--texto);
+    font-family: var(--fonte-cond); font-size: 12px; font-weight: 600;
+  }
   /* O "x" BEM PEQUENO, no canto superior direito — pedido ao pe da letra. Mesmo
-     pequeno ele tem 20px de alvo e nome acessivel: um alvo minusculo sem nome e
+     pequeno ele tem alvo de 24px e nome acessivel: um alvo minusculo sem nome e
      enfeite, nao botao de fechar. */
   .ajuda-balao-x {
     position: absolute; top: 3px; right: 3px;
@@ -680,27 +693,28 @@ export const ESTILO = `
     border-color: transparent; transform: none; box-shadow: none;
   }
 
-  /* AS DUAS BOLHAS DO PENSAMENTO, ligando o botao ao balao. Elas sobem em ordem,
-     da menor (junto do botao) para a maior (junto do balao) — e o atraso e o que
-     desenha o movimento de subida em vez de tres coisas piscando juntas.
+  /* AS DUAS BOLHAS DO PENSAMENTO, ligando o item ao balao. Elas surgem em
+     ordem, da menor (junto do item) para a maior (junto do balao) — e o atraso
+     e o que desenha o movimento em vez de duas coisas piscando juntas.
 
      ELAS SAO LARANJA E NAO BRANCAS, e isto foi MEDIDO num render de verdade: com
      a cor do balao, duas bolinhas de 8 e 12px ficavam brancas sobre o creme da
-     pagina e dentro da sombra do proprio balao — invisiveis. A convencao do
-     quadrinho diz que a cauda e da cor do balao; aqui a cauda tinha de ser vista,
-     e a cor do BOTAO diz melhor o que ela quer dizer: isto sobe DALI. */
+     pagina e dentro da sombra do proprio balao — invisiveis. A cauda tinha de
+     ser vista. [01/10/2026, etapa 7c] Elas sao o UNICO laranja que a ajuda
+     ainda tem, e so na primeira visita: o item nao e mais laranja. */
   .ajuda-bolha {
-    position: fixed; z-index: 31; display: block;
+    position: absolute; z-index: 31; display: block;
     background: var(--acento); border-radius: var(--raio-pilula);
-    animation: ajuda-subir .3s ease-out both;
+    animation: ajuda-do-lado .3s ease-out both;
   }
   /* As bolhas sao a EXCECAO NOMEADA do raio zero (I8c): a cauda de um balao de
-     pensamento e redonda por natureza, e quadrada ela deixaria de ser cauda. */
-  .ajuda-bolha-1 { right: 36px; bottom: 73px; width: 8px; height: 8px; animation-delay: .05s; }
-  .ajuda-bolha-2 { right: 28px; bottom: 81px; width: 12px; height: 12px; animation-delay: .13s; }
+     pensamento e redonda por natureza, e quadrada ela deixaria de ser cauda.
+     Centradas na altura do item (40px): a do meio esta a 20px da base. */
+  .ajuda-bolha-1 { left: calc(100% + 14px); bottom: 16px; width: 8px; height: 8px; animation-delay: .05s; }
+  .ajuda-bolha-2 { left: calc(100% + 26px); bottom: 14px; width: 12px; height: 12px; animation-delay: .13s; }
 
-  @keyframes ajuda-subir {
-    from { opacity: 0; transform: translateY(10px) scale(.92); }
+  @keyframes ajuda-do-lado {
+    from { opacity: 0; transform: translateX(-10px) scale(.92); }
   }
 
   /* ------------------------------------------------------ central de ajuda
@@ -886,6 +900,34 @@ export const ESTILO = `
      abaixo de 13px; o "82ch" antigo, com a Barlow mais estreita, passava de 90
      caracteres por linha. */
   .conteudo { max-width: var(--largura); margin: 0 auto; padding: 28px 20px 80px; }
+  /* [01/10/2026, etapa 7c] A TELA DE LISTA ALARGA ONDE HA LUGAR ("Tela.larga" em
+     navegacao.ts): de 1160 para 1320px quando a janela tem 1600 ou mais com o
+     menu aberto — ou 1400 com ele recolhido, que sobra o mesmo. Medido em
+     Contas a pagar: a descricao quebrava em ate cinco linhas a 1160. A 1440 com
+     o menu aberto a area ja e 1192, e la quem resolve e o rebalanceamento das
+     colunas, nao a largura. A PROSA NAO ALARGA: o subtitulo continua a 72ch e o
+     texto de aviso ganha a mesma medida aqui, onde a linha poderia passar de
+     170 caracteres. */
+  @media (min-width: 1600px) { .conteudo.larga { max-width: 1320px; } }
+  @media (min-width: 1400px) { .recolhida .conteudo.larga { max-width: 1320px; } }
+  .conteudo.larga .aviso .corpo { max-width: 96ch; }
+  /* AS LISTAS DE CAIXA (Contas a receber e Contas a pagar) REBALANCEADAS
+     (01/10/2026, etapa 7c): numa tabela "auto", a coluna que pode quebrar
+     paga pela que nao pode. Aqui o que nao deve quebrar e o ato (o botao e o
+     link da linha), e o que pode quebrar sem dano e o selo longo — «Boleto
+     recusado pelo banco», «Paga em parte» —, que no cartao do celular ja
+     quebrava. Quem ganha a largura e o nome e a descricao. */
+  .lista-de-caixa td.c-aco, .lista-de-caixa td.c-aco button, .lista-de-caixa td.c-aco a { white-space: nowrap; }
+  .lista-de-caixa td.c-sit .marca {
+    white-space: normal; max-width: 12em; padding: 4px 8px; line-height: 1.35; align-items: flex-start;
+  }
+  .lista-de-caixa td.c-sit .marca > .ic { margin-top: 2px; flex: none; }
+  /* E o texto que explica pede largura minima: o beneficiario e a descricao de
+     Contas a pagar nao descem abaixo de 12em e 15em; o recibo debaixo do saldo
+     («pago em 16/09/2026») pode quebrar, o valor nao. */
+  .lista-de-caixa td.c-nome { min-width: 12em; }
+  .lista-de-caixa td.c-desc { min-width: 15em; }
+  .lista-de-caixa td.num .recibo-da-linha { white-space: normal; }
   h1 { font-size: var(--t-h1); font-weight: 600; line-height: 1.1; margin: 0 0 6px; letter-spacing: 0; }
   h2 {
     font-size: var(--t-h2); font-weight: 600; line-height: 1.2; margin: 30px 0 11px; letter-spacing: 0;
@@ -1086,6 +1128,10 @@ export const ESTILO = `
     background: var(--fundo2); margin: 22px 0 0;
   }
   .recolhido + .recolhido { margin-top: 10px; }
+  /* O recolhido que ficou no lugar de um cartao (Conector Sicoob, etapa 7c)
+     guarda o ritmo de secao ate o cartao de baixo — colados, os dois
+     contornos viravam uma linha dupla. */
+  .recolhido + .cartao { margin-top: var(--gap-secao); }
   .recolhido > summary {
     display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 14px;
     padding: 13px 18px; cursor: pointer; list-style: none;
@@ -1096,6 +1142,10 @@ export const ESTILO = `
     font-family: var(--fonte-cond); font-size: var(--t-h3); font-weight: 600; color: var(--texto);
   }
   .recolhido-tit > .ic { color: var(--fraco); }
+  /* O titulo que e SECAO ("Recolhido secao"): um h2 com a cara do titulo do
+     recolhido — o h2 da pagina tem 30px de ar em cima, e aqui ele mora dentro
+     da linha do resumo. */
+  h2.recolhido-tit { margin: 0; font-size: var(--t-h3); line-height: 1.25; }
   .recolhido-resumo { flex: 1 1 280px; min-width: 0; color: var(--fraco); font-size: var(--t-ui); line-height: 1.45; }
   .recolhido-seta { align-self: center; flex: none; color: var(--fraco); transition: transform .15s ease; }
   .recolhido[open] > summary .recolhido-seta { transform: rotate(180deg); }
@@ -1105,6 +1155,10 @@ export const ESTILO = `
   .recolhido-corpo > :first-child { margin-top: 0; }
   .recolhido-corpo > :last-child { margin-bottom: 0; }
   .recolhido-corpo .rolagem { margin-top: 12px; }
+  /* O RECOLHIDO LEVE (01/10/2026, etapa 7c): o que mora DENTRO de um cartao — o
+     «Como fazer» do funil — perde a superficie e o contorno. Cartao dentro de
+     cartao e o que o g3ref recusa; o que diz «isto abre» e a seta. */
+  .recolhido.leve { border: 0; background: none; }
 
   /* -------------------------------------------------------------- tabela
      LINHA VERTICAL NENHUMA, e a horizontal e a --borda-suave (1.16:1 contra o
@@ -2366,6 +2420,27 @@ export const ESTILO = `
   .em-bloco-acoes { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .em-ordem { margin: 0 0 12px; font-size: var(--t-meta); color: var(--fraco); line-height: 1.5; }
   .em-ordem a.em-outros { color: var(--acento-forte); font-weight: 600; }
+  /* O RESUMO DO QUE NAO CHEGOU AO BANCO (01/10/2026, etapa 7c): uma linha sobre
+     a superficie da casa, embaixo da tabela — era um bloco que repetia as
+     linhas-problema da tabela. O desenho do boleto na tinta fraca: o tom de
+     cada cobranca esta na linha dela, e aqui so se conta. */
+  /* O EXPANSOR DA LINHA (Contas a pagar, 01/10/2026, etapa 7c): «9 pagamentos»
+     com a seta, na tinta do texto — e o numero da linha, e ele abre o um a um.
+     A linha aberta afunda no creme aprofundado, como toda linha aberta. */
+  button.expansor-da-linha { padding: 2px 0; min-height: 24px; gap: 6px; color: var(--texto); font-weight: 600; }
+  tr.linha-detalhe > td { background: var(--fundo-recuo); padding: 8px 14px 12px; }
+  .pagamentos-da-usina {
+    list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-width: 520px;
+    font-size: var(--t-meta);
+  }
+  .pagamentos-da-usina li {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 12px; padding: 3px 0;
+    border-bottom: 1px solid var(--borda-suave);
+  }
+  .pagamentos-da-usina li:last-child { border-bottom: 0; }
+  .em-banco { margin: 20px 0 0; padding: 12px 16px; }
+  .em-banco-linha { margin: 0; display: flex; gap: 9px; align-items: baseline; line-height: 1.5; }
+  .em-banco-linha > .ic { flex: none; color: var(--fraco); transform: translateY(2px); }
   .em-bloco > .aviso { margin: 0 0 12px; }
   /* O titulo que recebe foco por programa (depois de fechar a revisao ou de
      cancelar) nao desenha anel: nao e controle. O leitor anuncia do mesmo jeito. */
@@ -2795,10 +2870,16 @@ export const ESTILO = `
   .roteiro-painel-risco-linha { display: flex; gap: 6px; align-items: flex-start; }
   .roteiro-painel-oque { margin: 8px 0 0; max-width: 72ch; line-height: 1.6; }
   .roteiro-painel-ir { margin: 14px 0 0; }
-  .roteiro-como-tit {
-    margin: 18px 0 0; font-family: var(--fonte-cond); font-size: var(--t-rotulo); font-weight: 600;
-    letter-spacing: .06em; text-transform: uppercase; color: var(--fraco);
+  /* [01/10/2026, etapa 7c] O «COMO FAZER» RECOLHE, e lembra a escolha
+     ("Recolhido" com "lembrar"). O titulo continua o rotulo caixa-alta de
+     antes — agora e o botao que fecha —, com o resumo e a seta ao lado. */
+  .roteiro-como-fazer { margin: 18px 0 0; }
+  .roteiro-como-fazer > summary { padding: 2px 0; min-height: 24px; gap: 4px 12px; align-items: center; }
+  .roteiro-como-fazer .recolhido-tit {
+    font-size: var(--t-rotulo); letter-spacing: .06em; text-transform: uppercase; color: var(--fraco);
   }
+  .roteiro-como-fazer .recolhido-resumo { flex: 0 1 auto; font-size: var(--t-meta); }
+  .roteiro-como-fazer > .recolhido-corpo { padding: 0; border-top: 0; }
   .roteiro-como { margin: 6px 0 0; padding-left: 20px; max-width: 76ch; line-height: 1.65; }
   .roteiro-como li + li { margin-top: 4px; }
 
@@ -2836,6 +2917,13 @@ export const ESTILO = `
   .mes-lista-estado strong { color: var(--texto); }
   button.mes-como-ler { display: inline-flex; align-items: center; gap: 6px; }
   .mes-oque { max-width: 520px; }
+  /* [01/10/2026, etapa 7c] A LINHA SIMPLES debaixo do nome da conferencia: o
+     que falta e o que acontece se ficar para depois, no corpo de meta e na
+     tinta fraca — ela explica, e quem chama o olho continua sendo o nome e o
+     numero. A coluna «Situacao» encolhe ate o selo («c-sit-estreita») para a
+     frase ganhar a largura que ela sobrava. */
+  .mes-oque-simples { margin: 3px 0 2px; font-size: var(--t-meta); line-height: 1.5; color: var(--fraco); }
+  th.c-sit-estreita { width: 1%; white-space: nowrap; }
 
   /* NO CELULAR OS CINCO PASSOS SAO UMA LISTA: numero e titulo a esquerda, a
      contagem grande a direita, e o risco embaixo, na largura toda. Cinco colunas
@@ -2864,9 +2952,16 @@ export const ESTILO = `
   }
 
   /* --------------------------------------------- a faixa da tela de trabalho */
-  .faixa-do-passo { padding: 10px 14px; margin-bottom: 14px; font-size: var(--t-meta); line-height: 1.6; }
-  .faixa-do-passo p { margin: 0; }
-  .faixa-do-passo p + p { margin-top: 3px; }
+  /* [01/10/2026, etapa 7c] AS DUAS FRASES LADO A LADO onde cabem: o que a tela
+     e, e o antes/depois. Cada uma continua presa a 62ch (a medida de leitura,
+     mais abaixo); juntas elas ocupam a largura do cartao em vez de cinco linhas
+     empilhadas. Na tela estreita elas descem uma sob a outra, como antes. */
+  .faixa-do-passo {
+    padding: 10px 14px; margin-bottom: 14px; font-size: var(--t-meta); line-height: 1.6;
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 32px;
+  }
+  .faixa-do-passo p { margin: 0; flex: 1 1 34ch; }
+  @media (max-width: 720px) { .faixa-vizinhos { display: none; } }
   .faixa-do-passo > p:first-child .ic { display: inline-block; vertical-align: -2px; }
 
   /* ======================== CELULAR E ACESSIBILIDADE (01/10/2026, etapa 5)
@@ -3099,23 +3194,34 @@ export const ESTILO = `
   }
 
   /* ------------------------------------------- a ajuda no celular
-     NO COMPUTADOR o botao fica no canto inferior direito, como o dono pediu em
-     21/08. ABAIXO DE ${MENU_VIRA_GAVETA}px — onde existe a faixa do topo — ele
-     sobe para ela, no canto direito, ao lado do «Menu»: no canto de baixo ele
-     cobria a ultima coluna de toda tabela e o botao de toda linha que
-     passasse por ele, medido em 01/10 em Clientes, Contas a pagar e Unidades.
-     O balao da primeira visita desce dele, em vez de subir — e continua
-     apontando para o botao que existe. */
+     [01/10/2026, etapa 7c] COM A GAVETA FECHADA, O PE DO MENU NAO ESTA NA
+     TELA — e a ajuda nao pode ficar a dois toques de quem travou. A faixa do
+     topo ganha um botao de desenho no fim da linha, discreto como o «Menu»: a
+     tinta apagada da faixa, sem fundo, sem laranja. Ele e da faixa, entao com a
+     gaveta aberta fica sob o veu (41 > 20) — o item do pe, dentro dela, e o que
+     se ve. O balao da primeira visita desce DELE; o do pe do menu nao aparece
+     aqui (dentro da gaveta ele sairia da tela, a direita). */
   @media (max-width: ${MENU_VIRA_GAVETA - 0.02}px) {
-    .faixa-celular-linha { padding-right: 60px; }
-    .ajuda-gatilho { top: 6px; right: 8px; bottom: auto; width: 44px; height: 44px; z-index: 21; }
-    .ajuda-balao {
-      top: 76px; right: 8px; bottom: auto; transform-origin: top right;
-      animation-name: ajuda-descer;
+    .faixa-celular-linha { padding-right: 6px; }
+    button.faixa-celular-ajuda {
+      flex: none; width: 44px; height: 44px; padding: 0;
+      background: none; border-color: transparent; box-shadow: none; color: var(--topo-fraco);
     }
-    .ajuda-bolha { animation-name: ajuda-descer; }
-    .ajuda-bolha-1 { top: 54px; bottom: auto; right: 26px; }
-    .ajuda-bolha-2 { top: 62px; bottom: auto; right: 32px; }
+    button.faixa-celular-ajuda:hover:not(:disabled), button.faixa-celular-ajuda[aria-expanded="true"] {
+      background: var(--topo-veu); border-color: transparent; color: var(--topo-texto); transform: none;
+    }
+    .ajuda-no-faixa .ajuda-balao {
+      left: auto; right: 0; top: calc(100% + 24px); bottom: auto;
+      width: min(258px, calc(100vw - 24px));
+      transform-origin: top right; animation-name: ajuda-descer;
+    }
+    .ajuda-no-faixa .ajuda-bolha { animation-name: ajuda-descer; }
+    .ajuda-no-faixa .ajuda-bolha-1 { left: auto; right: 18px; top: calc(100% + 2px); bottom: auto; }
+    .ajuda-no-faixa .ajuda-bolha-2 { left: auto; right: 24px; top: calc(100% + 10px); bottom: auto; }
+    .ajuda-no-menu .ajuda-balao, .ajuda-no-menu .ajuda-bolha { display: none; }
+    /* A tecla do atalho sai do item na gaveta: no telefone nao ha «?» a um
+       toque, e prometer a tecla ali seria ensinar o que nao serve. */
+    .lateral-tecla { display: none; }
   }
   @keyframes ajuda-descer {
     from { opacity: 0; transform: translateY(-10px) scale(.92); }

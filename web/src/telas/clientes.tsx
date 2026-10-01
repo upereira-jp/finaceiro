@@ -30,7 +30,7 @@ import { api, type Cliente } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
   Pagina, Aviso, RetornoDoAto, Tabela, Campo, Busca, Ferramentas, Filtro, ThOrd, Marca, Icone, BotaoDeIcone, MostrandoSo,
-  useOrdenacao, ordenar, contem, DetalheTecnico, BotaoDeCriar, PainelDeCriar,
+  useOrdenacao, ordenar, contem, DetalheTecnico, BotaoDeCriar, PainelDeCriar, DIRECOES_DO_ATIVO,
 } from '../ui.tsx';
 import {
   situacaoDoDocumento, contarDocumentos, formatarDocumento, tipoPeloComprimento,
@@ -173,7 +173,7 @@ export function TelaClientes() {
 
   return (
     <Pagina titulo="Clientes"
-            sub="Os clientes que o sistema cobra. É aqui que se confirma o CPF ou o CNPJ — e enquanto ele não estiver confirmado, o contrato daquele cliente não ativa e a cobrança dele não sai."
+            sub="Quem o sistema cobra, e onde se confirma o CPF ou o CNPJ de cada um."
             acao={<BotaoDeCriar controla="novo-cliente" aberto={criando} ao={() => { acao.limpar(); setCriando(!criando); }}>
               Novo cliente
             </BotaoDeCriar>}>
@@ -301,7 +301,7 @@ export function TelaClientes() {
                 <ThOrd chave="nome" ordem={ordem} ao={alternar}>Nome</ThOrd>
                 <ThOrd chave="documento" ordem={ordem} ao={alternar}>Documento</ThOrd>
                 <ThOrd chave="documento_estado" ordem={ordem} ao={alternar}>Vale para o contrato</ThOrd>
-                <ThOrd chave="situacao" ordem={ordem} ao={alternar}>Situação</ThOrd>
+                <ThOrd chave="situacao" ordem={ordem} ao={alternar} direcoes={DIRECOES_DO_ATIVO}>Situação</ThOrd>
                 <th>Contato</th>
               </>}
               vazio={todos.length

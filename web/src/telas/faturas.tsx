@@ -70,7 +70,7 @@ import {
 import { useAcao, useDados } from '../dados.ts';
 import {
   Pagina, Aviso, RetornoDoAto, Tabela, Marca, rotulo, linha, useOrdenacao, ordenar, ThOrd, Kpi,
-  Icone, CampoData, Carregando, AjudaDoMes, DetalheTecnico, Menu } from '../ui.tsx';
+  Icone, CampoData, Carregando, AjudaDoMes, DetalheTecnico, Menu, DIRECOES_DA_SITUACAO } from '../ui.tsx';
 import { competenciaISO, emReais, paraCentavos, mesDaQuery, kwhEmBr, centavosParaCampo } from '../dinheiro.ts';
 import { paraCsv, reaisParaPlanilha, nomeDoArquivo } from '../csv.ts';
 import { baixarCsv } from '../baixar.ts';
@@ -95,7 +95,7 @@ import {
 import { PerguntaNaTela } from '../serie.tsx';
 import { diaEmBr, hojeEmSP, contagem } from '../formato.ts';
 import { PainelDaEmissao } from '../emissao-travada-corpo.tsx';
-import type { EmissaoTravadaNaTela, LinhaNaTela } from '../emissao-travada.ts';
+import type { EmissaoTravadaNaTela } from '../emissao-travada.ts';
 import { FaixaDoPasso } from '../roteiro-corpo.tsx';
 import { rotuloDoMes } from '../registradas-regras.ts';
 
@@ -193,7 +193,6 @@ export function TelaFaturas() {
   // montado aqui em vez de por uma requisicao por linha - com 39 UCs, 39
   // requisicoes prenderiam 39 conexoes do pool transacional (ver `emLotes`).
   const ucPorId = useMemo(() => new Map((ucs.dado ?? []).map((u) => [u.id, u])), [ucs.dado]);
-  const ucPorNumero = useMemo(() => new Map((ucs.dado ?? []).map((u) => [u.numero_uc, u])), [ucs.dado]);
   const nomeDoCliente = useMemo(() => new Map((clientes.dado ?? []).map((c) => [c.id, c.nome])), [clientes.dado]);
   const travadaPorFatura = useMemo(
     () => new Map((emissao.dado?.linhas ?? []).map((l) => [l.fatura_id, l])), [emissao.dado]);
@@ -209,12 +208,6 @@ export function TelaFaturas() {
     ultimoErro: travadaPorFatura.get(f.id)?.boleto?.ultimo_erro ?? null,
     uc: ucPorId.get(f.unidade_consumidora_id) ?? null,
     mes,
-  });
-  const recusaDaLista = (l: LinhaNaTela): RecusaLida | null => recusaDaLinha({
-    daSessao: daSessao[l.fatura_id] ?? null,
-    ultimoErro: l.boleto?.ultimo_erro ?? null,
-    uc: ucPorNumero.get(l.unidade) ?? null,
-    mes: String(l.competencia).slice(0, 7),
   });
 
   const lista = ordenar(faturas.dado ?? [], ordem, {
@@ -442,7 +435,7 @@ export function TelaFaturas() {
     /* O TITULO E O NOME DA ABA, «Cobranças», desde 30/09/2026 (etapa 3; antes
        «Emissão e cobrança»): os passos 3 e 4 do mes. A rota `/faturas` ficou. */
     <Pagina titulo="Cobranças"
-            sub="O mês de referência inteiro, linha por linha. Emitir fecha o valor, o boleto vem depois, e dar baixa é o que dispara a divisão do dinheiro. A folha que o cliente recebe, a Fatura unificada, se monta na tela Contas de luz.">
+            sub="Cada cobrança do mês: emitir, pedir o boleto e dar baixa.">
       {/* ONDE ESTA TELA FICA NO MÊS — 10/09/2026. Quem chega aqui vindo de fora
           do roteiro não sabia que existem dois passos antes deste, nem que há um
           depois. A faixa é derivada do mesmo `MOLDES` que monta o funil na
@@ -531,7 +524,7 @@ export function TelaFaturas() {
                 {deOutrosMeses === 1
                   ? 'Há 1 cobrança de outro mês sem boleto no banco'
                   : `Há ${deOutrosMeses} cobranças de outros meses sem boleto no banco`}
-              </a>, na lista logo abaixo da tabela.
+              </a>: o resumo logo abaixo da tabela leva a cada mês.
             </>
           )}
         </p>
@@ -584,7 +577,7 @@ export function TelaFaturas() {
           <Tabela cartoes={false} cabecalho={<>
                     <th className="c-abrir"><span className="so-leitor">Abrir</span></th>
                     <ThOrd chave="uc" ordem={ordem} ao={alternar}>Unidade</ThOrd>
-                    <ThOrd chave="acao" ordem={ordem} ao={alternar}>Situação</ThOrd>
+                    <ThOrd chave="acao" ordem={ordem} ao={alternar} direcoes={DIRECOES_DA_SITUACAO}>Situação</ThOrd>
                     <ThOrd chave="vencimento" ordem={ordem} ao={alternar}>Vencimento</ThOrd>
                     <ThOrd chave="consumo" ordem={ordem} ao={alternar} num>Consumo kWh</ThOrd>
                     <ThOrd chave="total" ordem={ordem} ao={alternar} num>Total</ThOrd>
@@ -652,10 +645,13 @@ export function TelaFaturas() {
         mes que tem esse trabalho. O que a lista continua dizendo e o que a
         tabela do mes nao alcanca — os outros meses —, e a linha acima da tabela
         avisa quando ha algum, com o numero.
+
+        [01/10/2026, etapa 7c] E A LISTA VIROU UMA LINHA: ela repetia, embaixo,
+        cada cobranca-problema do mes que a tabela ja mostra com o porque e o
+        botao. Agora e o resumo — quantas deste mes, quantas de outros meses, e
+        o link de cada outro mes —, e o ato mora so na linha da tabela.
       */}
-      <PainelDaEmissao dados={emissao.dado} erro={emissao.erro}
-                       pedirBoleto={(id) => void pedirBoleto(id)} ocupado={acao.ocupado || pedindo !== null}
-                       recusaDe={recusaDaLista} />
+      <PainelDaEmissao dados={emissao.dado} erro={emissao.erro} mes={mes} />
     </Pagina>
   );
 }

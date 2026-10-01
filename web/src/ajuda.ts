@@ -425,13 +425,14 @@ export const TOPICOS: readonly Topico[] = [
     pergunta: 'Onde foi parar a barra de abas do alto da tela?',
     resposta: 'Virou o menu à esquerda, em 30/09/2026. As telas são as mesmas e os endereços também; '
       + 'mudou o lugar e a ordem, que agora é a do trabalho: primeiro o Mês, depois os cadastros, os '
-      + 'passos do mês e o resultado. No alto do menu está o setor aberto, e no pé, a sua conta.',
+      + 'passos do mês e o resultado. No alto do menu está o setor aberto, e no pé, a ajuda e a sua conta.',
     passos: [
       'Os títulos em caixa alta do menu (Cadastros, O mês, passo a passo…) são seções: clique num deles para fechar ou abrir a seção. O menu lembra a escolha neste computador.',
       'O número ao lado de Contas de luz, Cobranças e Contas a pagar é o passo do mês que acontece ali — o mesmo número dos cinco passos da tela Mês.',
       'Para ganhar espaço na tela, use «Recolher o menu», no pé dele: ficam só os desenhos, e passar o mouse (ou o Tab) num deles mostra o nome. A escolha também fica lembrada.',
       'No celular o menu fica guardado: toque em «Menu», no alto da tela, e ele abre por cima. Tocar fora dele, escolher uma tela ou apertar Esc fecha.',
       'Tema, empresa e Sair estão no pé do menu, no botão com o seu nome.',
+      'Esta ajuda mora no pé do menu, logo acima do seu nome, no item «Ajuda». De qualquer tela, a tecla ? também a abre — menos com o cursor dentro de um campo de texto, onde ? é só uma letra. No celular, com o menu fechado, ela está no botão de boia no alto da tela, ao lado de «Menu».',
     ],
     caminhos: [ir('/pendencias', 'Abrir Mês')],
     camada: null,
@@ -439,7 +440,8 @@ export const TOPICOS: readonly Topico[] = [
     termos: ['barra de cima', 'barra de abas', 'barra do alto', 'cade a barra', 'sumiu a barra', 'barra sumiu',
              'menu lateral', 'menu do lado', 'menu da esquerda', 'menu a esquerda', 'recolher o menu',
              'esconder o menu', 'abrir o menu', 'menu sumiu', 'expandir o menu', 'onde fica o sair',
-             'onde esta o sair', 'trocar o tema'],
+             'onde esta o sair', 'trocar o tema', 'onde fica a ajuda', 'cade a ajuda', 'botao da ajuda',
+             'botao laranja', 'sumiu o botao da ajuda', 'atalho', 'tecla de atalho'],
   },
   {
     id: 'ainda-nao-da-para-conferir',
@@ -1296,9 +1298,9 @@ export const TOPICOS: readonly Topico[] = [
   {
     id: 'cliente-nao-aparece',
     pergunta: 'O cliente não aparece na lista. O que houve?',
-    resposta: 'Quase sempre é filtro ligado ou a empresa errada selecionada no alto da tela.',
+    resposta: 'Quase sempre é filtro ligado ou a empresa errada selecionada no pé do menu.',
     passos: [
-      'Confira a empresa selecionada no canto superior direito.',
+      'Confira a empresa selecionada no pé do menu, logo acima do seu nome.',
       'Limpe os filtros da barra acima da tabela — inclusive o de pendência, que pode ter vindo de um link.',
       'Busque pelo nome ou pelo documento no campo de busca.',
       'Se ainda assim não aparecer, o cliente pode não ter vindo do CRM ainda.',
@@ -1313,10 +1315,10 @@ export const TOPICOS: readonly Topico[] = [
   {
     id: 'trocar-empresa',
     pergunta: 'Como troco de empresa?',
-    resposta: 'No seletor do canto superior direito. Todas as telas mostram os dados de uma empresa '
-      + 'só por vez.',
+    resposta: 'No seletor do pé do menu, logo acima do seu nome. Todas as telas mostram os dados de '
+      + 'uma empresa só por vez.',
     passos: [
-      'Clique no nome da empresa, no alto à direita.',
+      'Clique no seletor de empresa, no pé do menu (ele só aparece para quem tem mais de uma).',
       'Escolha a outra empresa na lista.',
       'Confira na tela Mês: o que falta é contado por empresa, e muda junto.',
     ],
@@ -1324,7 +1326,7 @@ export const TOPICOS: readonly Topico[] = [
     camada: null,
     telas: [],
     termos: ['trocar empresa', 'mudar empresa', 'outra empresa', 'tenant', 'empresa errada',
-             'dados errados', 'nao e minha empresa', 'cnpj errado no alto'],
+             'dados errados', 'nao e minha empresa', 'cnpj errado no alto', 'empresa no pe do menu'],
   },
   {
     id: 'deu-erro',

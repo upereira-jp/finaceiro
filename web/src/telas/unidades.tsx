@@ -27,7 +27,7 @@ import type { VinculoNaTela } from '../vinculo-do-crm.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
   Pagina, Aviso, RetornoDoAto, Tabela, Busca, Campo, Ferramentas, Filtro, ThOrd, Marca, BotaoDeIcone,
-  CampoData, Icone, useOrdenacao, ordenar, contem, rotulo, DetalheTecnico, MostrandoSo,
+  CampoData, Icone, useOrdenacao, ordenar, contem, rotulo, DetalheTecnico, MostrandoSo, DIRECOES_DA_SITUACAO,
 } from '../ui.tsx';
 import {
   situacaoDaUc, ehFaturavel, contarSituacoes,
@@ -38,7 +38,7 @@ import {
 import { decimalDoCadastro, decimalParaCampo, mesDaQuery } from '../dinheiro.ts';
 import { mesEmBr } from '../formato.ts';
 import { PerguntaNaTela } from '../serie.tsx';
-import { SELO_DA_UNIDADE } from '../tom-do-estado.ts';
+import { SELO_DA_UNIDADE, pesoDoSelo } from '../tom-do-estado.ts';
 import { semEnderecoParaOBoleto, comContratoAtivo } from '../o-que-falta.ts';
 import {
   FILTROS_DA_TELA, filtroDaConsulta, unidadeDaConsulta, rotuloDoRecorte, esquecerORecorte,
@@ -175,7 +175,7 @@ export function TelaUnidades() {
     {
       uc: (u) => u.numero_uc,
       vencimento: (u) => u.data_vencimento,
-      situacao: (u) => situacaoDaUc(u),
+      situacao: (u) => pesoDoSelo(SELO_DA_UNIDADE[situacaoDaUc(u)]),
       /* Quem mais falta primeiro, na ordem decrescente — «O que falta» e a coluna
          por onde se trabalha a lista. */
       falta: (u) => faltasDaUc(u).length,
@@ -268,7 +268,7 @@ export function TelaUnidades() {
 
   return (
     <Pagina titulo="Unidades consumidoras"
-            sub="Vêm do CRM. Aqui se completa o que a cobrança e o boleto precisam: o preço do kWh, o endereço do pagador e o dia de vencimento, que vale quando a conta de luz não traz a data.">
+            sub="Vêm do CRM. Aqui se completam o preço do kWh, o endereço e o vencimento.">
       {/*
         OS TRES AVISOS FORAM REESCRITOS EM 21/08/2026 na mesma forma: primeiro o
         QUE falta, depois o que isso IMPEDE, depois o que FAZER — e o código de
@@ -395,7 +395,7 @@ export function TelaUnidades() {
       */}
       <Tabela cabecalho={<>
                 <ThOrd chave="uc" ordem={ordem} ao={alternar}>Unidade</ThOrd>
-                <ThOrd chave="situacao" ordem={ordem} ao={alternar}>Situação</ThOrd>
+                <ThOrd chave="situacao" ordem={ordem} ao={alternar} direcoes={DIRECOES_DA_SITUACAO}>Situação</ThOrd>
                 <ThOrd chave="falta" ordem={ordem} ao={alternar}>O que falta</ThOrd>
                 <ThOrd chave="vencimento" ordem={ordem} ao={alternar}>Vencimento</ThOrd>
                 <th><span className="so-leitor">Detalhe</span></th>

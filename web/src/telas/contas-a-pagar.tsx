@@ -21,15 +21,15 @@
 // E O PAPEL `cobrança` NÃO ENTRA AQUI. A matriz do PRD §3 lhe dá traço na coluna
 // Corporativo, e a rota responde 403 — não é defeito, é a coluna funcionando.
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { api } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
   Pagina, Aviso, RetornoDoAto, Tabela, Campo, Busca, Ferramentas, Filtro, ThOrd, Marca, Icone, DetalheTecnico,
-  Carregando, AjudaDoMes, CampoData, useOrdenacao, ordenar, contem, BotaoDeCriar, PainelDeCriar,
+  Carregando, AjudaDoMes, CampoData, useOrdenacao, ordenar, contem, BotaoDeCriar, PainelDeCriar, DIRECOES_DA_SITUACAO,
 } from '../ui.tsx';
 import { Ligacao } from '../rota.tsx';
-import { SELO_DA_CONTA_A_PAGAR, SELO_DA_ESPERA_DO_REPASSE, tipoDoAviso } from '../tom-do-estado.ts';
+import { SELO_DA_CONTA_A_PAGAR, SELO_DA_ESPERA_DO_REPASSE, tipoDoAviso, pesoDoSelo } from '../tom-do-estado.ts';
 import { emReais, paraCentavos, competenciaISO, centavosParaCampo } from '../dinheiro.ts';
 import { diaEmBr, mesEmBr, hojeEmSP, contagem } from '../formato.ts';
 import { PerguntaNaTela } from '../serie.tsx';
@@ -40,9 +40,9 @@ import {
   type ContaAPagar, type FormaDePagamento, type PagamentoDaConta,
 } from '../contas-regras.ts';
 import {
-  motivoDaEspera, podeRepartirAgora, ordenarPelaEspera, resumoDaEspera, totalCentavos,
+  agruparPorUsina, resumoDaEspera, totalCentavos,
   ROTULO_DO_MOTIVO, ROTULO_CURTO_DO_MOTIVO, EXPLICACAO_DO_MOTIVO, COMO_DESTRAVAR, ORDEM_DOS_MOTIVOS,
-  type RepassePendente, type MotivoDaEspera,
+  type RepassePendente,
 } from '../repasse-pendente.ts';
 import { paraCsv, reaisParaPlanilha, nomeDoArquivo, type Coluna } from '../csv.ts';
 import { baixarCsv } from '../baixar.ts';
@@ -101,7 +101,9 @@ export function TelaContasAPagar() {
       descricao: (c) => c.descricao,
       valor: (c) => c.valor_centavos,
       saldo: (c) => saldoCentavos(c),
-      situacao: (c) => c.status,
+      /* O peso do tom e nao o texto do estado (etapa 7c): a vencida, a em
+         aberto, a cancelada e a paga, nessa ordem. */
+      situacao: (c) => pesoDoSelo(estaAtrasada(c, hoje) ? SELO_DA_CONTA_A_PAGAR.vencida : SELO_DA_CONTA_A_PAGAR[c.status]),
     },
   );
 
@@ -125,7 +127,7 @@ export function TelaContasAPagar() {
 
   return (
     <Pagina titulo="Contas a pagar"
-            sub="O que a empresa deve — a parte do dono da usina, a comissão de quem trouxe o cliente, a concessionária e despesas avulsas. A parte do dono e a comissão nascem sozinhas quando um cliente paga."
+            sub="O que a empresa deve: a parte do dono da usina, a comissão e as despesas."
             acao={<BotaoDeCriar controla="nova-despesa" aberto={lancando} ao={() => setLancando(!lancando)}>
               Nova despesa avulsa
             </BotaoDeCriar>}>
@@ -246,6 +248,11 @@ export function TelaContasAPagar() {
       {contas.carregando ? <Carregando /> : contas.erro ? (
         <Aviso tipo="erro">Não foi possível ler as contas a pagar: {contas.erro}</Aviso>
       ) : (
+        /* [01/10/2026, etapa 7c] AS COLUNAS REBALANCEADAS (`.lista-de-caixa`):
+           os botões da linha não quebram, o selo longo («Paga em parte»)
+           quebra dentro dele, e a largura que sobra vai para o beneficiário e
+           a descrição — que quebravam em quatro e cinco linhas a 1440. */
+        <div className="lista-de-caixa">
         <Tabela vazio={todas.length === 0
                   ? 'Nenhuma conta a pagar. As de repasse e comissão aparecem quando a primeira cobrança for paga.'
                   : 'Nenhuma conta com esses filtros.'}
@@ -255,7 +262,7 @@ export function TelaContasAPagar() {
                   <ThOrd chave="descricao" ordem={ordem} ao={alternar}>Descrição</ThOrd>
                   <ThOrd chave="valor" ordem={ordem} ao={alternar} num>Valor</ThOrd>
                   <ThOrd chave="saldo" ordem={ordem} ao={alternar} num>Saldo</ThOrd>
-                  <ThOrd chave="situacao" ordem={ordem} ao={alternar}>Situação</ThOrd>
+                  <ThOrd chave="situacao" ordem={ordem} ao={alternar} direcoes={DIRECOES_DA_SITUACAO}>Situação</ThOrd>
                   <th>Ações</th>
                 </>}>
           {visiveis.map((c) => (
@@ -263,6 +270,7 @@ export function TelaContasAPagar() {
                           aoMudar={() => { contas.recarregar(); resumo.recarregar(); }} />
           ))}
         </Tabela>
+        </div>
       )}
     </Pagina>
   );
@@ -299,18 +307,21 @@ function LinhaDeConta(p: {
           {diaEmBr(c.vencimento)}
           {atrasada && <> <Marca selo={SELO_DA_CONTA_A_PAGAR.vencida}>vencida</Marca></>}
         </td>
-        <td className="c-id">
+        <td className="c-id c-nome">
           <strong>{nomeDoBeneficiario(c)}</strong>
           <div className="nota">{ROTULO_DO_BENEFICIARIO[c.beneficiario_tipo]}</div>
         </td>
-        <td>
+        <td className="c-desc">
           {c.descricao}
           {/* De onde a conta veio importa: a que nasceu do split tem valor
               IMUTÁVEL (PRD §4.4), e quem olha precisa saber por que não há
               como editá-la. [30/09/2026, etapa 4b] «split» saiu da tela: a
               GLOSSARIO.md proíbe a palavra sozinha (colide com o split payment
               tributário), e na tela o nome é «divisão do pagamento». */}
-          <div className="nota">{c.origem_split_item_id ? 'nascida da divisão de um pagamento' : 'lançada à mão'}</div>
+          {/* [01/10/2026, etapa 7c] «da divisão de um pagamento», sem o
+              «nascida»: a frase cabia em duas linhas na coluna de 1440 e
+              empurrava a descrição para cinco. */}
+          <div className="nota">{c.origem_split_item_id ? 'da divisão de um pagamento' : 'lançada à mão'}</div>
         </td>
         <td className="num">{emReais(c.valor_centavos)}</td>
         <td className="num c-val">
@@ -540,21 +551,39 @@ function FormularioDeConta(p: {
  * as linhas se agrupam pelo motivo da espera; o cabecalho do grupo diz o que e
  * e como destrava (os dois passos de «falta o dono», com os links), e a linha
  * fica com o estado curto e a acao ou o destino.
+ *
+ * [01/10/2026, etapa 7c] E A LINHA PASSOU A SER A USINA. Ainda eram dezesseis
+ * linhas «Sem dono · Vincular em Usinas» para duas usinas — o mesmo ato
+ * dezesseis vezes, e no celular dezesseis cartoes antes da lista do que pagar.
+ * Agora e uma linha por usina (`agruparPorUsina`): quantos pagamentos, de
+ * quando a quando, os meses, a soma e o ato UMA vez; os pagamentos ficam no
+ * expansor da linha. Repartir, quando da, continua sendo pagamento por
+ * pagamento no servidor — o botao da usina pede um de cada vez.
  */
 function DinheiroParado(p: {
   linhas: readonly RepassePendente[]; ocupado: boolean;
   repartir: (l: RepassePendente) => Promise<void>;
 }) {
-  const ordenadas = ordenarPelaEspera(p.linhas);
+  const base = useId();
+  /* As usinas abertas no expansor. Fechadas por padrão: a linha da usina já diz
+     quantos, de quando a quando e quanto — o um a um é para conferir. */
+  const [abertas, setAbertas] = useState<ReadonlySet<string>>(() => new Set());
+  const alternar = (chave: string) => setAbertas((a) => {
+    const nova = new Set(a);
+    if (nova.has(chave)) nova.delete(chave); else nova.add(chave);
+    return nova;
+  });
+  const usinas = agruparPorUsina(p.linhas);
   const grupos = ORDEM_DOS_MOTIVOS
     .map((m) => ({
       motivo: m,
-      linhas: ordenadas.filter((l) => motivoDaEspera(l) === m),
+      usinas: usinas.filter((u) => u.motivo === m),
       /* O último passo do caminho é o que a LINHA oferece: o dono já existe
          quando alguém chega nela, e o que falta é o vínculo com a usina dela. */
       ultimoPasso: COMO_DESTRAVAR[m]?.[COMO_DESTRAVAR[m]!.length - 1] ?? null,
     }))
-    .filter((g) => g.linhas.length > 0);
+    .filter((g) => g.usinas.length > 0);
+  const pagamentos = (n: number) => `${n} ${n === 1 ? 'pagamento' : 'pagamentos'}`;
 
   return (
     <div className="cartao secao">
@@ -565,55 +594,100 @@ function DinheiroParado(p: {
         {resumoDaEspera(p.linhas).replace(/^./, (c) => c.toUpperCase())}. Somam{' '}
         <strong>{emReais(totalCentavos(p.linhas))}</strong>.
       </p>
-      <Tabela cabecalho={<><th>Pago em</th><th>Mês de referência</th><th>Usina</th>
+      <Tabela cabecalho={<><th>Usina</th><th>Pagamentos</th><th>Mês de referência</th>
                           <th className="num">Valor</th><th>Situação</th><th>O que fazer</th></>}>
-        {grupos.flatMap((g) => [
-          <tr key={`grupo:${g.motivo}`} className="grupo-da-tabela">
-            <td colSpan={6}>
-              <h3>
-                <Marca selo={SELO_DA_ESPERA_DO_REPASSE[g.motivo]}>{ROTULO_DO_MOTIVO[g.motivo]}</Marca>
-                <span className="fraco">
-                  {g.linhas.length} {g.linhas.length === 1 ? 'pagamento' : 'pagamentos'},{' '}
-                  {emReais(totalCentavos(g.linhas))}
-                </span>
-              </h3>
-              <p>{EXPLICACAO_DO_MOTIVO[g.motivo]}</p>
-              {COMO_DESTRAVAR[g.motivo] && (
-                <ol className="grupo-passos">
-                  {COMO_DESTRAVAR[g.motivo]!.map((x) => (
-                    <li key={x.destino.endereco}>
-                      {x.ato} em <Ligacao para={x.destino.endereco}>{x.destino.rotulo}</Ligacao>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </td>
-          </tr>,
-          ...g.linhas.map((l) => (
-            <tr key={l.liquidacao_id}>
-              <td>{diaEmBr(l.data_liquidacao)}</td>
-              <td>{mesEmBr(l.competencia)}</td>
-              <td className="c-id">{l.codigo_geradora}</td>
-              <td className="num c-val"><strong>{emReais(l.valor_liquidado_centavos)}</strong></td>
-              <td className="c-sit"><Marca selo={SELO_DA_ESPERA_DO_REPASSE[g.motivo]}>{ROTULO_CURTO_DO_MOTIVO[g.motivo]}</Marca></td>
-              <td className="c-aco">
-                {/* A AÇÃO OU O DESTINO: repartir, quando dá; o último passo do
-                    caminho, quando é trabalho de alguém; e a frase de que não há
-                    nada a fazer, quando o banco é que confirma. */}
-                {podeRepartirAgora(l) ? (
-                  <button disabled={p.ocupado} onClick={() => void p.repartir(l)}>Repartir agora</button>
-                ) : g.ultimoPasso ? (
-                  <Ligacao para={g.ultimoPasso.destino.endereco}
-                           rotulo={`Vincular em ${g.ultimoPasso.destino.rotulo} o dono da usina ${l.codigo_geradora}`}>
-                    Vincular em {g.ultimoPasso.destino.rotulo}
-                  </Ligacao>
-                ) : (
-                  <span className="nota">O sistema reparte sozinho</span>
+        {grupos.flatMap((g) => {
+          const n = g.usinas.reduce((a, u) => a + u.pagamentos.length, 0);
+          return [
+            <tr key={`grupo:${g.motivo}`} className="grupo-da-tabela">
+              <td colSpan={6}>
+                <h3>
+                  <Marca selo={SELO_DA_ESPERA_DO_REPASSE[g.motivo]}>{ROTULO_DO_MOTIVO[g.motivo]}</Marca>
+                  <span className="fraco">
+                    {pagamentos(n)}{g.usinas.length > 1 ? ` de ${g.usinas.length} usinas` : ''},{' '}
+                    {emReais(g.usinas.reduce((a, u) => a + u.totalCentavos, 0))}
+                  </span>
+                </h3>
+                <p>{EXPLICACAO_DO_MOTIVO[g.motivo]}</p>
+                {COMO_DESTRAVAR[g.motivo] && (
+                  <ol className="grupo-passos">
+                    {COMO_DESTRAVAR[g.motivo]!.map((x) => (
+                      <li key={x.destino.endereco}>
+                        {x.ato} em <Ligacao para={x.destino.endereco}>{x.destino.rotulo}</Ligacao>
+                      </li>
+                    ))}
+                  </ol>
                 )}
               </td>
-            </tr>
-          )),
-        ])}
+            </tr>,
+            ...g.usinas.flatMap((u, i) => {
+              const chave = `${u.motivo}|${u.codigo_geradora}`;
+              const aberta = abertas.has(chave);
+              const idDetalhe = `${base}-${g.motivo}-${i}`;
+              const k = u.pagamentos.length;
+              return [
+                <tr key={chave}>
+                  <td className="c-id"><strong>{u.codigo_geradora}</strong></td>
+                  <td>
+                    {/* O EXPANSOR: os pagamentos da usina, um a um. O nome diz
+                        de qual usina é — numa lista de usinas, «9 pagamentos»
+                        sozinho seria o mesmo botão para o leitor de tela. */}
+                    <button type="button" className="discreto expansor-da-linha" aria-expanded={aberta}
+                            aria-controls={idDetalhe} onClick={() => alternar(chave)}
+                            aria-label={`${aberta ? 'Ocultar' : 'Ver'} os ${pagamentos(k)} da usina ${u.codigo_geradora}`}>
+                      <Icone nome={aberta ? 'subir' : 'descer'} tamanho={12} peso="bold" /> {pagamentos(k)}
+                    </button>
+                    <div className="nota">
+                      {u.desde === u.ate ? `em ${diaEmBr(u.desde)}` : `de ${diaEmBr(u.desde)} a ${diaEmBr(u.ate)}`}
+                    </div>
+                  </td>
+                  <td>{u.meses.map((m) => mesEmBr(m)).join(' e ')}</td>
+                  <td className="num c-val"><strong>{emReais(u.totalCentavos)}</strong></td>
+                  <td className="c-sit"><Marca selo={SELO_DA_ESPERA_DO_REPASSE[u.motivo]}>{ROTULO_CURTO_DO_MOTIVO[u.motivo]}</Marca></td>
+                  <td className="c-aco">
+                    {/* O ATO, UMA VEZ POR USINA: repartir, quando dá (o número no
+                        rótulo, como todo ato em série da casa); o último passo
+                        do caminho, quando é trabalho de alguém; e a frase de que
+                        não há nada a fazer, quando o banco é que confirma. */}
+                    {u.motivo === 'pronto' ? (
+                      <button disabled={p.ocupado} onClick={() => void (async () => {
+                        for (const l of u.pagamentos) await p.repartir(l);
+                      })()}>
+                        {k === 1 ? 'Repartir agora' : `Repartir os ${k} agora`}
+                      </button>
+                    ) : g.ultimoPasso ? (
+                      <Ligacao para={g.ultimoPasso.destino.endereco}
+                               rotulo={`Vincular em ${g.ultimoPasso.destino.rotulo} o dono da usina ${u.codigo_geradora}`}>
+                        Vincular em {g.ultimoPasso.destino.rotulo}
+                      </Ligacao>
+                    ) : (
+                      <span className="nota">O sistema reparte sozinho</span>
+                    )}
+                  </td>
+                </tr>,
+                aberta && (
+                  <tr key={`${chave}:pagamentos`} className="linha-detalhe">
+                    <td colSpan={6} id={idDetalhe}>
+                      {/* UMA LISTA, e não uma tabela dentro da tabela: no
+                          celular a tabela de dentro viraria cartões dentro do
+                          cartão da usina. Três colunas fixas, o valor à
+                          direita, alinhado como na coluna de cima. */}
+                      <ul className="pagamentos-da-usina" aria-label={`Pagamentos da usina ${u.codigo_geradora}`}>
+                        {u.pagamentos.map((l) => (
+                          <li key={l.liquidacao_id}>
+                            <span>pago em {diaEmBr(l.data_liquidacao)}</span>
+                            <span className="fraco">mês {mesEmBr(l.competencia)}</span>
+                            <span className="num">{emReais(l.valor_liquidado_centavos)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </td>
+                  </tr>
+                ),
+              ].filter(Boolean);
+            }),
+          ];
+        })}
       </Tabela>
       <DetalheTecnico>
         <p className="nota">

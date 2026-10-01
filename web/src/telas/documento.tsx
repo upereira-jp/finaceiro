@@ -236,7 +236,7 @@ export function TelaDocumento() {
    */
   return (
     <Pagina titulo="Contas de luz"
-            sub="Onde as contas de luz do mês chegam e viram cobrança: sobe a conta da distribuidora, confere os dados, gera a cobrança e imprime a folha que o cliente recebe, a Fatura unificada.">
+            sub="Onde a conta de luz do mês vira cobrança e a folha do cliente se imprime.">
       <FaixaDoPasso rota="/documento" />
 
       {/*

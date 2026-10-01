@@ -25,7 +25,7 @@
 import { readFileSync } from 'node:fs';
 import {
   fraseDaLinha, haQuantoTempo, resumoDaEmissao, avisoDeTruncagem,
-  type LinhaNaTela, type NivelDaEmissao, type EmissaoTravadaNaTela,
+  type LinhaNaTela, type NivelDaEmissao, type EmissaoTravadaNaTela, resumoDoBanco, fraseDoMesNoBanco,
 } from '../src/emissao-travada.ts';
 
 let falhas = 0;
@@ -208,6 +208,32 @@ const TODOS: NivelDaEmissao[] = ['nao_pedido', 'esquecido', 'esperando', 'insist
       'e a PRIMEIRA tela da barra busca a mesma leitura e poe o funil — com o passo 4 contando quem '
       + 'esta sem boleto — ACIMA da tabela do mes: quem so abre a aba Mes descobre ali que ha cliente '
       + 'sem boleto, sem depender de abrir a aba certa no dia certo');
+}
+
+// ============ EM-14 o resumo de uma linha (01/10/2026, etapa 7c)
+{
+  /* O BLOCO DE BAIXO REPETIA AS LINHAS DA TABELA. Agora ele conta: as deste
+     mês (cujo detalhe está na linha) e as de outros meses, cada mês com
+     quantas, do mais recente ao mais antigo. */
+  const ls = [
+    linha('esquecido', { fatura_id: 'a', competencia: '2026-09-01' }),
+    linha('insistindo', { fatura_id: 'b', competencia: '2026-09-01' }),
+    linha('nao_pedido', { fatura_id: 'c', competencia: '2026-08-01' }),
+    linha('parado', { fatura_id: 'd', competencia: '2026-06-01' }),
+    linha('esperando', { fatura_id: 'e', competencia: '2026-08-01' }),
+  ];
+  const r = resumoDoBanco(conjunto(ls), '2026-09');
+  chk('EM-14', r.doMes === 2 && r.deOutros === 3 && r.outros.map((o) => `${o.mes}:${o.quantos}`).join() === '2026-08:2,2026-06:1'
+            && r.total === 5 && r.truncou === null,
+      'o resumo conta 2 deste mes e 3 de outros, cada outro mes com quantas, do mais recente ao mais antigo');
+  chk('EM-14b', fraseDoMesNoBanco(r) === '2 cobranças deste mês sem boleto no banco'
+             && fraseDoMesNoBanco(resumoDoBanco(conjunto([ls[0]!]), '2026-09')) === '1 cobrança deste mês sem boleto no banco'
+             && fraseDoMesNoBanco(resumoDoBanco(conjunto([ls[2]!]), '2026-09')) === 'Nenhuma cobrança deste mês sem boleto no banco'
+             && fraseDoMesNoBanco(resumoDoBanco(conjunto(ls), null)) === '5 cobranças emitidas sem boleto no banco',
+      'a frase do mes concorda no singular, diz «nenhuma» com todas as letras, e sem mes na tela conta todas');
+  const sem = resumoDoBanco(conjunto(ls), null);
+  chk('EM-14c', sem.doMes === null && sem.outros.length === 0 && resumoDoBanco(conjunto([ls[0]!], 340), '2026-09').truncou !== null,
+      'sem mes na tela nao ha «outros meses»; e a lista com teto diz que contou o que veio');
 }
 
 console.log(`\n${falhas === 0 ? `emissao travada: ${feitas} verificacoes, 0 falhas`

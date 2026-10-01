@@ -148,3 +148,59 @@ export function resumoDaEspera(ls: readonly RepassePendente[]): string {
   return partes.length <= 1 ? (partes[0] ?? '')
     : `${partes.slice(0, -1).join(', ')} e ${partes[partes.length - 1]}`;
 }
+
+/* ==========================================================================
+ * UMA LINHA POR USINA (01/10/2026, etapa 7c)
+ * ==========================================================================
+ *
+ * A LINHA ERA O PAGAMENTO, e o trabalho é a USINA. Com 16 pagamentos de duas
+ * usinas sem dono, a tabela tinha 16 linhas «Sem dono · Vincular em Usinas» —
+ * o mesmo ato, oferecido 16 vezes, para destravar duas coisas. No celular
+ * eram 16 cartões, milhares de pixels antes da lista do que pagar. Agora cada
+ * usina é uma linha, com quantos pagamentos esperam, de quando a quando, a soma
+ * e o ato UMA vez; os pagamentos ficam num expansor da linha, para quem quer
+ * conferir um a um.
+ *
+ * A CHAVE É MOTIVO + USINA, e não só a usina: o motivo «sem dono» é da usina
+ * (todos os pagamentos dela esperam juntos), mas «aguardando o banco» e
+ * «pronto» são de cada pagamento — uma usina com dono pode ter um de cada, e
+ * aí ela aparece nos dois grupos, porque os dois pedem coisas diferentes.
+ */
+export type UsinaQueEspera = {
+  codigo_geradora: string;
+  motivo: MotivoDaEspera;
+  /** Do mais antigo ao mais recente — a ordem em que o dinheiro entrou. */
+  pagamentos: RepassePendente[];
+  totalCentavos: number;
+  /** A data do primeiro e do último pagamento que esperam. */
+  desde: string;
+  ate: string;
+  /** Os meses de referência, sem repetir, do mais antigo ao mais recente. */
+  meses: string[];
+};
+
+export function agruparPorUsina(ls: readonly RepassePendente[]): UsinaQueEspera[] {
+  const grupos = new Map<string, RepassePendente[]>();
+  for (const l of ls) {
+    const chave = `${motivoDaEspera(l)}|${l.codigo_geradora}`;
+    const g = grupos.get(chave);
+    if (g) g.push(l); else grupos.set(chave, [l]);
+  }
+  return [...grupos.values()]
+    .map((g) => {
+      const pagamentos = [...g].sort((a, b) => String(a.data_liquidacao).localeCompare(String(b.data_liquidacao)));
+      return {
+        codigo_geradora: pagamentos[0]!.codigo_geradora,
+        motivo: motivoDaEspera(pagamentos[0]!),
+        pagamentos,
+        totalCentavos: totalCentavos(pagamentos),
+        desde: pagamentos[0]!.data_liquidacao,
+        ate: pagamentos[pagamentos.length - 1]!.data_liquidacao,
+        meses: [...new Set(pagamentos.map((p) => String(p.competencia).slice(0, 7)))].sort(),
+      };
+    })
+    /* Quem exige ação primeiro (`PESO`), e dentro do mesmo motivo a usina com
+       o dinheiro parado há mais tempo. */
+    .sort((a, b) => (PESO[a.motivo] - PESO[b.motivo]) || a.desde.localeCompare(b.desde)
+      || a.codigo_geradora.localeCompare(b.codigo_geradora));
+}

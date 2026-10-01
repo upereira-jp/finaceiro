@@ -188,3 +188,64 @@ export function avisoDeTruncagem(e: EmissaoTravadaNaTela): string | null {
   if (e.total <= e.linhas.length) return null;
   return `Mostrando as ${e.linhas.length} de vencimento mais antigo, de ${e.total} ao todo.`;
 }
+
+/* ==========================================================================
+ * O RESUMO DE UMA LINHA, embaixo da tabela de Cobranças (01/10/2026, etapa 7c)
+ * ==========================================================================
+ *
+ * ATÉ AQUI A TELA DIZIA TUDO DUAS VEZES. O bloco «O que ainda não chegou ao
+ * banco» repetia, embaixo da tabela, cada linha-problema que a própria tabela
+ * já mostrava — com a segunda linha da situação («O banco recusou: falta o
+ * endereço»), o «Boleto e baixa» da linha e o mesmo «Pedir o boleto» /
+ * «Completar o endereço». Para o mês à vista, o detalhe fica na LINHA, que é
+ * onde se age; aqui sobra o que a tabela do mês não alcança — os outros meses —
+ * e a afirmação de que nada ficou para trás, que é a lição de 10/09 (a
+ * ausência não grita, e uma tela muda tem a cara de uma tela quebrada).
+ *
+ * «3 cobranças deste mês sem boleto no banco · 2 de outros meses», e cada
+ * outro mês é um link para Cobranças naquele mês — onde as linhas dele estão,
+ * com as mesmas ações.
+ */
+export type OutroMesSemBoleto = { mes: string; quantos: number };
+
+export type ResumoDoBanco = {
+  /** Do mês à vista. `null` sem mês na tela. */
+  doMes: number | null;
+  /** Os outros meses com cobrança sem boleto, do mais recente ao mais antigo. */
+  outros: OutroMesSemBoleto[];
+  /** Quantas, somando os outros meses. */
+  deOutros: number;
+  total: number;
+  /** A lista veio com teto: os números acima contam o que veio. */
+  truncou: string | null;
+};
+
+const mesDaLinha = (l: LinhaNaTela): string => String(l.competencia).slice(0, 7);
+
+export function resumoDoBanco(e: EmissaoTravadaNaTela, mes: string | null): ResumoDoBanco {
+  const doMes = mes ? e.linhas.filter((l) => mesDaLinha(l) === mes).length : null;
+  const porMes = new Map<string, number>();
+  for (const l of e.linhas) {
+    const m = mesDaLinha(l);
+    if (mes && m === mes) continue;
+    porMes.set(m, (porMes.get(m) ?? 0) + 1);
+  }
+  const outros = mes
+    ? [...porMes.entries()].map(([m, quantos]) => ({ mes: m, quantos })).sort((a, b) => b.mes.localeCompare(a.mes))
+    : [];
+  return {
+    doMes, outros, deOutros: outros.reduce((a, o) => a + o.quantos, 0),
+    total: e.total, truncou: avisoDeTruncagem(e),
+  };
+}
+
+/** A metade da frase que fala do mês à vista: «3 cobranças deste mês sem boleto
+ *  no banco», «Nenhuma cobrança deste mês sem boleto no banco». Sem mês na tela,
+ *  conta todas. */
+export function fraseDoMesNoBanco(r: ResumoDoBanco): string {
+  if (r.doMes === null) {
+    return `${r.total} ${r.total === 1 ? 'cobrança emitida' : 'cobranças emitidas'} sem boleto no banco`;
+  }
+  if (r.doMes === 0) return 'Nenhuma cobrança deste mês sem boleto no banco';
+  return `${r.doMes} ${r.doMes === 1 ? 'cobrança' : 'cobranças'} deste mês sem boleto no banco`;
+}

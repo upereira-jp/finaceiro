@@ -56,18 +56,20 @@
 //       (só no componente que ele não usa), e um atalho sem aviso na tela é um
 //       atalho que ninguém descobre;
 //   bolinhas de aviso, sinos, badges        não há o que avisar por ali: o que
-//       trava o mês está na tela Mês, e a ajuda tem o botão dela.
+//       trava o mês está na tela Mês, e a ajuda tem o item dela no pé.
 //
 // E UM COMPORTAMENTO QUE LÁ NÃO HÁ: na janela média (900 a 1279px) o menu nasce
 // recolhido enquanto a pessoa não escolher — lá ele nasce sempre aberto. As
 // tabelas daqui são mais largas que as de lá (`MENU_VIRA_TRILHO`, abaixo).
 //
 // ============================================================================
-// A CENTRAL DE AJUDA NÃO ENTROU NO PÉ, e a razão é um pedido do dono. Em
-// 21/08/2026 o botão foi para o canto inferior direito, e o balão de primeira
-// visita aponta para ESSE lugar (`ajuda-gatilho.tsx`: «dois gatilhos para o
-// mesmo painel seriam ruído — e o balão mentiria para metade das pessoas»). O
-// canto continua livre com o menu à esquerda, então o botão fica onde está.
+// A CENTRAL DE AJUDA MORA NO PÉ desde 01/10/2026 (etapa 7c), logo acima da
+// conta, com o nome escrito e a tecla do atalho. Até ali ela era o quadrado
+// laranja do canto inferior direito, pedido pelo dono em 21/08 — e foi o próprio
+// dono que o tirou de lá, em 01/10: era o segundo laranja de toda tela e cobria
+// a última coluna das tabelas. O porquê inteiro está em `ajuda-gatilho.tsx`. No
+// celular, com a gaveta fechada, o pé não está na tela: a faixa do topo ganha um
+// botão de desenho ao lado de «Menu», e cada largura mostra um só.
 //
 // ============================================================================
 // ACESSIBILIDADE, que é o que um menu desenhado à mão costuma perder
@@ -87,6 +89,7 @@ import { focaveis } from './ui.tsx';
 import { Ligacao } from './rota.tsx';
 import { SeletorDeSetor } from './seletor-de-setor.tsx';
 import { MENU_VIRA_GAVETA } from './estilo.ts';
+import type { LugarDaAjuda } from './ajuda-gatilho.tsx';
 import {
   secoesDoMenu, telasDoFunil, rotuloDosPassos, fraseDosPassos,
   type Funil, type Tela, type SecaoDoMenu,
@@ -181,14 +184,17 @@ export type PropsDoMenuLateral = {
   /** Estado inicial sem armazenamento, para o teste de render. */
   recolhidoInicial?: boolean;
   /**
-   * O BOTÃO DA AJUDA (e o balão dele). [01/10/2026, etapa 5] Ele mora aqui, logo
-   * depois da faixa do celular e antes do conteúdo, para a ORDEM DO TAB bater
-   * com o que se vê nas duas larguras: no computador ele flutua no canto de
-   * baixo, como o dono pediu em 21/08; no celular ele sobe para a faixa do
-   * topo, ao lado do «Menu» — lá embaixo ele cobria a última coluna de toda
-   * tabela e o botão de toda linha que passasse por ele.
+   * O GATILHO DA AJUDA (e o balão dele), desenhado para cada lugar. [01/10/2026,
+   * etapa 7c] Dois lugares, um por largura: `'menu'` é o item do pé, logo acima
+   * da conta — no computador e dentro da gaveta —, e `'faixa'` é o botão de
+   * desenho da faixa do topo do celular, que existe só abaixo de
+   * `MENU_VIRA_GAVETA`. Cada um some da vista e do Tab onde o outro aparece.
+   * Função e não nó: o mesmo gatilho, com o balão, nos dois lugares — e o
+   * menu continua sem conhecer a ajuda (é o que o deixa montável no teste).
+   * (Até a etapa 7c era um nó só, entre a faixa e o conteúdo, flutuando no
+   * canto de baixo.)
    */
-  ajuda?: ReactNode;
+  ajuda?: (lugar: LugarDaAjuda) => ReactNode;
   children: ReactNode;
 };
 
@@ -362,7 +368,13 @@ export function MenuLateral(p: PropsDoMenuLateral) {
           </button>
         </div>
 
-        <div className="lateral-pe">{p.pe(recolhido)}</div>
+        {/* O PÉ: a ajuda e, logo abaixo, a conta. A dica do menu recolhido
+            vale também aqui — a ajuda recolhida é só o desenho, como os itens. */}
+        <div className="lateral-pe" onMouseOver={mostrarDica} onFocus={mostrarDica}
+             onMouseLeave={esconderDica} onBlur={esconderDica}>
+          {p.ajuda?.('menu')}
+          {p.pe(recolhido)}
+        </div>
       </div>
 
       {gavetaAberta && <div className="lateral-veu" aria-hidden="true" onClick={() => fecharGaveta(true)} />}
@@ -376,9 +388,9 @@ export function MenuLateral(p: PropsDoMenuLateral) {
 
       <div className="casca-corpo">
         {/*
-          A FAIXA DO CELULAR: o botão que abre a gaveta, a marca e o setor. É a
-          única barra que sobrou, e só abaixo de `MENU_VIRA_GAVETA` — o CSS a
-          esconde no desktop. O botão diz «Menu» por escrito, além do desenho: as
+          A FAIXA DO CELULAR: o botão que abre a gaveta, a marca, o setor e a
+          ajuda. É a única barra que sobrou, e só abaixo de `MENU_VIRA_GAVETA` —
+          o CSS a esconde no desktop. O botão diz «Menu» por escrito, além do desenho: as
           três linhas sozinhas pedem que a pessoa já saiba o que elas são.
         */}
         <div className="faixa-celular">
@@ -390,12 +402,15 @@ export function MenuLateral(p: PropsDoMenuLateral) {
             </button>
             <span className="marca-app"><Logotipo tamanho={20} /> Financeiro G3</span>
             <span className="faixa-celular-setor">{p.funil.rotulo}</span>
+            {/* A AJUDA COM A GAVETA FECHADA: um botão de desenho, discreto,
+                no fim da faixa. Com a gaveta aberta ele fica sob o véu, e o
+                item do pé, dentro dela, é o que se vê. */}
+            {p.ajuda?.('faixa')}
           </div>
         </div>
 
-        {p.ajuda}
-
-        <main id="conteudo" className="conteudo" tabIndex={-1}>{p.children}</main>
+        {/* A TELA DE LISTA ALARGA na janela grande (`Tela.larga`, etapa 7c). */}
+        <main id="conteudo" className={p.tela.larga ? 'conteudo larga' : 'conteudo'} tabIndex={-1}>{p.children}</main>
       </div>
     </div>
   );

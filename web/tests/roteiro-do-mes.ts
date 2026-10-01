@@ -468,8 +468,11 @@ const passo = (e: LeituraDoMes, chave: string) => mesNoFunil(e).passos.find((p) 
 
 // ------------------ RM22 tela que não hospeda passo nenhum não ganha faixa
 {
+  /* [01/10/2026, etapa 7c] '/contas-a-receber' SAIU DESTA LISTA: ela passou a
+     hospedar a metade «receber» do passo 5 (`RM24b`) — o funil já mandava para
+     lá quando o passo tinha vencida, e a tela não dizia que era parte do mês. */
   const semPasso = ['/clientes', '/unidades', '/contratos', '/usinas', '/donos', '/cobranca',
-                    '/historico', '/relatorios', '/carteira', '/pendencias', '/contas-a-receber'];
+                    '/historico', '/relatorios', '/carteira', '/pendencias'];
   const inventadas = semPasso.filter((r) => ondeEstouNoMes(r) !== null);
   chk('RM22', inventadas.length === 0,
       `nenhuma tela de cadastro ganha faixa de passo${inventadas.length ? ` (ganharam: ${inventadas.join(', ')})` : ''}`
@@ -492,6 +495,27 @@ const passo = (e: LeituraDoMes, chave: string) => mesNoFunil(e).passos.find((p) 
       'Contas a pagar é o passo 5 e FECHA o mês (sem «depois»), aponta o passo 4 em Cobranças, e sabe '
       + 'que é de outro setor — a faixa dela diz «do mês do Rateio», porque quem chega pela Empresa '
       + 'não sabe de que mês ela é o fim');
+}
+
+// ---------- RM24b o passo 5 é dividido: Contas a receber é a metade «receber»
+{
+  /* [01/10/2026, etapa 7c] O FUNIL JÁ MANDAVA PARA CONTAS A RECEBER quando o
+     passo 5 tinha vencida (`destinoDoRisco`), e a tela não dizia que era parte
+     do mês — sem faixa e sem número no menu (RM25 exige que os três digam o
+     mesmo). Agora ela é a metade «receber» do passo, e diz onde ele termina. */
+  const cr = ondeEstouNoMes('/contas-a-receber');
+  const cp = ondeEstouNoMes('/contas-a-pagar')!;
+  const m5 = MOLDES.find((m) => m.chave === 'receber')!;
+  chk('RM24b', cr !== null && cr.aqui.map((p) => p.numero).join() === '5' && cr.depois === null
+              && cr.antes?.destino?.endereco === '/faturas' && cr.deOutroSetor
+              && cr.parte !== null && /receber/.test(cr.parte) && cr.outra?.endereco === '/contas-a-pagar'
+              && cp.parte === null && cp.outra?.endereco === '/contas-a-receber'
+              && m5.destino.endereco === '/contas-a-pagar' && m5.destinoDoRisco?.endereco === '/contas-a-receber',
+      'Contas a receber hospeda a metade «receber» do passo 5, aponta o passo 4 e diz que o mês termina em '
+      + 'Contas a pagar; Contas a pagar continua sendo o fim, e aponta de volta quem ainda deve');
+  const so = ondeEstouNoMes('/faturas')!;
+  chk('RM24c', so.parte === null && so.outra === null,
+      'e o passo que mora numa tela só não ganha divisão nenhuma');
 }
 
 /* ==========================================================================

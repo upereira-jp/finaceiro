@@ -69,9 +69,9 @@ import { api, type Contrato, type UnidadeConsumidora, type Originador, type Clie
 import { useAcao, useDados } from '../dados.ts';
 import {
   Pagina, Aviso, RetornoDoAto, Tabela, Campo, ThOrd, Marca, Icone, useOrdenacao, ordenar, rotulo, Escolha,
-  BotaoDeCriar, PainelDeCriar, Busca, Ferramentas, Filtro, MostrandoSo, Menu, contem,
+  BotaoDeCriar, PainelDeCriar, Busca, Ferramentas, Filtro, MostrandoSo, Menu, contem, DIRECOES_DA_SITUACAO,
 } from '../ui.tsx';
-import { seloDoContrato } from '../tom-do-estado.ts';
+import { seloDoContrato, pesoDoSelo } from '../tom-do-estado.ts';
 
 /* O status do contrato no tom do selo: `seloDoContrato`, de `tom-do-estado.ts`
  * desde 01/10/2026 (etapa 7b). [30/09/2026, etapa 4a] O que nao e `ativo` era
@@ -208,7 +208,7 @@ export function TelaContratos() {
       cliente: (l) => l.cliente,
       usina: (l) => l.usina,
       quem: (l) => l.quem,
-      situacao: (l) => l.k.status,
+      situacao: (l) => pesoDoSelo(seloDoContrato(l.k.status)),
       cheias: (l) => l.k.faturas_cheias_pagas,
     },
   );
@@ -271,7 +271,7 @@ export function TelaContratos() {
 
   return (
     <Pagina titulo="Contratos"
-            sub="Liga o cliente, a unidade, a usina e quem trouxe o cliente. É a peça que faz a cobrança existir: sem contrato ativo, aquela unidade fica fora do mês inteiro."
+            sub="O que liga cliente, unidade e usina. Sem contrato ativo, não há cobrança."
             acao={<BotaoDeCriar controla="novo-contrato" aberto={criando}
                                 ao={() => { setDevolverA(null); acao.limpar(); setCriando(!criando); }}>
               Novo contrato
@@ -388,7 +388,7 @@ export function TelaContratos() {
                     <ThOrd chave="cliente" ordem={ordem} ao={alternar}>Cliente</ThOrd>
                     <ThOrd chave="usina" ordem={ordem} ao={alternar}>Usina</ThOrd>
                     <ThOrd chave="quem" ordem={ordem} ao={alternar}>Quem trouxe o cliente</ThOrd>
-                    <ThOrd chave="situacao" ordem={ordem} ao={alternar}>Situação</ThOrd>
+                    <ThOrd chave="situacao" ordem={ordem} ao={alternar} direcoes={DIRECOES_DA_SITUACAO}>Situação</ThOrd>
                     <ThOrd chave="cheias" ordem={ordem} ao={alternar} num>Cheias pagas</ThOrd>
                     <th><span className="so-leitor">Ações</span></th>
                   </>}
