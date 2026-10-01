@@ -382,7 +382,15 @@ export const ESCURO: Paleta = {
   fundoRecuo: '#182642',   // [derivado] entre a página e o cartão · texto 13.5:1
   fundoHover: '#243458',   // [derivado] no escuro, destacar é CLAREAR acima do cartão
   texto: '#F6F2EA',        // [G3] Cream sobre Navy · 14.31:1 e 12.38:1
-  fraco: '#999DA8',        // [derivado do Gray] o Gray CLAREADO 7% · pior par 4.54:1
+  // [derivado, 01/10/2026 — etapa 5] O CINZA DO ESCURO GANHOU A MATIZ DO NAVY.
+  // Era '#999DA8' (o Gray clareado 7%, saturação 8%): cinza neutro pousado em
+  // TODA superfície do escuro, que é navy — o detector acusou 467 vezes «texto
+  // cinza sobre fundo de cor», e o craft-floor da casa diz o mesmo: em fundo de
+  // cor, o texto secundário puxa a matiz do fundo, nunca o cinza. Mesma
+  // luminosidade, matiz do navy (saturação 22%), e o pior par SUBIU de 4.54 para
+  // 5.05:1 (sobre --fundo-hover). O `topoFraco` fica: é a navegação, e ela é a
+  // mesma nos dois temas.
+  fraco: '#9CA6C0',
   borda: '#2C3A5C',        // [derivado] a linha, um degrau acima do cartão
   bordaSuave: '#22304F',   // [derivado] a divisória interna · 1.13:1 contra o cartão
   // [derivado, 30/09] A linha forte, na mesma distância do cartão que a do claro

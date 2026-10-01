@@ -113,10 +113,13 @@ export function TelaHistorico() {
                   { valor: 'U', texto: 'Só o que foi alterado' },
                   { valor: 'D', texto: 'Só o que foi apagado' },
                 ]} />
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span className="fraco" style={{ fontSize: 12 }}>Desde</span>
-          <CampoData valor={desde} ao={setDesde} rotuloAcessivel="Mostrar a partir desta data" />
-        </label>
+        {/* O «Desde» é o rótulo DA data (htmlFor), e não um label em volta de um
+            grupo: o nome que o leitor de tela ouve é o que está escrito. Corpo
+            de meta (13,5px) e não 12px: o detector mediu o 12 como miúdo. */}
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <label htmlFor="historico-desde" className="rotulo-em-linha">Desde</label>
+          <CampoData id="historico-desde" valor={desde} ao={setDesde} />
+        </span>
         {(busca || tabela || operacao || desde) && (
           <button type="button"
                   onClick={() => { setBusca(''); setTabela(''); setOperacao(''); setDesde(''); }}>
@@ -174,10 +177,13 @@ export function TelaHistorico() {
 function Dia(p: { titulo: string; linhas: readonly LinhaDaTrilha[] }) {
   return (
     <>
-      <tr>
-        <td colSpan={5} style={{ paddingTop: 18 }}>
+      {/* A linha do dia é um CABEÇALHO DE GRUPO da casa ("grupo-da-tabela"):
+          no celular ela vira o título que separa os cartões do dia, e não um
+          cartão vazio (01/10/2026, etapa 5). */}
+      <tr className="grupo-da-tabela">
+        <td colSpan={5}>
           <strong>{p.titulo}</strong>{' '}
-          <span className="fraco" style={{ fontSize: 12 }}>
+          <span className="fraco" style={{ fontSize: 'var(--t-meta)' }}>
             · {p.linhas.length} {p.linhas.length === 1 ? 'alteração' : 'alterações'}
           </span>
         </td>
@@ -196,7 +202,7 @@ function LinhaDoHistorico({ l }: { l: LinhaDaTrilha }) {
       <tr>
         <td>{horaDaLinha(l.ocorrido_em)}</td>
         <td>{quemFez(l)}</td>
-        <td>
+        <td className="c-id">
           <Marca tom={TOM[l.operacao] ?? 'nao_medido'}
                  icone={l.operacao === 'I' ? 'acrescentar' : l.operacao === 'D' ? 'remover' : 'confirmar'}>
             {VERBO[l.operacao]}
@@ -235,28 +241,17 @@ function LinhaDoHistorico({ l }: { l: LinhaDaTrilha }) {
 function Diferenca({ l }: { l: LinhaDaTrilha }) {
   return (
     <div className="cartao" style={{ margin: 0 }}>
-      <div className="rolagem">
-      <table>
-        <thead>
-          <tr>
-            <th>Campo</th>
-            <th>Antes</th>
-            <th>Depois</th>
+      <Tabela cabecalho={<><th>Campo</th><th>Antes</th><th>Depois</th></>}>
+        {l.mudancas.map((m) => (
+          <tr key={m.coluna}>
+            <td>{rotuloDaColuna(m.coluna)}</td>
+            <td className="fraco">{valorNaTela(m.coluna, m.de)}</td>
+            <td><strong>{valorNaTela(m.coluna, m.para)}</strong></td>
           </tr>
-        </thead>
-        <tbody>
-          {l.mudancas.map((m) => (
-            <tr key={m.coluna}>
-              <td>{rotuloDaColuna(m.coluna)}</td>
-              <td className="fraco">{valorNaTela(m.coluna, m.de)}</td>
-              <td><strong>{valorNaTela(m.coluna, m.para)}</strong></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      </div>
+        ))}
+      </Tabela>
       {l.mudancas.some((m) => m.cortado) && (
-        <p className="fraco" style={{ fontSize: 12, marginBottom: 0 }}>
+        <p className="fraco" style={{ fontSize: 'var(--t-meta)', marginBottom: 0 }}>
           Um dos valores é longo demais para caber aqui e aparece cortado. O que está guardado
           continua inteiro — o corte é só do que a tela mostra.
         </p>

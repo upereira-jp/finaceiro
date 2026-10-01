@@ -27,7 +27,12 @@ import {
 import { mesPorExtenso as mesPorExtensoDoVocabulario } from '../src/vocabulario.ts';
 import {
   decimalEmBr, kwhEmBr, decimalParaCampo, centavosParaCampo, percentualEmBr, decimalTexto, paraCentavos,
+  campoParaDecimal,
 } from '../src/dinheiro.ts';
+import { tecladoDoCampo } from '../src/teclado.ts';
+// O PARSER DO SERVIDOR, importado e nao copiado: F13 compara o que ele grava com
+// o texto que a tela mandava antes e com o que ela manda agora.
+import { paraDecimal, decimalParaTexto } from '../../src/dominio/fatura-unificada.ts';
 import { reaisParaPlanilha } from '../src/csv.ts';
 import { erroDeLogin, casoDoErro } from '../src/login-regras.ts';
 
@@ -241,6 +246,121 @@ chk('F9', centavosParaCampo(12345) === '123,45' && centavosParaCampo(8) === '0,0
   const float = achar(/_centavos\s*\/\s*100\b|\bsaldo\s*\/\s*100\b|\/\s*100\)\.toFixed/);
   chk('F11c', float.length === 0,
       `nenhum valor em centavos dividido por 100 na tela (regra 1)${float.length ? ` — ACHADO: ${float.join(', ')}` : ''}`);
+}
+
+// ============================================================================
+// F12 a F14 — o numero decimal digitado (01/10/2026, etapa 5)
+//
+// O modelo da fatura (Contas de luz, aba 3) mostra desconto, fator, multa e
+// juros com virgula, e devolve ao servidor o texto canonico. E DINHEIRO
+// INDIRETO — a multa e os juros saem impressos em toda folha do mes —, entao as
+// tres afirmacoes sao medidas contra o PROPRIO parser do servidor:
+//
+//   F12  o valor que o servidor mandou e que ninguem tocou volta IGUAL, letra
+//        por letra (a tela ainda pula a conversao nesse caso, mas a funcao
+//        sozinha ja garante);
+//   F13  todo formato aceito e gravado pelo servidor exatamente como seria
+//        gravado o texto cru que a tela mandava antes desta etapa;
+//   F14  o ambiguo e recusado com uma frase que diz o que escrever.
+// ============================================================================
+
+/** O que o servidor grava: `paraDecimal` e o arredondamento das casas da coluna
+ *  (2 no percentual, 6 no fator) — `camposDoModelo` em `src/repos/documento.ts`. */
+const gravado = (texto: string, casas: number): string => decimalParaTexto(paraDecimal(texto, 'teste'), casas);
+
+{
+  // Como o servidor devolve: numeric do Postgres pelo Decimal do Prisma, sem
+  // zero a direita («2», «0.029»), e tambem com («2.00», «1.50»), por garantia.
+  const doServidor = ['20', '2', '1', '0', '0.029', '2.5', '0.33', '10.000', '1.234', '12.3456', '2.00', '1.50', '100'];
+  const voltam = doServidor.filter((x) => {
+    const r = campoParaDecimal(decimalParaCampo(x));
+    return r.ok && r.valor === x;
+  });
+  chk('F12', voltam.length === doServidor.length,
+      `o valor salvo, mostrado com virgula e devolvido, e o MESMO texto em ${voltam.length} de ${doServidor.length} `
+      + `(${doServidor.filter((x) => !voltam.includes(x)).join(', ') || 'todos'})`);
+  chk('F12b', decimalParaCampo('0.029') === '0,029' && decimalParaCampo('2.5') === '2,5' && decimalParaCampo('20') === '20',
+      'a tela mostra com virgula: 0.029 -> 0,029, 2.5 -> 2,5, 20 -> 20');
+}
+
+{
+  const casos: Array<[string, string]> = [
+    ['2', '2'], ['2,5', '2.5'], ['2.5', '2.5'], ['0,33', '0.33'], ['10,000', '10.000'],
+    ['0.029', '0.029'], ['0,029', '0.029'], [' 2,5 ', '2.5'], ['2%', '2'], ['1,5 %', '1.5'], ['', ''],
+    ['1234', '1234'], ['1.2345', '1.2345'], ['007', '007'],
+  ];
+  const errados = casos.filter(([t, esperado]) => {
+    const r = campoParaDecimal(t);
+    return !r.ok || r.valor !== esperado;
+  });
+  chk('F13', errados.length === 0,
+      `cada formato aceito vira o texto canonico esperado${errados.length ? ` — ERRADOS: ${errados.map(([t]) => `«${t}»`).join(', ')}` : ''}`);
+  // O servidor grava o novo IGUAL ao velho — o texto cru que a tela mandava.
+  const divergem: string[] = [];
+  for (const [t] of casos) {
+    const r = campoParaDecimal(t);
+    if (!r.ok) continue;
+    for (const casas of [2, 6]) {
+      if (gravado(t, casas) !== gravado(r.valor, casas)) divergem.push(`«${t}»/${casas}`);
+    }
+  }
+  chk('F13b', divergem.length === 0,
+      `o servidor grava o texto novo exatamente como gravava o cru, com 2 e com 6 casas${divergem.length ? ` — DIVERGEM: ${divergem.join(', ')}` : ''}`);
+  const canonico = (t: string): string => { const r = campoParaDecimal(t); return r.ok ? r.valor : `RECUSADO ${t}`; };
+  chk('F13c', gravado(canonico('2,5'), 2) === '2.50'
+        && gravado(canonico('0,029'), 6) === '0.029000'
+        && gravado(canonico('10,000'), 2) === '10.00',
+      'medido no parser do servidor: 2,5 -> 2.50 · 0,029 -> 0.029000 · 10,000 -> 10.00 (dez, e nao dez mil)');
+}
+
+{
+  const recusados = ['1.234', '10.000', '12.345', '1.234,5', '1,234.5', '2,5,1', '1.2.3', '-2', '2a', 'vinte', ',5', '5,', '.5'];
+  const passaram = recusados.filter((t) => campoParaDecimal(t).ok);
+  chk('F14', passaram.length === 0,
+      `o ambiguo e o invalido sao recusados, sem palpite${passaram.length ? ` — PASSARAM: ${passaram.join(', ')}` : ''}`);
+  const r = campoParaDecimal('1.234');
+  chk('F14b', !r.ok && r.erro.includes('1,234') && r.erro.includes('1234'),
+      `a frase do ambiguo diz as duas leituras e como escrever cada uma: «${r.ok ? '' : r.erro}»`);
+  // O que o servidor faria com eles se a tela nao recusasse — e o motivo de
+  // recusar: «1.234» viraria 1,23% de multa para quem quis dizer mil e tantos,
+  // e «1,234.5» viraria 1,2345.
+  chk('F14c', gravado('1.234', 2) === '1.23' && gravado('1,234.5', 6) === '1.234500',
+      'sem a recusa, o servidor leria «1.234» como 1,23 e «1,234.5» como 1,2345 — o palpite que a tela nao da mais');
+  chk('F14d', campoParaDecimal('0.029').ok && campoParaDecimal('0.500').ok,
+      'com zero na parte inteira nao ha milhar possivel: «0.029» e «0.500» passam');
+}
+
+// ============================================================================
+// F15 — o teclado do celular sai do rotulo (01/10/2026, etapa 5)
+// ============================================================================
+{
+  const t = tecladoDoCampo;
+  chk('F15', t('Valor (R$)').inputMode === 'decimal' && t('Juros ao mês (%)').inputMode === 'decimal'
+        && t('Fator CO₂ (kg/kWh)').inputMode === 'decimal' && t('Tarifa R$/kWh').inputMode === 'decimal',
+      'valor, percentual, fator e tarifa abrem o teclado com virgula (decimal)');
+  chk('F15b', t('CEP').inputMode === 'numeric' && t('Agência').inputMode === 'numeric'
+        && t('Unidade consumidora').inputMode === 'numeric' && t('Leitura atual').inputMode === 'numeric'
+        && t('Dias faturados').inputMode === 'numeric' && t('Vencimento').inputMode === undefined,
+      'CEP, agencia, unidade, leitura e dias abrem o teclado so de algarismos; a data digitada (com barra) fica no comum');
+  chk('F15c', t('CPF ou CNPJ').inputMode === 'text' && t('CPF ou CNPJ').autoCapitalize === 'characters'
+        && t('Documento (CPF ou CNPJ)').inputMode === 'text' && t('CNPJ').spellCheck === false,
+      'CPF ou CNPJ fica no teclado de TEXTO, em maiuscula e sem corretor — o CNPJ alfanumerico tem letra');
+  chk('F15d', t('E-mail').inputMode === 'email' && t('x', 'email').inputMode === 'email' && t('Telefone').inputMode === 'tel',
+      'e-mail e telefone abrem os teclados proprios');
+  chk('F15e', t('Nome').inputMode === undefined && t('Nome').autoComplete === 'off' && t('CEP').autoComplete === 'off',
+      'o resto fica no teclado comum, e nenhum campo oferece o preenchimento automatico de quem opera (dado de terceiro)');
+  chk('F15f', t('Valor de referência (R$)').inputMode === 'decimal' && t('Chave Pix').inputMode === undefined,
+      '«Valor de referência (R$)» e dinheiro; «Chave Pix» pode ser qualquer coisa e fica no teclado comum');
+}
+
+// A tela usa o par — e nao manda o texto cru como antes.
+{
+  const doc = readFileSync(fileURLToPath(new URL('../src/telas/documento.tsx', import.meta.url)), 'utf8');
+  chk('F16', /campoParaDecimal\(texto\)/.test(doc) && /decimalParaCampo\(x\[k\]\)/.test(doc)
+        && /texto === decimalParaCampo\(original\[k\]\)\) \{ valores\[k\] = original\[k\]/.test(doc),
+      'o modelo da fatura mostra com virgula, manda o canonico, e o campo intocado volta com o valor do servidor sem conversao');
+  chk('F16b', !/multa_percentual: m\.multa_percentual/.test(doc),
+      'o PUT do modelo nao manda mais o texto do campo cru');
 }
 
 console.log();

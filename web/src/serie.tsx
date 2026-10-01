@@ -170,6 +170,14 @@ export function RevisaoEmSerie(p: {
   depois?: ReactNode;
   soma: ReactNode;
   atos: ReactNode;
+  /**
+   * A RODADA ACABOU, e o título virou o placar («5 de 5 emitidas»).
+   * [01/10/2026, etapa 5] A nota é a região viva da revisão, e ela já dizia
+   * «Todas emitidas»; o NÚMERO estava só no título, que não é anunciado. Com
+   * `resultado`, o placar entra na região (para o leitor de tela; a vista já
+   * o tem no título) — a frase ouvida passa a ser a do resultado inteiro.
+   */
+  resultado?: boolean;
 }) {
   const titulo = useRef<HTMLHeadingElement>(null);
   /* O FOCO VAI AO TÍTULO quando a revisão abre: o botão que a abriu some da
@@ -179,7 +187,10 @@ export function RevisaoEmSerie(p: {
   return (
     <div className="serie-revisao" id={p.id} role="region" aria-labelledby={`${p.id}-titulo`}>
       <h3 id={`${p.id}-titulo`} ref={titulo} tabIndex={-1}>{p.titulo}</h3>
-      <p className="serie-nota" role="status">{p.nota}</p>
+      <p className="serie-nota" role="status">
+        {p.resultado && <span className="so-leitor">{p.titulo}. </span>}
+        {p.nota}
+      </p>
       {p.alerta}
       <ol className={`serie-lista${p.comSelecao ? ' com-selecao' : ''}`}>{p.children}</ol>
       {p.depois}

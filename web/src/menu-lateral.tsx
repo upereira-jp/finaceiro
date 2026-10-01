@@ -83,6 +83,7 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent,
   type ReactNode, type SyntheticEvent } from 'react';
 import { Icone, Logotipo } from './icones.tsx';
+import { focaveis } from './ui.tsx';
 import { Ligacao } from './rota.tsx';
 import { SeletorDeSetor } from './seletor-de-setor.tsx';
 import { MENU_VIRA_GAVETA } from './estilo.ts';
@@ -157,12 +158,9 @@ function useAbaixoDe(largura: number): boolean {
   return estreita;
 }
 
-/** O que recebe o foco dentro da gaveta, na ordem do DOM. Só o que está à vista:
- *  a linha de recolher existe no DOM e não no celular. */
-const focaveis = (raiz: HTMLElement): HTMLElement[] =>
-  Array.from(raiz.querySelectorAll<HTMLElement>(
-    'a[href], button:not([disabled]), select:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
-  )).filter((el) => el.getClientRects().length > 0);
+/* O que recebe o foco dentro da gaveta mora em `ui.tsx` (`focaveis`) desde
+ * 01/10/2026: a central de ajuda prende o foco do mesmo jeito. Só conta o que
+ * está à vista — a linha de recolher existe no DOM e não no celular. */
 
 // ------------------------------------------------------------------- o menu
 
@@ -182,6 +180,15 @@ export type PropsDoMenuLateral = {
   forcarAberto?: boolean;
   /** Estado inicial sem armazenamento, para o teste de render. */
   recolhidoInicial?: boolean;
+  /**
+   * O BOTÃO DA AJUDA (e o balão dele). [01/10/2026, etapa 5] Ele mora aqui, logo
+   * depois da faixa do celular e antes do conteúdo, para a ORDEM DO TAB bater
+   * com o que se vê nas duas larguras: no computador ele flutua no canto de
+   * baixo, como o dono pediu em 21/08; no celular ele sobe para a faixa do
+   * topo, ao lado do «Menu» — lá embaixo ele cobria a última coluna de toda
+   * tabela e o botão de toda linha que passasse por ele.
+   */
+  ajuda?: ReactNode;
   children: ReactNode;
 };
 
@@ -385,6 +392,8 @@ export function MenuLateral(p: PropsDoMenuLateral) {
             <span className="faixa-celular-setor">{p.funil.rotulo}</span>
           </div>
         </div>
+
+        {p.ajuda}
 
         <main id="conteudo" className="conteudo" tabIndex={-1}>{p.children}</main>
       </div>

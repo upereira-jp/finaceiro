@@ -45,10 +45,12 @@ export function PainelDoVinculo({ dados, carregando, erro, destravar, ocupado, p
 
   return (
     <div style={{ display: 'grid', gap: 8 }}>
-      <h4 style={{ margin: 0 }}>
+      {/* h2, como os outros títulos do detalhe da unidade (01/10/2026, etapa 5):
+          era um h4 logo abaixo do h1 da página. */}
+      <h2 className="detalhe-tit" style={{ margin: 0 }}>
         <Icone nome={f.travada ? 'falha' : 'ok'} tamanho={15} peso="bold" />{' '}
         Vínculo com o outro sistema
-      </h4>
+      </h2>
       <div style={{ lineHeight: 1.55 }}>
         <strong>{f.titulo}</strong> <span className="fraco">{f.corpo}</span>
       </div>

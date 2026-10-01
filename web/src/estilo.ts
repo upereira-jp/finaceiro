@@ -727,9 +727,9 @@ export const ESTILO = `
   }
   .ajuda-porque strong { color: var(--texto); font-weight: 600; }
 
-  /* O PORQUE DENTRO DO CAMPO. O botao mora no <label> e por isso o label vira
-     flex - sem isso o icone cai numa linha propria e o rotulo parece quebrado. */
-  label:has(.campo-porque-botao) { display: inline-flex; align-items: center; gap: 6px; }
+  /* O PORQUE AO LADO DO ROTULO. Ate 01/10/2026 o botao morava DENTRO do
+     <label>, que virava flex; saiu para a linha ".campo-rotulo" (secao da etapa
+     5, mais abaixo), porque dentro do label ele entrava no nome do campo. */
   /* [30/09] O HOVER PINTAVA "--acento" SOBRE O CARTAO CLARO: 2,69:1, abaixo dos
      3:1 que icone de controle pede (WCAG 1.4.11). E o fundo pedia
      "--fundo-suave", um token que nunca existiu - a declaracao caia inteira. */
@@ -820,6 +820,11 @@ export const ESTILO = `
      numero. */
   .secao { margin-bottom: var(--gap-secao); }
   .rolagem {
+    /* "position: relative" desde 01/10/2026: sem ela, o recorte do leitor de
+       tela (".so-leitor", absoluto) dentro de um cabecalho tomava a JANELA como
+       referencia e escapava da rolagem — era ele que empurrava a pagina de
+       Unidades 433px para o lado num telefone. */
+    position: relative;
     overflow-x: auto; border: 1px solid var(--borda); border-radius: var(--raio-cartao);
     background: var(--fundo2); scrollbar-color: var(--borda-forte) transparent;
   }
@@ -1023,6 +1028,9 @@ export const ESTILO = `
   input:disabled, select:disabled, textarea:disabled {
     background: var(--fundo-recuo); color: var(--fraco); cursor: default;
   }
+  /* SO LEITURA (01/10/2026): o fundo recuado do desabilitado, com a tinta do
+     texto — o valor e verdadeiro e se le inteiro, so nao se muda aqui. */
+  input:read-only:not([type="checkbox"]):not([type="radio"]):not([type="file"]) { background: var(--fundo-recuo); }
   input[type="file"] { padding: 6px 8px; font-size: var(--t-ui); }
   /* O BOTAO DO SELETOR DE ARQUIVO era a ultima peca nativa da tela: "Choose File /
      No file chosen", com desenho e IDIOMA do sistema operacional - aparecia em
@@ -1540,7 +1548,7 @@ export const ESTILO = `
     .g3ref .fu-abas-lista { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; width: 100%; }
     .g3ref .fu-aba-traco { display: none; }
     .g3ref .fu-aba {
-      padding: 7px 6px; font-size: var(--rotulo-tamanho); letter-spacing: .03em; line-height: 1.25;
+      padding: 7px 9px; font-size: var(--rotulo-tamanho); letter-spacing: .03em; line-height: 1.3;
       white-space: normal; text-align: center; border: 1px solid var(--borda);
     }
     .g3ref .fu-abas > button { margin-left: auto; }
@@ -2629,6 +2637,316 @@ export const ESTILO = `
   .faixa-do-passo p { margin: 0; }
   .faixa-do-passo p + p { margin-top: 3px; }
   .faixa-do-passo > p:first-child .ic { display: inline-block; vertical-align: -2px; }
+
+  /* ======================== CELULAR E ACESSIBILIDADE (01/10/2026, etapa 5)
+     Tres pecas que valem para o sistema inteiro: a tabela que vira cartao, o
+     alvo de toque, e a regiao viva que existe antes do texto. Cada uma esta
+     explicada no componente que a usa ("Tabela", "RetornoDoAto", "Campo", em
+     "ui.tsx"); aqui fica a mecanica. */
+
+  /* A REGIAO VIVA VAZIA SAI DO LAYOUT, MAS NAO DA ARVORE DE ACESSIBILIDADE.
+     "display: none" a tiraria das duas — e uma regiao que reaparece junto com
+     o texto e justamente a que o leitor de tela nao anuncia. Recortada, ela
+     continua la, esperando a frase. */
+  .regiao-viva:empty {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+    overflow: hidden; clip-path: inset(50%); border: 0;
+  }
+
+  /* O ROTULO E O PORQUE NUMA LINHA, fora do label — ver "Campo" em ui.tsx. A
+     explicacao aberta desce para a linha de baixo, na largura toda. */
+  .campo-rotulo { display: flex; align-items: center; flex-wrap: wrap; gap: 0 6px; margin-bottom: 5px; }
+  .campo-rotulo label { margin: 0; }
+  .campo-rotulo .campo-porque { flex: 1 1 100%; }
+  /* O CAMPO ERRADO: contorno na cor do erro e a frase logo abaixo, ligada por
+     "aria-describedby". A cor nao e o unico sinal — a frase diz o que fazer. */
+  input[aria-invalid="true"], input[aria-invalid="true"]:hover:not(:disabled) { border-color: var(--erro); }
+  .campo-erro {
+    display: flex; gap: 6px; margin: 5px 0 0; font-size: var(--t-meta); line-height: 1.45; color: var(--erro);
+  }
+
+  /* O ROTULO DE UM VALOR QUE NAO E CAMPO (a data do certificado, a usina e a
+     distribuidora no detalhe da unidade): o desenho do <label>, sem ser um —
+     label sem controle e um nome que nao nomeia nada. */
+  .rotulo-solto { display: block; margin: 0 0 5px; font-size: var(--t-meta); font-weight: 500; color: var(--fraco); }
+  /* O rotulo na mesma linha do campo («Desde», no Historico). */
+  label.rotulo-em-linha { margin: 0; font-size: var(--t-meta); }
+  /* O recibo de uma linha de Contas a pagar: o corpo de meta, e nao 11,5px. */
+  .recibo-da-linha { font-size: var(--t-meta); font-weight: 400; }
+  /* O SUCESSO DENTRO DE OUTRO AVISO (o religar do aviso de pagamento): o icone
+     da casa na cor do estado, a frase na tinta do texto. */
+  .aviso-retorno { display: flex; align-items: flex-start; gap: 6px; margin: 8px 0 0; color: var(--texto); }
+  .aviso-retorno > .ic { color: var(--ok); margin-top: 2px; flex: none; }
+  /* A LINHA DO RETORNO (Contratos): vazia, sem altura e sem linha. */
+  tr.linha-retorno > td { padding: 0; border-bottom: 0; }
+  tr.linha-retorno:hover { background: none; }
+  /* A ultima linha de verdade antes do retorno vazio nao desenha a linha de
+     baixo: quem fecha a tabela e a borda da caixa, como sempre. */
+  tbody tr:has(+ tr.linha-retorno:last-child) > td { border-bottom: 0; }
+  tr.linha-retorno .aviso { margin: 8px 14px 10px; }
+  /* O BOTAO QUE E UMA FRASE («Quem e quem no outro sistema — 2 ainda
+     conferidos por nome»): no celular ele quebra linha, e a entrelinha de
+     botao (1,2) aperta as duas linhas uma na outra. Entrelinha de texto, e a
+     frase alinhada a esquerda. */
+  button.botao-frase { line-height: 1.4; text-align: left; justify-content: flex-start; }
+
+  /* A MEDIDA DE LEITURA nas frases que atravessavam a tela inteira a 1440 (o
+     detector mediu 111 a 161 caracteres por linha): a faixa do passo, a lista
+     de lacunas, a nota do cartao, a frase do cabecalho de grupo e a coluna de
+     prosa das tabelas. 62ch, e nao 80: o "ch" e a largura do zero, e na Barlow
+     o zero e mais largo que a letra media — 80ch davam 95 caracteres. */
+  .faixa-do-passo p, .faixa-lista li, .cartao > p.nota, .roteiro-travas-repasse,
+  .grupo-da-tabela p { max-width: 62ch; }
+  /* A celula de tabela ignora "max-width"; quem tem a medida e o texto dentro dela. */
+  .celula-frase { display: block; max-width: 62ch; }
+  /* O cabecalho de grupo prende os filhos a esquerda (sticky) com a medida da
+     janela; a frase dele fica na medida de leitura. */
+  tr.grupo-da-tabela td > p { max-width: min(62ch, calc(100vw - 96px)); }
+  .mes-oque { max-width: 62ch; }
+
+  /* O BOTAO DENTRO DA LINHA QUE FILTRA (Contas a receber): parece o texto da
+     linha, e e por ele que o teclado chega ao filtro. Ligado, ganha o
+     sublinhado — o negrito da linha diz o mesmo para quem ve. */
+  button.linha-filtro {
+    padding: 0; min-height: 24px; border: 0; background: none; box-shadow: none;
+    font: inherit; font-weight: inherit; letter-spacing: normal; text-transform: none;
+    color: inherit; justify-content: flex-start; text-align: left;
+  }
+  button.linha-filtro:hover:not(:disabled) { background: none; border-color: transparent; color: var(--acento-forte); }
+  button.linha-filtro[aria-pressed="true"] { text-decoration: underline; text-underline-offset: 3px; }
+
+  /* ---------------------------------------- alvo de 24px em qualquer largura
+     WCAG 2.5.8. O que ficava abaixo, medido a 1440 em 01/10: a seta de ordenar
+     (16px de altura — o botao era so a palavra), o titulo de secao do menu
+     (24 cravados, 23,5 na pratica), o porque do campo (18px), o "x" do balao
+     da ajuda (20px), o link da unidade em Contas de luz (23px) e o da geracao
+     em Usinas (22px). O desenho nao muda: cresce a area, nao a letra. */
+  thead th:has(.ordenar) { padding-top: 6px; padding-bottom: 6px; }
+  th .ordenar { min-height: 24px; }
+  button.lateral-secao-tit { min-height: 26px; }
+  .campo-porque-botao { width: 24px; height: 24px; }
+  .ajuda-balao-x { width: 24px; height: 24px; }
+  .g3ref button.fu-link, button.em-link, .ligacao-crm, a.ir-resolver { min-height: 24px; }
+  .g3ref .fu-tabela th.c-sel label { min-height: 24px; align-items: center; }
+  .ligacao-crm { align-items: center; }
+  /* A CAIXA DE MARCAR DENTRO DE UMA CELULA ganha um "label" em volta, sem
+     texto (o nome continua no "aria-label" da caixa): clicar na margem dele
+     marca. O quadrado nativo fica do tamanho de sempre. */
+  .alvo-caixa {
+    display: inline-grid; place-items: center; min-width: 24px; min-height: 24px;
+    margin: 0; cursor: pointer;
+  }
+  /* A busca da central de ajuda ocupa a largura do painel. */
+  .ajuda-corpo .busca input { width: 100%; }
+  /* O nome do painel de ajuda e titulo (h2) desde 01/10, no corpo de antes. */
+  .ajuda-topo h2.ajuda-titulo {
+    display: inline-flex; align-items: center; gap: 8px; margin: 0;
+    font-family: var(--fonte); font-size: var(--t-corpo); font-weight: 700; line-height: 1.3;
+  }
+
+  /* ---------------------------------------- a tabela que vira cartao
+     A medida e a da propria tabela (o "container"), como em Cobrancas desde a
+     etapa 3b. Abaixo de 720px DE TABELA cada linha e um cartao do mesmo
+     desenho dos de Contas de luz e Cobrancas: branco, 1px de linha, 8px entre
+     um e outro. Dentro dele, duas colunas de "rotulo / valor", com quatro
+     lugares fixos:
+
+       identificacao   a primeira celula (ou ".c-id"), na largura toda, no alto
+       situacao        ".c-sit", logo abaixo dela
+       valor           ".c-val", logo depois
+       acao            ".c-aco", ou a ultima celula quando ela tem botao: no pe,
+                       na largura toda
+
+     O CABECALHO NAO SOME: as colunas que ordenam viram uma fileira de botoes
+     «Ordenar por», a mesma ordenacao do computador. As outras saem — o nome
+     delas ja esta em cada celula ("data-rotulo", escrito pela "Tabela").
+
+     AS LARGURAS ESCRITAS NA CELULA ("style" de largura minima, 180px na data
+     de Unidades, 210px no documento de Clientes) valem para a tabela e nao
+     para o cartao: elas empurravam a coluna para fora de um telefone de 360px.
+     O "!important" e o unico jeito de vencer um "style" — e e so aqui dentro. */
+  .tabela-cartoes { container: tabela / inline-size; }
+  @container tabela (max-width: 720px) {
+    .tabela-cartoes > .rolagem { border: 0; background: none; overflow: visible; }
+    .tabela-cartoes table, .tabela-cartoes tbody, .tabela-cartoes thead { display: block; }
+
+    .tabela-cartoes thead tr {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 10px;
+    }
+    .tabela-cartoes thead tr:not(:has(.ordenar)) { display: none; }
+    .tabela-cartoes thead tr::before {
+      content: "Ordenar por"; flex: 1 1 100%;
+      font-family: var(--fonte-cond); font-size: var(--rotulo-tamanho); font-weight: var(--rotulo-peso);
+      text-transform: uppercase; letter-spacing: var(--rotulo-tracking); color: var(--fraco);
+    }
+    .tabela-cartoes thead th { display: none; }
+    .tabela-cartoes thead th:has(.ordenar) {
+      display: block; padding: 0; background: none; border: 0; width: auto !important;
+    }
+    .tabela-cartoes th .ordenar {
+      min-height: 44px; padding: 0 10px; gap: 4px; letter-spacing: .04em;
+      border: 1px solid var(--borda); background: var(--fundo2); color: var(--texto);
+    }
+    .tabela-cartoes th[aria-sort] .ordenar { border-color: var(--acento-forte); background: var(--acento-suave); }
+
+    .tabela-cartoes tbody > tr {
+      display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px 14px;
+      margin: 0 0 8px; padding: 12px 14px;
+      background: var(--fundo2); border: 1px solid var(--borda);
+    }
+    .tabela-cartoes tbody > tr:hover { background: var(--fundo2); }
+    .tabela-cartoes tbody > tr > td {
+      display: block; padding: 0; border: 0; text-align: left; white-space: normal; overflow-wrap: anywhere;
+      min-width: 0 !important; max-width: none !important; width: auto !important;
+    }
+    .tabela-cartoes td[data-rotulo]:not([data-rotulo=""])::before {
+      content: attr(data-rotulo); display: block; margin-bottom: 2px;
+      font-family: var(--fonte-cond); font-size: var(--rotulo-tamanho); font-weight: var(--rotulo-peso);
+      text-transform: uppercase; letter-spacing: var(--rotulo-tracking); color: var(--fraco);
+    }
+
+    /* Os quatro lugares. */
+    .tabela-cartoes tbody > tr > td:first-child, .tabela-cartoes tbody > tr > td.c-id {
+      grid-column: 1 / -1; order: -3; font-size: var(--t-corpo);
+    }
+    /* A identificacao dispensa o rotulo: o nome e o numero se explicam. O
+       "[data-rotulo]" no seletor e o que o faz vencer a regra do rotulo. */
+    .tabela-cartoes tbody > tr > td:first-child[data-rotulo]::before,
+    .tabela-cartoes tbody > tr > td.c-id[data-rotulo]::before { display: none; }
+    .tabela-cartoes tbody > tr:has(> td.c-id) > td:first-child:not(.c-id) { grid-column: auto; order: 0; }
+    .tabela-cartoes tbody > tr:has(> td.c-id) > td:first-child:not(.c-id)[data-rotulo]::before { display: block; }
+    /* A celula com campo (a data de Unidades, o documento de Clientes, o
+       rotulo impresso em Contas de luz) ocupa a largura toda: meia coluna de
+       um telefone corta a data em «15/10/». */
+    .tabela-cartoes tbody > tr > td:has(.inline, select, input:not([type="checkbox"])) { grid-column: 1 / -1; }
+    .tabela-cartoes tbody > tr > td.c-sit { order: -2; }
+    .tabela-cartoes tbody > tr > td.c-val { order: -1; }
+    .tabela-cartoes tbody > tr > td.c-aco,
+    .tabela-cartoes tbody > tr > td:last-child:not(:first-child):has(button, a[href]) {
+      grid-column: 1 / -1; order: 9;
+    }
+    .tabela-cartoes tbody > tr > td.c-aco[data-rotulo]::before,
+    .tabela-cartoes tbody > tr > td:last-child:not(:first-child):has(button, a[href])[data-rotulo]::before { display: none; }
+    .tabela-cartoes td.num { text-align: left; }
+
+    /* A LINHA QUE ATRAVESSA A TABELA (o detalhe aberto, a pergunta na linha, o
+       formulario de pagamento) cola no cartao de cima: sem a linha do alto,
+       e com a mesma moldura. */
+    .tabela-cartoes tbody > tr:not(.grupo-da-tabela):not(.linha-retorno):has(> td[colspan]:only-child) {
+      display: block; padding: 0; margin: -9px 0 8px; border-top: 0;
+    }
+    .tabela-cartoes tbody > tr:not(.grupo-da-tabela):not(.linha-retorno) > td[colspan]:only-child { padding: 12px 14px; }
+    .tabela-cartoes tbody > tr.linha-pergunta > td, .tabela-cartoes tbody > tr.usuario-retorno > td { padding: 0; }
+    .tabela-cartoes tr.linha-pergunta .pergunta { border-width: 1px 0 0; }
+    .tabela-cartoes .rolagem td > .pergunta { position: static; max-width: none; }
+    .tabela-cartoes tr.linha-aberta { background: var(--fundo-hover); }
+    .tabela-cartoes tr.linha-aberta > td { background: none; }
+
+    /* A linha do retorno nao e cartao: vazia, nao aparece; com a frase, o
+       aviso e a moldura dela. */
+    .tabela-cartoes tbody > tr.linha-retorno {
+      display: block; margin: 0; padding: 0; background: none; border: 0;
+    }
+    .tabela-cartoes tbody > tr.linha-retorno > td { padding: 0; }
+    .tabela-cartoes tr.linha-retorno .aviso { margin: 0 0 8px; }
+
+    /* O CABECALHO DE GRUPO (Mes, Contas a pagar) e titulo, e nao cartao. */
+    .tabela-cartoes tbody > tr.grupo-da-tabela {
+      display: block; margin: 0; padding: 14px 0 8px; background: none; border: 0;
+    }
+    .tabela-cartoes tr.grupo-da-tabela td > * { position: static; max-width: none; }
+
+    /* O que era desenhado para caber numa coluna estreita de tabela. O selo
+       quebra linha: «Boleto recusado pelo banco» nao cabe em meio cartao. */
+    .tabela-cartoes .uc-meta, .tabela-cartoes .marca { white-space: normal; }
+    .tabela-cartoes .marca { padding-top: 4px; padding-bottom: 4px; line-height: 1.35; }
+    .tabela-cartoes .inline { flex-wrap: nowrap; }
+    .tabela-cartoes .inline input:not(.caixa), .tabela-cartoes .inline select { width: 100% !important; min-width: 0; }
+    .tabela-cartoes .inline .campo-data { flex: 1 1 auto; min-width: 0; }
+    .tabela-cartoes .inline .campo-data input { width: 100%; }
+    /* No cartao o campo da linha deixa de parecer texto: e um campo de verdade. */
+    .tabela-cartoes .inline input, .tabela-cartoes .inline select { border-color: var(--borda); background: var(--campo); }
+  }
+
+  /* ---------------------------------------- o celular: alvo de 44px
+     A REGRA E POR LARGURA (720px, a mesma dos cartoes) e nao por "pointer":
+     e no telefone que o dedo erra, e e la que a tela foi medida. Tudo o que
+     se aperta ganha 44px de altura; o que e so icone ganha 44 nos dois lados.
+     As excecoes sao duas, e nenhuma e acao — ficam nos 24px que valem em
+     qualquer largura: o porque ao lado do rotulo (a 44px ele invadiria o
+     campo logo abaixo, e quem erra o toque abre uma explicacao, nao apaga
+     nada) e o "x" do balao da ajuda, que o dono pediu "bem pequeno" e que nao
+     e o unico jeito de fechar o balao — abrir a ajuda tambem fecha. */
+  @media (max-width: 720px) {
+    button:not(.abrir-calendario):not(.campo-porque-botao):not(.ajuda-balao-x):not(.ordenar),
+    a.botao, a.fu-ir, .ajuda-ir, summary { min-height: 44px; }
+    button.so-icone, button.so-icone.grande, button.em-abrir, .g3ref button.fu-chip-x { min-width: 44px; min-height: 44px; }
+    button.discreto, button.em-link, .g3ref button.fu-link, .ligacao-crm, a.ir-resolver { min-height: 44px; }
+    /* O CALENDARIO DE DENTRO DO CAMPO DE DATA: o proprio campo ja abre o
+       seletor ao toque, mas o desenho e um botao — e botao no telefone e 44px.
+       O campo reserva a direita para ele. */
+    .campo-data input, .inline .campo-data input { padding-right: 46px; }
+    .campo-data .abrir-calendario, .inline .campo-data .abrir-calendario { right: 0; width: 44px; height: 44px; }
+    .ligacao-crm { padding: 0 10px; }
+    .interruptor { min-height: 44px; }
+    .alvo-caixa { min-width: 44px; min-height: 44px; }
+    .g3ref .fu-tabela th.c-sel label { min-height: 44px; }
+    .g3ref .fu-tabela td.c-sel .alvo-caixa, .serie-lista .r-sel .alvo-caixa { margin: -13px; }
+    .opcao { min-height: 44px; }
+    .menu-painel button, .menu-painel .item, .setor-item { min-height: 44px; }
+    .ajuda-pergunta { min-height: 44px; align-items: center; }
+    .ajuda-pergunta .ic { margin-top: 0; }
+    .pular { min-height: 44px; display: inline-flex; align-items: center; }
+
+    /* O CAMPO: 44px, e o texto a 16px. Abaixo de 16 o Safari do iPhone da
+       zoom na pagina ao focar o campo, e a tela fica cortada ate a pessoa
+       desfazer o zoom com dois dedos. */
+    input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea { font-size: 16px; }
+    input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select { min-height: 44px; }
+
+    /* A BARRA DE FERRAMENTAS EMPILHA: a busca e cada filtro na largura toda,
+       em vez de um campo de 260px e tres selects de larguras diferentes. */
+    .ferramentas { align-items: stretch; }
+    .ferramentas > .busca, .ferramentas > .campo-caixa { flex: 1 1 100%; }
+    .ferramentas .busca input, .ferramentas select, .ferramentas .campo-caixa select { width: 100%; }
+    .ferramentas .contagem { margin-left: 0; flex: 1 1 100%; }
+
+    /* O CAMPO NUMA FILEIRA FLEXIVEL (o formulario do Conector Sicoob) ocupa a
+       linha toda: lado a lado eles ja nao cabiam, e um embaixo do outro cada
+       um ficava da largura do proprio rotulo. Na grade (".campos") isto nao
+       vale nada — quem manda la e a grade. */
+    .campo { flex: 1 1 100%; }
+    /* O interruptor quebra a frase alinhada a esquerda, como texto. */
+    .interruptor { justify-content: flex-start; text-align: left; }
+
+    /* A BAIXA MANUAL de Cobrancas: tres colunas de 90px nao cabem num
+       telefone — a data e o valor ficam lado a lado, o resto empilha. */
+    .em-baixa-campos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .em-baixa-campos > :first-child { grid-column: 1 / -1; }
+  }
+
+  /* ------------------------------------------- a ajuda no celular
+     NO COMPUTADOR o botao fica no canto inferior direito, como o dono pediu em
+     21/08. ABAIXO DE ${MENU_VIRA_GAVETA}px — onde existe a faixa do topo — ele
+     sobe para ela, no canto direito, ao lado do «Menu»: no canto de baixo ele
+     cobria a ultima coluna de toda tabela e o botao de toda linha que
+     passasse por ele, medido em 01/10 em Clientes, Contas a pagar e Unidades.
+     O balao da primeira visita desce dele, em vez de subir — e continua
+     apontando para o botao que existe. */
+  @media (max-width: ${MENU_VIRA_GAVETA - 0.02}px) {
+    .faixa-celular-linha { padding-right: 60px; }
+    .ajuda-gatilho { top: 6px; right: 8px; bottom: auto; width: 44px; height: 44px; z-index: 21; }
+    .ajuda-balao {
+      top: 76px; right: 8px; bottom: auto; transform-origin: top right;
+      animation-name: ajuda-descer;
+    }
+    .ajuda-bolha { animation-name: ajuda-descer; }
+    .ajuda-bolha-1 { top: 54px; bottom: auto; right: 26px; }
+    .ajuda-bolha-2 { top: 62px; bottom: auto; right: 32px; }
+  }
+  @keyframes ajuda-descer {
+    from { opacity: 0; transform: translateY(-10px) scale(.92); }
+  }
 
   @media (prefers-reduced-motion: reduce) {
     /* WCAG 2.3.3. Nao e cortesia: ha gente para quem movimento na tela e

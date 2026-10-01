@@ -25,7 +25,7 @@ import { useState } from 'react';
 import { api } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
-  Pagina, Aviso, Tabela, Campo, Busca, Ferramentas, Filtro, ThOrd, Marca, Icone, DetalheTecnico,
+  Pagina, Aviso, RetornoDoAto, Tabela, Campo, Busca, Ferramentas, Filtro, ThOrd, Marca, Icone, DetalheTecnico,
   Carregando, AjudaDoMes, CampoData, useOrdenacao, ordenar, contem, BotaoDeCriar, PainelDeCriar,
 } from '../ui.tsx';
 import { Ligacao } from '../rota.tsx';
@@ -141,7 +141,7 @@ export function TelaContasAPagar() {
         <FormularioDeConta acao={acao} aoFechar={() => setLancando(false)}
                            aoCriar={() => { contas.recarregar(); resumo.recarregar(); }} />
       )}
-      {!lancando && acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
+      <RetornoDoAto texto={!lancando && acao.sucesso} />
 
       {/*
         O FIM DO MÊS DO RATEIO MORA AQUI, do outro lado da barra (30/09/2026). O
@@ -199,9 +199,11 @@ export function TelaContasAPagar() {
 
       {/* ------------------------------------------------ o resumo por quem recebe */}
       <div className="cartao secao">
-        <h3 className="cartao-tit">
+        {/* [01/10/2026, etapa 5] h2, e não h3: era o primeiro título depois do
+            h1, e o salto h1 → h3 foi o que o detector acusou nesta tela. */}
+        <h2 className="cartao-tit">
           <Icone nome="contas_a_pagar" tamanho={17} /> A pagar, por beneficiário
-        </h3>
+        </h2>
         {resumo.carregando ? <Carregando /> : resumo.erro ? (
           <Aviso tipo="erro">Não foi possível ler o resumo: {resumo.erro}</Aviso>
         ) : (resumo.dado?.length ?? 0) === 0 ? (
@@ -302,7 +304,7 @@ function LinhaDeConta(p: {
           {diaEmBr(c.vencimento)}
           {atrasada && <> <Marca tom="erro" icone="vencidas">vencida</Marca></>}
         </td>
-        <td>
+        <td className="c-id">
           <strong>{nomeDoBeneficiario(c)}</strong>
           <div className="nota">{ROTULO_DO_BENEFICIARIO[c.beneficiario_tipo]}</div>
         </td>
@@ -316,20 +318,22 @@ function LinhaDeConta(p: {
           <div className="nota">{c.origem_split_item_id ? 'nascida da divisão de um pagamento' : 'lançada à mão'}</div>
         </td>
         <td className="num">{emReais(c.valor_centavos)}</td>
-        <td className="num">
+        <td className="num c-val">
           <strong>{emReais(saldoCentavos(c))}</strong>
           {/* O RECIBO EM UMA LINHA, e ele é a metade que faltava: até 10/09/2026
               esta tela registrava pagamento e não mostrava nenhum, então depois
               de pagar a única coisa que mudava era este número. Numa conta paga
               em duas vezes, «quando foi a primeira?» não tinha resposta aqui. */}
-          <div className={r.alerta ? '' : 'fraco'} style={{ fontSize: 11.5, fontWeight: 400 }}>
+          {/* 13,5px (o corpo de meta) e nao 11,5: o detector mediu o recibo
+              como texto miudo, em dezessete linhas (01/10/2026, etapa 5). */}
+          <div className={r.alerta ? 'recibo-da-linha' : 'recibo-da-linha fraco'}>
             {r.alerta && <><Icone nome="aviso_alerta" tamanho={12} /> </>}{r.frase}
           </div>
         </td>
-        <td><Marca tom={TOM[c.status]} icone={c.status === 'paga' ? 'confirmar' : undefined}>
+        <td className="c-sit"><Marca tom={TOM[c.status]} icone={c.status === 'paga' ? 'confirmar' : undefined}>
           {ROTULO_DO_STATUS[c.status]}
         </Marca></td>
-        <td>
+        <td className="c-aco">
           <div style={{ display: 'flex', gap: 6 }}>
             {/* A CONTA PAGA TAMBÉM ABRE, e é o caso que mais se quer olhar: é
                 nela que a pergunta «isto já foi pago mesmo, e quando?» aparece.
@@ -391,30 +395,23 @@ function PagamentosDaConta({ pagamentos }: { pagamentos: readonly PagamentoDaCon
   const total = pagamentos.reduce((s, x) => s + x.valor_centavos, 0);
   return (
     <div className="cartao" style={{ margin: '0 0 12px' }}>
-      <h4 style={{ marginTop: 0 }}>
+      <h3 style={{ marginTop: 0 }}>
         Já pago — {emReais(total)} em {pagamentos.length}{' '}
         {pagamentos.length === 1 ? 'vez' : 'vezes'}
-      </h4>
-      <div className="rolagem">
-        <table>
-          <thead>
-            <tr>
-              <th>Data</th><th>Valor</th><th>Forma</th><th>Comprovante</th><th>Observação</th>
-            </tr>
-          </thead>
-          <tbody>
-            {pagamentos.map((x) => (
-              <tr key={x.id}>
-                <td>{emBr(x.data_pagamento)}</td>
-                <td className="num"><strong>{emReais(x.valor_centavos)}</strong></td>
-                <td>{ROTULO_DA_FORMA[x.forma] ?? x.forma}</td>
-                <td>{x.referencia_externa || <span className="fraco">—</span>}</td>
-                <td>{x.observacao || <span className="fraco">—</span>}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      </h3>
+      {/* A "Tabela" da casa desde 01/10/2026 (era um <table> escrito a mão):
+          no celular os pagamentos viram cartão como o resto da tela. */}
+      <Tabela cabecalho={<><th>Data</th><th className="num">Valor</th><th>Forma</th><th>Comprovante</th><th>Observação</th></>}>
+        {pagamentos.map((x) => (
+          <tr key={x.id}>
+            <td>{emBr(x.data_pagamento)}</td>
+            <td className="num c-val"><strong>{emReais(x.valor_centavos)}</strong></td>
+            <td>{ROTULO_DA_FORMA[x.forma] ?? x.forma}</td>
+            <td>{x.referencia_externa || <span className="fraco">—</span>}</td>
+            <td>{x.observacao || <span className="fraco">—</span>}</td>
+          </tr>
+        ))}
+      </Tabela>
     </div>
   );
 }
@@ -449,7 +446,7 @@ function FormularioDePagamento(p: {
 
   return (
     <div className="cartao" style={{ margin: 0 }}>
-      <h4 style={{ marginTop: 0 }}>Registrar pagamento — saldo {emReais(saldo)}</h4>
+      <h3 style={{ marginTop: 0 }}>Registrar pagamento — saldo {emReais(saldo)}</h3>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
         <Campo rotulo="Valor (R$)" valor={valor} ao={setValor} dica="0,00" />
         <Campo rotulo="Data do pagamento" valor={data} ao={setData} tipo="date" />
@@ -508,8 +505,8 @@ function FormularioDeConta(p: {
         <Campo rotulo="Quem recebe" porqueDe="pagar-dono" valor={f.beneficiario_nome} ao={campo('beneficiario_nome')} />
         <Campo rotulo="Valor (R$)" valor={f.valor} ao={campo('valor')} dica="0,00" />
         <div>
-          <label>Mês de referência</label>
-          <CampoData mes valor={f.competencia} ao={campo('competencia')} rotuloAcessivel="Mês de referência" />
+          <label htmlFor="despesa-mes">Mês de referência</label>
+          <CampoData id="despesa-mes" mes valor={f.competencia} ao={campo('competencia')} />
           <AjudaDoMes />
         </div>
         <Campo rotulo="Vencimento" porqueDe="pagar-dono" valor={f.vencimento} ao={campo('vencimento')} tipo="date" />
@@ -566,9 +563,9 @@ function DinheiroParado(p: {
 
   return (
     <div className="cartao secao">
-      <h3 className="cartao-tit">
+      <h2 className="cartao-tit">
         <Icone nome="pode_repartir" tamanho={17} /> Dinheiro recebido que ainda não foi repartido
-      </h3>
+      </h2>
       <p className="nota">
         {resumoDaEspera(p.linhas).replace(/^./, (c) => c.toUpperCase())}. Somam{' '}
         <strong>{emReais(totalCentavos(p.linhas))}</strong>.
@@ -578,13 +575,13 @@ function DinheiroParado(p: {
         {grupos.flatMap((g) => [
           <tr key={`grupo:${g.motivo}`} className="grupo-da-tabela">
             <td colSpan={6}>
-              <h4>
+              <h3>
                 <Marca tom={TOM_DA_ESPERA[g.motivo]}>{ROTULO_DO_MOTIVO[g.motivo]}</Marca>
                 <span className="fraco">
                   {g.linhas.length} {g.linhas.length === 1 ? 'pagamento' : 'pagamentos'},{' '}
                   {emReais(totalCentavos(g.linhas))}
                 </span>
-              </h4>
+              </h3>
               <p>{EXPLICACAO_DO_MOTIVO[g.motivo]}</p>
               {COMO_DESTRAVAR[g.motivo] && (
                 <ol className="grupo-passos">
@@ -601,10 +598,10 @@ function DinheiroParado(p: {
             <tr key={l.liquidacao_id}>
               <td>{diaEmBr(l.data_liquidacao)}</td>
               <td>{mesEmBr(l.competencia)}</td>
-              <td>{l.codigo_geradora}</td>
-              <td className="num"><strong>{emReais(l.valor_liquidado_centavos)}</strong></td>
-              <td><Marca tom={TOM_DA_ESPERA[g.motivo]}>{ROTULO_CURTO_DO_MOTIVO[g.motivo]}</Marca></td>
-              <td>
+              <td className="c-id">{l.codigo_geradora}</td>
+              <td className="num c-val"><strong>{emReais(l.valor_liquidado_centavos)}</strong></td>
+              <td className="c-sit"><Marca tom={TOM_DA_ESPERA[g.motivo]}>{ROTULO_CURTO_DO_MOTIVO[g.motivo]}</Marca></td>
+              <td className="c-aco">
                 {/* A AÇÃO OU O DESTINO: repartir, quando dá; o último passo do
                     caminho, quando é trabalho de alguém; e a frase de que não há
                     nada a fazer, quando o banco é que confirma. */}

@@ -178,7 +178,10 @@ export function TabelaDaFila(p: PropsDaFila) {
       )}
 
       <div className="fu-tabela fu-fila">
-        <Tabela cabecalho={<>
+        {/* `cartoes={false}`: esta tabela tem cartao proprio desde a etapa 1 (a
+            grade "sit / arq / uc mes / tot ven / aco"), e o generico da casa
+            brigaria com ela. */}
+        <Tabela cartoes={false} cabecalho={<>
           <th>Arquivo</th><th>Unidade</th><th>Mês</th>
           <th className="num">Total da conta</th><th>Vencimento</th><th>Situação</th>
           <th><span className="so-leitor">Ações</span></th>
@@ -400,6 +403,7 @@ export function TabelaDasRegistradas(p: PropsDasRegistradas) {
 
       <div className="fu-tabela fu-registradas">
         <Tabela
+          cartoes={false}
           vazio={p.lista == null ? 'Lendo as contas registradas…'
             : p.lista.length === 0
               ? 'Nenhuma conta registrada ainda. Cada conta enviada acima, conferida e registrada, aparece aqui — e é daqui que ela vira cobrança.'
@@ -434,9 +438,11 @@ export function TabelaDasRegistradas(p: PropsDasRegistradas) {
               <tr key={r.id} className={marcada ? 'fu-marcada' : undefined}>
                 <td className="c-sel">
                   {podeGerar(r) && (
-                    <input type="checkbox" checked={marcada} disabled={p.rodando}
-                           aria-label={`Incluir a unidade ${uc} em «Gerar cobranças»`}
-                           onChange={(ev) => p.aoMarcar(r.id, ev.target.checked)} />
+                    <label className="alvo-caixa">
+                      <input type="checkbox" checked={marcada} disabled={p.rodando}
+                             aria-label={`Incluir a unidade ${uc} em «Gerar cobranças»`}
+                             onChange={(ev) => p.aoMarcar(r.id, ev.target.checked)} />
+                    </label>
                   )}
                 </td>
                 <td className="c-uc">
@@ -579,7 +585,7 @@ function Revisao(p: {
      de Cobranças. O que é desta tela fica aqui: as frases, o «Conferir antes» e
      o caminho para Cobranças no fim. */
   return (
-    <RevisaoEmSerie id="fu-revisao" titulo={titulo}
+    <RevisaoEmSerie id="fu-revisao" titulo={titulo} resultado={acabou}
                     nota={<>
                       {!emRodada && 'Cada uma nasce como rascunho — nada é enviado ao cliente agora. Emitir é o passo seguinte, em «Cobranças».'}
                       {p.rodando && 'Uma de cada vez, na ordem abaixo. Pode acompanhar aqui; não feche a página.'}

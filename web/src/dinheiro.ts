@@ -162,6 +162,78 @@ export function decimalParaCampo(v: string | number | null | undefined): string 
   return /^-?\d+\.\d+$/.test(s) ? s.replace('.', ',') : s;
 }
 
+/** O que sai de um campo decimal: o texto canonico para o servidor, ou a frase
+ *  que diz o que esta errado. */
+export type DecimalDoCampo = { ok: true; valor: string } | { ok: false; erro: string };
+
+/**
+ * O CAMINHO DE VOLTA DE `decimalParaCampo`: o que a pessoa digitou -> o texto
+ * canonico da API (`"2.5"`, `"0.029"`, `"10"`), POR TEXTO e sem float.
+ *
+ * ==========================================================================
+ * POR QUE ISTO EXISTE (01/10/2026, etapa 5 do redesenho)
+ *
+ * O modelo da fatura (Contas de luz, aba 3) mostrava desconto, fator, multa e
+ * juros no formato do banco — «0.029», com ponto — numa tela que escreve todo
+ * outro numero com virgula. A exibicao passou a ser `decimalParaCampo`; esta
+ * funcao e a volta, e as duas juntas tem uma propriedade que os testes prendem
+ * (F12 em `web/tests/formato.ts`): para todo valor que o servidor devolve,
+ * `campoParaDecimal(decimalParaCampo(x))` e EXATAMENTE `x`. O valor que
+ * ninguem tocou volta ao servidor letra por letra igual ao de antes.
+ *
+ * ACEITA VIRGULA OU PONTO, e o servidor (`paraDecimal`, em
+ * `src/dominio/fatura-unificada.ts`) tambem aceitaria — mas os dois leem a
+ * mesma coisa so quando o texto NAO E AMBIGUO, e a tela agora recusa o que e:
+ *
+ *   «1.234»       um ponto seguido de exatamente tres algarismos, com parte
+ *                 inteira: e «um virgula dois tres quatro» ou «mil duzentos e
+ *                 trinta e quatro»? O servidor le o primeiro; quem digitou
+ *                 pode ter querido o segundo. «0.029» passa: com zero na
+ *                 frente nao ha milhar possivel;
+ *   «1.234,5»     ponto E virgula. Em portugues e milhar e decimal; em ingles
+ *   «1,234.5»     e o contrario, e o servidor leria o segundo como 1,2345.
+ *                 Percentual e fator nao tem milhar: um separador so;
+ *   «2,5,1»       mais de um separador do mesmo tipo;
+ *   «-2», «2a»    sinal e letra: multa negativa nao existe, e «vinte» nao e 2.
+ *
+ * NAO ADIVINHA: recusar com a frase e o caminho mais curto ate o numero certo,
+ * e um palpite errado aqui e uma multa impressa errada em toda folha do mes.
+ *
+ * Vazio devolve vazio — o servidor le vazio como zero hoje, e isso nao muda
+ * aqui. O «%» do fim e os espacos saem, como o servidor ja tirava.
+ */
+export function campoParaDecimal(texto: string): DecimalDoCampo {
+  const digitado = texto.trim();
+  const s = digitado.replace(/\s+/g, '').replace(/%$/, '');
+  if (s === '') return { ok: true, valor: '' };
+  if (s.startsWith('-')) return { ok: false, erro: `«${digitado}» é negativo. Use um número positivo, como 2,5.` };
+  if (!/^[\d.,]+$/.test(s)) {
+    return { ok: false, erro: `«${digitado}» não é um número. Escreva só os algarismos e a vírgula, como 2,5.` };
+  }
+  const virgulas = (s.match(/,/g) ?? []).length;
+  const pontos = (s.match(/\./g) ?? []).length;
+  if (virgulas > 0 && pontos > 0) {
+    return { ok: false, erro: `«${digitado}» tem ponto e vírgula. Use um separador só — a vírgula, para os decimais: 2,5.` };
+  }
+  if (virgulas + pontos > 1) {
+    return { ok: false, erro: `«${digitado}» tem mais de um separador. Use uma vírgula só, para os decimais: 2,5.` };
+  }
+  const m = /^(\d*)[.,]?(\d*)$/.exec(s)!;
+  const inteira = m[1]!;
+  const fracao = m[2]!;
+  const separador = virgulas + pontos === 1;
+  if (separador && inteira === '') return { ok: false, erro: `Falta o zero antes da vírgula: 0${s.replace('.', ',')}.` };
+  if (separador && fracao === '') return { ok: false, erro: `Faltam os algarismos depois da vírgula em «${digitado}».` };
+  if (pontos === 1 && fracao.length === 3 && /[1-9]/.test(inteira)) {
+    return {
+      ok: false,
+      erro: `«${digitado}» pode ser ${inteira},${fracao} ou ${inteira}${fracao}. Escreva com vírgula `
+        + `(${inteira},${fracao}) ou sem separador (${inteira}${fracao}).`,
+    };
+  }
+  return { ok: true, valor: separador ? `${inteira}.${fracao}` : inteira };
+}
+
 /**
  * CENTAVOS DENTRO DE UM CAMPO: `12345` -> `"123,45"`, `8` -> `"0,08"`. Por
  * TEXTO, sem dividir por 100 — a regra 1 vale também para o valor que a tela

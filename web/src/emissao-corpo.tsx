@@ -236,7 +236,7 @@ export function RevisaoDaSerie(p: {
             + 'e o que fazer estão na linha. Os outros foram registrados.';
 
   return (
-    <RevisaoEmSerie id="em-revisao" titulo={textoDoTitulo} nota={nota} comSelecao
+    <RevisaoEmSerie id="em-revisao" titulo={textoDoTitulo} nota={nota} comSelecao resultado={acabou}
                     alerta={!p.emRodada ? p.alerta : undefined}
                     depois={!p.emRodada && p.deFora && p.deFora.length > 0 && (
                       <div className="em-defora">
@@ -286,13 +286,15 @@ export function RevisaoDaSerie(p: {
         return (
           <ItemDaSerie key={l.id} estado={tirada ? 'tirada' : e?.estado}
                        selecao={p.emRodada ? null : (
-                         <input type="checkbox" checked={!tirada}
-                                aria-label={`Incluir a unidade ${l.unidade}`}
-                                onChange={(ev) => setTiradas((s) => {
-                                  const x = new Set(s);
-                                  if (ev.target.checked) x.delete(l.id); else x.add(l.id);
-                                  return x;
-                                })} />
+                         <label className="alvo-caixa">
+                           <input type="checkbox" checked={!tirada}
+                                  aria-label={`Incluir a unidade ${l.unidade}`}
+                                  onChange={(ev) => setTiradas((s) => {
+                                    const x = new Set(s);
+                                    if (ev.target.checked) x.delete(l.id); else x.add(l.id);
+                                    return x;
+                                  })} />
+                         </label>
                        )}
                        unidade={l.unidade} cliente={l.cliente}
                        vencimento={`vence ${diaEmBr(l.vencimento)}`}

@@ -31,8 +31,8 @@ import {
 import { useAcao, useDados } from '../dados.ts';
 import { useSessao } from '../sessao.tsx';
 import {
-  Pagina, Aviso, Campo, Tabela, linha, rotulo, Icone, Interruptor, BotaoDeIcone, Escolha, DetalheTecnico } from '../ui.tsx';
-import { paraCentavos, emReais } from '../dinheiro.ts';
+  Pagina, Aviso, RetornoDoAto, Campo, Tabela, linha, rotulo, Icone, Interruptor, BotaoDeIcone, Escolha, DetalheTecnico } from '../ui.tsx';
+import { paraCentavos, emReais, decimalParaCampo, campoParaDecimal } from '../dinheiro.ts';
 import { PerguntaNaTela } from '../serie.tsx';
 import { mover, paraEnvio, type CampoConfigurado } from '../cobranca-regras.ts';
 import { ladoDoQr } from '../layout-regras.ts';
@@ -274,7 +274,7 @@ export function TelaDocumento() {
         </Aviso>
       )}
       {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
-      {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
+      <RetornoDoAto texto={acao.sucesso} />
 
       {/* ============================ AS TRES ABAS DA TELA DEFINITIVA (14/08/2026)
           Portadas de `g3_fatura_unificada`. Elas sao AGORA o processo do Documento:
@@ -384,6 +384,7 @@ export function TelaDocumento() {
             ? <img src={logoUrl} alt="logo" style={{ maxHeight: 64, maxWidth: 240 }} />
             : <span className="fraco">Nenhuma logo.</span>}
           <input type="file" accept="image/png,image/jpeg" style={{ width: 'auto' }}
+                 aria-label="Escolher a logo (PNG ou JPEG)"
                  onChange={(e) => { const f = e.target.files?.[0]; if (f) void enviarLogo(f); }} />
           {ident.dado?.logo_sha256 && (
             <>
@@ -512,7 +513,7 @@ export function TelaDocumento() {
               {/* [30/09/2026, etapa 4b] O NOME DO CAMPO EM PORTUGUÊS, e não a chave
                   do enum (`percentual_rateio_aplicado`): é o nome que o campo tem
                   no padrão, e a coluna ao lado é como ele sai impresso. */}
-              <td>{nomeDoCampo(c.campo)}</td>
+              <td className="c-id">{nomeDoCampo(c.campo)}</td>
               <td>
                 {/* A classe `inline` vai num div e nao no `td`: `display: flex`
                     num td o retira do algoritmo de tabela, e a linha quebra. */}
@@ -578,6 +579,13 @@ function Cadastro({ children }: { children: ReactNode }) {
   );
 }
 
+/** Os quatro números do modelo — decimais, nunca centavos (regra 1). São os que
+ *  a tela mostra com vírgula e devolve no formato do banco (01/10/2026). */
+const NUMEROS_DO_MODELO = [
+  'percentual_desconto_padrao', 'fator_emissao_padrao', 'multa_percentual', 'juros_mes_percentual',
+] as const;
+type NumeroDoModelo = typeof NUMEROS_DO_MODELO[number];
+
 /**
  * ============================================================================
  * O MODELO DE FATURA — o TEMPLATE (migration 28).
@@ -606,23 +614,74 @@ function ModeloDaFatura() {
   const acao = useAcao();
   const modelos = useDados<ModeloDeFatura[]>(() => api.get('/cobranca/modelos'));
   const [m, setM] = useState<ModeloDeFatura | null>(null);
+  /* O erro de cada número só aparece depois do primeiro «Salvar»: avisar
+     «faltam os algarismos depois da vírgula» enquanto a pessoa ainda está
+     digitando o «2,» seria brigar com o cursor. */
+  const [tentouSalvar, setTentouSalvar] = useState(false);
+
+  /* [01/10/2026, etapa 5] OS QUATRO NÚMEROS ENTRAM NO FORMULÁRIO COM VÍRGULA.
+     O servidor devolve o formato do banco («0.029», «2.5»), e a tela mostrava
+     isso cru — a única tela do sistema com o ponto decimal. `paraEdicao`
+     troca o separador POR TEXTO (`decimalParaCampo`) ao abrir o modelo; o
+     caminho de volta está em `numerosParaEnviar`, logo abaixo. */
+  const paraEdicao = (x: ModeloDeFatura | null): ModeloDeFatura | null => (x ? {
+    ...x,
+    ...Object.fromEntries(NUMEROS_DO_MODELO.map((k) => [k, decimalParaCampo(x[k])])),
+  } : null);
 
   useEffect(() => {
     if (!modelos.dado) return;
-    setM(modelos.dado.find((x) => x.padrao) ?? modelos.dado[0] ?? null);
+    setM(paraEdicao(modelos.dado.find((x) => x.padrao) ?? modelos.dado[0] ?? null));
+    setTentouSalvar(false);
   }, [modelos.dado]);
 
   const mudar = (k: keyof ModeloDeFatura) => (v: string) =>
     setM((s) => (s ? { ...s, [k]: v } : s));
 
+  /**
+   * O QUE VAI AO SERVIDOR, número a número — e a regra é de dinheiro, então é
+   * a mais conservadora possível:
+   *
+   *   o campo NÃO MUDOU   vai o valor que o servidor mandou, intocado (nem
+   *                       passa pela conversão). Salvar o modelo para trocar
+   *                       só o título manda os quatro números exatamente como
+   *                       antes desta etapa;
+   *   o campo MUDOU       vai o texto canônico (`campoParaDecimal`: «2,5» ->
+   *                       «2.5»), que o servidor grava igual ao que gravaria
+   *                       com o texto cru — provado contra o `paraDecimal` do
+   *                       próprio servidor em `web/tests/formato.ts` (F13);
+   *   o texto é AMBÍGUO   nada vai: a frase aparece embaixo do campo.
+   */
+  const numerosParaEnviar = (): { valores: Record<NumeroDoModelo, string> } | { erros: Partial<Record<NumeroDoModelo, string>> } => {
+    const original = (modelos.dado ?? []).find((x) => x.id === m!.id);
+    const valores = {} as Record<NumeroDoModelo, string>;
+    const erros: Partial<Record<NumeroDoModelo, string>> = {};
+    for (const k of NUMEROS_DO_MODELO) {
+      const texto = m![k];
+      if (original && texto === decimalParaCampo(original[k])) { valores[k] = original[k]; continue; }
+      const r = campoParaDecimal(texto);
+      if (r.ok) valores[k] = r.valor; else erros[k] = r.erro;
+    }
+    return Object.keys(erros).length ? { erros } : { valores };
+  };
+  const errosDosNumeros = m && tentouSalvar ? (() => {
+    const r = numerosParaEnviar();
+    return 'erros' in r ? r.erros : {};
+  })() : {};
+
   const salvar = async () => {
     if (!m) return;
+    setTentouSalvar(true);
+    const numeros = numerosParaEnviar();
+    /* Recusado na tela: o «Modelo salvo.» de um salvar anterior sai junto —
+       ele diria que deu certo o que acabou de não ir. */
+    if ('erros' in numeros) { acao.limpar(); return; }
     const ok = await acao.executar(() => api.put(`/cobranca/modelos/${m.id}`, {
       nome: m.nome, descricao: m.descricao, assinatura: m.assinatura,
       aviso_titulo: m.aviso_titulo, aviso_corpo: m.aviso_corpo,
-      percentual_desconto_padrao: m.percentual_desconto_padrao,
-      fator_emissao_padrao: m.fator_emissao_padrao,
-      multa_percentual: m.multa_percentual, juros_mes_percentual: m.juros_mes_percentual,
+      percentual_desconto_padrao: numeros.valores.percentual_desconto_padrao,
+      fator_emissao_padrao: numeros.valores.fator_emissao_padrao,
+      multa_percentual: numeros.valores.multa_percentual, juros_mes_percentual: numeros.valores.juros_mes_percentual,
       rodape_legal: m.rodape_legal, nota_do_fator: m.nota_do_fator,
     }));
     if (ok) { acao.anunciar('Modelo salvo.'); modelos.recarregar(); }
@@ -671,14 +730,14 @@ function ModeloDaFatura() {
 
       {modelos.erro && <Aviso tipo="erro">Falha ao ler os modelos: {modelos.erro}</Aviso>}
       {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
-      {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
+      <RetornoDoAto texto={acao.sucesso} />
 
       {(modelos.dado ?? []).length > 1 && (
         <div style={{ marginBottom: 16 }}>
           <Campo rotulo="Modelo em uso" valor={m?.id ?? ''}
                  ao={(v) => {
                    const escolhido = (modelos.dado ?? []).find((x) => x.id === v);
-                   if (escolhido) setM(escolhido);
+                   if (escolhido) { setM(paraEdicao(escolhido)); setTentouSalvar(false); }
                  }}
                  opcoes={(modelos.dado ?? []).map((x) => ({
                    valor: x.id, texto: `${x.nome}${x.padrao ? ' — padrão' : ''}`,
@@ -705,9 +764,8 @@ function ModeloDaFatura() {
             <Campo rotulo="Título" valor={m.aviso_titulo} ao={mudar('aviso_titulo')} />
           </div>
           <div style={{ marginTop: 12 }}>
-            <label>Corpo</label>
-            <textarea className="fu-area" rows={2} value={m.aviso_corpo}
-                      aria-label="Corpo do aviso em destaque"
+            <label htmlFor="modelo-aviso-corpo">Corpo</label>
+            <textarea className="fu-area" rows={2} value={m.aviso_corpo} id="modelo-aviso-corpo"
                       onChange={(e) => mudar('aviso_corpo')(e.target.value)} />
           </div>
           <p className="sub" style={{ marginTop: 8 }}>
@@ -719,13 +777,17 @@ function ModeloDaFatura() {
           <h3 style={{ marginTop: 18 }}>Padrões de emissão</h3>
           <div className="campos">
             <Campo rotulo="Desconto padrão (%)" valor={m.percentual_desconto_padrao}
-                   ao={mudar('percentual_desconto_padrao')} dica="20" />
+                   ao={mudar('percentual_desconto_padrao')} dica="20"
+                   erro={errosDosNumeros.percentual_desconto_padrao} />
             <Campo rotulo="Fator CO₂ (kg/kWh)" valor={m.fator_emissao_padrao}
-                   ao={mudar('fator_emissao_padrao')} dica="0,029" />
+                   ao={mudar('fator_emissao_padrao')} dica="0,029"
+                   erro={errosDosNumeros.fator_emissao_padrao} />
             <Campo rotulo="Multa após vencer (%)" valor={m.multa_percentual}
-                   ao={mudar('multa_percentual')} dica="2" />
+                   ao={mudar('multa_percentual')} dica="2"
+                   erro={errosDosNumeros.multa_percentual} />
             <Campo rotulo="Juros ao mês (%)" valor={m.juros_mes_percentual}
-                   ao={mudar('juros_mes_percentual')} dica="1" />
+                   ao={mudar('juros_mes_percentual')} dica="1"
+                   erro={errosDosNumeros.juros_mes_percentual} />
           </div>
           <div style={{ marginTop: 12 }}>
             <Campo rotulo="Fonte do fator de CO₂ (nota impressa)" valor={m.nota_do_fator}
@@ -824,7 +886,7 @@ function CamposPersonalizados() {
 
       {lista.erro && <Aviso tipo="erro">Falha ao ler os campos: {lista.erro}</Aviso>}
       {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
-      {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
+      <RetornoDoAto texto={acao.sucesso} />
 
       <Tabela cabecalho={<>
                 <th style={{ width: 150 }}>Chave</th>
@@ -840,7 +902,8 @@ function CamposPersonalizados() {
             <td>
               <div className="inline">
                 <input value={c.chave} aria-label={`Chave do campo ${i + 1}`}
-                       placeholder="contrato_n" style={{ fontFamily: 'var(--fonte-mono)', fontSize: 12 }}
+                       placeholder="contrato_n" style={{ fontFamily: 'var(--fonte-mono)', fontSize: 'var(--t-meta)' }}
+                       autoCapitalize="none" autoComplete="off" spellCheck={false}
                        onChange={(e) => mudar(i, { chave: e.target.value })} />
               </div>
             </td>

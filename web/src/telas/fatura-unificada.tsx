@@ -34,7 +34,7 @@
 // `fatura-lote-corpo.tsx`; o que ela BUSCA e GRAVA continua aqui, pelas mesmas
 // rotas de sempre.
 
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   api, CAMPOS_DA_FATURA_VAZIOS, PARAMETROS_PADRAO, BOLETO_LIDO_VAZIO,
   type CamposDaFatura, type ParametrosDaEmissao, type BoletoLido,
@@ -1143,6 +1143,10 @@ type PropsDaConferencia = {
  * e o sinal de que a correcao pegou.
  */
 function ConferenciaDaConta(p: PropsDaConferencia) {
+  /* [01/10/2026, etapa 5] As tres caixas do boleto tem ROTULO LIGADO (o
+     "<label htmlFor>"), e nao uma legenda solta ao lado de um "aria-label" com
+     o mesmo texto: tocar no rotulo poe o cursor na caixa. */
+  const idBoleto = useId();
   /*
    * ==========================================================================
    * A CONFERENCIA DO BOLETO VEM PRONTA DO SERVIDOR desde 14/08.
@@ -1338,30 +1342,30 @@ function ConferenciaDaConta(p: PropsDaConferencia) {
           </div>
           <div className="fu-status">Beneficiário lido: {p.boleto.beneficiario || '—'}</div>
 
-          <div className="fu-legenda">
+          <label className="fu-legenda" htmlFor={`${idBoleto}-instrucoes`}>
             Instruções do boleto <span className="fraco">· uma por linha</span>
-          </div>
+          </label>
           <textarea className="fu-area" rows={4} value={p.boleto.instrucoes.join('\n')}
-                    aria-label="Instruções do boleto, uma por linha"
+                    id={`${idBoleto}-instrucoes`}
                     placeholder="A partir 18/08/2026 Juros 0,03%/dia."
                     onChange={(e) => p.setBoleto((s) => ({
                       ...s, instrucoes: e.target.value.split('\n'),
                     }))} />
 
-          <div className="fu-legenda">Linha digitável</div>
+          <label className="fu-legenda" htmlFor={`${idBoleto}-linha`}>Linha digitável</label>
           <textarea className="fu-area mono" rows={2} value={p.boleto.linha_digitavel}
-                    aria-label="Linha digitável" placeholder="47 dígitos"
+                    id={`${idBoleto}-linha`} inputMode="numeric" spellCheck={false} placeholder="47 dígitos"
                     onChange={(e) => p.setBoleto((s) => ({ ...s, linha_digitavel: e.target.value }))} />
           <StatusDaLinha
             digitos={p.boleto.linha_digitavel.replace(/\D/g, '')}
             motivo={p.composicao?.folha2.pagamento.barras_motivo ?? null}
             desenhou={linhaConferida} />
 
-          <div className="fu-legenda">PIX copia e cola</div>
+          <label className="fu-legenda" htmlFor={`${idBoleto}-pix`}>PIX copia e cola</label>
           {/* `miudo`: 12px contra os 13px da linha digitavel — o payload EMV tem
               tres vezes mais caracteres e a um ponto a mais nao cabe. */}
           <textarea className="fu-area mono miudo" rows={3} value={p.boleto.pix_copia_e_cola}
-                    aria-label="PIX copia e cola" placeholder="00020101…"
+                    id={`${idBoleto}-pix`} spellCheck={false} placeholder="00020101…"
                     onChange={(e) => p.setBoleto((s) => ({
                       ...s, pix_copia_e_cola: e.target.value.replace(/\s+/g, ''),
                     }))} />

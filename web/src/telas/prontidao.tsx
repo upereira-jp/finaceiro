@@ -244,9 +244,9 @@ export function TelaProntidao() {
           calendário parece defeito se a tela não disser por quê. */}
       <div className="cartao secao em-mes">
         <div className="em-mes-campo">
-          <label>Mês de referência</label>
+          <label htmlFor="mes-da-tela">Mês de referência</label>
           {mes
-            ? <CampoData mes valor={mes} ao={escolherMes} rotuloAcessivel="Mês de referência" style={{ width: 'auto' }} />
+            ? <CampoData id="mes-da-tela" mes valor={mes} ao={escolherMes} style={{ width: 'auto' }} />
             : <span className="em-mes-procurando">Procurando…</span>}
           <AjudaDoMes />
         </div>
@@ -355,14 +355,14 @@ export function TelaProntidao() {
               ...g.camadas.map((c) => (
                 <tr key={c.camada}>
                   <td><OQueFalta camada={c} /></td>
-                  <td>
+                  <td className="c-sit">
                     <Marca tom={TOM_DA_SITUACAO[c.situacao] ?? 'nao_medido'}>
                       {SITUACAO[c.situacao]?.curto ?? c.situacao}
                     </Marca>
                   </td>
                   {/* O SUBSTANTIVO ENTROU EM 24/08/2026: o mesmo `X de Y`
                       significava seis coisas nesta coluna. */}
-                  <td className="num">
+                  <td className="num c-val">
                     {c.situacao === 'nao_medido' ? '—' : <>
                       {c.faltam} de {c.total}{' '}
                       <span className="fraco" style={{ fontSize: 12, fontWeight: 500 }}>
@@ -490,6 +490,7 @@ function OndeResolver({ camada, situacao }: Pick<Camada, 'camada' | 'situacao'>)
       {endereco && tela ? (
         <Ligacao para={endereco}
                  rotulo={`${d.rotulo} — abre a aba ${tela.titulo}`}
+                 className="ir-resolver"
                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
           <Icone nome={tela.icone} tamanho={16} /> {d.rotulo}
         </Ligacao>
@@ -621,12 +622,12 @@ function SinaisDoConector() {
           <Tabela cabecalho={<><th>Tipo</th><th>Registro</th><th>O que o sistema achou</th></>}>
             {sinais.slice(0, 60).map((x, i) => (
               <tr key={`${x.entidade}-${x.chave}-${i}`}>
-                <td>
+                <td className="c-sit">
                   {/* A recusa é falha (a linha não foi gravada); a divergência
                       e a revisão são coisa a olhar. */}
                   <Marca tom={x.tipo === 'recusa' ? 'erro' : 'nao_medido'}>{x.tipo}</Marca>
                 </td>
-                <td><span className="fraco">{x.entidade}</span> {x.chave}</td>
+                <td className="c-id"><span className="fraco">{x.entidade}</span> {x.chave}</td>
                 <td>{x.sinal}</td>
               </tr>
             ))}

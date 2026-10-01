@@ -42,8 +42,8 @@ export function TelaRelatorios() {
       <div className="cartao secao">
         <div style={{ ...linha, gap: 12 }}>
           <div>
-            <label>Mês de referência</label>
-            <CampoData mes valor={mes} ao={setMes} rotuloAcessivel="Mês de referência" vazio="Todos os meses"
+            <label htmlFor="relatorio-mes">Mês de referência</label>
+            <CampoData id="relatorio-mes" mes valor={mes} ao={setMes} rotuloAcessivel="Mês de referência" vazio="Todos os meses"
                        style={{ width: 'auto', minWidth: 190 }} /><AjudaDoMes />
           </div>
           {mes && (
@@ -70,7 +70,7 @@ export function TelaRelatorios() {
                  <td><strong>{r.dono}</strong></td>
                  <td>{mesEmBr(r.competencia)}</td>
                  <td className="num">{r.itens}</td>
-                 <td className="num">{emReais(r.valor_centavos)}</td>
+                 <td className="num c-val">{emReais(r.valor_centavos)}</td>
                </tr>
              )} />
 
@@ -95,7 +95,7 @@ export function TelaRelatorios() {
                  <td>{mesEmBr(c.competencia)}</td>
                  <td className="num">{c.parcela_comissao}ª</td>
                  <td className="num">{c.itens}</td>
-                 <td className="num">{emReais(c.valor_centavos)}</td>
+                 <td className="num c-val">{emReais(c.valor_centavos)}</td>
                </tr>
              )} />
 
@@ -127,7 +127,7 @@ export function TelaRelatorios() {
                        colunas com as mesmas duas casas alinham de cima a baixo. */}
                    <td className="num">{decimalEmBr(u.geracao_kwh)}</td>
                    <td className="num">{decimalEmBr(u.consumo_faturado_kwh)}</td>
-                   <td className="num" style={{ color: negativo ? 'var(--erro)' : undefined }}>
+                   <td className="num c-val" style={{ color: negativo ? 'var(--erro)' : undefined }}>
                      {decimalEmBr(u.saldo_kwh)}
                    </td>
                  </tr>

@@ -29,7 +29,7 @@ import { useState } from 'react';
 import { api, type Cliente } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
-  Pagina, Aviso, Tabela, Campo, Busca, Ferramentas, Filtro, ThOrd, Marca, Icone, BotaoDeIcone,
+  Pagina, Aviso, RetornoDoAto, Tabela, Campo, Busca, Ferramentas, Filtro, ThOrd, Marca, Icone, BotaoDeIcone,
   useOrdenacao, ordenar, contem, DetalheTecnico, BotaoDeCriar, PainelDeCriar,
 } from '../ui.tsx';
 import {
@@ -255,7 +255,7 @@ export function TelaClientes() {
       {/* O RESULTADO DO QUE SE GRAVA NA LISTA (o documento, o contato), logo
           acima dela. Morava dentro do cartão de criar, que saiu do alto. */}
       {!criando && acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
-      {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
+      <RetornoDoAto texto={acao.sucesso} />
 
       {lista.erro && <Aviso tipo="erro">{lista.erro}</Aviso>}
 
@@ -365,7 +365,10 @@ function LinhaDeCliente(p: {
         <td>{c.nome}</td>
         <td style={{ minWidth: 210 }}>
           <div className="inline">
+            {/* O TECLADO E O DE TEXTO, em maiuscula: o CNPJ alfanumerico existe
+                desde julho de 2026 — ver "teclado.ts". */}
             <input value={valor} className="mono"
+                   inputMode="text" autoCapitalize="characters" autoComplete="off" spellCheck={false}
                    aria-label={`CPF ou CNPJ de ${c.nome}`}
                    onChange={(e) => p.aoDigitar(e.target.value)}
                    placeholder="000.000.000-00" style={{ width: 150 }} />
@@ -390,8 +393,8 @@ function LinhaDeCliente(p: {
             {ROTULO_DA_SITUACAO_DO_DOCUMENTO[estado]}
           </Marca>
         </td>
-        <td><Marca tom={c.ativo ? 'ok' : 'neutro'}>{c.ativo ? 'Ativo' : 'Inativo'}</Marca></td>
-        <td>
+        <td className="c-sit"><Marca tom={c.ativo ? 'ok' : 'neutro'}>{c.ativo ? 'Ativo' : 'Inativo'}</Marca></td>
+        <td className="c-aco">
           <button onClick={p.abrir} aria-expanded={p.aberto}>
             <Icone nome="clientes" tamanho={14} />
             {p.aberto ? 'Fechar' : 'Telefone e e-mail'}

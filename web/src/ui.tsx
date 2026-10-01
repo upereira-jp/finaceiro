@@ -27,12 +27,13 @@
 // `PainelDeCriar` (listar antes de criar) e `Recolhido` (o que se confere de vez
 // em quando fica fechado, com o resumo de uma linha a vista).
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode, CSSProperties, KeyboardEvent as EventoDeTecla } from 'react';
 import { lerModo, aplicarModo, type ModoTema } from './tema.ts';
 import { Icone, Logotipo } from './icones.tsx';
 import { ICONE_DO_ESTADO, ICONE_DO_AVISO, type NomeDeIcone, type TomDoSelo } from './iconografia.ts';
 import { PORQUE } from './porques.ts';
+import { tecladoDoCampo, type Teclado } from './teclado.ts';
 
 export { Icone, Logotipo };
 export { ESTILO } from './estilo.ts';
@@ -54,10 +55,41 @@ export { ESTILO } from './estilo.ts';
  * e ler e o ponto. A cor ficou onde chama atencao sem atravancar: a borda e o
  * icone.
  */
-export const Aviso = ({ tipo, children }: { tipo: 'erro' | 'ok' | 'alerta'; children: ReactNode }) => (
-  <div className={`aviso ${tipo}`} role={tipo === 'erro' ? 'alert' : undefined}>
+export const Aviso = ({ tipo, children, vivo = true }: {
+  tipo: 'erro' | 'ok' | 'alerta'; children: ReactNode;
+  /**
+   * [01/10/2026, etapa 5] O AVISO E REGIAO VIVA: o erro com `role="alert"`
+   * (interrompe — a pessoa precisa saber ja), o sucesso e o alerta com
+   * `role="status"` (espera a frase em curso terminar). Ate aqui so o erro
+   * falava; «Cobrança emitida» e «Modelo salvo» apareciam na tela e o leitor
+   * de tela ficava calado.
+   *
+   * `vivo={false}` e para quem JA ESTA dentro de uma regiao viva que existe
+   * antes do texto (o `RetornoDoAto`): duas regioes aninhadas fariam o leitor
+   * anunciar a mesma frase duas vezes.
+   */
+  vivo?: boolean;
+}) => (
+  <div className={`aviso ${tipo}`} role={!vivo ? undefined : tipo === 'erro' ? 'alert' : 'status'}>
     <Icone nome={ICONE_DO_AVISO[tipo]} tamanho={18} peso="bold" />
     <div className="corpo">{children}</div>
+  </div>
+);
+
+/**
+ * O RETORNO DE UM ATO QUE DEU CERTO — «Salvo», «Emitida», «Registrado».
+ *
+ * [01/10/2026, etapa 5] POR QUE UMA CAIXA QUE EXISTE ANTES DO TEXTO. Uma regiao
+ * viva so e anunciada com seguranca quando ela JA ESTAVA no documento e o
+ * conteudo dela muda; um `role="status"` que nasce junto com a frase (o
+ * `{acao.sucesso && <Aviso …>}` de sempre) e anunciado por um leitor de tela e
+ * ignorado por outro. Esta caixa fica montada o tempo todo — vazia, ela e
+ * recortada para fora do layout (`.regiao-viva:empty`) mas continua na arvore
+ * de acessibilidade —, e o aviso entra DENTRO dela.
+ */
+export const RetornoDoAto = ({ texto }: { texto: ReactNode }) => (
+  <div className="regiao-viva" role="status">
+    {texto ? <Aviso tipo="ok" vivo={false}>{texto}</Aviso> : null}
   </div>
 );
 
@@ -138,6 +170,8 @@ function abrirSeletorDeData(el: HTMLInputElement | null): void {
 export function CampoData(p: {
   valor: string; ao: (v: string) => void; rotuloAcessivel?: string;
   mes?: boolean; className?: string; style?: CSSProperties;
+  /** O `id` do input, para um `<label htmlFor>` de fora apontar para ele. */
+  id?: string;
   /**
    * O QUE O CAMPO VAZIO QUER DIZER, escrito no lugar da máscara do navegador.
    * [30/09/2026, etapa 4b] Em Relatórios o mês vazio significa «todos os
@@ -152,7 +186,7 @@ export function CampoData(p: {
   const semValor = Boolean(p.vazio) && !p.valor;
   return (
     <div className={`campo-data${semValor ? ' sem-valor' : ''}${p.className ? ` ${p.className}` : ''}`} style={p.style}>
-      <input ref={ref} type={p.mes ? 'month' : 'date'} value={p.valor}
+      <input ref={ref} id={p.id} type={p.mes ? 'month' : 'date'} value={p.valor}
              aria-label={p.rotuloAcessivel && semValor ? `${p.rotuloAcessivel} — ${p.vazio}` : p.rotuloAcessivel}
              onChange={(e) => p.ao(e.target.value)} />
       {semValor && <span className="campo-data-vazio" aria-hidden="true">{p.vazio}</span>}
@@ -189,10 +223,12 @@ export function Escolha(p: {
   valor: string; ao: (v: string) => void; rotuloAcessivel?: string;
   opcoes: Array<{ valor: string; texto: string }>; primeira?: string;
   desabilitado?: boolean; className?: string;
+  /** O `id` do select, para um `<label htmlFor>` de fora apontar para ele. */
+  id?: string;
 }) {
   return (
     <div className={`campo-caixa${p.className ? ` ${p.className}` : ''}`}>
-      <select value={p.valor} aria-label={p.rotuloAcessivel} disabled={p.desabilitado}
+      <select id={p.id} value={p.valor} aria-label={p.rotuloAcessivel} disabled={p.desabilitado}
               onChange={(e) => p.ao(e.target.value)}>
         {p.primeira !== undefined && <option value="">{p.primeira}</option>}
         {p.opcoes.map((o) => <option key={o.valor} value={o.valor}>{o.texto}</option>)}
@@ -235,25 +271,61 @@ function PorqueDoCampo({ chave, rotulo }: { chave: string; rotulo: string }) {
   );
 }
 
+/**
+ * O CAMPO COM ROTULO.
+ *
+ * [01/10/2026, etapa 5] O ROTULO E LIGADO AO CAMPO por `htmlFor` e `id`
+ * (`useId`), e nao mais so encostado nele. Ate aqui o `<label>` era um irmao
+ * solto: clicar no rotulo nao punha o cursor no campo, e o leitor de tela,
+ * entrando no input, ouvia «editar texto» sem nome — o nome so existia para
+ * quem ve. O select e a data tambem levam o `id`.
+ *
+ * O PORQUE SAIU DE DENTRO DO `<label>` pelo mesmo motivo: o nome acessivel de
+ * um campo e o TEXTO INTEIRO do rotulo ligado a ele, e com o botao la dentro
+ * o campo «Chave Pix» passaria a se chamar «Chave Pix Por que Chave Pix e
+ * pedido». Rotulo e botao agora dividem uma linha (`.campo-rotulo`), lado a
+ * lado como antes.
+ *
+ * O TECLADO DO CELULAR sai do rotulo (`tecladoDoCampo`, em `teclado.ts`):
+ * valor e percentual abrem o teclado com virgula, o CEP o numerico, o CPF ou
+ * CNPJ o de texto em maiuscula (o CNPJ ja tem letra). `teclado` sobrepoe.
+ */
 export function Campo(p: {
   rotulo: string; valor: string; ao: (v: string) => void;
   tipo?: string; dica?: string; opcoes?: Array<{ valor: string; texto: string }>;
   /** O `id` do assunto da ajuda que explica POR QUE este dado e pedido. O texto
    *  sai de `porques.ts`; escrever a explicacao aqui seria a segunda copia. */
   porqueDe?: string;
+  /** O teclado do celular, quando o rotulo nao basta para inferir. */
+  teclado?: Teclado;
+  /** O campo esta errado: o `aria-invalid` e a frase, ligada por
+   *  `aria-describedby`. A frase aparece logo abaixo do campo. */
+  erro?: string | null;
+  /** Mostra e nao deixa editar (o «Provedor» do conector, que so tem um). */
+  somenteLeitura?: boolean;
 }) {
+  const id = useId();
+  const idErro = `${id}-erro`;
+  const teclado = p.teclado ?? tecladoDoCampo(p.rotulo, p.tipo);
   return (
-    <div>
-      <label>
-        {p.rotulo}
-        {p.porqueDe && <PorqueDoCampo chave={p.porqueDe} rotulo={p.rotulo} />}
-      </label>
+    <div className="campo">
+      {p.rotulo && (
+        <div className="campo-rotulo">
+          <label htmlFor={id}>{p.rotulo}</label>
+          {p.porqueDe && <PorqueDoCampo chave={p.porqueDe} rotulo={p.rotulo} />}
+        </div>
+      )}
       {p.opcoes
-        ? <Escolha valor={p.valor} ao={p.ao} opcoes={p.opcoes} primeira="—" rotuloAcessivel={p.rotulo} />
+        ? <Escolha id={id} valor={p.valor} ao={p.ao} opcoes={p.opcoes} primeira="—" rotuloAcessivel={p.rotulo || undefined} />
         : p.tipo === 'date'
-          ? <CampoData valor={p.valor} ao={p.ao} rotuloAcessivel={p.rotulo} />
-          : <input type={p.tipo ?? 'text'} value={p.valor} placeholder={p.dica}
+          ? <CampoData id={id} valor={p.valor} ao={p.ao} rotuloAcessivel={p.rotulo || undefined} />
+          : <input id={id} type={p.tipo ?? 'text'} value={p.valor} placeholder={p.dica}
+                   readOnly={p.somenteLeitura || undefined}
+                   {...teclado}
+                   aria-invalid={p.erro ? true : undefined}
+                   aria-describedby={p.erro ? idErro : undefined}
                    onChange={(e) => p.ao(e.target.value)} />}
+      {p.erro && <p className="campo-erro" id={idErro}>{p.erro}</p>}
     </div>
   );
 }
@@ -446,18 +518,97 @@ export function Recolhido(p: {
   );
 }
 
-export const Tabela = ({ cabecalho, children, vazio }: {
-  cabecalho: ReactNode; children: ReactNode; vazio?: ReactNode;
+/**
+ * A TABELA DE TELA DE TRABALHO — e, abaixo de 720px de largura DELA, a lista de
+ * cartoes.
+ *
+ * [01/10/2026, etapa 5] O PADRAO DA CASA PASSOU A SER DO COMPONENTE. As etapas
+ * 1 e 2 fizeram Contas de luz e Cobrancas virarem cartao no celular, cada uma
+ * com o seu CSS; as outras vinte tabelas continuavam rolando para o lado num
+ * telefone de 390px — Unidades empurrava a PAGINA inteira 433px para fora, e
+ * em Clientes a coluna «Situacao» so aparecia rolando a tabela. Agora toda
+ * `Tabela` vira cartao sozinha:
+ *
+ *   - a medida e a da PROPRIA tabela (`container`), e nao a da janela: com o
+ *     menu lateral aberto, ou numa tabela que divide a linha com outra, e a
+ *     largura dela que decide;
+ *   - cada celula ganha o nome da coluna em `data-rotulo`, tirado do
+ *     cabecalho — escrito uma vez so, e nao repetido em cada `<td>` das
+ *     vinte tabelas. Quem ja escreve o proprio `data-rotulo` nao e sobrescrito;
+ *   - o CSS (`.tabela-cartoes`, em `estilo.ts`) poe a IDENTIFICACAO no alto, a
+ *     SITUACAO e o VALOR logo abaixo e a ACAO no pe, na largura toda. As
+ *     classes `c-id`, `c-sit`, `c-val` e `c-aco` numa celula dizem qual e qual
+ *     quando a ordem das colunas nao diz (em Contas a receber a primeira coluna
+ *     e o vencimento, e quem se procura e o cliente).
+ *
+ * `cartoes={false}` e para as duas tabelas que ja tem cartao proprio, com
+ * grade desenhada coluna a coluna (a fila e as registradas de Contas de luz, e
+ * a do mes em Cobrancas).
+ */
+/** `useLayoutEffect` no navegador (o rotulo chega antes da pintura, sem o
+ *  cartao piscar sem nome) e `useEffect` no render do teste, onde o primeiro
+ *  avisa a cada tabela que nao faz nada no servidor. */
+const useEfeitoDeLayout = typeof window === 'undefined' ? useEffect : useLayoutEffect;
+
+export const Tabela = ({ cabecalho, children, vazio, cartoes = true }: {
+  cabecalho: ReactNode; children: ReactNode; vazio?: ReactNode; cartoes?: boolean;
 }) => {
   const temLinha = Array.isArray(children) ? children.flat().filter(Boolean).length > 0 : Boolean(children);
-  return (
+  const caixa = useRef<HTMLDivElement>(null);
+  /* O ROTULO DE CADA CELULA, a cada render: linha nova (filtro, pagina, linha
+     aberta) nasce sem ele. So escreve onde falta ou mudou — trezentas linhas
+     sao trezentas comparacoes de texto, e nenhuma escrita na maioria das vezes. */
+  useEfeitoDeLayout(() => {
+    if (cartoes && caixa.current) rotularCelulas(caixa.current);
+  });
+  const corpo = (
     <div className="rolagem">
       {temLinha
         ? <table><thead><tr>{cabecalho}</tr></thead><tbody>{children}</tbody></table>
         : <div className="vazio">{vazio ?? 'Nada aqui ainda.'}</div>}
     </div>
   );
+  return cartoes ? <div className="tabela-cartoes" ref={caixa}>{corpo}</div> : corpo;
 };
+
+/**
+ * Escreve `data-rotulo` em cada `<td>` com o texto do `<th>` da mesma coluna.
+ * Exportada para quem monta `<table>` a mao dentro de `.tabela-cartoes`.
+ *
+ * O texto do cabecalho e o VISIVEL: o que esta em `.so-leitor` («Ações»,
+ * «Detalhe») e para o leitor de tela, e no cartao a coluna de botoes nao
+ * precisa de rotulo — o botao diz o que faz. Celula que atravessa colunas
+ * (`colSpan`, a linha de detalhe e a pergunta na linha) nao ganha rotulo.
+ */
+export function rotularCelulas(raiz: HTMLElement): void {
+  const tabela = raiz.querySelector('table');
+  if (!tabela) return;
+  const nomes: string[] = [];
+  for (const th of Array.from(tabela.querySelectorAll<HTMLTableCellElement>('thead tr:first-child > th'))) {
+    let texto = '';
+    for (const no of Array.from(th.childNodes)) {
+      if (no instanceof HTMLElement && no.classList.contains('so-leitor')) continue;
+      texto += no.textContent ?? '';
+    }
+    texto = texto.replace(/\s+/g, ' ').trim();
+    for (let i = 0; i < (th.colSpan || 1); i++) nomes.push(texto);
+  }
+  for (const tr of Array.from(tabela.querySelectorAll<HTMLTableRowElement>('tbody > tr'))) {
+    let coluna = 0;
+    for (const td of Array.from(tr.cells)) {
+      const largura = td.colSpan || 1;
+      /* Rotulo que nao veio daqui (`data-rotulo-auto` ausente) foi escrito no
+         JSX, por quem conhece a coluna melhor que o cabecalho: ele manda. */
+      const proprio = td.hasAttribute('data-rotulo') && !td.hasAttribute('data-rotulo-auto');
+      const nome = nomes[coluna] ?? '';
+      if (largura === 1 && !proprio && td.getAttribute('data-rotulo') !== nome) {
+        td.setAttribute('data-rotulo', nome);
+        td.setAttribute('data-rotulo-auto', '');
+      }
+      coluna += largura;
+    }
+  }
+}
 
 export const linha: CSSProperties = { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' };
 
@@ -649,6 +800,18 @@ export const Ferramentas = ({ children, contagem }: { children: ReactNode; conta
     {contagem && <span className="contagem">{contagem}</span>}
   </div>
 );
+
+// ------------------------------------------------------- o foco preso
+/**
+ * O QUE RECEBE TAB DENTRO DE UMA CAIXA, na ordem do documento e so o que esta
+ * desenhado. [01/10/2026, etapa 5] Saiu do `menu-lateral.tsx` quando a central
+ * de ajuda passou a prender o foco tambem: dois paineis com `aria-modal`, uma
+ * regra so do que conta como focavel.
+ */
+export const focaveis = (raiz: HTMLElement): HTMLElement[] =>
+  Array.from(raiz.querySelectorAll<HTMLElement>(
+    'a[href], button:not([disabled]), select:not([disabled]), input:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])',
+  )).filter((el) => el.getClientRects().length > 0);
 
 // ------------------------------------------------------------------- o menu
 

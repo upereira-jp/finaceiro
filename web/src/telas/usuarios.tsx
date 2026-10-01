@@ -189,11 +189,15 @@ function LinhaDeUsuario({ u, aoMudar }: { u: UsuarioDoTenant; aoMudar: () => voi
           const cx = caixaDoSetor(u, c.chave);
           return (
             <td key={c.chave} className="usuario-coluna-setor">
-              <input type="checkbox" className="caixa"
-                     checked={cx.marcada} disabled={cx.travada || acao.ocupado}
-                     title={cx.motivo ?? undefined}
-                     aria-label={`${c.nome} para ${u.nome}${cx.motivo ? ` — ${cx.motivo}` : ''}`}
-                     onChange={() => void gravar({ setores: alternarSetor(u.setores, c.chave) })} />
+              {/* O "label" em volta e so ALVO (01/10/2026, etapa 5): 24px no
+                  computador, 44 no celular, e o nome continua no aria-label. */}
+              <label className="alvo-caixa">
+                <input type="checkbox" className="caixa"
+                       checked={cx.marcada} disabled={cx.travada || acao.ocupado}
+                       title={cx.motivo ?? undefined}
+                       aria-label={`${c.nome} para ${u.nome}${cx.motivo ? ` — ${cx.motivo}` : ''}`}
+                       onChange={() => void gravar({ setores: alternarSetor(u.setores, c.chave) })} />
+              </label>
             </td>
           );
         })}

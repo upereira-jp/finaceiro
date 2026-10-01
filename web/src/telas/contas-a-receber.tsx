@@ -139,9 +139,19 @@ export function TelaContasAReceber() {
                 <tr key={f.faixa}
                     style={{ cursor: 'pointer', fontWeight: faixa === f.faixa ? 650 : undefined }}
                     onClick={() => setFaixa((atual) => (atual === f.faixa ? '' : f.faixa))}>
-                  <td><Marca tom={f.titulos ? TOM_DA_FAIXA[f.faixa] : 'nao_medido'}>{ROTULO_DA_FAIXA[f.faixa]}</Marca></td>
+                  {/* [01/10/2026, etapa 5] A LINHA CLICÁVEL TEM UM BOTÃO DENTRO: o
+                      clique na linha inteira continua (é o alvo grande do mouse),
+                      e o teclado e o leitor de tela chegam pelo botão, que diz
+                      se o filtro está ligado (`aria-pressed`). O clique do botão
+                      não sobe até a linha — senão o filtro ligaria e desligaria. */}
+                  <td>
+                    <button type="button" className="linha-filtro" aria-pressed={faixa === f.faixa}
+                            onClick={(e) => { e.stopPropagation(); setFaixa((atual) => (atual === f.faixa ? '' : f.faixa)); }}>
+                      <Marca tom={f.titulos ? TOM_DA_FAIXA[f.faixa] : 'nao_medido'}>{ROTULO_DA_FAIXA[f.faixa]}</Marca>
+                    </button>
+                  </td>
                   <td className="num">{f.titulos}</td>
-                  <td className="num">{emReais(f.centavos)}</td>
+                  <td className="num c-val">{emReais(f.centavos)}</td>
                 </tr>
               ))}
             </Tabela>
@@ -160,9 +170,14 @@ export function TelaContasAReceber() {
               {devedores.map((d) => (
                 <tr key={d.cliente_id} style={{ cursor: 'pointer', fontWeight: busca === d.cliente ? 650 : undefined }}
                     onClick={() => setBusca((atual) => (atual === d.cliente ? '' : d.cliente))}>
-                  <td><strong>{d.cliente}</strong></td>
+                  <td>
+                    <button type="button" className="linha-filtro" aria-pressed={busca === d.cliente}
+                            onClick={(e) => { e.stopPropagation(); setBusca((atual) => (atual === d.cliente ? '' : d.cliente)); }}>
+                      <strong>{d.cliente}</strong>
+                    </button>
+                  </td>
                   <td className="num">{d.titulos}</td>
-                  <td className="num" style={{ color: d.vencido_centavos ? 'var(--erro)' : undefined }}>
+                  <td className="num c-val" style={{ color: d.vencido_centavos ? 'var(--erro)' : undefined }}>
                     {emReais(d.vencido_centavos)}
                   </td>
                   <td className="num">{emReais(d.centavos)}</td>
@@ -213,16 +228,16 @@ export function TelaContasAReceber() {
           return (
             <tr key={t.fatura_id}>
               <td>{diaEmBr(t.vencimento)}</td>
-              <td>
+              <td className="c-sit">
                 <Marca tom={TOM_DA_FAIXA[fx]} icone={dias > 0 ? 'vencidas' : undefined}>
                   {fraseDoAtraso(dias)}
                 </Marca>
               </td>
-              <td><strong>{t.cliente}</strong></td>
+              <td className="c-id"><strong>{t.cliente}</strong></td>
               <td>{t.unidade}</td>
               <td>{mesEmBr(t.competencia)}</td>
-              <td className="num">{emReais(t.valor_total_centavos)}</td>
-              <td><Marca tom={TOM_DA_SITUACAO[sit]} icone="boleto">{ROTULO_DA_SITUACAO[sit]}</Marca></td>
+              <td className="num c-val">{emReais(t.valor_total_centavos)}</td>
+              <td className="c-sit"><Marca tom={TOM_DA_SITUACAO[sit]} icone="boleto">{ROTULO_DA_SITUACAO[sit]}</Marca></td>
               <td>
                 {/* Abre Cobrancas JA NO MES da fatura — sem isso a pessoa cai no
                     mes corrente e o titulo antigo some de novo. «Ver em

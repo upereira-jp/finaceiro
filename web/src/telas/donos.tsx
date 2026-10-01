@@ -9,7 +9,7 @@ import { useState } from 'react';
 import { api, type DonoUsina, type Usina } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
-  Pagina, Aviso, Tabela, Campo, Busca, Ferramentas, Filtro, ThOrd, Marca, Icone, DetalheTecnico,
+  Pagina, Aviso, RetornoDoAto, Tabela, Campo, Busca, Ferramentas, Filtro, ThOrd, Marca, Icone, DetalheTecnico,
   useOrdenacao, ordenar, contem, BotaoDeCriar, PainelDeCriar,
 } from '../ui.tsx';
 import { Ligacao } from '../rota.tsx';
@@ -85,11 +85,9 @@ export function TelaDonos() {
           </div>
         </PainelDeCriar>
       )}
-      {!criando && acao.sucesso && (
-        <Aviso tipo="ok">
-          {acao.sucesso} <Ligacao para="/usinas?pendencia=sem_dono">Abrir Usinas</Ligacao>
-        </Aviso>
-      )}
+      <RetornoDoAto texto={!criando && acao.sucesso ? (
+        <>{acao.sucesso} <Ligacao para="/usinas?pendencia=sem_dono">Abrir Usinas</Ligacao></>
+      ) : null} />
 
       {/*
         ÂMBAR E NÃO VERMELHO (30/09/2026, etapa 4a). Usina sem dono é cadastro a
@@ -183,7 +181,7 @@ function LinhaDoDono({ d, aoSalvar }: { d: DonoUsina; aoSalvar: () => void }) {
         <td>{d.nome} <span className="fraco">· {d.natureza.toUpperCase()}</span></td>
         <td className="fraco">{d.documento}</td>
         <td className="fraco">{d.chave_pix ?? d.banco ?? '—'}</td>
-        <td><Marca tom={d.ativo ? 'ok' : 'neutro'}>{d.ativo ? 'Ativo' : 'Inativo'}</Marca></td>
+        <td className="c-sit"><Marca tom={d.ativo ? 'ok' : 'neutro'}>{d.ativo ? 'Ativo' : 'Inativo'}</Marca></td>
         <td>
           <button type="button" onClick={() => setEditando(!editando)}>
             <Icone nome="confirmar" tamanho={14} /> {editando ? 'Fechar' : 'Corrigir'}

@@ -26,7 +26,7 @@ import { PainelDoVinculo } from '../vinculo-do-crm-corpo.tsx';
 import type { VinculoNaTela } from '../vinculo-do-crm.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
-  Pagina, Aviso, Tabela, Busca, Campo, Ferramentas, Filtro, ThOrd, Marca, BotaoDeIcone,
+  Pagina, Aviso, RetornoDoAto, Tabela, Busca, Campo, Ferramentas, Filtro, ThOrd, Marca, BotaoDeIcone,
   CampoData, Icone, useOrdenacao, ordenar, contem, rotulo, DetalheTecnico,
 } from '../ui.tsx';
 import {
@@ -305,7 +305,7 @@ export function TelaUnidades() {
         </Aviso>
       )}
       {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
-      {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
+      <RetornoDoAto texto={acao.sucesso} />
       {ucs.erro && <Aviso tipo="erro">{ucs.erro}</Aviso>}
 
       {/* A contagem diz as DUAS coisas. "41 de 41" escondia que so 29 faturam, e
@@ -367,7 +367,7 @@ export function TelaUnidades() {
                 {usina ? <> · usina {usina}</> : null}
               </div>
             </td>
-            <td>
+            <td className="c-sit">
               <Marca tom={TOM_DA_SITUACAO[situacaoDaUc(u)]} icone={ICONE_DA_SITUACAO[situacaoDaUc(u)]}>
                 {ROTULO_DA_SITUACAO[situacaoDaUc(u)]}
               </Marca>
@@ -420,7 +420,7 @@ export function TelaUnidades() {
                 {/* O id `endereco-<uc>` e o do destino de «Completar o endereço»
                     (Cobranças): o foco cai no primeiro campo vazio DAQUI. */}
                 <div id={`endereco-${u.id}`}>
-                  <h4 className="detalhe-tit">Endereço do pagador</h4>
+                  <h2 className="detalhe-tit">Endereço do pagador</h2>
                   <EnderecoDoPagador uc={u} ocupado={acao.ocupado}
                                      daConta={daConta.dado?.find((c) => c.numero_uc === u.numero_uc)}
                                      aoGravar={(campos) => void salvarEndereco(u, campos)} />
@@ -479,10 +479,13 @@ function UsinaEPreco(p: {
   const { uc } = p;
   return (
     <div className="detalhe-bloco">
-      <h4 className="detalhe-tit">Usina e preço</h4>
+      {/* [01/10/2026, etapa 5] Os títulos do detalhe são h2: a página não tem
+          outro h2 antes da tabela, e o h4 de antes era um salto de dois níveis
+          para quem navega por títulos. O desenho é o mesmo (".detalhe-tit"). */}
+      <h2 className="detalhe-tit">Usina e preço</h2>
       <div className="campos detalhe-campos">
         <div>
-          <label>Usina</label>
+          <p className="rotulo-solto">Usina</p>
           <p className="detalhe-valor">
             {p.usina ?? <span className="uc-falta-lista"><Icone nome="a_fazer" tamanho={13} peso="bold" /> Sem usina — ela vem do outro sistema</span>}
           </p>
@@ -490,7 +493,7 @@ function UsinaEPreco(p: {
         <div>
           <label htmlFor={`fatia-${uc.id}`}>Fatia do cliente (%)</label>
           <div className="inline">
-            <input id={`fatia-${uc.id}`} value={p.rateio}
+            <input id={`fatia-${uc.id}`} value={p.rateio} inputMode="decimal" autoComplete="off"
                    onChange={(e) => p.aoMudarRateio(e.target.value)}
                    placeholder="Ex. 12,5" style={{ width: 96, textAlign: 'right' }} />
             <BotaoDeIcone icone="confirmar" rotulo={`Gravar a fatia da unidade ${uc.numero_uc}`}
@@ -500,7 +503,7 @@ function UsinaEPreco(p: {
         <div>
           <label htmlFor={`tarifa-${uc.id}`}>Tarifa R$/kWh</label>
           <div className="inline">
-            <input id={`tarifa-${uc.id}`} value={p.tarifa}
+            <input id={`tarifa-${uc.id}`} value={p.tarifa} inputMode="decimal" autoComplete="off"
                    onChange={(e) => p.aoMudarTarifa(e.target.value)}
                    placeholder="Ex. 1,185396" style={{ width: 116, textAlign: 'right' }} />
             <BotaoDeIcone icone="confirmar" rotulo={`Gravar a tarifa da unidade ${uc.numero_uc}`}
@@ -508,7 +511,7 @@ function UsinaEPreco(p: {
           </div>
         </div>
         <div>
-          <label>Distribuidora</label>
+          <p className="rotulo-solto">Distribuidora</p>
           <p className="detalhe-valor">{uc.distribuidora}</p>
         </div>
       </div>
@@ -699,7 +702,7 @@ function VinculoComOutroSistema({ ucId, aoDestravar }: { ucId: string; aoDestrav
   return (
     <>
       {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
-      {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
+      <RetornoDoAto texto={acao.sucesso} />
       <PainelDoVinculo dados={vinculo.dado} carregando={vinculo.carregando} erro={vinculo.erro}
                        destravar={() => setPerguntando(true)} ocupado={acao.ocupado}
                        pergunta={perguntando && (

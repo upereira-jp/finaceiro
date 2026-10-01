@@ -49,6 +49,7 @@ import { CAMPOS_DA_FATURA_VAZIOS, type RegistroDeFatura } from '../src/api.ts';
 import { filtrarRegistradas } from '../src/registradas-regras.ts';
 import { RevisaoDaSerie, RecusaNaTela, ResumoDaBaixa, SituacaoDaCobranca } from '../src/emissao-corpo.tsx';
 import { PerguntaNaTela } from '../src/serie.tsx';
+import { Campo, Aviso, RetornoDoAto, Tabela, Pagina } from '../src/ui.tsx';
 import { lerRecusa, recusaPrevista } from '../src/emissao-regras.ts';
 
 let falhas = 0;
@@ -1313,6 +1314,73 @@ const LEITURA_VAZIA = {
   chk('R28h', /<nav class="lateral-nav" aria-label="Financeiro Empresa"/.test(empresa)
           && /class="lateral-passos" aria-hidden="true"[^>]*>5</.test(empresa) && />Caixa</.test(empresa) && />Apoio</.test(empresa),
       'na Empresa: Caixa e Apoio, e Contas a pagar mostra o passo 5 — o fim do mes do Rateio');
+}
+
+// ============================================================================
+// R29 — celular e acessibilidade, o que o HTML montado prova (01/10/2026, etapa 5)
+// ============================================================================
+//
+// O que nao depende de efeito nem de navegador: o rotulo LIGADO ao campo, o
+// papel de cada aviso, a regiao viva que existe antes da frase, a tabela que
+// sabe virar cartao, a hierarquia de titulos do painel de ajuda e o lugar do
+// botao da ajuda na ordem do Tab. A rotulagem de cada celula (`data-rotulo`) e
+// efeito e e medida no navegador — `harness/medir-etapa5.mjs`.
+{
+  const texto = renderToStaticMarkup(<Campo rotulo="Valor (R$)" valor="12,50" ao={() => {}} />);
+  const data = renderToStaticMarkup(<Campo rotulo="Vencimento" valor="2026-10-01" ao={() => {}} tipo="date" />);
+  const lista = renderToStaticMarkup(<Campo rotulo="Natureza" valor="pf" ao={() => {}}
+                                            opcoes={[{ valor: 'pf', texto: 'Pessoa física' }]} />);
+  const comPorque = renderToStaticMarkup(<Campo rotulo="Chave Pix" porqueDe="dono-usina" valor="" ao={() => {}} />);
+  const idDe = (h: string) => /<label for="([^"]+)"/.exec(h)?.[1] ?? '';
+  chk('R29a', [texto, data, lista, comPorque].every((h) => idDe(h) !== '' && h.includes(`id="${idDe(h)}"`)),
+      'todo Campo tem <label for> apontando para o id do proprio controle — texto, data, lista e o com «por que»');
+  chk('R29b', /<input id="[^"]+" type="date"/.test(data) && /<select id="[^"]+"/.test(lista) && /<input id="[^"]+" type="text"/.test(texto),
+      'o id esta no CONTROLE (o input da data, o select da lista), e nao numa caixa em volta');
+  const rotuloDoPorque = /<label for="[^"]+">([\s\S]*?)<\/label>/.exec(comPorque)?.[1] ?? '';
+  chk('R29c', rotuloDoPorque === 'Chave Pix' && /class="campo-rotulo"/.test(comPorque) && comPorque.includes('campo-porque-botao'),
+      `o botao do «por que» mora FORA do <label> — o nome do campo e so «Chave Pix» (veio: «${rotuloDoPorque}»)`);
+  chk('R29d', /inputmode="decimal"/i.test(texto) && /autocomplete="off"/i.test(texto),
+      'o campo de valor pede o teclado com virgula e nao oferece o preenchimento automatico');
+  const errado = renderToStaticMarkup(<Campo rotulo="Multa após vencer (%)" valor="1.234" ao={() => {}} erro="Escreva 1,234 ou 1234." />);
+  const idErro = /aria-describedby="([^"]+)"/.exec(errado)?.[1] ?? '';
+  chk('R29e', /aria-invalid="true"/.test(errado) && idErro !== '' && errado.includes(`<p class="campo-erro" id="${idErro}">`),
+      'o campo recusado leva aria-invalid e a frase ligada por aria-describedby, logo abaixo dele');
+
+  const erro = renderToStaticMarkup(<Aviso tipo="erro">Falhou</Aviso>);
+  const ok = renderToStaticMarkup(<Aviso tipo="ok">Salvo</Aviso>);
+  const alerta = renderToStaticMarkup(<Aviso tipo="alerta">Cuidado</Aviso>);
+  chk('R29f', /role="alert"/.test(erro) && /role="status"/.test(ok) && /role="status"/.test(alerta),
+      'o aviso de erro e role=alert; o de sucesso e o de alerta sao role=status — os tres falam com o leitor de tela');
+  const vazio = renderToStaticMarkup(<RetornoDoAto texto={null} />);
+  const cheio = renderToStaticMarkup(<RetornoDoAto texto="Cobrança emitida." />);
+  chk('R29g', vazio === '<div class="regiao-viva" role="status"></div>'
+          && /^<div class="regiao-viva" role="status"><div class="aviso ok">/.test(cheio) && !/class="aviso ok" role=/.test(cheio),
+      'o retorno de um ato e uma regiao viva que JA EXISTE vazia; com a frase, o aviso entra dentro dela sem segundo role');
+
+  const tab = renderToStaticMarkup(
+    <Tabela cabecalho={<><th>Nome</th><th>Situação</th></>}><tr><td>Ana</td><td>Ativa</td></tr></Tabela>);
+  const semCartao = renderToStaticMarkup(
+    <Tabela cartoes={false} cabecalho={<th>Nome</th>}><tr><td>Ana</td></tr></Tabela>);
+  chk('R29h', /^<div class="tabela-cartoes"><div class="rolagem"><table>/.test(tab) && /^<div class="rolagem"><table>/.test(semCartao),
+      'toda Tabela nasce dentro da caixa que vira cartao; cartoes={false} e so para as duas com cartao proprio');
+
+  const ajuda = renderToStaticMarkup(
+    <CorpoDaAjuda rota="/clientes" passos={[]} carregando={false} falhou={false} mes={null} aoFechar={() => {}} ir={() => {}} />);
+  const niveis = [...ajuda.matchAll(/<h([1-6])\b/g)].map((m) => Number(m[1]));
+  chk('R29i', niveis[0] === 2 && niveis.slice(1).every((n) => n === 3) && /role="dialog" aria-modal="true"/.test(ajuda)
+          && /<h2 class="ajuda-titulo"[^>]*>/.test(ajuda),
+      `o painel de ajuda abre com h2 («Ajuda») e as secoes sao h3 — sem salto (veio: ${niveis.join(' → ')})`);
+
+  const casca = renderToStaticMarkup(
+    <MenuLateral funil={FUNIS[0]!} visiveis={FUNIS} tela={telaDoCaminho('/clientes')} pe={() => null}
+                 ajuda={<button type="button" className="primario ajuda-gatilho">?</button>}>
+      <Pagina titulo="Clientes"><p>conteudo</p></Pagina>
+    </MenuLateral>);
+  const iFaixa = casca.indexOf('class="faixa-celular"');
+  const iAjuda = casca.indexOf('ajuda-gatilho');
+  const iMain = casca.indexOf('<main');
+  chk('R29j', iFaixa > 0 && iAjuda > iFaixa && iMain > iAjuda,
+      'o botao da ajuda fica entre a faixa do celular e o conteudo: a ordem do Tab bate com a vista nas duas larguras');
 }
 
 export const resultado = () => ({ falhas, feitas });

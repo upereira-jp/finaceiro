@@ -19,7 +19,7 @@
 // sairam do `.tsx` no mesmo dia. Era a condicao para a regra 8 alcancar a camada
 // de apresentacao, que e onde ela nunca tinha chegado neste projeto.
 
-import { ESTILO } from '../src/estilo.ts';
+import { ESTILO, MENU_VIRA_GAVETA } from '../src/estilo.ts';
 import { VARIAVEIS_CSS, TIPOGRAFIA, RITMO } from '../src/tema.ts';
 import {
   ICONES_QUE_SE_MOVEM, ICONE_DO_ESTADO, ICONE_DO_AVISO, ICONE_DO_STATUS_DA_FATURA, TONS_DO_SELO,
@@ -1131,6 +1131,52 @@ chk('I9g', ABAS.every((a) => (ROTULO_DA_ABA[a] ?? '').trim() !== ''),
       && doAperto.every((r) => !/faixa-pgto-(barras|qr|linha|codigo)|font-size/.test(r)),
       'nenhum degrau toca codigo de barras, QR, linha digitavel nem copia-e-cola, e nenhum reduz '
       + 'corpo de letra — compactar e espacamento e entrelinha');
+}
+
+// ------------------------------------------ I12 celular e acessibilidade (01/10/2026, etapa 5)
+//
+// O que a etapa 5 prometeu no CSS e que um ajuste distraido desfaz sem nenhum
+// teste de tela perceber: a tabela vira cartao pela largura DELA, o alvo de
+// toque e de 44px no celular, a regiao viva vazia continua na arvore de
+// acessibilidade, e o botao da ajuda sobe para a faixa do topo onde ela existe.
+{
+  const LIMPO = REGRAS.replace(/\/\*[\s\S]*?\*\//g, '');
+  const bloco = (abre: string): string => {
+    const i = LIMPO.indexOf(abre);
+    if (i < 0) return '';
+    let n = 0;
+    for (let j = LIMPO.indexOf('{', i); j < LIMPO.length; j++) {
+      if (LIMPO[j] === '{') n++;
+      else if (LIMPO[j] === '}' && --n === 0) return LIMPO.slice(i, j + 1);
+    }
+    return '';
+  };
+  chk('I12a', /\.tabela-cartoes\s*\{\s*container:\s*tabela \/ inline-size;/.test(LIMPO)
+      && bloco('@container tabela (max-width: 720px)').includes('.tabela-cartoes tbody > tr {'),
+      'a tabela e um container e vira cartao abaixo de 720px DELA — com o menu aberto, recolhido ou na gaveta');
+  const cartao = bloco('@container tabela (max-width: 720px)');
+  chk('I12b', /td\[data-rotulo\]:not\(\[data-rotulo=""\]\)::before\s*\{[^}]*content:\s*attr\(data-rotulo\)/.test(cartao)
+      && /td\.c-aco/.test(cartao) && /td\.c-sit/.test(cartao) && /td\.c-val/.test(cartao) && /td\.c-id/.test(cartao)
+      && /min-width:\s*0 !important/.test(cartao),
+      'no cartao cada celula leva o nome da coluna, ha lugar para identificacao, situacao, valor e acao, e a '
+      + 'largura escrita na celula deixa de empurrar o cartao para fora do telefone');
+  const celular = bloco('@media (max-width: 720px) {\n    button:not(');
+  chk('I12c', /min-height:\s*44px/.test(celular) && /button\.so-icone[^{]*\{[^}]*min-width:\s*44px/.test(celular)
+      && /font-size:\s*16px/.test(celular),
+      'no celular todo botao tem 44px, o so-icone 44 nos dois lados, e o campo fica em 16px (o Safari nao da zoom)');
+  chk('I12d', /\.regiao-viva:empty\s*\{[^}]*clip-path:\s*inset\(50%\)/.test(LIMPO)
+      && !/\.regiao-viva:empty\s*\{[^}]*display:\s*none/.test(LIMPO),
+      'a regiao viva vazia e RECORTADA, e nao display:none — sumida da arvore ela nao anunciaria a frase que chega');
+  const faixa = bloco(`@media (max-width: ${MENU_VIRA_GAVETA - 0.02}px) {\n    .faixa-celular-linha { padding-right`);
+  chk('I12e', /\.ajuda-gatilho\s*\{[^}]*top:\s*6px[^}]*bottom:\s*auto[^}]*width:\s*44px/.test(faixa)
+      && /\.ajuda-balao\s*\{[^}]*top:/.test(faixa) && /\.ajuda-gatilho\s*\{[^}]*right:\s*22px;\s*bottom:\s*22px/.test(LIMPO),
+      'no computador o botao da ajuda fica no canto de baixo (pedido de 21/08); onde ha a faixa do topo, ele sobe '
+      + 'para ela com 44px, e o balao desce dele');
+  chk('I12f', /th \.ordenar\s*\{\s*min-height:\s*24px/.test(LIMPO) && /\.campo-porque-botao\s*\{\s*width:\s*24px;\s*height:\s*24px/.test(LIMPO)
+      && /\.ajuda-balao-x\s*\{\s*width:\s*24px;\s*height:\s*24px/.test(LIMPO),
+      'em qualquer largura nada se aperta com menos de 24px: a seta de ordenar, o porque do campo e o x do balao');
+  chk('I12g', /\.rolagem\s*\{[^}]*position:\s*relative/.test(LIMPO),
+      'a rolagem e posicionada — o recorte do leitor de tela dentro dela nao escapa e nao empurra a pagina');
 }
 
 console.log();

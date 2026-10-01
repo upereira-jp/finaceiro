@@ -40,7 +40,7 @@ import { api, type Contrato, type UnidadeConsumidora, type Originador, type Clie
   type VendedorDoCrm } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
-  Pagina, Aviso, Tabela, Campo, ThOrd, Marca, Icone, useOrdenacao, ordenar, rotulo, Escolha, linha,
+  Pagina, Aviso, RetornoDoAto, Tabela, Campo, ThOrd, Marca, Icone, useOrdenacao, ordenar, rotulo, Escolha, linha,
   BotaoDeCriar, PainelDeCriar,
 } from '../ui.tsx';
 import type { TomDoSelo } from '../iconografia.ts';
@@ -215,7 +215,7 @@ export function TelaContratos() {
           </div>
         </PainelDeCriar>
       )}
-      {!criando && acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
+      <RetornoDoAto texto={!criando && acao.sucesso} />
 
       {vigentes.erro && <Aviso tipo="erro">{vigentes.erro}</Aviso>}
       <Tabela cabecalho={<>
@@ -315,7 +315,7 @@ function LinhaDoContrato({ k, uc, aoMudar }: { k: Contrato; uc: string; aoMudar:
       <tr>
         <td><strong>{uc}</strong></td>
         <td className="fraco">{diaEmBr(k.data_fechamento)}</td>
-        <td><Marca tom={tomDoContrato(k.status)}>{rotulo(k.status)}</Marca></td>
+        <td className="c-sit"><Marca tom={tomDoContrato(k.status)}>{rotulo(k.status)}</Marca></td>
         <td className="num">{k.faturas_cheias_pagas}</td>
         <td>
           <div style={{ ...linha, gap: 6 }}>
@@ -351,7 +351,10 @@ function LinhaDoContrato({ k, uc, aoMudar }: { k: Contrato; uc: string; aoMudar:
         </tr>
       )}
       {acao.erro && <tr><td colSpan={5}><Aviso tipo="erro">{acao.erro}</Aviso></td></tr>}
-      {acao.sucesso && <tr><td colSpan={5}><Aviso tipo="ok">{acao.sucesso}</Aviso></td></tr>}
+      {/* A LINHA DO RETORNO EXISTE SEMPRE (01/10/2026, etapa 5): vazia, ela nao
+          ocupa altura; e e por existir antes da frase que o leitor de tela
+          anuncia «Contrato suspenso» — ver "RetornoDoAto". */}
+      <tr className="linha-retorno"><td colSpan={5}><RetornoDoAto texto={acao.sucesso} /></td></tr>
     </>
   );
 }
@@ -407,7 +410,7 @@ function QuemEQuemNoOutroSistema({ originadores, aoCasar }: {
 
   return (
     <div>
-      <button type="button" onClick={() => setAberto(!aberto)} aria-expanded={aberto}>
+      <button type="button" className="botao-frase" onClick={() => setAberto(!aberto)} aria-expanded={aberto}>
         <Icone nome={aberto ? 'ordem_crescente' : 'ordem_decrescente'} tamanho={15} />{' '}
         Quem é quem no outro sistema
         {semCasar > 0 && originadores.length > 0 && (
@@ -442,7 +445,12 @@ function QuemEQuemNoOutroSistema({ originadores, aoCasar }: {
                   )}
                 </td>
                 <td>
-                  <Campo rotulo="" valor={o.crm_user_id ?? ''}
+                  {/* [01/10/2026, etapa 5] O SELETOR TEM NOME: era um `Campo` de
+                      rótulo vazio, e o leitor de tela ouvia «caixa de seleção»
+                      sem dizer de quem. O cabeçalho da coluna não chega a ele
+                      linha por linha. */}
+                  <Escolha rotuloAcessivel={`Quem é ${o.nome} no outro sistema`} primeira="—"
+                         valor={o.crm_user_id ?? ''}
                          ao={(v) => void casar(o, v)}
                          opcoes={[
                            { valor: '', texto: '— ninguém ainda —' },
@@ -465,7 +473,7 @@ function QuemEQuemNoOutroSistema({ originadores, aoCasar }: {
           </Tabela>
 
           {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
-          {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
+          <RetornoDoAto texto={acao.sucesso} />
         </div>
       )}
     </div>
@@ -523,7 +531,7 @@ function NovoOriginador({ aoCriar }: { aoCriar: () => void }) {
         <button type="button" onClick={() => { acao.limpar(); setAberto(true); }}>
           <Icone nome="acrescentar" tamanho={15} /> Cadastrar quem traz clientes
         </button>
-        {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
+        <RetornoDoAto texto={acao.sucesso} />
       </>
     );
   }
@@ -537,7 +545,7 @@ function NovoOriginador({ aoCriar }: { aoCriar: () => void }) {
                dica="O dígito é conferido ao gravar" />
         <label>
           Pessoa
-          <Escolha rotuloAcessivel="Pessoa física ou jurídica" valor={natureza} ao={setNatureza}
+          <Escolha rotuloAcessivel="Pessoa (física ou jurídica)" valor={natureza} ao={setNatureza}
                    opcoes={[{ valor: 'pf', texto: 'Pessoa física' },
                             { valor: 'pj', texto: 'Pessoa jurídica' }]} />
         </label>
@@ -557,7 +565,7 @@ function NovoOriginador({ aoCriar }: { aoCriar: () => void }) {
         a contagem de meses cheios. Confira antes de gravar.
       </p>
       {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
-      {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
+      <RetornoDoAto texto={acao.sucesso} />
       <div style={{ display: 'flex', gap: 8 }}>
         <button className="primario" onClick={() => void criar()} disabled={acao.ocupado}>
           <Icone nome="confirmar" tamanho={15} peso="bold" /> Cadastrar

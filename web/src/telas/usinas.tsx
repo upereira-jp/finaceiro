@@ -10,7 +10,7 @@ import { api, type Usina, type DonoUsina, type RegraRepasse } from '../api.ts';
 import { usinaNoCrm } from '../crm.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
-  Pagina, Aviso, Tabela, Campo, Busca, Ferramentas, Filtro, ThOrd, Marca, Escolha, Icone,
+  Pagina, Aviso, RetornoDoAto, Tabela, Campo, Busca, Ferramentas, Filtro, ThOrd, Marca, Escolha, Icone,
   useOrdenacao, ordenar, contem, rotulo, linha, CampoData, BotaoDeCriar, PainelDeCriar,
 } from '../ui.tsx';
 import { naMensagem } from '../arquivo.ts';
@@ -144,7 +144,7 @@ export function TelaUsinas() {
       )}
 
       {!criando && acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
-      {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
+      <RetornoDoAto texto={acao.sucesso} />
       {usinas.erro && <Aviso tipo="erro">{usinas.erro}</Aviso>}
 
       <Ferramentas contagem={todas.length ? `${visiveis.length} de ${todas.length}` : undefined}>
@@ -209,7 +209,7 @@ export function TelaUsinas() {
                        primeira="— Sem dono (bloqueia o repasse)"
                        opcoes={(donos.dado ?? []).map((d) => ({ valor: d.id, texto: d.nome }))} />
             </td>
-            <td><Marca tom={u.status === 'ativa' ? 'ok' : 'neutro'}>{rotulo(u.status)}</Marca></td>
+            <td className="c-sit"><Marca tom={u.status === 'ativa' ? 'ok' : 'neutro'}>{rotulo(u.status)}</Marca></td>
           </tr>
         ))}
       </Tabela>
@@ -316,8 +316,8 @@ function GeracaoLancada({ usinas }: { usinas: Usina[] }) {
     <div className="cartao secao">
       <div style={{ ...linha, gap: 12, marginBottom: 8 }}>
         <div>
-          <label>Geração lançada em</label>
-          <CampoData mes valor={mes} ao={setMes} rotuloAcessivel="Competência da geração"
+          <label htmlFor="geracao-mes">Geração lançada em</label>
+          <CampoData id="geracao-mes" mes valor={mes} ao={setMes}
                      style={{ width: 'auto' }} />
         </div>
       </div>

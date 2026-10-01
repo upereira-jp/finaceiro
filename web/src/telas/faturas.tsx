@@ -69,7 +69,7 @@ import {
 } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
-  Pagina, Aviso, Tabela, Marca, rotulo, linha, useOrdenacao, ordenar, ThOrd, Kpi,
+  Pagina, Aviso, RetornoDoAto, Tabela, Marca, rotulo, linha, useOrdenacao, ordenar, ThOrd, Kpi,
   Icone, CampoData, Carregando, AjudaDoMes, DetalheTecnico, Menu } from '../ui.tsx';
 import { competenciaISO, emReais, paraCentavos, mesDaQuery, kwhEmBr, centavosParaCampo } from '../dinheiro.ts';
 import { paraCsv, reaisParaPlanilha, nomeDoArquivo } from '../csv.ts';
@@ -453,9 +453,9 @@ export function TelaFaturas() {
           os governa. */}
       <div className="cartao secao em-mes">
         <div className="em-mes-campo">
-          <label>Mês de referência</label>
+          <label htmlFor="mes-da-tela">Mês de referência</label>
           {mes
-            ? <CampoData mes valor={mes} ao={escolherMes} rotuloAcessivel="Mês de referência" style={{ width: 'auto' }} />
+            ? <CampoData id="mes-da-tela" mes valor={mes} ao={escolherMes} style={{ width: 'auto' }} />
             : <span className="em-mes-procurando">Procurando…</span>}
           <AjudaDoMes />
         </div>
@@ -536,7 +536,7 @@ export function TelaFaturas() {
         </p>
 
         {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
-        {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
+        <RetornoDoAto texto={acao.sucesso} />
         {!revisando && avisoDaTarifa}
 
         {revisando === 'emitir' && mes && (
@@ -578,7 +578,9 @@ export function TelaFaturas() {
         )}
 
         <div className="em-tabela">
-          <Tabela cabecalho={<>
+          {/* `cartoes={false}`: o cartao desta tabela e o da etapa 2, medido na
+              propria tabela ("@container" do ".em-tabela"). */}
+          <Tabela cartoes={false} cabecalho={<>
                     <th className="c-abrir"><span className="so-leitor">Abrir</span></th>
                     <ThOrd chave="uc" ordem={ordem} ao={alternar}>Unidade</ThOrd>
                     <ThOrd chave="acao" ordem={ordem} ao={alternar}>Situação</ThOrd>
@@ -1127,7 +1129,7 @@ function PainelDaFatura({ f, unidade, uc, mes, daSessao, ultimoErroDaLista, pedi
       )}
 
       {!conferindoBaixa && !cancelandoBoleto && acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
-      {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
+      <RetornoDoAto texto={acao.sucesso} />
     </div>
   );
 }
@@ -1330,7 +1332,7 @@ function ImportarBoleto({ fatura, aoImportar }: { fatura: Fatura; aoImportar: ()
       </div>
 
       {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
-      {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
+      <RetornoDoAto texto={acao.sucesso} />
     </div>
   );
 }

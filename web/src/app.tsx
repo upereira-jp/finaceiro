@@ -277,7 +277,31 @@ export function App() {
         manda escolher ali.
       */}
       <MenuLateral funil={funil} visiveis={visiveis} tela={tela} pe={pe}
-                   forcarAberto={varios && !s.tenantId}>
+                   forcarAberto={varios && !s.tenantId}
+                   ajuda={
+                     /*
+                       O BOTAO DA AJUDA e o balao que ensina que ele existe. Ele
+                       NAO e `lazy`: precisa estar em toda tela desde o primeiro
+                       desenho, porque quem trava nao sabe que vai travar. O que
+                       chega sob demanda e o painel — a base de assuntos e o
+                       glossario inteiro.
+
+                       ONDE ELE APARECE e do CSS: no canto inferior direito no
+                       computador (pedido do dono, 21/08), na faixa do topo no
+                       celular (01/10, etapa 5). O DOM e um so, entre a faixa e
+                       o conteudo — ver `ajuda` em `menu-lateral.tsx`.
+
+                       O BALAO SO APARECE COM EMPRESA ESCOLHIDA. Sem ela a tela
+                       ja mostra um aviso pedindo para escolher, e dois avisos ao
+                       mesmo tempo fazem a pessoa ler o menos importante primeiro.
+                     */
+                     <GatilhoDeAjuda
+                       aberta={ajudaAberta}
+                       aoAbrir={() => { setTopicoDaAjuda(null); setAjudaAberta(true); encerrarAviso(); }}
+                       aviso={avisoDaAjuda && Boolean(s.tenantId)}
+                       aoFecharAviso={encerrarAviso}
+                     />
+                   }>
         {destino ? (
           <Carregando texto="Abrindo o seu setor…" />
         ) : !s.tenantId ? (
@@ -291,23 +315,6 @@ export function App() {
           </Suspense>
         )}
       </MenuLateral>
-
-      {/*
-        O BOTAO DA AJUDA, no canto inferior direito, e o balao que ensina que ele
-        existe. Ele NAO e `lazy`: precisa estar em toda tela desde o primeiro
-        desenho, porque quem trava nao sabe que vai travar. O que chega sob
-        demanda e o painel — a base de assuntos e o glossario inteiro.
-
-        O BALAO SO APARECE COM EMPRESA ESCOLHIDA. Sem ela a tela ja mostra um
-        aviso pedindo para escolher, e dois avisos ao mesmo tempo fazem a pessoa
-        ler o menos importante primeiro.
-      */}
-      <GatilhoDeAjuda
-        aberta={ajudaAberta}
-        aoAbrir={() => { setTopicoDaAjuda(null); setAjudaAberta(true); encerrarAviso(); }}
-        aviso={avisoDaAjuda && Boolean(s.tenantId)}
-        aoFecharAviso={encerrarAviso}
-      />
 
       {/* Sem `fallback` visivel: o painel chega em milissegundos e um spinner
           piscando por cima da pagina seria mais ruido do que espera. */}

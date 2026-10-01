@@ -39,7 +39,7 @@
 //                    aquilo pelo menos APARECE, com o rótulo dizendo isso.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Icone, Carregando, Busca } from './ui.tsx';
+import { Icone, Carregando, Busca, focaveis } from './ui.tsx';
 import {
   responder, topicosDaTela, topicosComuns, TOPICOS,
   type Caminho, type Topico, type PassoDoEstado,
@@ -93,14 +93,48 @@ export function CorpoDaAjuda(p: CorpoDaAjuda) {
   const comuns = useMemo(() => topicosComuns(), []);
 
   /* Esc fecha, e o foco entra na busca. São as duas coisas que um painel que
-   * cobre a tela deve a quem não usa mouse. */
+   * cobre a tela deve a quem não usa mouse.
+   *
+   * [01/10/2026, etapa 5] E O `aria-modal` PASSOU A SER CUMPRIDO, e não só
+   * declarado: o Tab dá a volta dentro do painel (antes ele saía para a tela
+   * de trás, coberta pelo véu, e o foco sumia de vista), e ao fechar o foco
+   * VOLTA a quem abriu — o botão da ajuda, ou o «Como ler esta lista» da tela
+   * Mês. Antes ele caía no `body`, e o próximo Tab recomeçava do alto da
+   * página. O mesmo desenho da gaveta de Contas de luz (`GavetaDaConta`).
+   *
+   * `aoFechar` mora numa referência: quem chama passa uma função nova a cada
+   * render, e reinstalar o efeito a cada tecla devolveria o foco à busca no
+   * meio da digitação. */
+  const fechar = useRef(p.aoFechar);
+  fechar.current = p.aoFechar;
   const aoFechar = p.aoFechar;
   useEffect(() => {
-    const tecla = (e: KeyboardEvent) => { if (e.key === 'Escape') aoFechar(); };
+    const quemAbriu = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const tecla = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.preventDefault(); fechar.current(); return; }
+      if (e.key !== 'Tab' || !caixa.current) return;
+      const lista = focaveis(caixa.current);
+      if (lista.length === 0) return;
+      const primeiro = lista[0]!;
+      const ultimo = lista[lista.length - 1]!;
+      const dentro = caixa.current.contains(document.activeElement);
+      if (e.shiftKey && (!dentro || document.activeElement === primeiro)) { e.preventDefault(); ultimo.focus(); }
+      else if (!e.shiftKey && (!dentro || document.activeElement === ultimo)) { e.preventDefault(); primeiro.focus(); }
+    };
     addEventListener('keydown', tecla);
     caixa.current?.querySelector('input')?.focus();
-    return () => removeEventListener('keydown', tecla);
-  }, [aoFechar]);
+    return () => {
+      removeEventListener('keydown', tecla);
+      /* Quem abriu pode ter saído da tela (ir para outra tela fecha o painel):
+         aí o foco vai ao botão da ajuda, que existe em toda tela. Um frame
+         depois, para o painel já ter saído do documento. */
+      requestAnimationFrame(() => {
+        const destino = quemAbriu && quemAbriu.isConnected && quemAbriu !== document.body
+          ? quemAbriu : document.querySelector<HTMLElement>('.ajuda-gatilho');
+        destino?.focus();
+      });
+    };
+  }, []);
 
   /* O ASSUNTO PEDIDO DE DENTRO DA TELA APARECE, e não só abre: expandido lá
      embaixo, abaixo do estado do mês, ele ficaria fora da vista de quem clicou
@@ -117,9 +151,13 @@ export function CorpoDaAjuda(p: CorpoDaAjuda) {
       <aside className="ajuda-painel" ref={caixa}
              role="dialog" aria-modal="true" aria-label="Central de ajuda">
         <header className="ajuda-topo">
-          <strong style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          {/* [01/10/2026, etapa 5] O NOME DO PAINEL É TÍTULO (h2), e as
+              seções abaixo são h3: dentro do diálogo a hierarquia recomeça
+              logo abaixo do h1 da página. Era um `<strong>`, e o leitor de
+              tela que navega por títulos caía direto num h3. */}
+          <h2 className="ajuda-titulo" id="ajuda-titulo">
             <Icone nome="ajuda" tamanho={19} peso="fill" /> Ajuda
-          </strong>
+          </h2>
           <button type="button" className="so-icone" onClick={aoFechar}
                   title="Fechar" aria-label="Fechar a ajuda">
             <Icone nome="limpar" tamanho={16} peso="bold" />
