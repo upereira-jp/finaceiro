@@ -1526,6 +1526,16 @@ export const ESTILO = `
   .marca.a_fazer { background: var(--alerta-fundo); color: var(--alerta); }
   .marca.nao_medido { background: var(--alerta-fundo); color: var(--alerta); }
   .marca.neutro { background: var(--fundo-recuo); color: var(--fraco); }
+  /* A TINTA DO TOM FORA DO SELO (01/10/2026, etapa 7b): a linha curta que fala
+     de um estado — a nota sob o selo em Cobranças, o risco de um passo do funil,
+     o icone da linha do que nao chegou ao banco — pinta com o MESMO tom que o
+     selo daquele estado teria, lido de "tom-do-estado.ts". Ate aqui cada uma
+     tinha a sua cor escrita a mao, e a recusa do banco saia cinza numa, ambar
+     noutra e vermelha numa terceira. */
+  .tinta-do-tom.erro { color: var(--erro); }
+  .tinta-do-tom.a_fazer, .tinta-do-tom.nao_medido { color: var(--alerta); }
+  .tinta-do-tom.ok { color: var(--ok); }
+  .tinta-do-tom.neutro { color: var(--fraco); }
   /* SEM HOVER. A pilula e ROTULO, nao controle - "Marca" renderiza um "<span>".
      Ver a nota do ".kpi" acima: movimento sob o mouse e promessa de clique. */
 
@@ -1682,8 +1692,15 @@ export const ESTILO = `
   /* -------------------------------------------------- as abas de etapa
      O DESENHO É O DA BARRA NAVY DA REFERÊNCIA, com uma troca obrigatória: lá as
      abas pousam sobre o navy, e aqui sobre o creme da página. A inativa é a
-     tinta apagada do sistema ("--fraco", 4,98:1 no creme); a ATIVA é o bloco
-     laranja cheio — com tinta NAVY, e não a branca da referência (2,69:1). */
+     tinta apagada do sistema ("--fraco", 4,98:1 no creme).
+
+     [01/10/2026, etapa 7b] A ATIVA DEIXOU O LARANJA. Ela era o bloco laranja
+     cheio, e a tela tinha dois laranjas na mesma área: a aba e o ato da tela
+     («Gerar N cobranças», «Registrar N contas conferidas»). The One Orange Rule
+     (DESIGN.md) guarda o laranja para o ato — então a aba ativa é a tinta
+     forte ("--texto", o navy no claro) com o SUBLINHADO de 2px na mesma tinta.
+     Forma e cor juntas, como antes: não é só a cor do texto que muda. A borda
+     de baixo transparente na inativa reserva os 2px, e a barra não pula. */
   /* [30/09, etapa 1] A BARRA TEM DUAS PARTES: o "tablist" com as tres abas e,
      do lado de fora dele, o «Nova fatura» — dentro, a seta do teclado o pularia
      e o leitor de tela o contaria como quarta aba. Em tela estreita as abas
@@ -1699,7 +1716,8 @@ export const ESTILO = `
      (0,2,0) perde para ela. Com ".g3ref" na frente estas são (0,3,x) e ganham.
      O invariante I7 prende isto. */
   .g3ref .fu-aba {
-    background: transparent; border: none; border-radius: var(--raio); box-shadow: none;
+    background: transparent; border: none; border-bottom: 2px solid transparent;
+    border-radius: var(--raio); box-shadow: none;
     padding: 9px 16px; margin-bottom: 0;
     font-size: var(--t-corpo); font-weight: 600;
     letter-spacing: .06em; text-transform: uppercase;
@@ -1714,15 +1732,15 @@ export const ESTILO = `
     border-color: transparent; box-shadow: none; transform: none;
   }
   .g3ref .fu-aba[aria-selected="true"] {
-    background: var(--acento); color: var(--acento-texto);
-    border-color: transparent;
+    background: transparent; color: var(--texto);
+    border-color: transparent; border-bottom: 2px solid var(--texto);
   }
   .g3ref .fu-aba[aria-selected="true"]:hover:not(:disabled) {
-    background: var(--acento-hover); color: var(--acento-texto);
+    background: transparent; color: var(--texto); border-bottom-color: var(--texto);
   }
   .g3ref .fu-aba-traco { width: 26px; height: 1px; background: var(--borda); }
   /* NO CELULAR AS TRES ABAS SAO UMA FILEIRA SO, em tres colunas iguais, e o
-     rotulo quebra DENTRO da aba — «1 · Leitura / e cálculo». Soltas, cada uma
+     rotulo quebra DENTRO da aba — «Leitura e / cálculo». Soltas, cada uma
      ocupava uma linha com o traco pendurado, e a barra comia 200px antes do
      trabalho. Sem o traco, a inativa ganha contorno: e o que ainda a desenha
      como aba, e nao como texto. */
@@ -1731,8 +1749,12 @@ export const ESTILO = `
     .g3ref .fu-aba-traco { display: none; }
     .g3ref .fu-aba {
       padding: 7px 9px; font-size: var(--rotulo-tamanho); letter-spacing: .03em; line-height: 1.3;
-      white-space: normal; text-align: center; border: 1px solid var(--borda);
+      white-space: normal; text-align: center; border: 1px solid var(--borda); border-bottom-width: 2px;
     }
+    /* No celular a ativa e a caixa contornada na tinta forte, com o sublinhado
+       de 2px embaixo — as inativas tem o contorno claro. */
+    .g3ref .fu-aba[aria-selected="true"],
+    .g3ref .fu-aba[aria-selected="true"]:hover:not(:disabled) { border-color: var(--texto); }
     .g3ref .fu-abas > button { margin-left: auto; }
   }
 
@@ -2021,6 +2043,7 @@ export const ESTILO = `
   .g3ref .fu-motivo > .ic { margin-top: 2px; }
   .g3ref .fu-motivo.alerta { color: var(--alerta); }
   .g3ref .fu-motivo.ok { color: var(--ok); }
+  .g3ref .fu-motivo.erro { color: var(--erro); }
   .g3ref .fu-acoes { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
   /* [01/10, etapa 6] Nas contas registradas a «2ª via» fica sempre no mesmo
      lugar: encostada a direita, ela andava para a esquerda nas linhas que tem
@@ -2384,7 +2407,17 @@ export const ESTILO = `
   }
   .em-nota > span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .em-nota > .ic { margin-top: 2px; flex: none; }
-  .em-nota.alerta { color: var(--alerta); }
+  /* [01/10/2026, etapa 7b] A NOTA TEM O TOM DO SELO DELA ("tom-do-estado.ts"):
+     a recusa do banco e vermelha aqui como em toda tela — ate esta data ela era
+     cinza quando o sistema estava retentando e ambar quando o motivo era
+     conhecido —, o boleto a pedir e ambar, e o neutro fica na tinta apagada.
+     O «o sistema tenta de novo sozinho» e a linha de baixo, sem cor. */
+  /* (a tinta vem da classe comum ".tinta-do-tom", no bloco do selo de estado) */
+  .em-nota-depois { display: block; margin-top: 2px; font-size: var(--t-meta); line-height: 1.4; color: var(--fraco); }
+  /* A recusa diz QUEM recusou e O QUE falta («O banco recusou: falta o
+     endereço do pagador.»), e em duas linhas o fim — o que falta — era o que o
+     corte comia. A falha ganha a terceira linha; as outras notas ficam em duas. */
+  .em-nota.tinta-do-tom.erro > span { -webkit-line-clamp: 3; }
   .em-acoes { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
   .em-acoes-esq { justify-content: flex-start; }
   .em-tabela .em-acoes { flex-wrap: nowrap; }
@@ -2433,6 +2466,9 @@ export const ESTILO = `
   .em-recusa { display: grid; gap: 8px; margin: 0 0 10px; }
   .em-recusa-frase { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-size: var(--t-ui); line-height: 1.5; max-width: 80ch; }
   .em-recusa-frase > .ic { margin-top: 3px; flex: none; color: var(--alerta); }
+  /* A recusa que ACONTECEU e o octogono da falha; a prevista (o cadastro avisa
+     que o banco vai recusar) continua o triangulo ambar da tarefa (etapa 7b). */
+  .em-recusa.erro .em-recusa-frase > .ic { color: var(--erro); }
   .em-recusa-acoes { justify-content: flex-start; }
 
   /* [30/09/2026, etapa 4b] A REVISAO ANTES DO ATO saiu daqui para a secao
@@ -2720,7 +2756,8 @@ export const ESTILO = `
     background: var(--fundo2);
   }
   /* O DESTAQUE E O NUMERO CHEIO — o laranja com a tinta Navy, 5,93:1 — mais a
-     palavra «Comece aqui» em cima. Forma e palavra: a cor nunca sozinha. */
+     palavra em cima («Mais urgente agora» ou «Próximo passo», desde 01/10).
+     Forma e palavra: a cor nunca sozinha. */
   .roteiro-passo.foco .roteiro-num { background: var(--acento); border-color: var(--acento); color: var(--acento-texto); }
   .roteiro-tit { font-family: var(--fonte-cond); font-size: var(--t-ui); font-weight: 600; line-height: 1.25; }
   .roteiro-qtd {
@@ -2752,6 +2789,10 @@ export const ESTILO = `
     color: var(--alerta); font-size: var(--t-corpo);
   }
   .roteiro-painel-risco .ic { margin-top: 3px; }
+  /* [01/10/2026, etapa 7b] A tinta do risco e a do tom dele (".tinta-do-tom"):
+     a recusa e a vencida em vermelho, o boleto parado em ambar. O ambar fixo
+     acima fica so de reserva. */
+  .roteiro-painel-risco-linha { display: flex; gap: 6px; align-items: flex-start; }
   .roteiro-painel-oque { margin: 8px 0 0; max-width: 72ch; line-height: 1.6; }
   .roteiro-painel-ir { margin: 14px 0 0; }
   .roteiro-como-tit {

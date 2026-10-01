@@ -63,8 +63,8 @@ export type DestinoDaCamada = {
    * link viraria "nao ha tela", que e mentira.
    *
    * EXISTE POR UM CASO CONCRETO, e ele foi achado em 24/08/2026 depois de o
-   * link do emissor ja estar no ar: a aba «3 · Cadastro da fatura» estava
-   * OCULTA da barra, e o unico jeito de alcanca-la era `#cadastro`. Sem o
+   * link do emissor ja estar no ar: a aba «3 · Cadastro da fatura» (hoje
+   * «Dados de quem cobra») estava OCULTA da barra, e o unico jeito de alcanca-la era `#cadastro`. Sem o
    * fragmento o link abria a etapa 1 e a etapa 3 nem aparecia — o pior tipo de
    * link, o que leva a algum lugar. Desde 30/09 a aba fica na barra, e o
    * fragmento continua sendo o que ABRE direto nela (`abaDoFragmento`): o link
@@ -132,7 +132,7 @@ export const ROTULO_DO_RECORTE = {
     sem_vencimento: 'unidades sem dia de vencimento',
     sem_tarifa: 'unidades sem o preço do kWh',
     sem_usina: 'unidades sem usina',
-    sem_endereco: 'unidades sem o endereço do pagador completo',
+    sem_endereco: 'unidades com contrato ativo sem o endereço completo do pagador',
   },
   '/usinas': { sem_dono: 'usinas sem dono' },
   '/contratos': {
@@ -223,7 +223,7 @@ export const DESTINO_DA_CAMADA: Record<string, DestinoDaCamada> = {
     rota: '/documento', filtro: 'sem_conta',
     rotulo: 'Ler a conta da distribuidora',
     caminho: null,
-    nota: 'Na aba «1 · Leitura e cálculo»: sobe-se o PDF da conta, confere-se campo a campo o que '
+    nota: 'Na aba «Leitura e cálculo»: sobe-se o PDF da conta, confere-se campo a campo o que '
       + 'o leitor extraiu e registra-se. É a conta registrada que vira a cobrança, pelo botão '
       + '«Gerar N cobranças» da lista logo abaixo. Uma conta por unidade e por mês — as do mês '
       + 'inteiro podem subir juntas, e cada uma vira uma linha da fila. Registrar não exige a '
@@ -275,7 +275,10 @@ export const DESTINO_DA_CAMADA: Record<string, DestinoDaCamada> = {
    */
   emissor_da_fatura: {
     rota: '/documento', fragmento: FRAGMENTO_DO_CADASTRO, filtro: null,
-    rotulo: 'Cadastrar quem emite a fatura (etapa 3)',
+    /* [01/10/2026, etapa 7b] O NOME DO ATO E O DA ABA a que ele leva: era
+       «Cadastrar quem emite a fatura (etapa 3)», com o numero de uma aba que
+       nao se numera mais e a «fatura», que na tela e so a folha impressa. */
+    rotulo: 'Preencher os dados de quem cobra',
     /* `null` E A RESPOSTA CERTA, e a primeira versao desta linha dizia
        `npm run identidade` — que esta ERRADO. Aquele script cadastra CHAVE PIX
        e aponta a padrao; ele nao toca `razao_social` nem `cnpj` em passo nenhum.
@@ -284,7 +287,7 @@ export const DESTINO_DA_CAMADA: Record<string, DestinoDaCamada> = {
        dizia isso: "esta aba e o UNICO caminho de tela para o que a folha
        imprime". */
     caminho: null,
-    nota: 'Razão social e CNPJ da empresa que cobra, em «3 · Cadastro da fatura». Nada recusa sem '
+    nota: 'Razão social e CNPJ da empresa que cobra, em «Dados de quem cobra». Nada recusa sem '
       + 'eles — a folha sai igual, e é esse o problema: o cabeçalho e o rodapé saem sem o nome, o '
       + 'campo «Beneficiário» da faixa de pagamento sai vazio, e a linha «Atenção ao golpe do '
       + 'boleto: confira sempre se o beneficiário é X» some inteira, porque ela amarra no nome. O '
@@ -307,7 +310,7 @@ export const DESTINO_DA_CAMADA: Record<string, DestinoDaCamada> = {
     rotulo: 'Preencher o endereço do pagador',
     caminho: 'npm run enderecos',
     nota: 'A Sicoob exige logradouro, bairro, município, CEP e UF do pagador, e a emissão é '
-      + 'RECUSADA sem eles — a fatura existe e continua cobrável por Pix, o que não nasce é o '
+      + 'RECUSADA sem eles — a cobrança existe e continua pagável por Pix, o que não nasce é o '
       + 'boleto. O número é o único campo do formulário que não entra na exigência. Entra linha a '
       + 'linha na tela Unidades consumidoras, ou na carteira inteira pelo importador em lote.',
   },
@@ -367,7 +370,7 @@ export const DESTINO_DA_CAMADA: Record<string, DestinoDaCamada> = {
     nota: 'Agência, conta, contrato, convênio, validade do A1 e a `credencial_ref`. O certificado '
       + 'e a senha NÃO entram aqui: segredo por tenant vive em armazenamento cifrado e é acessado '
       + 'por referência (regra 5) — o formulário recusa um valor que pareça o próprio segredo. '
-      + 'Sem o conector a fatura existe e é cobrável por Pix, e o boleto emitido no banco pode ser '
+      + 'Sem o conector a cobrança existe e é pagável por Pix, e o boleto emitido no banco pode ser '
       + 'importado na tela Cobranças; o que falta é a emissão pela API.',
   },
 };

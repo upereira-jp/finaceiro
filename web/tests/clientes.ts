@@ -14,11 +14,12 @@
 // nenhum deles destrava contrato nenhum.
 
 import {
-  situacaoDoDocumento, ROTULO_DA_SITUACAO_DO_DOCUMENTO, TOM_DA_SITUACAO_DO_DOCUMENTO,
+  situacaoDoDocumento, ROTULO_DA_SITUACAO_DO_DOCUMENTO,
   destravaContrato, contarDocumentos, normalizarDocumento, tipoPeloComprimento,
   formatarDocumento, motivoDaTravaDoDocumento, podeGravarDocumento,
   type ClienteConferivel, type SituacaoDoDocumento,
 } from '../src/clientes-regras.ts';
+import { SELO_DO_DOCUMENTO } from '../src/tom-do-estado.ts';
 
 let falhas = 0;
 const chk = (id: string, cond: boolean, d: string) => {
@@ -65,7 +66,7 @@ const cli = (p: Partial<ClienteConferivel>): ClienteConferivel =>
     ['sem_documento', 'semente_do_crm', 'digito_nao_confere', 'validado'];
 
   chk('C2', estados.every((s) => ROTULO_DA_SITUACAO_DO_DOCUMENTO[s].length > 0
-                              && TOM_DA_SITUACAO_DO_DOCUMENTO[s] !== undefined),
+                              && SELO_DO_DOCUMENTO[s] !== undefined),
       'os quatro estados tem rotulo e tom - nenhum cai num `undefined` na pilula');
 
   chk('C2b', destravaContrato(cli({
@@ -80,9 +81,9 @@ const cli = (p: Partial<ClienteConferivel>): ClienteConferivel =>
   /* [30/09, etapa 4a] O digito torto e o campo vazio sao TAREFA (`a_fazer`,
    * ambar com o lapis), e nao falha: o vermelho ficou so para a recusa do banco,
    * a vencida, o conector caido e a leitura que nao voltou (`TomDoSelo`). */
-  chk('C2e', TOM_DA_SITUACAO_DO_DOCUMENTO.semente_do_crm === 'nao_medido'
-        && TOM_DA_SITUACAO_DO_DOCUMENTO.digito_nao_confere === 'a_fazer'
-        && TOM_DA_SITUACAO_DO_DOCUMENTO.sem_documento === 'a_fazer',
+  chk('C2e', SELO_DO_DOCUMENTO.semente_do_crm.tom === 'nao_medido'
+        && SELO_DO_DOCUMENTO.digito_nao_confere.tom === 'a_fazer'
+        && SELO_DO_DOCUMENTO.sem_documento.tom === 'a_fazer',
       'semente e `nao_medido` e digito torto e `a_fazer`: "nao confirmado" nao e "errado" — e nenhum '
       + 'dos dois e vermelho: faltar documento e tarefa, nao falha');
 }

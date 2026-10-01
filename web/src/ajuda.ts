@@ -262,13 +262,15 @@ export const TOPICOS: readonly Topico[] = [
     id: 'primeiro-dia',
     pergunta: 'Nunca usei este sistema. Por onde começo?',
     resposta: 'Pela tela Mês, o primeiro item do menu. No alto estão os cinco passos do mês, cada um com '
-      + 'quantas unidades estão nele agora, e o «Comece aqui» no passo que pede você primeiro. Nada '
+      + 'quantas unidades estão nele agora, e um deles em destaque: «Mais urgente agora» quando há '
+      + 'dinheiro em risco, «Próximo passo» quando não há. Nada '
       + 'aqui se perde por clicar no lugar errado.',
     passos: [
       'Abra a tela Mês e confira o mês que está selecionado no alto.',
       'Leia os cinco passos na ordem: ler as contas, gerar, emitir, pedir o boleto, receber. O '
         + 'número de cada um é quantas unidades estão nele agora.',
-      'Comece pelo passo marcado «Comece aqui». O botão «Abrir …» leva à tela onde ele se faz, e '
+      'Vá ao passo em destaque — «Mais urgente agora» ou «Próximo passo». O botão «Abrir …» leva '
+        + 'à tela onde ele se faz, e '
         + '«Como fazer» diz os cliques.',
       'Volte à tela Mês depois de cada tanto: os números mudam sozinhos e mostram o que andou.',
       'Se travar em alguma palavra, procure aqui mesmo pelo nome dela — o significado está escrito.',
@@ -295,7 +297,7 @@ export const TOPICOS: readonly Topico[] = [
       + 'mês poder ser cobrado, quantos faltam de quantos e onde se resolve. Ela mostra só o que está '
       + 'em aberto; o que já fechou fica a um clique, em «ver quais».',
     passos: [
-      'As linhas vêm em três grupos, e o título do grupo diz o que ele trava: «Para gerar as faturas» '
+      'As linhas vêm em três grupos, e o título do grupo diz o que ele trava: «Para gerar as cobranças» '
       + 'impede a cobrança do mês; «Para o boleto sair» deixa cobrar por Pix, mas o banco recusa o '
       + 'boleto; «Para dividir o dinheiro» deixa cobrar, e trava o repasse ao dono da usina e a '
       + 'comissão quando o dinheiro entrar.',
@@ -365,7 +367,8 @@ export const TOPICOS: readonly Topico[] = [
       + 'caminho para resolver.',
     passos: [
       'Abra a tela Mês.',
-      'Os cinco passos do alto dizem onde está o trabalho; o «Comece aqui» marca o que pede você primeiro.',
+      'Os cinco passos do alto dizem onde está o trabalho; o destaque marca o que pede você '
+        + 'primeiro — «Mais urgente agora» quando há risco, «Próximo passo» quando não há.',
       'Cada linha da tabela de baixo tem um botão «onde resolver» que já abre a tela filtrada.',
     ],
     caminhos: [ir('/pendencias', 'Abrir Mês')],
@@ -639,7 +642,7 @@ export const TOPICOS: readonly Topico[] = [
     porque: PORQUE['endereco-unidade'],
     passos: [
       'Abra a tela Unidades consumidoras.',
-      'Use o filtro de pendência «Sem endereço completo».',
+      'Use o filtro de pendência «Com contrato, sem endereço completo».',
       'Abra a linha da unidade e complete os cinco campos exigidos.',
       'A pílula da linha fica verde quando aquela unidade já consegue emitir.',
     ],
@@ -866,7 +869,7 @@ export const TOPICOS: readonly Topico[] = [
       + 'removida justamente porque gerar por lá travava a unidade neste.',
     passos: [
       'Confira antes a tela Mês: o que o cadastro ainda trava lá vira recusa aqui.',
-      'Abra a tela Contas de luz, em «1 · Leitura e cálculo».',
+      'Abra a tela Contas de luz, em «Leitura e cálculo».',
       'Envie as contas da distribuidora — uma, ou todas as do mês de uma vez.',
       'Confira cada linha da fila: unidade, mês, total e vencimento. Corrija o que precisar.',
       'Clique em «Registrar N contas conferidas».',
@@ -936,8 +939,8 @@ export const TOPICOS: readonly Topico[] = [
   },
   {
     id: 'emitir-fatura',
-    pergunta: 'Como emito as faturas do mês?',
-    resposta: 'Na tela Cobranças. Emitir fecha o valor da fatura — o boleto e a baixa vêm '
+    pergunta: 'Como emito as cobranças do mês?',
+    resposta: 'Na tela Cobranças. Emitir fecha o valor da cobrança — o boleto e a baixa vêm '
       + 'depois, cada um no seu botão.',
     passos: [
       'Abra a tela Cobranças. Ela abre no mês que tem cobrança por emitir.',
@@ -962,7 +965,7 @@ export const TOPICOS: readonly Topico[] = [
   },
   {
     id: 'gerar-boleto',
-    pergunta: 'Cadê o boleto? Como gero o boleto de uma fatura?',
+    pergunta: 'Cadê o boleto? Como gero o boleto de uma cobrança?',
     resposta: 'Na tela Cobranças, depois de emitida: «Pedir os N boletos» pede os do mês de uma '
       + 'vez, e «Pedir o boleto» pede o de uma linha. Só funciona com a conexão do banco configurada; '
       + 'sem ela, dá para cobrar por Pix ou importar um boleto emitido no site do banco.',
@@ -990,8 +993,8 @@ export const TOPICOS: readonly Topico[] = [
   {
     id: 'importar-boleto',
     pergunta: 'Emiti o boleto no site do banco. Como registro aqui?',
-    resposta: 'Na linha da fatura, colando a linha digitável. O sistema confere o valor e a data '
-      + 'dentro do próprio código antes de aceitar — se não bater com a fatura, ele recusa.',
+    resposta: 'Na linha da cobrança, colando a linha digitável. O sistema confere o valor e a data '
+      + 'dentro do próprio código antes de aceitar — se não bater com a cobrança, ele recusa.',
     passos: [
       'Abra a tela Cobranças e abra a linha da cobrança — o triângulo no começo dela.',
       'Em «Boleto», clique em «Já emitiu este boleto no site do banco?» e cole a linha digitável.',
@@ -1007,10 +1010,10 @@ export const TOPICOS: readonly Topico[] = [
   {
     id: 'cobrar-por-pix',
     pergunta: 'Dá para cobrar por Pix?',
-    resposta: 'Dá, e independe da conexão com o banco. A fatura traz o código para copiar e mandar '
+    resposta: 'Dá, e independe da conexão com o banco. A cobrança traz o código para copiar e mandar '
       + 'ao cliente.',
     passos: [
-      'Abra a tela Cobranças e ache a fatura emitida.',
+      'Abra a tela Cobranças e ache a cobrança emitida.',
       'Abra a linha dela — o triângulo no começo — e copie o código de pagamento: o botão de '
         + 'copiar evita errar um dígito.',
       'Mande ao cliente. Quando ele pagar, registre o pagamento em «Baixa manual», na mesma linha.',
@@ -1023,8 +1026,8 @@ export const TOPICOS: readonly Topico[] = [
   {
     id: 'cliente-pagou',
     pergunta: 'O cliente pagou. Como dou baixa?',
-    resposta: 'Na tela Cobranças, na linha da própria fatura. É a baixa que dispara a '
-      + 'divisão do dinheiro: a parte do dono da usina e a comissão de quem indicou nascem dela.',
+    resposta: 'Na tela Cobranças, na linha da própria cobrança. É a baixa que dispara a '
+      + 'divisão do dinheiro: a parte do dono da usina e a comissão de quem trouxe o cliente nascem dela.',
     passos: [
       'Abra a tela Cobranças e abra a linha da cobrança do cliente — o triângulo no começo.',
       'Em «Baixa manual», confira a data, os juros e a multa e clique em «Registrar pagamento».',
@@ -1043,7 +1046,7 @@ export const TOPICOS: readonly Topico[] = [
   },
   {
     id: 'valor-errado',
-    pergunta: 'A fatura saiu com o valor errado. O que faço?',
+    pergunta: 'A cobrança saiu com o valor errado. O que faço?',
     resposta: 'O valor nasce de três coisas: a energia gerada no mês, a fatia daquele cliente e o '
       + 'preço do kWh da unidade dele. Conferir as três costuma achar o erro.',
     passos: [
@@ -1075,11 +1078,11 @@ export const TOPICOS: readonly Topico[] = [
     resposta: 'A parte dele nasce sozinha quando um cliente paga, e vai para a tela Contas a pagar. '
       + 'É lá que se registra a quitação.',
     passos: [
-      'Dê baixa na fatura do cliente, na tela Cobranças — é isso que cria o que a empresa deve.',
+      'Dê baixa na cobrança do cliente, na tela Cobranças — é isso que cria o que a empresa deve.',
       'Abra a tela Contas a pagar.',
       'Confira a linha e registre o pagamento.',
     ],
-    caminhos: [ir('/contas-a-pagar', 'Abrir Contas a pagar'), ver('/faturas', 'Antes: dar baixa na fatura')],
+    caminhos: [ir('/contas-a-pagar', 'Abrir Contas a pagar'), ver('/faturas', 'Antes: dar baixa na cobrança')],
     camada: null,
     telas: ['/contas-a-pagar'],
     termos: ['pagar o dono', 'quando pago o dono', 'repasse ao dono', 'contas a pagar', 'a pagar',
@@ -1100,7 +1103,7 @@ export const TOPICOS: readonly Topico[] = [
     pergunta: 'O que são «Rateio» e «Empresa» no alto do menu?',
     resposta: 'São os dois setores financeiros do sistema, e o menu muda conforme o setor '
       + 'escolhido. Rateio é o dinheiro que entra dos clientes: usinas, unidades, contratos, a conta '
-      + 'lida, a fatura, o boleto e a cobrança. Empresa é o caixa da G3: o que há para receber, o que '
+      + 'lida, a cobrança e o boleto. Empresa é o caixa da G3: o que há para receber, o que '
       + 'há para pagar, o banco e o histórico. Nenhuma tela sumiu — ela está no outro setor. Se um '
       + 'setor não aparece no menu, ele não foi liberado para você: quem administra a plataforma '
       + 'marca isso na tela Usuários.',
@@ -1162,7 +1165,7 @@ export const TOPICOS: readonly Topico[] = [
     resposta: 'Na tela Contas a receber, no setor Empresa. Ela lista todo título emitido e ainda '
       + 'não pago, de qualquer mês, com os dias de atraso e se o boleto chegou ao banco. Cobrar '
       + '— emitir, pedir o boleto, dar baixa — continua sendo na tela Cobranças, no setor Rateio.',
-    porque: 'A tela Cobranças responde por MÊS, e uma fatura antiga some atrás do mês corrente. '
+    porque: 'A tela Cobranças responde por MÊS, e uma cobrança antiga some atrás do mês corrente. '
       + 'Contas a receber olha a carteira inteira por vencimento: é onde se vê o que venceu há 90 '
       + 'dias sem ninguém precisar lembrar de voltar o seletor.',
     passos: [
@@ -1170,7 +1173,7 @@ export const TOPICOS: readonly Topico[] = [
       'Abra a tela Contas a receber.',
       'Use «Por tempo de atraso» para ver o que venceu e há quanto tempo, e «Quem mais deve» '
         + 'para ver por cliente.',
-      'Para agir sobre uma fatura, use «Ver em Cobranças»: ele abre a tela Cobranças já no mês '
+      'Para agir sobre uma cobrança, use «Ver em Cobranças»: ele abre a tela Cobranças já no mês '
         + 'certo.',
     ],
     caminhos: [ir('/contas-a-receber', 'Abrir Contas a receber'), ver('/faturas', 'Cobrar na tela Cobranças')],
@@ -1184,7 +1187,7 @@ export const TOPICOS: readonly Topico[] = [
     id: 'despesa-avulsa',
     pergunta: 'Como lanço uma despesa da empresa?',
     resposta: 'Na tela Contas a pagar tem um cadastro de conta avulsa, para o que não nasce de uma '
-      + 'fatura — a conta da concessionária e as despesas do dia a dia.',
+      + 'cobrança — a conta da concessionária e as despesas do dia a dia.',
     passos: [
       'Abra a tela Contas a pagar.',
       'Clique «Nova despesa avulsa», no alto, ao lado do título.',
@@ -1205,12 +1208,12 @@ export const TOPICOS: readonly Topico[] = [
      * luz. A resposta dizia ainda «isso é Faturamento e Emissão e cobrança» —
      * uma aba que saiu em 10/09 e outra que mudou de nome. */
     resposta: 'A Fatura unificada: uma folha só, que junta a conta da distribuidora com a cobrança '
-      + 'da G3. Ela se monta e se imprime na tela Contas de luz, em «2 · Folha do cliente» — e só '
+      + 'da G3. Ela se monta e se imprime na tela Contas de luz, em «Folha do cliente» — e só '
       + 'apresenta: quem cria a cobrança é o «Gerar N cobranças», e quem cobra é a tela Cobranças.',
     passos: [
       'Abra a tela Contas de luz.',
       'Suba a conta de energia daquele cliente e registre a leitura.',
-      'Abra «2 · Folha do cliente» para conferir e imprimir a folha — ou use «2ª via» na lista de '
+      'Abra «Folha do cliente» para conferir e imprimir a folha — ou use «2ª via» na lista de '
         + 'contas registradas.',
     ],
     caminhos: [
@@ -1225,17 +1228,17 @@ export const TOPICOS: readonly Topico[] = [
   },
   {
     id: 'identidade-da-empresa',
-    pergunta: 'Como coloco o logotipo e os dados da empresa na fatura?',
+    pergunta: 'Como coloco o logotipo e os dados da empresa na Fatura unificada?',
     resposta: 'No cadastro do emissor, na tela Contas de luz. É de lá que saem o nome, o '
       + 'documento, o logotipo e a chave de pagamento impressos na folha.',
     porque: PORQUE['identidade-da-empresa'],
     passos: [
-      'Abra a tela Contas de luz e vá até «3 · Cadastro da fatura».',
+      'Abra a tela Contas de luz e vá até «Dados de quem cobra».',
       'Preencha a razão social e o CNPJ — são esses dois que a tela Mês cobra.',
       'Suba o logotipo e cadastre a chave de pagamento, que ficam no mesmo cartão.',
       'Grave e emita uma folha para conferir como ficou.',
     ],
-    caminhos: [daCamada('emissor_da_fatura', 'Cadastrar quem emite a fatura')],
+    caminhos: [daCamada('emissor_da_fatura', 'Preencher os dados de quem cobra')],
     /* LIGADO A CAMADA EM 24/08/2026. O assunto existia desde a central de ajuda
        e respondia "onde faço"; o que faltava era ele ser o destino da linha de
        Pendências — enquanto `camada` foi `null`, a pendência do emissor não

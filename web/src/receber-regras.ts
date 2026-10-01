@@ -15,7 +15,6 @@
 // decisão de `ha_quanto_tempo_segundos` nas automações.
 
 import type { TituloAReceber } from './api.ts';
-import type { TomDoSelo } from './iconografia.ts';
 
 export type { TituloAReceber };
 
@@ -56,13 +55,10 @@ export const ROTULO_DA_FAIXA: Record<FaixaDeAtraso, string> = {
   acima_90: 'Mais de 90 dias',
 };
 
-/** A vencer é `ok` (nada de errado); qualquer atraso é `erro` — a vencida é uma
- *  das quatro coisas que ficaram vermelhas quando o vermelho passou a ser só da
- *  falha (30/09/2026, `TomDoSelo`). O ícone e o texto carregam a gravidade; a
- *  cor nunca é o único sinal (restrição 3 do tema). */
-export const TOM_DA_FAIXA: Record<FaixaDeAtraso, TomDoSelo> = {
-  a_vencer: 'ok', ate_30: 'erro', ate_60: 'erro', ate_90: 'erro', acima_90: 'erro',
-};
+/* O TOM DE CADA FAIXA (`TOM_DA_FAIXA`) SAIU DAQUI em 01/10/2026 (etapa 7b) para
+ * `tom-do-estado.ts` (`SELO_DO_ATRASO`). E mudou: «A vencer» era `ok`, e o
+ * verde com o visto dizia «resolvido» sobre um título que ninguém pagou ainda —
+ * agora é neutro, com o calendário. */
 
 export function faixaDeAtraso(vencimentoISO: string, hojeISO: string): FaixaDeAtraso {
   const d = diasDeAtraso(vencimentoISO, hojeISO);
@@ -122,17 +118,11 @@ export const ROTULO_DA_SITUACAO: Record<SituacaoDaCobranca, string> = {
   boleto_baixado: 'Boleto baixado no banco',
 };
 
-/* [30/09, etapa 4a] SO A RECUSA E VERMELHA. Sem boleto e boleto baixado sao
- * TAREFA — alguem precisa pedir o boleto (de novo) —, e nao falha: `a_fazer`. A
- * recusa do banco e a falha, e e a unica aqui que fica em `erro`. */
-export const TOM_DA_SITUACAO: Record<SituacaoDaCobranca, TomDoSelo> = {
-  sem_boleto: 'a_fazer',
-  boleto_a_caminho: 'nao_medido',
-  boleto_no_banco: 'ok',
-  boleto_importado: 'ok',
-  boleto_recusado: 'erro',
-  boleto_baixado: 'a_fazer',
-};
+/* O TOM DE CADA SITUAÇÃO (`TOM_DA_SITUACAO`) SAIU DAQUI em 01/10/2026 (etapa
+ * 7b) para `tom-do-estado.ts` (`SELO_DO_BOLETO`), com o desenho de cada uma. A
+ * regra de 30/09 continua: só a recusa é vermelha; sem boleto e baixado são
+ * tarefa. O que mudou foi o «a caminho», que era a interrogação de «não se
+ * sabe» e é o pedido em curso — neutro, com o relógio. */
 
 /** Só o título com boleto vivo no banco pode ser pago hoje. */
 export const podeSerPaga = (s: SituacaoDaCobranca): boolean =>

@@ -32,12 +32,13 @@ import { Ligacao } from '../rota.tsx';
 import { emReais } from '../dinheiro.ts';
 import { diaEmBr, mesEmBr } from '../formato.ts';
 import {
-  diasDeAtraso, faixaDeAtraso, fraseDoAtraso, FAIXAS, ROTULO_DA_FAIXA, TOM_DA_FAIXA,
-  situacaoDaCobranca, SITUACOES, ROTULO_DA_SITUACAO, TOM_DA_SITUACAO,
+  diasDeAtraso, faixaDeAtraso, fraseDoAtraso, FAIXAS, ROTULO_DA_FAIXA,
+  situacaoDaCobranca, SITUACOES, ROTULO_DA_SITUACAO,
   porFaixa, porCliente, totalCentavos, avisoDeTruncagem,
   type FaixaDeAtraso, type SituacaoDaCobranca,
 } from '../receber-regras.ts';
 import { paraCsv, reaisParaPlanilha, nomeDoArquivo, type Coluna } from '../csv.ts';
+import { SELO_DO_ATRASO, SELO_DO_BOLETO, seloDaFaixa } from '../tom-do-estado.ts';
 import { baixarCsv } from '../baixar.ts';
 
 const MAIS_DEVEDORES = 8;
@@ -155,7 +156,12 @@ export function TelaContasAReceber() {
                   <td>
                     <button type="button" className="linha-filtro" aria-pressed={faixa === f.faixa}
                             onClick={(e) => { e.stopPropagation(); setFaixa((atual) => (atual === f.faixa ? '' : f.faixa)); }}>
-                      <Marca tom={f.titulos ? TOM_DA_FAIXA[f.faixa] : 'nao_medido'}>{ROTULO_DA_FAIXA[f.faixa]}</Marca>
+                      {/* [01/10/2026, etapa 7b] A FAIXA ZERADA É NEUTRA: nada ali, e
+                          isso se sabe. Era a interrogação âmbar de «não se sabe»,
+                          e «Mais de 90 dias» vazia parecia uma dúvida ao lado de
+                          «Até 30» vermelha. Toda faixa de atraso com título tem o
+                          mesmo selo — nenhuma parece mais leve que outra. */}
+                      <Marca selo={seloDaFaixa(f.faixa, f.titulos)}>{ROTULO_DA_FAIXA[f.faixa]}</Marca>
                     </button>
                   </td>
                   <td className="num">{f.titulos}</td>
@@ -233,7 +239,7 @@ export function TelaContasAReceber() {
         vazio={carga.carregando ? <Carregando />
              : carga.erro ? 'Desconhecido.'
              : todas.length === 0
-               ? 'Nenhum título em aberto. Ou tudo o que foi emitido já foi pago, ou nenhuma fatura foi emitida ainda — a tela Mês, no setor Rateio, diz qual dos dois.'
+               ? 'Nenhum título em aberto. Ou tudo o que foi emitido já foi pago, ou nenhuma cobrança foi emitida ainda — a tela Mês, no setor Rateio, diz qual dos dois.'
                : 'Nenhum título com esses filtros.'}>
         {visiveis.map((t) => {
           const dias = diasDeAtraso(t.vencimento, hoje);
@@ -243,7 +249,9 @@ export function TelaContasAReceber() {
             <tr key={t.fatura_id}>
               <td>{diaEmBr(t.vencimento)}</td>
               <td className="c-sit">
-                <Marca tom={TOM_DA_FAIXA[fx]} icone={dias > 0 ? 'vencidas' : undefined}>
+                {/* «Vence em 5 dias» é neutro, com o calendário: o verde com o
+                    visto dizia «resolvido» sobre um título que ninguém pagou. */}
+                <Marca selo={SELO_DO_ATRASO[fx]}>
                   {fraseDoAtraso(dias)}
                 </Marca>
               </td>
@@ -251,14 +259,14 @@ export function TelaContasAReceber() {
               <td>{t.unidade}</td>
               <td>{mesEmBr(t.competencia)}</td>
               <td className="num c-val">{emReais(t.valor_total_centavos)}</td>
-              <td className="c-sit"><Marca tom={TOM_DA_SITUACAO[sit]} icone="boleto">{ROTULO_DA_SITUACAO[sit]}</Marca></td>
+              <td className="c-sit"><Marca selo={SELO_DO_BOLETO[sit]}>{ROTULO_DA_SITUACAO[sit]}</Marca></td>
               <td>
                 {/* Abre Cobrancas JA NO MES da fatura — sem isso a pessoa cai no
                     mes corrente e o titulo antigo some de novo. «Ver em
                     Cobranças», e nao «Ver na emissao», desde 30/09/2026: o nome
                     no link e o da aba a que ele leva. */}
                 <Ligacao para={`/faturas?mes=${String(t.competencia).slice(0, 7)}`}
-                         rotulo={`Ver a fatura de ${t.cliente} em Cobranças`}>
+                         rotulo={`Ver a cobrança de ${t.cliente} em Cobranças`}>
                   Ver em Cobranças
                 </Ligacao>
               </td>

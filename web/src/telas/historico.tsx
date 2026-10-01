@@ -46,16 +46,14 @@ import {
   horaDaLinha, veioCortada, ehRodadaAutomatica, VERBO,
   type LinhaDaTrilha, type RespostaDaTrilha,
 } from '../historico.ts';
-import type { TomDoSelo } from '../iconografia.ts';
+import { SELO_DA_TRILHA } from '../tom-do-estado.ts';
 import { hojeEmSP } from '../formato.ts';
 
-/** O tom de cada operação: criar é ganho, alterar é meio do caminho, apagar é
- *  `neutro`. [30/09, etapa 4a] Apagar era vermelho, e o vermelho passou a ser só
- *  da FALHA (`TomDoSelo`): uma exclusão registrada na trilha é um fato, não um
- *  defeito. O ícone da lixeira e o verbo continuam dizendo o que foi. */
-const TOM: Record<string, TomDoSelo> = {
-  I: 'ok', U: 'nao_medido', D: 'neutro',
-};
+/* O TOM DE CADA OPERAÇÃO vem de `tom-do-estado.ts` (`SELO_DA_TRILHA`) desde
+ * 01/10/2026 (etapa 7b), e os três são NEUTROS: um verbo de auditoria é fato,
+ * não estado. [30/09, etapa 4a] Apagar já tinha saído do vermelho; «Alterou»
+ * ainda era âmbar — a cor de tarefa — e «Criou» verde, a cor do que fechou. O
+ * desenho e o verbo dizem qual foi: o mais, as setas da troca, a lixeira. */
 
 /** Hoje em São Paulo (`formato.ts`): o `toISOString` é UTC, e das 21h à
  *  meia-noite o título «hoje» caía no dia seguinte. */
@@ -205,8 +203,7 @@ function LinhaDoHistorico({ l }: { l: LinhaDaTrilha }) {
         <td>{horaDaLinha(l.ocorrido_em)}</td>
         <td>{quemFez(l)}</td>
         <td className="c-id">
-          <Marca tom={TOM[l.operacao] ?? 'nao_medido'}
-                 icone={l.operacao === 'I' ? 'acrescentar' : l.operacao === 'D' ? 'remover' : 'confirmar'}>
+          <Marca selo={SELO_DA_TRILHA[l.operacao as 'I' | 'U' | 'D'] ?? SELO_DA_TRILHA.U}>
             {VERBO[l.operacao]}
           </Marca>{' '}
           {rotuloDaTabela(l.tabela)}

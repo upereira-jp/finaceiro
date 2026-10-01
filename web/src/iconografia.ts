@@ -85,6 +85,17 @@ export type NomeDeIcone =
    * `ir_para` é a seta do ato que LEVA a outra tela («Completar o endereço»):
    * quem clica precisa saber antes que vai sair daqui. */
   | 'mais_acoes' | 'abrir_linha' | 'ir_para'
+  /* OS DESENHOS DE ESTADO QUE A ETAPA 7b TROUXE (01/10/2026), cada um porque o
+   * anterior mentia:
+   *   `cancelado`  o círculo cortado. A cobrança, a unidade e a conta a pagar
+   *                canceladas usavam a lixeira (`remover`), que é o desenho do
+   *                BOTÃO de apagar — o selo lia como ação;
+   *   `a_pagar`    a conta a pagar em aberto. Usava o lápis de `a_fazer`, que é
+   *                o desenho da lacuna de cadastro: «em aberto» não é campo a
+   *                preencher, é dinheiro a entregar;
+   *   `alterou`    o verbo da trilha. As duas setas da troca — de um valor para
+   *                outro, que é o que a linha aberta mostra (antes → depois). */
+  | 'cancelado' | 'a_pagar' | 'alterou'
   // cobrança e documento
   | 'boleto' | 'pix' | 'certificado'
   // movimento: as duas que existem para ANIMAR, não para informar
@@ -109,11 +120,16 @@ export type NomeDeIcone =
  *   `ok`          pronto, pago, registrado;
  *   `erro`        FALHA — a recusa do banco, a cobrança vencida, o conector
  *                 caído, a leitura que não voltou. Só isto é vermelho;
- *   `a_fazer`     TAREFA — a lacuna de cadastro, a conta a pagar em aberto. É
- *                 trabalho de alguém, e não um defeito: âmbar, com o lápis;
- *   `nao_medido`  «ainda não dá para saber», e o que está a caminho (lendo, na
- *                 fila). Âmbar também, com a interrogação ou o desenho do ato;
- *   `neutro`      nem bom nem ruim: inativo, cancelada, suspenso. Cinza.
+ *   `a_fazer`     TAREFA — a lacuna de cadastro, a conta a pagar em aberto, o
+ *                 rascunho a emitir. É trabalho de alguém, e não um defeito:
+ *                 âmbar, com o lápis;
+ *   `nao_medido`  «ainda não dá para saber». Âmbar também, com a interrogação;
+ *   `neutro`      nada a fazer agora: inativo, cancelada, suspenso — e, desde
+ *                 01/10/2026 (etapa 7b), o que está EM CURSO sem você (emitida,
+ *                 boleto a caminho, lendo, na fila). Cinza.
+ *
+ * QUEM DECIDE O TOM DE CADA ESTADO é `tom-do-estado.ts`, e só ele: a tela não
+ * escolhe cor (`Marca` recebe um `Selo` de lá).
  *
  * `pendente` SAIU DO VOCABULÁRIO DE TOM DE PROPÓSITO: com ele fora, passar a
  * situação da prontidão direto como tom não compila mais — a tela tem de dizer
@@ -148,34 +164,11 @@ export const ICONE_DO_ESTADO: Record<TomDoSelo, NomeDeIcone> = {
   neutro: 'neutro',
 };
 
-/**
- * O STATUS DA FATURA -> ícone, e este mapa existe por causa de um defeito que a
- * primeira versão do acabamento produziu — vale registrar porque ele é sobre
- * significado, não sobre desenho.
- *
- * A pílula de estado deriva a COR do tom (`TomDoSelo`), e a fatura reusa os
- * tons para seis status: `emitida` cai em `nao_medido`
- * porque não é nem bom nem ruim, é meio do caminho. Enquanto o único sinal era a
- * cor, isso funcionava. Assim que o ícone entrou, "Emitida" passou a exibir uma
- * INTERROGAÇÃO — o desenho de "não sei", que é o significado certo para uma
- * camada de prontidão não medida e o significado errado para uma fatura que foi
- * emitida com sucesso.
- *
- * O tom continua vindo de `tomDoStatusDaFatura` (`cobranca-regras.ts`, testado);
- * o que este mapa faz é dar ao terceiro sinal o significado do DOMÍNIO em vez do
- * significado do tom.
- *
- * NENHUM DELES PODE ESTAR EM `ICONES_QUE_SE_MOVEM`: uma tabela de 39 faturas
- * desenharia 39 ícones animados a cada render.
- */
-export const ICONE_DO_STATUS_DA_FATURA: Record<string, NomeDeIcone> = {
-  rascunho: 'documento',
-  emitida: 'emitir',
-  paga: 'ok',
-  vencida: 'vencidas',
-  cancelada: 'remover',
-  negociada: 'donos',
-};
+/* O STATUS DA FATURA -> ícone (`ICONE_DO_STATUS_DA_FATURA`) SAIU DAQUI em
+ * 01/10/2026 (etapa 7b): o desenho e a cor de cada status da cobrança moram
+ * juntos em `tom-do-estado.ts` (`SELO_DA_COBRANCA`), com os de todos os outros
+ * estados do sistema. O defeito que o mapa existia para evitar continua
+ * evitado lá — a emitida tem o avião de papel, não a interrogação. */
 
 /** Os três avisos -> ícone. `erro` leva octógono e não triângulo: octógono é
  *  parada, triângulo é atenção, e a diferença entre "a fatura não vai nascer" e

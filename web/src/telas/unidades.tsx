@@ -21,7 +21,7 @@
 // (`faltamNoEndereco`), entao ela nao pode mais discordar dele.
 
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { api, type UnidadeConsumidora, type Usina, type Cliente } from '../api.ts';
+import { api, type UnidadeConsumidora, type Usina, type Cliente, type Contrato } from '../api.ts';
 import { PainelDoVinculo } from '../vinculo-do-crm-corpo.tsx';
 import type { VinculoNaTela } from '../vinculo-do-crm.ts';
 import { useAcao, useDados } from '../dados.ts';
@@ -31,13 +31,15 @@ import {
 } from '../ui.tsx';
 import {
   situacaoDaUc, ehFaturavel, contarSituacoes,
-  ROTULO_DA_SITUACAO, TOM_DA_SITUACAO, ICONE_DA_SITUACAO,
+  ROTULO_DA_SITUACAO,
   rotuloDoEndereco, enderecoEmiteBoleto, faltasDaUc,
   type SituacaoDaUc,
 } from '../unidades-regras.ts';
 import { decimalDoCadastro, decimalParaCampo, mesDaQuery } from '../dinheiro.ts';
 import { mesEmBr } from '../formato.ts';
 import { PerguntaNaTela } from '../serie.tsx';
+import { SELO_DA_UNIDADE } from '../tom-do-estado.ts';
+import { semEnderecoParaOBoleto, comContratoAtivo } from '../o-que-falta.ts';
 import {
   FILTROS_DA_TELA, filtroDaConsulta, unidadeDaConsulta, rotuloDoRecorte, esquecerORecorte,
 } from '../destino-da-camada.ts';
@@ -74,6 +76,15 @@ export function TelaUnidades() {
    */
   const daConta = useDados<Array<{ numero_uc: string; endereco: string; competencia: string }>>(
     () => api.get('/faturas/unificada/enderecos'));
+  /*
+   * OS CONTRATOS VIGENTES (01/10/2026, etapa 7b) — a mesma leitura de Contratos,
+   * e só para uma coisa: saber quais unidades têm contrato ATIVO. A trava
+   * «Endereço do pagador» do Mês conta só essas (sem contrato a unidade já cai
+   * uma camada antes), e a faixa e o recorte desta tela passaram a contar a
+   * MESMA população (`semEnderecoParaOBoleto`). Até aqui eram três números para
+   * a mesma frase: 4 no Mês, 5 na faixa, 6 no recorte.
+   */
+  const vigentes = useDados<Record<string, Contrato | null>>(() => api.get('/contratos-vigentes'));
   const acao = useAcao();
   const [edicao, setEdicao] = useState<Record<string, string>>({});
   const [rateio, setRateio] = useState<Record<string, string>>({});
@@ -134,6 +145,16 @@ export function TelaUnidades() {
     usinas.dado?.find((u) => u.id === id)?.codigo_geradora ?? (id ? '—' : null);
 
   const todas = ucs.dado ?? [];
+  /* O ENDERECO CONTA AS DA TRAVA DO MES (01/10/2026, etapa 7b): faturavel COM
+   * CONTRATO ATIVO e sem o que o banco exige — `semEnderecoParaOBoleto`, o mesmo
+   * predicado do recorte logo abaixo e da camada `endereco_do_pagador` do
+   * servidor. Ate esta data contava a faturavel, com ou sem contrato, e dava um
+   * numero maior que o do Mes. Sem os contratos (`null`), a linha espera: um
+   * numero sobre a populacao errada e pior que nenhum. */
+  const enderecoDaTrava = semEnderecoParaOBoleto(todas, vigentes.dado);
+  const idsDaTrava = enderecoDaTrava ? new Set(enderecoDaTrava.map((u) => u.id)) : null;
+  const semEndereco = enderecoDaTrava?.length ?? 0;
+  const comContrato = vigentes.dado ? todas.filter((u) => comContratoAtivo(u, vigentes.dado!)).length : 0;
   const visiveis = ordenar(
     todas.filter((u) =>
       (contem(u.numero_uc, busca) || contem(u.distribuidora, busca) || contem(nomeDoCliente(u.cliente_id), busca)) &&
@@ -146,7 +167,10 @@ export function TelaUnidades() {
          unidade sem o numero aparece como incompleta e emite normalmente. Filtro
          que nao casa com a contagem manda a pessoa para uma lista maior do que a
          linha prometeu — a regra 2 do cabecalho de `destino-da-camada.ts`. */
-      (pendencia !== 'sem_endereco' || !enderecoEmiteBoleto(u))),
+      /* [01/10/2026, etapa 7b] E A LISTA E EXATAMENTE A QUE A TRAVA CONTA: com
+         contrato ativo, alem de nao emitir. Sem os contratos ainda, o recorte
+         cai no criterio antigo (nao emite) ate eles chegarem. */
+      (pendencia !== 'sem_endereco' || (idsDaTrava ? idsDaTrava.has(u.id) : !enderecoEmiteBoleto(u)))),
     ordem,
     {
       uc: (u) => u.numero_uc,
@@ -240,14 +264,11 @@ export function TelaUnidades() {
   /* O MESMO CRITERIO DO VENCIMENTO, e pelo mesmo motivo: sem tarifa a composicao
    * LEVANTA (R26), e contar as 41 mandaria preencher doze que nao faturam. */
   const semTarifa = todas.filter((u) => !u.tarifa_reais_por_kwh && ehFaturavel(u)).length;
-  /* MESMO CRITERIO DOS OUTROS DOIS - so as faturaveis -, e pelo mesmo motivo:
-   * contar as 41 mandaria preencher doze enderecos de UC que nao vai faturar. */
-  const semEndereco = todas.filter((u) => !enderecoEmiteBoleto(u) && ehFaturavel(u)).length;
   const contagem = contarSituacoes(todas);
 
   return (
     <Pagina titulo="Unidades consumidoras"
-            sub="Espelhadas do CRM. O dia de vencimento é local e obrigatório para faturar — o servidor recusa em vez de escolher um dia.">
+            sub="Vêm do CRM. Aqui se completa o que a cobrança e o boleto precisam: o preço do kWh, o endereço do pagador e o dia de vencimento, que vale quando a conta de luz não traz a data.">
       {/*
         OS TRES AVISOS FORAM REESCRITOS EM 21/08/2026 na mesma forma: primeiro o
         QUE falta, depois o que isso IMPEDE, depois o que FAZER — e o código de
@@ -305,7 +326,8 @@ export function TelaUnidades() {
             )}
             {semEndereco > 0 && (
               <li>
-                <strong>{semEndereco}</strong> sem o endereço completo do pagador — o banco recusa o boleto.{' '}
+                <strong>{semEndereco}</strong> das {comContrato} com contrato ativo sem o endereço completo do
+                pagador — o banco recusa o boleto.{' '}
                 <button type="button" className="em-link" onClick={() => setPendencia('sem_endereco')}>Mostrar só essas</button>
               </li>
             )}
@@ -355,7 +377,7 @@ export function TelaUnidades() {
                          { valor: 'sem_vencimento', texto: 'Sem vencimento' },
                          { valor: 'sem_tarifa', texto: 'Sem tarifa' },
                          { valor: 'sem_usina', texto: 'Sem usina' },
-                         { valor: 'sem_endereco', texto: 'Sem endereço completo' }]} />
+                         { valor: 'sem_endereco', texto: 'Com contrato, sem endereço completo' }]} />
         {(busca || situacao || pendencia) && (
           <button type="button" onClick={() => { setBusca(''); setSituacao(''); setPendencia(''); esquecerORecorte(); }}>
             <Icone nome="limpar" tamanho={15} /> Limpar filtros
@@ -401,7 +423,7 @@ export function TelaUnidades() {
               </div>
             </td>
             <td className="c-sit">
-              <Marca tom={TOM_DA_SITUACAO[situacaoDaUc(u)]} icone={ICONE_DA_SITUACAO[situacaoDaUc(u)]}>
+              <Marca selo={SELO_DA_UNIDADE[situacaoDaUc(u)]}>
                 {ROTULO_DA_SITUACAO[situacaoDaUc(u)]}
               </Marca>
             </td>

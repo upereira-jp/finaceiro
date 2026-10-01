@@ -24,7 +24,7 @@ import {
   sinalDeSegredo, motivoDaTravaDoConector, podeSalvarConector,
   estadoDoCertificado, DIAS_DE_AVISO_DO_CERTIFICADO,
   podeEmitirFatura, podeGerarBoleto, podeBaixarManual,
-  totalEsperadoDaBaixa, tomDoStatusDaFatura, conferirTarifas,
+  totalEsperadoDaBaixa, conferirTarifas,
   podeImportarBoleto, motivoDaTravaDaImportacao, podeImportarAgora, DIGITOS_DA_LINHA,
   podeBaixarNoBanco,
   type EstadoDoConector, type StatusFatura, type FaturaConferivel,
@@ -35,6 +35,7 @@ import {
   lerMesLembrado, lembrarMes, CHAVE_DO_MES_LEMBRADO, type StatusDaCobranca,
 } from '../src/emissao-regras.ts';
 import { decimalEmBr, kwhEmBr } from '../src/dinheiro.ts';
+import { SELO_DA_COBRANCA } from '../src/tom-do-estado.ts';
 import { destinoDoEndereco, unidadeDaConsulta } from '../src/destino-da-camada.ts';
 
 let falhas = 0;
@@ -145,12 +146,17 @@ const chk = (id: string, cond: boolean, d: string) => {
 
 // ------------------------------------------------------------ B7 tom do status
 {
-  chk('B7', tomDoStatusDaFatura('paga') === 'ok'
-         && tomDoStatusDaFatura('vencida') === 'erro'
-         && tomDoStatusDaFatura('cancelada') === 'neutro'
-         && tomDoStatusDaFatura('rascunho') === 'nao_medido',
-      'rascunho nao e problema nem sucesso: e `nao_medido`, como no resto do sistema; so a vencida '
-      + 'e vermelha — cancelar e decisao, nao falha (30/09, etapa 4a)');
+  /* [01/10/2026, etapa 7b] O tom saiu de `cobranca-regras.ts` para
+     `tom-do-estado.ts`, e MUDOU: rascunho era `nao_medido` — o mesmo ambar da
+     emitida —, e as duas ficavam iguais em dezesseis das vinte linhas. Rascunho
+     e tarefa (`a_fazer`); emitida esta em curso sem voce (`neutro`). */
+  chk('B7', SELO_DA_COBRANCA.paga.tom === 'ok'
+         && SELO_DA_COBRANCA.vencida.tom === 'erro'
+         && SELO_DA_COBRANCA.cancelada.tom === 'neutro'
+         && SELO_DA_COBRANCA.rascunho.tom === 'a_fazer'
+         && SELO_DA_COBRANCA.emitida.tom === 'neutro',
+      'rascunho e tarefa (`a_fazer`) e emitida e neutra — nao dividem mais o tom; so a vencida e '
+      + 'vermelha — cancelar e decisao, nao falha (30/09, etapa 4a; 01/10, etapa 7b)');
 }
 
 // -------------------------------- B8 reordenar campos do documento, sem buraco
@@ -420,7 +426,7 @@ const chk = (id: string, cond: boolean, d: string) => {
           && acaoDaLinha('paga', undefined, null).tipo === 'nenhuma',
       'vencida nao ganha boleto (so emitida), emitida com boleto no banco nao pede nada, paga tambem nao');
   chk('B17d', notaDaSituacao('emitida', { nivel: 'nao_pedido' }, null)?.texto === 'Boleto ainda não pedido.'
-          && notaDaSituacao('emitida', { nivel: 'insistindo' }, endereco)?.alerta === true
+          && notaDaSituacao('emitida', { nivel: 'insistindo' }, endereco)?.selo.tom === 'erro'
           && notaDaSituacao('paga', undefined, null) === null,
       'a segunda linha da situacao diz o porque curto, e cala onde o selo ja diz tudo');
 }

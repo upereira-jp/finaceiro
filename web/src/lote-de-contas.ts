@@ -198,7 +198,7 @@ export function avisoDoItem(i: ItemDoLote, ucsDoCadastro: ReadonlySet<string>): 
 
   if (uc && ucsDoCadastro.size > 0 && !ucsDoCadastro.has(uc)) {
     return `A unidade ${uc} não está no cadastro. A conta é registrada assim mesmo, `
-         + 'mas ela não vira fatura enquanto a unidade não existir.';
+         + 'mas ela não vira cobrança enquanto a unidade não existir.';
   }
   /* ZERO NAO E AUSENTE, e a distincao ja custou caro neste projeto: uma conta
    * que fecha em R$ 0,00 e um fato possivel (a compensacao cobriu tudo), e a

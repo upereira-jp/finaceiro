@@ -35,7 +35,7 @@
 // ficaria "aguardando ativacao" para sempre, esperando um CRM que nao sabe dela.
 
 import { faltamNoEndereco } from '../../src/sicoob/porta.ts';
-import type { NomeDeIcone, TomDoSelo } from './iconografia.ts';
+import { SELO_DO_ENDERECO, type Selo } from './tom-do-estado.ts';
 
 export type UcParaSituacao = {
   status: string;
@@ -64,40 +64,11 @@ export const ROTULO_DA_SITUACAO: Record<SituacaoDaUc, string> = {
   cancelada: 'Cancelada',
 };
 
-/**
- * O tom da pilula. **So `ativa` e verde: e a unica que fatura.**
- *
- * [30/09, etapa 4a] AS QUE NAO FATURAM SAIRAM DO VERMELHO. Aguardando ativacao,
- * troca de titularidade e suspensa nao sao falha de ninguem: sao estados do
- * cadastro, decididos no outro sistema ou por gente. Pintadas de vermelho, a
- * tabela gritava em linha que nao pede conserto — agora sao `neutro` (cinza), e a
- * palavra continua dizendo qual e. O vermelho ficou para a falha (`TomDoSelo`).
- */
-export const TOM_DA_SITUACAO: Record<SituacaoDaUc, TomDoSelo> = {
-  ativa: 'ok',
-  aguardando_ativacao: 'neutro',
-  em_troca_titularidade: 'neutro',
-  suspensa: 'neutro',
-  // A interrogacao do `nao_medido` esta CERTA aqui: nos literalmente nao sabemos
-  // - o conector nao leu esta UC.
-  situacao_nao_lida: 'nao_medido',
-  cancelada: 'neutro',
-};
-
-/**
- * O icone que SOBREPOE o do tom, quando o do tom mentiria.
- *
- * `Marca` aceita esse override justamente por isto, e o precedente esta no
- * comentario dela: "Emitida e tom `nao_medido` e exibiria a interrogacao de
- * 'nao sei', que e o certo para uma camada nao medida e o errado para uma
- * fatura emitida". Cancelada e o mesmo caso - nos sabemos muito bem.
- */
-export const ICONE_DA_SITUACAO: Partial<Record<SituacaoDaUc, NomeDeIcone>> = {
-  cancelada: 'remover',
-  /* A espera tem desenho de espera: o relogio, e nao o traco do neutro. */
-  aguardando_ativacao: 'a_receber',
-  em_troca_titularidade: 'recarregar',
-};
+/* O TOM E O ICONE DA PILULA (`TOM_DA_SITUACAO`, `ICONE_DA_SITUACAO`) SAIRAM
+ * DAQUI em 01/10/2026 (etapa 7b) para `tom-do-estado.ts` (`SELO_DA_UNIDADE`).
+ * A regra e a mesma — so `ativa` e verde, e a unica que fatura —, e o que mudou
+ * foi o desenho da CANCELADA: era a lixeira, que e o desenho do botao de apagar,
+ * e num selo ela lia como acao. Agora e o circulo cortado. */
 
 /**
  * A situacao que a pessoa le, derivada das duas fontes.
@@ -206,7 +177,7 @@ export const ROTULO_DO_ENDERECO: Record<SituacaoDoEndereco, string> = {
 };
 
 /**
- * ⚠️ MANTIDA SO PARA O ROTULO — o TOM nao sai mais daqui. Ver `tomDoEndereco`.
+ * ⚠️ MANTIDA SO PARA O ROTULO — o TOM nao sai mais daqui. Ver `seloDoEndereco`.
  *
  * Ate 08/09/2026 esta tabela decidia a cor, e ela dizia que endereco incompleto
  * era `nao_medido` — "amarelo" —, com o argumento de que a exigencia da Sicoob
@@ -218,11 +189,8 @@ export const ROTULO_DO_ENDERECO: Record<SituacaoDoEndereco, string> = {
  * A tela ficou onze dias dizendo «isto nao impede cobrar» sobre a unica coisa
  * que, hoje, impede — e em amarelo, que e a cor de "pode deixar para depois".
  */
-export const TOM_DO_ENDERECO: Record<SituacaoDoEndereco, TomDoSelo> = {
-  vazio: 'a_fazer',
-  parcial: 'a_fazer',
-  completo: 'ok',
-};
+/* `TOM_DO_ENDERECO` mora em `tom-do-estado.ts` desde 01/10/2026 (etapa 7b):
+ * `SELO_DO_ENDERECO`. */
 
 /**
  * O QUE FALTA PARA O BOLETO SAIR, na mesma conta que o servidor faz.
@@ -263,8 +231,8 @@ export const enderecoEmiteBoleto = (u: EnderecoDaUc): boolean => faltamParaOBole
  * falta («Falta CEP, UF»): e tarefa, com nome. O vermelho ficou para a recusa do
  * banco, que e o que acontece quando a tarefa nao e feita.
  */
-export const tomDoEndereco = (u: EnderecoDaUc): 'ok' | 'a_fazer' =>
-  (enderecoEmiteBoleto(u) ? 'ok' : 'a_fazer');
+export const seloDoEndereco = (u: EnderecoDaUc): Selo =>
+  SELO_DO_ENDERECO[enderecoEmiteBoleto(u) ? 'completo' : 'vazio'];
 
 /** O rotulo da pilula, dizendo o que falta quando falta. */
 export function rotuloDoEndereco(u: EnderecoDaUc): string {

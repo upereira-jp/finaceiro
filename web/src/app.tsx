@@ -305,9 +305,11 @@ export function App() {
         {destino ? (
           <Carregando texto="Abrindo o seu setor…" />
         ) : !s.tenantId ? (
-          <Aviso tipo="erro">
-            Escolha a empresa no pé do menu, logo acima do seu nome. Nenhuma tela carrega sem isso — e o
-            servidor recusaria de qualquer forma: com mais de um vínculo, ele não escolhe por você.
+          /* [01/10/2026, etapa 7b] ÂMBAR, E NÃO O VERMELHO DA FALHA: nada deu
+             errado — falta uma escolha, e ela é da pessoa. */
+          <Aviso tipo="alerta">
+            Escolha a empresa no pé do menu, logo acima do seu nome. Nenhuma tela abre antes disso: com
+            mais de um vínculo, o sistema não escolhe por você.
           </Aviso>
         ) : (
           <Suspense fallback={<Carregando texto="Abrindo a tela…" />}>

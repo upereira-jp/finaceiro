@@ -89,6 +89,8 @@ import { ArrowRight } from '@phosphor-icons/react/ArrowRight';
 import { List } from '@phosphor-icons/react/List';
 import { ArrowLineLeft } from '@phosphor-icons/react/ArrowLineLeft';
 import { ArrowLineRight } from '@phosphor-icons/react/ArrowLineRight';
+import { Prohibit } from '@phosphor-icons/react/Prohibit';
+import { ArrowsLeftRight } from '@phosphor-icons/react/ArrowsLeftRight';
 
 import type { NomeDeIcone } from './iconografia.ts';
 
@@ -221,6 +223,14 @@ const DESENHO: Record<NomeDeIcone, Icon> = {
   mais_acoes: DotsThree,
   abrir_linha: CaretRight,
   ir_para: ArrowRight,
+  /* [01/10/2026, etapa 7b] OS TRES DESENHOS DE ESTADO NOVOS. `cancelado` e o
+   * circulo cortado — a lixeira e o desenho do botao de apagar, e num selo ela
+   * lia como acao. `a_pagar` e a MESMA mao que entrega moedas de
+   * `contas_a_pagar`: a conta em aberto e o dinheiro que vai sair. `alterou`
+   * sao as setas da troca, de um valor para outro. */
+  cancelado: Prohibit,
+  a_pagar: HandCoins,
+  alterou: ArrowsLeftRight,
 
   // cobrança e documento
   boleto: Barcode,

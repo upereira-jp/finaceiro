@@ -89,13 +89,13 @@ const NIVEL: Record<NivelDaEmissao, {
   grave: boolean;
 }> = {
   nao_pedido: {
-    estado: 'A fatura foi emitida e o boleto ainda não foi pedido ao banco.',
-    oQueFazer: 'Peça o boleto por aqui. Emitir a fatura e pedir o boleto são dois atos, '
+    estado: 'A cobrança foi emitida e o boleto ainda não foi pedido ao banco.',
+    oQueFazer: 'Peça o boleto por aqui. Emitir a cobrança e pedir o boleto são dois atos, '
              + 'e o segundo não acontece sozinho.',
     grave: false,
   },
   esquecido: {
-    estado: 'Ninguém pediu o boleto desta fatura, e já passou de um dia.',
+    estado: 'Ninguém pediu o boleto desta cobrança, e já passou de um dia.',
     oQueFazer: 'Peça o boleto por aqui. Nada vai pedir sozinho: o sistema só tenta de novo '
              + 'boleto que já foi pedido ao menos uma vez, e este nunca foi. '
              + 'Se o pedido for recusado, a recusa aparece na hora e diz o que falta no cadastro.',
@@ -115,7 +115,7 @@ const NIVEL: Record<NivelDaEmissao, {
     grave: true,
   },
   parado: {
-    estado: 'Esta fatura saiu do estado em que o banco aceita registrar boleto, e o sistema '
+    estado: 'Esta cobrança saiu do estado em que o banco aceita registrar boleto, e o sistema '
           + 'parou de tentar.',
     oQueFazer: 'Ninguém vai tentar de novo sozinho. Decida entre cobrar por outro caminho ou '
              + 'refazer a cobrança do mês para esta unidade.',
@@ -170,16 +170,16 @@ export function fraseDaLinha(l: LinhaNaTela): FraseDaLinha {
  */
 export function resumoDaEmissao(e: EmissaoTravadaNaTela): string {
   if (e.total === 0) {
-    return 'Todas as faturas emitidas já têm boleto registrado no banco.';
+    return 'Todas as cobranças emitidas já têm boleto registrado no banco.';
   }
   const n = e.total;
-  const faturas = n === 1 ? '1 fatura emitida' : `${n} faturas emitidas`;
+  const cobrancas = n === 1 ? '1 cobrança emitida' : `${n} cobranças emitidas`;
   const pedem = e.pedem_gente === 0
     ? 'nenhuma precisa de você agora — o sistema está tentando sozinho.'
     : e.pedem_gente === 1
       ? '1 delas não se resolve sozinha.'
       : `${e.pedem_gente} delas não se resolvem sozinhas.`;
-  return `${faturas} ainda sem boleto no banco, e ${pedem}`;
+  return `${cobrancas} ainda sem boleto no banco, e ${pedem}`;
 }
 
 /** Truncou? A resposta traz `total` do banco e a lista vem com teto. Uma tela

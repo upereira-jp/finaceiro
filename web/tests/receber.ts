@@ -8,12 +8,13 @@
 // faria o teste depender do fuso da maquina.
 
 import {
-  diasDeAtraso, faixaDeAtraso, fraseDoAtraso, FAIXAS, ROTULO_DA_FAIXA, TOM_DA_FAIXA,
-  situacaoDaCobranca, SITUACOES, ROTULO_DA_SITUACAO, TOM_DA_SITUACAO, podeSerPaga,
+  diasDeAtraso, faixaDeAtraso, fraseDoAtraso, FAIXAS, ROTULO_DA_FAIXA,
+  situacaoDaCobranca, SITUACOES, ROTULO_DA_SITUACAO, podeSerPaga,
   porFaixa, porCliente, totalCentavos, avisoDeTruncagem,
   type TituloAReceber,
 } from '../src/receber-regras.ts';
 import { mesDaQuery } from '../src/dinheiro.ts';
+import { SELO_DO_ATRASO, SELO_DO_BOLETO } from '../src/tom-do-estado.ts';
 
 let falhas = 0;
 let feitas = 0;
@@ -51,10 +52,14 @@ chk('RC2f', faixaDeAtraso('2026-07-24', HOJE) === 'ate_60', '60 dias -> 31 a 60 
 chk('RC2g', faixaDeAtraso('2026-07-23', HOJE) === 'ate_90', '61 dias -> 61 a 90');
 chk('RC2h', faixaDeAtraso('2026-06-24', HOJE) === 'ate_90', '90 dias -> 61 a 90 (inclusivo)');
 chk('RC2i', faixaDeAtraso('2026-06-23', HOJE) === 'acima_90', '91 dias -> mais de 90');
-chk('RC2j', FAIXAS.every((f) => ROTULO_DA_FAIXA[f] && TOM_DA_FAIXA[f]),
+chk('RC2j', FAIXAS.every((f) => ROTULO_DA_FAIXA[f] && SELO_DO_ATRASO[f]),
     'toda faixa tem rotulo e tom');
-chk('RC2k', TOM_DA_FAIXA.a_vencer === 'ok' && FAIXAS.slice(1).every((f) => TOM_DA_FAIXA[f] === 'erro'),
-    'a vencer e ok; qualquer atraso e `erro` - a vencida e uma das quatro coisas que ficaram vermelhas');
+/* [01/10/2026, etapa 7b] A VENCER DEIXOU DE SER `ok`: o verde com o visto dizia
+   «resolvido» sobre um titulo que ninguem pagou ainda. E neutro, com o
+   calendario (`tom-do-estado.ts`). */
+chk('RC2k', SELO_DO_ATRASO.a_vencer.tom === 'neutro' && SELO_DO_ATRASO.a_vencer.icone === 'calendario'
+         && FAIXAS.slice(1).every((f) => SELO_DO_ATRASO[f].tom === 'erro'),
+    'a vencer e neutro (o calendario, e nao o visto verde); qualquer atraso e `erro`');
 
 // ---------------------------------------------------------- RC3 a frase
 
@@ -75,13 +80,13 @@ chk('RC4e', situacaoDaCobranca(b('erro')) === 'boleto_recusado', 'erro = recusad
 chk('RC4f', situacaoDaCobranca(b('baixado')) === 'boleto_baixado'
          && situacaoDaCobranca(b('cancelado')) === 'boleto_baixado',
     'baixado e cancelado = nao pagavel');
-chk('RC4g', SITUACOES.every((s) => ROTULO_DA_SITUACAO[s] && TOM_DA_SITUACAO[s]),
+chk('RC4g', SITUACOES.every((s) => ROTULO_DA_SITUACAO[s] && SELO_DO_BOLETO[s]),
     'toda situacao tem rotulo e tom');
 chk('RC4h', podeSerPaga('boleto_no_banco') && podeSerPaga('boleto_importado')
          && !podeSerPaga('sem_boleto') && !podeSerPaga('boleto_baixado') && !podeSerPaga('boleto_recusado'),
     'so boleto vivo no banco pode ser pago hoje');
-chk('RC4i', TOM_DA_SITUACAO.sem_boleto === 'a_fazer' && TOM_DA_SITUACAO.boleto_baixado === 'a_fazer'
-           && TOM_DA_SITUACAO.boleto_recusado === 'erro',
+chk('RC4i', SELO_DO_BOLETO.sem_boleto.tom === 'a_fazer' && SELO_DO_BOLETO.boleto_baixado.tom === 'a_fazer'
+           && SELO_DO_BOLETO.boleto_recusado.tom === 'erro',
     'sem boleto e baixado sao TAREFA (`a_fazer`): cobranca que nao saiu e trabalho, nao espera — e a '
     + 'recusa do banco, que e falha, e a unica vermelha');
 

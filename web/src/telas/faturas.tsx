@@ -83,10 +83,11 @@ import {
   type MotivoDeTravaDaImportacao,
 } from '../cobranca-regras.ts';
 import {
-  chaveDaOrdemDeAcao, acaoDaLinha, notaDaSituacao, recusaDaLinha, tipoDaRecusa, paraPedirBoleto,
+  chaveDaOrdemDeAcao, acaoDaLinha, notaDaSituacao, notaDaRecusaCrua, recusaDaLinha, tipoDaRecusa, paraPedirBoleto,
   fraseDaOrigem, lembrarMes,
-  type EstadoDaVez, type EscolhaDoMes, type RecusaLida,
+  type EstadoDaVez, type EscolhaDoMes, type NotaDaSituacao, type RecusaLida,
 } from '../emissao-regras.ts';
+import { SELO_DE_ORIGEM, seloDoStatusDoBoleto } from '../tom-do-estado.ts';
 import { procurarMesDoTrabalho, armazemDoNavegador, anunciarMesEmTela } from '../leitura-do-mes.ts';
 import {
   SituacaoDaCobranca, RecusaNaTela, BotaoDaSaida, RevisaoDaSerie, ResumoDaBaixa, type LinhaDaSerie,
@@ -609,8 +610,7 @@ export function TelaFaturas() {
               /* A RECUSA DESCONHECIDA que acabou de voltar tambem e dita na linha,
                  com as palavras do banco: sem traducao, e a unica informacao. */
               const nota = notaDaSituacao(f.status, t, recusa)
-                ?? (sessao && !tipoDaRecusa(sessao.nome, sessao.texto)
-                  ? { texto: `O banco recusou agora: ${sessao.texto}`, alerta: true } : null);
+                ?? (sessao && !tipoDaRecusa(sessao.nome, sessao.texto) ? notaDaRecusaCrua(sessao.texto) : null);
               return (
                 <LinhaDaCobranca key={f.id} f={f} unidade={unidadeDe(f)} cliente={clienteDe(f)}
                                  colunas={colunas}
@@ -664,7 +664,7 @@ export function TelaFaturas() {
 
 function LinhaDaCobranca(p: {
   f: Fatura; unidade: string; cliente: string | null; colunas: number;
-  nota: { texto: string; alerta: boolean } | null;
+  nota: NotaDaSituacao | null;
   acaoDaLinha: ReturnType<typeof acaoDaLinha>;
   aberta: boolean; abrir: () => void;
   ocupado: boolean; pedindo: boolean;
@@ -729,7 +729,10 @@ function LinhaDaCobranca(p: {
               <span data-menu-da-linha={f.id} style={{ display: 'contents' }}>
                 <Menu soIcone className="em-menu" rotulo={`Mais ações da unidade ${p.unidade}`}
                       gatilho={<Icone nome="mais_acoes" tamanho={18} peso="bold" />}>
-                  <button type="button" role="menuitem" onClick={() => p.pedirCancelamento(f.id)}>
+                  {/* PERIGO, como o «Encerrar» do menu de Contratos (etapa 7b):
+                      cancelar a cobrança não se desfaz, e é o único item deste
+                      menu. */}
+                  <button type="button" role="menuitem" className="perigo" onClick={() => p.pedirCancelamento(f.id)}>
                     <Icone nome="remover" tamanho={16} /> Cancelar esta cobrança…
                   </button>
                 </Menu>
@@ -949,7 +952,7 @@ function PainelDaFatura({ f, unidade, uc, mes, daSessao, ultimoErroDaLista, pedi
           {boleto.dado && (
             <div className="em-boleto">
               <div style={{ ...linha, gap: 10 }}>
-                <Marca tom={boleto.dado.status === 'liquidado' ? 'ok' : boleto.dado.status === 'erro' ? 'erro' : 'nao_medido'}>
+                <Marca selo={seloDoStatusDoBoleto(boleto.dado.status)}>
                   {rotulo(boleto.dado.status)}
                 </Marca>
                 {/*
@@ -960,7 +963,7 @@ function PainelDaFatura({ f, unidade, uc, mes, daSessao, ultimoErroDaLista, pedi
                   dos dois - e a baixa pela API nao vale para o importado.
                 */}
                 {boleto.dado.origem === 'importado' && (
-                  <Marca tom="nao_medido" icone="baixar">emitido no banco</Marca>
+                  <Marca selo={SELO_DE_ORIGEM.emitido_no_banco}>emitido no banco</Marca>
                 )}
                 <span className="fraco">nosso número {boleto.dado.nosso_numero ?? '—'}</span>
                 <span className="fraco">{emReais(boleto.dado.valor_registrado_centavos)}</span>
@@ -1231,7 +1234,7 @@ function ImportarBoleto({ fatura, aoImportar }: { fatura: Fatura; aoImportar: ()
       linha_digitavel: linhaDigitavel, nosso_numero: nossoNumero, pix_copia_e_cola: pix,
     }));
     if (ok) {
-      acao.anunciar('Boleto importado. Ele é o que o documento desta fatura vai imprimir.');
+      acao.anunciar('Boleto importado. Ele é o que a folha desta cobrança vai imprimir.');
       setLinhaDigitavel(''); setNossoNumero(''); setPix('');
       setConferencia(null); setStatus(null);
       aoImportar();
@@ -1245,7 +1248,7 @@ function ImportarBoleto({ fatura, aoImportar }: { fatura: Fatura; aoImportar: ()
         Para o boleto que <strong>já existe</strong> — emitido à mão no portal da cooperativa
         enquanto o certificado A1 não chega. Nada aqui fala com a Sicoob: o título já está
         registrado lá, e o que entra é a transcrição dele. Depois de importado ele aparece no
-        painel acima e é o que o documento desta fatura imprime, no lugar do Pix estático.
+        painel acima e é o que a folha desta cobrança imprime, no lugar do Pix estático.
       </p>
 
       {/* O `input[type=file]` NU, e não um `<label>` disfarçado de botão: o

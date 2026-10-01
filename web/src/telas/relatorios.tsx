@@ -74,8 +74,8 @@ export function TelaRelatorios() {
                </tr>
              )} />
 
-      <Bloco titulo="Comissão por originador"
-             nota="A parcela importa: a comissão sai na 1ª e na 2ª fatura cheia do cliente, e é zero da 3ª em diante."
+      <Bloco titulo="Comissão por quem trouxe o cliente"
+             nota="A parcela importa: a comissão sai na 1ª e na 2ª cobrança cheia paga do cliente, e é zero da 3ª em diante."
              detalhe={<DetalheTecnico>
                <p style={{ margin: 0 }}>A escala das parcelas é a do PRD §5.4; a soma vem da view <code>comissao_por_originador</code>.</p>
              </DetalheTecnico>}
@@ -88,7 +88,7 @@ export function TelaRelatorios() {
                { titulo: 'Itens', de: (c: Comissao) => c.itens },
                { titulo: 'Valor R$', de: (c: Comissao) => reaisParaPlanilha(c.valor_centavos) },
              ] }}
-             cabecalho={<><th>Originador</th><th>Mês de ref.</th><th className="num">Parcela</th><th className="num">Itens</th><th className="num">Valor</th></>}
+             cabecalho={<><th>Quem trouxe o cliente</th><th>Mês de ref.</th><th className="num">Parcela</th><th className="num">Itens</th><th className="num">Valor</th></>}
              corpo={(c: Comissao, i: number) => (
                <tr key={`${c.originador}-${c.competencia}-${c.parcela_comissao}-${i}`}>
                  <td><strong>{c.originador}</strong></td>

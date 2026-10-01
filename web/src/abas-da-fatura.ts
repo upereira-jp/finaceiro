@@ -24,8 +24,8 @@
 //
 // O `#cadastro` CONTINUA VALENDO, agora para ABRIR a aba e nao para revela-la:
 // a tela de Pendencias, a ajuda e tres mensagens do SERVIDOR mandam para
-// `/documento#cadastro` pelo nome «3 · Cadastro da fatura», e as tres
-// continuam certas letra por letra.
+// `/documento#cadastro` pelo nome da aba — «Dados de quem cobra» desde
+// 01/10/2026 —, e as tres continuam certas letra por letra.
 //
 // E A ABA 2 MUDOU DE NOME. Ela se chamava «2 · Emissão», e e so a folha que o
 // cliente recebe, para conferir e imprimir — quem lia "Emissão" procurava ali o
@@ -33,12 +33,35 @@
 
 export type AbaDaFatura = 'leitura' | 'emissao' | 'cadastro';
 
-/** O rotulo carrega o NUMERO da aba, e o numero e o da ordem na barra. A chave
- *  interna `emissao` ficou (ela e o `id` do painel), o que a pessoa le mudou. */
+/**
+ * O ROTULO DE CADA ABA. A chave interna `emissao` ficou (ela e o `id` do
+ * painel), o que a pessoa le mudou.
+ *
+ * [01/10/2026, etapa 7b] AS ABAS PERDERAM O NUMERO, e a terceira mudou de nome.
+ *
+ *   SEM NUMERO porque a tela ja tem uma numeracao, e e outra: Contas de luz e
+ *   onde moram os PASSOS 1 e 2 do mes (a faixa do alto diz isso, e o menu
+ *   lateral tambem), e as abas «1 · 2 · 3» logo abaixo eram uma segunda
+ *   contagem que nao casava com a primeira — «2 · Folha do cliente» nao e o
+ *   passo 2. A ordem da barra ja diz a ordem;
+ *
+ *   «DADOS DE QUEM COBRA» no lugar de «Cadastro da fatura». A aba nao cadastra
+ *   fatura nenhuma: ela guarda quem a G3 e na folha — razao social, CNPJ,
+ *   contato do rodape, logo, chave Pix — e como a folha sai (modelo, campos).
+ *   O que o Mes trava nela e exatamente o emissor («a razao social e o CNPJ da
+ *   empresa que cobra»), e «fatura» na tela e so o nome da folha impressa, a
+ *   Fatura unificada;
+ *
+ *   «LEITURA E CALCULO» e «FOLHA DO CLIENTE» ficam: dizem o que mostram.
+ *
+ * Os textos que mandam para uma aba citam o nome dela letra por letra — inclusive
+ * tres mensagens do SERVIDOR (`src/repos/documento.ts`, `src/repos/prontidao.ts`,
+ * `src/dominio/fatura-do-registro.ts`), atualizadas no mesmo dia.
+ */
 export const ROTULO_DA_ABA: Record<AbaDaFatura, string> = {
-  leitura: '1 · Leitura e cálculo',
-  emissao: '2 · Folha do cliente',
-  cadastro: '3 · Cadastro da fatura',
+  leitura: 'Leitura e cálculo',
+  emissao: 'Folha do cliente',
+  cadastro: 'Dados de quem cobra',
 };
 
 /** A ordem da barra. E a MESMA lista que governa a seta do teclado — duas listas

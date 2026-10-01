@@ -38,7 +38,7 @@ import { estadoDoCertificado } from '../cobranca-regras.ts';
 import { CorpoDaSaude } from '../saude-corpo.tsx';
 import { FaixasDasAutomacoes, PainelDasAutomacoes } from '../automacoes-corpo.tsx';
 import type { NivelDoAviso } from '../saude-do-dinheiro.ts';
-import type { TomDoSelo } from '../iconografia.ts';
+import { SELO_DA_CONFERENCIA, SELO_DA_LEITURA_DO_CRM } from '../tom-do-estado.ts';
 import {
   VERBETE_DA_CAMADA, SITUACAO,
   agruparPorEfeito, tituloDoGrupo, subDoGrupo, contagemDaCamada, aindaEmAberto, jaFechadas,
@@ -52,15 +52,13 @@ import { mesDaQuery } from '../dinheiro.ts';
 import { quandoEmBr } from '../formato.ts';
 import { abrirAjuda } from '../ajuda-gatilho.tsx';
 
-/**
- * A SITUAÇÃO DA LINHA -> o tom do selo. [30/09/2026, etapa 4a] Até aqui a tela
- * passava `c.situacao` direto como tom, e `pendente` era o vermelho: «Falta
- * preencher» saía na mesma tinta de «Recusada pelo banco». Faltar cadastro é
- * TAREFA — âmbar, com o lápis —, e o vermelho ficou para a falha (`TomDoSelo`).
+/*
+ * A SITUAÇÃO DA LINHA -> o selo: `SELO_DA_CONFERENCIA`, de `tom-do-estado.ts`
+ * desde 01/10/2026 (etapa 7b). [30/09/2026, etapa 4a] Até aqui a tela passava
+ * `c.situacao` direto como tom, e `pendente` era o vermelho: «Falta preencher»
+ * saía na mesma tinta de «Recusada pelo banco». Faltar cadastro é TAREFA —
+ * âmbar, com o lápis —, e o vermelho ficou para a falha.
  */
-const TOM_DA_SITUACAO: Record<string, TomDoSelo> = {
-  ok: 'ok', pendente: 'a_fazer', nao_medido: 'nao_medido',
-};
 
 /* ==========================================================================
  * A SAUDE DO CAMINHO DO DINHEIRO, no alto da PRIMEIRA tela
@@ -356,7 +354,7 @@ export function TelaProntidao() {
                 <tr key={c.camada}>
                   <td><OQueFalta camada={c} /></td>
                   <td className="c-sit">
-                    <Marca tom={TOM_DA_SITUACAO[c.situacao] ?? 'nao_medido'}>
+                    <Marca selo={SELO_DA_CONFERENCIA[c.situacao as keyof typeof SELO_DA_CONFERENCIA] ?? SELO_DA_CONFERENCIA.nao_medido}>
                       {SITUACAO[c.situacao]?.curto ?? c.situacao}
                     </Marca>
                   </td>
@@ -427,9 +425,13 @@ function OQueFalta({ camada: c }: { camada: Camada }) {
         )}
         <p style={{ margin: '0 0 6px' }}>{c.explicacao}</p>
         {d?.nota && <p style={{ margin: '0 0 6px' }}>{d.nota}</p>}
+        {/* [01/10/2026, etapa 7b] O COMANDO É DE QUEM CUIDA DO SERVIDOR, e a
+            frase diz isso: «Para a carteira inteira de uma vez: npm run …» lia
+            como instrução para quem abriu a tela, que não tem terminal. */}
         {d?.caminho && (
           <p style={{ margin: '0 0 6px' }}>
-            Para a carteira inteira de uma vez: <code>{d.caminho}</code>
+            Quem cuida do servidor pode preencher a carteira inteira de uma vez com o
+            comando <code>{d.caminho}</code>.
           </p>
         )}
         <p style={{ margin: 0 }}>
@@ -630,8 +632,9 @@ function SinaisDoConector() {
               <tr key={`${x.entidade}-${x.chave}-${i}`}>
                 <td className="c-sit">
                   {/* A recusa é falha (a linha não foi gravada); a divergência
-                      e a revisão são coisa a olhar. */}
-                  <Marca tom={x.tipo === 'recusa' ? 'erro' : 'nao_medido'}>{x.tipo}</Marca>
+                      e a revisão são coisa a olhar — tarefa, e não mais a
+                      interrogação de «não se sabe» (etapa 7b). */}
+                  <Marca selo={SELO_DA_LEITURA_DO_CRM[x.tipo]}>{x.tipo}</Marca>
                 </td>
                 <td className="c-id"><span className="fraco">{x.entidade}</span> {x.chave}</td>
                 {/* A frase na medida de leitura (62ch): a 1440 ela corria 88

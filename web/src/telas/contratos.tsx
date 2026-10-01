@@ -57,7 +57,7 @@
 //                                       cliente. Suspender e Encerrar moram no
 //                                       menu «⋯» da linha, e os dois perguntam
 //                                       na tela dizendo unidade E cliente;
-//   «Quem traz clientes»                 o cadastro e o «quem é quem», no pé.
+//   «Cadastro de quem trouxe o cliente» o cadastro e o «quem é quem», no pé.
 //
 // E O ENDEREÇO RECORTA: `?pendencia=sem_contrato` mostra só o bloco do que
 // falta, `?pendencia=sem_originador` só os contratos sem quem trouxe — com o
@@ -71,13 +71,12 @@ import {
   Pagina, Aviso, RetornoDoAto, Tabela, Campo, ThOrd, Marca, Icone, useOrdenacao, ordenar, rotulo, Escolha,
   BotaoDeCriar, PainelDeCriar, Busca, Ferramentas, Filtro, MostrandoSo, Menu, contem,
 } from '../ui.tsx';
-import type { TomDoSelo } from '../iconografia.ts';
+import { seloDoContrato } from '../tom-do-estado.ts';
 
-/* O status do contrato no tom do selo (`TomDoSelo`). [30/09/2026, etapa 4a] O
- * que nao e `ativo` era vermelho; suspender e encerrar sao decisoes, nao falhas
- * — `neutro` —, e o rascunho e a tarefa de ativar — `a_fazer`. */
-const tomDoContrato = (status: string): TomDoSelo =>
-  (status === 'ativo' ? 'ok' : status === 'rascunho' ? 'a_fazer' : 'neutro');
+/* O status do contrato no tom do selo: `seloDoContrato`, de `tom-do-estado.ts`
+ * desde 01/10/2026 (etapa 7b). [30/09/2026, etapa 4a] O que nao e `ativo` era
+ * vermelho; suspender e encerrar sao decisoes, nao falhas — `neutro` —, e o
+ * rascunho e a tarefa de ativar — `a_fazer`. */
 import { Ligacao } from '../rota.tsx';
 import { paraCentavos, emReais } from '../dinheiro.ts';
 import { diaEmBr, hojeEmSP } from '../formato.ts';
@@ -325,9 +324,9 @@ export function TelaContratos() {
           {origs.erro && <Aviso tipo="erro">Não consegui carregar a lista de quem trouxe os clientes: {origs.erro}</Aviso>}
           {!origs.erro && !origs.carregando && (origs.dado ?? []).length === 0 && (
             <Aviso tipo="alerta">
-              Ninguém cadastrado ainda como quem traz clientes — e o contrato não pode ser criado
-              sem isso. Cadastre em <a href="#quem-traz-clientes">Quem traz clientes</a>, no pé desta
-              tela. A escolha não muda depois, então ela precisa estar certa da primeira vez.
+              Ninguém cadastrado ainda em «Quem trouxe o cliente» — e o contrato não pode ser criado
+              sem isso. Cadastre em <a href="#quem-trouxe-o-cliente">Cadastro de quem trouxe o cliente</a>,
+              no pé desta tela. A escolha não muda depois, então ela precisa estar certa da primeira vez.
             </Aviso>
           )}
           {trava === 'sem_originador' && (origs.dado ?? []).length > 0 && (
@@ -399,7 +398,7 @@ export function TelaContratos() {
                     // mesma mentira que o `catch` engolido contava.
                     vigentes.carregando ? 'Lendo os contratos…'
                     : vigentes.erro ? 'Não foi possível ler os contratos — o aviso acima diz por quê. Esta lista não está vazia: ela é desconhecida.'
-                    : todas.length === 0 ? 'Nenhum contrato — e é isso que impede a primeira fatura.'
+                    : todas.length === 0 ? 'Nenhum contrato — e é isso que impede a primeira cobrança.'
                     : soSemQuem && !busca && !situacao
                       ? 'Todo contrato ativo tem quem trouxe o cliente registrado.'
                       : 'Nenhum contrato corresponde à busca ou aos filtros.'
@@ -420,8 +419,11 @@ export function TelaContratos() {
         atos. Continua sem aba própria no menu, pelo motivo de sempre: é nesta
         tela que quem trouxe o cliente importa.
       */}
-      <section className="secao-de-pe" aria-labelledby="quem-traz-clientes">
-        <h2 id="quem-traz-clientes">Quem traz clientes</h2>
+      {/* [01/10/2026, etapa 7b] UM NOME SÓ: era «Quem traz clientes» aqui e
+          «Quem trouxe o cliente» no contrato, em Contas a pagar e no Mês — dois
+          nomes para a mesma pessoa. Relatórios dizia «originador». */}
+      <section className="secao-de-pe" aria-labelledby="quem-trouxe-o-cliente">
+        <h2 id="quem-trouxe-o-cliente">Cadastro de quem trouxe o cliente</h2>
         <p className="sub">
           {(origs.dado ?? []).length === 0
             ? 'Ninguém cadastrado ainda.'
@@ -597,7 +599,7 @@ function LinhaDoContrato({ k, uc, cliente, usina, quem, semQuem, aoMudar }: {
           ) : <span className="fraco">—</span>)}
         </td>
         <td className="c-sit">
-          <Marca tom={tomDoContrato(k.status)}>{rotulo(k.status)}</Marca>
+          <Marca selo={seloDoContrato(k.status)}>{rotulo(k.status)}</Marca>
           <div className="uc-meta">fechado em {diaEmBr(k.data_fechamento)}</div>
         </td>
         <td className="num">{k.faturas_cheias_pagas}</td>
@@ -652,7 +654,7 @@ function LinhaDoContrato({ k, uc, cliente, usina, quem, semQuem, aoMudar }: {
                             aoManter={desistir} aoConfirmar={() => void encerrar()}>
               Encerrar o contrato da unidade <strong>{uc}</strong>
               {cliente && <>, de <strong>{cliente}</strong></>}? A unidade fica livre para um contrato
-              novo, e deixa de ser faturada por este. O contador de faturas cheias pagas
+              novo, e deixa de ser faturada por este. O contador de cobranças cheias pagas
               ({k.faturas_cheias_pagas}) recomeça no contrato seguinte, e não há como desfazer isto
               pela tela.
             </PerguntaNaTela>
@@ -743,7 +745,7 @@ function QuemEQuemNoOutroSistema({ originadores, aoCasar }: {
             </Aviso>
           )}
 
-          <Tabela vazio="Ninguém cadastrado ainda como quem traz clientes."
+          <Tabela vazio="Ninguém cadastrado ainda em «Quem trouxe o cliente»."
                   cabecalho={<><th>Aqui</th><th>É quem, no outro sistema</th></>}>
             {originadores.map((o) => (
               <tr key={o.id}>
@@ -838,7 +840,7 @@ function NovoOriginador({ aoCriar }: { aoCriar: () => void }) {
     return (
       <>
         <button type="button" onClick={() => { acao.limpar(); setAberto(true); }}>
-          <Icone nome="acrescentar" tamanho={15} /> Cadastrar quem traz clientes
+          <Icone nome="acrescentar" tamanho={15} /> Cadastrar quem trouxe o cliente
         </button>
         <RetornoDoAto texto={acao.sucesso} />
       </>
@@ -847,7 +849,7 @@ function NovoOriginador({ aoCriar }: { aoCriar: () => void }) {
 
   return (
     <div className="cartao">
-      <h3 style={{ marginTop: 0 }}>Cadastrar quem traz clientes</h3>
+      <h3 style={{ marginTop: 0 }}>Cadastrar quem trouxe o cliente</h3>
       <div className="campos">
         <Campo rotulo="Nome ou razão social" valor={nome} ao={setNome} />
         <Campo rotulo="CPF ou CNPJ" valor={documento} ao={setDocumento}
@@ -860,7 +862,7 @@ function NovoOriginador({ aoCriar }: { aoCriar: () => void }) {
         </label>
         <label>
           Tipo
-          <Escolha rotuloAcessivel="Tipo de quem traz o cliente" valor={tipo} ao={setTipo}
+          <Escolha rotuloAcessivel="Tipo de quem trouxe o cliente" valor={tipo} ao={setTipo}
                    opcoes={[{ valor: 'vendedor_g3', texto: 'Vendedor da casa' },
                             { valor: 'terceirizado', texto: 'Terceirizado' },
                             { valor: 'parceiro_indicador', texto: 'Parceiro indicador' },

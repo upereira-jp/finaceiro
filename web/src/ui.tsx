@@ -31,7 +31,8 @@ import { Children, Fragment, isValidElement, useEffect, useId, useLayoutEffect, 
 import type { ReactNode, CSSProperties, KeyboardEvent as EventoDeTecla } from 'react';
 import { lerModo, aplicarModo, type ModoTema } from './tema.ts';
 import { Icone, Logotipo } from './icones.tsx';
-import { ICONE_DO_ESTADO, ICONE_DO_AVISO, type NomeDeIcone, type TomDoSelo } from './iconografia.ts';
+import { ICONE_DO_AVISO, type NomeDeIcone } from './iconografia.ts';
+import type { Selo } from './tom-do-estado.ts';
 import { PORQUE } from './porques.ts';
 import { tecladoDoCampo, type Teclado } from './teclado.ts';
 
@@ -273,7 +274,7 @@ export function CampoData(p: {
  */
 export const AjudaDoMes = () => (
   <div className="fraco" style={{ fontSize: 13, marginTop: 2 }}>
-    o mês do consumo, não o mês em que a fatura é paga
+    o mês do consumo, não o mês em que a cobrança é paga
   </div>
 );
 
@@ -732,18 +733,20 @@ export function rotulo(s: string): string {
  * do `tema.ts`: a separacao entre estado e acento passou a ser de PESO — o
  * acento e preenchido solido, o estado e preenchido suave.
  */
-export const Marca = ({ tom, icone, children }: {
-  tom: TomDoSelo;
-  /** Sobrepõe o ícone do TOM pelo ícone do SIGNIFICADO. Existe porque a fatura
-   *  tem seis status mapeados em três tons: "Emitida" é tom `nao_medido` e
-   *  exibiria a interrogação de "não sei", que é o certo para uma camada não
-   *  medida e o errado para uma fatura emitida. Ver
-   *  `ICONE_DO_STATUS_DA_FATURA`. */
-  icone?: NomeDeIcone;
+export const Marca = ({ selo, children }: {
+  /**
+   * [01/10/2026, etapa 7b] O SELO INTEIRO, e não mais `tom` e `icone` soltos.
+   * Até aqui cada tela escolhia a cor do seu selo, e a crítica de 01/10 achou a
+   * mesma recusa do banco vermelha numa tela, âmbar noutra e cinza numa
+   * terceira. Agora a cor e o desenho de cada estado vêm de `tom-do-estado.ts`
+   * — e só de lá: um `tom=` aqui não compila, e um `selo={{ … }}` escrito à mão
+   * é recusado pela suíte `web/tests/tom-do-estado.ts`.
+   */
+  selo: Selo;
   children: ReactNode;
 }) => (
-  <span className={`marca ${tom}`}>
-    <Icone nome={icone ?? ICONE_DO_ESTADO[tom]} tamanho={12} peso="bold" />
+  <span className={`marca ${selo.tom}`}>
+    <Icone nome={selo.icone} tamanho={12} peso="bold" />
     {children}
   </span>
 );

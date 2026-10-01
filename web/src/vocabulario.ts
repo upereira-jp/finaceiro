@@ -158,7 +158,7 @@ export const VERBETE_DA_CAMADA: Record<string, Verbete> = {
   },
 
   emissor_da_fatura: {
-    titulo: 'Quem emite a fatura',
+    titulo: 'Dados de quem cobra',
     simples: 'A razão social e o CNPJ da empresa que cobra ainda não foram preenchidos.',
     consequencia: 'A folha sai assim mesmo, e é esse o risco: ela vai ao cliente sem dizer quem '
       + 'está cobrando, o campo do beneficiário fica em branco e o aviso «confira sempre se o '
@@ -192,8 +192,8 @@ export const VERBETE_DA_CAMADA: Record<string, Verbete> = {
 
   originador_do_contrato: {
     titulo: 'Quem trouxe o cliente',
-    simples: 'Tem contrato ativo sem a indicação de quem trouxe aquele cliente.',
-    consequencia: 'Dá para cobrar. O que trava é a comissão: sem saber quem indicou, não há a quem '
+    simples: 'Tem contrato ativo sem dizer quem trouxe aquele cliente.',
+    consequencia: 'Dá para cobrar. O que trava é a comissão: sem saber quem trouxe o cliente, não há a quem '
       + 'pagar quando o dinheiro entrar.',
     contagem: { singular: 'contrato', plural: 'contratos' },
   },
@@ -229,12 +229,12 @@ export const EFEITO: Record<string, { curto: string; longo: string }> = {
   bloqueia_boleto: {
     curto: 'Impede o boleto sair',
     longo: 'A cobrança existe e pode ser paga por Pix. O que o banco recusa é emitir o boleto, '
-      + 'então a fatura fica sem título para o cliente pagar no banco.',
+      + 'então a cobrança fica sem título para o cliente pagar no banco.',
   },
   bloqueia_split: {
     curto: 'Impede dividir o dinheiro',
     longo: 'Dá para cobrar o cliente normalmente. O que fica travado é a divisão do dinheiro '
-      + 'quando ele entrar — a parte do dono da usina e a comissão de quem indicou.',
+      + 'quando ele entrar — a parte do dono da usina e a comissão de quem trouxe o cliente.',
   },
 };
 
@@ -324,8 +324,11 @@ export const GLOSSARIO: readonly TermoDoGlossario[] = [
     ],
   },
   {
-    termo: 'Quem trouxe o cliente (originador)',
-    texto: 'A pessoa ou parceiro que indicou aquele cliente e recebe comissão por isso. Fica '
+    /* [01/10/2026, etapa 7b] «(originador)» saiu do nome: a tela diz «quem
+     * trouxe o cliente» em todo lugar, e a palavra interna continua achando
+     * este verbete pela busca (`busca`, logo abaixo). */
+    termo: 'Quem trouxe o cliente',
+    texto: 'A pessoa ou o parceiro que trouxe aquele cliente e recebe comissão por isso. Fica '
       + 'gravado no contrato e não muda depois que o contrato é criado.',
     busca: ['originador', 'quem trouxe', 'indicacao', 'indicou', 'comissao', 'parceiro', 'vendedor'],
     caminhos: [{ rota: '/contratos', rotulo: 'Ver nos contratos', tipo: 'ver' }],
@@ -402,15 +405,15 @@ export const GLOSSARIO: readonly TermoDoGlossario[] = [
   },
   {
     termo: 'Baixa',
-    texto: 'Registrar que o cliente pagou aquela fatura. É o ato que dispara a divisão do dinheiro: '
-      + 'a parte do dono da usina e a comissão de quem indicou só nascem depois dele.',
+    texto: 'Registrar que o cliente pagou aquela cobrança. É o ato que dispara a divisão do dinheiro: '
+      + 'a parte do dono da usina e a comissão de quem trouxe o cliente só nascem depois dele.',
     /* «pagou» e «recebido» ficam DE FORA, e não por descuido: o assunto «O
      * cliente pagou. Como dou baixa?» já responde a essas duas com passos, e um
      * verbete que casa a mesma frase apareceria embaixo dele definindo o que a
      * resposta acabou de explicar. O glossário define a PALAVRA que alguém não
      * conhece; quem escreve «pagou» não está pedindo definição. */
     busca: ['baixa', 'dar baixa', 'baixar fatura', 'quitado', 'liquidar', 'baixa da fatura'],
-    caminhos: [{ rota: '/faturas', rotulo: 'Dar baixa numa fatura', tipo: 'resolver' }],
+    caminhos: [{ rota: '/faturas', rotulo: 'Dar baixa numa cobrança', tipo: 'resolver' }],
   },
   /* O NOME DO DOCUMENTO FICOU; o da aba, não (30/09/2026). A folha continua
    * sendo a Fatura unificada — é o nome que o cliente vê no papel —, e ela se
@@ -419,7 +422,7 @@ export const GLOSSARIO: readonly TermoDoGlossario[] = [
     termo: 'Fatura unificada',
     texto: 'A folha que o cliente recebe, juntando a conta da distribuidora com a cobrança da G3 num '
       + 'papel só. Ela não cria a cobrança nem recebe dinheiro — só apresenta. Monta-se e imprime-se '
-      + 'na tela Contas de luz, em «2 · Folha do cliente».',
+      + 'na tela Contas de luz, em «Folha do cliente».',
     busca: ['fatura unificada', 'folha', 'papel do cliente', 'documento do cliente', 'unificada',
             'conta junta'],
     caminhos: [{ rota: '/documento', rotulo: 'Abrir Contas de luz', tipo: 'resolver' }],
@@ -474,13 +477,15 @@ export type ChaveDoGrupo = 'bloqueia_fatura' | 'bloqueia_boleto' | 'bloqueia_spl
 export const ORDEM_DOS_GRUPOS: readonly ChaveDoGrupo[] =
   ['bloqueia_fatura', 'bloqueia_boleto', 'bloqueia_split'];
 
-/** O título da seção. Nomeia o MÊS quando ele é legível — «Para gerar as faturas
- *  de julho de 2026» responde sozinho, e «deste mês» obriga a olhar o seletor. */
+/** O título da seção. Nomeia o MÊS quando ele é legível — «Para gerar as
+ *  cobranças de julho de 2026» responde sozinho, e «deste mês» obriga a olhar o
+ *  seletor. [01/10/2026, etapa 7b] «cobranças», e não «faturas»: na tela,
+ *  «fatura» é só a folha impressa (a Fatura unificada). */
 export function tituloDoGrupo(chave: ChaveDoGrupo, competencia: string): string {
   if (chave === 'bloqueia_split') return 'Para dividir o dinheiro quando ele entrar';
   if (chave === 'bloqueia_boleto') return 'Para o boleto sair';
   const mes = mesPorExtenso(competencia);
-  return mes ? `Para gerar as faturas de ${mes}` : 'Para gerar as faturas deste mês';
+  return mes ? `Para gerar as cobranças de ${mes}` : 'Para gerar as cobranças deste mês';
 }
 
 /** A frase de baixo. Carrega o NÚMERO de unidades porque é ele que dá tamanho ao
@@ -497,7 +502,7 @@ export function subDoGrupo(chave: ChaveDoGrupo, unidades: number): string {
   }
   if (chave !== 'bloqueia_fatura') {
     return 'A cobrança sai normalmente. O que trava é o repasse ao dono da usina e a comissão de '
-         + 'quem indicou, quando o dinheiro entrar.';
+         + 'quem trouxe o cliente, quando o dinheiro entrar.';
   }
   /*
    * A FRASE NÃO PROMETE MAIS «enquanto qualquer uma estiver aberta, a cobrança

@@ -322,7 +322,7 @@ export function TelaDocumento() {
 
       {/* -------------------------------------------------------- quem emite */}
       <div className="cartao secao">
-        <h2 style={{ marginTop: 0 }}><Icone nome="cobranca" tamanho={17} /> Quem emite a fatura</h2>
+        <h2 style={{ marginTop: 0 }}><Icone nome="cobranca" tamanho={17} /> Quem cobra</h2>
         <p className="sub">
           Sai no <strong>cabeçalho</strong> e no <strong>rodapé</strong> da folha, e no campo
           <strong> Beneficiário</strong> da faixa de pagamento — é a este nome que o aviso contra o
@@ -424,7 +424,7 @@ export function TelaDocumento() {
           estático</strong> gerado aqui. Chave Pix <strong>não é segredo</strong> — ela identifica o
           destino e sai impressa no documento; quem a tem consegue te pagar, não se autenticar como
           você. <strong>A conciliação é manual:</strong> um Pix estático não carrega identificador por
-          fatura, então o dinheiro chega sem dizer de quem é — a baixa é na tela Cobranças.
+          cobrança, então o dinheiro chega sem dizer de quem é — a baixa é na tela Cobranças.
         </p>
         {/* AS CHAVES CADASTRADAS, e a escolha da padrao. O apelido e o que se
             escolhe: a chave em si nao se reconhece de cor, e conferir um CNPJ
@@ -438,8 +438,8 @@ export function TelaDocumento() {
                        valor: c.id, texto: `${c.apelido} — ${c.chave}`,
                      })))} />
             <p className="sub" style={{ marginBottom: 0 }}>
-              A fatura <strong>guarda a chave que usou</strong>: trocar aqui muda o próximo lote e
-              não mexe no que já foi composto — a segunda via de uma fatura sai igual à primeira.
+              A cobrança <strong>guarda a chave que usou</strong>: trocar aqui muda o próximo lote e
+              não mexe no que já foi composto — a 2ª via sai igual à primeira.
             </p>
           </div>
         )}
@@ -572,7 +572,7 @@ function Cadastro({ children }: { children: ReactNode }) {
       <p className="sub">
         Configuração por tenant. O que está aqui é o que a folha <strong>imprime</strong> — no
         cabeçalho, no rodapé, na faixa de pagamento e na grade do cliente. Mexe-se uma vez, não a
-        cada fatura.
+        cada mês.
       </p>
       {children}
     </div>
@@ -704,7 +704,7 @@ function ModeloDaFatura() {
   return (
     <div className="cartao secao">
       <div style={{ ...linha }}>
-        <h2 style={{ margin: 0 }}><Icone nome="documento" tamanho={17} /> Modelo da fatura</h2>
+        <h2 style={{ margin: 0 }}><Icone nome="documento" tamanho={17} /> Modelo da folha</h2>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
           <button onClick={() => setCriando(true)} disabled={acao.ocupado || criando} aria-expanded={criando}>
             <Icone nome="acrescentar" tamanho={15} /> Novo modelo
@@ -723,7 +723,7 @@ function ModeloDaFatura() {
       {criando && (
         <PerguntaNaTela rotulo="Criar um modelo novo" manter="Cancelar" confirmar="Criar o modelo"
                         campo={{ rotulo: 'Nome do modelo novo', dica: 'Ex.: Residencial com desconto de 15%',
-                                 nota: 'É por este nome que se escolhe o modelo na hora de montar a fatura.' }}
+                                 nota: 'É por este nome que se escolhe o modelo na hora de montar a folha.' }}
                         ocupado={acao.ocupado}
                         aoManter={() => setCriando(false)} aoConfirmar={(nome) => void criar(nome)} />
       )}
@@ -878,8 +878,8 @@ function CamposPersonalizados() {
       </div>
       <p className="sub">
         Saem na <strong>grade do cliente</strong> da folha 1, depois dos oito campos que vêm da
-        fatura da distribuidora. <strong>Fixo</strong> sai igual em toda fatura;
-        <strong> variável</strong> é digitado a cada uma, na aba <em>1 · Leitura e cálculo</em>.
+        conta de luz. <strong>Fixo</strong> sai igual em toda folha; <strong>por conta</strong> é
+        digitado a cada uma, na aba <em>Leitura e cálculo</em>.
         Campo sem valor <strong>não sai</strong> — um rótulo com nada embaixo é a mesma classe do
         travessão que este sistema recusa.
       </p>
@@ -919,7 +919,7 @@ function CamposPersonalizados() {
                 <Escolha valor={c.origem} rotuloAcessivel={`Origem do campo ${i + 1}`}
                          ao={(v) => mudar(i, { origem: v as 'fixo' | 'variavel' })}
                          opcoes={[{ valor: 'fixo', texto: 'Fixo' },
-                                  { valor: 'variavel', texto: 'Por fatura' }]} />
+                                  { valor: 'variavel', texto: 'Por conta' }]} />
               </div>
             </td>
             <td>
@@ -927,7 +927,7 @@ function CamposPersonalizados() {
                 <input value={c.origem === 'fixo' ? c.valor ?? '' : ''}
                        aria-label={`Valor fixo do campo ${i + 1}`}
                        disabled={c.origem !== 'fixo'}
-                       placeholder={c.origem === 'fixo' ? 'O que sai impresso' : 'digitado por fatura'}
+                       placeholder={c.origem === 'fixo' ? 'O que sai impresso' : 'digitado em cada conta'}
                        onChange={(e) => mudar(i, { valor: e.target.value })} />
               </div>
             </td>
@@ -944,7 +944,7 @@ function CamposPersonalizados() {
       </Tabela>
       <p className="sub" style={{ marginTop: 12, marginBottom: 0 }}>
         A <strong>chave</strong> é minúscula, sem acento e sem espaço, começando por letra. Ela não
-        é o rótulo: o rótulo muda e a chave é o que liga o valor de uma fatura já registrada ao campo
+        é o rótulo: o rótulo muda e a chave é o que liga o valor de uma conta já registrada ao campo
         que o imprime.
       </p>
     </div>
@@ -1000,7 +1000,7 @@ function ConferirQr({ temIdentidade }: { temIdentidade: boolean }) {
       <h2 style={{ marginTop: 0 }}><Icone nome="documento" tamanho={17} /> Conferir o QR com a câmera</h2>
       <p className="sub">
         Desenha um QR a partir da sua chave Pix e de um valor que você digita, <strong>sem precisar
-        de fatura</strong>. É o teste de campo: as verificações automáticas provam que a matriz é um
+        de cobrança</strong>. É o teste de campo: as verificações automáticas provam que a matriz é um
         QR válido pelo padrão, e <strong>não</strong> provam que o aplicativo do banco aceita.
       </p>
 

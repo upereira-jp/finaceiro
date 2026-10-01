@@ -36,7 +36,6 @@
 // prova que o documento e daquela pessoa. Quem olhasse so a coluna `documento`
 // veria um CPF preenchido e concluiria que o contrato pode ativar. Nao pode.
 
-import type { TomDoSelo } from './iconografia.ts';
 
 /** Espelho de `documento_origem` no banco. */
 export type OrigemDoDocumento = 'crm_semente' | 'coleta_local';
@@ -80,19 +79,10 @@ export const ROTULO_DA_SITUACAO_DO_DOCUMENTO: Record<SituacaoDoDocumento, string
   validado: 'Validado',
 };
 
-/* [30/09, etapa 4a] FALTAR O DOCUMENTO E TAREFA, NAO FALHA: `a_fazer` (ambar,
- * com o lapis) e nao mais o vermelho. O vermelho ficou so para a falha — a
- * recusa do banco, a vencida —, e uma coluna inteira de clientes a completar
- * pintada de vermelho ensinava a nao ver o vermelho de verdade. Ver `TomDoSelo`. */
-export const TOM_DA_SITUACAO_DO_DOCUMENTO: Record<SituacaoDoDocumento, TomDoSelo> = {
-  sem_documento: 'a_fazer',
-  digito_nao_confere: 'a_fazer',
-  /* `nao_medido` e nao `a_fazer`: a semente do CRM nao esta errada, esta
-   * NAO CONFIRMADA. E a mesma distincao que o `estadoDoCertificado` faz entre
-   * "vencido" e "sem data cadastrada". */
-  semente_do_crm: 'nao_medido',
-  validado: 'ok',
-};
+/* O TOM DE CADA SITUACAO DO DOCUMENTO (`TOM_DA_SITUACAO_DO_DOCUMENTO`) SAIU
+ * DAQUI em 01/10/2026 (etapa 7b) para `tom-do-estado.ts` (`SELO_DO_DOCUMENTO`).
+ * A regra de 30/09 continua la: faltar o documento e tarefa, nao falha, e a
+ * semente do CRM e `nao_medido` — nao confirmada, e nao errada. */
 
 /** O que ainda falta para o contrato poder ativar (R9). Os tres estados que nao
  *  sao `validado` contam junto, porque nenhum deles destrava. */

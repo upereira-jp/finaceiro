@@ -17,14 +17,23 @@
 
 import {
   situacaoDaUc, ehFaturavel, contarSituacoes,
-  ROTULO_DA_SITUACAO, TOM_DA_SITUACAO, ICONE_DA_SITUACAO,
+  ROTULO_DA_SITUACAO,
   situacaoDoEndereco, camposDoEnderecoPreenchidos, enderecoNumaLinha,
-  CAMPOS_DO_ENDERECO, ROTULO_DO_ENDERECO, TOM_DO_ENDERECO,
+  CAMPOS_DO_ENDERECO, ROTULO_DO_ENDERECO,
   type UcParaSituacao, type SituacaoDaUc, type SituacaoDoEndereco,
-  tomDoEndereco, rotuloDoEndereco, enderecoEmiteBoleto,
+  seloDoEndereco, rotuloDoEndereco, enderecoEmiteBoleto,
   faltasDaUc,
 } from '../src/unidades-regras.ts';
-import { FILTROS_DA_TELA } from '../src/destino-da-camada.ts';
+import { readFileSync } from 'node:fs';
+import { FILTROS_DA_TELA, DESTINO_DA_CAMADA, rotuloDoRecorte } from '../src/destino-da-camada.ts';
+import { semEnderecoParaOBoleto, comContratoAtivo, type UcDaLista, type ContratoDaLista } from '../src/o-que-falta.ts';
+import { SELO_DA_UNIDADE, SELO_DO_ENDERECO } from '../src/tom-do-estado.ts';
+/* [01/10/2026, etapa 7b] O tom e o icone de cada situacao sairam de
+   `unidades-regras.ts` para `tom-do-estado.ts`; as verificacoes abaixo leem de
+   la. `tomDoEndereco(u)` virou `seloDoEndereco(u).tom`. */
+const TOM_DA_SITUACAO = Object.fromEntries(Object.entries(SELO_DA_UNIDADE).map(([k, v]) => [k, v.tom])) as Record<SituacaoDaUc, string>;
+const TOM_DO_ENDERECO = Object.fromEntries(Object.entries(SELO_DO_ENDERECO).map(([k, v]) => [k, v.tom])) as Record<SituacaoDoEndereco, string>;
+const tomDoEndereco = (u: Parameters<typeof seloDoEndereco>[0]) => seloDoEndereco(u).tom;
 import { CAMPOS_DE_ENDERECO_EXIGIDOS } from '../../src/sicoob/porta.ts';
 
 let falhas = 0;
@@ -140,9 +149,11 @@ console.log('== a situacao de uma UC: duas fontes, um rotulo ==\n');
    * `cancelada` cai no mesmo tom pela mesma razao de arranjo, e a interrogacao
    * mentiria - nos sabemos muito bem que ela foi cancelada.
    */
-  chk('U7c', ICONE_DA_SITUACAO.cancelada === 'remover'
-       && ICONE_DA_SITUACAO.situacao_nao_lida === undefined,
-      'cancelada troca o icone do tom, e "nao lida" NAO troca - ali a interrogacao e o certo');
+  /* [01/10/2026, etapa 7b] A CANCELADA DEIXOU A LIXEIRA: num selo, o desenho do
+     botao de apagar lia como acao. Agora e o circulo cortado (`cancelado`). */
+  chk('U7c', SELO_DA_UNIDADE.cancelada.icone === 'cancelado'
+       && SELO_DA_UNIDADE.situacao_nao_lida.icone === 'nao_medido',
+      'cancelada troca o icone do tom (o circulo cortado, e nao a lixeira), e "nao lida" NAO troca - ali a interrogacao e o certo');
 }
 
 // ---- U8: a contagem do cabecalho, contra a ENTRADA e nao contra numero meu.
@@ -296,6 +307,69 @@ console.log('== a situacao de uma UC: duas fontes, um rotulo ==\n');
       'e o endereco diz qual campo falta — o mesmo criterio do servidor (sem numero, emite)');
   chk('U9e', faltasDaUc({ ...cheia, endereco_numero: '' } as typeof cheia).length === 0,
       'sem o numero a unidade emite, e a coluna nao acusa nada');
+}
+
+// ---- EP: AS TRES CONTAGENS DO ENDERECO, uma populacao so (01/10/2026, etapa 7b)
+//
+// A critica de 01/10 achou tres numeros para a mesma frase «endereco do
+// pagador»: a trava do Mes dizia 4 (unidades com contrato ativo), a faixa de
+// Unidades dizia 5 (faturaveis, com ou sem contrato) e o recorte
+// `?pendencia=sem_endereco` mostrava 6 (todas). Os tres agora sao a MESMA
+// populacao — faturavel, com contrato ativo, sem o endereco que o banco exige —,
+// e estas verificacoes prendem as tres pontas: o predicado da tela, o SQL do
+// servidor que conta a trava, e a tela usando o mesmo predicado na faixa e no
+// recorte.
+{
+  const end = { endereco_logradouro: 'Rua A', endereco_bairro: 'Centro', endereco_municipio: 'Goiânia',
+                endereco_uf: 'GO', endereco_cep: '74000-000', endereco_numero: '10' };
+  const uc = (id: string, extra: Record<string, unknown> = {}) => ({
+    id, numero_uc: id, cliente_id: 'c', usina_id: 'u', status: 'ativa', crm_usina_cliente_id: null, ...extra,
+  }) as UcDaLista & Record<string, unknown>;
+  const ucs = [
+    uc('a'),                                                   // faturavel, contrato ativo, sem endereco: CONTA
+    uc('b', { ...end, endereco_bairro: '' }),                   // falta o bairro: CONTA
+    uc('c', { ...end, endereco_cep: '' }),                      // falta o CEP: CONTA
+    uc('d', { ...end, endereco_numero: '' }),                   // falta so o numero: emite, NAO conta
+    uc('e'),                                                   // faturavel SEM contrato: cai uma camada antes
+    uc('f'),                                                   // contrato SUSPENSO: nao fatura
+    uc('g', { status: 'cancelada' }),                          // cancelada: nao fatura
+    uc('h', { crm_usina_cliente_id: 'x', rateio_situacao: 'aguardando' }), // CRM nao ativou: nao fatura
+    uc('i', end),                                              // completa: emite
+  ];
+  const k = (id: string, status = 'ativo'): ContratoDaLista =>
+    ({ id: `k-${id}`, cliente_id: 'c', unidade_consumidora_id: id, originador_id: 'o', status });
+  const vigentes: Record<string, ContratoDaLista | null> = {
+    a: k('a'), b: k('b'), c: k('c'), d: k('d'), e: null, f: k('f', 'suspenso'), g: k('g'), h: k('h'), i: k('i'),
+  };
+  const lista = semEnderecoParaOBoleto(ucs, vigentes);
+  chk('EP1', lista?.map((u) => u.id).join(',') === 'a,b,c',
+      'a lista da trava e a faturavel COM CONTRATO ATIVO que o banco recusa — nem a sem contrato, nem a '
+      + `suspensa, nem a que nao fatura, nem a que so nao tem o numero (achei: ${lista?.map((u) => u.id).join(',')})`);
+  chk('EP2', semEnderecoParaOBoleto(ucs, null) === null
+          && ucs.filter((u) => comContratoAtivo(u, vigentes)).map((u) => u.id).join(',') === 'a,b,c,d,i',
+      'sem os contratos a lista e «nao sei» (null), e nao a lista maior; o universo («de N») e a com contrato ativo');
+
+  /* O SERVIDOR CONTA A MESMA POPULACAO: a camada `endereco_do_pagador` le
+     `sem_endereco`, que conta `uc_contratada` — `uc_ativa` (o espelho de
+     `ehFaturavel`) com contrato `ativo` na unidade. */
+  const sql = readFileSync(new URL('../../src/repos/prontidao.ts', import.meta.url), 'utf8');
+  chk('EP3', /uc_ativa AS \(\s*SELECT uc\.\* FROM unidade_consumidora uc\s*WHERE uc\.status = 'ativa'\s*AND \(uc\.crm_usina_cliente_id IS NULL OR uc\.rateio_situacao = 'ativado'\)/.test(sql)
+          && /uc_contratada AS \([\s\S]*?FROM uc_ativa uc\s*JOIN contrato k ON [^\n]*k\.status = 'ativo'/.test(sql)
+          && /\(SELECT count\(\*\) FROM uc_contratada uc\s*WHERE btrim\(coalesce\(uc\.endereco_logradouro[\s\S]{0,400}?AS sem_endereco/.test(sql)
+          && /camada: 'endereco_do_pagador', faltam: n\(l\.sem_endereco\), total: n\(l\.contratos_ativos\)/.test(sql),
+      'o numero da trava no Mes vem do servidor contando `uc_contratada` — a faturavel com contrato ativo —, a mesma populacao');
+
+  /* E A TELA DE UNIDADES USA A MESMA LISTA NA FAIXA E NO RECORTE, e o chip do
+     recorte diz qual e a populacao. */
+  const tela = readFileSync(new URL('../src/telas/unidades.tsx', import.meta.url), 'utf8');
+  chk('EP4', /const enderecoDaTrava = semEnderecoParaOBoleto\(todas, vigentes\.dado\)/.test(tela)
+          && /const semEndereco = enderecoDaTrava\?\.length \?\? 0/.test(tela)
+          && /pendencia !== 'sem_endereco' \|\| \(idsDaTrava \? idsDaTrava\.has\(u\.id\)/.test(tela)
+          && /das \{comContrato\} com contrato ativo sem o endereço completo/.test(tela),
+      'a faixa conta e o recorte mostra a MESMA lista da trava, e a faixa diz «das N com contrato ativo»');
+  chk('EP5', rotuloDoRecorte('/unidades', 'sem_endereco') === 'unidades com contrato ativo sem o endereço completo do pagador'
+          && DESTINO_DA_CAMADA.endereco_do_pagador?.filtro === 'sem_endereco',
+      'a trava do Mes leva a este recorte, e o chip «Mostrando só» diz a populacao — a mesma da frase da trava');
 }
 
 console.log(`\n${falhas === 0 ? 'TODAS PASSARAM' : `${falhas} FALHA(S)`}`);

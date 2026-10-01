@@ -8,7 +8,7 @@
 // que essas três garantias, juntas, produziam «você está no 1 de 5» num mês com
 // quinze cobranças emitidas. O modelo virou funil, e as garantias viraram:
 //
-//   um só destaque   cinco números na tela, e UM «Comece aqui». Duas
+//   um só destaque   cinco números na tela, e UM destaque. Duas
 //                    instruções ao mesmo tempo continuam sendo nenhuma;
 //   risco primeiro    o destaque vai para o passo em que o dinheiro corre perigo,
 //                    e não para o primeiro da lista;
@@ -24,6 +24,7 @@
 
 import {
   mesNoFunil, travasDe, ondeEstouNoMes, escolherOFoco, MOLDES, TETO_DAS_COBRANCAS,
+  rotuloDoDestaque, ROTULO_DO_DESTAQUE,
   type CamadaDoRoteiro, type LeituraDoMes, type LinhaSemBoleto, type ContaRegistrada,
 } from '../src/roteiro-do-mes.ts';
 import { TELAS, caminhoNoMenu, rotuloDosPassos } from '../src/navegacao.ts';
@@ -115,7 +116,7 @@ const passo = (e: LeituraDoMes, chave: string) => mesNoFunil(e).passos.find((p) 
   ];
   const errados = cenarios.filter(([, c]) => mesNoFunil(c).passos.filter((p) => p.foco).length > 1);
   chk('RM1', errados.length === 0,
-      `em nenhum dos ${cenarios.length} cenários há mais de um «Comece aqui»`
+      `em nenhum dos ${cenarios.length} cenários há mais de um destaque`
       + `${errados.length ? ` (erram: ${errados.map(([n]) => n).join(', ')})` : ''} - duas instruções `
       + 'simultâneas é o mesmo que nenhuma');
 }
@@ -271,6 +272,11 @@ const passo = (e: LeituraDoMes, chave: string) => mesNoFunil(e).passos.find((p) 
                     .risco?.frase === '1 recusada pelo banco e 1 parada há mais de um dia',
       'o risco do mês é frase de gente — «1 recusada pelo banco e 1 parada há mais de um dia», com '
       + '«e» e não com «·»');
+  /* [01/10/2026, etapa 7b] Só parada, sem recusa: é tarefa (`a_fazer`), e não a
+     falha — ninguém pediu o boleto ainda. */
+  const soParada = passo(ler({ semBoleto: { linhas: semBoleto(1, { pede_gente: true }), total: 1 } }), 'cobrar').risco;
+  chk('RM10f', risco?.tom === 'erro' && soParada !== null && soParada.tom === 'a_fazer',
+      'o risco com recusa do banco é `erro`; o boleto só parado há mais de um dia, sem recusa, é `a_fazer`');
 }
 
 // --------------------------------- RM10b o que está em cada passo soma o mês
@@ -380,12 +386,34 @@ const passo = (e: LeituraDoMes, chave: string) => mesNoFunil(e).passos.find((p) 
   const f = mesNoFunil(RETRATO).frase;
   const doisPassos = mesNoFunil(ler({ camadas: cadastroEmDia(15), cobrancas: cobrancas({ rascunho: 5 }),
                                       registradas: { lista: registradas(0, 5), parcial: false } })).frase;
-  /* [30/09, etapa 4a] «Comece pelo passo 4, Pedir o boleto…» — sem o «·» no
-     meio da frase corrida. */
-  chk('RM16', /^Falta trabalho nos cinco passos\. Comece pelo passo 4, Pedir o boleto/.test(f) && /recusada pelo banco/.test(f)
-              && /^Falta trabalho em dois dos cinco passos\. Comece pelo passo 3, Emitir as cobranças: 5 cobranças a emitir\.$/.test(doisPassos)
-              && !/·/.test(f),
-      `no retrato de 30/09 a frase diz quantos passos têm trabalho e onde começar, com o motivo — «${f}»`);
+  /* [30/09, etapa 4a] sem o «·» no meio da frase corrida. [01/10/2026, etapa
+     7b] E sem o «Comece pelo passo…»: a frase diz POR QUE aquele passo, com as
+     palavras do selo dele — «O mais urgente é o passo 4» quando é o risco, «O
+     próximo é o passo 3» quando é só o trabalho mais perto do dinheiro. */
+  chk('RM16', /^Falta trabalho nos cinco passos\. O mais urgente é o passo 4, Pedir o boleto/.test(f) && /recusada pelo banco/.test(f)
+              && /^Falta trabalho em dois dos cinco passos\. O próximo é o passo 3, Emitir as cobranças: 5 cobranças a emitir\.$/.test(doisPassos)
+              && !/·/.test(f) && !/Comece/.test(f + doisPassos),
+      `no retrato de 30/09 a frase diz quantos passos têm trabalho, qual é o mais urgente e por quê — «${f}»`);
+}
+
+// ------------- RM16b o rótulo do destaque: urgência pelo risco, próximo passo sem ele
+{
+  const comRisco = mesNoFunil(RETRATO);
+  const semRisco = mesNoFunil(ler({ camadas: cadastroEmDia(15), cobrancas: cobrancas({ rascunho: 5 }),
+                                    registradas: { lista: registradas(0, 5), parcial: false } }));
+  const rotulos = (m: ReturnType<typeof mesNoFunil>) => m.passos.map(rotuloDoDestaque).filter(Boolean);
+  chk('RM16b', rotulos(comRisco).join() === ROTULO_DO_DESTAQUE.risco && rotuloDoDestaque(comRisco.foco!) === 'Mais urgente agora'
+              && rotulos(semRisco).join() === ROTULO_DO_DESTAQUE.trabalho && rotuloDoDestaque(semRisco.foco!) === 'Próximo passo',
+      'o destaque pelo risco diz «Mais urgente agora»; sem risco, no trabalho mais perto do dinheiro, '
+      + '«Próximo passo» — e só o passo em destaque tem rótulo');
+  /* E O RISCO TEM O TOM DO QUE ELE CONTA (`tom-do-estado.ts`): a recusa e a
+     vencida são `erro`; o boleto só parado sem pedido, `a_fazer`. */
+  const cobrar = comRisco.passos.find((p) => p.chave === 'cobrar')!;
+  const receber = comRisco.passos.find((p) => p.chave === 'receber')!;
+  chk('RM16c', cobrar.risco?.tom === 'erro' && /recusada pelo banco/.test(cobrar.risco.frase)
+              && (receber.risco === null || receber.risco.tom === 'erro'),
+      'o risco com recusa do banco é `erro` (vermelho), como a recusa em Cobranças e em Contas a '
+      + 'receber; a vencida também');
 }
 
 // --------------------------------------- RM17 o mês fechado fala, e só medido

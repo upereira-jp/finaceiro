@@ -22,6 +22,7 @@ import { api, type UsuarioDoTenant } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import { useSessao } from '../sessao.tsx';
 import { PerguntaNaTela } from '../serie.tsx';
+import { SELO_DA_PESSOA } from '../tom-do-estado.ts';
 import {
   Pagina, Aviso, Tabela, Campo, Busca, Ferramentas, Marca, Icone, Interruptor, Escolha,
   Carregando, contem,
@@ -172,8 +173,8 @@ function LinhaDeUsuario({ u, aoMudar }: { u: UsuarioDoTenant; aoMudar: () => voi
         <td>
           <div className="usuario-nome">
             <strong>{u.nome}</strong>
-            {u.voce && <Marca tom="ok" icone="usuario">você</Marca>}
-            {servico && <Marca tom="nao_medido" icone="cobranca">conta do sistema</Marca>}
+            {u.voce && <Marca selo={SELO_DA_PESSOA.voce}>você</Marca>}
+            {servico && <Marca selo={SELO_DA_PESSOA.conta_do_sistema}>conta do sistema</Marca>}
           </div>
           <div className="fraco usuario-email">{u.email}</div>
         </td>
@@ -211,7 +212,11 @@ function LinhaDeUsuario({ u, aoMudar }: { u: UsuarioDoTenant; aoMudar: () => voi
       {desligando && (
         <tr className="usuario-retorno">
           <td colSpan={3 + COLUNAS_DE_SETOR.length}>
-            <PerguntaNaTela tom="perigo" rotulo={`Confirmar: desligar o acesso de ${u.nome}`}
+            {/* [01/10/2026, etapa 7b] AVISO E NAO PERIGO: desligar o acesso nao
+                apaga nem cancela nada — a frase diz que da para religar depois,
+                com tudo como estava. O vermelho do perigo e so do que apaga ou
+                cancela (DESIGN.md); e o mesmo tom do «Suspender» de Contratos. */}
+            <PerguntaNaTela tom="aviso" rotulo={`Confirmar: desligar o acesso de ${u.nome}`}
                             manter="Manter ligado" confirmar="Desligar o acesso"
                             ocupado={acao.ocupado}
                             aoManter={() => setDesligando(false)}

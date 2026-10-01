@@ -482,7 +482,7 @@ export async function prontidao(comp: Date | string): Promise<Prontidao> {
         '- o aviso amarra no nome e some junto com ele. A conferencia do boleto importado perde o ' +
         'lado contra o qual comparar. As duas colunas sao da migration 26 (Q-DOCG3-08, ja fechada ' +
         'no schema): o que falta e o insumo, e ele entra por UM caminho so - Contas de luz > ' +
-        '"3 · Cadastro da fatura" (/documento#cadastro). NAO ha ' +
+        '"Dados de quem cobra" (/documento#cadastro). NAO ha ' +
         'importador: `npm run identidade` cadastra CHAVE PIX e nao toca estas duas colunas. ' +
         'O CNPJ tem digito verificador conferido na gravacao (`CnpjDoEmissorInvalido`, 422), ' +
         'entao numero inventado nao passa' },

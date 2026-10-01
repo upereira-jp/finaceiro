@@ -14,6 +14,7 @@ import {
   useOrdenacao, ordenar, contem, rotulo, linha, CampoData, BotaoDeCriar, PainelDeCriar,
 } from '../ui.tsx';
 import { naMensagem } from '../arquivo.ts';
+import { SELO_DO_CADASTRO, SELO_DA_GERACAO } from '../tom-do-estado.ts';
 import { decimalTexto } from '../dinheiro.ts';
 import { diaEmBr, mesEmBr, mesDeHojeEmSP } from '../formato.ts';
 import { divisaoEmPalavras, parteDaG3, parteDaG3ComComissao, comVirgula } from '../repasse-regras.ts';
@@ -215,7 +216,7 @@ export function TelaUsinas() {
                        primeira="— Sem dono (bloqueia o repasse)"
                        opcoes={(donos.dado ?? []).map((d) => ({ valor: d.id, texto: d.nome }))} />
             </td>
-            <td className="c-sit"><Marca tom={u.status === 'ativa' ? 'ok' : 'neutro'}>{rotulo(u.status)}</Marca></td>
+            <td className="c-sit"><Marca selo={SELO_DO_CADASTRO[u.status === 'ativa' ? 'ativo' : 'inativo']}>{rotulo(u.status)}</Marca></td>
           </tr>
         ))}
       </Tabela>
@@ -348,8 +349,8 @@ function GeracaoLancada({ usinas }: { usinas: Usina[] }) {
                 {meses === undefined
                   ? <span className="fraco">lendo…</span>
                   : tem
-                    ? <Marca tom="ok" icone="confirmar">lançada</Marca>
-                    : <Marca tom="a_fazer">falta</Marca>}
+                    ? <Marca selo={SELO_DA_GERACAO.lancada}>lançada</Marca>
+                    : <Marca selo={SELO_DA_GERACAO.falta}>falta</Marca>}
                 {meses !== undefined && !tem && usinaNoCrm(u.crm_usina_id) && (
                   <a className="ligacao-crm" style={{ marginLeft: 8 }}
                      href={usinaNoCrm(u.crm_usina_id)!} target="_blank" rel="noopener noreferrer"

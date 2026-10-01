@@ -425,8 +425,10 @@ chk('A5l', mesPorExtenso('2026-07-01') === 'julho de 2026'
 chk('A5m', mesPorExtenso('') === '' && mesPorExtenso('lixo') === '' && mesPorExtenso('2026-13-01') === '',
     'competencia ilegivel devolve vazio em vez de "undefined de 2026" impresso no titulo');
 
-chk('A5n', tituloDoGrupo('bloqueia_fatura', '2026-07-01') === 'Para gerar as faturas de julho de 2026'
-        && tituloDoGrupo('bloqueia_fatura', '') === 'Para gerar as faturas deste mes'.replace('mes', 'mês'),
+/* [01/10/2026, etapa 7b] «cobranças», e não «faturas»: na tela, «fatura» é só a
+   folha impressa (a Fatura unificada). */
+chk('A5n', tituloDoGrupo('bloqueia_fatura', '2026-07-01') === 'Para gerar as cobranças de julho de 2026'
+        && tituloDoGrupo('bloqueia_fatura', '') === 'Para gerar as cobranças deste mes'.replace('mes', 'mês'),
     'o titulo nomeia o mes quando da para le-lo, e cai em "deste mes" quando nao da — nunca fica '
     + 'com um buraco no meio da frase');
 

@@ -35,6 +35,7 @@ import {
 } from './emissao-travada.ts';
 import { acaoDaLinha, lerRecusa, type RecusaLida, type StatusDaCobranca } from './emissao-regras.ts';
 import { RecusaNaTela } from './emissao-corpo.tsx';
+import { SELO_DO_BOLETO_DA_COBRANCA } from './tom-do-estado.ts';
 
 export type CorpoDaEmissao = {
   /** `null` enquanto a leitura não voltou, e ausência de resposta não é resposta:
@@ -81,7 +82,7 @@ export function PainelDaEmissao({ dados, erro, pedirBoleto, ocupado, recusaDe }:
   if (erro) {
     return (
       <Aviso tipo="alerta">
-        <strong>Não foi possível saber quais faturas estão sem boleto no banco.</strong>{' '}
+        <strong>Não foi possível saber quais cobranças estão sem boleto no banco.</strong>{' '}
         Isso não quer dizer que estão todas certas — quer dizer que ninguém sabe. O motivo foi: {erro}
       </Aviso>
     );
@@ -147,9 +148,14 @@ function LinhaDaEmissao({ l, primeira, pedirBoleto, ocupado, recusa }: {
     }}>
       <div style={{ display: 'flex', gap: 9, alignItems: 'baseline', flexWrap: 'wrap' }}>
         {/* O ícone é o SEGUNDO sinal, e não a informação: quem não distingue a
-            cor lê a mesma frase inteira. Restrição 3 do tema. O calendário é o
-            que espera a próxima tentativa; a pendência é o que espera alguém. */}
-        <Icone nome={f.grave ? 'falha' : 'calendario'} tamanho={15} peso="bold" />
+            cor lê a mesma frase inteira. Restrição 3 do tema. [01/10/2026, etapa
+            7b] O desenho e a cor são os do selo do nível (`tom-do-estado.ts`),
+            os mesmos da segunda linha da tabela de cima: o boleto a pedir é a
+            tarefa âmbar, e a recusa do banco é o X vermelho — também quando o
+            sistema já está tentando de novo, que a frase diz. */}
+        <span className={`tinta-do-tom ${SELO_DO_BOLETO_DA_COBRANCA[l.nivel].tom}`} style={{ display: 'inline-flex' }}>
+          <Icone nome={SELO_DO_BOLETO_DA_COBRANCA[l.nivel].icone} tamanho={15} peso="bold" />
+        </span>
         <strong>{l.unidade}</strong>
         <span>{l.cliente}</span>
         {mesCurto(l.competencia) && <span className="fraco">mês {mesCurto(l.competencia)}</span>}

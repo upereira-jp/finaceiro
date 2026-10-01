@@ -89,14 +89,15 @@ export const ROTULO_DA_TABELA: Record<string, string> = {
   usina: 'usina',
   usina_geracao: 'geração da usina',
   dono_usina: 'dono de usina',
-  originador: 'originador',
+  originador: 'cadastro de quem trouxe o cliente',
   chave_pix: 'chave Pix',
   regra_comissao: 'regra de comissão',
   regra_repasse: 'regra de repasse',
   tarifa: 'tarifa',
 
   // o dinheiro
-  fatura: 'fatura',
+  /* [01/10/2026, etapa 7b] O nome da tabela e `fatura`; na tela, e cobranca. */
+  fatura: 'cobrança',
   boleto: 'boleto',
   liquidacao: 'baixa de pagamento',
   split_execucao: 'divisão do dinheiro recebido',
@@ -108,8 +109,8 @@ export const ROTULO_DA_TABELA: Record<string, string> = {
 
   // a fatura que o cliente recebe
   registro_de_fatura_unificada: 'conta lida da distribuidora',
-  modelo_de_fatura: 'modelo da fatura',
-  campo_personalizado_da_fatura: 'campo da fatura',
+  modelo_de_fatura: 'modelo da folha do cliente',
+  campo_personalizado_da_fatura: 'campo da folha do cliente',
   campo_do_documento: 'campo do documento',
   identidade_de_cobranca: 'identidade de quem cobra',
   logo_de_cobranca: 'logotipo da cobrança',
@@ -195,6 +196,15 @@ const ROTULO_DA_COLUNA: Record<string, string> = {
   endereco_uf: 'UF',
   data_vencimento: 'data do vencimento',
   data_fechamento: 'data de fechamento',
+  /* [01/10/2026, etapa 7b] UM NOME SÓ PARA CADA COISA, também aqui: a coluna
+     `originador_id` lia «originador» e `fatura_id` lia «fatura» pela regra
+     geral. Na tela é «quem trouxe o cliente» e «cobrança», como em toda tela. */
+  originador_id: 'quem trouxe o cliente',
+  originador_tipo: 'tipo de quem trouxe o cliente',
+  originador_tipo_no_fechamento: 'tipo de quem trouxe o cliente, no fechamento',
+  fatura_id: 'cobrança',
+  flag_fatura_cheia: 'cobrança cheia',
+  faturas_cheias_pagas: 'cobranças cheias pagas',
 };
 
 /**

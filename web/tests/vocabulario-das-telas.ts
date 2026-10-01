@@ -50,6 +50,7 @@
 
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { rotuloDaColuna, rotuloDaTabela } from '../src/historico.ts';
 
 let falhas = 0;
 let feitas = 0;
@@ -409,6 +410,119 @@ const EXCECOES_T6 = new Set(['estilo.ts', 'tema.ts', 'destino-da-camada.ts']);
   }
   chk('T8', achados.length === 0,
       `nenhum plural de parenteses («conta(s)») no texto${achados.length ? ` — ACHADO: ${achados.join(' · ')}` : ''}`);
+}
+
+// ============================================================================
+// T9 e T10 — UM NOME SÓ PARA CADA COISA (01/10/2026, etapa 7b)
+// ============================================================================
+//
+// A crítica de 01/10 (P1 nº 3) achou um objeto com três nomes: a cobrança da G3
+// era «fatura» em Cobranças («faturas emitidas ainda sem boleto»), no Mês
+// («Para gerar as faturas de setembro») e na ajuda, e «cobrança» no resto; e a
+// pessoa que trouxe o cliente era «quem trouxe o cliente» em Contratos, «quem
+// traz clientes» no cadastro dela, «quem indicou» no glossário e «originador»
+// em Relatórios.
+//
+// O MAPA, que vale para a tela inteira:
+//
+//   conta de luz   o que ENTRA, da distribuidora — lida em Contas de luz;
+//   cobrança       o que a G3 cobra do cliente — a tabela `fatura` no banco;
+//   boleto         o título da cobrança no banco;
+//   pagamento      o que o cliente pagou (a baixa);
+//   Fatura unificada  SÓ o nome da folha impressa que o cliente recebe;
+//   quem trouxe o cliente  a pessoa da comissão — `originador` no banco.
+//
+// Os NOMES DE CÓDIGO NÃO MUDAM (regra 7 do CLAUDE.md: a tabela é `fatura`, a
+// coluna é `originador_id`), e por isso a varredura lê só TEXTO: nos `.tsx`, o
+// que `visiveis` acha (rótulos e texto entre tags); nos `.ts`, as frases (o
+// literal com espaço), que é como texto de tela é escrito em regra, ajuda e
+// vocabulário. Comentário e `<DetalheTecnico>` ficam fora, como em T1.
+//
+// AS EXCEÇÕES SÃO DECLARADAS AQUI, cada uma com o motivo, e são as únicas:
+
+const EXCECOES_DE_VOCABULARIO: ReadonlyArray<[RegExp, string]> = [
+  [/Fatura unificada/gi, 'o nome da folha impressa que o cliente recebe — o único uso de «fatura» na tela'],
+  [/\btermos:\s*\[[^\]]*\]/g, 'as palavras que a pessoa DIGITA na busca da ajuda — «fatura» e «originador» são palavras dela'],
+  [/\bbusca:\s*\[[^\]]*\]/g, 'idem, no glossário'],
+  [/export const PALAVRAS_DA_TELA[\s\S]*?\n\};/g, 'idem, as palavras que levam a cada tela'],
+  [/\{ campo: 'flag_fatura_cheia', rotulo: 'Fatura cheia' \}/g,
+    'rótulo padrão de um campo IMPRESSO do documento (`documento.tsx`): mudar aqui mudaria o papel'],
+  [/\b(?:nota|caminho):\s*(?:null|'(?:[^'\\]|\\.)*'(?:\s*\+\s*'(?:[^'\\]|\\.)*')*)/g,
+    'o texto de engenharia de cada camada (`destino-da-camada.ts`), que só aparece atrás do «ver detalhe técnico» (T6b)'],
+];
+
+/** A cobrança chamada de fatura: o SUBSTANTIVO. O verbo «faturar» («a unidade
+ *  que fatura», «faturável») é o ato de cobrar por período e fica. */
+const FATURA_SUBSTANTIVO =
+  /\b(?:[Aa]s?|[Dd]as?|[Nn]as?|[Uu]mas?|[Dd]esta|[Dd]essa|[Ee]ssa|[Ee]sta|[Cc]ada|[Ss]ua|[Pp]rimeira|[Nn]enhuma|[Tt]oda|à|[Pp]ela|[Pp]or|de)\s+faturas?\b|\bfaturas\b|\bFaturas?\b/;
+const ORIGINADOR = /\boriginador(?:es)?\b|\bquem (?:traz|indicou)\b/i;
+
+/** As frases de um `.ts`: o literal com pelo menos um espaço e uma letra. */
+const frasesDoTs = (src: string): Array<[number, string]> => {
+  const saida: Array<[number, string]> = [];
+  src.split('\n').forEach((l, i) => {
+    for (const m of l.matchAll(/'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)"|`([^`]*)`/g)) {
+      const t = m[1] ?? m[2] ?? m[3] ?? '';
+      if (/\s/.test(t.trim()) && /[A-Za-zÀ-ÿ]/.test(t)) saida.push([i + 1, t]);
+    }
+  });
+  return saida;
+};
+
+const semExcecoes = (src: string): string =>
+  EXCECOES_DE_VOCABULARIO.reduce((t, [r]) => t.replace(r, (m) => '\n'.repeat((m.match(/\n/g) ?? []).length)), src);
+
+const TEXTO_DA_TELA = FONTES.filter((f) => !EXCECOES_T6.has(f) || f === 'destino-da-camada.ts')
+  .filter((f) => !['estilo.ts', 'tema.ts', 'icones.tsx', 'iconografia.ts', 'api.ts'].includes(f))
+  .map((arq) => {
+    const limpo = semExcecoes(semIcones(semDetalheTecnico(semComentario(ler(arq)))));
+    /* No `.tsx`, além do que `visiveis` acha, a LINHA DE PROSA solta — o meio de
+       um parágrafo que quebra linha entre duas tags, que `visiveis` não alcança
+       (a aproximação declarada no alto). Prosa é a linha sem sinal de código e
+       com pelo menos três palavras. */
+    const semImport = (t: string) => t.replace(/^import\b[\s\S]*?from\s+'[^']+';/gm, (m) => '\n'.repeat((m.match(/\n/g) ?? []).length));
+    const prosa = (t: string): Array<[number, string]> => semImport(t).split('\n')
+      .map((l, i): [number, string] => [i + 1, l.trim()])
+      .filter(([, l]) => !/[=;{}()]|=>|^[<'"`/*]|^[a-z_]+:/.test(l) && (l.match(/[A-Za-zÀ-ÿ]+/g) ?? []).length >= 3);
+    const frases = arq.endsWith('.tsx') ? [...visiveis(limpo), ...prosa(limpo)] : frasesDoTs(limpo);
+    return [arq, frases.map(([l, t]) => [l, semInterpolacao(t)] as [number, string])] as const;
+  });
+
+{
+  const achados = TEXTO_DA_TELA.flatMap(([arq, frases]) =>
+    frases.filter(([, t]) => FATURA_SUBSTANTIVO.test(t)).map(([l, t]) => `${arq}:${l} «${t.trim().slice(0, 70)}»`));
+  chk('T9', TEXTO_DA_TELA.length > 40 && achados.length === 0,
+      `«fatura» só como o nome da folha impressa (a Fatura unificada), em ${TEXTO_DA_TELA.length} arquivos de `
+      + `web/src — a cobrança da G3 se chama cobrança${achados.length ? ` — ACHADO: ${achados.join(' · ')}` : ''}`);
+}
+{
+  const achados = TEXTO_DA_TELA.flatMap(([arq, frases]) =>
+    frases.filter(([, t]) => ORIGINADOR.test(t)).map(([l, t]) => `${arq}:${l} «${t.trim().slice(0, 70)}»`));
+  chk('T10', achados.length === 0,
+      '«quem trouxe o cliente» em toda tela — nem «originador», nem «quem traz», nem «quem indicou»'
+      + `${achados.length ? ` — ACHADO: ${achados.join(' · ')}` : ''}`);
+}
+{
+  /* E OS DOIS NOMES CERTOS ESTÃO ONDE A CRÍTICA ACHOU OS ERRADOS — sem isto, T9
+     e T10 passariam com as frases simplesmente apagadas. */
+  const rel = ler('telas/relatorios.tsx');
+  const ctr = ler('telas/contratos.tsx');
+  chk('T10b', /titulo="Comissão por quem trouxe o cliente"/.test(rel) && /<th>Quem trouxe o cliente<\/th>/.test(rel)
+          && /Cadastro de quem trouxe o cliente<\/h2>/.test(ctr) && /Cadastrar quem trouxe o cliente/.test(ctr),
+      'Relatórios diz «Comissão por quem trouxe o cliente», e o cadastro em Contratos é «Cadastro de quem trouxe o cliente»');
+  /* A TRILHA TAMBÉM: o Histórico mostra o nome da tabela e das colunas tocadas,
+     e «originador» chegava à tela por ali — pela regra geral, que tira o `_id`. */
+  chk('T10c', rotuloDaColuna('originador_id') === 'quem trouxe o cliente' && rotuloDaColuna('fatura_id') === 'cobrança'
+          && rotuloDaTabela('fatura') === 'cobrança' && !/originador|fatura/.test(rotuloDaTabela('originador')),
+      'no Histórico, a coluna e a tabela também dizem «quem trouxe o cliente» e «cobrança»');
+  const mes = ler('vocabulario.ts');
+  const travada = ler('emissao-travada.ts');
+  chk('T9b', /Para gerar as cobranças de \$\{mes\}/.test(mes) && /cobranças emitidas/.test(travada)
+          && /A cobrança foi emitida e o boleto ainda não foi pedido/.test(travada),
+      'o Mês diz «Para gerar as cobranças de setembro», e Cobranças diz «cobranças emitidas ainda sem boleto»');
+  const fu = ler('telas/fatura-unificada.tsx');
+  chk('T9c', /'Descartar e começar outra conta'/.test(fu) && !/'Nova fatura'/.test(fu),
+      '«Nova fatura» virou «Descartar e começar outra conta» — o botão diz o que faz: descarta a conta em edição');
 }
 
 console.log();

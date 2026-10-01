@@ -780,8 +780,9 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
   }
 
   /**
-   * NOVA FATURA. Apaga o RASCUNHO e preserva os REGISTROS — é o que a referência
-   * faz desde `36e964e`, e o motivo é que as duas coisas têm vidas diferentes: o
+   * DESCARTAR E COMEÇAR OUTRA CONTA («Nova fatura» até 01/10/2026 — o nome
+   * prometia criar uma fatura, e o ato é descartar). Apaga o RASCUNHO e
+   * preserva os REGISTROS — é o que a referência faz desde `36e964e`, e o motivo é que as duas coisas têm vidas diferentes: o
    * rascunho é o que está em edição agora; os registros são a série que produz a
    * economia acumulada. A fila do lote também fica: ela é o trabalho do mês, e
    * não a conta em edição.
@@ -848,7 +849,14 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
   return (
     <>
       <Abas atual={aba} ao={irPara}
-            acao={aba === 'cadastro' ? null : { texto: 'Nova fatura', ao: novaFatura, confirmar: contaEmEdicao }} />
+            /* [01/10/2026, etapa 7b] O BOTÃO DIZ O QUE FAZ. Era «Nova fatura» — e
+               ele não cria fatura nenhuma: DESCARTA a conta em edição e limpa os
+               campos para a próxima. Com uma conta aberta, o nome é o descarte;
+               sem nenhuma, não há o que perder, e ele só começa outra. */
+            acao={aba === 'cadastro' ? null : {
+              texto: contaEmEdicao ? 'Descartar e começar outra conta' : 'Começar outra conta',
+              ao: novaFatura, confirmar: contaEmEdicao,
+            }} />
 
       <div id={`fu-painel-${aba}`} role="tabpanel" aria-labelledby={`fu-aba-${aba}`}>
         {aba === 'leitura' && (
@@ -1008,7 +1016,7 @@ function Abas({ atual, ao, acao }: {
 
   return (
     <div className="fu-abas naoimprime">
-      <div className="fu-abas-lista" role="tablist" aria-label="Etapas da fatura" onKeyDown={teclado}>
+      <div className="fu-abas-lista" role="tablist" aria-label="Partes de Contas de luz" onKeyDown={teclado}>
         {ABAS.map((a, i) => (
           <Fragment key={a}>
             {i > 0 && <span className="fu-aba-traco" aria-hidden="true" />}
@@ -1033,11 +1041,12 @@ function Abas({ atual, ao, acao }: {
           `window.confirm`: ela fica na barra onde o botão estava, diz o que sai
           (a conta em edição) e o que fica (as registradas). */}
       {acao && perguntando && (
-        <PerguntaNaTela forma="linha" tom="perigo" rotulo="Confirmar a nova fatura"
-                        manter="Manter" confirmar="Começar outra"
+        <PerguntaNaTela forma="linha" tom="perigo" rotulo="Confirmar o descarte da conta em edição"
+                        manter="Manter a conta" confirmar="Descartar a conta"
                         aoManter={() => setPerguntando(false)}
                         aoConfirmar={() => { setPerguntando(false); acao.ao(); }}>
-          Apagar a conta em edição ({acao.confirmar}) e começar outra? As contas registradas ficam.
+          Descartar a conta em edição ({acao.confirmar}) e começar outra? O que nela não foi registrado
+          se perde; as contas registradas ficam.
         </PerguntaNaTela>
       )}
     </div>
@@ -1093,7 +1102,7 @@ function AbaDeLeitura(p: {
           emissor estão em branco, e nada recusa por isso: o cabeçalho, o campo «Beneficiário» da
           faixa de pagamento e o aviso contra boleto falso somem — é o nome que os sustenta.
           {' '}
-          <button type="button" onClick={p.irParaCadastro}>Cadastrar quem emite a fatura</button>
+          <button type="button" onClick={p.irParaCadastro}>Preencher os dados de quem cobra</button>
         </Aviso>
       )}
 
@@ -1124,7 +1133,7 @@ function AbaDeLeitura(p: {
       </div>
 
       {/* A CONTA EM EDICAO, quando a gaveta esta fechada. E o rascunho — o que a
-          aba «2 · Folha do cliente» mostra —, e sem esta linha ele seria
+          aba «Folha do cliente» mostra —, e sem esta linha ele seria
           invisivel depois de um F5: gravado, mas sem porta. */}
       {emEdicao && (
         <div className="fu-emedicao">
@@ -1339,8 +1348,8 @@ function ConferenciaDaConta(p: PropsDaConferencia) {
             inerte por 25 dias. */}
         <p className="fu-nota">
           {p.modelo
-            ? `Padrão do cadastro «${p.modelo.nome}»: ${percentualEmBr(p.modelo.percentual_desconto_padrao)} de desconto. `
-            : 'Ainda sem cadastro de fatura — os valores acima são os de partida do sistema. '}
+            ? `Padrão do modelo «${p.modelo.nome}»: ${percentualEmBr(p.modelo.percentual_desconto_padrao)} de desconto. `
+            : 'Ainda sem modelo de folha — os valores acima são os de partida do sistema. '}
           Alterar aqui vale só para esta conta. O fator de CO₂ é o médio da margem de operação do
           SIN (MCTI/SIRENE).
         </p>
@@ -1441,7 +1450,7 @@ function ConferenciaDaConta(p: PropsDaConferencia) {
  * aberta. Na coluna de 380px ele era o maior peso visual da aba 1 com qualquer
  * estado — inclusive sem conta nenhuma, dizendo «R$ —» para uma fila de sete.
  *
- * «REGISTRAR ESTE MES» E O LARANJA DAQUI, e «Ver a fatura do cliente» e o
+ * «REGISTRAR ESTE MES» E O LARANJA DAQUI, e «Ver a folha do cliente» e o
  * comum: registrar ESCREVE e muda o que a folha do mes que vem afirma; ver a
  * folha e conferencia e nao escreve nada. Ate 30/09 o laranja estava na previa.
  */
@@ -1486,7 +1495,7 @@ function PainelDoBoleto(p: {
         )}
         <div className="fu-acoes">
           <button type="button" onClick={p.verFolha} disabled={!p.composicao}>
-            Ver a fatura do cliente
+            Ver a folha do cliente
           </button>
           {p.proxima
             ? <button type="button" className="primario" onClick={p.proxima}>Abrir a próxima</button>
@@ -1814,7 +1823,7 @@ function CamposDoTenant({ valores, ao }: {
   if (campos.length === 0) return null;
   return (
     <div className="fu-secao">
-      <div className="fu-secao-tit">Campos desta fatura</div>
+      <div className="fu-secao-tit">Campos desta folha</div>
       <div className="campos">
         {campos.map((c) => (
           <Campo key={c.chave} rotulo={c.rotulo} valor={valores[c.chave] ?? ''}
@@ -1884,7 +1893,7 @@ function AbaDaFolha({ composicao, logoUrl, temConta, erro, voltar }: {
       <div className="naoimprime">
         {erro && <Aviso tipo="erro">Não foi possível compor a fatura: {erro}</Aviso>}
         <Aviso tipo="alerta">
-          Nenhuma conta aberta. Na aba <strong>1 · Leitura e cálculo</strong>, abra uma conta da fila
+          Nenhuma conta aberta. Na aba <strong>Leitura e cálculo</strong>, abra uma conta da fila
           em «Conferir» — ou a «2ª via» de um mês já registrado, na lista de contas registradas.
         </Aviso>
       </div>
@@ -1900,10 +1909,10 @@ function AbaDaFolha({ composicao, logoUrl, temConta, erro, voltar }: {
           a folha e voltar a corrigir o que se acabou de ver — e desde 30/09 o
           lugar de corrigir e a gaveta, e nao a aba 1 inteira. */}
       <div className="fu-barra naoimprime">
-        <span className="fraco">Fatura {numero_da_fatura}</span>
+        <span className="fraco">Fatura unificada {numero_da_fatura}</span>
         <div className="fu-acoes">
           <button type="button" onClick={voltar}>Voltar à conferência</button>
-          <button type="button" className="fu-imprimir" onClick={() => window.print()}>Imprimir fatura</button>
+          <button type="button" className="fu-imprimir" onClick={() => window.print()}>Imprimir a folha</button>
         </div>
       </div>
 

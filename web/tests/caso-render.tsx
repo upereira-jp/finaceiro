@@ -50,7 +50,7 @@ import { filtrarRegistradas } from '../src/registradas-regras.ts';
 import { RevisaoDaSerie, RecusaNaTela, ResumoDaBaixa, SituacaoDaCobranca } from '../src/emissao-corpo.tsx';
 import { PerguntaNaTela } from '../src/serie.tsx';
 import { Campo, Aviso, RetornoDoAto, Tabela, Pagina, DetalheTecnico, MostrandoSo, nomeDoDetalhe } from '../src/ui.tsx';
-import { lerRecusa, recusaPrevista } from '../src/emissao-regras.ts';
+import { lerRecusa, recusaPrevista, notaDaSituacao } from '../src/emissao-regras.ts';
 
 let falhas = 0;
 let feitas = 0;
@@ -216,7 +216,7 @@ const camada = (p: Partial<CamadaLida>): CamadaLida =>
   const t = texto(html);
   chk('R4', t.includes('Isto responde'),
       'resultado unico vem sob "Isto responde", e nao "Isto pode responder"');
-  chk('R4b', t.includes('Cadê o boleto? Como gero o boleto de uma fatura?'),
+  chk('R4b', t.includes('Cadê o boleto? Como gero o boleto de uma cobrança?'),
       'e a pergunta certa e desenhada — desde 21/08 esta e a do assunto do BOLETO DA FATURA, e nao '
       + 'a do formulario de credencial do banco, que era onde quem so queria o boleto acabava');
   /* [30/09/2026] a aba se chama «Cobranças» (antes «Emissão e cobrança"); o
@@ -816,7 +816,7 @@ const desenharRoteiro = (leitura: Parameters<typeof CorpoDoRoteiro>[0]): string 
   renderToStaticMarkup(<CorpoDoRoteiro {...leitura} />);
 
 /* [30/09/2026, etapa 3] O ROTEIRO VIROU FUNIL, e estas verificações seguiram o
- * modelo: cinco abas com a contagem de cada passo, UM «Comece aqui», um painel
+ * modelo: cinco abas com a contagem de cada passo, UM destaque, um painel
  * só, e o cadastro numa linha própria. As garantias de antes continuam — uma
  * instrução por vez, o link de verdade, o mês fechado que fala — com a forma
  * nova. */
@@ -838,10 +838,13 @@ const LEITURA_VAZIA = {
       `a caixa monta (${html.length} caracteres) e o título nomeia o mês por extenso - «a `
       + 'competência 2026-07-01» é o nome que o banco dá, e não o que a pessoa fala');
 
-  chk('R16b', (html.match(/role="tab"/g) ?? []).length === 5 && (t.match(/Comece aqui/g) ?? []).length === 1
+  /* [01/10/2026, etapa 7b] O destaque sem risco diz «Próximo passo», e não mais
+     «Comece aqui» — que lia como ordem também quando o destaque era de urgência. */
+  chk('R16b', (html.match(/role="tab"/g) ?? []).length === 5 && (t.match(/Próximo passo/g) ?? []).length === 1
+             && !/Comece aqui|Mais urgente agora/.test(t)
              && t.includes('Ler as contas de luz do mês') && /29\s*contas a ler/.test(t),
-      'os cinco passos aparecem como abas, cada um com a sua contagem, e UM só leva o «Comece aqui» '
-      + '— com o mês zerado, o de ler as 29 contas');
+      'os cinco passos aparecem como abas, cada um com a sua contagem, e UM só leva o destaque — sem '
+      + 'risco, «Próximo passo» — com o mês zerado, o de ler as 29 contas');
 
   chk('R16c', t.includes('Como fazer') && /Baixe do portal da distribuidora/.test(t),
       'e o «como fazer» do passo em destaque sai inteiro no HTML, começando por onde o arquivo vem');
@@ -881,7 +884,8 @@ const LEITURA_VAZIA = {
     cobrancas: Array(29).fill({ status: 'paga' }),
     registradas: { lista: Array(29).fill({ competencia: '2026-07-01', fatura_id: 'x', cobranca_disponivel: true }), parcial: false },
   });
-  chk('R16h', fechado !== '' && /Nada falta fazer neste mês/.test(texto(fechado)) && !/Comece aqui/.test(texto(fechado)),
+  chk('R16h', fechado !== '' && /Nada falta fazer neste mês/.test(texto(fechado))
+             && !/Comece aqui|Mais urgente agora|Próximo passo/.test(texto(fechado)),
       'e com o mês inteiro fechado a caixa NÃO some: ela diz que nada falta fazer, com a mesma frase '
       + 'da tabela de conferências e da Central de Ajuda');
 
@@ -907,6 +911,15 @@ const LEITURA_VAZIA = {
              && risco.includes('href="/faturas?mes=2026-09"'),
       'com 15 contas a ler e um boleto recusado pelo banco, o painel abre no PASSO 4 — «Abrir '
       + 'Cobranças», com a recusa escrita —, e não no 1');
+  /* [01/10/2026, etapa 7b] O DESTAQUE PELO RISCO DIZ «Mais urgente agora», e o
+     risco tem o tom do que conta: a recusa do banco e a vencida são o vermelho
+     da falha, no funil como em Cobranças e em Contas a receber. */
+  chk('R16j2', /data-passo="cobrar"[^>]*>\s*<span class="roteiro-selo[^"]*">Mais urgente agora/.test(risco)
+             && (tr.match(/Mais urgente agora/g) ?? []).length === 1 && !/Comece aqui|Próximo passo/.test(tr)
+             && /class="roteiro-risco tinta-do-tom erro"[^>]*>[\s\S]*?recusada pelo banco/.test(risco)
+             && /class="roteiro-risco tinta-do-tom erro"[^>]*>[\s\S]*?vencidas sem pagamento/.test(risco),
+      'o destaque pelo RISCO diz «Mais urgente agora», e a recusa e as vencidas saem no vermelho da '
+      + 'falha (`tinta-do-tom erro`) — até 01/10 o risco era âmbar e a recusa tinha três cores');
 
   // ------------- o boleto de OUTRO mês é aviso com link, e não o destaque (4a)
   const deFora = desenharRoteiro({
@@ -920,9 +933,9 @@ const LEITURA_VAZIA = {
   });
   const tf = texto(deFora);
   chk('R16l', /E 1 de outros meses pede você/.test(tf) && deFora.includes('href="/faturas?mes=2026-09"')
-             && !/Comece aqui/.test(tf) && !/data-passo="cobrar"[^>]*>\s*<span class="roteiro-selo[^"]*">Comece/.test(deFora),
+             && !/data-passo="cobrar"[^>]*>\s*<span class="roteiro-selo[^"]*">[A-Z]/.test(deFora),
       'em agosto, sem nada sem boleto no mês, o de setembro que pede você aparece como AVISO com o '
-      + 'link para Cobranças em setembro — e o «Comece aqui» não cai no passo 4 vazio');
+      + 'link para Cobranças em setembro — e o destaque não cai no passo 4 vazio');
 
   const semMedida = desenharRoteiro({ competencia: 'julho de 2026', ...LEITURA_VAZIA, camadas, cobrancas: null });
   chk('R16k', /não medido/.test(texto(semMedida)) && semMedida.includes('>—<'),
@@ -1218,9 +1231,27 @@ const LEITURA_VAZIA = {
 
   // ------------------------------------------------ a situacao na linha
   const sit = texto(renderToStaticMarkup(
-    <SituacaoDaCobranca status="emitida" nota={{ texto: 'Falta o endereço do pagador.', alerta: true }} />));
+    <SituacaoDaCobranca status="emitida" nota={notaDaSituacao('emitida', { nivel: 'nao_pedido' }, prevista)} />));
   chk('R24a', /Emitida/.test(sit) && /Falta o endereço do pagador/.test(sit),
       'o selo «Emitida» ganha o porque embaixo quando a cobranca nao chegou ao banco');
+  /* [01/10/2026, etapa 7b] A RECUSA DO BANCO E VERMELHA AQUI COMO EM TODA TELA,
+     e o «tenta de novo» e a linha de baixo, sem cor: ate esta data esta mesma
+     linha era cinza (sistema retentando) ou ambar (motivo conhecido). */
+  const recusada = renderToStaticMarkup(
+    <SituacaoDaCobranca status="emitida" nota={notaDaSituacao('emitida', { nivel: 'esperando' }, recusa)} />);
+  chk('R24b', /class="marca neutro"/.test(recusada) && /class="em-nota tinta-do-tom erro"/.test(recusada)
+          && /O banco recusou: falta o endereço do pagador/.test(texto(recusada))
+          && /<span class="em-nota-depois">O sistema tenta de novo sozinho\.<\/span>/.test(recusada),
+      'a emitida e neutra; a recusa embaixo e `erro` (vermelha), e «o sistema tenta de novo sozinho» vem '
+      + 'como segunda linha em tinta comum — informacao, e nao outra cor');
+  const naoPedido = renderToStaticMarkup(
+    <SituacaoDaCobranca status="emitida" nota={notaDaSituacao('emitida', { nivel: 'nao_pedido' }, null)} />);
+  const rascunho = renderToStaticMarkup(<SituacaoDaCobranca status="rascunho" nota={null} />);
+  chk('R24c', /class="em-nota tinta-do-tom a_fazer"/.test(naoPedido) && /class="marca a_fazer"/.test(rascunho),
+      'o boleto a pedir e o rascunho a emitir sao TAREFA (ambar); a emitida, nao — Rascunho e Emitida nao '
+      + 'dividem mais o tom');
+  chk('R24d', /class="em-recusa erro"/.test(rec) && /class="em-recusa alerta"/.test(renderToStaticMarkup(<RecusaNaTela recusa={prevista} />)),
+      'a recusa que aconteceu e o aviso vermelho; a que o cadastro so anuncia continua o ambar da tarefa');
 
   // --------------------------------- a confirmacao do cancelamento, na linha
   /* [30/09/2026, etapa 4b] A pergunta e a `PerguntaNaTela` de `serie.tsx` — a

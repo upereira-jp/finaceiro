@@ -37,6 +37,7 @@
 import type { NivelDaEmissao } from './emissao-travada.ts';
 import { faltamParaOBoleto, type EnderecoDaUc } from './unidades-regras.ts';
 import { destinoDoEndereco } from './destino-da-camada.ts';
+import { SELO_DO_BOLETO_DA_COBRANCA, TENTANDO_DE_NOVO, type Selo } from './tom-do-estado.ts';
 
 /** O status da cobrança, como o enum `status_fatura` do banco. */
 export type StatusDaCobranca = 'rascunho' | 'emitida' | 'paga' | 'vencida' | 'cancelada' | 'negociada';
@@ -321,22 +322,60 @@ export function acaoDaLinha(
 /**
  * A SEGUNDA LINHA DA SITUAÇÃO — o porquê curto, embaixo do selo. `null` quando o
  * selo já diz tudo («Paga», «Emitida» com boleto no banco).
+ *
+ * [01/10/2026, etapa 7b] A LINHA TEM O SELO DELA, de `tom-do-estado.ts`, e não
+ * mais um `alerta` sim-ou-não. Até aqui a recusa do banco saía de três jeitos:
+ * âmbar quando a tela conhecia o motivo, cinza quando o sistema estava
+ * tentando de novo, e vermelha em Contas a receber. Agora:
+ *
+ *   - a recusa que ACONTECEU é `erro`, sempre, e diz que foi o banco;
+ *   - a que o cadastro só ANUNCIA (`prevista`) é `a_fazer`: ninguém pediu nada,
+ *     o que há é o endereço a completar;
+ *   - o «o sistema tenta de novo sozinho» é a linha `depois`, em tinta comum —
+ *     uma informação a mais sobre a mesma falha, e não outra cor;
+ *   - o boleto que ninguém pediu é `a_fazer`: é o próximo ato da linha.
  */
+export type NotaDaSituacao = {
+  texto: string;
+  selo: Selo;
+  /** Uma linha a mais, em tinta comum — hoje, só o «o sistema tenta de novo». */
+  depois: string | null;
+};
+
+/** «Falta o endereço do pagador.» -> «falta o endereço do pagador.» */
+const minuscula = (t: string): string => t.charAt(0).toLowerCase() + t.slice(1);
+
 export function notaDaSituacao(
   status: StatusDaCobranca,
   travada: { nivel: NivelDaEmissao } | null | undefined,
   recusa: RecusaLida | null,
-): { texto: string; alerta: boolean } | null {
+): NotaDaSituacao | null {
   if (!travada || (status !== 'emitida' && status !== 'vencida')) return null;
-  if (recusa && status === 'emitida') return { texto: recusa.frase, alerta: true };
+  const B = SELO_DO_BOLETO_DA_COBRANCA;
+  if (recusa && status === 'emitida') {
+    return recusa.prevista
+      ? { texto: recusa.frase, selo: B.recusa_prevista, depois: null }
+      : { texto: `O banco recusou: ${minuscula(recusa.frase)}`, selo: B.recusado,
+          depois: travada.nivel === 'esperando' ? TENTANDO_DE_NOVO : null };
+  }
   switch (travada.nivel) {
-    case 'nao_pedido': return { texto: 'Boleto ainda não pedido.', alerta: false };
-    case 'esquecido': return { texto: 'Boleto não pedido há mais de um dia.', alerta: true };
-    case 'esperando': return { texto: 'O banco recusou; o sistema tenta de novo sozinho.', alerta: false };
-    case 'insistindo': return { texto: 'O banco vem recusando o boleto.', alerta: true };
-    case 'parado': return { texto: 'Sem boleto, e o sistema parou de tentar.', alerta: true };
+    case 'nao_pedido': return { texto: 'Boleto ainda não pedido.', selo: B.nao_pedido, depois: null };
+    case 'esquecido': return { texto: 'Boleto não pedido há mais de um dia.', selo: B.esquecido, depois: null };
+    case 'esperando': return { texto: 'O banco recusou o boleto.', selo: B.esperando, depois: TENTANDO_DE_NOVO };
+    case 'insistindo': return { texto: 'O banco vem recusando o boleto.', selo: B.insistindo, depois: null };
+    case 'parado': return { texto: 'Sem boleto, e o sistema parou de tentar.', selo: B.parado, depois: null };
   }
 }
+
+/** A recusa que voltou agora e que a tela não sabe traduzir: dita com as
+ *  palavras do banco, e com o tom de qualquer recusa. */
+export const notaDaRecusaCrua = (texto: string): NotaDaSituacao =>
+  ({ texto: `O banco recusou agora: ${texto}`, selo: SELO_DO_BOLETO_DA_COBRANCA.recusado, depois: null });
+
+/** O selo da recusa inteira (`RecusaNaTela`): a que aconteceu é a falha; a
+ *  prevista, a lacuna. */
+export const seloDaRecusa = (recusa: RecusaLida | null): Selo =>
+  (recusa?.prevista ? SELO_DO_BOLETO_DA_COBRANCA.recusa_prevista : SELO_DO_BOLETO_DA_COBRANCA.recusado);
 
 /* ==========================================================================
  * 4. OS ATOS EM SÉRIE — «Emitir N» e «Pedir os N boletos»

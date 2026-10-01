@@ -27,12 +27,15 @@
 //                                 camada `originador_do_contrato`;
 //   contas que faltam ler         a faturável sem conta registrada NAQUELE mês,
 //                                 casada pelo número da unidade, como a junção
-//                                 `conta_do_mes` do servidor.
+//                                 `conta_do_mes` do servidor;
+//   sem endereço para o boleto    [etapa 7b] a faturável com contrato ativo sem
+//                                 o endereço que o banco exige — `uc_contratada`
+//                                 da camada `endereco_do_pagador`.
 //
 // `.ts` PURO, e pelo motivo de sempre: o runner do `web/` não lê JSX, e regra
 // dentro de tela é inalcançável por teste (regra 8).
 
-import { ehFaturavel, type UcParaSituacao } from './unidades-regras.ts';
+import { ehFaturavel, enderecoEmiteBoleto, type EnderecoDaUc, type UcParaSituacao } from './unidades-regras.ts';
 
 /** O mínimo que estas listas leem de uma unidade. Estrutural: o tipo
  *  `UnidadeConsumidora` de `api.ts` satisfaz isto. */
@@ -157,6 +160,45 @@ export function quemTrouxeOMesmoCliente(
  */
 export function contratoSemQuemTrouxe(k: ContratoDaLista, uc: UcParaSituacao | null | undefined): boolean {
   return k.status === 'ativo' && !k.originador_id && Boolean(uc) && ehFaturavel(uc!);
+}
+
+/* ==========================================================================
+ * O ENDEREÇO DO PAGADOR QUE O BANCO EXIGE (01/10/2026, etapa 7b)
+ * ========================================================================== */
+
+/**
+ * AS UNIDADES QUE A TRAVA «ENDEREÇO DO PAGADOR» CONTA — e a mesma lista que o
+ * recorte `?pendencia=sem_endereco` mostra e que a faixa de Unidades conta.
+ *
+ * ATÉ ESTA DATA ERAM TRÊS NÚMEROS para a mesma frase, e a crítica de 01/10
+ * mediu os três numa tela só: a trava do Mês dizia 4, a faixa de Unidades
+ * dizia 5 e o recorte mostrava 6. Os três estavam certos, cada um sobre uma
+ * população diferente — a trava conta a unidade COM CONTRATO ATIVO (o
+ * `uc_contratada` de `src/repos/prontidao.ts`, porque sem contrato a unidade já
+ * cai uma camada antes), a faixa contava a faturável, e o recorte, toda
+ * unidade. Quem clicava em «4» e via 6 concluía que um dos dois mentia.
+ *
+ * AGORA OS TRÊS SÃO ESTE: faturável (`ehFaturavel`, o `uc_ativa` do servidor),
+ * com contrato ATIVO na unidade (`k.status = 'ativo'`), e sem o endereço que o
+ * banco exige (`enderecoEmiteBoleto`, que chama a MESMA `faltamNoEndereco` do
+ * servidor — o número da casa não é exigido).
+ *
+ * `null` QUANDO OS CONTRATOS NÃO CHEGARAM: sem o mapa, não se sabe quais têm
+ * contrato, e contar todas seria voltar ao número maior.
+ */
+export function semEnderecoParaOBoleto<T extends UcDaLista & EnderecoDaUc>(
+  ucs: readonly T[] | null,
+  vigentes: Readonly<Record<string, ContratoDaLista | null>> | null,
+): T[] | null {
+  if (!ucs || !vigentes) return null;
+  return ucs.filter((u) => comContratoAtivo(u, vigentes) && !enderecoEmiteBoleto(u));
+}
+
+/** O universo da trava: a faturável com contrato ativo — o «de 35» do Mês. */
+export function comContratoAtivo(
+  u: UcDaLista, vigentes: Readonly<Record<string, ContratoDaLista | null>>,
+): boolean {
+  return ehFaturavel(u) && vigentes[u.id]?.status === 'ativo';
 }
 
 /* ==========================================================================

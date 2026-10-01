@@ -19,11 +19,13 @@
 // sairam do `.tsx` no mesmo dia. Era a condicao para a regra 8 alcancar a camada
 // de apresentacao, que e onde ela nunca tinha chegado neste projeto.
 
+import { readFileSync, readdirSync } from 'node:fs';
 import { ESTILO, MENU_VIRA_GAVETA } from '../src/estilo.ts';
 import { VARIAVEIS_CSS, TIPOGRAFIA, RITMO } from '../src/tema.ts';
 import {
-  ICONES_QUE_SE_MOVEM, ICONE_DO_ESTADO, ICONE_DO_AVISO, ICONE_DO_STATUS_DA_FATURA, TONS_DO_SELO,
+  ICONES_QUE_SE_MOVEM, ICONE_DO_ESTADO, ICONE_DO_AVISO, TONS_DO_SELO,
 } from '../src/iconografia.ts';
+import { SELO_DA_COBRANCA } from '../src/tom-do-estado.ts';
 import {
   TELAS, FUNIS, PASTAS, telaDoCaminho, telasDoFunil, primeiraTelaDoFunil, funilDoCaminho,
   funisDaPasta, funisVisiveis, destinoVisivel, secoesDoMenu, caminhoNoMenu, SECAO_DO_GRUPO,
@@ -584,8 +586,11 @@ chk('I5e', /\.marca\s*\{[^}]*border:\s*1px solid transparent/.test(REGRAS),
     'a borda da pilula e transparente e existe: ela reserva o espaco sem desenhar contorno');
 
 // OS SEIS STATUS DA FATURA, cada um com o icone do SIGNIFICADO e nao do tom. O
-// mapa existe por causa de um defeito real: "Emitida" cai no tom `nao_medido` e
-// exibia a interrogacao de "nao sei". Ver `ICONE_DO_STATUS_DA_FATURA`.
+// mapa existe por causa de um defeito real: "Emitida" caia no tom `nao_medido` e
+// exibia a interrogacao de "nao sei". [01/10/2026, etapa 7b] O icone mora com o
+// tom em `SELO_DA_COBRANCA` (`tom-do-estado.ts`).
+const ICONE_DO_STATUS_DA_FATURA: Record<string, string> =
+  Object.fromEntries(Object.entries(SELO_DA_COBRANCA).map(([k, v]) => [k, v.icone]));
 const STATUS_DA_FATURA = ['rascunho', 'emitida', 'paga', 'vencida', 'cancelada', 'negociada'];
 for (const s of STATUS_DA_FATURA) {
   chk('I5f', Boolean(ICONE_DO_STATUS_DA_FATURA[s]), `o status ${s} tem icone proprio`);
@@ -693,10 +698,17 @@ for (const base of HOVERS_DE_BOTAO) {
    * com tinta `#fff` (2,69:1); e `--acento` com `--acento-texto` (5,93:1) desde
    * que a paleta da ilha saiu. A tinta passou a ser verificada pelo NOME — branco
    * sobre o laranja e o par que reprovou duas vezes neste projeto. */
+  /* [01/10/2026, etapa 7b] A AFIRMACAO MUDOU DE FORMA e nao de fundo: a aba
+   * selecionada continua se distinguindo por FORMA e cor juntas — mas a forma
+   * agora e o sublinhado de 2px na tinta forte, e nao o bloco laranja. O laranja
+   * e do ato da tela (The One Orange Rule), e a aba ativa era o segundo laranja
+   * da mesma area. A verificacao prende as duas metades: ha sublinhado, e o
+   * laranja nao voltou. */
   const a = regraDe('.g3ref .fu-aba[aria-selected="true"]');
-  chk('I7c', /background:\s*var\(--acento\)/.test(a) && /color:\s*var\(--acento-texto\)/.test(a),
-      'a aba selecionada e uma SUPERFICIE cheia com tinta propria, e nao so uma cor de texto '
-      + 'diferente — e a tinta sobre o laranja e o Navy (--acento-texto), nunca o branco');
+  chk('I7c', /border-bottom:\s*2px solid var\(--texto\)/.test(a) && /color:\s*var\(--texto\)/.test(a)
+          && !/var\(--acento/.test(a),
+      'a aba selecionada se distingue por FORMA (o sublinhado de 2px na tinta forte) e nao so por cor '
+      + 'de texto — e nao e mais laranja: o laranja e do ato da tela (One Orange)');
 }
 
 // O ANEL DE FOCO E SEMPRE `--foco`. Ele e o unico token medido contra 3:1 em toda
@@ -966,13 +978,39 @@ chk('I7e', /summary:focus-visible\s*\{[^}]*outline:/.test(REGRAS),
 // VAZIOS em producao no dia em que ela foi escondida.
 //
 // O que continua valendo e o fragmento: Pendencias, a ajuda e tres mensagens do
-// servidor mandam para `/documento#cadastro` pelo nome «3 · Cadastro da fatura».
+// servidor mandam para `/documento#cadastro` pelo nome da aba («Dados de quem
+// cobra» desde 01/10/2026).
 
 chk('I9', ABAS.length === 3 && ABAS[0] === 'leitura' && ABAS[1] === 'emissao' && ABAS[2] === 'cadastro',
     `as tres abas estao na barra, na ordem do trabalho (hoje: ${ABAS.join(' | ')})`);
 
-chk('I9b', ABAS.every((a, i) => ROTULO_DA_ABA[a].startsWith(`${i + 1} · `)),
-    'o numero do rotulo e a posicao na barra — «3 ·» na terceira, e nao um numero que a barra nao mostra');
+/* [01/10/2026, etapa 7b] AS ABAS PERDERAM O NUMERO. A I9b prendia o contrario
+ * («3 ·» na terceira), e o numero era o defeito que a critica de 01/10 achou:
+ * Contas de luz e onde moram os PASSOS 1 e 2 do mes, e as abas «1 · 2 · 3»
+ * logo abaixo eram uma segunda numeracao que nao casava com a primeira. A
+ * terceira tambem mudou de nome: «Cadastro da fatura» nao cadastra fatura — e
+ * o emissor, quem cobra. Ver `abas-da-fatura.ts`. */
+chk('I9b', ABAS.every((a) => !/\d|·/.test(ROTULO_DA_ABA[a])),
+    `nenhuma aba carrega numero — a tela ja numera os passos do mes (hoje: ${ABAS.map((a) => ROTULO_DA_ABA[a]).join(' | ')})`);
+chk('I9b2', ROTULO_DA_ABA.cadastro === 'Dados de quem cobra' && !/fatura/i.test(ABAS.map((a) => ROTULO_DA_ABA[a]).join(' ')),
+    'a terceira diz o que guarda — os dados de quem cobra — e nenhuma diz «fatura», que na tela e so a folha impressa');
+{
+  /* E NENHUM TEXTO CITA A ABA PELO NOME VELHO, na web nem no SERVIDOR: tres
+   * mensagens de `src/` mandam a pessoa para a aba pelo nome, e um nome que a
+   * barra nao mostra e um caminho que nao existe. */
+  const raiz = new URL('../../', import.meta.url);
+  const arquivos = (dir: string): string[] => readdirSync(new URL(dir, raiz), { withFileTypes: true })
+    .flatMap((e) => (e.isDirectory() ? arquivos(`${dir}${e.name}/`) : /\.(ts|tsx)$/.test(e.name) ? [`${dir}${e.name}`] : []));
+  const semComentario = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(?<!:)\/\/[^\n]*/g, '');
+  const velhos = [...arquivos('web/src/'), ...arquivos('src/')]
+    .filter((f) => /\d · (Leitura e c|Folha do cliente|Cadastro da fatura)/.test(semComentario(readFileSync(new URL(f, raiz), 'utf8'))));
+  chk('I9b3', velhos.length === 0,
+      `nenhum texto da web nem do servidor cita uma aba numerada${velhos.length ? ` — ACHADO: ${velhos.join(', ')}` : ''}`);
+  const doServidor = ['src/repos/documento.ts', 'src/repos/prontidao.ts']
+    .every((f) => readFileSync(new URL(f, raiz), 'utf8').includes('"Dados de quem cobra"'));
+  chk('I9b4', doServidor && readFileSync(new URL('src/dominio/fatura-do-registro.ts', raiz), 'utf8').includes('"Leitura e cálculo"'),
+      'e as mensagens do servidor citam as abas pelo nome de hoje');
+}
 
 // A PORTA DO ENDERECO CONTINUA ABERTA, agora para ABRIR e nao para revelar.
 chk('I9c', abaDoFragmento(FRAGMENTO_DO_CADASTRO) === 'cadastro'

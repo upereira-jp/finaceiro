@@ -29,7 +29,7 @@ export const PERFIS: ReadonlyArray<{ valor: Papel; nome: string; faz: string }> 
   { valor: 'financeiro', nome: 'Financeiro',
     faz: 'Lança e paga contas a pagar. Vê cadastros e cobrança, sem alterar.' },
   { valor: 'cobranca', nome: 'Cobrança',
-    faz: 'Emite faturas, pede boletos e dá baixa. Vê cadastros; não vê contas a pagar.' },
+    faz: 'Emite cobranças, pede boletos e dá baixa. Vê cadastros; não vê contas a pagar.' },
   { valor: 'leitura', nome: 'Só leitura',
     faz: 'Consulta tudo, menos contas a pagar da empresa. Não altera nada.' },
 ];

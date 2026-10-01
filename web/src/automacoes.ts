@@ -86,15 +86,15 @@ const AUTOMACAO: Record<ChaveDaAutomacao, {
     consequencia:
       'É ela que percebe sozinha quem pagou. Parada, um boleto já pago continua aparecendo em '
       + 'aberto aqui, e a cobrança acaba acusando quem não deve nada. O dinheiro não se perde — '
-      + 'ele está na conta —, mas a baixa precisa ser dada à mão na aba Faturas até a rodada voltar.',
+      + 'ele está na conta —, mas a baixa precisa ser dada à mão na tela Cobranças até a rodada voltar.',
     comando: 'systemctl status financeiro-agenda-consulta.timer',
   },
   fila_de_emissao: {
     nome: 'o envio de boletos ao banco',
     Nome: 'O envio de boletos ao banco',
     consequencia:
-      'É por ele que a fatura emitida vira boleto no banco. Parado, o cliente não recebe nada '
-      + 'para pagar: as faturas ficam esperando na fila. Nada se perde e nada é cobrado em '
+      'É por ele que a cobrança emitida vira boleto no banco. Parado, o cliente não recebe nada '
+      + 'para pagar: as cobranças ficam esperando na fila. Nada se perde e nada é cobrado em '
       + 'dobro quando voltar — mas enquanto isso nenhuma cobrança nova sai.',
     comando: 'systemctl status financeiro-agenda-fila.timer',
   },
@@ -164,7 +164,7 @@ export function oQueFez(r: RodadaNaTela): string {
       return `${u.examinados} em aberto conferidos, ${u.feitos} com pagamento encontrado`
            + (u.falhos > 0 ? `, ${u.falhos} com valor que não fecha` : '');
     case 'fila_de_emissao':
-      if (u.examinados === 0) return 'não havia fatura esperando boleto';
+      if (u.examinados === 0) return 'não havia cobrança esperando boleto';
       return `${u.examinados} na fila, ${u.feitos} registrados no banco`
            + (u.falhos > 0 ? `, ${u.falhos} que falharam de novo` : '');
     case 'ciclo_do_crm':

@@ -171,9 +171,9 @@ export type Funil = {
 export const FUNIS: readonly Funil[] = [
   {
     chave: 'rateio', rotulo: 'Rateio', nome: 'Financeiro Rateio',
-    descricao: 'O dinheiro que entra dos clientes: usinas, unidades, contratos, a conta lida, '
-             + 'a fatura, o boleto e a cobrança.',
-    resumo: 'Usinas, clientes, faturas e cobrança',
+    descricao: 'O dinheiro que entra dos clientes: usinas, unidades, contratos, a conta de luz '
+             + 'lida, a cobrança e o boleto.',
+    resumo: 'Clientes, contas de luz e cobranças',
     icone: 'setor_rateio', pasta: 'setores',
   },
   {
@@ -314,8 +314,8 @@ export const TELAS: readonly Tela[] = [
    * «CONTAS DE LUZ», E ANTES «FATURA UNIFICADA» (17/08) E «DOCUMENTO». É a tela
    * dos passos 1 e 2: a conta da distribuidora entra, é conferida, registrada e
    * vira cobrança — e a folha do cliente, a Fatura unificada, se imprime aqui na
-   * aba «2 · Folha do cliente». A ROTA NÃO MUDA: `/documento#cadastro` abre
-   * direto a aba do emissor, «3 · Cadastro da fatura».
+   * aba «Folha do cliente». A ROTA NÃO MUDA: `/documento#cadastro` abre
+   * direto a aba do emissor, «Dados de quem cobra».
    */
   { funil: 'rateio', rota: '/documento',  titulo: 'Contas de luz', icone: 'documento', grupo: 'passos', passos: [1, 2] },
   /*

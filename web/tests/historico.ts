@@ -96,8 +96,12 @@ chk('H1-0', AUDITADAS.size >= 25,
    * tabela, e acusou sete: `cliente`, `contrato`, `usina`, `originador`,
    * `tarifa`, `fatura` e `boleto`. Nenhuma delas e preguica — sao tabelas cujo
    * nome ja E a palavra portuguesa que a pessoa usa, porque o dominio deste
-   * sistema foi nomeado em portugues desde a primeira migration. Traduzir
-   * `fatura` para outra coisa seria inventar um segundo vocabulario.
+   * sistema foi nomeado em portugues desde a primeira migration.
+   *
+   * [01/10/2026, etapa 7b] DUAS DAS SETE GANHARAM ROTULO: na tela, a tabela
+   * `fatura` e «cobrança» e a `originador` e o «cadastro de quem trouxe o
+   * cliente» — o vocabulario fixo das telas (`vocabulario-das-telas.ts`, T9 e
+   * T10), em que «fatura» e so o nome da folha impressa.
    *
    * O que a tela nao pode receber e SUBLINHADO: `conta_pagar` na celula e
    * jargao de banco, e e o que a suite de vocabulario proibe no resto do

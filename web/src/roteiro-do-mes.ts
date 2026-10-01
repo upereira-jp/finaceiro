@@ -35,7 +35,8 @@
 // AS QUATRO REGRAS QUE GOVERNAM ESTE ARQUIVO
 //
 //   1. **Um passo em destaque, e só um.** A lista inteira aparece com os
-//      números, mas exatamente um carrega o «comece aqui». A escolha tem ordem
+//      números, mas exatamente um carrega o destaque — «Mais urgente agora»
+//      ou «Próximo passo» (`rotuloDoDestaque`). A escolha tem ordem
 //      escrita (`escolherOFoco`): risco primeiro; sem risco, o passo com
 //      trabalho mais perto do dinheiro — terminar o que já começou antes de
 //      abrir mais;
@@ -63,6 +64,8 @@ import {
 import { VERBETE_DA_CAMADA } from './vocabulario.ts';
 import { tipoDaRecusa } from './emissao-regras.ts';
 import { funilDoCaminho } from './navegacao.ts';
+import { SELO_DA_COBRANCA, SELO_DO_BOLETO_DA_COBRANCA } from './tom-do-estado.ts';
+import type { TomDoSelo } from './iconografia.ts';
 
 /** O mínimo que este módulo lê de uma linha do relatório. Estrutural de
  *  propósito: o tipo `Camada` de `api.ts` satisfaz isto sem que este arquivo
@@ -130,6 +133,13 @@ export type RiscoDoPasso = {
   frase: string;
   /** A ordem entre riscos: maior vem primeiro. Ver `escolherOFoco`. */
   peso: number;
+  /**
+   * [01/10/2026, etapa 7b] O TOM DO RISCO, lido de `tom-do-estado.ts` — o
+   * mesmo do selo das linhas que ele conta. Até aqui todo risco era âmbar, e a
+   * recusa do banco saía âmbar no funil e vermelha em Contas a receber. Agora:
+   * recusa ou vencida no risco, `erro`; só o boleto parado sem pedido, `a_fazer`.
+   */
+  tom: TomDoSelo;
 };
 
 /**
@@ -253,7 +263,7 @@ export const MOLDES: readonly Molde[] = [
       + 'Tudo o que vem depois sai dos números dela.',
     comoFazer: [
       'Baixe do portal da distribuidora as contas do mês — uma por unidade.',
-      'Abra «Contas de luz» e envie TODAS de uma vez na aba «1 · Leitura e cálculo». '
+      'Abra «Contas de luz» e envie TODAS de uma vez na aba «Leitura e cálculo». '
       + 'Não precisa ser uma por vez: o sistema lê em fila.',
       'Cada conta lida vira uma linha da fila. A que estiver com pendência aparece no topo, com o '
       + 'motivo — clique «Conferir», corrija o campo na gaveta que abre, e a linha se resolve.',
@@ -323,8 +333,8 @@ export const MOLDES: readonly Molde[] = [
       + 'na conta que você já leu. Grave e peça o boleto de novo.',
       'Boleto pedido que não registrou volta sozinho na fila, a cada 5 minutos. Não adianta ficar '
       + 'clicando: a lista mostra quantas tentativas já houve.',
-      'A folha do cliente — a Fatura unificada — se imprime em «Contas de luz», na aba «2 · Folha '
-      + 'do cliente», e a «2ª via» de qualquer mês já registrado sai pelo botão de mesmo nome.',
+      'A folha do cliente — a Fatura unificada — se imprime em «Contas de luz», na aba «Folha do '
+      + 'cliente», e a «2ª via» de qualquer mês já registrado sai pelo botão de mesmo nome.',
     ],
     destino: COBRANCAS,
   },
@@ -450,7 +460,10 @@ function contar(l: LeituraDoMes): Record<ChaveDoPasso, Numeros> & { pagas: numbe
     }
     const paradas = pedemNoMes - recusadasNoMes;
     if (paradas > 0) partes.push(`${paradas} ${paradas === 1 ? 'parada' : 'paradas'} há mais de um dia`);
-    riscoDoBoleto = { quantos: pedemNoMes, frase: emLista(partes), peso: 3 };
+    riscoDoBoleto = {
+      quantos: pedemNoMes, frase: emLista(partes), peso: 3,
+      tom: recusadasNoMes > 0 ? SELO_DO_BOLETO_DA_COBRANCA.recusado.tom : SELO_DO_BOLETO_DA_COBRANCA.esquecido.tom,
+    };
   }
   let deOutrosMeses: AvisoDeOutrosMeses | null = null;
   if (quemPedeFora.length > 0) {
@@ -502,7 +515,8 @@ function contar(l: LeituraDoMes): Record<ChaveDoPasso, Numeros> & { pagas: numbe
       quantos: receber,
       contexto: pagas !== null && pagas > 0 ? `${pagas} ${pagas === 1 ? 'já paga' : 'já pagas'}` : null,
       risco: vencidas !== null && vencidas > 0
-        ? { quantos: vencidas, frase: `${vencidas} ${vencidas === 1 ? 'vencida' : 'vencidas'} sem pagamento`, peso: 2 }
+        ? { quantos: vencidas, frase: `${vencidas} ${vencidas === 1 ? 'vencida' : 'vencidas'} sem pagamento`, peso: 2,
+            tom: SELO_DA_COBRANCA.vencida.tom }
         : null,
     },
     pagas,
@@ -522,8 +536,8 @@ function contar(l: LeituraDoMes): Record<ChaveDoPasso, Numeros> & { pagas: numbe
  *      (puxar da direita);
  *   3. O passo AUTOMÁTICO só entra pelo risco: sem ele não há o que clicar;
  *   4. [30/09, etapa 4a] PASSO COM ZERO NO MÊS NÃO GANHA O DESTAQUE, nem pelo
- *      risco. O destaque diz «comece aqui», e começar num passo vazio no mês
- *      escolhido manda a pessoa para uma lista sem nada. O que vem de outros
+ *      risco. O destaque diz por onde ir, e um passo vazio no mês escolhido
+ *      mandaria a pessoa para uma lista sem nada. O que vem de outros
  *      meses tem o seu aviso próprio (`AvisoDeOutrosMeses`).
  *
  * `null` quando nenhum passo tem trabalho nem risco — e aí a tela diz isso, que é
@@ -537,6 +551,25 @@ export function escolherOFoco(passos: readonly Omit<PassoDoMes, 'foco'>[]): Chav
     .sort((a, b) => b.numero - a.numero);
   return comTrabalho[0]?.chave ?? null;
 }
+
+/**
+ * O RÓTULO DO DESTAQUE, em cima do número do passo (01/10/2026, etapa 7b).
+ *
+ * Era «Comece aqui» nos dois casos, e a pergunta 4 da crítica de 01/10 era
+ * exatamente essa: «é ordem ou urgência?». A escolha (`escolherOFoco`) tem DOIS
+ * motivos, e o rótulo passou a dizer qual:
+ *
+ *   - com RISCO (a recusa do banco, a vencida): «Mais urgente agora» — o
+ *     dinheiro corre perigo ali, mesmo que haja trabalho antes no funil;
+ *   - sem risco, o trabalho mais perto do dinheiro: «Próximo passo».
+ *
+ * O passo com risco é sempre o escolhido pelo risco: um passo só entra no
+ * destaque pelo trabalho quando nenhum tem risco (`escolherOFoco`, regra 1).
+ */
+export const ROTULO_DO_DESTAQUE = { risco: 'Mais urgente agora', trabalho: 'Próximo passo' } as const;
+
+export const rotuloDoDestaque = (p: Pick<PassoDoMes, 'foco' | 'risco'>): string =>
+  (!p.foco ? '' : p.risco ? ROTULO_DO_DESTAQUE.risco : ROTULO_DO_DESTAQUE.trabalho);
 
 /**
  * AS PENDÊNCIAS DE CADASTRO, já em português e com o caminho.
@@ -615,11 +648,17 @@ function fraseDoMes(
     const EXTENSO = ['', 'um', 'dois', 'três', 'quatro'];
     const onde = comTrabalho.length >= passos.length ? 'nos cinco passos'
       : `em ${EXTENSO[comTrabalho.length]} dos cinco passos`;
-    /* «Comece pelo passo 4, Pedir o boleto…» e não mais «Comece pelo 4 · Pedir o
-       boleto…» (30/09, etapa 4a): o «·» no meio da frase corrida saiu. */
+    /* [01/10/2026, etapa 7b] A FRASE DIZ POR QUE AQUELE PASSO, com as mesmas
+       palavras do selo dele (`rotuloDoDestaque`). Era «Comece pelo passo 4…»
+       nos dois casos — e «comece» lia como ORDEM («faça este antes dos
+       outros») quando o destaque é de URGÊNCIA: a recusa do banco no passo 4
+       não manda deixar as contas do passo 1 para depois. */
+    const porque = foco.risco
+      ? `O mais urgente é o passo ${foco.numero}`
+      : `O próximo é o passo ${foco.numero}`;
     return {
       estado: 'andando',
-      frase: `Falta trabalho ${onde}. Comece pelo passo ${foco.numero}, ${foco.titulo}: ${motivo}.${semMedida}`,
+      frase: `Falta trabalho ${onde}. ${porque}, ${foco.titulo}: ${motivo}.${semMedida}`,
     };
   }
   if (naoMedidos.length > 0) {

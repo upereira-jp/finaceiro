@@ -98,7 +98,7 @@ export const EXPLICACAO_DO_REGISTRO: Record<MotivoDeRecusaDoRegistro, string> = 
   sem_tarifa_na_conta:
     'a tarifa lida na conta e zero ou ausente, e a fatura exige tarifa positiva. Uma fatura ' +
     'com tarifa zero imprimiria "R$ 0,000000 por kWh" no documento que o cliente confere. ' +
-    'Corrija o campo Tarifa em Contas de luz > "1 · Leitura e cálculo" antes de faturar',
+    'Corrija o campo Tarifa em Contas de luz > "Leitura e cálculo" antes de faturar',
   sem_vencimento:
     'nem a conta lida traz vencimento nem a UC tem dia de vencimento cadastrado. Nao ha ' +
     'default e nao vai haver: escolher uma data aqui seria o improviso que a regra 10 proibe',

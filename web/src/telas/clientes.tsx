@@ -36,10 +36,11 @@ import {
   situacaoDoDocumento, contarDocumentos, formatarDocumento, tipoPeloComprimento,
   motivoDaTravaDoDocumento, podeGravarDocumento,
   casaComFiltroDeDocumento,
-  ROTULO_DA_SITUACAO_DO_DOCUMENTO, ROTULO_DO_FILTRO_DE_DOCUMENTO, TOM_DA_SITUACAO_DO_DOCUMENTO,
+  ROTULO_DA_SITUACAO_DO_DOCUMENTO, ROTULO_DO_FILTRO_DE_DOCUMENTO,
   type FiltroDeDocumento, type MotivoDeTravaDoDocumento,
 } from '../clientes-regras.ts';
 import { FILTROS_DA_TELA, filtroDaConsulta, rotuloDoRecorte, esquecerORecorte } from '../destino-da-camada.ts';
+import { SELO_DO_CADASTRO, SELO_DO_DOCUMENTO } from '../tom-do-estado.ts';
 
 /** As duas situações de cliente, para o filtro e para a pílula. */
 const SITUACOES = [
@@ -396,11 +397,11 @@ function LinhaDeCliente(p: {
           )}
         </td>
         <td>
-          <Marca tom={TOM_DA_SITUACAO_DO_DOCUMENTO[estado]}>
+          <Marca selo={SELO_DO_DOCUMENTO[estado]}>
             {ROTULO_DA_SITUACAO_DO_DOCUMENTO[estado]}
           </Marca>
         </td>
-        <td className="c-sit"><Marca tom={c.ativo ? 'ok' : 'neutro'}>{c.ativo ? 'Ativo' : 'Inativo'}</Marca></td>
+        <td className="c-sit"><Marca selo={SELO_DO_CADASTRO[c.ativo ? 'ativo' : 'inativo']}>{c.ativo ? 'Ativo' : 'Inativo'}</Marca></td>
         <td className="c-aco">
           <button onClick={p.abrir} aria-expanded={p.aberto}>
             <Icone nome="clientes" tamanho={14} />

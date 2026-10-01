@@ -35,11 +35,11 @@ import { ItemDaSerie, PerguntaNaTela, RevisaoEmSerie } from './serie.tsx';
 import { Ligacao } from './rota.tsx';
 import { emReais } from './dinheiro.ts';
 import { diaEmBr } from './formato.ts';
-import { tomDoStatusDaFatura } from './cobranca-regras.ts';
-import { ICONE_DO_STATUS_DA_FATURA } from './iconografia.ts';
+import { ICONE_DO_AVISO } from './iconografia.ts';
+import { SELO_DA_COBRANCA, SELO_DA_VEZ, tipoDoAviso } from './tom-do-estado.ts';
 import {
-  placarDaSerie, boletos,
-  type EstadoDaVez, type RecusaLida, type SaidaDaRecusa, type StatusDaCobranca,
+  placarDaSerie, boletos, seloDaRecusa,
+  type EstadoDaVez, type NotaDaSituacao, type RecusaLida, type SaidaDaRecusa, type StatusDaCobranca,
 } from './emissao-regras.ts';
 
 
@@ -53,19 +53,21 @@ import {
  */
 export function SituacaoDaCobranca({ status, nota }: {
   status: StatusDaCobranca;
-  nota: { texto: string; alerta: boolean } | null;
+  nota: NotaDaSituacao | null;
 }) {
+  /* [01/10/2026, etapa 7b] A COR DA NOTA É A DO SELO DELA (`tom-do-estado.ts`):
+     a recusa do banco é vermelha aqui como em toda tela, e o «o sistema tenta de
+     novo sozinho» vem embaixo, em tinta comum — informação, não outra cor. */
   return (
     <>
-      <Marca tom={tomDoStatusDaFatura(status)} icone={ICONE_DO_STATUS_DA_FATURA[status]}>
-        {rotulo(status)}
-      </Marca>
+      <Marca selo={SELO_DA_COBRANCA[status]}>{rotulo(status)}</Marca>
       {nota && (
-        <span className={`em-nota${nota.alerta ? ' alerta' : ''}`} title={nota.texto}>
-          {nota.alerta && <Icone nome="aviso_alerta" tamanho={13} peso="bold" />}
+        <span className={`em-nota tinta-do-tom ${nota.selo.tom}`} title={nota.texto}>
+          <Icone nome={nota.selo.icone} tamanho={13} peso="bold" />
           <span>{nota.texto}</span>
         </span>
       )}
+      {nota?.depois && <span className="em-nota-depois">{nota.depois}</span>}
     </>
   );
 }
@@ -110,21 +112,26 @@ export function RecusaNaTela({ recusa, bruto, primario, unidade }: {
   primario?: boolean;
   unidade?: string;
 }) {
+  /* [01/10/2026, etapa 7b] O DESENHO E A COR SÃO OS DO AVISO DO MESMO TOM: a
+     recusa que aconteceu é o octógono vermelho da falha; a que o cadastro só
+     anuncia (`prevista`) é o triângulo âmbar da tarefa. Até aqui as duas eram o
+     triângulo âmbar. */
+  const tom = tipoDoAviso(seloDaRecusa(recusa));
   if (!recusa) {
     if (!bruto) return null;
     return (
-      <div className="em-recusa">
+      <div className={`em-recusa ${tom}`}>
         <p className="em-recusa-frase">
-          <Icone nome="aviso_alerta" tamanho={15} peso="bold" />
+          <Icone nome={ICONE_DO_AVISO[tom]} tamanho={15} peso="bold" />
           <span><strong>O banco recusou.</strong> A resposta dele foi: {bruto}</span>
         </p>
       </div>
     );
   }
   return (
-    <div className="em-recusa">
+    <div className={`em-recusa ${tom}`}>
       <p className="em-recusa-frase">
-        <Icone nome="aviso_alerta" tamanho={15} peso="bold" />
+        <Icone nome={ICONE_DO_AVISO[tom]} tamanho={15} peso="bold" />
         <span>
           {recusa.prevista && 'O banco vai recusar este boleto: '}
           <strong>{recusa.frase}</strong> {recusa.oQueFazer}
@@ -157,14 +164,14 @@ export type LinhaDaSerie = {
 
 function SituacaoDaVez({ tipo, e }: { tipo: 'emitir' | 'boletos'; e: EstadoDaVez | undefined }) {
   if (!e) return null;
-  if (e.estado === 'na_vez') return <Marca tom="nao_medido" icone="a_receber">Na vez</Marca>;
+  if (e.estado === 'na_vez') return <Marca selo={SELO_DA_VEZ.na_vez}>Na vez</Marca>;
   if (e.estado === 'andando') {
-    return <Marca tom="nao_medido" icone="carregando">{tipo === 'emitir' ? 'Emitindo…' : 'Pedindo…'}</Marca>;
+    return <Marca selo={SELO_DA_VEZ.andando}>{tipo === 'emitir' ? 'Emitindo…' : 'Pedindo…'}</Marca>;
   }
   if (e.estado === 'feita') {
-    return <Marca tom="ok" icone="confirmar">{tipo === 'emitir' ? 'Emitida' : 'Boleto registrado'}</Marca>;
+    return <Marca selo={SELO_DA_VEZ.feita}>{tipo === 'emitir' ? 'Emitida' : 'Boleto registrado'}</Marca>;
   }
-  return <Marca tom="erro">Recusada</Marca>;
+  return <Marca selo={SELO_DA_VEZ.recusada}>Recusada</Marca>;
 }
 
 /**
@@ -228,7 +235,7 @@ export function RevisaoDaSerie(p: {
       : placar.recusadas === 0
         ? (p.tipo === 'emitir'
           ? 'Todas emitidas. O próximo passo é pedir os boletos ao banco.'
-          : 'Todos registrados no banco. A folha com o boleto sai em Contas de luz, na aba «2 · Folha do cliente».')
+          : 'Todos registrados no banco. A folha com o boleto sai em Contas de luz, na aba «Folha do cliente».')
         : p.tipo === 'emitir'
           ? `${placar.recusadas} ${placar.recusadas === 1 ? 'foi recusada' : 'foram recusadas'} — o motivo `
             + 'está na linha. As outras foram emitidas.'

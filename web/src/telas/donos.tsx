@@ -13,6 +13,7 @@ import {
   useOrdenacao, ordenar, contem, BotaoDeCriar, PainelDeCriar,
 } from '../ui.tsx';
 import { Ligacao } from '../rota.tsx';
+import { SELO_DO_CADASTRO } from '../tom-do-estado.ts';
 
 export function TelaDonos() {
   const donos = useDados<DonoUsina[]>(() => api.get('/donos-usina'));
@@ -181,7 +182,7 @@ function LinhaDoDono({ d, aoSalvar }: { d: DonoUsina; aoSalvar: () => void }) {
         <td>{d.nome} <span className="fraco">· {d.natureza.toUpperCase()}</span></td>
         <td className="fraco">{d.documento}</td>
         <td className="fraco">{d.chave_pix ?? d.banco ?? '—'}</td>
-        <td className="c-sit"><Marca tom={d.ativo ? 'ok' : 'neutro'}>{d.ativo ? 'Ativo' : 'Inativo'}</Marca></td>
+        <td className="c-sit"><Marca selo={SELO_DO_CADASTRO[d.ativo ? 'ativo' : 'inativo']}>{d.ativo ? 'Ativo' : 'Inativo'}</Marca></td>
         <td>
           <button type="button" onClick={() => setEditando(!editando)}>
             <Icone nome="confirmar" tamanho={14} /> {editando ? 'Fechar' : 'Corrigir'}

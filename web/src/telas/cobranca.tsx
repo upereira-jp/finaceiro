@@ -23,6 +23,7 @@ import { api, ErroDaApi, type ConectorCobranca } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import { Pagina, Aviso, RetornoDoAto, Campo, Marca, linha, Interruptor, Icone, DetalheTecnico, Tabela } from '../ui.tsx';
 import { podeReligarNaTela } from '../saude-do-dinheiro.ts';
+import { SELO_DO_DEGRAU } from '../tom-do-estado.ts';
 import { diaEmBr, contagem } from '../formato.ts';
 import {
   motivoDaTravaDoConector, podeSalvarConector, sinalDeSegredo,
@@ -418,24 +419,34 @@ export function TelaCobranca() {
           deducao errada de parecer razoavel.
         */}
         <div className="secao" style={{ marginTop: 16 }}>
-          <h3 style={{ margin: '0 0 4px', fontSize: 15 }}>Identidade do cooperado na API</h3>
+          {/* [01/10/2026, etapa 7b] OS ROTULOS FALAM PORTUGUES: eram os nomes
+              dos campos da API do banco (`numeroCliente`, `codigoModalidade`…),
+              que agora moram no detalhe tecnico, um ao lado do outro, para quem
+              confere contra a documentacao da Sicoob. */}
+          <h3 style={{ margin: '0 0 4px', fontSize: 15 }}>A empresa no Sicoob</h3>
           <p className="sub" style={{ marginTop: 0, marginBottom: 10 }}>
-            Estes três vêm da <strong>cooperativa</strong>, com o contrato de cobrança — não são a
+            Estes números vêm da <strong>cooperativa</strong>, com o contrato de cobrança — não são a
             agência, a conta nem o número do contrato acima, e <strong>não se derivam</strong>{' '}
-            deles. Sem os três, o conector não liga: o banco recusa pela constraint e a emissão
-            recusa nomeando qual falta.
+            deles. Sem os três primeiros o conector não pode ser ligado, e a emissão diz qual
+            deles falta.
           </p>
           <div style={{ ...linha, gap: 12 }}>
-            <Campo rotulo="numeroCliente" porqueDe="banco" valor={numeroCliente}
+            <Campo rotulo="Número do cliente no Sicoob" porqueDe="banco" valor={numeroCliente}
                    ao={setNumeroCliente} dica="só dígitos" />
-            <Campo rotulo="codigoModalidade" porqueDe="banco" valor={codigoModalidade}
+            <Campo rotulo="Modalidade de cobrança" porqueDe="banco" valor={codigoModalidade}
                    ao={setCodigoModalidade} dica="1 = simples com registro" />
-            <Campo rotulo="numeroContratoCobranca" porqueDe="banco" valor={numeroContratoCobranca}
+            <Campo rotulo="Número do contrato de cobrança no Sicoob" porqueDe="banco" valor={numeroContratoCobranca}
                    ao={setNumeroContratoCobranca} />
-            <Campo rotulo="numeroContaCorrente (opcional)" porqueDe="banco" valor={numeroContaCorrente}
+            <Campo rotulo="Conta corrente no Sicoob (opcional)" porqueDe="banco" valor={numeroContaCorrente}
                    ao={setNumeroContaCorrente} />
           </div>
-          <DetalheTecnico>
+          <DetalheTecnico de="A empresa no Sicoob">
+            <p style={{ margin: '0 0 6px' }}>
+              Na API do banco os quatro se chamam <code>numeroCliente</code>,{' '}
+              <code>codigoModalidade</code>, <code>numeroContratoCobranca</code> e{' '}
+              <code>numeroContaCorrente</code>. Sem os três primeiros, a restrição do banco de dados
+              impede ligar o conector, e a emissão recusa nomeando o que falta.
+            </p>
             <p style={{ margin: 0 }}>
               Vão para a API como <strong>número</strong>, não texto — por isso só dígitos, e por
               isso zero à esquerda não é guardado: <code>0025</code> e <code>25</code> são o mesmo
@@ -506,7 +517,7 @@ export function TelaCobranca() {
       */}
       <h2><Icone nome="certificado" tamanho={17} /> O que o boleto precisa, e o que já está pronto</h2>
       <p className="sub">
-        Os quatro degraus entre «a fatura existe» e «o cliente paga um boleto nosso». Nenhum é
+        Os quatro degraus entre «a cobrança existe» e «o cliente paga um boleto nosso». Nenhum é
         código faltando — e desde 01/09 nenhum deles está pendente.
       </p>
       {/* A "Tabela" da casa desde 01/10/2026 (era um <table> a mão): no celular
@@ -516,25 +527,25 @@ export function TelaCobranca() {
               <td><strong>Certificado do banco</strong></td>
               <td><span className="celula-frase">O certificado que identifica a empresa na Sicoob. Sem ele o sistema recusa
                   emitir, com o motivo escrito, em vez de fingir que emitiu.</span></td>
-              <td className="c-sit"><Marca tom="ok">no cofre</Marca></td>
+              <td className="c-sit"><Marca selo={SELO_DO_DEGRAU.pronto}>no cofre</Marca></td>
             </tr>
             <tr>
               <td><strong>Cofre da senha</strong></td>
               <td><span className="celula-frase">Onde a senha do certificado fica guardada, cifrada. Nem esta tela nem o banco de
                   dados da aplicação enxergam o conteúdo.</span></td>
-              <td className="c-sit"><Marca tom="ok">pronto</Marca></td>
+              <td className="c-sit"><Marca selo={SELO_DO_DEGRAU.pronto}>pronto</Marca></td>
             </tr>
             <tr>
               <td><strong>Aviso de pagamento</strong></td>
               <td><span className="celula-frase">Como o banco avisa o sistema de que o cliente pagou. O endereço existe e é
                   autenticado pela origem, não por senha.</span></td>
-              <td className="c-sit"><Marca tom="ok">pronto</Marca></td>
+              <td className="c-sit"><Marca selo={SELO_DO_DEGRAU.pronto}>pronto</Marca></td>
             </tr>
             <tr>
               <td><strong>Rotina diária</strong></td>
               <td><span className="celula-frase">A fila que tenta emitir de novo, a conferência diária que pega o pagamento cujo
                   aviso falhou, e o alerta de vencimento do certificado.</span></td>
-              <td className="c-sit"><Marca tom="ok">rodando</Marca></td>
+              <td className="c-sit"><Marca selo={SELO_DO_DEGRAU.pronto}>rodando</Marca></td>
             </tr>
       </Tabela>
       {/* OS CODIGOS DESCERAM PARA CA em 21/08/2026. A primeira coluna era

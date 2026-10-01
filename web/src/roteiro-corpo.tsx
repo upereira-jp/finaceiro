@@ -14,9 +14,12 @@
 //   fila — «você está no 1 de 5», e os passos 2 a 5 apagados — e num mês com
 //   quinze cobranças emitidas ela dizia «1 de 5» porque ainda havia conta a ler;
 //
-//   UM PASSO EM DESTAQUE, pelo RISCO. O «Comece aqui» vai para o passo em que o
+//   UM PASSO EM DESTAQUE, pelo RISCO. O destaque vai para o passo em que o
 //   dinheiro corre perigo (a recusa do banco, a vencida), e não para o primeiro.
-//   A regra está em `escolherOFoco`, com suíte;
+//   A regra está em `escolherOFoco`, com suíte. [01/10/2026, etapa 7b] E ele
+//   diz POR QUÊ: «Mais urgente agora» quando é o risco, «Próximo passo» quando
+//   é só o trabalho mais perto do dinheiro — o «Comece aqui» de antes lia como
+//   ordem nos dois casos (`rotuloDoDestaque`);
 //
 //   UM PAINEL SÓ, e a pessoa escolhe qual. Os passos são abas (`role="tab"`) de
 //   um painel com o que fazer, o botão e o como fazer. Ele abre no destaque, e
@@ -37,15 +40,35 @@
 // ganhou uma linha própria logo abaixo da frase do mês, com o link para o mês
 // dele em Cobranças — e deixou de pôr o «Comece aqui» num passo vazio no mês
 // escolhido. Ver `AvisoDeOutrosMeses` em `roteiro-do-mes.ts`.
+//
+// [01/10/2026, etapa 7b] O RISCO TEM O TOM DO QUE ELE CONTA, e não mais o âmbar
+// para tudo: a recusa do banco e a vencida são o vermelho da falha (o octógono),
+// como nas linhas de Cobranças e de Contas a receber; o boleto só parado sem
+// pedido é o âmbar da tarefa (o triângulo). Ver `RiscoDoPasso.tom`.
 
 import { useId, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Ligacao } from './rota.tsx';
 import { Icone } from './ui.tsx';
+import { ICONE_DO_AVISO } from './iconografia.ts';
+import { tipoDoAviso } from './tom-do-estado.ts';
 import {
-  mesNoFunil, ondeEstouNoMes,
+  mesNoFunil, ondeEstouNoMes, rotuloDoDestaque,
   type AvisoDeOutrosMeses, type ChaveDoPasso, type LeituraDoMes, type PassoDoMes, type PassoNoMapa,
   type TravaDoPasso,
 } from './roteiro-do-mes.ts';
+
+/** O risco na tinta e no desenho do tom dele: o octógono vermelho da falha ou o
+ *  triângulo âmbar da tarefa — os mesmos do `Aviso`. */
+function Risco({ risco, tamanho, className, children }: {
+  risco: NonNullable<PassoDoMes['risco']>; tamanho: number; className: string; children: ReactNode;
+}) {
+  const aviso = tipoDoAviso(risco);
+  return (
+    <span className={`${className} tinta-do-tom ${risco.tom}`}>
+      <Icone nome={ICONE_DO_AVISO[aviso]} tamanho={tamanho} peso="bold" /> {children}
+    </span>
+  );
+}
 
 /** Um passo do funil, como aba. O número, o título, a contagem e o risco. */
 function AbaDoPasso({ passo, escolhido, idAba, idPainel, aoEscolher }: {
@@ -61,7 +84,7 @@ function AbaDoPasso({ passo, escolhido, idAba, idPainel, aoEscolher }: {
       {/* O SELO EXISTE EM TODA ABA, vazio nas outras: é o que alinha o número
           das cinco na mesma altura, sem depender de quantas linhas o título
           de cada uma ocupa. */}
-      <span className="roteiro-selo rot-alta">{passo.foco ? 'Comece aqui' : ''}</span>
+      <span className="roteiro-selo rot-alta">{rotuloDoDestaque(passo)}</span>
       <span className="roteiro-cab">
         <span className="roteiro-num" aria-hidden="true">{passo.numero}</span>
         <span className="roteiro-tit">{passo.titulo}</span>
@@ -74,11 +97,7 @@ function AbaDoPasso({ passo, escolhido, idAba, idPainel, aoEscolher }: {
           {passo.contexto}
         </span>
       )}
-      {passo.risco && (
-        <span className="roteiro-risco">
-          <Icone nome="aviso_alerta" tamanho={14} peso="bold" /> {passo.risco.frase}
-        </span>
-      )}
+      {passo.risco && <Risco risco={passo.risco} tamanho={14} className="roteiro-risco">{passo.risco.frase}</Risco>}
     </button>
   );
 }
@@ -94,7 +113,9 @@ function PainelDoPasso({ passo, idAba, idPainel }: { passo: PassoDoMes; idAba: s
 
       {passo.risco && (
         <p className="roteiro-painel-risco">
-          <Icone nome="aviso_alerta" tamanho={15} peso="bold" /> <strong>{passo.risco.frase}.</strong>
+          <Risco risco={passo.risco} tamanho={15} className="roteiro-painel-risco-linha">
+            <strong>{passo.risco.frase}.</strong>
+          </Risco>
         </p>
       )}
 

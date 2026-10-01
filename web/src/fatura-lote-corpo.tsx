@@ -1,5 +1,5 @@
 // O LOTE DO MES NA TELA — a fila, as contas registradas e a gaveta de uma conta.
-// O que a Fatura unificada DESENHA na aba «1 · Leitura e cálculo»; o que ela
+// O que a Fatura unificada DESENHA na aba «Leitura e cálculo»; o que ela
 // BUSCA e GRAVA continua em `telas/fatura-unificada.tsx`.
 //
 // ============================================================================
@@ -40,6 +40,8 @@ import { Ligacao } from './rota.tsx';
 import { emReais } from './dinheiro.ts';
 import { numeroDaUcNaTela } from './formato.ts';
 import { ItemDaSerie, PerguntaNaTela, RevisaoEmSerie } from './serie.tsx';
+import { ICONE_DO_AVISO } from './iconografia.ts';
+import { SELO_DA_LEITURA, SELO_DO_REGISTRO } from './tom-do-estado.ts';
 import {
   competenciaDoItem, pendenciaDoItem, avisoDoItem, chavesRepetidas,
   podeRegistrar, resumoDoLote, ordemDaFila, type ItemDoLote,
@@ -53,11 +55,13 @@ import {
 /* ================================================================ a fila */
 
 /** A linha de status miuda — icone quando ha tom, porque cor sozinha nao e sinal
- *  (restricao 3 do tema). Mesmo desenho do `Status` da tela. */
-function Motivo({ tom, children }: { tom?: 'ok' | 'alerta'; children: ReactNode }) {
+ *  (restricao 3 do tema). Mesmo desenho do `Status` da tela. [01/10/2026, etapa
+ *  7b] Ganhou o `erro`: o motivo de uma cobranca RECUSADA na geracao era ambar,
+ *  ao lado do selo «Recusada» vermelho da mesma linha. */
+function Motivo({ tom, children }: { tom?: 'ok' | 'alerta' | 'erro'; children: ReactNode }) {
   return (
     <span className={['fu-motivo', tom].filter(Boolean).join(' ')}>
-      {tom && <Icone nome={tom === 'ok' ? 'aviso_ok' : 'aviso_alerta'} tamanho={14} peso="bold" />}
+      {tom && <Icone nome={ICONE_DO_AVISO[tom]} tamanho={14} peso="bold" />}
       <span>{children}</span>
     </span>
   );
@@ -65,14 +69,14 @@ function Motivo({ tom, children }: { tom?: 'ok' | 'alerta'; children: ReactNode 
 
 /** A pilula de estado da linha da fila. Cor, icone e PALAVRA — os tres sinais. */
 export function SituacaoDaLinha({ item, pendente }: { item: ItemDoLote; pendente: boolean }) {
-  if (item.estado === 'registrado') return <Marca tom="ok" icone="confirmar">Registrada</Marca>;
-  if (item.estado === 'registrando') return <Marca tom="nao_medido" icone="carregando">Gravando…</Marca>;
-  if (item.estado === 'lendo') return <Marca tom="nao_medido" icone="carregando">Lendo…</Marca>;
-  if (item.estado === 'na_fila') return <Marca tom="nao_medido">Na fila</Marca>;
-  if (item.estado === 'falhou') return <Marca tom="erro">{item.campos ? 'Recusada' : 'Não leu'}</Marca>;
+  if (item.estado === 'registrado') return <Marca selo={SELO_DA_LEITURA.registrado}>Registrada</Marca>;
+  if (item.estado === 'registrando') return <Marca selo={SELO_DA_LEITURA.registrando}>Gravando…</Marca>;
+  if (item.estado === 'lendo') return <Marca selo={SELO_DA_LEITURA.lendo}>Lendo…</Marca>;
+  if (item.estado === 'na_fila') return <Marca selo={SELO_DA_LEITURA.na_fila}>Na fila</Marca>;
+  if (item.estado === 'falhou') return <Marca selo={SELO_DA_LEITURA.falhou}>{item.campos ? 'Recusada' : 'Não leu'}</Marca>;
   return pendente
-    ? <Marca tom="a_fazer">Corrigir</Marca>
-    : <Marca tom="ok">Conferida</Marca>;
+    ? <Marca selo={SELO_DA_LEITURA.corrigir}>Corrigir</Marca>
+    : <Marca selo={SELO_DA_LEITURA.conferida}>Conferida</Marca>;
 }
 
 export type PropsDaFila = {
@@ -298,14 +302,16 @@ function tituloDasRegistradas(f: FiltroDasRegistradas): string {
 }
 
 function SituacaoDoRegistro({ r, g }: { r: RegistroDeFatura; g: EstadoDaGeracao | undefined }) {
-  if (g?.estado === 'gerando') return <Marca tom="nao_medido" icone="carregando">Gerando…</Marca>;
-  if (r.fatura_id || g?.estado === 'gerada') return <Marca tom="ok" icone="confirmar">Cobrança gerada</Marca>;
-  if (g?.estado === 'recusada') return <Marca tom="erro">Recusada</Marca>;
-  if (g?.estado === 'na_vez') return <Marca tom="nao_medido">Na vez</Marca>;
-  if (!r.cobranca_disponivel) return <Marca tom="nao_medido">Registrada</Marca>;
+  if (g?.estado === 'gerando') return <Marca selo={SELO_DO_REGISTRO.gerando}>Gerando…</Marca>;
+  if (r.fatura_id || g?.estado === 'gerada') return <Marca selo={SELO_DO_REGISTRO.gerada}>Cobrança gerada</Marca>;
+  if (g?.estado === 'recusada') return <Marca selo={SELO_DO_REGISTRO.recusada}>Recusada</Marca>;
+  if (g?.estado === 'na_vez') return <Marca selo={SELO_DO_REGISTRO.na_vez}>Na vez</Marca>;
+  if (!r.cobranca_disponivel) return <Marca selo={SELO_DO_REGISTRO.sem_ligacao}>Registrada</Marca>;
   /* AMBAR E NAO VERMELHO: sem cobranca e trabalho A FAZER, nao erro — o
-     vermelho com X fica para a recusa. O relogio diz "esperando". */
-  return <Marca tom="nao_medido" icone="a_receber">Sem cobrança</Marca>;
+     vermelho com X fica para a recusa. [01/10/2026, etapa 7b] E agora o tom e
+     o de tarefa de fato (`a_fazer`, com o recibo da cobranca a gerar): era a
+     interrogacao de «nao se sabe» com o relogio. */
+  return <Marca selo={SELO_DO_REGISTRO.sem_cobranca}>Sem cobrança</Marca>;
 }
 
 /**
@@ -463,7 +469,7 @@ export function TabelaDasRegistradas(p: PropsDasRegistradas) {
                 </td>
                 <td className="c-cli">
                   <span className="fu-nome" title={r.cliente_nome ?? undefined}>{r.cliente_nome || '—'}</span>
-                  {g?.estado === 'recusada' && <Motivo tom="alerta">{g.motivo}</Motivo>}
+                  {g?.estado === 'recusada' && <Motivo tom="erro">{g.motivo}</Motivo>}
                   {g?.estado !== 'recusada' && e && !r.fatura_id && (
                     <Motivo tom={e.vira ? 'ok' : 'alerta'}>{e.frase}</Motivo>
                   )}
@@ -632,11 +638,11 @@ function Revisao(p: {
                        unidade={numeroDaUcNaTela(r.numero_uc, p.cadastro)} cliente={r.cliente_nome}
                        valor={emReais(r.total_centavos)}
                        situacao={g ? <SituacaoDoRegistro r={r} g={g} />
-                         : p.ensaiando === r.id ? <Marca tom="nao_medido" icone="carregando">Conferindo…</Marca>
+                         : p.ensaiando === r.id ? <Marca selo={SELO_DO_REGISTRO.conferindo}>Conferindo…</Marca>
                          : e ? <Motivo tom={e.vira ? 'ok' : 'alerta'}>{e.vira ? 'Vira cobrança' : 'Não vira cobrança'}</Motivo>
                          : null}
                        motivo={(g?.estado === 'recusada' || (!g && e && !e.vira)) && (
-                         <Motivo tom="alerta">{g?.estado === 'recusada' ? g.motivo : e!.frase}</Motivo>
+                         <Motivo tom={g?.estado === 'recusada' ? 'erro' : 'alerta'}>{g?.estado === 'recusada' ? g.motivo : e!.frase}</Motivo>
                        )} />
         );
       })}

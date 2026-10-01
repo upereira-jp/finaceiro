@@ -120,7 +120,8 @@ const TODOS: NivelDaEmissao[] = ['nao_pedido', 'esquecido', 'esperando', 'insist
 // ========================================= EM-8 o resumo nao mente sobre o total
 {
   const r = resumoDaEmissao(conjunto([linha('esquecido'), linha('esperando')]));
-  chk('EM-8', /2 faturas emitidas/.test(r) && /1 delas n[aã]o se resolve sozinha/.test(r),
+  /* [01/10/2026, etapa 7b] «cobranças emitidas»: na tela, «fatura» é só a folha. */
+  chk('EM-8', /2 cobranças emitidas/.test(r) && /1 delas n[aã]o se resolve sozinha/.test(r),
       'o resumo separa QUANTAS estao sem boleto de QUANTAS precisam de gente - somar as duas '
       + 'coisas num numero so faria "8 pendencias" significar oito trabalhos que nao existem');
 

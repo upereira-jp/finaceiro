@@ -749,7 +749,7 @@ function alertasDoBoleto(
     const razao = (emissor.razao_social ?? '').trim();
     if (!razao) {
       a.push(`Beneficiário lido no boleto: "${lido}". Não há razão social cadastrada para comparar `
-           + '— preencha o emissor na etapa "3 · Cadastro da fatura" (/documento#cadastro).');
+           + '— preencha o emissor na etapa "Dados de quem cobra" (/documento#cadastro).');
     } else if (!pareceMesmoNome(lido, razao)) {
       a.push(`Beneficiário divergente: o boleto diz "${lido}" e o emissor cadastrado é "${razao}". `
            + 'Confira se o boleto é o correto.');

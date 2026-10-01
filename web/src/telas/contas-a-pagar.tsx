@@ -29,7 +29,7 @@ import {
   Carregando, AjudaDoMes, CampoData, useOrdenacao, ordenar, contem, BotaoDeCriar, PainelDeCriar,
 } from '../ui.tsx';
 import { Ligacao } from '../rota.tsx';
-import type { TomDoSelo } from '../iconografia.ts';
+import { SELO_DA_CONTA_A_PAGAR, SELO_DA_ESPERA_DO_REPASSE, tipoDoAviso } from '../tom-do-estado.ts';
 import { emReais, paraCentavos, competenciaISO, centavosParaCampo } from '../dinheiro.ts';
 import { diaEmBr, mesEmBr, hojeEmSP, contagem } from '../formato.ts';
 import { PerguntaNaTela } from '../serie.tsx';
@@ -57,21 +57,13 @@ type ItemSemConta = {
   split_item_id: string; tipo: string; valor_centavos: number; competencia: string;
 };
 
-/* As quatro situacoes nos tons do selo (`TomDoSelo`): paga e `ok`; aberta e
- * parcial sao `a_fazer` — ha uma conta a pagar, e isso e trabalho, nao falha —;
- * cancelada e `neutro`, saiu da conta. [30/09/2026, etapa 4a] Aberta era o
- * vermelho de «pendente»; o vermelho ficou para a VENCIDA, que e o selo ao lado
- * da data. */
-const TOM: Record<ContaAPagar['status'], TomDoSelo> = {
-  aberta: 'a_fazer', parcial: 'a_fazer', paga: 'ok', cancelada: 'neutro',
-};
-
-/* AGUARDAR NAO E TAREFA, e por isso `aguardando_banco` e `nao_medido` e nao
- * `a_fazer`: o sistema pergunta ao banco todo dia e resolve sozinho. Pintar de
- * tarefa produziria alguem tentando resolver o que nao e resolvivel a mao. */
-const TOM_DA_ESPERA: Record<MotivoDaEspera, TomDoSelo> = {
-  sem_dono: 'a_fazer', aguardando_banco: 'nao_medido', pronto: 'a_fazer',
-};
+/* AS SITUACOES DA CONTA E DA ESPERA nos tons do selo vem de `tom-do-estado.ts`
+ * desde 01/10/2026 (etapa 7b): `SELO_DA_CONTA_A_PAGAR` e
+ * `SELO_DA_ESPERA_DO_REPASSE`. A regra de 30/09 continua — aberta e parcial sao
+ * tarefa, o vermelho e da VENCIDA, o selo ao lado da data —, com duas trocas:
+ * «Em aberto» deixou o lapis da lacuna de cadastro pela mao que entrega moedas,
+ * e «aguardando o banco» saiu da interrogacao ambar para o neutro com o relogio
+ * (em curso, sem voce: o sistema pergunta ao banco todo dia). */
 
 export function TelaContasAPagar() {
   const contas = useDados<ContaAPagar[]>(() => api.get('/contas-a-pagar'));
@@ -169,8 +161,11 @@ export function TelaContasAPagar() {
         </Aviso>
       )}
 
+      {/* [01/10/2026, etapa 7b] O AVISO TEM O TOM DO SELO DE QUE ELE FALA: era
+          âmbar em cima de linhas com o selo VENCIDA vermelho. `tipoDoAviso` lê
+          o mesmo selo das linhas, e os dois não têm mais como discordar. */}
       {atrasadas.length > 0 && (
-        <Aviso tipo="alerta">
+        <Aviso tipo={tipoDoAviso(SELO_DA_CONTA_A_PAGAR.vencida)}>
           {contagem(atrasadas.length, 'conta vencida', 'contas vencidas')}, somando <strong>{emReais(totalAtrasado)}</strong>.
         </Aviso>
       )}
@@ -224,7 +219,7 @@ export function TelaContasAPagar() {
                 <td className="num">{emReais(r.pago_centavos)}</td>
                 <td className="num"><strong>{emReais(r.saldo_centavos)}</strong></td>
                 <td className="num">{r.atrasados > 0
-                  ? <Marca tom="erro" icone="vencidas">{r.atrasados}</Marca>
+                  ? <Marca selo={SELO_DA_CONTA_A_PAGAR.vencida}>{r.atrasados}</Marca>
                   : <span className="nota">—</span>}</td>
               </tr>
             ))}
@@ -252,7 +247,7 @@ export function TelaContasAPagar() {
         <Aviso tipo="erro">Não foi possível ler as contas a pagar: {contas.erro}</Aviso>
       ) : (
         <Tabela vazio={todas.length === 0
-                  ? 'Nenhuma conta a pagar. As de repasse e comissão aparecem quando a primeira fatura for liquidada.'
+                  ? 'Nenhuma conta a pagar. As de repasse e comissão aparecem quando a primeira cobrança for paga.'
                   : 'Nenhuma conta com esses filtros.'}
                 cabecalho={<>
                   <ThOrd chave="vencimento" ordem={ordem} ao={alternar}>Vencimento</ThOrd>
@@ -302,7 +297,7 @@ function LinhaDeConta(p: {
       <tr>
         <td>
           {diaEmBr(c.vencimento)}
-          {atrasada && <> <Marca tom="erro" icone="vencidas">vencida</Marca></>}
+          {atrasada && <> <Marca selo={SELO_DA_CONTA_A_PAGAR.vencida}>vencida</Marca></>}
         </td>
         <td className="c-id">
           <strong>{nomeDoBeneficiario(c)}</strong>
@@ -330,7 +325,7 @@ function LinhaDeConta(p: {
             {r.alerta && <><Icone nome="aviso_alerta" tamanho={12} /> </>}{r.frase}
           </div>
         </td>
-        <td className="c-sit"><Marca tom={TOM[c.status]} icone={c.status === 'paga' ? 'confirmar' : undefined}>
+        <td className="c-sit"><Marca selo={SELO_DA_CONTA_A_PAGAR[c.status]}>
           {ROTULO_DO_STATUS[c.status]}
         </Marca></td>
         <td className="c-aco">
@@ -576,7 +571,7 @@ function DinheiroParado(p: {
           <tr key={`grupo:${g.motivo}`} className="grupo-da-tabela">
             <td colSpan={6}>
               <h3>
-                <Marca tom={TOM_DA_ESPERA[g.motivo]}>{ROTULO_DO_MOTIVO[g.motivo]}</Marca>
+                <Marca selo={SELO_DA_ESPERA_DO_REPASSE[g.motivo]}>{ROTULO_DO_MOTIVO[g.motivo]}</Marca>
                 <span className="fraco">
                   {g.linhas.length} {g.linhas.length === 1 ? 'pagamento' : 'pagamentos'},{' '}
                   {emReais(totalCentavos(g.linhas))}
@@ -600,7 +595,7 @@ function DinheiroParado(p: {
               <td>{mesEmBr(l.competencia)}</td>
               <td className="c-id">{l.codigo_geradora}</td>
               <td className="num c-val"><strong>{emReais(l.valor_liquidado_centavos)}</strong></td>
-              <td className="c-sit"><Marca tom={TOM_DA_ESPERA[g.motivo]}>{ROTULO_CURTO_DO_MOTIVO[g.motivo]}</Marca></td>
+              <td className="c-sit"><Marca selo={SELO_DA_ESPERA_DO_REPASSE[g.motivo]}>{ROTULO_CURTO_DO_MOTIVO[g.motivo]}</Marca></td>
               <td className="c-aco">
                 {/* A AÇÃO OU O DESTINO: repartir, quando dá; o último passo do
                     caminho, quando é trabalho de alguém; e a frase de que não há

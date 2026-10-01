@@ -193,6 +193,10 @@ components:
   menu-lateral-item-ativo:
     textColor: "{colors.laranja}"
     rounded: "{rounded.none}"
+  aba-ativa:
+    textColor: "{colors.navy}"
+    borderBottom: "2px solid {colors.navy}"
+    rounded: "{rounded.none}"
 ---
 
 # Design System: Financeiro G3
@@ -200,7 +204,10 @@ components:
 <!-- Gerado em 01/10/2026 (etapa 6 do redesenho) a partir do que está construído em
      `web/src/tema.ts` (tokens), `web/src/estilo.ts` (regras) e `web/src/ui.tsx`,
      `serie.tsx`, `menu-lateral.tsx` (componentes). O frontmatter é normativo; a
-     fonte de verdade continua sendo o código — mudou lá, regenere aqui. -->
+     fonte de verdade continua sendo o código — mudou lá, regenere aqui.
+     Etapa 7b (01/10/2026): o tom de cada estado passou a morar em
+     `web/src/tom-do-estado.ts`, com suíte (`web/tests/tom-do-estado.ts`); as
+     seções Estados, Selos, Abas, Perigo, Funil e Vocabulário foram reescritas. -->
 
 ## Overview
 
@@ -245,17 +252,38 @@ Paleta da G3 (navy, creme, laranja, ouro), com os derivados que a medição de c
 - **Topo-fraco** (`topo-fraco`): item inativo do menu lateral, 5,89:1 sobre o navy.
 
 ### Estados
-- **Erro** (`erro` sobre `erro-fundo`, 6,05:1): falha — recusa do banco, cobrança vencida, conector caído, campo inválido.
-- **Alerta / a fazer** (`alerta` sobre `alerta-fundo`, 5,37:1): lacuna de cadastro, o que falta preencher, o que não foi medido.
-- **Ok** (`ok` sobre `ok-fundo`, 5,40:1): o que fechou.
+A pergunta que decide o tom é **«o que isto pede de você?»**. Cada estado de negócio tem o seu tom e o seu desenho num lugar só, `web/src/tom-do-estado.ts`, e a tela não escolhe cor: o selo (`Marca`) recebe um `Selo` de lá, e o aviso que fala do mesmo estado lê o tom de lá (`tipoDoAviso`).
+- **Erro** (`erro` sobre `erro-fundo`, 6,05:1): FALHOU — algo aconteceu e deu errado. A recusa do banco (em toda tela, inclusive quando o sistema já está tentando de novo), a cobrança e a conta a pagar vencidas, o atraso, a leitura que não voltou.
+- **Alerta / a fazer** (`alerta` sobre `alerta-fundo`, 5,37:1): TAREFA de alguém — o rascunho a emitir, o boleto a pedir, a lacuna de cadastro, a recusa que o cadastro só anuncia, a conta a pagar em aberto.
+- **Não medido** (o mesmo âmbar, com a interrogação): NÃO SE SABE — a camada sem medida, a situação que o conector não leu.
+- **Ok** (`ok` sobre `ok-fundo`, 5,40:1): FECHOU — pago, registrado, conferido, pronto, ativo.
+- **Neutro** (`fraco` sobre `recuo`): NADA A FAZER AGORA — o que está em curso sem você (emitida, boleto a caminho, na vez, aguardando o banco), o que ainda vai vencer, o inativo, o cancelado, o verbo da trilha.
+
+#### O mapa, em resumo (o inteiro está em `tom-do-estado.ts`)
+| Estado | Tom | Desenho |
+|---|---|---|
+| Cobrança: rascunho · emitida · negociada · paga · vencida · cancelada | a_fazer · neutro · neutro · ok · erro · neutro | documento · avião · aperto de mão · visto · alerta redondo · círculo cortado |
+| Boleto da cobrança: não pedido · parado há um dia · recusa prevista · recusado (também retentando) | a_fazer · a_fazer · a_fazer · erro | código de barras · código de barras · lápis · X |
+| Boleto na carteira: sem boleto · a caminho · no banco · importado · recusado · baixado | a_fazer · neutro · ok · ok · erro · a_fazer | — |
+| Atraso: a vencer · até 30 / 31–60 / 61–90 / mais de 90 · faixa vazia | neutro · erro (todas iguais) · neutro | calendário · alerta redondo · traço |
+| Conta a pagar: em aberto / parcial · paga · cancelada · vencida | a_fazer · ok · neutro · erro | mão com moedas · visto · círculo cortado · alerta redondo |
+| Trilha: criou · alterou · apagou | neutro | mais · setas da troca · lixeira |
+| Unidade: ativa · aguardando · troca de titularidade · suspensa · não lida · cancelada | ok · neutro · neutro · neutro · nao_medido · neutro | — · relógio · setas · traço · interrogação · círculo cortado |
+| Série (emitir, pedir, ler, gerar): na vez · fazendo · feita · recusada | neutro · neutro · ok · erro | relógio · girando · visto · X |
 
 ### Tema escuro
 O escuro parte do navy como superfície (`navy` → `cartao-escuro` → `hover-escuro`, com `recuo-escuro` entre a página e o cartão e a faixa afundando em `topo-escuro`). A tinta fraca ganha a matiz do navy (`tinta-fraca-escuro`, 5,68:1 no cartão, 5,05:1 no hover) em vez do cinza neutro. O acento troca para o ouro, e os estados clareiam (`erro-escuro`, `ok-escuro`, `alerta-escuro`, todos acima de 6:1 sobre os próprios fundos). O modo é escolha da pessoa (claro, escuro, sistema), guardado no navegador.
 
 ### Named Rules
-**The Red Is Failure Rule.** O vermelho é só da falha — algo que aconteceu e deu errado. O que falta preencher é âmbar com o lápis (`a_fazer`), nunca o X vermelho. Faixa de lacuna de cadastro pintada de erro é defeito.
+**The Red Is Failure Rule.** O vermelho é só da falha — algo que aconteceu e deu errado. O que falta preencher é âmbar com o lápis (`a_fazer`), nunca o X vermelho. Faixa de lacuna de cadastro pintada de erro é defeito. E o contrário também: a falha é vermelha em TODA tela — a recusa do banco não sai âmbar no funil e cinza em Cobranças. Quando o sistema já está tentando de novo sozinho, isso é uma segunda linha, em tinta comum, e não outra cor.
 
-**The One Orange Rule.** Um botão laranja por contexto (a página, a gaveta, a revisão em série, a pergunta na tela). O segundo ato da mesma área é o botão comum, de contorno.
+**The One Map Rule.** O tom de um estado é decidido em `tom-do-estado.ts` e em mais nenhum lugar. `Marca` só aceita um `Selo` (um `tom=` solto não compila), e a suíte `web/tests/tom-do-estado.ts` prende um tom por estado contra uma tabela escrita à mão, recusa `selo={{ … }}` escrito na tela e recusa outro mapa de estado para tom.
+
+**The Ok Is Closed Rule.** Verde é o que FECHOU. «Vence em 5 dias» não é verde (nada fechou: o cliente ainda não pagou), e «Criou», na trilha, também não (é um fato, não um estado).
+
+**The In-Flight Is Neutral Rule.** O que está em curso sem você é neutro: a cobrança emitida, o boleto a caminho, a linha na vez. Um sexto tom «em curso» foi considerado e recusado em 01/10/2026: numa tela de trabalho a cor se gasta com o que pede alguém. O que separa a emitida da cancelada, as duas cinza, é o desenho, a palavra e o lugar na lista.
+
+**The One Orange Rule.** Um botão laranja por contexto (a página, a gaveta, a revisão em série, a pergunta na tela). O segundo ato da mesma área é o botão comum, de contorno. Seleção não é ato: a aba ativa de Contas de luz é a tinta forte com o sublinhado de 2px (era o bloco laranja cheio, até 01/10/2026). O realce do passo em destaque no funil e o item ativo do menu lateral continuam laranja — são lugar, não botão, e não disputam com o ato da página.
 
 **The AA Floor Rule.** Texto ≥ 4,5:1 em toda superfície dos dois temas; ≥ 3:1 só para o anel de foco e a borda de controle. Cor nova entra com o par medido escrito ao lado do token em `tema.ts`.
 
@@ -311,13 +339,16 @@ Canto reto em tudo: `--raio`, `--raio-cartao` e `--raio-pequeno` valem 0 e conti
 - **Primary (`primario`):** laranja com tinta navy, rótulo em caixa alta (tracking 0,06em). É o ato da área, e o rótulo diz o ato com a quantidade: «Gerar 6 cobranças», «Emitir 5 cobranças», «Registrar 5 contas conferidas».
 - **Comum:** branco com contorno `borda` e tinta navy; no hover a borda vira navy.
 - **Discreto:** sem contorno, tinta fraca, 14px — «2ª via», «conferir antes», «ver detalhe técnico».
-- **Perigo:** contorno e tinta de erro; no hover, preenchido. Só para o que apaga ou cancela.
+- **Perigo:** contorno e tinta de erro; no hover, preenchido. Só para o que APAGA ou CANCELA sem volta por um clique — excluir, cancelar a cobrança, encerrar o contrato, descartar a conta em edição. O que se desfaz depois («Suspender o contrato», «Desligar o acesso», que se religa com tudo como estava) é o tom `aviso` da pergunta, nunca o perigo. No menu «⋯» da linha, o item que cancela leva a tinta de perigo («Encerrar», «Cancelar esta cobrança…»); o botão de linha que só abre a pergunta fica comum, e a pergunta é que é de perigo.
 - **Desabilitado:** token e não opacidade — `recuo` com tinta fraca.
 - **Foco:** anel de 2px no `foco`, afastado 2px.
 
 ### Selos de estado (`Marca`)
 - **Style:** preenchido suave, canto reto, rótulo condensado em caixa alta a 12px, ícone a 12px. Três sinais juntos — cor, desenho, palavra.
-- **Os cinco tons (`TomDoSelo`):** `ok` (verde, o visto), `erro` (vermelho, o X — só falha), `a_fazer` (âmbar, o lápis — lacuna), `nao_medido` (âmbar, a interrogação — não se sabe), `neutro` (recuo, o traço — inativo, cancelada).
+- **Os cinco tons (`TomDoSelo`):** `ok` (verde, o visto — fechou), `erro` (vermelho, o X — só falha), `a_fazer` (âmbar, o lápis — tarefa), `nao_medido` (âmbar, a interrogação — não se sabe), `neutro` (recuo, o traço — nada a fazer agora, inclusive o que está em curso).
+- **O desenho é o do significado, quando o do tom mentiria:** a emitida leva o avião, a cancelada o círculo cortado (a lixeira é o desenho do BOTÃO de apagar, e num selo lia como ação), a conta a pagar em aberto a mão com moedas (o lápis é da lacuna de cadastro). O lápis, a interrogação e o visto só aparecem no próprio tom — a suíte prende.
+- **O selo vem de `tom-do-estado.ts`**, nunca da tela: `<Marca selo={SELO_DA_COBRANCA[status]}>`.
+- **A linha de baixo** (a nota sob o selo em Cobranças, o risco no funil) pinta com o mesmo tom, pela classe `.tinta-do-tom`.
 - **No cartão** o selo quebra linha com 8px dos dois lados e o ícone na altura da primeira linha.
 
 ### Cards / Containers
@@ -353,12 +384,24 @@ Canto reto em tudo: `--raio`, `--raio-cartao` e `--raio-pequeno` valem 0 e conti
 - **Pergunta na tela:** o lugar do `confirm()`/`prompt()` nativos, na própria linha ou em bloco, com quatro tons (`perigo`, `aviso`, `comum`, `decisao`); o «sim» só fica laranja no tom `comum`/`decisao`, e trava até o campo obrigatório ter texto.
 
 ### O funil do mês (`roteiro-corpo.tsx`)
-- Os cinco passos lado a lado com o número em quadro, a contagem do que falta em número grande e o «de N» embaixo; o passo com risco ganha o realce laranja e o «Começa aqui». No celular, um passo por linha.
+- Os cinco passos lado a lado com o número em quadro, a contagem do que falta em número grande e o «de N» embaixo; UM passo ganha o realce laranja, e a palavra em cima diz por quê: «Mais urgente agora» quando é o risco (a recusa do banco, a vencida), «Próximo passo» quando é só o trabalho mais perto do dinheiro. (Era «Comece aqui» nos dois casos, e lia como ordem.) O risco sai na tinta do tom dele — a recusa e a vencida em vermelho, com o octógono; o boleto só parado, em âmbar. No celular, um passo por linha.
+
+### As abas de Contas de luz (`Abas`, em `fatura-unificada.tsx`)
+- **Sem número:** «Leitura e cálculo», «Folha do cliente», «Dados de quem cobra». A tela já numera os passos do mês (1 e 2), e uma segunda numeração nas abas não casava com a primeira. A terceira guarda quem cobra — razão social, CNPJ, contato, logo, chave Pix, modelo e campos da folha —, e por isso não se chama mais «Cadastro da fatura».
+- **A ativa** é a tinta forte com o sublinhado de 2px na mesma tinta; a inativa, a tinta apagada com a borda reservada. No celular, as três numa fileira, a ativa contornada na tinta forte.
 
 ### A folha impressa (`Folha`, em `fatura-unificada.tsx`)
 - O documento do cliente: duas páginas de **altura fixa**, com degraus de compactação (`aperto-*`) em vez de corte. É a ilha onde a referência vale letra por letra.
 
 ## Do's and Don'ts
+
+### Vocabulário — um nome só para cada coisa
+- **conta de luz** é o que entra, da distribuidora; **cobrança** é o que a G3 cobra do cliente (a tabela `fatura` no banco); **boleto** é o título dela no banco; **pagamento** (a baixa) é o que o cliente pagou.
+- **Fatura unificada** é SÓ o nome da folha impressa que o cliente recebe. «Fatura» em qualquer outro sentido na tela é defeito.
+- **Quem trouxe o cliente** é a pessoa da comissão — nunca «originador», «quem traz clientes» ou «quem indicou». O cadastro dessas pessoas é o «Cadastro de quem trouxe o cliente».
+- O botão diz o que faz: «Descartar e começar outra conta» (era «Nova fatura», que não criava fatura nenhuma).
+- O nome de código não muda (regra 7 do `CLAUDE.md`): `fatura`, `originador_id`. Só o texto. As exceções da varredura (`vocabulario-das-telas.ts`, T9 e T10) estão declaradas lá, com o motivo de cada uma.
+- Os números de uma frase dizem a MESMA população em todo lugar, ou dizem qual contam: «Endereço do pagador (4 unidades)» no Mês, «4 das 35 com contrato ativo» em Unidades e o recorte com as 4.
 
 ### Do:
 - **Do** usar os tokens de `tema.ts` (`var(--…)`) para toda cor, e medir o contraste do par novo nos dois temas antes de criar um token.
