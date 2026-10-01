@@ -52,6 +52,8 @@ const tomDoContrato = (status: string): TomDoSelo =>
   (status === 'ativo' ? 'ok' : status === 'rascunho' ? 'a_fazer' : 'neutro');
 import { Ligacao } from '../rota.tsx';
 import { paraCentavos, emReais } from '../dinheiro.ts';
+import { diaEmBr, hojeEmSP } from '../formato.ts';
+import { PerguntaNaTela } from '../serie.tsx';
 import { podeCriarContrato, motivoDaTrava } from '../contrato-regras.ts';
 
 export function TelaContratos() {
@@ -62,7 +64,7 @@ export function TelaContratos() {
 
   const [ucId, setUcId] = useState('');
   const [origId, setOrigId] = useState('');
-  const [fechamento, setFechamento] = useState(new Date().toISOString().slice(0, 10));
+  const [fechamento, setFechamento] = useState(hojeEmSP);
   const [valor, setValor] = useState('');
   const { ordem, alternar } = useOrdenacao('uc');
   /* LISTAR ANTES DE CRIAR (30/09/2026, etapa 4a): o formulario de contrato abria
@@ -294,12 +296,11 @@ function LinhaDoContrato({ k, uc, aoMudar }: { k: Contrato; uc: string; aoMudar:
     if (ok) { acao.anunciar('Contrato suspenso. A unidade continua ocupada por ele.'); aoMudar(); }
   };
 
+  /* [30/09/2026, etapa 4b] A PERGUNTA NA LINHA, embaixo do contrato — era um
+     `window.confirm`. O foco nasce em «Manter o contrato», e Esc desiste. */
+  const [encerrando, setEncerrando] = useState(false);
   const encerrar = async () => {
-    if (!confirm(
-      `Encerrar o contrato da unidade ${uc}?\n\n`
-      + 'A unidade fica livre para um contrato novo, e ela deixa de ser faturada por este. '
-      + 'O contador de faturas cheias pagas recomeça no contrato seguinte, e não há como '
-      + 'desfazer isto pela tela.')) return;
+    setEncerrando(false);
     const ok = await acao.executar(() => api.post(`/contratos/${k.id}/encerrar`, {}));
     if (ok) { acao.anunciar('Contrato encerrado. A unidade está livre para um contrato novo.'); aoMudar(); }
   };
@@ -313,7 +314,7 @@ function LinhaDoContrato({ k, uc, aoMudar }: { k: Contrato; uc: string; aoMudar:
     <>
       <tr>
         <td><strong>{uc}</strong></td>
-        <td className="fraco">{k.data_fechamento?.slice(0, 10)}</td>
+        <td className="fraco">{diaEmBr(k.data_fechamento)}</td>
         <td><Marca tom={tomDoContrato(k.status)}>{rotulo(k.status)}</Marca></td>
         <td className="num">{k.faturas_cheias_pagas}</td>
         <td>
@@ -328,12 +329,27 @@ function LinhaDoContrato({ k, uc, aoMudar }: { k: Contrato; uc: string; aoMudar:
                 <Icone nome="confirmar" tamanho={14} /> Reativar
               </button>
             )}
-            <button onClick={() => void encerrar()} disabled={acao.ocupado}>
+            <button onClick={() => setEncerrando(true)} disabled={acao.ocupado || encerrando}
+                    aria-expanded={encerrando}>
               <Icone nome="remover" tamanho={14} /> Encerrar
             </button>
           </div>
         </td>
       </tr>
+      {encerrando && (
+        <tr className="linha-pergunta">
+          <td colSpan={5}>
+            <PerguntaNaTela tom="perigo" rotulo="Confirmar o encerramento do contrato"
+                            manter="Manter o contrato" confirmar="Encerrar o contrato"
+                            ocupado={acao.ocupado}
+                            aoManter={() => setEncerrando(false)} aoConfirmar={() => void encerrar()}>
+              Encerrar o contrato da unidade <strong>{uc}</strong>? A unidade fica livre para um
+              contrato novo, e ela deixa de ser faturada por este. O contador de faturas cheias
+              pagas recomeça no contrato seguinte, e não há como desfazer isto pela tela.
+            </PerguntaNaTela>
+          </td>
+        </tr>
+      )}
       {acao.erro && <tr><td colSpan={5}><Aviso tipo="erro">{acao.erro}</Aviso></td></tr>}
       {acao.sucesso && <tr><td colSpan={5}><Aviso tipo="ok">{acao.sucesso}</Aviso></td></tr>}
     </>

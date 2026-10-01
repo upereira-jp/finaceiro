@@ -31,8 +31,9 @@ import {
 import { useAcao, useDados } from '../dados.ts';
 import { useSessao } from '../sessao.tsx';
 import {
-  Pagina, Aviso, Campo, Tabela, linha, rotulo, Icone, Interruptor, BotaoDeIcone, Escolha } from '../ui.tsx';
+  Pagina, Aviso, Campo, Tabela, linha, rotulo, Icone, Interruptor, BotaoDeIcone, Escolha, DetalheTecnico } from '../ui.tsx';
 import { paraCentavos, emReais } from '../dinheiro.ts';
+import { PerguntaNaTela } from '../serie.tsx';
 import { mover, paraEnvio, type CampoConfigurado } from '../cobranca-regras.ts';
 import { ladoDoQr } from '../layout-regras.ts';
 import { FaturaUnificada } from './fatura-unificada.tsx';
@@ -59,6 +60,10 @@ const CAMPOS: Array<{ campo: string; rotulo: string }> = [
   { campo: 'flag_fatura_cheia', rotulo: 'Fatura cheia' },
 ];
 
+/** O nome do campo na tela: o rótulo padrão dele. A chave do enum só aparece se
+ *  o banco devolver um campo que esta lista ainda não conhece. */
+const nomeDoCampo = (campo: string): string => CAMPOS.find((c) => c.campo === campo)?.rotulo ?? campo;
+
 const TETO_DA_LOGO = 512 * 1024;
 
 export function TelaDocumento() {
@@ -75,6 +80,9 @@ export function TelaDocumento() {
   const [padrao, setPadrao] = useState<string>('');
   const [lista, setLista] = useState<CampoConfigurado[] | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  /** [30/09/2026, etapa 4b] A pergunta aberta na tela — remover a logo ou voltar
+   *  o layout ao padrão. Eram dois `window.confirm`. */
+  const [pergunta, setPergunta] = useState<'logo' | 'layout' | null>(null);
 
   // A identidade nao carrega mais a chave, so APONTA para ela (migration 25).
   // O formulario abaixo cadastra chave NOVA e nasce vazio de proposito: ele nao
@@ -194,7 +202,7 @@ export function TelaDocumento() {
   };
 
   const removerLogo = async () => {
-    if (!confirm('Remover a logo? O documento volta a sair sem ela.')) return;
+    setPergunta(null);
     const ok = await acao.executar(() => api.del('/cobranca/logo'));
     if (ok) { acao.anunciar('Logo removida.'); ident.recarregar(); }
   };
@@ -206,7 +214,7 @@ export function TelaDocumento() {
   };
 
   const voltarAoPadrao = async () => {
-    if (!confirm('Voltar ao layout padrão? A sua configuração é apagada.')) return;
+    setPergunta(null);
     const ok = await acao.executar(() => api.put('/cobranca/campos', { campos: [] }));
     if (ok) { acao.anunciar('Layout de volta ao padrão.'); cfg.recarregar(); }
   };
@@ -379,16 +387,32 @@ export function TelaDocumento() {
                  onChange={(e) => { const f = e.target.files?.[0]; if (f) void enviarLogo(f); }} />
           {ident.dado?.logo_sha256 && (
             <>
-              <button onClick={() => void removerLogo()} disabled={acao.ocupado}>
+              <button onClick={() => setPergunta('logo')} disabled={acao.ocupado || pergunta === 'logo'}
+                      aria-expanded={pergunta === 'logo'}>
                 <Icone nome="remover" tamanho={15} /> Remover
               </button>
+              {/* O TAMANHO É PARA QUEM ENVIA (o teto é 512 KB); o tipo e a
+                  impressão digital do arquivo são para quem investiga. */}
               <span className="fraco" style={{ fontSize: 12 }}>
-                {ident.dado.logo_mime} · {Math.round((ident.dado.logo_bytes ?? 0) / 1024)} KB ·
-                sha256 {ident.dado.logo_sha256.slice(0, 12)}…
+                {Math.round((ident.dado.logo_bytes ?? 0) / 1024)} KB
               </span>
             </>
           )}
         </div>
+        {pergunta === 'logo' && (
+          <PerguntaNaTela forma="linha" tom="perigo" rotulo="Confirmar: remover a logo"
+                          manter="Manter a logo" confirmar="Remover a logo" ocupado={acao.ocupado}
+                          aoManter={() => setPergunta(null)} aoConfirmar={() => void removerLogo()}>
+            Remover a logo? O documento volta a sair sem ela.
+          </PerguntaNaTela>
+        )}
+        {ident.dado?.logo_sha256 && (
+          <DetalheTecnico>
+            <p style={{ margin: 0 }}>
+              <code>{ident.dado.logo_mime}</code> · sha256 <code>{ident.dado.logo_sha256.slice(0, 12)}…</code>
+            </p>
+          </DetalheTecnico>
+        )}
       </div>
 
       {/* ------------------------------------------------ o Pix do recebedor */}
@@ -445,7 +469,8 @@ export function TelaDocumento() {
         <div style={{ ...linha }}>
           <h2 style={{ margin: 0 }}><Icone nome="documento" tamanho={17} /> Campos do documento</h2>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-            <button onClick={() => void voltarAoPadrao()} disabled={acao.ocupado}>
+            <button onClick={() => setPergunta('layout')} disabled={acao.ocupado || pergunta === 'layout'}
+                    aria-expanded={pergunta === 'layout'}>
               <Icone nome="recarregar" tamanho={15} /> Voltar ao padrão
             </button>
             <button className="primario" onClick={() => void salvarCampos()} disabled={acao.ocupado || !lista}>
@@ -453,6 +478,14 @@ export function TelaDocumento() {
             </button>
           </div>
         </div>
+        {pergunta === 'layout' && (
+          <PerguntaNaTela forma="linha" tom="perigo" rotulo="Confirmar: voltar o layout ao padrão"
+                          manter="Manter o meu layout" confirmar="Voltar ao padrão" ocupado={acao.ocupado}
+                          aoManter={() => setPergunta(null)} aoConfirmar={() => void voltarAoPadrao()}>
+            Voltar ao layout padrão? A ordem, os rótulos e o que aparece, que você configurou aqui,
+            são apagados.
+          </PerguntaNaTela>
+        )}
         <p className="sub">
           A ordem aqui é a ordem impressa. {cfg.dado?.length === 0 && (
             <><strong>Você ainda não configurou nada</strong> — a lista abaixo é o padrão, e salvar a
@@ -476,12 +509,15 @@ export function TelaDocumento() {
                                 desabilitado={i === lista!.length - 1} />
                 </div>
               </td>
-              <td><code style={{ fontSize: 12 }}>{c.campo}</code></td>
+              {/* [30/09/2026, etapa 4b] O NOME DO CAMPO EM PORTUGUÊS, e não a chave
+                  do enum (`percentual_rateio_aplicado`): é o nome que o campo tem
+                  no padrão, e a coluna ao lado é como ele sai impresso. */}
+              <td>{nomeDoCampo(c.campo)}</td>
               <td>
                 {/* A classe `inline` vai num div e nao no `td`: `display: flex`
                     num td o retira do algoritmo de tabela, e a linha quebra. */}
                 <div className="inline">
-                  <input value={c.rotulo} aria-label={`Rótulo impresso de ${c.campo}`}
+                  <input value={c.rotulo} aria-label={`Rótulo impresso de ${nomeDoCampo(c.campo)}`}
                          onChange={(e) => setLista(lista!.map((x, j) => (j === i ? { ...x, rotulo: e.target.value } : x)))} />
                 </div>
               </td>
@@ -592,11 +628,13 @@ function ModeloDaFatura() {
     if (ok) { acao.anunciar('Modelo salvo.'); modelos.recarregar(); }
   };
 
-  const criar = async () => {
-    const nome = window.prompt('Nome do modelo novo (é por ele que se escolhe):');
-    if (!nome?.trim()) return;
+  /* [30/09/2026, etapa 4b] O NOME DO MODELO NOVO é pedido num campo da tela —
+     era um `window.prompt`, a caixa de uma linha do navegador. */
+  const [criando, setCriando] = useState(false);
+  const criar = async (nome: string) => {
+    if (!nome.trim()) return;
     const ok = await acao.executar(() => api.post('/cobranca/modelos', { nome: nome.trim() }));
-    if (ok) { acao.anunciar('Modelo criado.'); modelos.recarregar(); }
+    if (ok) { setCriando(false); acao.anunciar('Modelo criado.'); modelos.recarregar(); }
   };
 
   const escolherPadrao = async (id: string) => {
@@ -609,7 +647,7 @@ function ModeloDaFatura() {
       <div style={{ ...linha }}>
         <h2 style={{ margin: 0 }}><Icone nome="documento" tamanho={17} /> Modelo da fatura</h2>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-          <button onClick={() => void criar()} disabled={acao.ocupado}>
+          <button onClick={() => setCriando(true)} disabled={acao.ocupado || criando} aria-expanded={criando}>
             <Icone nome="acrescentar" tamanho={15} /> Novo modelo
           </button>
           <button className="primario" onClick={() => void salvar()} disabled={acao.ocupado || !m}>
@@ -623,6 +661,13 @@ function ModeloDaFatura() {
         cartão acima, e é um por empresa; de modelo há vários, porque a mesma empresa fatura de mais
         de um jeito.
       </p>
+      {criando && (
+        <PerguntaNaTela rotulo="Criar um modelo novo" manter="Cancelar" confirmar="Criar o modelo"
+                        campo={{ rotulo: 'Nome do modelo novo', dica: 'Ex.: Residencial com desconto de 15%',
+                                 nota: 'É por este nome que se escolhe o modelo na hora de montar a fatura.' }}
+                        ocupado={acao.ocupado}
+                        aoManter={() => setCriando(false)} aoConfirmar={(nome) => void criar(nome)} />
+      )}
 
       {modelos.erro && <Aviso tipo="erro">Falha ao ler os modelos: {modelos.erro}</Aviso>}
       {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}

@@ -19,8 +19,9 @@
 import { useState } from 'react';
 import { api, type Repasse, type Comissao, type UsoDaUsina } from '../api.ts';
 import { useDados } from '../dados.ts';
-import { Pagina, Aviso, Tabela, linha, Icone, CampoData, Carregando, AjudaDoMes } from '../ui.tsx';
-import { competenciaISO, emReais } from '../dinheiro.ts';
+import { Pagina, Aviso, Tabela, linha, Icone, CampoData, Carregando, AjudaDoMes, DetalheTecnico } from '../ui.tsx';
+import { competenciaISO, emReais, decimalEmBr } from '../dinheiro.ts';
+import { mesEmBr } from '../formato.ts';
 import { paraCsv, reaisParaPlanilha, nomeDoArquivo, type Coluna } from '../csv.ts';
 import { baixarCsv } from '../baixar.ts';
 
@@ -41,8 +42,9 @@ export function TelaRelatorios() {
       <div className="cartao secao">
         <div style={{ ...linha, gap: 12 }}>
           <div>
-            <label>Mês de referência (vazio = todos)</label>
-            <CampoData mes valor={mes} ao={setMes} rotuloAcessivel="Mês de referência" style={{ width: 'auto' }} /><AjudaDoMes />
+            <label>Mês de referência</label>
+            <CampoData mes valor={mes} ao={setMes} rotuloAcessivel="Mês de referência" vazio="Todos os meses"
+                       style={{ width: 'auto', minWidth: 190 }} /><AjudaDoMes />
           </div>
           {mes && (
             <button style={{ alignSelf: 'end' }} onClick={() => setMes('')}>
@@ -66,14 +68,17 @@ export function TelaRelatorios() {
              corpo={(r: Repasse, i: number) => (
                <tr key={`${r.dono}-${r.competencia}-${i}`}>
                  <td><strong>{r.dono}</strong></td>
-                 <td>{String(r.competencia).slice(0, 7)}</td>
+                 <td>{mesEmBr(r.competencia)}</td>
                  <td className="num">{r.itens}</td>
                  <td className="num">{emReais(r.valor_centavos)}</td>
                </tr>
              )} />
 
       <Bloco titulo="Comissão por originador"
-             nota="A parcela importa: o PRD §5.4 escalona a comissão na 1ª e na 2ª fatura cheia, e zero da 3ª em diante."
+             nota="A parcela importa: a comissão sai na 1ª e na 2ª fatura cheia do cliente, e é zero da 3ª em diante."
+             detalhe={<DetalheTecnico>
+               <p style={{ margin: 0 }}>A escala das parcelas é a do PRD §5.4; a soma vem da view <code>comissao_por_originador</code>.</p>
+             </DetalheTecnico>}
              carga={comissoes}
              vazio="Nenhuma comissão ainda. Se já houve pagamento e isto continua vazio, olhe se o contrato tem quem trouxe o cliente — a tela Mês acusa, na lista do cadastro."
              csv={{ assunto: 'comissoes', mes, colunas: [
@@ -87,7 +92,7 @@ export function TelaRelatorios() {
              corpo={(c: Comissao, i: number) => (
                <tr key={`${c.originador}-${c.competencia}-${c.parcela_comissao}-${i}`}>
                  <td><strong>{c.originador}</strong></td>
-                 <td>{String(c.competencia).slice(0, 7)}</td>
+                 <td>{mesEmBr(c.competencia)}</td>
                  <td className="num">{c.parcela_comissao}ª</td>
                  <td className="num">{c.itens}</td>
                  <td className="num">{emReais(c.valor_centavos)}</td>
@@ -95,7 +100,10 @@ export function TelaRelatorios() {
              )} />
 
       <Bloco titulo="Uso da usina, mês a mês"
-             nota="Geração lançada contra consumo faturado. `saldo_kwh` negativo significa que a composição foi contornada por outro caminho — é a RATEIO-USO-01 ficando olhável."
+             nota="A energia que a usina gerou contra a energia cobrada dos clientes, mês a mês. Saldo negativo quer dizer que se cobrou mais do que a usina gerou — sinal de uma cobrança montada fora do caminho normal, que vale conferir."
+             detalhe={<DetalheTecnico>
+               <p style={{ margin: 0 }}>A coluna é <code>saldo_kwh</code> da view <code>uso_da_usina_por_competencia</code>; o negativo é a <code>RATEIO-USO-01</code> ficando visível.</p>
+             </DetalheTecnico>}
              carga={uso}
              vazio="Nenhum mês tem, ao mesmo tempo, energia gerada e cobrança emitida para comparar."
              csv={{ assunto: 'uso-das-usinas', mes, colunas: [
@@ -114,11 +122,13 @@ export function TelaRelatorios() {
                return (
                  <tr key={`${u.codigo_geradora}-${u.competencia}-${i}`}>
                    <td><strong>{u.codigo_geradora}</strong></td>
-                   <td>{String(u.competencia).slice(0, 7)}</td>
-                   <td className="num">{u.geracao_kwh ?? '—'}</td>
-                   <td className="num">{u.consumo_faturado_kwh ?? '—'}</td>
+                   <td>{mesEmBr(u.competencia)}</td>
+                   {/* kWh em portugues e na escala do banco (`decimalEmBr`): as tres
+                       colunas com as mesmas duas casas alinham de cima a baixo. */}
+                   <td className="num">{decimalEmBr(u.geracao_kwh)}</td>
+                   <td className="num">{decimalEmBr(u.consumo_faturado_kwh)}</td>
                    <td className="num" style={{ color: negativo ? 'var(--erro)' : undefined }}>
-                     {u.saldo_kwh ?? '—'}
+                     {decimalEmBr(u.saldo_kwh)}
                    </td>
                  </tr>
                );
@@ -137,6 +147,10 @@ type Carga<T> = { dado: T[] | null; carregando: boolean; erro: string | null };
 
 function Bloco<T>(p: {
   titulo: string; nota: string; vazio: string;
+  /** O ponteiro para quem mantém o número (a view, o código da questão) — um
+   *  `<DetalheTecnico>` inteiro, escrito por quem chama, para a suíte de
+   *  vocabulário enxergar o esconderijo onde o texto mora. */
+  detalhe?: React.ReactNode;
   carga: Carga<T>;
   csv: { assunto: string; mes: string; colunas: Array<Coluna<T>> };
   cabecalho: React.ReactNode;
@@ -156,6 +170,7 @@ function Bloco<T>(p: {
         </button>
       </div>
       <p className="sub">{p.nota}</p>
+      {p.detalhe}
       {p.carga.erro && (
         <Aviso tipo="erro">
           Não foi possível ler: {p.carga.erro} — a tabela abaixo não está vazia,

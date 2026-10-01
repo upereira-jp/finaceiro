@@ -148,6 +148,41 @@ export function kwhEmBr(v: string | number | null | undefined): string {
   return /,0+$/.test(t) ? t.replace(/,0+$/, '') : t;
 }
 
+/**
+ * A GRANDEZA DECIMAL DENTRO DE UM CAMPO, para ser editada: `"9.7122"` ->
+ * `"9,7122"`. Como `decimalEmBr`, mas SEM o ponto de milhar e sem travessão: o
+ * campo volta para `decimalTexto` ao gravar, e `decimalTexto` aceita a vírgula
+ * do teclado e recusa o separador de milhar. [30/09/2026, etapa 4b] Até aqui a
+ * fatia e a tarifa de Unidades abriam com o ponto do banco ("9.7122",
+ * "0.936986") ao lado de um exemplo com vírgula ("1,185396").
+ */
+export function decimalParaCampo(v: string | number | null | undefined): string {
+  if (v == null || String(v).trim() === '') return '';
+  const s = String(v).trim();
+  return /^-?\d+\.\d+$/.test(s) ? s.replace('.', ',') : s;
+}
+
+/**
+ * CENTAVOS DENTRO DE UM CAMPO: `12345` -> `"123,45"`, `8` -> `"0,08"`. Por
+ * TEXTO, sem dividir por 100 — a regra 1 vale também para o valor que a tela
+ * põe no campo. [30/09/2026, etapa 4b] A tarifa da distribuidora em Cobranças
+ * abria com `(c / 100).toFixed(2)`, o float que a regra proíbe.
+ */
+export function centavosParaCampo(c: Centavos | null | undefined): string {
+  if (c == null) return '';
+  const negativo = c < 0;
+  const s = String(Math.abs(Math.trunc(c))).padStart(3, '0');
+  return `${negativo ? '-' : ''}${s.slice(0, -2)},${s.slice(-2)}`;
+}
+
+/** Percentual na tela: `"9.7122"` -> `"9,7122%"`. A escala do banco fica — a
+ *  fatia tem quatro casas porque o rateio tem, e arredondar na tela mostraria
+ *  uma fatia que não é a gravada. */
+export const percentualEmBr = (v: string | number | null | undefined): string => {
+  const t = decimalEmBr(v);
+  return t === '—' ? t : `${t}%`;
+};
+
 /** Data ISO (AAAA-MM-DD) a partir do <input type="date">, ou null. */
 export const dataOuNull = (v: string): string | null => (v.trim() ? v.trim() : null);
 

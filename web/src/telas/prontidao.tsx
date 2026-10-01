@@ -46,9 +46,10 @@ import {
 } from '../vocabulario.ts';
 import { CorpoDoRoteiro } from '../roteiro-corpo.tsx';
 import { mesNoFunil } from '../roteiro-do-mes.ts';
-import { useLeiturasDoMes, procurarMesDoTrabalho, armazemDoNavegador } from '../leitura-do-mes.ts';
+import { useLeiturasDoMes, procurarMesDoTrabalho, armazemDoNavegador, anunciarMesEmTela } from '../leitura-do-mes.ts';
 import { fraseDaOrigem, lembrarMes, type EscolhaDoMes } from '../emissao-regras.ts';
 import { mesDaQuery } from '../dinheiro.ts';
+import { quandoEmBr } from '../formato.ts';
 import { abrirAjuda } from '../ajuda-gatilho.tsx';
 
 /**
@@ -187,6 +188,12 @@ export function TelaProntidao() {
     void procurarMesDoTrabalho(leituras.semBoleto.dado?.linhas ?? []).then((e) => { if (vivo) setEscolha(e); });
     return () => { vivo = false; };
   }, [escolha, leituras.semBoleto.carregando]);
+
+  /* A Central de Ajuda narra o MESMO mês que esta tela mostra (etapa 4b). */
+  useEffect(() => {
+    anunciarMesEmTela(mes);
+    return () => anunciarMesEmTela(null);
+  }, [mes]);
 
   /* AS TRES RODADAS AUTOMATICAS, LIDAS UMA VEZ SO e desenhadas em dois lugares:
    * o alarme no alto, junto das faixas do caminho do dinheiro, e a afirmacao no
@@ -489,10 +496,15 @@ function OndeResolver({ camada, situacao }: Pick<Camada, 'camada' | 'situacao'>)
       ) : (
         <>
           <strong>{d.rotulo}</strong>
+          {/* [30/09/2026, etapa 4b] O COMANDO EM LOTE SAIU DA SUPERFÍCIE: «O
+              caminho é npm run ciclo» era a única instrução de terminal ainda à
+              vista no sistema — escapava da suíte de vocabulário por vir de um
+              dado (`d.caminho`). O rótulo já diz onde se resolve; o comando fica
+              para quem tem o repositório. */}
           {d.caminho && (
-            <div className="fraco" style={{ fontSize: 12, marginTop: 4 }}>
-              O caminho é <code>{d.caminho}</code>
-            </div>
+            <DetalheTecnico>
+              <p style={{ margin: 0 }}>Em lote: <code>{d.caminho}</code></p>
+            </DetalheTecnico>
           )}
         </>
       )}
@@ -533,15 +545,17 @@ function SinaisDoConector() {
     ...ultima.fila_de_revisao.map((x) => ({ ...x, tipo: 'revisão' as const })),
     ...ultima.divergencias.map((x) => ({ ...x, tipo: 'divergência' as const })),
   ];
-  const quando = new Date(ultima.terminado_em ?? ultima.iniciado_em);
-  const relogio = `${String(quando.getHours()).padStart(2, '0')}:${String(quando.getMinutes()).padStart(2, '0')}`;
+  /* O QUANDO NO FUSO DE SÃO PAULO e com o dia (`formato.ts`): «às 10:24» sozinho
+     fazia uma leitura de três dias atrás parecer de agora há pouco, e a hora
+     vinha do relógio do navegador, que não é necessariamente o de quem opera. */
+  const quando = quandoEmBr(ultima.terminado_em ?? ultima.iniciado_em);
 
   /* O RESUMO DE UMA LINHA, e ele é o que se lê com a seção fechada (30/09/2026,
      etapa 4a): quando foi a última leitura, quanto ela leu e quantos
      apontamentos há — com a recusa nomeada à parte, porque é a única que impede. */
   const resumo = (
     <>
-      Última leitura às {relogio}: {ultima.lidos} {ultima.lidos === 1 ? 'registro lido' : 'registros lidos'}
+      Última leitura {quando}: {ultima.lidos} {ultima.lidos === 1 ? 'registro lido' : 'registros lidos'}
       {sinais.length === 0
         ? ', nada a apontar.'
         : <>, {sinais.length} {sinais.length === 1 ? 'apontamento' : 'apontamentos'}

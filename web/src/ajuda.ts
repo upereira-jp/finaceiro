@@ -225,7 +225,7 @@ export const TOPICOS: readonly Topico[] = [
       + 'que passo está cada unidade e, logo abaixo dos passos, o que o cadastro ainda trava.',
     passos: [
       'Abra a tela Mês (é o primeiro item do menu, à esquerda).',
-      'Confira o mês no alto da tela.',
+      'Confira o mês no alto da tela: ela abre no mês mais recente com trabalho, e diz por quê ao lado.',
       'Em «O cadastro trava parte do mês», cada item tem o link que abre a tela certa, já filtrada. '
         + 'A lista completa está na tabela mais abaixo, nas linhas marcadas como «Falta preencher».',
       'Comece pela de cima: fechar a primeira costuma destravar as de baixo.',
@@ -526,13 +526,16 @@ export const TOPICOS: readonly Topico[] = [
   {
     id: 'contrato',
     pergunta: 'Como crio e ativo o contrato de um cliente?',
-    resposta: 'O formulário fica no topo da tela Contratos e já cria ativando. Ele exige duas coisas '
-      + 'prontas antes: o CPF/CNPJ confirmado e quem trouxe o cliente.',
+    /* [30/09/2026, etapa 4b] «O formulário do topo» deixou de existir na etapa
+     * 4a: a lista vem primeiro, e criar é o botão «Novo contrato» ao lado do
+     * título. A resposta seguia mandando procurar o formulário. */
+    resposta: 'Em «Novo contrato», no alto da tela Contratos, ao lado do título — ele já cria ativando. '
+      + 'Ele exige duas coisas prontas antes: o CPF/CNPJ confirmado e quem trouxe o cliente.',
     porque: PORQUE['contrato'],
     passos: [
       'Confirme antes o CPF ou CNPJ do cliente na tela Clientes — sem isso o sistema recusa ativar.',
       'Abra a tela Contratos.',
-      'Preencha o formulário do topo: cliente, unidade, quem trouxe o cliente, data de fechamento e valor.',
+      'Clique em «Novo contrato», no alto da tela, e preencha: cliente, unidade, quem trouxe o cliente, data de fechamento e valor.',
       'Grave. O contrato já nasce ativo.',
     ],
     caminhos: [
@@ -769,11 +772,11 @@ export const TOPICOS: readonly Topico[] = [
   {
     id: 'cadastrar-cliente',
     pergunta: 'Como cadastro um cliente novo?',
-    resposta: 'A maioria chega sozinha do CRM. Se precisar de um que não está lá, o formulário do '
-      + 'topo da tela Clientes cria na hora — nome basta, o documento pode vir depois.',
+    resposta: 'A maioria chega sozinha do CRM. Se precisar de um que não está lá, o botão «Novo '
+      + 'cliente», no alto da tela Clientes, cria na hora — nome basta, o documento pode vir depois.',
     passos: [
       'Abra a tela Clientes e procure primeiro pelo nome: ele pode já ter vindo do CRM.',
-      'Não achou? Preencha o nome no formulário do topo e grave.',
+      'Não achou? Clique em «Novo cliente», no alto da tela, preencha o nome e grave.',
       'Depois confirme o CPF ou CNPJ dele — sem isso o contrato não ativa.',
     ],
     caminhos: [ir('/clientes', 'Abrir Clientes')],
@@ -1153,14 +1156,17 @@ export const TOPICOS: readonly Topico[] = [
   {
     id: 'contas-a-receber',
     pergunta: 'Onde vejo quem está devendo, e quanto?',
-    resposta: 'Na tela Contas a receber, na metade Empresa. Ela lista todo título emitido e ainda '
+    /* [30/09/2026, etapa 4b] «a metade Empresa» era o nome de 22/09, quando o
+     * sistema tinha duas metades na barra; desde 27/09 é o SETOR, escolhido no
+     * alto do menu. */
+    resposta: 'Na tela Contas a receber, no setor Empresa. Ela lista todo título emitido e ainda '
       + 'não pago, de qualquer mês, com os dias de atraso e se o boleto chegou ao banco. Cobrar '
       + '— emitir, pedir o boleto, dar baixa — continua sendo na tela Cobranças, no setor Rateio.',
     porque: 'A tela Cobranças responde por MÊS, e uma fatura antiga some atrás do mês corrente. '
       + 'Contas a receber olha a carteira inteira por vencimento: é onde se vê o que venceu há 90 '
       + 'dias sem ninguém precisar lembrar de voltar o seletor.',
     passos: [
-      'Abra a metade Empresa, no alto da tela.',
+      'No alto do menu, clique no nome do setor (o ícone de duas setas, ⌃⌄) e escolha «Empresa».',
       'Abra a tela Contas a receber.',
       'Use «Por tempo de atraso» para ver o que venceu e há quanto tempo, e «Quem mais deve» '
         + 'para ver por cliente.',

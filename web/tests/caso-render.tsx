@@ -47,7 +47,8 @@ import { TabelaDaFila, TabelaDasRegistradas, GavetaDaConta, type PropsDasRegistr
 import type { ItemDoLote } from '../src/lote-de-contas.ts';
 import { CAMPOS_DA_FATURA_VAZIOS, type RegistroDeFatura } from '../src/api.ts';
 import { filtrarRegistradas } from '../src/registradas-regras.ts';
-import { RevisaoDaSerie, RecusaNaTela, ConfirmacaoNaLinha, ResumoDaBaixa, SituacaoDaCobranca } from '../src/emissao-corpo.tsx';
+import { RevisaoDaSerie, RecusaNaTela, ResumoDaBaixa, SituacaoDaCobranca } from '../src/emissao-corpo.tsx';
+import { PerguntaNaTela } from '../src/serie.tsx';
 import { lerRecusa, recusaPrevista } from '../src/emissao-regras.ts';
 
 let falhas = 0;
@@ -1082,7 +1083,7 @@ const LEITURA_VAZIA = {
 
   const rev = desenharReg({ revisando: true });
   const rt = texto(rev);
-  const soRevisao = texto(rev.slice(rev.indexOf('class="fu-revisao"'), rev.indexOf('class="fu-tabela fu-registradas"')));
+  const soRevisao = texto(rev.slice(rev.indexOf('class="serie-revisao"'), rev.indexOf('class="fu-tabela fu-registradas"')));
   chk('R20a', /Gerar 2 cobranças de setembro de 2026\?/.test(soRevisao) && /Ana Souza/.test(soRevisao)
           && /Bruno Lima/.test(soRevisao) && /R\$ 1\.111,11/.test(soRevisao) && !/Davi Rocha/.test(soRevisao),
       'a revisao lista unidade, cliente e valor das MARCADAS — a desmarcada fica fora');
@@ -1218,14 +1219,18 @@ const LEITURA_VAZIA = {
       'o selo «Emitida» ganha o porque embaixo quando a cobranca nao chegou ao banco');
 
   // --------------------------------- a confirmacao do cancelamento, na linha
+  /* [30/09/2026, etapa 4b] A pergunta e a `PerguntaNaTela` de `serie.tsx` — a
+     mesma de Contas de luz e das telas que usavam `window.confirm`. O botao que
+     desfaz passou de `em-perigo` para a variante da casa, `perigo`. */
   const canc = renderToStaticMarkup(
-    <ConfirmacaoNaLinha rotulo="Confirmar o cancelamento" perigo motivo={{ rotulo: 'Motivo do cancelamento' }}
-                        manter="Manter a cobrança" confirmar="Cancelar a cobrança" aoManter={nada} aoConfirmar={nada}>
+    <PerguntaNaTela rotulo="Confirmar o cancelamento" tom="perigo"
+                    campo={{ rotulo: 'Motivo do cancelamento', linhas: 2 }}
+                    manter="Manter a cobrança" confirmar="Cancelar a cobrança" aoManter={nada} aoConfirmar={nada}>
       Cancelar a cobrança da unidade 000401269001287?
-    </ConfirmacaoNaLinha>);
+    </PerguntaNaTela>);
   chk('R25a', /<textarea/.test(canc) && /Motivo do cancelamento/.test(canc),
       'o motivo do cancelamento e pedido num campo da propria linha — nao num prompt()');
-  chk('R25b', /<button[^>]*class="em-perigo"[^>]*disabled=""[^>]*>Cancelar a cobrança<\/button>/.test(canc)
+  chk('R25b', /<button[^>]*class="perigo"[^>]*disabled=""[^>]*>Cancelar a cobrança<\/button>/.test(canc)
           && /Manter a cobrança/.test(texto(canc)),
       'e o ato que desfaz nasce travado ate o motivo existir (o servidor recusa sem ele), contornado no vermelho');
 

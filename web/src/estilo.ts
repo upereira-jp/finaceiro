@@ -1065,6 +1065,17 @@ export const ESTILO = `
     border: 0; background: none; box-shadow: none; color: var(--fraco); cursor: pointer;
   }
   .campo-data .abrir-calendario:hover { color: var(--acento-forte); background: none; transform: translateY(-50%); }
+  /* [30/09/2026, etapa 4b] O CAMPO DE MES VAZIO DIZ O QUE O VAZIO QUER DIZER
+     («Todos os meses»), no lugar da mascara «--------- de ----» do navegador. A
+     mascara so fica transparente enquanto o campo nao tem foco: ao focar, a
+     frase sai e a mascara volta, porque e nela que se digita. */
+  .campo-data.sem-valor input:not(:focus) { color: transparent; }
+  .campo-data-vazio {
+    position: absolute; left: 11px; right: 36px; top: 50%; transform: translateY(-50%);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: var(--texto); font-size: var(--t-corpo); pointer-events: none;
+  }
+  .campo-data.sem-valor input:focus ~ .campo-data-vazio { display: none; }
 
   /* O INPUT DE DENTRO DA TABELA PARECE TEXTO ate receber atencao. A borda existe
      desde o inicio, transparente: pintar borda so no hover mexeria no layout da
@@ -1245,6 +1256,14 @@ export const ESTILO = `
   }
   button.discreto:hover:not(:disabled) { background: var(--fundo-hover); color: var(--texto); border-color: transparent; }
   button.discreto:disabled { background: none; border-color: transparent; }
+  /* [30/09/2026, etapa 4b] O BOTAO QUE DESFAZ — apagar, cancelar, limpar. Era
+     escrito duas vezes («fu-perigo» em Contas de luz, «em-perigo» em Cobranças),
+     com as mesmas tres regras; virou variante da casa, como o primario e o
+     discreto. Contornado no vermelho, cheio so sob o ponteiro: nunca e o
+     convite da tela, e o foco nunca nasce nele (ver "PerguntaNaTela"). */
+  button.perigo { border-color: var(--erro); color: var(--erro); }
+  button.perigo:hover:not(:disabled) { background: var(--erro); border-color: var(--erro); color: var(--fundo2); }
+  button.perigo:disabled { color: var(--fraco); border-color: var(--borda); }
 
   /* O BOTAO DE ICONE - o que era "OK" ao lado do input da tabela. Quadrado, 30px,
      o contorno do botao comum. Ele SEMPRE leva 'aria-label', senao o botao fica
@@ -1851,67 +1870,23 @@ export const ESTILO = `
   .g3ref button.fu-chip-x:hover:not(:disabled) { border-color: var(--texto); background: none; }
   .g3ref .fu-filtros { margin-bottom: 12px; }
 
-  /* A REVISAO ANTES DE GERAR: uma caixa so, contornada no laranja-texto — e a
-     decisao pendente da tela, e o contorno e o que a separa da tabela embaixo.
-     A lista rola dentro dela: com cinquenta linhas ela nao empurra a tabela
-     para fora da tela, e a soma e o botao ficam a vista. */
-  .g3ref .fu-revisao {
-    margin: 0 0 12px; padding: 16px 18px; background: var(--fundo2);
-    border: 1px solid var(--acento-forte);
-  }
-  .g3ref .fu-revisao h3 { margin: 0; }
-  .g3ref .fu-revisao-nota { margin: 4px 0 12px; font-size: var(--t-meta); color: var(--fraco); max-width: 80ch; }
-  .g3ref .fu-revisao-lista {
-    list-style: none; margin: 0; padding: 0; max-height: 264px; overflow-y: auto;
-    border-top: 1px solid var(--borda-suave); border-bottom: 1px solid var(--borda-suave);
-  }
-  .g3ref .fu-revisao-lista li {
-    display: grid; grid-template-columns: 150px minmax(0, 1fr) 120px minmax(0, 200px);
-    gap: 4px 14px; align-items: center; padding: 7px 2px;
-    border-bottom: 1px solid var(--borda-suave); font-size: var(--t-ui);
-  }
-  .g3ref .fu-revisao-lista li:last-child { border-bottom: 0; }
-  .g3ref .fu-revisao-lista .r-cli { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .g3ref .fu-revisao-lista .r-val { text-align: right; }
-  .g3ref .fu-revisao-lista .r-est .fu-motivo { margin-top: 0; }
-  .g3ref .fu-revisao-lista .r-motivo { grid-column: 2 / -1; }
-  .g3ref .fu-revisao-lista .r-motivo .fu-motivo { margin-top: 0; }
-  .g3ref .fu-revisao-pe {
-    display: flex; align-items: center; justify-content: space-between; gap: 10px 16px;
-    flex-wrap: wrap; margin-top: 12px;
-  }
-  .g3ref .fu-revisao-pe .fu-acoes { flex-wrap: wrap; }
   .g3ref a.fu-ir { font-weight: 600; font-size: var(--t-ui); }
-
-  /* A CONFIRMACAO DA EXCLUSAO, na linha. Fundo do erro na linha inteira: e o
-     unico lugar da tela que apaga dado, e ele se ve de longe sem tocar em cor
-     de texto. O botao que apaga e contornado no vermelho e so fica cheio sob o
-     ponteiro — «Manter», o comum, e o que nasce com o foco. */
-  .g3ref .fu-tabela tr.fu-confirma td { background: var(--erro-fundo); white-space: normal; }
+  /* [30/09/2026, etapa 4b] A REVISAO ANTES DE GERAR e as PERGUNTAS NA LINHA
+     (excluir, 2a via, limpar a fila, nova fatura) sairam daqui: sao a
+     «RevisaoEmSerie» e a «PerguntaNaTela» de "serie.tsx", com o CSS comum na
+     secao «A PERGUNTA NA TELA E A REVISAO EM SERIE», mais abaixo. O que fica e
+     so o encaixe delas nesta tabela: a linha da pergunta nao tem respiro
+     proprio, quem desenha a caixa e a pergunta. */
+  .g3ref .fu-tabela tr.fu-confirma td { padding: 0; white-space: normal; }
   .g3ref .fu-tabela tr.fu-confirma:hover { background: none; }
-  .g3ref .fu-confirma-caixa {
-    display: flex; align-items: center; justify-content: space-between; gap: 8px 16px;
-    flex-wrap: wrap; font-size: var(--t-ui);
-  }
-  /* [30/09, etapa 2] A 2a VIA PERGUNTA NA LINHA, em ambar: nada sai do banco,
-     o que sai da tela e o rascunho em edicao. */
-  .g3ref .fu-tabela tr.fu-confirma-aviso td { background: var(--alerta-fundo); }
-  /* A PERGUNTA NA BARRA — «Limpar a fila» e «Nova fatura» deixaram de ser
-     "window.confirm". Ela ocupa o lugar do botao que a abriu: a frase e os dois
-     atos, com o foco em «Manter». */
-  .g3ref .fu-pergunta {
-    display: flex; align-items: center; justify-content: flex-end; gap: 8px 14px; flex-wrap: wrap;
-    padding: 8px 10px; background: var(--erro-fundo);
-    border: 1px solid color-mix(in srgb, var(--erro) 30%, var(--erro-fundo));
-  }
-  .g3ref .fu-pergunta-texto { font-size: var(--t-ui); line-height: 1.45; max-width: 60ch; }
-  .g3ref .fu-abas > .fu-pergunta { margin-left: auto; }
+  .g3ref .fu-tabela tr.fu-confirma .pergunta { border-width: 0 0 1px; }
+  /* A pergunta que toma o lugar do botao na barra («Nova fatura») ou no topo
+     do bloco («Limpar a fila») fica no mesmo canto que ele ocupava. */
+  .g3ref .fu-abas > .pergunta, .g3ref .fu-bloco-topo > .pergunta { margin-left: auto; }
   @media (max-width: 720px) {
-    .g3ref .fu-pergunta { justify-content: flex-start; width: 100%; }
-    .g3ref .fu-bloco-acoes.fu-pergunta { flex-direction: row; align-items: center; }
+    .g3ref .fu-abas > .pergunta, .g3ref .fu-bloco-topo > .pergunta { margin-left: 0; width: 100%; }
   }
-  .g3ref button.fu-perigo { border-color: var(--erro); color: var(--erro); }
-  .g3ref button.fu-perigo:hover:not(:disabled) { background: var(--erro); border-color: var(--erro); color: var(--fundo2); }
+
 
   /* ABAIXO DE 720px CADA LINHA VIRA UM CARTAO, e o mesmo HTML serve os dois:
      tabela nao cabe em 390px sem esconder coluna, e as colunas que caiam eram
@@ -1976,18 +1951,11 @@ export const ESTILO = `
     /* A lixeira divide a ultima faixa com as acoes, na ponta oposta: sozinha
        numa coluna estreita ela empurrava «conferir antes» para outra linha. */
     .g3ref .fu-registradas .c-exc { grid-area: aco; justify-self: end; align-self: center; }
-    .g3ref .fu-registradas tr.fu-confirma { display: block; }
+    /* A pergunta na linha vira a propria caixa, em largura cheia, logo abaixo
+       do cartao que a pediu — sem o quadro do cartao em volta. */
+    .g3ref .fu-registradas tr.fu-confirma { display: block; padding: 0; border: 0; background: none; }
     .g3ref .fu-registradas tr.fu-confirma td { padding: 0; background: none; }
-
-    .g3ref .fu-revisao-lista li {
-      grid-template-columns: minmax(0, 1fr) auto;
-      grid-template-areas: "uc val" "cli cli" "est est" "mot mot";
-    }
-    .g3ref .fu-revisao-lista .r-uc { grid-area: uc; }
-    .g3ref .fu-revisao-lista .r-val { grid-area: val; }
-    .g3ref .fu-revisao-lista .r-cli { grid-area: cli; }
-    .g3ref .fu-revisao-lista .r-est { grid-area: est; }
-    .g3ref .fu-revisao-lista .r-motivo { grid-area: mot; grid-column: auto; }
+    .g3ref .fu-tabela tr.fu-confirma .pergunta { border-width: 1px; }
   }
 
   /* ------------------------------------------------------------- a gaveta
@@ -2184,7 +2152,7 @@ export const ESTILO = `
   .em-bloco > .aviso { margin: 0 0 12px; }
   /* O titulo que recebe foco por programa (depois de fechar a revisao ou de
      cancelar) nao desenha anel: nao e controle. O leitor anuncia do mesmo jeito. */
-  .em-bloco-titulo h2[tabindex="-1"]:focus, .em-revisao h3[tabindex="-1"]:focus { outline: none; }
+  .em-bloco-titulo h2[tabindex="-1"]:focus { outline: none; }
   @media (max-width: 720px) {
     .em-bloco-acoes { flex-direction: column-reverse; align-items: stretch; width: 100%; }
   }
@@ -2273,41 +2241,9 @@ export const ESTILO = `
   .em-recusa-frase > .ic { margin-top: 3px; flex: none; color: var(--alerta); }
   .em-recusa-acoes { justify-content: flex-start; }
 
-  /* A REVISAO ANTES DO ATO: uma caixa so, contornada no laranja-texto — e a
-     decisao pendente da tela. A lista rola dentro dela: com trinta linhas ela
-     nao empurra a tabela para fora da tela, e a soma e o «Sim» ficam a vista. */
-  .em-revisao {
-    margin: 0 0 12px; padding: 16px 18px; background: var(--fundo2);
-    border: 1px solid var(--acento-forte);
-  }
-  .em-revisao h3 { margin: 0; }
-  .em-revisao-nota { margin: 4px 0 12px; font-size: var(--t-ui); color: var(--fraco); max-width: 80ch; }
-  .em-revisao > .aviso { margin: 0 0 12px; }
-  .em-revisao-lista {
-    list-style: none; margin: 0; padding: 0; max-height: 320px; overflow-y: auto;
-    border-top: 1px solid var(--borda-suave); border-bottom: 1px solid var(--borda-suave);
-  }
-  .em-revisao-lista li {
-    display: grid; grid-template-columns: 22px 130px minmax(0, 1fr) 130px 110px minmax(0, 170px);
-    gap: 4px 14px; align-items: center; padding: 7px 2px;
-    border-bottom: 1px solid var(--borda-suave); font-size: var(--t-ui);
-  }
-  .em-revisao-lista li:last-child { border-bottom: 0; }
-  .em-revisao-lista li.em-rev-tirada .r-uc, .em-revisao-lista li.em-rev-tirada .r-cli,
-  .em-revisao-lista li.em-rev-tirada .r-ven, .em-revisao-lista li.em-rev-tirada .r-val {
-    color: var(--fraco); text-decoration: line-through;
-  }
-  .em-revisao-lista .r-sel input { width: 17px; height: 17px; margin: 0; display: block; }
-  .em-revisao-lista .r-uc { font-weight: 600; }
-  .em-revisao-lista .r-cli { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .em-revisao-lista .r-ven { color: var(--fraco); }
-  .em-revisao-lista .r-val { text-align: right; }
-  .em-revisao-lista .r-motivo { grid-column: 2 / -1; }
-  .em-revisao-lista .r-motivo .em-recusa { margin: 2px 0 4px; }
-  .em-revisao-pe {
-    display: flex; align-items: center; justify-content: space-between; gap: 10px 16px;
-    flex-wrap: wrap; margin-top: 12px;
-  }
+  /* [30/09/2026, etapa 4b] A REVISAO ANTES DO ATO saiu daqui para a secao
+     comum «A PERGUNTA NA TELA E A REVISAO EM SERIE» (a mesma de Contas de luz).
+     Fica o que so esta tela tem: o que ficou de fora e por que. */
   .em-defora { margin-top: 12px; font-size: var(--t-ui); }
   .em-defora-titulo { margin: 0 0 6px; font-weight: 600; }
   .em-defora ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
@@ -2319,27 +2255,12 @@ export const ESTILO = `
   .em-defora .r-cli { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fraco); }
   .em-defora .r-frase { color: var(--alerta); }
 
-  /* A CONFIRMACAO NA LINHA. Fundo do erro so quando desfaz (cancelar); o resumo
-     do pagamento e a pergunta comum ficam sobre o cartao, contornados. */
-  .em-confirma {
-    display: grid; gap: 10px; padding: 14px 18px 14px 44px; font-size: var(--t-ui);
-    background: var(--fundo2); border-top: 1px solid var(--borda); border-bottom: 1px solid var(--borda);
-  }
-  .em-confirma.perigo { background: var(--erro-fundo); }
-  .em-painel .em-confirma { padding: 14px 16px; border: 1px solid var(--borda); }
-  .em-painel .em-confirma.perigo { border-color: color-mix(in srgb, var(--erro) 30%, var(--erro-fundo)); }
-  .em-confirma-texto { line-height: 1.5; max-width: 80ch; }
-  .em-confirma-motivo { display: grid; gap: 4px; max-width: 560px; }
-  .em-confirma-motivo label { margin: 0; color: var(--texto); font-weight: 600; }
-  .em-confirma-motivo textarea { resize: vertical; min-height: 56px; }
-  .em-confirma-dica { font-size: var(--t-meta); color: var(--fraco); }
-  .em-confirma .em-acoes { justify-content: flex-start; }
-  .em-confirma > .aviso { margin: 0; }
-  button.em-perigo { border-color: var(--erro); color: var(--erro); }
-  button.em-perigo:hover:not(:disabled) { background: var(--erro); border-color: var(--erro); color: var(--fundo2); }
-  button.em-perigo:disabled { color: var(--fraco); border-color: var(--borda); }
-  .em-resumo { border: 1px solid var(--acento-forte); }
-  .em-painel .em-resumo { border-color: var(--acento-forte); }
+  /* A CONFIRMACAO NA LINHA e o RESUMO DO PAGAMENTO sao a «PerguntaNaTela» de
+     "serie.tsx" desde 30/09/2026 (etapa 4b). Aqui fica o encaixe dela nesta
+     tabela — recuada ate a coluna do triangulo, sem as bordas laterais, como a
+     linha que ela explica — e o miolo do resumo. */
+  .em-tabela tr.em-linha-confirma .pergunta { padding-left: 44px; border-width: 1px 0; }
+  .em-painel .pergunta { padding: 14px 16px; }
   .em-resumo-pergunta { margin: 0 0 8px; font-size: var(--t-corpo); }
   .em-resumo-contas { display: grid; gap: 2px; margin: 0 0 10px; max-width: 420px; }
   .em-resumo-contas > div { display: flex; justify-content: space-between; gap: 16px; padding: 3px 0; border-bottom: 1px solid var(--borda-suave); }
@@ -2396,24 +2317,12 @@ export const ESTILO = `
     }
     .em-tabela tr.em-linha-painel td, .em-tabela tr.em-linha-confirma td { display: block; }
     .em-painel { padding: 4px 14px 14px; }
-    .em-confirma { padding: 12px 14px; border: 0; }
+    .em-tabela tr.em-linha-confirma .pergunta { padding: 12px 14px; border: 0; }
     .em-baixa-campos { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .em-baixa-obs { grid-column: 1 / -1; }
     .em-importar-corpo { padding-left: 0; }
   }
   @media (max-width: 900px) {
-    .em-revisao { padding: 14px; }
-    .em-revisao-lista li {
-      grid-template-columns: 22px minmax(0, 1fr) auto;
-      grid-template-areas: "sel uc val" "sel cli cli" "sel ven est" "sel mot mot";
-    }
-    .em-revisao-lista .r-sel { grid-area: sel; align-self: start; padding-top: 2px; }
-    .em-revisao-lista .r-uc { grid-area: uc; }
-    .em-revisao-lista .r-val { grid-area: val; }
-    .em-revisao-lista .r-cli { grid-area: cli; }
-    .em-revisao-lista .r-ven { grid-area: ven; }
-    .em-revisao-lista .r-est { grid-area: est; justify-self: end; }
-    .em-revisao-lista .r-motivo { grid-area: mot; grid-column: auto; }
     .em-defora li { grid-template-columns: minmax(0, 1fr) auto; }
     .em-defora .r-frase { grid-column: 1 / -1; }
   }
@@ -2432,6 +2341,119 @@ export const ESTILO = `
     .em-tabela .c-sit .em-nota { justify-content: flex-start; }
     .em-baixa-campos { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
     .em-baixa-campos > div:first-child { grid-column: 1 / -1; }
+  }
+
+  /* ====================== A PERGUNTA NA TELA E A REVISAO EM SERIE (30/09/2026, etapa 4b)
+     Os dois desenhos de "serie.tsx". Ate esta data eles existiam duas vezes —
+     "fu-*" em Contas de luz e "em-*" em Cobrancas — com as mesmas regras e
+     medidas quase iguais; e quatro telas ainda perguntavam com a caixa do
+     navegador. Agora ha um CSS so, e cada tela guarda apenas o ENCAIXE (a linha
+     de tabela sem respiro proprio, o recuo ate a coluna do triangulo).
+
+     A PERGUNTA: a caixa inteira diz o tom — fundo do erro quando o sim apaga,
+     ambar quando tira algo so da tela, o cartao quando anda para a frente, e o
+     contorno do acento no resumo do pagamento, que nao se desfaz. A cor fica no
+     FUNDO e no botao, nunca no texto: e paragrafo para ser lido. */
+  .pergunta {
+    display: grid; gap: 10px; padding: 14px 18px; font-size: var(--t-ui);
+    background: var(--fundo2); border: 1px solid var(--borda);
+  }
+  .pergunta.tom-perigo {
+    background: var(--erro-fundo); border-color: color-mix(in srgb, var(--erro) 30%, var(--erro-fundo));
+  }
+  .pergunta.tom-aviso {
+    background: var(--alerta-fundo); border-color: color-mix(in srgb, var(--alerta) 30%, var(--alerta-fundo));
+  }
+  .pergunta.tom-decisao { border-color: var(--acento-forte); }
+  .pergunta-texto { line-height: 1.5; max-width: 80ch; }
+  .pergunta-campo { display: grid; gap: 4px; max-width: 560px; }
+  .pergunta-campo label { margin: 0; color: var(--texto); font-weight: 600; }
+  .pergunta-campo textarea { resize: vertical; min-height: 56px; }
+  .pergunta-nota { font-size: var(--t-meta); color: var(--fraco); }
+  .pergunta-atos { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .pergunta > .aviso { margin: 0; }
+  /* NA LINHA (a linha de uma tabela, a barra de acoes): a frase a esquerda e os
+     dois atos a direita, e eles descem para baixo da frase quando falta largura. */
+  .pergunta.na-linha {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px 16px;
+    flex-wrap: wrap; padding: 9px 12px;
+  }
+  .pergunta.na-linha .pergunta-texto { flex: 1 1 32ch; max-width: 72ch; line-height: 1.45; }
+  .pergunta.na-linha .pergunta-atos { flex: none; }
+  /* A PERGUNTA NUMA LINHA PROPRIA DA TABELA (Contratos, Contas a pagar): a
+     linha nao tem respiro nem hover, e a caixa perde as bordas dos lados para
+     ler como continuacao da linha que a pediu. */
+  tr.linha-pergunta > td { padding: 0; border-bottom: 0; white-space: normal; }
+  tr.linha-pergunta:hover { background: none; }
+  tr.linha-pergunta .pergunta { border-width: 0 0 1px; }
+  tr.usuario-retorno .pergunta { margin: 0 0 4px; }
+  /* NA TABELA QUE ROLA PARA O LADO (Contratos e Usuarios no celular), a linha
+     da pergunta tem a largura da TABELA, e nao a da tela: a frase sumia para a
+     direita, atras da rolagem. A caixa fica presa a borda esquerda e na largura
+     visivel — a da janela menos as margens da pagina e a borda da rolagem. */
+  .rolagem td > .pergunta { position: sticky; left: 0; max-width: calc(100vw - 42px); }
+
+  /* A REVISAO: uma caixa so, contornada no laranja-texto — e a decisao pendente
+     da tela, e o contorno e o que a separa da tabela embaixo. A lista rola
+     dentro dela: com trinta linhas ela nao empurra a tabela para fora da tela,
+     e a soma e o «Sim» ficam a vista. */
+  .serie-revisao {
+    margin: 0 0 12px; padding: 16px 18px; background: var(--fundo2);
+    border: 1px solid var(--acento-forte);
+  }
+  .serie-revisao h3 { margin: 0; }
+  /* O titulo recebe foco por programa ao abrir: nao e controle, nao desenha anel. */
+  .serie-revisao h3[tabindex="-1"]:focus { outline: none; }
+  .serie-nota { margin: 4px 0 12px; font-size: var(--t-ui); color: var(--fraco); max-width: 80ch; }
+  .serie-revisao > .aviso { margin: 0 0 12px; }
+  .serie-lista {
+    list-style: none; margin: 0; padding: 0; max-height: 320px; overflow-y: auto;
+    border-top: 1px solid var(--borda-suave); border-bottom: 1px solid var(--borda-suave);
+  }
+  .serie-lista li {
+    display: grid; grid-template-columns: 150px minmax(0, 1fr) 120px minmax(0, 200px);
+    gap: 4px 14px; align-items: center; padding: 7px 2px;
+    border-bottom: 1px solid var(--borda-suave); font-size: var(--t-ui);
+  }
+  .serie-lista.com-selecao li {
+    grid-template-columns: 22px 130px minmax(0, 1fr) 130px 110px minmax(0, 170px);
+  }
+  .serie-lista li:last-child { border-bottom: 0; }
+  .serie-lista li.serie-tirada .r-uc, .serie-lista li.serie-tirada .r-cli,
+  .serie-lista li.serie-tirada .r-ven, .serie-lista li.serie-tirada .r-val {
+    color: var(--fraco); text-decoration: line-through;
+  }
+  .serie-lista .r-sel input { width: 17px; height: 17px; margin: 0; display: block; }
+  .serie-lista .r-uc { font-weight: 600; }
+  .serie-lista .r-cli { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .serie-lista .r-ven { color: var(--fraco); }
+  .serie-lista .r-val { text-align: right; }
+  .serie-lista .r-motivo { grid-column: 2 / -1; }
+  .serie-lista .fu-motivo { margin-top: 0; }
+  .serie-lista .r-motivo .em-recusa { margin: 2px 0 4px; }
+  .serie-pe {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px 16px;
+    flex-wrap: wrap; margin-top: 12px;
+  }
+  .serie-atos { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
+  @media (max-width: 900px) {
+    .serie-revisao { padding: 14px; }
+    .serie-lista li {
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas: "uc val" "cli cli" "est est" "mot mot";
+    }
+    .serie-lista.com-selecao li {
+      grid-template-columns: 22px minmax(0, 1fr) auto;
+      grid-template-areas: "sel uc val" "sel cli cli" "sel ven est" "sel mot mot";
+    }
+    .serie-lista .r-sel { grid-area: sel; align-self: start; padding-top: 2px; }
+    .serie-lista .r-uc { grid-area: uc; }
+    .serie-lista .r-val { grid-area: val; }
+    .serie-lista .r-cli { grid-area: cli; }
+    .serie-lista .r-ven { grid-area: ven; }
+    .serie-lista .r-est { grid-area: est; }
+    .serie-lista.com-selecao .r-est { justify-self: end; }
+    .serie-lista .r-motivo { grid-area: mot; grid-column: auto; }
   }
 
   /* ======================== O MES, PASSO A PASSO (30/09/2026, etapa 3 do redesenho)

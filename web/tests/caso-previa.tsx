@@ -81,7 +81,7 @@ export const avisos = renderToStaticMarkup(
       </DetalheTecnico>
     </Aviso>
     <Aviso tipo="alerta">
-      <strong>7 unidade(s) sem o endereço completo.</strong> É o endereço que sai impresso no
+      <strong>7 unidades sem o endereço completo.</strong> É o endereço que sai impresso no
       boleto. <strong>Isto não impede cobrar</strong> — por isso é aviso e não erro.
       <DetalheTecnico>
         <p style={{ margin: 0 }}>

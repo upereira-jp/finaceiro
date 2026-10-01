@@ -47,6 +47,7 @@ import {
   type LinhaDaTrilha, type RespostaDaTrilha,
 } from '../historico.ts';
 import type { TomDoSelo } from '../iconografia.ts';
+import { hojeEmSP } from '../formato.ts';
 
 /** O tom de cada operação: criar é ganho, alterar é meio do caminho, apagar é
  *  `neutro`. [30/09, etapa 4a] Apagar era vermelho, e o vermelho passou a ser só
@@ -56,7 +57,9 @@ const TOM: Record<string, TomDoSelo> = {
   I: 'ok', U: 'nao_medido', D: 'neutro',
 };
 
-const hojeISO = () => new Date().toISOString().slice(0, 10);
+/** Hoje em São Paulo (`formato.ts`): o `toISOString` é UTC, e das 21h à
+ *  meia-noite o título «hoje» caía no dia seguinte. */
+const hojeISO = () => hojeEmSP();
 
 export function TelaHistorico() {
   const [tabela, setTabela] = useState('');

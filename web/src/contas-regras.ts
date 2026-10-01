@@ -22,6 +22,7 @@
 // discordancia aparece na frase que explica por que o botao travou.
 
 import { emReais } from './dinheiro.ts';
+import { diaEmBr } from './formato.ts';
 
 /** A forma que a rota devolve. Espelha `conta_pagar` do banco. */
 export type ContaAPagar = {
@@ -121,8 +122,11 @@ export function podePagar(c: ContaAPagar, valorCentavos: number): Trava {
 export function podeCancelar(c: ContaAPagar): Trava {
   if (c.status === 'cancelada') return nao('Esta conta já está cancelada.');
   if (c.valor_pago_centavos > 0) {
-    return nao('Esta conta já tem pagamento registrado. Desfazer é estorno, e o estorno ainda '
-             + 'não tem caminho decidido (Q-ESTORNO-01).');
+    /* [30/09/2026, etapa 4b] O CODIGO DA QUESTAO SAIU DA FRASE: ela aparece na
+       dica do botao, para quem opera, e «Q-ESTORNO-01» nao dizia nada a essa
+       pessoa. O rastreio continua no QUESTOES.md e na suite (C5b). */
+    return nao('Esta conta já tem pagamento registrado. Desfazer seria um estorno, e o sistema '
+             + 'ainda não faz estorno.');
   }
   return sim;
 }
@@ -200,10 +204,10 @@ export function recibo(c: ContaAPagar): { frase: string; alerta: boolean } {
   return { frase: `${ps.length} pagamentos, o último em ${emBr(ps[ps.length - 1]!.data_pagamento)}`, alerta: false };
 }
 
-/** Data ISO do banco na forma brasileira. O `slice` antes do corte existe porque
- *  a coluna e `date` mas o JSON pode trazer o horario junto. */
-export const emBr = (iso: string): string =>
-  String(iso).slice(0, 10).split('-').reverse().join('/');
+/** Data ISO do banco na forma brasileira. [30/09/2026, etapa 4b] E o
+ *  `diaEmBr` de `formato.ts` — o formato do dia e um so no sistema inteiro, e
+ *  este nome fica porque as telas e a suite o importam daqui. */
+export const emBr = diaEmBr;
 
 export const ROTULO_DO_BENEFICIARIO: Record<ContaAPagar['beneficiario_tipo'], string> = {
   dono_usina: 'Dono de usina',

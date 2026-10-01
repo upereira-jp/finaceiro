@@ -35,7 +35,9 @@ import {
   rotuloDoEndereco, enderecoEmiteBoleto, faltasDaUc,
   type SituacaoDaUc,
 } from '../unidades-regras.ts';
-import { decimalTexto, mesDaQuery } from '../dinheiro.ts';
+import { decimalTexto, decimalParaCampo, mesDaQuery } from '../dinheiro.ts';
+import { mesEmBr } from '../formato.ts';
+import { PerguntaNaTela } from '../serie.tsx';
 import { FILTROS_DA_TELA, filtroDaConsulta, unidadeDaConsulta } from '../destino-da-camada.ts';
 import { Ligacao } from '../rota.tsx';
 import { separarEndereco, completarVazios, faltamNaProposta, avisoDoCepDaConta } from '../endereco-da-conta.ts';
@@ -147,7 +149,7 @@ export function TelaUnidades() {
     const v = edicao[uc.id];
     if (!v) return;
     const ok = await acao.executar(() => api.patch(`/unidades-consumidoras/${uc.id}`, { data_vencimento: v }));
-    if (ok) { acao.anunciar(`Vencimento da ${uc.numero_uc} gravado.`); ucs.recarregar(); }
+    if (ok) { acao.anunciar(`Vencimento da unidade ${uc.numero_uc} gravado.`); ucs.recarregar(); }
   }
 
   /*
@@ -170,7 +172,7 @@ export function TelaUnidades() {
     const ok = await acao.executar(() => api.patch(`/unidades-consumidoras/${uc.id}`, {
       tarifa_reais_por_kwh: v.trim() ? decimalTexto(v, 6) : null,
     }));
-    if (ok) { acao.anunciar(`Tarifa da ${uc.numero_uc} gravada.`); ucs.recarregar(); }
+    if (ok) { acao.anunciar(`Tarifa da unidade ${uc.numero_uc} gravada.`); ucs.recarregar(); }
   }
 
   /**
@@ -186,7 +188,7 @@ export function TelaUnidades() {
   async function salvarEndereco(uc: UnidadeConsumidora, campos: Record<string, string>) {
     const ok = await acao.executar(() => api.patch(`/unidades-consumidoras/${uc.id}`, campos));
     if (ok) {
-      acao.anunciar(`Endereço da ${uc.numero_uc} gravado.`);
+      acao.anunciar(`Endereço da unidade ${uc.numero_uc} gravado.`);
       setAberta(null);
       ucs.recarregar();
     }
@@ -201,7 +203,7 @@ export function TelaUnidades() {
       api.put(`/unidades-consumidoras/${uc.id}/rateio`, {
         usina_id: uc.usina_id, percentual_rateio: decimalTexto(pct, 4),
       }));
-    if (ok) { acao.anunciar(`Rateio da ${uc.numero_uc} atualizado.`); ucs.recarregar(); }
+    if (ok) { acao.anunciar(`Fatia da unidade ${uc.numero_uc} gravada.`); ucs.recarregar(); }
   }
 
   /*
@@ -408,10 +410,10 @@ export function TelaUnidades() {
                   detalhe aberto se confunde com a linha seguinte da tabela. */}
               <td colSpan={5} id={`detalhe-${u.id}`} style={{ background: 'var(--fundo-recuo)' }}>
                 <UsinaEPreco uc={u} usina={usina} ocupado={acao.ocupado}
-                             rateio={rateio[u.id] ?? u.percentual_rateio ?? ''}
+                             rateio={rateio[u.id] ?? decimalParaCampo(u.percentual_rateio)}
                              aoMudarRateio={(v) => setRateio({ ...rateio, [u.id]: v })}
                              aoGravarRateio={() => void salvarRateio(u)}
-                             tarifa={tarifa[u.id] ?? u.tarifa_reais_por_kwh ?? ''}
+                             tarifa={tarifa[u.id] ?? decimalParaCampo(u.tarifa_reais_por_kwh)}
                              aoMudarTarifa={(v) => setTarifa({ ...tarifa, [u.id]: v })}
                              aoGravarTarifa={() => void salvarTarifa(u)} />
                 <hr className="detalhe-regua" />
@@ -500,8 +502,8 @@ function UsinaEPreco(p: {
           <div className="inline">
             <input id={`tarifa-${uc.id}`} value={p.tarifa}
                    onChange={(e) => p.aoMudarTarifa(e.target.value)}
-                   placeholder="1,185396" style={{ width: 110, textAlign: 'right' }} />
-            <BotaoDeIcone icone="confirmar" rotulo={`Gravar a tarifa da ${uc.numero_uc}`}
+                   placeholder="Ex. 1,185396" style={{ width: 116, textAlign: 'right' }} />
+            <BotaoDeIcone icone="confirmar" rotulo={`Gravar a tarifa da unidade ${uc.numero_uc}`}
                           ao={p.aoGravarTarifa} desabilitado={p.ocupado} />
           </div>
         </div>
@@ -588,7 +590,7 @@ function EnderecoDoPagador({ uc, ocupado, daConta, aoGravar }: {
           <p style={{ margin: '4px 0 0' }}>
             «{daConta!.endereco}»{' '}
             <span className="fraco" style={{ fontSize: 12 }}>
-              — da conta de {String(daConta!.competencia).slice(0, 7).split('-').reverse().join('/')}
+              — da conta de {mesEmBr(daConta!.competencia)}
             </span>
           </p>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: 10 }}>
@@ -681,11 +683,11 @@ function VinculoComOutroSistema({ ucId, aoDestravar }: { ucId: string; aoDestrav
   const acao = useAcao();
   const vinculo = useDados<VinculoNaTela>(() => api.get(`/unidades-consumidoras/${ucId}/vinculo`), [ucId]);
 
+  /* [30/09/2026, etapa 4b] A PERGUNTA MORA NO PAINEL, no lugar do botão — era
+     um `window.confirm`, que tirava a pessoa da tela para responder sobre ela. */
+  const [perguntando, setPerguntando] = useState(false);
   const destravar = async () => {
-    if (!confirm(
-      'Soltar o vínculo velho desta unidade?\n\n'
-      + 'Isto registra que você decidiu qual leitura vale. A leitura automática do outro sistema '
-      + 'grava o vínculo novo no próximo ciclo, em até 15 minutos.')) return;
+    setPerguntando(false);
     const ok = await acao.executar(() => api.post(`/unidades-consumidoras/${ucId}/destravar-vinculo`));
     if (ok) {
       acao.anunciar('Vínculo solto. A leitura automática grava o novo no próximo ciclo.');
@@ -699,7 +701,17 @@ function VinculoComOutroSistema({ ucId, aoDestravar }: { ucId: string; aoDestrav
       {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
       {acao.sucesso && <Aviso tipo="ok">{acao.sucesso}</Aviso>}
       <PainelDoVinculo dados={vinculo.dado} carregando={vinculo.carregando} erro={vinculo.erro}
-                       destravar={() => void destravar()} ocupado={acao.ocupado} />
+                       destravar={() => setPerguntando(true)} ocupado={acao.ocupado}
+                       pergunta={perguntando && (
+                         <PerguntaNaTela rotulo="Confirmar: soltar o vínculo velho"
+                                         manter="Manter o vínculo" confirmar="Soltar o vínculo velho"
+                                         ocupado={acao.ocupado}
+                                         aoManter={() => setPerguntando(false)} aoConfirmar={() => void destravar()}>
+                           Soltar o vínculo velho desta unidade? Isto registra que você decidiu qual
+                           leitura vale. A leitura automática do outro sistema grava o vínculo novo no
+                           próximo ciclo, em até 15 minutos.
+                         </PerguntaNaTela>
+                       )} />
     </>
   );
 }

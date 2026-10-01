@@ -33,6 +33,8 @@
 // aqui, lendo o arquivo do servidor, do mesmo jeito que `destino-da-camada.ts`
 // já faz.
 
+import { mesPorExtenso } from './formato.ts';
+
 /** O verbete de uma camada da prontidão, em português de quem opera. */
 export type Verbete = {
   /** O nome curto, como apareceria numa conversa. Não é o nome da coluna. */
@@ -453,22 +455,15 @@ export const GLOSSARIO: readonly TermoDoGlossario[] = [
 // pelo runner do `web/`, e a regra 8 diz que invariante sem teste é comentário.
 // ============================================================================
 
-const MESES_PT = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
-                  'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
-
 /**
  * `'2026-07-01'` -> `'julho de 2026'`. String vazia quando não dá para ler.
  *
- * SEM `new Date`, DE PROPÓSITO: `new Date('2026-07-01')` é meia-noite UTC, e em
- * fuso negativo — o do Brasil — `getMonth()` devolve JUNHO. O título diria o mês
- * errado, e diria com convicção. Recorte de texto não tem fuso.
+ * [30/09/2026, etapa 4b] MOROU AQUI ATÉ A ETAPA 4b, e agora mora em
+ * `formato.ts`, com os outros formatos de data da tela — a mesma função, o
+ * mesmo contrato. Fica exportada daqui porque é daqui que as telas e as suítes
+ * a importavam.
  */
-export function mesPorExtenso(iso: string): string {
-  const m = /^(\d{4})-(\d{2})/.exec(iso ?? '');
-  if (!m) return '';
-  const n = Number(m[2]);
-  return n >= 1 && n <= 12 ? `${MESES_PT[n - 1]} de ${m[1]}` : '';
-}
+export { mesPorExtenso };
 
 export type ChaveDoGrupo = 'bloqueia_fatura' | 'bloqueia_boleto' | 'bloqueia_split';
 

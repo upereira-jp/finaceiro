@@ -126,6 +126,13 @@ const PROPS = [
    * e uma propriedade fora da lista e uma regra que nao existe ali.
    */
   'vazio',
+  /*
+   * `nota`, `manter` e `confirmar` ENTRARAM EM 30/09/2026 (etapa 4b). `nota` e a
+   * frase de baixo dos blocos de Relatorios, e era por ela que «PRD §5.4» e
+   * «`saldo_kwh` ... RATEIO-USO-01» chegavam a tela sem a suite ver; `manter` e
+   * `confirmar` sao os dois botoes da `PerguntaNaTela` (serie.tsx).
+   */
+  'nota', 'manter', 'confirmar',
 ];
 
 /** (linha, texto) de tudo o que a tela EXIBE — as propriedades de rotulo e o
@@ -169,6 +176,12 @@ const PROIBIDO: Array<[RegExp, string]> = [
   [/\btiers?\b/i, 'jargao de comissionamento'],
   [/\bUC\b/, 'sigla — a tela diz "unidade" ou "unidade consumidora"'],
   [/(?<![\w/])[a-z]{3,}_[a-z]{3,}(?![\w/])/, 'nome de coluna em snake_case'],
+  /* [30/09/2026, etapa 4b] Os tres de baixo vieram da critica de 30/09, que
+     achou «PRD §5.4» e «RATEIO-USO-01» em Relatorios. Estao tambem na V4
+     (`ajuda.ts`) — a lista e uma so, de proposito. */
+  [/\bPRD\b|§/, 'referencia a documento interno (PRD §5.4) — quem opera nao tem o documento'],
+  [/\b(?:SPEC|AUD)-\d/, 'numero de documento interno (especificacao, auditoria)'],
+  [/\b[A-Z]{3,}-[A-Z0-9]+(?:-[A-Z0-9]+)*-\d{2}\b/, 'codigo de rastreio interno (RATEIO-USO-01)'],
 ];
 
 // ============================================================================
@@ -262,6 +275,137 @@ for (const arq of TELAS) {
   const linhas = visiveis(src).filter(([, t]) => /npm run/.test(t));
   chk('T4', linhas.length === 0,
       `${arq}: nao manda rodar comando na superficie${linhas.length ? ` — ACHADO na(s) linha(s) ${linhas.map(([l]) => l).join(', ')}` : ''}`);
+}
+
+// ============================================================================
+// T5 — os corpos, que as telas montam (30/09/2026, etapa 4b)
+// ============================================================================
+//
+// T1 olha `telas/` e T2 o chrome, e o resto do texto do sistema mora nos
+// `*-corpo.tsx` e em `serie.tsx` — a revisao da serie, o painel da emissao, o
+// funil do mes, o vinculo com o outro sistema. Eram quinze arquivos de texto
+// exibido fora da varredura.
+
+const CORPOS = readdirSync(SRC).filter((f) => f.endsWith('.tsx') && !['ui.tsx', 'app.tsx', 'menu-lateral.tsx'].includes(f)).sort();
+chk('T5', CORPOS.length >= 10, `ha ${CORPOS.length} arquivos .tsx fora de telas/ para varrer`);
+for (const arq of CORPOS) {
+  const src = semIcones(semDetalheTecnico(semComentario(ler(arq))));
+  const achados: string[] = [];
+  for (const [linha, cru] of visiveis(src)) {
+    const txt = semInterpolacao(cru);
+    for (const [regra, porque] of PROIBIDO) {
+      const m = regra.exec(txt);
+      if (m) { achados.push(`${arq}:${linha} "${m[0]}" (${porque})`); break; }
+    }
+  }
+  chk('T5', achados.length === 0,
+      `${arq}: nenhum jargao no texto exibido${achados.length ? ` — ACHADO: ${achados.join(' · ')}` : ''}`);
+}
+
+// ============================================================================
+// T6 — codigo interno em QUALQUER texto, e nao so nas propriedades conhecidas
+// ============================================================================
+//
+// T1 a T5 olham as propriedades de rotulo e o texto entre tags. Um codigo que
+// chega por outro caminho — uma frase montada numa funcao de regra, um ternario,
+// uma propriedade que a lista ainda nao conhece — passava. Foi assim que
+// «(Q-ESTORNO-01)» chegou a dica de um botao (`contas-regras.ts`) e «O caminho
+// e `npm run ciclo`» a tela Mes (vindo de um DADO, `d.caminho`).
+//
+// Aqui a varredura e o ARQUIVO INTEIRO, sem comentario e sem `<DetalheTecnico>`,
+// de todo `.ts`/`.tsx` de `web/src` — e ela so procura CODIGO (regra, questao,
+// comando, documento interno), que nao aparece em nome de variavel nem em chave.
+// Por isso nao ha falso positivo a tratar.
+//
+// DUAS EXCECOES, e as duas declaradas:
+//   `estilo.ts`/`tema.ts`  sao CSS dentro de template: os comentarios de CSS
+//                          citam questoes, e nenhum deles chega a tela;
+//   `destino-da-camada.ts` e o texto de ENGENHARIA de cada camada (`nota`,
+//                          `caminho`), escrito para o detalhe tecnico — e a T6b
+//                          prova que a tela Mes so o mostra la dentro.
+
+const CODIGO: Array<[RegExp, string]> = [
+  [/\bR\d{1,2}\b/, 'codigo de regra'],
+  [/\bQ-[A-Z]/, 'codigo de questao'],
+  [/npm run/, 'comando de terminal'],
+  [/\bPRD\b|§/, 'documento interno'],
+  [/\b(?:ADR|SPEC|AUD)-\d/, 'numero de documento interno'],
+  [/\b[A-Z]{3,}-[A-Z0-9]+(?:-[A-Z0-9]+)*-\d{2}\b/, 'codigo de rastreio interno'],
+];
+
+function todosOsArquivos(dir: string, base = ''): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? todosOsArquivos(`${dir}${e.name}/`, `${base}${e.name}/`)
+      : /\.(ts|tsx)$/.test(e.name) ? [`${base}${e.name}`] : []);
+}
+const FONTES = todosOsArquivos(SRC).sort();
+const EXCECOES_T6 = new Set(['estilo.ts', 'tema.ts', 'destino-da-camada.ts']);
+
+{
+  const achados: string[] = [];
+  for (const arq of FONTES.filter((f) => !EXCECOES_T6.has(f))) {
+    semDetalheTecnico(semComentario(ler(arq))).split('\n').forEach((l, i) => {
+      for (const [regra, porque] of CODIGO) {
+        const m = regra.exec(l);
+        if (m) { achados.push(`${arq}:${i + 1} "${m[0]}" (${porque})`); break; }
+      }
+    });
+  }
+  chk('T6', FONTES.length > 40 && achados.length === 0,
+      `nenhum codigo interno fora do detalhe tecnico, em ${FONTES.length} arquivos de web/src`
+      + `${achados.length ? ` — ACHADO: ${achados.join(' · ')}` : ''}`);
+}
+{
+  // T6b: a excecao se sustenta — a tela Mes usa `d.nota` e `d.caminho` SO dentro
+  // do `<DetalheTecnico>`. Fora dele, os dois nao aparecem.
+  const tela = semComentario(ler('telas/prontidao.tsx'));
+  const fora = semDetalheTecnico(tela);
+  chk('T6b', /d\??\.nota/.test(tela) && /d\.caminho/.test(tela) && !/\{d\??\.(nota|caminho)\}/.test(fora),
+      'a nota e o comando em lote de cada camada so aparecem atras do «ver detalhe tecnico»');
+}
+
+// ============================================================================
+// T7 — nenhuma pergunta do navegador, em lugar nenhum (30/09/2026, etapa 4b)
+// ============================================================================
+//
+// `window.confirm` e `window.prompt` tiram a pessoa da tela para responder sobre
+// ela, sem a lista, os valores e o que muda a vista — e o `prompt` e uma caixa
+// de uma linha para digitar um motivo. A etapa 4b trocou as seis que restavam
+// (Contas de luz, Unidades, Contratos, Usuarios) pela `PerguntaNaTela` de
+// `serie.tsx`. Esta verificacao vale para `web/src` inteiro: a proxima tela que
+// escrever `confirm(` falha aqui, e nao numa revisao.
+
+{
+  const achados: string[] = [];
+  for (const arq of FONTES) {
+    semComentario(ler(arq)).split('\n').forEach((l, i) => {
+      if (/\b(?:window\.)?(?:confirm|prompt|alert)\s*\(/.test(l)) achados.push(`${arq}:${i + 1}`);
+    });
+  }
+  chk('T7', achados.length === 0,
+      `nenhum window.confirm, window.prompt ou alert em web/src${achados.length ? ` — ACHADO: ${achados.join(', ')}` : ''}`);
+  chk('T7b', /export function PerguntaNaTela/.test(ler('serie.tsx')) && /key === 'Escape'/.test(ler('serie.tsx')),
+      'e ha o lugar suportado para perguntar: a `PerguntaNaTela`, que desiste com Esc');
+}
+
+// ============================================================================
+// T8 — plural por inteiro (30/09/2026, etapa 4b)
+// ============================================================================
+//
+// «3 conta(s) vencida(s)» e o sistema dizendo que nao sabe contar. Os textos vem
+// inteiros (`formato.ts:contagem`). A marca procurada e letra seguida de «(s)»
+// ou «(es)» e de espaco ou virgula — o que exclui `test(s) ?` e `normalizar(s).`.
+
+{
+  const achados: string[] = [];
+  for (const arq of FONTES.filter((f) => !EXCECOES_T6.has(f))) {
+    semComentario(ler(arq)).split('\n').forEach((l, i) => {
+      const m = /[a-zà-ú]\((?:s|es)\)(?:,| [a-zà-úA-Z])/.exec(l);
+      if (m) achados.push(`${arq}:${i + 1} "${m[0]}"`);
+    });
+  }
+  chk('T8', achados.length === 0,
+      `nenhum plural de parenteses («conta(s)») no texto${achados.length ? ` — ACHADO: ${achados.join(' · ')}` : ''}`);
 }
 
 console.log();

@@ -27,14 +27,24 @@
 // pareceria errado. E a FRASE do estado do mês sai da mesma função que escreve a
 // do alto da tela Mês — até ali a ajuda tinha a sua, e ela olhava só o cadastro.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { navegar } from './rota.tsx';
 import { passosDoEstado } from './ajuda.ts';
 import { CorpoDaAjuda } from './ajuda-corpo.tsx';
-import { useLeiturasDoMes } from './leitura-do-mes.ts';
+import { useLeiturasDoMes, procurarMesDoTrabalho, mesQueATelaMostra } from './leitura-do-mes.ts';
 import { mesNoFunil } from './roteiro-do-mes.ts';
+import { mesDaQuery } from './dinheiro.ts';
+import { mesPorExtenso } from './formato.ts';
 
-const mesAtual = () => new Date().toISOString().slice(0, 7);
+/*
+ * [30/09/2026, etapa 4b] O MÊS NARRADO É O DA TELA. Até aqui era o mês de hoje
+ * (`toISOString`, em UTC), enquanto a tela Mês abria no mês com trabalho — a
+ * ajuda dizia «nada falta» de setembro com agosto inteiro por emitir à vista.
+ * A ordem agora é a da tela: o mês que ela está mostrando (Mês e Cobranças o
+ * anunciam), senão o do endereço (`?mes=`), senão a MESMA procura que a tela
+ * Mês faz ao abrir (`procurarMesDoTrabalho`).
+ */
+const mesDaTela = (): string | null => mesQueATelaMostra() ?? mesDaQuery(location.search);
 
 export function PainelDeAjuda({ rota, topico, aoFechar }: {
   rota: string;
@@ -43,9 +53,18 @@ export function PainelDeAjuda({ rota, topico, aoFechar }: {
   aoFechar: () => void;
 }) {
   // O mês é lido UMA vez, na montagem: o painel abre e fecha em segundos.
-  const [mes] = useState(mesAtual);
+  const [mes, setMes] = useState<string | null>(mesDaTela);
   const leituras = useLeiturasDoMes(mes);
-  const { dado, carregando, erro } = leituras.prontidao;
+  const { dado, erro } = leituras.prontidao;
+  /* Sem mês ainda, a procura está andando: é carga, e não falha. */
+  const carregando = mes === null || leituras.prontidao.carregando;
+
+  useEffect(() => {
+    if (mes || leituras.semBoleto.carregando) return;
+    let vivo = true;
+    void procurarMesDoTrabalho(leituras.semBoleto.dado?.linhas ?? []).then((e) => { if (vivo) setMes(e.mes); });
+    return () => { vivo = false; };
+  }, [mes, leituras.semBoleto.carregando]);
 
   const passos = useMemo(() => (dado ? passosDoEstado(dado.camadas) : []), [dado]);
   const funil = leituras.leitura ? mesNoFunil(leituras.leitura) : null;
@@ -57,6 +76,7 @@ export function PainelDeAjuda({ rota, topico, aoFechar }: {
       topicoAberto={topico ?? null}
       passos={passos}
       mes={estado}
+      nomeDoMes={mes ? mesPorExtenso(mes) : null}
       carregando={carregando}
       /* `!carregando` NA FRENTE, e não só `erro || !dado`: durante a carga o
        * dado é nulo por definição, e sem esta guarda o painel nasceria

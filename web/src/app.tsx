@@ -28,7 +28,7 @@
 import { lazy, Suspense, useEffect, useState, type ReactElement } from 'react';
 import { useSessao } from './sessao.tsx';
 import {
-  Aviso, Icone, Menu, ItensDeTema, Escolha, Carregando, ESTILO,
+  Aviso, Icone, Menu, ItensDeTema, Escolha, Carregando, DetalheTecnico, ESTILO,
 } from './ui.tsx';
 import { useCaminho, navegar } from './rota.tsx';
 import { telaDoCaminho, funilDoCaminho, funisVisiveis, destinoVisivel } from './navegacao.ts';
@@ -188,11 +188,21 @@ export function App() {
       <><style>{ESTILO}</style>
         <div className="conteudo">
           <h1>Financeiro G3</h1>
-          <Aviso tipo="erro">{s.erro}</Aviso>
-          <p className="sub">
-            Se a mensagem fala de <code>SUPABASE_ANON_KEY</code>, a variável não está no ambiente do
-            servidor. O <code>.env.example</code> diz onde encontrá-la.
-          </p>
+          {/* [30/09/2026, etapa 4b] A FRASE É PARA QUEM ABRIU A TELA; a mensagem
+              crua e o nome da variável de ambiente são para quem cuida do
+              servidor, e ficam atrás do «ver detalhe técnico». */}
+          <Aviso tipo="erro">
+            <strong>O sistema não conseguiu se preparar para o login.</strong> Recarregue a página
+            em alguns minutos; se continuar assim, avise quem cuida do servidor e mostre o detalhe
+            técnico abaixo.
+            <DetalheTecnico>
+              <p style={{ margin: '0 0 6px' }}>O que voltou: <code>{s.erro}</code></p>
+              <p style={{ margin: 0 }}>
+                Se a mensagem fala de <code>SUPABASE_ANON_KEY</code>, a variável não está no ambiente
+                do servidor. O <code>.env.example</code> diz onde encontrá-la.
+              </p>
+            </DetalheTecnico>
+          </Aviso>
         </div>
       </>
     );

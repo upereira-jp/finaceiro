@@ -839,6 +839,12 @@ const PROIBIDO: Array<[RegExp, string]> = [
   [/\bUC\b/, 'sigla — a tela diz "unidade" ou "unidade consumidora"'],
   [/[a-z]+_[a-z]+/, 'nome de coluna em snake_case'],
   [/\(\)/, 'nome de funcao'],
+  // [30/09/2026, etapa 4b] os mesmos tres que entraram na suite das telas — a
+  // lista e uma so, nos dois lugares.
+  [/\bPRD\b|§/, 'referencia a documento interno (PRD §5.4)'],
+  [/\b(?:ADR|SPEC|AUD)-\d/, 'numero de documento interno'],
+  [/\b[A-Z]{3,}-[A-Z0-9]+(?:-[A-Z0-9]+)*-\d{2}\b/, 'codigo de rastreio interno (RATEIO-USO-01)'],
+  [/[a-zà-ú]\((?:s|es)\)(?:,| [a-zà-úA-Z])/, 'plural de parenteses («conta(s)»)'],
 ];
 
 /** So o que a tela EXIBE. Os campos de busca ficam fora — ver o cabecalho. */

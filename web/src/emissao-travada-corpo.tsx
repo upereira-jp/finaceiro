@@ -28,6 +28,7 @@
 
 import { Aviso, Icone } from './ui.tsx';
 import { emReais } from './dinheiro.ts';
+import { diaEmBr, mesEmBr, mesPorExtenso } from './formato.ts';
 import {
   fraseDaLinha, haQuantoTempo, resumoDaEmissao, avisoDeTruncagem,
   type EmissaoTravadaNaTela, type LinhaNaTela,
@@ -64,12 +65,9 @@ export type CorpoDaEmissao = {
 const recusaGravada = (l: LinhaNaTela): RecusaLida | null =>
   lerRecusa({ texto: l.boleto?.ultimo_erro, numeroUc: l.unidade, mes: String(l.competencia).slice(0, 7) });
 
-const mesCurto = (v: string): string => {
-  const m = /^(\d{4})-(\d{2})/.exec(String(v));
-  return m ? `${m[2]}/${m[1]}` : '';
-};
-
-const dataBr = (v: string): string => String(v).slice(0, 10).split('-').reverse().join('/');
+/* O MES E O DIA SAEM DE `formato.ts` desde 30/09/2026 (etapa 4b): as duas
+   copias locais que moravam aqui eram a quinta e a sexta do sistema. */
+const mesCurto = (v: string): string => (mesPorExtenso(v) ? mesEmBr(v) : '');
 
 /**
  * A LISTA, e ela desenha ATÉ quando está vazia.
@@ -155,7 +153,7 @@ function LinhaDaEmissao({ l, primeira, pedirBoleto, ocupado, recusa }: {
         <strong>{l.unidade}</strong>
         <span>{l.cliente}</span>
         {mesCurto(l.competencia) && <span className="fraco">mês {mesCurto(l.competencia)}</span>}
-        <span className="fraco">vence {dataBr(l.vencimento)}</span>
+        <span className="fraco">vence {diaEmBr(l.vencimento)}</span>
         <span className="fraco">{emReais(l.valor_total_centavos)}</span>
         {haQuantoTempo(l) && <span className="fraco">{haQuantoTempo(l)}</span>}
         {f.tentativas && <span className="fraco">{f.tentativas}</span>}

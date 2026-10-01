@@ -30,7 +30,7 @@ import {
 } from '../ui.tsx';
 import { Ligacao } from '../rota.tsx';
 import { emReais } from '../dinheiro.ts';
-import { emBr } from '../contas-regras.ts';
+import { diaEmBr, mesEmBr } from '../formato.ts';
 import {
   diasDeAtraso, faixaDeAtraso, fraseDoAtraso, FAIXAS, ROTULO_DA_FAIXA, TOM_DA_FAIXA,
   situacaoDaCobranca, SITUACOES, ROTULO_DA_SITUACAO, TOM_DA_SITUACAO,
@@ -115,7 +115,7 @@ export function TelaContasAReceber() {
             {r.em_aberto.titulos} {r.em_aberto.titulos === 1 ? 'título' : 'títulos'} em aberto,
             {' '}{r.vencido.titulos} {r.vencido.titulos === 1 ? 'vencido' : 'vencidos'},
             {' '}{r.vence_em_30_dias.titulos} {r.vence_em_30_dias.titulos === 1 ? 'vence' : 'vencem'} nos
-            próximos 30 dias. Contado em {emBr(r ? dados!.hoje : '')}.
+            próximos 30 dias. Contado em {diaEmBr(r ? dados!.hoje : '')}.
           </p>
         </>
       )}
@@ -212,7 +212,7 @@ export function TelaContasAReceber() {
           const sit = situacaoDaCobranca(t.boleto);
           return (
             <tr key={t.fatura_id}>
-              <td>{emBr(t.vencimento)}</td>
+              <td>{diaEmBr(t.vencimento)}</td>
               <td>
                 <Marca tom={TOM_DA_FAIXA[fx]} icone={dias > 0 ? 'vencidas' : undefined}>
                   {fraseDoAtraso(dias)}
@@ -220,7 +220,7 @@ export function TelaContasAReceber() {
               </td>
               <td><strong>{t.cliente}</strong></td>
               <td>{t.unidade}</td>
-              <td>{String(t.competencia).slice(0, 7)}</td>
+              <td>{mesEmBr(t.competencia)}</td>
               <td className="num">{emReais(t.valor_total_centavos)}</td>
               <td><Marca tom={TOM_DA_SITUACAO[sit]} icone="boleto">{ROTULO_DA_SITUACAO[sit]}</Marca></td>
               <td>

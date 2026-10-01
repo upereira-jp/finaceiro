@@ -191,8 +191,14 @@ chk('H4f', valorNaTela('ativo', 'true') === 'sim' && valorNaTela('ativo', 'false
     'booleano vira sim/nao');
 chk('H4g', valorNaTela('vencimento', '2026-09-10') === '10/09/2026',
     'data ISO vira data brasileira');
-chk('H4h', valorNaTela('criado_em', '2026-09-10T13:24:40.123Z') === '10/09/2026 13:24',
-    'e data com hora mostra a hora, sem os segundos que ninguem le');
+chk('H4h', valorNaTela('criado_em', '2026-09-10T13:24:40.123Z') === '10/09/2026 às 10:24'
+          && valorNaTela('criado_em', '2026-09-10T13:24:40.123+00:00') === '10/09/2026 às 10:24',
+    'e data com hora mostra a hora NO FUSO DE SAO PAULO (era a do texto UTC ate 30/09), sem os '
+    + 'segundos que ninguem le');
+chk('H4k', valorNaTela('percentual_rateio', '9.7122') === '9,7122'
+          && valorNaTela('tarifa_reais_por_kwh', '0.936986') === '0,936986'
+          && valorNaTela('numero_uc', '0215334585') === '0215334585',
+    'grandeza decimal sai com virgula e na escala do banco; o numero da unidade continua como esta');
 chk('H4i', valorNaTela('cliente_id', '804294b7-6546-418e-92a4-dd451ff15073') === '804294b7…',
     'identificador longo aparece encurtado: trinta e seis caracteres empurram a coluna '
     + 'vizinha para fora, e ninguem reconhece um pelo fim');
@@ -261,8 +267,20 @@ chk('H7b', tituloDoDia('2026-08-31', '2026-09-01') === 'ontem',
       'lista vazia nao inventa um dia');
 }
 
-chk('H7f', horaDaLinha('2026-09-10T13:24:40.000Z') === '13:24',
-    'a linha mostra a hora, ja que o dia virou titulo');
+/* [30/09/2026, etapa 4b] A HORA E A DE SAO PAULO, e nao a do texto UTC: ate
+   aqui a H7f afirmava '13:24' para um instante que em Goiania foi 10:24 — o
+   teste protegia o defeito. Mudou de proposito, e ganhou a virada do dia. */
+chk('H7f', horaDaLinha('2026-09-10T13:24:40.000Z') === '10:24',
+    'a linha mostra a hora NO FUSO DE SAO PAULO, ja que o dia virou titulo');
+{
+  const ds = porDia([
+    linha({ id: 'a', ocorrido_em: '2026-09-10T12:00:00.000Z' }),
+    linha({ id: 'b', ocorrido_em: '2026-09-10T01:30:00.000Z' }),
+  ], '2026-09-10');
+  chk('H7g', ds.length === 2 && ds[0]!.titulo === 'hoje' && ds[1]!.titulo === 'ontem'
+          && horaDaLinha('2026-09-10T01:30:00.000Z') === '22:30',
+      '01h30 UTC do dia 10 e 22h30 do dia 9 em Goiania: a linha cai em «ontem», e nao em «hoje»');
+}
 
 // ============================================================================
 // H8 — a lista cortada

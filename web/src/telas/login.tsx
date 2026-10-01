@@ -8,23 +8,32 @@
 
 import { useState } from 'react';
 import { useSessao } from '../sessao.tsx';
-import { Aviso, Logotipo, Icone } from '../ui.tsx';
+import { Aviso, Logotipo, Icone, DetalheTecnico } from '../ui.tsx';
+import { erroDeLogin, type ErroDeLogin } from '../login-regras.ts';
 
 export function Login() {
   const { cliente, motivoDeSaida } = useSessao();
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
-  const [erro, setErro] = useState<string | null>(null);
+  const [erro, setErro] = useState<ErroDeLogin | null>(null);
   const [ocupado, setOcupado] = useState(false);
 
   async function entrar(e: React.FormEvent) {
     e.preventDefault();
     if (!cliente) return;
     setOcupado(true); setErro(null);
-    const { error } = await cliente.auth.signInWithPassword({ email: email.trim(), password: senha });
     // A mensagem do Supabase e generica de proposito ("Invalid login credentials")
-    // e ela fica: dizer se o e-mail existe entregaria a lista de usuarios.
-    if (error) setErro(error.message);
+    // e a traducao tambem e: dizer se o e-mail existe entregaria a lista de
+    // usuarios. [30/09/2026, etapa 4b] Ela deixou de ir crua, em ingles, para a
+    // tela — `login-regras.ts` a traduz no que fazer, e o original fica atras do
+    // «ver detalhe tecnico». O `try` pega o `fetch` que cai antes de haver
+    // resposta (rede fora), que levanta em vez de devolver `error`.
+    try {
+      const { error } = await cliente.auth.signInWithPassword({ email: email.trim(), password: senha });
+      if (error) setErro(erroDeLogin(error));
+    } catch (e: any) {
+      setErro(erroDeLogin({ name: e?.name, message: e?.message ?? String(e) }));
+    }
     setOcupado(false);
   }
 
@@ -50,16 +59,25 @@ export function Login() {
         <form onSubmit={entrar} className="cartao">
           <div style={{ display: 'grid', gap: 12 }}>
             <div>
-              <label>E-mail</label>
-              <input type="email" value={email} autoComplete="username"
+              <label htmlFor="login-email">E-mail</label>
+              <input id="login-email" type="email" value={email} autoComplete="username"
+                     aria-invalid={erro?.caso === 'credencial' || undefined}
                      onChange={(e) => setEmail(e.target.value)} required />
             </div>
             <div>
-              <label>Senha</label>
-              <input type="password" value={senha} autoComplete="current-password"
+              <label htmlFor="login-senha">Senha</label>
+              <input id="login-senha" type="password" value={senha} autoComplete="current-password"
+                     aria-invalid={erro?.caso === 'credencial' || undefined}
                      onChange={(e) => setSenha(e.target.value)} required />
             </div>
-            {erro && <Aviso tipo="erro">{erro}</Aviso>}
+            {erro && (
+              <Aviso tipo="erro">
+                {erro.frase}
+                <DetalheTecnico>
+                  <p style={{ margin: 0 }}>O que o servidor de login respondeu: <code>{erro.original}</code></p>
+                </DetalheTecnico>
+              </Aviso>
+            )}
             <button className="primario" disabled={ocupado || !cliente}>
               <Icone nome={ocupado ? 'carregando' : 'usuario'} tamanho={16} peso="bold" />
               {ocupado ? 'Entrando…' : 'Entrar'}

@@ -21,6 +21,7 @@ import { useMemo, useState } from 'react';
 import { api, type UsuarioDoTenant } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import { useSessao } from '../sessao.tsx';
+import { PerguntaNaTela } from '../serie.tsx';
 import {
   Pagina, Aviso, Tabela, Campo, Busca, Ferramentas, Marca, Icone, Interruptor, Escolha,
   Carregando, contem,
@@ -157,10 +158,12 @@ function LinhaDeUsuario({ u, aoMudar }: { u: UsuarioDoTenant; aoMudar: () => voi
     void gravar({ papel: m.papel, setores: m.setores }, m.aviso);
   };
 
+  /* [30/09/2026, etapa 4b] DESLIGAR PERGUNTA NA LINHA, embaixo da pessoa — era
+     um `window.confirm`. Religar não pergunta: devolve tudo como estava. */
+  const [desligando, setDesligando] = useState(false);
   const trocarAtivo = (ligar: boolean) => {
-    if (!ligar && !confirm(`Desligar o acesso de ${u.nome}? A pessoa deixa de entrar no Financeiro a `
-      + 'partir da próxima tela que abrir. Dá para religar depois, com tudo como estava.')) return;
-    void gravar({ ativo: ligar });
+    if (!ligar) { setDesligando(true); return; }
+    void gravar({ ativo: true });
   };
 
   return (
@@ -201,6 +204,20 @@ function LinhaDeUsuario({ u, aoMudar }: { u: UsuarioDoTenant; aoMudar: () => voi
                        desabilitado={u.voce || servico || acao.ocupado} />
         </td>
       </tr>
+      {desligando && (
+        <tr className="usuario-retorno">
+          <td colSpan={3 + COLUNAS_DE_SETOR.length}>
+            <PerguntaNaTela tom="perigo" rotulo={`Confirmar: desligar o acesso de ${u.nome}`}
+                            manter="Manter ligado" confirmar="Desligar o acesso"
+                            ocupado={acao.ocupado}
+                            aoManter={() => setDesligando(false)}
+                            aoConfirmar={() => { setDesligando(false); void gravar({ ativo: false }); }}>
+              Desligar o acesso de <strong>{u.nome}</strong>? A pessoa deixa de entrar no Financeiro a
+              partir da próxima tela que abrir. Dá para religar depois, com tudo como estava.
+            </PerguntaNaTela>
+          </td>
+        </tr>
+      )}
       {(acao.erro || aviso) && (
         <tr className="usuario-retorno">
           <td colSpan={3 + COLUNAS_DE_SETOR.length}>

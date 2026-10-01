@@ -47,7 +47,7 @@ import {
   escalaDaPrevia, regraDaPagina, PX_POR_MM,
   proximoNivelDoAperto, classesDoAperto, larguraDoCampoDaFolha,
 } from '../layout-regras.ts';
-import { emReais } from '../dinheiro.ts';
+import { emReais, percentualEmBr } from '../dinheiro.ts';
 import { useLargura } from '../medir-largura.ts';
 import {
   ROTULO_DA_ABA, ABAS, abaDoFragmento, fragmentoDaAba, type AbaDaFatura,
@@ -67,6 +67,8 @@ import {
   type EstadoDaGeracao, type FiltroDasRegistradas,
 } from '../registradas-regras.ts';
 import { TabelaDaFila, TabelaDasRegistradas, GavetaDaConta } from '../fatura-lote-corpo.tsx';
+import { PerguntaNaTela } from '../serie.tsx';
+import { mapaDoCadastro, numeroDaUcNaTela } from '../formato.ts';
 
 /** `setState` sem depender do namespace `React` — o transform novo nao o poe em escopo. */
 type Ajustar<T> = (f: (anterior: T) => T) => void;
@@ -346,6 +348,9 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
   /** As UCs do cadastro, so para AVISAR que a conta e de uma unidade que nao
    *  existe aqui. Nao bloqueia — o servidor aceita `unidade_consumidora_id` nulo. */
   const [ucsDoCadastro, setUcsDoCadastro] = useState<ReadonlySet<string>>(new Set());
+  /** [30/09/2026, etapa 4b] A MESMA LISTA, agora tambem para MOSTRAR o numero
+   *  como o cadastro o guarda (`formato.ts:numeroDaUcNaTela`). */
+  const [cadastroDeUcs, setCadastroDeUcs] = useState<ReadonlyMap<string, string>>(new Map());
 
   /* Os `File` NAO entram no estado do React: eles nao sao serializaveis, nao vao
    * para o rascunho e manter um PDF de 3 MB por linha em `useState` seguraria a
@@ -359,12 +364,16 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
   useEffect(() => {
     let vivo = true;
     api.get<UnidadeConsumidora[]>('/unidades-consumidoras')
-      .then((l) => { if (vivo) setUcsDoCadastro(new Set(l.map((u) => normalizarUc(u.numero_uc)))); })
+      .then((l) => {
+        if (!vivo) return;
+        setUcsDoCadastro(new Set(l.map((u) => normalizarUc(u.numero_uc))));
+        setCadastroDeUcs(mapaDoCadastro(l.map((u) => u.numero_uc)));
+      })
       /* A LISTA E CONVENIENCIA, e falhar em busca-la nao pode travar o lote: sem
        * ela `avisoDoItem` simplesmente nao acusa UC desconhecida (verificacao
        * `L3i`), que e o certo — acusar sem saber seria acusar o proprio
        * desconhecimento. */
-      .catch(() => { if (vivo) setUcsDoCadastro(new Set()); });
+      .catch(() => { if (vivo) { setUcsDoCadastro(new Set()); setCadastroDeUcs(new Map()); } });
     return () => { vivo = false; };
   }, [tenantId]);
 
@@ -822,7 +831,7 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
             adicionarAoLote={adicionarAoLote}
             fila={
               <TabelaDaFila
-                itens={lote} ucs={ucsDoCadastro} registrando={registrandoLote}
+                itens={lote} ucs={ucsDoCadastro} cadastro={cadastroDeUcs} registrando={registrandoLote}
                 principal={resumo.prontos > 0} abertaId={gaveta ? abertoId : null}
                 registrar={(ids) => void registrarDoLote(ids)}
                 conferir={abrirConta}
@@ -832,6 +841,7 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
             }
             registradas={
               <ContasRegistradas
+                cadastro={cadastroDeUcs}
                 versao={registrosVersao}
                 /* O LARANJA PASSA PARA «Gerar N cobranças» quando a fila nao tem
                    nada a registrar — o passo seguinte do mes. */
@@ -988,18 +998,12 @@ function Abas({ atual, ao, acao }: {
           `window.confirm`: ela fica na barra onde o botão estava, diz o que sai
           (a conta em edição) e o que fica (as registradas). */}
       {acao && perguntando && (
-        <div className="fu-pergunta" role="group" aria-label="Confirmar a nova fatura"
-             onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); setPerguntando(false); } }}>
-          <span className="fu-pergunta-texto">
-            Apagar a conta em edição ({acao.confirmar}) e começar outra? As contas registradas ficam.
-          </span>
-          <span className="fu-acoes">
-            <button type="button" autoFocus onClick={() => setPerguntando(false)}>Manter</button>
-            <button type="button" className="fu-perigo" onClick={() => { setPerguntando(false); acao.ao(); }}>
-              Começar outra
-            </button>
-          </span>
-        </div>
+        <PerguntaNaTela forma="linha" tom="perigo" rotulo="Confirmar a nova fatura"
+                        manter="Manter" confirmar="Começar outra"
+                        aoManter={() => setPerguntando(false)}
+                        aoConfirmar={() => { setPerguntando(false); acao.ao(); }}>
+          Apagar a conta em edição ({acao.confirmar}) e começar outra? As contas registradas ficam.
+        </PerguntaNaTela>
       )}
     </div>
   );
@@ -1279,7 +1283,7 @@ function ConferenciaDaConta(p: PropsDaConferencia) {
             inerte por 25 dias. */}
         <p className="fu-nota">
           {p.modelo
-            ? `Padrão do cadastro «${p.modelo.nome}»: ${p.modelo.percentual_desconto_padrao}% de desconto. `
+            ? `Padrão do cadastro «${p.modelo.nome}»: ${percentualEmBr(p.modelo.percentual_desconto_padrao)} de desconto. `
             : 'Ainda sem cadastro de fatura — os valores acima são os de partida do sistema. '}
           Alterar aqui vale só para esta conta. O fator de CO₂ é o médio da margem de operação do
           SIN (MCTI/SIRENE).
@@ -1525,7 +1529,8 @@ function SerieDaUnidade({ uc, mes, versao, verNaLista }: {
  * quem sabe se falta contrato, geracao ou vencimento e a triagem, e duplicar a
  * decisao aqui daria duas respostas para a mesma pergunta.
  */
-function ContasRegistradas({ versao, principal, unidade, aoMudarUnidade, segundaVia, emEdicao, aoMudar }: {
+function ContasRegistradas({ cadastro, versao, principal, unidade, aoMudarUnidade, segundaVia, emEdicao, aoMudar }: {
+  cadastro: ReadonlyMap<string, string>;
   versao: number;
   principal: boolean;
   unidade: string | null;
@@ -1661,7 +1666,7 @@ function ContasRegistradas({ versao, principal, unidade, aoMudarUnidade, segunda
     if (id === null && antes) {
       const r = todas.find((x) => x.id === antes);
       if (r) {
-        const rotulo = `Excluir o registro de ${mesCurto(mesDoRegistro(r))} da unidade ${r.numero_uc}`;
+        const rotulo = `Excluir o registro de ${mesCurto(mesDoRegistro(r))} da unidade ${numeroDaUcNaTela(r.numero_uc, cadastro)}`;
         requestAnimationFrame(() => document.querySelector<HTMLElement>(`button[aria-label="${rotulo}"]`)?.focus());
       }
     }
@@ -1669,6 +1674,7 @@ function ContasRegistradas({ versao, principal, unidade, aoMudarUnidade, segunda
 
   return (
     <TabelaDasRegistradas
+      cadastro={cadastro}
       lista={lista} visiveis={visiveis} erro={erro} filtro={filtro} meses={meses}
       parcial={!alvo && listaParcial(todas)}
       aoFiltrar={(f) => {
@@ -1704,7 +1710,7 @@ function ContasRegistradas({ versao, principal, unidade, aoMudarUnidade, segunda
         if (id === null && antes) {
           const r = todas.find((x) => x.id === antes);
           if (r) {
-            const rotulo = `2ª via de ${mesCurto(mesDoRegistro(r))} da unidade ${r.numero_uc}`;
+            const rotulo = `2ª via de ${mesCurto(mesDoRegistro(r))} da unidade ${numeroDaUcNaTela(r.numero_uc, cadastro)}`;
             requestAnimationFrame(() => document.querySelector<HTMLElement>(`button[aria-label="${rotulo}"]`)?.focus());
           }
         }

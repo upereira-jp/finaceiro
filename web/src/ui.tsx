@@ -138,12 +138,24 @@ function abrirSeletorDeData(el: HTMLInputElement | null): void {
 export function CampoData(p: {
   valor: string; ao: (v: string) => void; rotuloAcessivel?: string;
   mes?: boolean; className?: string; style?: CSSProperties;
+  /**
+   * O QUE O CAMPO VAZIO QUER DIZER, escrito no lugar da máscara do navegador.
+   * [30/09/2026, etapa 4b] Em Relatórios o mês vazio significa «todos os
+   * meses», e a tela mostrava «--------- de ----» — a máscara do Chromium para
+   * `type="month"`, que não diz nada a ninguém. Com `vazio`, a frase aparece
+   * enquanto o campo está vazio e sem foco; ao focar, a máscara volta, porque é
+   * nela que se digita.
+   */
+  vazio?: string;
 }) {
   const ref = useRef<HTMLInputElement>(null);
+  const semValor = Boolean(p.vazio) && !p.valor;
   return (
-    <div className={`campo-data${p.className ? ` ${p.className}` : ''}`} style={p.style}>
-      <input ref={ref} type={p.mes ? 'month' : 'date'} value={p.valor} aria-label={p.rotuloAcessivel}
+    <div className={`campo-data${semValor ? ' sem-valor' : ''}${p.className ? ` ${p.className}` : ''}`} style={p.style}>
+      <input ref={ref} type={p.mes ? 'month' : 'date'} value={p.valor}
+             aria-label={p.rotuloAcessivel && semValor ? `${p.rotuloAcessivel} — ${p.vazio}` : p.rotuloAcessivel}
              onChange={(e) => p.ao(e.target.value)} />
+      {semValor && <span className="campo-data-vazio" aria-hidden="true">{p.vazio}</span>}
       <button type="button" className="abrir-calendario" tabIndex={-1}
               aria-label="Abrir calendário" onClick={() => abrirSeletorDeData(ref.current)}>
         <Icone nome="calendario" tamanho={15} />

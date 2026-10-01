@@ -30,7 +30,9 @@ import {
 } from '../ui.tsx';
 import { Ligacao } from '../rota.tsx';
 import type { TomDoSelo } from '../iconografia.ts';
-import { emReais, paraCentavos, competenciaISO } from '../dinheiro.ts';
+import { emReais, paraCentavos, competenciaISO, centavosParaCampo } from '../dinheiro.ts';
+import { diaEmBr, mesEmBr, hojeEmSP, contagem } from '../formato.ts';
+import { PerguntaNaTela } from '../serie.tsx';
 import {
   saldoCentavos, nomeDoBeneficiario, estaAtrasada, recibo, emBr,
   podePagar, podeCancelar, podeCriar,
@@ -42,7 +44,6 @@ import {
   ROTULO_DO_MOTIVO, ROTULO_CURTO_DO_MOTIVO, EXPLICACAO_DO_MOTIVO, COMO_DESTRAVAR, ORDEM_DOS_MOTIVOS,
   type RepassePendente, type MotivoDaEspera,
 } from '../repasse-pendente.ts';
-import { mesPorExtenso } from '../vocabulario.ts';
 import { paraCsv, reaisParaPlanilha, nomeDoArquivo, type Coluna } from '../csv.ts';
 import { baixarCsv } from '../baixar.ts';
 import { FaixaDoPasso } from '../roteiro-corpo.tsx';
@@ -160,7 +161,8 @@ export function TelaContasAPagar() {
         */}
       {(semProvisao.dado?.length ?? 0) > 0 && (
         <Aviso tipo="erro">
-          {semProvisao.dado!.length} valor(es) já apurado(s) que não viraram conta a pagar. É
+          {contagem(semProvisao.dado!.length, 'valor já apurado não virou', 'valores já apurados não viraram')} conta
+          a pagar. É
           dinheiro que alguém tem a receber e que ninguém vai pagar sem ajuste — normalmente de
           pagamentos registrados antes de 03/08/2026. Somam:{' '}
           <strong>{emReais(semProvisao.dado!.reduce((a, i) => a + i.valor_centavos, 0))}</strong>.
@@ -169,7 +171,7 @@ export function TelaContasAPagar() {
 
       {atrasadas.length > 0 && (
         <Aviso tipo="alerta">
-          {atrasadas.length} conta(s) vencida(s), somando <strong>{emReais(totalAtrasado)}</strong>.
+          {contagem(atrasadas.length, 'conta vencida', 'contas vencidas')}, somando <strong>{emReais(totalAtrasado)}</strong>.
         </Aviso>
       )}
 
@@ -276,6 +278,10 @@ function LinhaDeConta(p: {
   acao: ReturnType<typeof useAcao>; aoMudar: () => void;
 }) {
   const [abrindo, setAbrindo] = useState(false);
+  /* [30/09/2026, etapa 4b] CANCELAR PERGUNTA ANTES — até aqui a lixeira cancelava
+     no primeiro clique, sem nome e sem volta pela tela. A pergunta mora na
+     linha, com o foco em «Manter a conta». */
+  const [cancelando, setCancelando] = useState(false);
   const c = p.conta;
   const atrasada = estaAtrasada(c, p.hoje);
   const cancelar = podeCancelar(c);
@@ -284,6 +290,7 @@ function LinhaDeConta(p: {
   const aceitaPagamento = c.status !== 'paga' && c.status !== 'cancelada';
 
   async function confirmarCancelamento() {
+    setCancelando(false);
     const ok = await p.acao.executar(() => api.post(`/contas-a-pagar/${c.id}/cancelar`, {}));
     if (ok) { p.acao.anunciar('Conta cancelada.'); p.aoMudar(); }
   }
@@ -292,7 +299,7 @@ function LinhaDeConta(p: {
     <>
       <tr>
         <td>
-          {String(c.vencimento).slice(0, 10).split('-').reverse().join('/')}
+          {diaEmBr(c.vencimento)}
           {atrasada && <> <Marca tom="erro" icone="vencidas">vencida</Marca></>}
         </td>
         <td>
@@ -303,8 +310,10 @@ function LinhaDeConta(p: {
           {c.descricao}
           {/* De onde a conta veio importa: a que nasceu do split tem valor
               IMUTÁVEL (PRD §4.4), e quem olha precisa saber por que não há
-              como editá-la. */}
-          <div className="nota">{c.origem_split_item_id ? 'nascida do split' : 'lançada à mão'}</div>
+              como editá-la. [30/09/2026, etapa 4b] «split» saiu da tela: a
+              GLOSSARIO.md proíbe a palavra sozinha (colide com o split payment
+              tributário), e na tela o nome é «divisão do pagamento». */}
+          <div className="nota">{c.origem_split_item_id ? 'nascida da divisão de um pagamento' : 'lançada à mão'}</div>
         </td>
         <td className="num">{emReais(c.valor_centavos)}</td>
         <td className="num">
@@ -332,13 +341,27 @@ function LinhaDeConta(p: {
               <Icone nome={aceitaPagamento ? 'confirmar' : 'buscar'} tamanho={15} />{' '}
               {aceitaPagamento ? 'Pagar' : 'Ver pagamentos'}
             </button>
-            <button disabled={!cancelar.pode} title={cancelar.pode ? undefined : cancelar.porque}
-                    onClick={confirmarCancelamento}>
+            <button disabled={!cancelar.pode || cancelando} title={cancelar.pode ? 'Cancelar a conta' : cancelar.porque}
+                    aria-label={cancelar.pode ? `Cancelar a conta de ${nomeDoBeneficiario(c)}` : cancelar.porque}
+                    aria-expanded={cancelando}
+                    onClick={() => setCancelando(true)}>
               <Icone nome="remover" tamanho={15} />
             </button>
           </div>
         </td>
       </tr>
+      {cancelando && (
+        <tr className="linha-pergunta">
+          <td colSpan={7}>
+            <PerguntaNaTela tom="perigo" forma="linha" rotulo="Confirmar o cancelamento da conta"
+                            manter="Manter a conta" confirmar="Cancelar a conta" ocupado={p.acao.ocupado}
+                            aoManter={() => setCancelando(false)} aoConfirmar={() => void confirmarCancelamento()}>
+              Cancelar a conta de <strong>{nomeDoBeneficiario(c)}</strong> ({emReais(c.valor_centavos)})? Ela
+              fica registrada como cancelada e sai do que a empresa deve.
+            </PerguntaNaTela>
+          </td>
+        </tr>
+      )}
       {abrindo && (
         <tr>
           <td colSpan={7}>
@@ -404,8 +427,8 @@ function FormularioDePagamento(p: {
   const saldo = saldoCentavos(p.conta);
   /* O campo já vem com o SALDO, não com o valor da conta: numa conta parcial,
      preencher o valor cheio produziria uma tentativa que o servidor recusa. */
-  const [valor, setValor] = useState(String(saldo / 100).replace('.', ','));
-  const [data, setData] = useState(new Date().toISOString().slice(0, 10));
+  const [valor, setValor] = useState(() => centavosParaCampo(saldo));
+  const [data, setData] = useState(hojeEmSP);
   const [forma, setForma] = useState<FormaDePagamento>('pix');
   const [ref, setRef] = useState('');
   const [obs, setObs] = useState('');
@@ -576,8 +599,8 @@ function DinheiroParado(p: {
           </tr>,
           ...g.linhas.map((l) => (
             <tr key={l.liquidacao_id}>
-              <td>{emBr(String(l.data_liquidacao).slice(0, 10))}</td>
-              <td>{mesPorExtenso(String(l.competencia)) || String(l.competencia).slice(0, 7)}</td>
+              <td>{diaEmBr(l.data_liquidacao)}</td>
+              <td>{mesEmBr(l.competencia)}</td>
               <td>{l.codigo_geradora}</td>
               <td className="num"><strong>{emReais(l.valor_liquidado_centavos)}</strong></td>
               <td><Marca tom={TOM_DA_ESPERA[g.motivo]}>{ROTULO_CURTO_DO_MOTIVO[g.motivo]}</Marca></td>

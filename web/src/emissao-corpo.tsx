@@ -29,10 +29,12 @@
 //   «UC» NÃO APARECE ESCRITO. A suíte de vocabulário recusa a sigla; a tela diz
 //   «unidade».
 
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { Aviso, DetalheTecnico, Icone, Marca, rotulo } from './ui.tsx';
+import { useState, type ReactNode } from 'react';
+import { DetalheTecnico, Icone, Marca, rotulo } from './ui.tsx';
+import { ItemDaSerie, PerguntaNaTela, RevisaoEmSerie } from './serie.tsx';
 import { Ligacao } from './rota.tsx';
 import { emReais } from './dinheiro.ts';
+import { diaEmBr } from './formato.ts';
 import { tomDoStatusDaFatura } from './cobranca-regras.ts';
 import { ICONE_DO_STATUS_DA_FATURA } from './iconografia.ts';
 import {
@@ -40,9 +42,6 @@ import {
   type EstadoDaVez, type RecusaLida, type SaidaDaRecusa, type StatusDaCobranca,
 } from './emissao-regras.ts';
 
-/** `2026-10-05` -> `05/10/2026`, sem `new Date` (fuso negativo volta um dia). */
-export const dataEmBr = (v: string | null | undefined): string =>
-  (v ? String(v).slice(0, 10).split('-').reverse().join('/') : '—');
 
 /* ============================================================ a situação */
 
@@ -200,11 +199,8 @@ export function RevisaoDaSerie(p: {
   proxima?: { rotulo: string; ao: () => void } | null;
 }) {
   const [tiradas, setTiradas] = useState<ReadonlySet<string>>(new Set());
-  const titulo = useRef<HTMLHeadingElement>(null);
-  /* O FOCO VAI AO TÍTULO quando a revisão abre: o leitor de tela anuncia a
-     pergunta, e o próximo Tab entra na lista. Sem isso, quem usa teclado ficava
-     no botão que acabou de sumir. */
-  useEffect(() => { titulo.current?.focus(); }, []);
+  /* O FOCO NO TÍTULO AO ABRIR, a nota viva e a lista que rola são da casca
+     comum (`RevisaoEmSerie`, em `serie.tsx`) desde 30/09/2026, etapa 4b. */
 
   const escolhidas = p.emRodada ? p.linhas : p.linhas.filter((l) => !tiradas.has(l.id));
   const n = escolhidas.length;
@@ -240,144 +236,84 @@ export function RevisaoDaSerie(p: {
             + 'e o que fazer estão na linha. Os outros foram registrados.';
 
   return (
-    <div className="em-revisao" role="region" aria-labelledby="em-revisao-titulo">
-      <h3 id="em-revisao-titulo" ref={titulo} tabIndex={-1}>{textoDoTitulo}</h3>
-      <p className="em-revisao-nota" role="status">{nota}</p>
-      {!p.emRodada && p.alerta}
-
-      <ol className="em-revisao-lista">
-        {p.linhas.map((l) => {
-          const e = p.estados[l.id];
-          const tirada = !p.emRodada && tiradas.has(l.id);
-          return (
-            <li key={l.id} className={tirada ? 'em-rev-tirada' : e ? `em-rev-${e.estado}` : undefined}>
-              <span className="r-sel">
-                {!p.emRodada && (
-                  <input type="checkbox" checked={!tirada}
-                         aria-label={`Incluir a unidade ${l.unidade}`}
-                         onChange={(ev) => setTiradas((s) => {
-                           const x = new Set(s);
-                           if (ev.target.checked) x.delete(l.id); else x.add(l.id);
-                           return x;
-                         })} />
-                )}
-              </span>
-              <span className="r-uc">{l.unidade}</span>
-              <span className="r-cli" title={l.cliente ?? undefined}>{l.cliente || '—'}</span>
-              <span className="r-ven">vence {dataEmBr(l.vencimento)}</span>
-              <span className="r-val num">{emReais(l.valor_centavos)}</span>
-              <span className="r-est"><SituacaoDaVez tipo={p.tipo} e={e} /></span>
-              {e?.estado === 'recusada' && (
-                <span className="r-motivo">
-                  <RecusaNaTela recusa={e.recusa} bruto={e.motivo} unidade={l.unidade} />
-                </span>
-              )}
-            </li>
-          );
-        })}
-      </ol>
-
-      {!p.emRodada && p.deFora && p.deFora.length > 0 && (
-        <div className="em-defora">
-          <p className="em-defora-titulo">
-            {p.deFora.length === 1 ? 'Fica de fora, porque o banco recusaria:' : `Ficam de fora ${p.deFora.length}, porque o banco recusaria:`}
-          </p>
-          <ul>
-            {p.deFora.map((d) => (
-              <li key={d.id}>
-                <span className="r-uc">{d.unidade}</span>
-                <span className="r-cli">{d.cliente || '—'}</span>
-                <span className="r-frase">{d.recusa.frase}</span>
-                {d.recusa.saida && (
-                  <BotaoDaSaida saida={d.recusa.saida}
-                                rotuloAcessivel={`${d.recusa.saida.rotulo} da unidade ${d.unidade}`} />
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <div className="em-revisao-pe">
-        <span className="em-revisao-soma">
-          Soma: <strong>{emReais(soma)}</strong> em {cobrancas(n)}
-        </span>
-        <span className="em-acoes">
-          {!p.emRodada && (
-            <>
-              <button type="button" className="discreto" onClick={p.aoFechar}>Cancelar</button>
-              <button type="button" className="primario" disabled={n === 0}
-                      onClick={() => p.aoConfirmar(escolhidas.map((l) => l.id))}>
-                {p.tipo === 'emitir'
-                  ? (n === 1 ? 'Sim, emitir a cobrança' : `Sim, emitir as ${n}`)
-                  : (n === 1 ? 'Sim, pedir o boleto' : `Sim, pedir os ${n}`)}
-              </button>
-            </>
-          )}
-          {acabou && (
-            <>
-              <button type="button" className={p.proxima ? undefined : 'primario'} onClick={p.aoFechar}>Fechar</button>
-              {p.proxima && (
-                <button type="button" className="primario" onClick={p.proxima.ao}>{p.proxima.rotulo}</button>
-              )}
-            </>
-          )}
-        </span>
-      </div>
-    </div>
+    <RevisaoEmSerie id="em-revisao" titulo={textoDoTitulo} nota={nota} comSelecao
+                    alerta={!p.emRodada ? p.alerta : undefined}
+                    depois={!p.emRodada && p.deFora && p.deFora.length > 0 && (
+                      <div className="em-defora">
+                        <p className="em-defora-titulo">
+                          {p.deFora.length === 1 ? 'Fica de fora, porque o banco recusaria:' : `Ficam de fora ${p.deFora.length}, porque o banco recusaria:`}
+                        </p>
+                        <ul>
+                          {p.deFora.map((d) => (
+                            <li key={d.id}>
+                              <span className="r-uc">{d.unidade}</span>
+                              <span className="r-cli">{d.cliente || '—'}</span>
+                              <span className="r-frase">{d.recusa.frase}</span>
+                              {d.recusa.saida && (
+                                <BotaoDaSaida saida={d.recusa.saida}
+                                              rotuloAcessivel={`${d.recusa.saida.rotulo} da unidade ${d.unidade}`} />
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    soma={<>Soma: <strong>{emReais(soma)}</strong> em {cobrancas(n)}</>}
+                    atos={<>
+                      {!p.emRodada && (
+                        <>
+                          <button type="button" className="discreto" onClick={p.aoFechar}>Cancelar</button>
+                          <button type="button" className="primario" disabled={n === 0}
+                                  onClick={() => p.aoConfirmar(escolhidas.map((l) => l.id))}>
+                            {p.tipo === 'emitir'
+                              ? (n === 1 ? 'Sim, emitir a cobrança' : `Sim, emitir as ${n}`)
+                              : (n === 1 ? 'Sim, pedir o boleto' : `Sim, pedir os ${n}`)}
+                          </button>
+                        </>
+                      )}
+                      {acabou && (
+                        <>
+                          <button type="button" className={p.proxima ? undefined : 'primario'} onClick={p.aoFechar}>Fechar</button>
+                          {p.proxima && (
+                            <button type="button" className="primario" onClick={p.proxima.ao}>{p.proxima.rotulo}</button>
+                          )}
+                        </>
+                      )}
+                    </>}>
+      {p.linhas.map((l) => {
+        const e = p.estados[l.id];
+        const tirada = !p.emRodada && tiradas.has(l.id);
+        return (
+          <ItemDaSerie key={l.id} estado={tirada ? 'tirada' : e?.estado}
+                       selecao={p.emRodada ? null : (
+                         <input type="checkbox" checked={!tirada}
+                                aria-label={`Incluir a unidade ${l.unidade}`}
+                                onChange={(ev) => setTiradas((s) => {
+                                  const x = new Set(s);
+                                  if (ev.target.checked) x.delete(l.id); else x.add(l.id);
+                                  return x;
+                                })} />
+                       )}
+                       unidade={l.unidade} cliente={l.cliente}
+                       vencimento={`vence ${diaEmBr(l.vencimento)}`}
+                       valor={emReais(l.valor_centavos)}
+                       situacao={<SituacaoDaVez tipo={p.tipo} e={e} />}
+                       motivo={e?.estado === 'recusada' && (
+                         <RecusaNaTela recusa={e.recusa} bruto={e.motivo} unidade={l.unidade} />
+                       )} />
+        );
+      })}
+    </RevisaoEmSerie>
   );
 }
 
-/* ================================== a confirmação na própria linha */
-
-/**
- * A PERGUNTA NA LINHA, no lugar do `window.confirm` e do `window.prompt`.
+/* ================================== a confirmação na própria linha
  *
- * O FOCO NASCE NO GESTO QUE NÃO MUDA NADA — «Manter» — ou no campo do motivo
- * quando há um: um Enter distraído não desfaz nada. `Escape` é o mesmo que
- * «Manter». O ato que desfaz é contornado no vermelho e fica travado até o
- * motivo existir, porque o servidor recusa sem ele (422) e a pergunta existe
- * para não descobrir isso no erro.
+ * `ConfirmacaoNaLinha` MOROU AQUI até 30/09/2026 (etapa 4b), e virou a
+ * `PerguntaNaTela` de `serie.tsx` — a mesma pergunta que Contas de luz tinha
+ * escrito à parte, e que as telas que ainda usavam `window.confirm` passaram a
+ * usar. O motivo do cancelamento é o `campo` dela.
  */
-export function ConfirmacaoNaLinha(p: {
-  rotulo: string;
-  children: ReactNode;
-  motivo?: { rotulo: string; dica?: string };
-  manter: string;
-  confirmar: string;
-  perigo?: boolean;
-  ocupado?: boolean;
-  erro?: string | null;
-  aoManter: () => void;
-  aoConfirmar: (motivo: string) => void;
-}) {
-  const [motivo, setMotivo] = useState('');
-  const id = useId();
-  const falta = Boolean(p.motivo) && motivo.trim() === '';
-  return (
-    <div className={`em-confirma${p.perigo ? ' perigo' : ''}`} role="group" aria-label={p.rotulo}
-         onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); p.aoManter(); } }}>
-      <div className="em-confirma-texto">{p.children}</div>
-      {p.motivo && (
-        <div className="em-confirma-motivo">
-          <label htmlFor={id}>{p.motivo.rotulo}</label>
-          <textarea id={id} rows={2} value={motivo} autoFocus placeholder={p.motivo.dica}
-                    onChange={(e) => setMotivo(e.target.value)} />
-          <span className="em-confirma-dica">Fica registrado com o seu nome e a data.</span>
-        </div>
-      )}
-      {p.erro && <Aviso tipo="erro">{p.erro}</Aviso>}
-      <div className="em-acoes">
-        <button type="button" autoFocus={!p.motivo} onClick={p.aoManter} disabled={p.ocupado}>{p.manter}</button>
-        <button type="button" className={p.perigo ? 'em-perigo' : 'primario'}
-                disabled={p.ocupado || falta} onClick={() => p.aoConfirmar(motivo.trim())}>
-          {p.ocupado && <Icone nome="carregando" tamanho={15} />}
-          {p.confirmar}
-        </button>
-      </div>
-    </div>
-  );
-}
 
 /* ========================================== o resumo do pagamento */
 
@@ -405,35 +341,27 @@ export function ResumoDaBaixa(p: {
   aoConfirmar: () => void;
 }) {
   return (
-    <div className="em-confirma em-resumo" role="group" aria-label="Confirmar o pagamento"
-         onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); p.aoVoltar(); } }}>
-      <div className="em-confirma-texto">
-        <p className="em-resumo-pergunta">
-          Registrar o pagamento de <strong>{emReais(p.total_centavos)}</strong> da unidade{' '}
-          <strong>{p.unidade}</strong>, recebido em <strong>{dataEmBr(p.data)}</strong>?
-        </p>
-        <dl className="em-resumo-contas">
-          <div><dt>Energia</dt><dd className="num">{emReais(p.consumo_centavos)}</dd></div>
-          <div><dt>Tarifa da distribuidora</dt><dd className="num">{emReais(p.tarifas_centavos)}</dd></div>
-          <div><dt>Juros</dt><dd className="num">{emReais(p.juros_centavos)}</dd></div>
-          <div><dt>Multa</dt><dd className="num">{emReais(p.multa_centavos)}</dd></div>
-          <div className="em-resumo-total"><dt>Total recebido</dt><dd className="num">{emReais(p.total_centavos)}</dd></div>
-          {p.observacao.trim() && <div><dt>Observação</dt><dd>{p.observacao.trim()}</dd></div>}
-        </dl>
-        <p className="em-resumo-efeito">
-          Ao registrar, o dinheiro é dividido na mesma hora: a comissão de quem trouxe o cliente e a
-          parte do dono da usina. Se faltar o cadastro do dono, a cobrança fica paga e a divisão fica
-          pendente — a tela avisa. <strong>Não há como desfazer isto pelo sistema.</strong>
-        </p>
-      </div>
-      {p.erro && <Aviso tipo="erro">{p.erro}</Aviso>}
-      <div className="em-acoes">
-        <button type="button" autoFocus onClick={p.aoVoltar} disabled={p.ocupado}>Voltar</button>
-        <button type="button" className="primario" disabled={p.ocupado} onClick={p.aoConfirmar}>
-          {p.ocupado && <Icone nome="carregando" tamanho={15} />}
-          Sim, registrar o pagamento
-        </button>
-      </div>
-    </div>
+    <PerguntaNaTela rotulo="Confirmar o pagamento" tom="decisao" className="em-resumo"
+                    manter="Voltar" confirmar="Sim, registrar o pagamento"
+                    ocupado={p.ocupado} erro={p.erro}
+                    aoManter={p.aoVoltar} aoConfirmar={() => p.aoConfirmar()}>
+      <p className="em-resumo-pergunta">
+        Registrar o pagamento de <strong>{emReais(p.total_centavos)}</strong> da unidade{' '}
+        <strong>{p.unidade}</strong>, recebido em <strong>{diaEmBr(p.data)}</strong>?
+      </p>
+      <dl className="em-resumo-contas">
+        <div><dt>Energia</dt><dd className="num">{emReais(p.consumo_centavos)}</dd></div>
+        <div><dt>Tarifa da distribuidora</dt><dd className="num">{emReais(p.tarifas_centavos)}</dd></div>
+        <div><dt>Juros</dt><dd className="num">{emReais(p.juros_centavos)}</dd></div>
+        <div><dt>Multa</dt><dd className="num">{emReais(p.multa_centavos)}</dd></div>
+        <div className="em-resumo-total"><dt>Total recebido</dt><dd className="num">{emReais(p.total_centavos)}</dd></div>
+        {p.observacao.trim() && <div><dt>Observação</dt><dd>{p.observacao.trim()}</dd></div>}
+      </dl>
+      <p className="em-resumo-efeito">
+        Ao registrar, o dinheiro é dividido na mesma hora: a comissão de quem trouxe o cliente e a
+        parte do dono da usina. Se faltar o cadastro do dono, a cobrança fica paga e a divisão fica
+        pendente — a tela avisa. <strong>Não há como desfazer isto pelo sistema.</strong>
+      </p>
+    </PerguntaNaTela>
   );
 }

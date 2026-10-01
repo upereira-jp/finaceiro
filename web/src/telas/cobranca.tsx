@@ -23,6 +23,7 @@ import { api, ErroDaApi, type ConectorCobranca } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import { Pagina, Aviso, Campo, Marca, linha, Interruptor, Icone, DetalheTecnico } from '../ui.tsx';
 import { podeReligarNaTela } from '../saude-do-dinheiro.ts';
+import { diaEmBr, contagem } from '../formato.ts';
 import {
   motivoDaTravaDoConector, podeSalvarConector, sinalDeSegredo,
   estadoDoCertificado, DIAS_DE_AVISO_DO_CERTIFICADO,
@@ -187,33 +188,39 @@ export function TelaCobranca() {
 
       {situacao === 'sem_conector' && (
         <Aviso tipo="alerta">
-          <strong>Nenhum conector de cobrança cadastrado.</strong> Enquanto for assim, pedir boleto
-          para uma fatura devolve <code>412 CobrancaNaoHabilitada</code> — a fatura continua válida
-          e cobrável por outro meio; o que não existe é o boleto.
+          <strong>Nenhum conector de cobrança cadastrado.</strong> Enquanto for assim, o banco não
+          recebe pedido de boleto — a cobrança continua válida e pode ser paga por outro meio, como o
+          Pix; o que não existe é o boleto.
+          <DetalheTecnico>
+            <p style={{ margin: 0 }}>O pedido de boleto volta <code>412 CobrancaNaoHabilitada</code>.</p>
+          </DetalheTecnico>
         </Aviso>
       )}
       {situacao === 'nao_medido' && (
         <Aviso tipo="alerta">
-          Conector cadastrado, <strong>sem data de validade do certificado</strong>. Isso não é "está
-          tudo bem": o <code>PRD</code> §6 registra que A1 vencido derruba a emissão <em>sem erro
+          Conector cadastrado, <strong>sem data de validade do certificado</strong>. Isso não quer
+          dizer que está tudo bem: um certificado A1 vencido para a emissão de boleto <em>sem erro
           óbvio</em>, e sem a data não há como avisar antes.
+          <DetalheTecnico>
+            <p style={{ margin: 0 }}>O risco está registrado no PRD §6.</p>
+          </DetalheTecnico>
         </Aviso>
       )}
       {situacao === 'vencido' && (
         <Aviso tipo="erro">
-          <strong>Certificado A1 vencido</strong>{cert.dado?.expira_em && ` em ${cert.dado.expira_em.slice(0, 10)}`}.
+          <strong>Certificado A1 vencido</strong>{cert.dado?.expira_em && ` em ${diaEmBr(cert.dado.expira_em)}`}.
           A emissão vai falhar, e o modo de falha é silencioso.
         </Aviso>
       )}
       {situacao === 'vence_em_breve' && (
         <Aviso tipo="alerta">
-          Certificado A1 vence em <strong>{cert.dado?.dias} dia(s)</strong>. O aviso começa a
+          Certificado A1 vence em <strong>{contagem(cert.dado?.dias ?? 0, 'dia', 'dias')}</strong>. O aviso começa a
           {' '}{DIAS_DE_AVISO_DO_CERTIFICADO} dias porque é o prazo típico de emissão de um A1 novo.
         </Aviso>
       )}
       {situacao === 'ok' && (
         <Aviso tipo="ok">
-          Conector ativo, certificado com <strong>{cert.dado?.dias} dia(s)</strong> de validade.
+          Conector ativo, certificado com <strong>{contagem(cert.dado?.dias ?? 0, 'dia', 'dias')}</strong> de validade.
         </Aviso>
       )}
 
@@ -380,7 +387,7 @@ export function TelaCobranca() {
             <label>Certificado A1 vence em</label>
             <div style={{ padding: '8px 0' }}>
               {expiraEm
-                ? <strong>{expiraEm.split('-').reverse().join('/')}</strong>
+                ? <strong>{diaEmBr(expiraEm)}</strong>
                 : <span className="fraco">— ainda não conferido</span>}
             </div>
             <div className="sub" style={{ marginTop: -4 }}>
@@ -437,7 +444,7 @@ export function TelaCobranca() {
             para uma consequencia grande. O `role="switch"` e o `aria-checked`
             continuam sendo os de verdade — ver `Interruptor` no ui.tsx.
           */}
-          <Interruptor ligado={sandbox} ao={setSandbox} rotulo="Sandbox" />
+          <Interruptor ligado={sandbox} ao={setSandbox} rotulo="Ambiente de teste" />
           <Interruptor ligado={ativo} ao={setAtivo} rotulo="Ativo" />
           <span className="fraco" style={{ fontSize: 13 }}>
             {/*
@@ -446,8 +453,8 @@ export function TelaCobranca() {
               ativo e apontando para producao e o tipo de default que emite
               cobranca de verdade por engano.
             */}
-            O servidor nasce em <code>sandbox</code> e <strong>inativo</strong> de propósito —
-            só o conector ativo é usado pela emissão.
+            O conector nasce no <strong>ambiente de teste</strong> do banco e <strong>inativo</strong>,
+            de propósito — só o conector ativo é usado pela emissão.
           </span>
         </div>
 

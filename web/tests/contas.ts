@@ -129,9 +129,15 @@ const conta = (o: Partial<ContaAPagar> = {}): ContaAPagar => ({
   chk('C5a', podeCancelar(conta()).pode === true, 'conta aberta sem pagamento se cancela');
 
   const comPag = podeCancelar(conta({ valor_pago_centavos: 1, status: 'parcial' }));
-  chk('C5b', comPag.pode === false && /Q-ESTORNO-01/.test((comPag as any).porque),
-      'UM CENTAVO pago ja trava o cancelamento, e a mensagem aponta a questao - cancelar deixaria '
-      + 'um pagamento apontando para titulo que "nao existe", que e a R46 na fatura');
+  /* [30/09/2026, etapa 4b] A frase e a DICA DO BOTAO na tela, e quem a le opera o
+     sistema: o codigo da questao (Q-ESTORNO-01, ainda aberta no QUESTOES.md) saiu
+     dela. A verificacao passou a exigir o contrario — o porque em portugues, e
+     nenhum codigo interno. */
+  chk('C5b', comPag.pode === false && /estorno/.test((comPag as any).porque)
+          && !/\bQ-[A-Z]|\bR\d{1,2}\b/.test((comPag as any).porque),
+      'UM CENTAVO pago ja trava o cancelamento, e a mensagem diz por que (desfazer seria estorno) sem '
+      + 'codigo interno - cancelar deixaria um pagamento apontando para titulo que "nao existe", que e '
+      + 'a R46 na fatura');
 
   chk('C5c', podeCancelar(conta({ status: 'cancelada' })).pode === false, 'cancelar duas vezes trava');
 }

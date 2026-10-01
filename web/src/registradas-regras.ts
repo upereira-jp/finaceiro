@@ -30,8 +30,7 @@
 // que ja virou cobranca, e o banco que ainda nao sabe cobrar conta lida.
 
 import type { RegistroDeFatura } from './api.ts';
-import { mesPorExtenso } from './vocabulario.ts';
-import { emBr } from './contas-regras.ts';
+import { mesPorExtenso, mesEmBr, diaEmBr } from './formato.ts';
 import { normalizarUc } from './lote-de-contas.ts';
 
 /**
@@ -53,14 +52,12 @@ export const mesDoRegistro = (r: Pick<RegistroDeFatura, 'competencia'>): string 
 /** `'2026-09'` -> `'setembro de 2026'`. Cai no proprio texto quando nao le. */
 export const rotuloDoMes = (mes: string): string => mesPorExtenso(`${mes}-01`) || mes;
 
-/** `'2026-09'` -> `'09/2026'`, a forma curta que a fila e a folha usam. */
-export const mesCurto = (mes: string): string => {
-  const m = /^(\d{4})-(\d{2})$/.exec(mes);
-  return m ? `${m[2]}/${m[1]}` : mes;
-};
+/** `'2026-09'` -> `'09/2026'`, a forma curta que a fila e a folha usam. E o
+ *  `mesEmBr` de `formato.ts` desde 30/09/2026 (etapa 4b) — so o vazio muda de
+ *  resposta: devolve o proprio texto, como antes, e nao o travessao. */
+export const mesCurto = (mes: string): string => (mes ? mesEmBr(mes) : mes);
 
-export const vencimentoEmBr = (r: Pick<RegistroDeFatura, 'vencimento'>): string =>
-  (r.vencimento ? emBr(r.vencimento) : '—');
+export const vencimentoEmBr = (r: Pick<RegistroDeFatura, 'vencimento'>): string => diaEmBr(r.vencimento);
 
 /** Ainda nao virou cobranca. */
 export const semCobranca = (r: Pick<RegistroDeFatura, 'fatura_id'>): boolean => r.fatura_id == null;

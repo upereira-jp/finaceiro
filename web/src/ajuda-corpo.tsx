@@ -60,6 +60,9 @@ export type CorpoDaAjuda = {
    * `null` quando as leituras não chegaram.
    */
   mes?: { estado: 'andando' | 'travado' | 'nao_medido' | 'fechado'; frase: string } | null;
+  /** [30/09/2026, etapa 4b] O mês narrado, por extenso («setembro de 2026») —
+   *  o mesmo que a tela Mês está mostrando. Sem ele, o título diz «o mês». */
+  nomeDoMes?: string | null;
   carregando: boolean;
   /** Não deu para conferir o mês. A ajuda CONTINUA servindo: os assuntos e a
    *  busca não dependem da rede. */
@@ -130,7 +133,7 @@ export function CorpoDaAjuda(p: CorpoDaAjuda) {
           {/* ---------------------------------------------- o estado ao vivo */}
           {!buscando && (
             <section className="ajuda-secao">
-              <h3>Como está o mês agora</h3>
+              <h3>{p.nomeDoMes ? `Como está ${p.nomeDoMes}` : 'Como está o mês agora'}</h3>
               {p.carregando && <Carregando texto="Conferindo…" />}
               {!p.carregando && p.falhou && (
                 <p className="fraco ajuda-nota">

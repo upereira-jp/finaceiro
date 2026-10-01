@@ -15,6 +15,8 @@
 // escritas para serem lidas por quem opera. Substitui-las por "erro ao salvar"
 // jogaria fora o trabalho que o servidor fez.
 
+import { datasDoTextoEmBr } from './formato.ts';
+
 export class ErroDaApi extends Error {
   readonly status: number;
   readonly nome: string;
@@ -106,7 +108,10 @@ async function chamar<T>(metodo: string, caminho: string, corpo?: unknown): Prom
       dado?.erro ?? 'ErroDesconhecido',
       // Sem mensagem no corpo, o status sozinho e melhor do que uma frase
       // inventada: "erro ao salvar" esconderia qual das 78 rotas falhou.
-      dado?.mensagem ?? `${metodo} ${caminho} devolveu ${r.status}`,
+      // [30/09/2026, etapa 4b] A DATA DENTRO DA FRASE chega crua de algumas
+      // recusas («a unidade 123 em 2026-09-01 ja virou fatura»); ela sai no
+      // formato da tela, e nenhuma palavra do servidor e trocada.
+      dado?.mensagem != null ? datasDoTextoEmBr(String(dado.mensagem)) : `${metodo} ${caminho} devolveu ${r.status}`,
     );
     avisarSePerdeuSessao(e);
     throw e;
@@ -148,7 +153,7 @@ export async function buscarBinario(caminho: string): Promise<Blob> {
     let dado: any;
     try { dado = texto ? JSON.parse(texto) : undefined; } catch { dado = undefined; }
     const e = new ErroDaApi(r.status, dado?.erro ?? 'ErroDesconhecido',
-      dado?.mensagem ?? `GET ${caminho} devolveu ${r.status}`);
+      dado?.mensagem != null ? datasDoTextoEmBr(String(dado.mensagem)) : `GET ${caminho} devolveu ${r.status}`);
     avisarSePerdeuSessao(e);
     throw e;
   }

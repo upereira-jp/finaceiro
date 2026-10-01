@@ -38,6 +38,8 @@ import type { RegistroDeFatura } from './api.ts';
 import { Aviso, BotaoDeIcone, Filtro, Icone, Interruptor, Marca, Tabela } from './ui.tsx';
 import { Ligacao } from './rota.tsx';
 import { emReais } from './dinheiro.ts';
+import { numeroDaUcNaTela } from './formato.ts';
+import { ItemDaSerie, PerguntaNaTela, RevisaoEmSerie } from './serie.tsx';
 import {
   competenciaDoItem, pendenciaDoItem, avisoDoItem, chavesRepetidas,
   podeRegistrar, resumoDoLote, ordemDaFila, type ItemDoLote,
@@ -76,6 +78,9 @@ export function SituacaoDaLinha({ item, pendente }: { item: ItemDoLote; pendente
 export type PropsDaFila = {
   itens: ItemDoLote[];
   ucs: ReadonlySet<string>;
+  /** O número de cada unidade como o CADASTRO o guarda, pela chave completada
+   *  (`formato.ts:mapaDoCadastro`). Sem ele a unidade sai como a conta a leu. */
+  cadastro?: ReadonlyMap<string, string>;
   registrando: boolean;
   /** Se o «Registrar N» e o laranja da tela. Ver o cabecalho deste arquivo. */
   principal: boolean;
@@ -132,20 +137,15 @@ export function TabelaDaFila(p: PropsDaFila) {
           <p className="fu-bloco-resumo">{partes.join(' · ')}</p>
         </div>
         {confirmandoLimpeza ? (
-          <div className="fu-bloco-acoes fu-pergunta" role="group" aria-label="Confirmar a limpeza da fila"
-               onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); setConfirmandoLimpeza(false); } }}>
-            <span className="fu-pergunta-texto">
-              {naoRegistradas === 1
-                ? 'Limpar a fila? 1 conta lida ainda não foi registrada e precisaria ser enviada de novo.'
-                : `Limpar a fila? ${naoRegistradas} contas lidas ainda não foram registradas e precisariam ser enviadas de novo.`}
-              {' '}As registradas ficam.
-            </span>
-            <span className="fu-acoes">
-              <button type="button" autoFocus onClick={() => setConfirmandoLimpeza(false)}>Manter a fila</button>
-              <button type="button" className="fu-perigo"
-                      onClick={() => { setConfirmandoLimpeza(false); p.limpar(); }}>Limpar a fila</button>
-            </span>
-          </div>
+          <PerguntaNaTela forma="linha" tom="perigo" rotulo="Confirmar a limpeza da fila"
+                          manter="Manter a fila" confirmar="Limpar a fila"
+                          aoManter={() => setConfirmandoLimpeza(false)}
+                          aoConfirmar={() => { setConfirmandoLimpeza(false); p.limpar(); }}>
+            {naoRegistradas === 1
+              ? 'Limpar a fila? 1 conta lida ainda não foi registrada e precisaria ser enviada de novo.'
+              : `Limpar a fila? ${naoRegistradas} contas lidas ainda não foram registradas e precisariam ser enviadas de novo.`}
+            {' '}As registradas ficam.
+          </PerguntaNaTela>
         ) : (
           <div className="fu-bloco-acoes">
             {/* SO PERGUNTA QUANDO HA O QUE PERDER: com tudo registrado, limpar
@@ -186,9 +186,15 @@ export function TabelaDaFila(p: PropsDaFila) {
           {ordenados.map((i) => {
             const pendencia = pendenciaDoItem(i, p.ucs, repetidas);
             const aviso = avisoDoItem(i, p.ucs);
-            /* A UNIDADE COMO A CONTA A IMPRIME, e nao com os zeros que a chave
-               de comparacao poe: quem confere compara com o papel. */
-            const uc = i.campos?.unidade_consumidora?.trim() ?? '';
+            /* A UNIDADE COMO O CADASTRO A GUARDA, e nunca com os zeros que a
+               chave de comparacao poe (`normalizarUc`). [30/09/2026, etapa 4b]
+               Ate aqui era o texto que o leitor da conta devolvia — e ele pode
+               vir completado com zeros («000006732614380»), que nao e como o
+               numero aparece em nenhuma outra tela. Quando a conta e de uma
+               unidade do cadastro, sai o numero de la (os mesmos digitos, sem o
+               enchimento); quando nao e, sai como foi lido. */
+            const uc = i.campos?.unidade_consumidora?.trim()
+              ? numeroDaUcNaTela(i.campos.unidade_consumidora, p.cadastro) : '';
             const aberta = p.abertaId === i.id;
             return (
               <tr key={i.id} className={aberta ? 'fu-aberta' : undefined}
@@ -276,6 +282,8 @@ export type PropsDasRegistradas = {
   aoPedirExclusao: (id: string | null) => void;
   aoExcluir: (r: RegistroDeFatura) => void;
   aoVerUnidade: (uc: string | null) => void;
+  /** Ver `PropsDaFila.cadastro`. */
+  cadastro?: ReadonlyMap<string, string>;
 };
 
 /** O titulo diz O QUE a lista esta mostrando — o mes, a unidade ou tudo. Ate
@@ -368,9 +376,9 @@ export function TabelaDasRegistradas(p: PropsDasRegistradas) {
                      ao={(v) => p.aoFiltrar({ ...p.filtro, soSemCobranca: v })} />
         {p.filtro.unidade && (
           <span className="fu-chip">
-            Unidade {p.filtro.unidade}
+            Unidade {numeroDaUcNaTela(p.filtro.unidade, p.cadastro)}
             <button type="button" className="fu-chip-x" onClick={() => p.aoVerUnidade(null)}
-                    aria-label={`Tirar o filtro da unidade ${p.filtro.unidade}`} title="Tirar o filtro">
+                    aria-label={`Tirar o filtro da unidade ${numeroDaUcNaTela(p.filtro.unidade, p.cadastro)}`} title="Tirar o filtro">
               <Icone nome="fechar" tamanho={13} peso="bold" />
             </button>
           </span>
@@ -382,6 +390,7 @@ export function TabelaDasRegistradas(p: PropsDasRegistradas) {
 
       {p.revisando && (
         <Revisao marcadas={marcadas} rodada={p.rodada} rodadaIds={p.rodadaIds} lista={p.lista ?? []}
+                 cadastro={p.cadastro}
                  rodando={p.rodando} ensaio={p.ensaio} ensaiando={p.ensaiando}
                  aoGerar={p.aoGerar} aoEnsaiarTodas={p.aoEnsaiarTodas}
                  aoFechar={() => p.aoRevisar(false)} />
@@ -420,12 +429,13 @@ export function TabelaDasRegistradas(p: PropsDasRegistradas) {
             const e = p.ensaio[r.id];
             const mes = mesCurto(mesDoRegistro(r));
             const marcada = podeGerar(r) && !p.desmarcadas.has(r.id);
+            const uc = numeroDaUcNaTela(r.numero_uc, p.cadastro);
             const linha = (
               <tr key={r.id} className={marcada ? 'fu-marcada' : undefined}>
                 <td className="c-sel">
                   {podeGerar(r) && (
                     <input type="checkbox" checked={marcada} disabled={p.rodando}
-                           aria-label={`Incluir a unidade ${r.numero_uc} em «Gerar cobranças»`}
+                           aria-label={`Incluir a unidade ${uc} em «Gerar cobranças»`}
                            onChange={(ev) => p.aoMarcar(r.id, ev.target.checked)} />
                   )}
                 </td>
@@ -434,8 +444,8 @@ export function TabelaDasRegistradas(p: PropsDasRegistradas) {
                       E o mesmo pedido que antes se fazia digitando o numero no
                       formulario — agora explicito, e sem mexer no formulario. */}
                   <button type="button" className="fu-link" title="Ver só esta unidade"
-                          aria-label={`Ver só a unidade ${r.numero_uc}`}
-                          onClick={() => p.aoVerUnidade(r.numero_uc)}>{r.numero_uc}</button>
+                          aria-label={`Ver só a unidade ${uc}`}
+                          onClick={() => p.aoVerUnidade(r.numero_uc)}>{uc}</button>
                 </td>
                 <td className="c-cli">
                   <span className="fu-nome" title={r.cliente_nome ?? undefined}>{r.cliente_nome || '—'}</span>
@@ -453,13 +463,13 @@ export function TabelaDasRegistradas(p: PropsDasRegistradas) {
                     {/* A 2a VIA VALE SEMPRE, cobrada ou nao: e o documento daquele
                         mes, remontado do que foi gravado. */}
                     <button type="button" className="discreto"
-                            aria-label={`2ª via de ${mes} da unidade ${r.numero_uc}`}
+                            aria-label={`2ª via de ${mes} da unidade ${uc}`}
                             onClick={() => (p.emEdicao && p.aoPedirSegundaVia
                               ? p.aoPedirSegundaVia(r.id) : p.aoSegundaVia(r))}>2ª via</button>
                     {semCobranca(r) && (
                       <button type="button" className="discreto"
                               disabled={p.ensaiando !== null || p.rodando}
-                              aria-label={`Conferir antes a unidade ${r.numero_uc}`}
+                              aria-label={`Conferir antes a unidade ${uc}`}
                               onClick={() => p.aoEnsaiar(r)}>
                         {p.ensaiando === r.id ? 'conferindo…' : 'conferir antes'}
                       </button>
@@ -471,7 +481,7 @@ export function TabelaDasRegistradas(p: PropsDasRegistradas) {
                       deixaria a cobranca sem a conta que a originou. */}
                   {semCobranca(r) && (
                     <BotaoDeIcone icone="remover" desabilitado={p.rodando}
-                                  rotulo={`Excluir o registro de ${mes} da unidade ${r.numero_uc}`}
+                                  rotulo={`Excluir o registro de ${mes} da unidade ${uc}`}
                                   ao={() => p.aoPedirExclusao(r.id)} />
                   )}
                 </td>
@@ -483,22 +493,16 @@ export function TabelaDasRegistradas(p: PropsDasRegistradas) {
                  vermelho: nada e apagado do banco, o que sai e o rascunho da
                  tela. O foco nasce em «Manter a edição». */
               return [linha, (
-                <tr key={`${r.id}-segunda-via`} className="fu-confirma fu-confirma-aviso">
+                <tr key={`${r.id}-segunda-via`} className="fu-confirma">
                   <td colSpan={colunas + 1}>
-                    <div className="fu-confirma-caixa" role="group" aria-label="Confirmar a 2ª via"
-                         onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); p.aoPedirSegundaVia?.(null); } }}>
-                      <span>
-                        Abrir a 2ª via de <strong>{mes}</strong> da unidade <strong>{r.numero_uc}</strong>?
-                        {' '}A conta em edição agora ({p.emEdicao}) sai da tela — o que nela não foi
-                        registrado se perde.
-                      </span>
-                      <span className="fu-acoes">
-                        <button type="button" autoFocus onClick={() => p.aoPedirSegundaVia?.(null)}>Manter a edição</button>
-                        <button type="button" onClick={() => { p.aoPedirSegundaVia?.(null); p.aoSegundaVia(r); }}>
-                          Abrir a 2ª via
-                        </button>
-                      </span>
-                    </div>
+                    <PerguntaNaTela forma="linha" tom="aviso" rotulo="Confirmar a 2ª via"
+                                    manter="Manter a edição" confirmar="Abrir a 2ª via"
+                                    aoManter={() => p.aoPedirSegundaVia?.(null)}
+                                    aoConfirmar={() => { p.aoPedirSegundaVia?.(null); p.aoSegundaVia(r); }}>
+                      Abrir a 2ª via de <strong>{mes}</strong> da unidade <strong>{uc}</strong>?
+                      {' '}A conta em edição agora ({p.emEdicao}) sai da tela — o que nela não foi
+                      registrado se perde.
+                    </PerguntaNaTela>
                   </td>
                 </tr>
               )];
@@ -507,20 +511,14 @@ export function TabelaDasRegistradas(p: PropsDasRegistradas) {
             return [linha, (
               <tr key={`${r.id}-excluir`} className="fu-confirma">
                 <td colSpan={colunas + 1}>
-                  <div className="fu-confirma-caixa" role="group" aria-label="Confirmar a exclusão">
-                    <span>
-                      Excluir o registro de <strong>{mes}</strong> da unidade <strong>{r.numero_uc}</strong>?
-                      {' '}O desconto de {emReais(r.desconto_centavos)} sai da economia acumulada que a
-                      folha do cliente imprime.
-                    </span>
-                    <span className="fu-acoes">
-                      {/* O FOCO NASCE EM «MANTER»: um Enter distraido nao apaga. */}
-                      <button type="button" autoFocus onClick={() => p.aoPedirExclusao(null)}>Manter</button>
-                      <button type="button" className="fu-perigo" onClick={() => p.aoExcluir(r)}>
-                        Excluir o registro
-                      </button>
-                    </span>
-                  </div>
+                  {/* O FOCO NASCE EM «MANTER»: um Enter distraido nao apaga. */}
+                  <PerguntaNaTela forma="linha" tom="perigo" rotulo="Confirmar a exclusão"
+                                  manter="Manter" confirmar="Excluir o registro"
+                                  aoManter={() => p.aoPedirExclusao(null)} aoConfirmar={() => p.aoExcluir(r)}>
+                    Excluir o registro de <strong>{mes}</strong> da unidade <strong>{uc}</strong>?
+                    {' '}O desconto de {emReais(r.desconto_centavos)} sai da economia acumulada que a
+                    folha do cliente imprime.
+                  </PerguntaNaTela>
                 </td>
               </tr>
             )];
@@ -558,6 +556,7 @@ function Revisao(p: {
   aoGerar: () => void;
   aoEnsaiarTodas: () => void;
   aoFechar: () => void;
+  cadastro?: ReadonlyMap<string, string>;
 }) {
   const emRodada = p.rodadaIds.length > 0;
   const porId = new Map(p.lista.map((r) => [r.id, r]));
@@ -576,72 +575,58 @@ function Revisao(p: {
       ? `Gerando ${placar.geradas + placar.recusadas + 1} de ${placar.total}…`
       : `${placar.geradas} de ${placar.total} ${placar.total === 1 ? 'cobrança gerada' : 'cobranças geradas'}`;
 
+  /* A CASCA E A DE `serie.tsx` desde 30/09/2026 (etapa 4b) — a mesma da revisão
+     de Cobranças. O que é desta tela fica aqui: as frases, o «Conferir antes» e
+     o caminho para Cobranças no fim. */
   return (
-    <div className="fu-revisao" id="fu-revisao" role="region" aria-labelledby="fu-revisao-titulo">
-      <h3 id="fu-revisao-titulo">{titulo}</h3>
-      <p className="fu-revisao-nota" role="status">
-        {!emRodada && 'Cada uma nasce como rascunho — nada é enviado ao cliente agora. Emitir é o passo seguinte, em «Cobranças».'}
-        {p.rodando && 'Uma de cada vez, na ordem abaixo. Pode acompanhar aqui; não feche a página.'}
-        {acabou && (placar.recusadas === 0
-          ? 'Todas nasceram como rascunho. O próximo passo é emiti-las.'
-          : `${placar.recusadas} ${placar.recusadas === 1 ? 'foi recusada' : 'foram recusadas'} — o motivo está na linha. As outras nasceram como rascunho.`)}
-      </p>
-
-      <ol className="fu-revisao-lista">
-        {linhas.map((r) => {
-          const g = p.rodada[r.id];
-          const e = p.ensaio[r.id];
-          return (
-            <li key={r.id} className={g ? `fu-rev-${g.estado}` : undefined}>
-              <span className="r-uc">{r.numero_uc}</span>
-              <span className="r-cli" title={r.cliente_nome ?? undefined}>{r.cliente_nome || '—'}</span>
-              <span className="r-val num">{emReais(r.total_centavos)}</span>
-              <span className="r-est">
-                {g ? <SituacaoDoRegistro r={r} g={g} />
-                  : p.ensaiando === r.id ? <Marca tom="nao_medido" icone="carregando">Conferindo…</Marca>
-                  : e ? <Motivo tom={e.vira ? 'ok' : 'alerta'}>{e.vira ? 'Vira cobrança' : 'Não vira cobrança'}</Motivo>
-                  : null}
-              </span>
-              {/* O PORQUE VAI NUMA LINHA PROPRIA, na largura da lista: na coluna
-                  de estado ele virava uma torre de dez linhas. */}
-              {(g?.estado === 'recusada' || (!g && e && !e.vira)) && (
-                <span className="r-motivo">
-                  <Motivo tom="alerta">{g?.estado === 'recusada' ? g.motivo : e!.frase}</Motivo>
-                </span>
-              )}
-            </li>
-          );
-        })}
-      </ol>
-
-      <div className="fu-revisao-pe">
-        <span className="fu-revisao-soma">
-          Soma: <strong>{emReais(somaEmCentavos(linhas))}</strong> em {n} {n === 1 ? 'conta' : 'contas'}
-        </span>
-        <span className="fu-acoes">
-          {!emRodada && (
-            <>
-              <button type="button" className="discreto" onClick={p.aoFechar}>Cancelar</button>
-              <button type="button" disabled={p.ensaiando !== null || n === 0} onClick={p.aoEnsaiarTodas}>
-                {`Conferir antes as ${n}`}
-              </button>
-              <button type="button" className="primario" disabled={n === 0 || p.ensaiando !== null}
-                      onClick={p.aoGerar}>
-                {n === 1 ? 'Sim, gerar a cobrança' : `Sim, gerar as ${n}`}
-              </button>
-            </>
-          )}
-          {acabou && (
-            <>
-              <button type="button" onClick={p.aoFechar}>Fechar</button>
-              {placar.geradas > 0 && (
-                <Ligacao para="/faturas" className="fu-ir">Emitir em «Cobranças»</Ligacao>
-              )}
-            </>
-          )}
-        </span>
-      </div>
-    </div>
+    <RevisaoEmSerie id="fu-revisao" titulo={titulo}
+                    nota={<>
+                      {!emRodada && 'Cada uma nasce como rascunho — nada é enviado ao cliente agora. Emitir é o passo seguinte, em «Cobranças».'}
+                      {p.rodando && 'Uma de cada vez, na ordem abaixo. Pode acompanhar aqui; não feche a página.'}
+                      {acabou && (placar.recusadas === 0
+                        ? 'Todas nasceram como rascunho. O próximo passo é emiti-las.'
+                        : `${placar.recusadas} ${placar.recusadas === 1 ? 'foi recusada' : 'foram recusadas'} — o motivo está na linha. As outras nasceram como rascunho.`)}
+                    </>}
+                    soma={<>Soma: <strong>{emReais(somaEmCentavos(linhas))}</strong> em {n} {n === 1 ? 'conta' : 'contas'}</>}
+                    atos={<>
+                      {!emRodada && (
+                        <>
+                          <button type="button" className="discreto" onClick={p.aoFechar}>Cancelar</button>
+                          <button type="button" disabled={p.ensaiando !== null || n === 0} onClick={p.aoEnsaiarTodas}>
+                            {`Conferir antes as ${n}`}
+                          </button>
+                          <button type="button" className="primario" disabled={n === 0 || p.ensaiando !== null}
+                                  onClick={p.aoGerar}>
+                            {n === 1 ? 'Sim, gerar a cobrança' : `Sim, gerar as ${n}`}
+                          </button>
+                        </>
+                      )}
+                      {acabou && (
+                        <>
+                          <button type="button" onClick={p.aoFechar}>Fechar</button>
+                          {placar.geradas > 0 && (
+                            <Ligacao para="/faturas" className="fu-ir">Emitir em «Cobranças»</Ligacao>
+                          )}
+                        </>
+                      )}
+                    </>}>
+      {linhas.map((r) => {
+        const g = p.rodada[r.id];
+        const e = p.ensaio[r.id];
+        return (
+          <ItemDaSerie key={r.id} estado={g?.estado}
+                       unidade={numeroDaUcNaTela(r.numero_uc, p.cadastro)} cliente={r.cliente_nome}
+                       valor={emReais(r.total_centavos)}
+                       situacao={g ? <SituacaoDoRegistro r={r} g={g} />
+                         : p.ensaiando === r.id ? <Marca tom="nao_medido" icone="carregando">Conferindo…</Marca>
+                         : e ? <Motivo tom={e.vira ? 'ok' : 'alerta'}>{e.vira ? 'Vira cobrança' : 'Não vira cobrança'}</Motivo>
+                         : null}
+                       motivo={(g?.estado === 'recusada' || (!g && e && !e.vira)) && (
+                         <Motivo tom="alerta">{g?.estado === 'recusada' ? g.motivo : e!.frase}</Motivo>
+                       )} />
+        );
+      })}
+    </RevisaoEmSerie>
   );
 }
 

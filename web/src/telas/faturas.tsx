@@ -71,7 +71,7 @@ import { useAcao, useDados } from '../dados.ts';
 import {
   Pagina, Aviso, Tabela, Marca, rotulo, linha, useOrdenacao, ordenar, ThOrd, Kpi,
   Icone, CampoData, Carregando, AjudaDoMes, DetalheTecnico, Menu } from '../ui.tsx';
-import { competenciaISO, emReais, paraCentavos, mesDaQuery, kwhEmBr } from '../dinheiro.ts';
+import { competenciaISO, emReais, paraCentavos, mesDaQuery, kwhEmBr, centavosParaCampo } from '../dinheiro.ts';
 import { paraCsv, reaisParaPlanilha, nomeDoArquivo } from '../csv.ts';
 import { baixarCsv } from '../baixar.ts';
 import { lerBase64, mimeDo, reenviavel, naMensagem } from '../arquivo.ts';
@@ -87,11 +87,12 @@ import {
   fraseDaOrigem, lembrarMes,
   type EstadoDaVez, type EscolhaDoMes, type RecusaLida,
 } from '../emissao-regras.ts';
-import { procurarMesDoTrabalho, armazemDoNavegador } from '../leitura-do-mes.ts';
+import { procurarMesDoTrabalho, armazemDoNavegador, anunciarMesEmTela } from '../leitura-do-mes.ts';
 import {
-  SituacaoDaCobranca, RecusaNaTela, BotaoDaSaida, RevisaoDaSerie, ConfirmacaoNaLinha, ResumoDaBaixa,
-  dataEmBr, type LinhaDaSerie,
+  SituacaoDaCobranca, RecusaNaTela, BotaoDaSaida, RevisaoDaSerie, ResumoDaBaixa, type LinhaDaSerie,
 } from '../emissao-corpo.tsx';
+import { PerguntaNaTela } from '../serie.tsx';
+import { diaEmBr, hojeEmSP, contagem } from '../formato.ts';
 import { PainelDaEmissao } from '../emissao-travada-corpo.tsx';
 import type { EmissaoTravadaNaTela, LinhaNaTela } from '../emissao-travada.ts';
 import { FaixaDoPasso } from '../roteiro-corpo.tsx';
@@ -157,6 +158,12 @@ export function TelaFaturas() {
     void procurarMesDoTrabalho(emissao.dado?.linhas ?? []).then((e) => { if (vivo) setEscolha(e); });
     return () => { vivo = false; };
   }, [escolha, emissao.carregando]);
+
+  /* A Central de Ajuda narra o MESMO mês que esta tela mostra (etapa 4b). */
+  useEffect(() => {
+    anunciarMesEmTela(mes);
+    return () => anunciarMesEmTela(null);
+  }, [mes]);
 
   const faturas = useDados<Fatura[] | null>(
     () => (mes ? api.get(`/faturamento/${competenciaISO(mes)}`) : Promise.resolve(null)), [mes]);
@@ -694,7 +701,7 @@ function LinhaDaCobranca(p: {
           <span className="em-cliente" title={p.cliente ?? undefined}>{p.cliente || '—'}</span>
         </td>
         <td className="c-sit"><SituacaoDaCobranca status={f.status} nota={p.nota} /></td>
-        <td className="c-ven" data-rotulo="Vencimento">{dataEmBr(f.vencimento)}</td>
+        <td className="c-ven" data-rotulo="Vencimento">{diaEmBr(f.vencimento)}</td>
         <td className="c-kwh num" data-rotulo="Consumo kWh">{kwhEmBr(f.consumo_kwh)}</td>
         <td className="c-tot num" data-rotulo="Total"><strong>{emReais(f.valor_total_centavos)}</strong></td>
         <td className="c-aco">
@@ -738,24 +745,25 @@ function LinhaDaCobranca(p: {
                  titulo estiver vivo no banco. A tela ja sabe (a cobranca emitida
                  que nao esta na lista do que nao chegou ao banco TEM boleto la),
                  entao ela diz em vez de colher a recusa. */
-              <ConfirmacaoNaLinha rotulo="Cancelar a cobrança" manter="Voltar"
-                                  confirmar="Abrir o boleto desta linha"
-                                  aoManter={() => p.pedirCancelamento(null)}
-                                  aoConfirmar={() => { p.pedirCancelamento(null); if (!p.aberta) p.abrir(); }}>
+              <PerguntaNaTela rotulo="Cancelar a cobrança" manter="Voltar"
+                              confirmar="Abrir o boleto desta linha"
+                              aoManter={() => p.pedirCancelamento(null)}
+                              aoConfirmar={() => { p.pedirCancelamento(null); if (!p.aberta) p.abrir(); }}>
                 A cobrança da unidade <strong>{p.unidade}</strong> tem boleto registrado no banco.
                 Enquanto ele valer, o cliente consegue pagar por ele — cancele o boleto primeiro, no
                 painel da linha, e depois a cobrança.
-              </ConfirmacaoNaLinha>
+              </PerguntaNaTela>
             ) : (
-              <ConfirmacaoNaLinha rotulo="Confirmar o cancelamento" perigo
-                                  motivo={{ rotulo: 'Motivo do cancelamento', dica: 'Ex.: conta lida de novo, valor corrigido' }}
-                                  manter="Manter a cobrança" confirmar="Cancelar a cobrança"
-                                  ocupado={p.cancelandoOcupado} erro={p.erroDoCancelamento}
-                                  aoManter={() => p.pedirCancelamento(null)} aoConfirmar={p.cancelar}>
+              <PerguntaNaTela rotulo="Confirmar o cancelamento" tom="perigo"
+                              campo={{ rotulo: 'Motivo do cancelamento', dica: 'Ex.: conta lida de novo, valor corrigido',
+                                       nota: 'Fica registrado com o seu nome e a data.', linhas: 2 }}
+                              manter="Manter a cobrança" confirmar="Cancelar a cobrança"
+                              ocupado={p.cancelandoOcupado} erro={p.erroDoCancelamento}
+                              aoManter={() => p.pedirCancelamento(null)} aoConfirmar={p.cancelar}>
                 Cancelar a cobrança da unidade <strong>{p.unidade}</strong> ({emReais(f.valor_total_centavos)})?
                 Ela fica registrada como cancelada, com o motivo e a data — não some. A conta lida que
                 a originou volta a poder virar cobrança.
-              </ConfirmacaoNaLinha>
+              </PerguntaNaTela>
             )}
           </td>
         </tr>
@@ -801,7 +809,8 @@ function PainelDaFatura({ f, unidade, uc, mes, daSessao, ultimoErroDaLista, pedi
   const [juros, setJuros] = useState('0');
   const [multa, setMulta] = useState('0');
   const [observacao, setObservacao] = useState('');
-  const hoje = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
+  /* Hoje no fuso de quem opera (`formato.ts`), e nao no relogio do navegador. */
+  const hoje = hojeEmSP();
   const [data, setData] = useState(hoje);
   const [conferindoBaixa, setConferindoBaixa] = useState(false);
   const [cancelandoBoleto, setCancelandoBoleto] = useState(false);
@@ -810,8 +819,9 @@ function PainelDaFatura({ f, unidade, uc, mes, daSessao, ultimoErroDaLista, pedi
      que a fatura ja tem: zero e um valor legitimo («este mes nao levou tarifa»),
      e um campo vazio faria «gravar» sem digitar nada apagar a parcela sem
      dizer. */
-  const [tarifaConc, setTarifaConc] = useState(
-    () => (f.valor_tarifas_concessionaria_centavos / 100).toFixed(2).replace('.', ','));
+  /* [30/09/2026, etapa 4b] POR TEXTO, a partir dos centavos: era `(c / 100)
+     .toFixed(2)`, o float que a regra 1 proibe ate na exibicao. */
+  const [tarifaConc, setTarifaConc] = useState(() => centavosParaCampo(f.valor_tarifas_concessionaria_centavos));
 
   // Centavos, inteiros. `paraCentavos` converte por TEXTO (regra 1) e levanta
   // `ValorInvalido` no que nao for valor - entao o total so e calculado quando os
@@ -1020,15 +1030,16 @@ function PainelDaFatura({ f, unidade, uc, mes, daSessao, ultimoErroDaLista, pedi
               servidor RECUSA cancelar a fatura enquanto o titulo estiver vivo. */}
           {podeBaixarNoBanco(statusDoBoleto, boleto.dado?.origem ?? null) && (
             cancelandoBoleto ? (
-              <ConfirmacaoNaLinha rotulo="Cancelar o boleto no banco" perigo
-                                  motivo={{ rotulo: 'Motivo do cancelamento do boleto', dica: 'Ex.: cobrança refeita com outro valor' }}
-                                  manter="Manter o boleto" confirmar="Cancelar o boleto no banco"
-                                  ocupado={acao.ocupado} erro={acao.erro}
-                                  aoManter={() => setCancelandoBoleto(false)}
-                                  aoConfirmar={(m) => void cancelarNoBanco(m)}>
+              <PerguntaNaTela rotulo="Cancelar o boleto no banco" tom="perigo"
+                              campo={{ rotulo: 'Motivo do cancelamento do boleto', dica: 'Ex.: cobrança refeita com outro valor',
+                                       nota: 'Fica registrado com o seu nome e a data.', linhas: 2 }}
+                              manter="Manter o boleto" confirmar="Cancelar o boleto no banco"
+                              ocupado={acao.ocupado} erro={acao.erro}
+                              aoManter={() => setCancelandoBoleto(false)}
+                              aoConfirmar={(m) => void cancelarNoBanco(m)}>
                 Cancelar este boleto no banco? O cliente deixa de conseguir pagar por esta linha
                 digitável. Para cancelar a cobrança, este é o primeiro passo.
-              </ConfirmacaoNaLinha>
+              </PerguntaNaTela>
             ) : (
               <p className="em-painel-nota">
                 Para cancelar esta cobrança, cancele o boleto no banco primeiro: enquanto o título
@@ -1287,7 +1298,7 @@ function ImportarBoleto({ fatura, aoImportar }: { fatura: Fatura; aoImportar: ()
           <Aviso tipo="ok">
             Confere. O boleto cobra <strong>{emReais(conferencia.valor_centavos)}</strong>
             {conferencia.vencimento && <> e vence em{' '}
-              <strong>{conferencia.vencimento.split('-').reverse().join('/')}</strong></>}
+              <strong>{diaEmBr(conferencia.vencimento)}</strong></>}
             {' '}— os dois lidos de dentro do código de barras, e os dois batem com esta fatura.
           </Aviso>
         ) : (
@@ -1307,7 +1318,7 @@ function ImportarBoleto({ fatura, aoImportar }: { fatura: Fatura; aoImportar: ()
         {motivo && (
           <span className="fraco" style={{ fontSize: 13 }}>
             {motivo === 'digitos_de_menos'
-              ? `Faltam ${DIGITOS_DA_LINHA - digitos.length} dígito(s) para a linha ficar completa.`
+              ? `Faltam ${contagem(DIGITOS_DA_LINHA - digitos.length, 'dígito', 'dígitos')} para a linha ficar completa.`
               : EXPLICACAO_DA_TRAVA[motivo]}
           </span>
         )}

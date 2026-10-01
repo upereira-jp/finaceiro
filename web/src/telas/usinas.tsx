@@ -15,6 +15,7 @@ import {
 } from '../ui.tsx';
 import { naMensagem } from '../arquivo.ts';
 import { decimalTexto } from '../dinheiro.ts';
+import { diaEmBr, mesEmBr, mesDeHojeEmSP } from '../formato.ts';
 import { divisaoEmPalavras, parteDaG3, parteDaG3ComComissao, comVirgula } from '../repasse-regras.ts';
 import { FILTROS_DA_TELA, filtroDaConsulta } from '../destino-da-camada.ts';
 
@@ -258,8 +259,8 @@ export function TelaUsinas() {
               <td className="num">{comVirgula(String(r.percentual))}%</td>
               {/* Derivado na leitura tambem, e nao gravado: a coluna e uma so. */}
               <td className="num fraco">{comVirgula(parteDaG3(String(r.percentual)) ?? '—')}%</td>
-              <td className="fraco">{String(r.vigencia_inicio).slice(0, 10)}</td>
-              <td className="fraco">{r.vigencia_fim ? String(r.vigencia_fim).slice(0, 10) : 'Em aberto'}</td>
+              <td className="fraco">{diaEmBr(r.vigencia_inicio)}</td>
+              <td className="fraco">{r.vigencia_fim ? diaEmBr(r.vigencia_fim) : 'Em aberto'}</td>
             </tr>
           ))}
         </Tabela>
@@ -288,7 +289,7 @@ export function TelaUsinas() {
  * fica o link que ja existia para a ficha de la.
  */
 function GeracaoLancada({ usinas }: { usinas: Usina[] }) {
-  const [mes, setMes] = useState(() => new Date().toISOString().slice(0, 7));
+  const [mes, setMes] = useState(mesDeHojeEmSP);
   const [porUsina, setPorUsina] = useState<Record<string, string[]>>({});
   const [erro, setErro] = useState<string | null>(null);
 
@@ -352,7 +353,7 @@ function GeracaoLancada({ usinas }: { usinas: Usina[] }) {
                   </a>
                 )}
               </td>
-              <td className="fraco">{meses?.length ? meses[0]!.split('-').reverse().join('/') : '—'}</td>
+              <td className="fraco">{meses?.length ? mesEmBr(meses[0]) : '—'}</td>
             </tr>
           );
         })}

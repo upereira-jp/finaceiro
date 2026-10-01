@@ -30,7 +30,8 @@
 //
 // É PURO PELO MOTIVO DE SEMPRE (regra 8): o runner do `web/` não lê JSX.
 
-import { emReais } from './dinheiro.ts';
+import { emReais, decimalEmBr } from './dinheiro.ts';
+import { diaEmSP, horaEmSP, momentoEmBr, diaAnterior } from './formato.ts';
 
 /** O espelho de `Mudanca` do servidor (`src/dominio/trilha.ts`). */
 export type Mudanca = {
@@ -207,6 +208,8 @@ export function rotuloDaColuna(coluna: string): string {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DATA_ISO = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/;
+/** As colunas de grandeza decimal (regra 1: escala decimal, nunca centavos). */
+const COLUNA_DECIMAL = /percentual|_kwh$|^kwh|tarifa|fator|geracao/;
 
 /**
  * O valor de uma coluna, do jeito que a pessoa lê.
@@ -231,11 +234,17 @@ export function valorNaTela(coluna: string, v: string | null): string {
   if (v === 'true') return 'sim';
   if (v === 'false') return 'não';
 
+  /* [30/09/2026, etapa 4b] O INSTANTE NO FUSO DE SÃO PAULO. Até aqui o
+   * horário saía do texto UTC como veio — «13:24» para o que aconteceu às 10:24
+   * em Goiânia. `momentoEmBr` converte quando há fuso declarado; o dia sem hora
+   * (coluna `date`) continua lido por texto. */
   const d = DATA_ISO.exec(v);
-  if (d) {
-    const dia = `${d[3]}/${d[2]}/${d[1]}`;
-    return d[4] ? `${dia} ${d[4]}:${d[5]}` : dia;
-  }
+  if (d) return momentoEmBr(v);
+
+  /* A GRANDEZA DECIMAL EM PORTUGUÊS — a fatia, a tarifa, o kWh: «9.7122» vira
+   * «9,7122», sem passar por número (regra 1). Só nas colunas que SÃO grandeza;
+   * um número de unidade continua como está. */
+  if (COLUNA_DECIMAL.test(coluna) && /^-?\d+\.\d+$/.test(v)) return decimalEmBr(v);
 
   /* O UUID INTEIRO NÃO CABE E NÃO AJUDA: trinta e seis caracteres numa célula
    * empurram a coluna vizinha para fora da tela, e ninguém reconhece um pelo
@@ -303,16 +312,17 @@ export function resumoDaLinha(l: LinhaDaTrilha): string {
 
 export type DiaDaTrilha = { dia: string; titulo: string; linhas: LinhaDaTrilha[] };
 
-const soDia = (iso: string): string => iso.slice(0, 10);
+/** O DIA da linha é o dia EM SÃO PAULO (30/09/2026, etapa 4b): o que aconteceu
+ *  às 22h30 de ontem em Goiânia é 01h30 de hoje em UTC, e agrupar pelo texto
+ *  UTC o punha no dia errado. Sem fuso declarado, cai no recorte de texto. */
+const soDia = (iso: string): string => diaEmSP(iso) || iso.slice(0, 10);
 
 /** "hoje", "ontem" ou a data — e a comparação é por texto de data, sem fuso: os
  *  dois lados vêm em ISO, e converter para `Date` só para comparar dia abriria a
  *  porta do fuso do navegador mudar a resposta à meia-noite. */
 export function tituloDoDia(dia: string, hoje: string): string {
   if (dia === hoje) return 'hoje';
-  const d = new Date(`${hoje}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() - 1);
-  if (dia === d.toISOString().slice(0, 10)) return 'ontem';
+  if (dia === diaAnterior(hoje)) return 'ontem';
   return dia.split('-').reverse().join('/');
 }
 
@@ -329,8 +339,9 @@ export function porDia(linhas: readonly LinhaDaTrilha[], hoje: string): DiaDaTri
   return saida;
 }
 
-/** A hora do dia, que é o que a linha mostra depois de o dia virar título. */
-export const horaDaLinha = (iso: string): string => iso.slice(11, 16);
+/** A hora do dia, que é o que a linha mostra depois de o dia virar título — no
+ *  fuso de São Paulo, por `Intl` (`formato.ts`). */
+export const horaDaLinha = (iso: string): string => horaEmSP(iso);
 
 /**
  * A RESPOSTA ESTÁ CHEIA? — e por que a tela precisa perguntar isso.

@@ -317,13 +317,22 @@ export function TelaClientes() {
         ))}
       </Tabela>
 
+      {/* [30/09/2026, etapa 4b] «R9» e «ativo» (o valor do enum) sairam do texto
+          corrido: o que a pessoa precisa saber e o que a coluna mede, e o numero
+          da regra fica para quem o procura. */}
       <p className="sub" style={{ marginTop: 12 }}>
-        <strong>Vale para o contrato</strong> é a R9 e não a presença do campo: só documento
-        coletado localmente e com dígito conferido destrava a transição para <code>ativo</code>.
+        <strong>Vale para o contrato</strong> não é só ter o campo preenchido: só o documento
+        conferido aqui, com o dígito certo, deixa o contrato do cliente ficar ativo.
         Documento com dígito errado <strong>grava assim mesmo</strong> — o sistema nasce sobre
         cadastro incompleto, e travar na porta impediria a própria migração. O que ele bloqueia é
         o contrato, mais adiante, onde a decisão tem consequência.
       </p>
+      <DetalheTecnico>
+        <p style={{ margin: 0 }}>
+          A coluna é a regra R9: só <code>documento_validado = true</code> destrava a transição do
+          contrato para <code>ativo</code>.
+        </p>
+      </DetalheTecnico>
     </Pagina>
   );
 }

@@ -21,6 +21,7 @@
 import { api, type Prontidao, type PosicaoDaCarteira, type Fatura, type RegistroDeFatura } from './api.ts';
 import { useDados, type Carga } from './dados.ts';
 import { competenciaISO } from './dinheiro.ts';
+import { mesDeHojeEmSP } from './formato.ts';
 import type { EmissaoTravadaNaTela } from './emissao-travada.ts';
 import { LIMITE_DA_LISTA, listaParcial } from './registradas-regras.ts';
 import type { LeituraDoMes } from './roteiro-do-mes.ts';
@@ -76,12 +77,34 @@ export function useLeiturasDoMes(mes: string | null): LeiturasDoMes {
   return { prontidao, carteira, cobrancas, registradas, semBoleto, leitura };
 }
 
-/** O mês de hoje no RELÓGIO LOCAL (`toISOString` é UTC: na noite do último dia
- *  do mês, em Goiânia, já seria o mês seguinte). */
+/** O mês de hoje EM SÃO PAULO (`toISOString` é UTC: na noite do último dia do
+ *  mês, em Goiânia, já seria o mês seguinte). [30/09/2026, etapa 4b] Era o
+ *  relógio do navegador; passou a ser o fuso de quem opera, por `formato.ts`. */
 export function mesDeHoje(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  return mesDeHojeEmSP();
 }
+
+/*
+ * O MÊS QUE A TELA ESTÁ MOSTRANDO AGORA (30/09/2026, etapa 4b).
+ *
+ * A Central de Ajuda narra «como está o mês», e até aqui narrava o mês de HOJE
+ * (em UTC) enquanto a tela Mês abria no mês com trabalho — a mesma pergunta
+ * respondida sobre dois meses diferentes, lado a lado. Agora as duas telas que
+ * escolhem mês (Mês e Cobranças) avisam aqui qual está à vista, e a ajuda narra
+ * ESSE. Aberta de outra tela, ela faz a mesma procura que a tela Mês faria
+ * (`procurarMesDoTrabalho`).
+ *
+ * Uma variável de módulo, e não um contexto de React: há uma tela à vista por
+ * vez, o painel lê o valor uma vez ao abrir, e nada precisa redesenhar quando
+ * ele muda.
+ */
+let mesEmTela: string | null = null;
+
+/** A tela diz qual mês está mostrando; `null` ao sair. */
+export function anunciarMesEmTela(mes: string | null): void { mesEmTela = mes; }
+
+/** O mês à vista na tela aberta, se ela escolhe mês. */
+export const mesQueATelaMostra = (): string | null => mesEmTela;
 
 /** O armazenamento do navegador, ou nada. Acessar `localStorage` levanta em
  *  alguns navegadores com o armazenamento bloqueado. */

@@ -9,6 +9,7 @@
 // do sistema que lê o OUTRO banco a partir de uma tela. Quem nunca abrir uma
 // linha nunca faz o servidor abrir conexão com ele — ver `crm/pool-de-leitura.ts`.
 
+import type { ReactNode } from 'react';
 import { Aviso, DetalheTecnico, Icone, Carregando } from './ui.tsx';
 import { fraseDoVinculo, type VinculoNaTela } from './vinculo-do-crm.ts';
 
@@ -21,9 +22,12 @@ export type CorpoDoVinculo = {
    *  desenhado, em vez de existir sem efeito. */
   destravar?: () => void;
   ocupado?: boolean;
+  /** [30/09/2026, etapa 4b] A PERGUNTA de «Soltar o vínculo velho», que toma o
+   *  lugar do botão enquanto espera a resposta — era um `window.confirm`. */
+  pergunta?: ReactNode;
 };
 
-export function PainelDoVinculo({ dados, carregando, erro, destravar, ocupado }: CorpoDoVinculo) {
+export function PainelDoVinculo({ dados, carregando, erro, destravar, ocupado, pergunta }: CorpoDoVinculo) {
   if (carregando) return <Carregando texto="Conferindo o vínculo no outro sistema…" />;
 
   if (erro) {
@@ -53,7 +57,8 @@ export function PainelDoVinculo({ dados, carregando, erro, destravar, ocupado }:
         <p className="sub" style={{ margin: 0 }}>{f.oQueOBotaoFaz}</p>
       )}
 
-      {f.podeDestravar && destravar && (
+      {f.podeDestravar && destravar && pergunta}
+      {f.podeDestravar && destravar && !pergunta && (
         <div>
           <button className="primario" onClick={destravar} disabled={ocupado}>
             <Icone nome="confirmar" tamanho={15} peso="bold" /> Soltar o vínculo velho
