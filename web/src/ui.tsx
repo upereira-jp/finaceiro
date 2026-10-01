@@ -120,7 +120,18 @@ export const RetornoDoAto = ({ texto }: { texto: ReactNode }) => (
  * A REGRA DE USO, em uma linha: se a frase só faz sentido para quem leu o código,
  * ela mora aqui dentro.
  */
-export function DetalheTecnico({ children }: { children: ReactNode }) {
+export function DetalheTecnico({ children, de }: {
+  children: ReactNode;
+  /**
+   * DE QUE É ESTE DETALHE — «Contrato ativo», «Geração da competência».
+   * [01/10/2026, etapa 7a] A tela Mês tinha seis «ver detalhe técnico» na
+   * mesma lista, e para o leitor de tela os seis eram o mesmo botão (crítica de
+   * 01/10, persona Sam). Com `de`, o nome acessível diz de qual linha ele é —
+   * e COMEÇA pelo texto visível, para quem fala com o computador dizer o que lê
+   * (`nomeDoDetalhe`).
+   */
+  de?: string;
+}) {
   const [aberto, setAberto] = useState(false);
   return (
     <>
@@ -128,6 +139,7 @@ export function DetalheTecnico({ children }: { children: ReactNode }) {
           mais, e você decide se quer» — e dois desenhos para um gesto só fariam
           a pessoa aprender duas vezes. */}
       <button type="button" className="ajuda-pergunta" aria-expanded={aberto}
+              aria-label={nomeDoDetalhe(aberto, de)}
               style={{ fontSize: 13, fontWeight: 500, padding: '6px 0' }}
               onClick={() => setAberto((x) => !x)}>
         <Icone nome={aberto ? 'subir' : 'descer'} tamanho={11} peso="bold" />
@@ -140,6 +152,52 @@ export function DetalheTecnico({ children }: { children: ReactNode }) {
         </div>
       )}
     </>
+  );
+}
+
+/** O nome acessível do «ver detalhe técnico» de UMA linha: o texto visível e,
+ *  depois dos dois-pontos, de quem ele é. Sem `de`, o nome é o próprio texto
+ *  (`undefined` deixa o botão falar por si). */
+export function nomeDoDetalhe(aberto: boolean, de?: string): string | undefined {
+  const visivel = aberto ? 'ocultar detalhe técnico' : 'ver detalhe técnico';
+  return de?.trim() ? `${visivel}: ${de.trim()}` : undefined;
+}
+
+/**
+ * «MOSTRANDO SÓ: …» — o recorte com que a tela abriu, dito e removível.
+ *
+ * [01/10/2026, etapa 7a] Toda trava do Mês leva à tela já recortada no que
+ * falta (`?pendencia=`). Uma lista curta sem o aviso do recorte é o jeito de
+ * «sumir» com um cadastro que está lá — e quem chega de um link não sabe que
+ * a lista foi cortada. O chip diz O QUE a lista mostra, na frase de
+ * `ROTULO_DO_RECORTE`, e o «x» devolve a lista inteira.
+ *
+ * TIRAR O RECORTE TIRA DO ENDEREÇO TAMBÉM (`aoRemover` chama
+ * `esquecerORecorte`): sem isso, recarregar a página traria de volta o recorte
+ * que a pessoa acabou de tirar.
+ *
+ * O FOCO não cai no nada quando o chip some: vai para `focarDepois` (o campo de
+ * busca ou o título da lista), que é por onde a pessoa continua.
+ */
+export function MostrandoSo(p: { rotulo: string; aoRemover: () => void; focarDepois?: string }) {
+  if (!p.rotulo) return null;
+  return (
+    <p className="mostrando-so">
+      <span className="mostrando-so-rot">Mostrando só</span>
+      <span className="chip">
+        {p.rotulo}
+        <button type="button" className="chip-x" title="Mostrar tudo"
+                aria-label={`Mostrar tudo — tirar o recorte «${p.rotulo}»`}
+                onClick={() => {
+                  p.aoRemover();
+                  if (p.focarDepois) {
+                    requestAnimationFrame(() => document.getElementById(p.focarDepois!)?.focus());
+                  }
+                }}>
+          <Icone nome="fechar" tamanho={13} peso="bold" />
+        </button>
+      </span>
+    </p>
   );
 }
 
@@ -456,19 +514,40 @@ export function BotaoDeCriar(p: { controla: string; aberto: boolean; ao: () => v
  */
 export function PainelDeCriar(p: {
   id: string; titulo: string; aoFechar: () => void; children: ReactNode;
+  /**
+   * QUEM ABRIU, quando não foi o «Novo …» do alto (01/10/2026, etapa 7a): o
+   * «Criar contrato» de uma unidade da lista do que falta. O foco volta a ele
+   * ao fechar — e, se ele sumiu junto (a unidade ganhou contrato), ao «Novo …».
+   */
+  devolverA?: string | null;
 }) {
   const caixa = useRef<HTMLElement>(null);
   /* A referencia guarda o `aoFechar` mais novo sem reinstalar o efeito — o mesmo
      cuidado da `GavetaDaConta`: remontar a cada tecla arrancaria o cursor. */
   const fechar = useRef(p.aoFechar);
   fechar.current = p.aoFechar;
+  const devolver = useRef(p.devolverA);
+  devolver.current = p.devolverA;
 
   useEffect(() => {
-    caixa.current?.querySelector<HTMLElement>('input, select, textarea')?.focus();
+    /* O FOCO ENTRA NO PRIMEIRO CAMPO VAZIO (etapa 7a), e não no primeiro campo:
+       aberto de uma unidade, o painel já vem com ela escolhida, e o que falta
+       decidir é quem trouxe o cliente. Tudo preenchido, o primeiro. */
+    const campos = Array.from(caixa.current?.querySelectorAll<HTMLInputElement>('input, select, textarea') ?? []);
+    (campos.find((c) => !c.value) ?? campos[0])?.focus();
     const gatilho = `${p.id}-gatilho`;
     /* Fechou (Cancelar, Esc, ou cadastrou): o foco volta a quem abriu. Sem isto
        ele cairia no `body`, e o proximo Tab recomecaria do topo da pagina. */
-    return () => { document.getElementById(gatilho)?.focus(); };
+    return () => {
+      /* SO QUANDO O FOCO SE PERDEU (etapa 7a): fechado pelo «Cancelar», pelo Esc
+         ou pelo ato, ele estava dentro do painel e caiu no `body`; fechado pelo
+         proprio «Novo …», ele ja esta no gatilho, e move-lo seria tirar a
+         pessoa de onde ela acabou de clicar. */
+      const agora = document.activeElement;
+      if (agora && agora !== document.body) return;
+      const origem = devolver.current ? document.getElementById(devolver.current) : null;
+      (origem ?? document.getElementById(gatilho))?.focus();
+    };
   }, [p.id]);
 
   return (
@@ -554,8 +633,12 @@ export const Tabela = ({ cabecalho, children, vazio, cartoes = true }: {
   cabecalho: ReactNode; children: ReactNode; vazio?: ReactNode;
   /** `'estreita'` [01/10/2026, etapa 6]: a tabela curta de resumo, que vira
    *  cartao so abaixo de 440px DE TABELA — numa coluna de meia tela do
-   *  computador ela continua tabela. */
-  cartoes?: boolean | 'estreita';
+   *  computador ela continua tabela.
+   *  `'larga'` [01/10/2026, etapa 7a]: a tabela de muitas colunas com o menu
+   *  «⋯» na linha (Contratos), que vira cartao abaixo de 860px — a medida de
+   *  Cobranças — e por isso nunca precisa rolar para o lado: a rolagem fica
+   *  aberta, e o menu da ultima linha nao e cortado por ela. */
+  cartoes?: boolean | 'estreita' | 'larga';
 }) => {
   const temLinha = Array.isArray(children) ? children.flat().filter(Boolean).length > 0 : Boolean(children);
   const caixa = useRef<HTMLDivElement>(null);
@@ -577,7 +660,7 @@ export const Tabela = ({ cabecalho, children, vazio, cartoes = true }: {
     </div>
   );
   return cartoes
-    ? <div className={cartoes === 'estreita' ? 'tabela-cartoes estreita' : 'tabela-cartoes'} ref={caixa}>{seletor}{corpo}</div>
+    ? <div className={typeof cartoes === 'string' ? `tabela-cartoes ${cartoes}` : 'tabela-cartoes'} ref={caixa}>{seletor}{corpo}</div>
     : <>{seletor}{corpo}</>;
 };
 
@@ -872,12 +955,16 @@ export function normalizar(s: string): string {
 export const contem = (alvo: string | null | undefined, busca: string): boolean =>
   !busca || (alvo != null && normalizar(alvo).includes(normalizar(busca)));
 
-export function Busca(p: { valor: string; ao: (v: string) => void; dica?: string }) {
+export function Busca(p: { valor: string; ao: (v: string) => void; dica?: string;
+  /** O `id` do campo — para o foco voltar a ele quando um recorte sai
+   *  (`MostrandoSo`, etapa 7a). */
+  id?: string;
+}) {
   return (
     <div className="busca">
       {/* O input vem ANTES do icone no DOM de proposito: e o que permite
           `input:focus + .adorno-esquerda` acender a lupa junto com o foco. */}
-      <input type="search" value={p.valor} placeholder={p.dica ?? 'Buscar…'}
+      <input id={p.id} type="search" value={p.valor} placeholder={p.dica ?? 'Buscar…'}
              aria-label={p.dica ?? 'Buscar'} onChange={(e) => p.ao(e.target.value)} />
       <span className="adorno-esquerda"><Icone nome="buscar" tamanho={15} peso="bold" /></span>
     </div>

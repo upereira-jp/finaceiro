@@ -984,6 +984,72 @@ export const ESTILO = `
   .secao-de-pe-atos { display: grid; gap: 10px; justify-items: start; }
   .secao-de-pe-atos > .cartao, .secao-de-pe-atos > div, .secao-de-pe-atos > .aviso { justify-self: stretch; }
 
+  /* ============== O QUE FALTA, ANTES DO QUE EXISTE (01/10/2026, etapa 7a)
+     O caminho do cadastro travado: a trava do Mes leva a tela ja recortada no
+     que falta, e a tela diz o recorte num chip que se tira.
+
+     «MOSTRANDO SO: …» ("MostrandoSo"): o rotulo condensado e o chip — o mesmo
+     par contorno-e-fundo do acento do chip de unidade de Contas de luz, agora
+     fora da ilha, porque cinco telas o usam. O "x" e um alvo de 24px no
+     computador e de 44px no telefone, com nome proprio. */
+  .mostrando-so {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin: 0 0 20px;
+  }
+  /* Dentro da aba de leitura de Contas de luz o ritmo e o "gap" da coluna. */
+  .g3ref .fu-leitura > .mostrando-so, .g3ref .fu-leitura > .recolhido { margin: 0; }
+  .mostrando-so-rot {
+    font-family: var(--fonte-cond); font-size: var(--rotulo-tamanho); font-weight: var(--rotulo-peso);
+    text-transform: uppercase; letter-spacing: var(--rotulo-tracking); color: var(--fraco);
+  }
+  .chip {
+    display: inline-flex; align-items: center; gap: 4px; padding: 2px 2px 2px 10px; min-width: 0;
+    border: 1px solid var(--acento-forte); background: var(--acento-suave); color: var(--texto);
+    font-size: var(--t-ui); font-weight: 600; line-height: 1.35;
+  }
+  button.chip-x {
+    flex: none; width: 24px; height: 24px; padding: 0;
+    border-color: transparent; background: none; color: var(--texto);
+  }
+  button.chip-x:hover:not(:disabled) { border-color: var(--texto); background: none; }
+
+  /* O BLOCO «UNIDADES SEM CONTRATO ATIVO» (Contratos): o titulo leva o lapis
+     da tarefa na tinta ambar — e lacuna de cadastro, e nao falha —, e a
+     contagem apagada ao lado. A tabela e a da casa. */
+  .ct-falta { margin: 0 0 8px; }
+  .ct-falta > h2 { margin-top: 0; }
+  .ct-falta > h2 > .ic { color: var(--alerta); flex: none; }
+  .ct-falta-n { color: var(--fraco); font-weight: 500; }
+  .ct-falta > .sub { margin-bottom: 14px; }
+  td.ct-falta-ato { width: 1%; white-space: nowrap; text-align: right; vertical-align: middle; }
+  .ct-lista > h2 { margin-top: 34px; }
+  .ct-lista .busca input { width: 300px; }
+  /* A sugestao de quem trouxe, no painel: uma linha com o icone da ajuda e o
+     «usar Fulano» como link — nunca um campo ja preenchido. */
+  .ct-sugestao {
+    display: flex; align-items: flex-start; gap: 8px; margin: 12px 0 0; max-width: 72ch;
+    font-size: var(--t-ui); line-height: 1.5;
+  }
+  .ct-sugestao > .ic { margin-top: 3px; flex: none; color: var(--fraco); }
+  /* O «⋯» da linha de Contratos: o mesmo desenho do de Cobrancas. O texto
+     «Mais ações» so aparece no cartao, onde o icone sozinho seria adivinhacao. */
+  td.ct-aco { width: 1%; vertical-align: middle; text-align: right; }
+  .ct-menu-texto { display: none; }
+  /* O ITEM QUE DESFAZ, NO MENU, NA TINTA DO ERRO: encerrar o contrato apaga a
+     ocupacao da unidade e nao tem desfazer pela tela — a mesma regra do
+     "button.perigo", sem o contorno que um item de menu nao tem. */
+  .menu-painel button.perigo { color: var(--erro); }
+  /* Sob o ponteiro, o fundo tingido do erro (6,05:1) — e nao o vermelho cheio
+     do "button.perigo", que viria junto por especificidade e deixaria o texto
+     vermelho sobre vermelho. */
+  .menu-painel button.perigo:hover:not(:disabled) {
+    color: var(--erro); background: var(--erro-fundo); border-color: transparent;
+  }
+
+  /* O CLIENTE NA IDENTIFICACAO DA UNIDADE (Unidades): logo abaixo do numero,
+     na tinta do texto e no corpo de interface — e por ele que se reconhece a
+     linha; a distribuidora e a usina continuam apagadas embaixo. */
+  .uc-cliente { margin-top: 2px; font-size: var(--t-ui); line-height: 1.35; }
+
   /* ================= MENOS PROSA, LISTA ANTES (30/09/2026, etapa 4a)
      Tres pecas que a etapa deu as telas de trabalho, e as tres moram aqui fora
      de qualquer escopo porque servem a cinco telas ou mais.
@@ -2914,6 +2980,25 @@ export const ESTILO = `
   @container tabela-estreita (max-width: 440px) {
     ${CARTAO_DA_TABELA}
   }
+  /* [01/10, etapa 7a] A TABELA LARGA (Contratos: sete colunas e o «⋯» na
+     linha) vira cartao abaixo de 860px DE TABELA, a medida de Cobrancas. Acima
+     disso as colunas cabem, e a rolagem fica aberta — e por ela estar aberta
+     que o menu da ULTIMA linha sai por baixo da tabela, em vez de ser cortado
+     pela caixa que rola. As celulas quebram em qualquer ponto, para um nome
+     comprido nunca empurrar a tabela para fora. */
+  .tabela-cartoes.larga { container-name: tabela-larga; }
+  .tabela-cartoes.larga > .rolagem { overflow: visible; }
+  .tabela-cartoes.larga td { overflow-wrap: anywhere; }
+  .tabela-cartoes.larga td.c-aco, .tabela-cartoes.larga td.num { overflow-wrap: normal; }
+  @container tabela-larga (max-width: 860px) {
+    ${CARTAO_DA_TABELA}
+    /* O «Mais ações» divide a última linha do cartão com «Cheias pagas», à
+       direita — uma linha inteira só para ele era a mais vazia do cartão. */
+    .tabela-cartoes.larga tbody > tr > td.ct-aco.c-aco:last-child { grid-column: auto; text-align: right; align-self: end; }
+    .tabela-cartoes .ct-menu { display: inline-block; }
+    .tabela-cartoes .ct-menu > button.so-icone { width: auto; padding: 0 12px; gap: 6px; border-color: var(--borda); }
+    .tabela-cartoes .ct-menu-texto { display: inline; }
+  }
 
   /* ---------------------------------------- o celular: alvo de 44px
      A REGRA E POR LARGURA (720px, a mesma dos cartoes) e nao por "pointer":
@@ -2927,7 +3012,7 @@ export const ESTILO = `
   @media (max-width: 720px) {
     button:not(.abrir-calendario):not(.campo-porque-botao):not(.ajuda-balao-x):not(.ordenar),
     a.botao, a.fu-ir, .ajuda-ir, summary { min-height: 44px; }
-    button.so-icone, button.so-icone.grande, button.em-abrir, .g3ref button.fu-chip-x { min-width: 44px; min-height: 44px; }
+    button.so-icone, button.so-icone.grande, button.em-abrir, .g3ref button.fu-chip-x, button.chip-x { min-width: 44px; min-height: 44px; }
     button.discreto, button.em-link, .g3ref button.fu-link, .ligacao-crm, a.ir-resolver { min-height: 44px; }
     /* O CALENDARIO DE DENTRO DO CAMPO DE DATA: o proprio campo ja abre o
        seletor ao toque, mas o desenho e um botao — e botao no telefone e 44px.

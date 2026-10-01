@@ -41,7 +41,10 @@ import {
   type ComposicaoUnificada, type LinhaDetalhada, type CampoPersonalizado,
   type RegistroDeFatura, type UnidadeConsumidora, type ModeloDeFatura,
 } from '../api.ts';
-import { Aviso, Campo, Icone } from '../ui.tsx';
+import { Aviso, Campo, Icone, MostrandoSo } from '../ui.tsx';
+import { ContasQueFaltam } from '../contas-que-faltam.tsx';
+import { FILTROS_DA_TELA, filtroDaConsulta, rotuloDoRecorte, esquecerORecorte } from '../destino-da-camada.ts';
+import { mesDaQuery } from '../dinheiro.ts';
 import { TrianguloDeAviso } from '../icones.tsx';
 import {
   escalaDaPrevia, regraDaPagina, PX_POR_MM,
@@ -324,6 +327,15 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
   const gatilho = useRef<HTMLElement | null>(null);
   /** O chip de unidade da lista de registradas. Ver `FiltroDasRegistradas`. */
   const [unidadeDaLista, setUnidadeDaLista] = useState<string | null>(null);
+  /*
+   * O RECORTE DO ENDEREÇO (01/10/2026, etapa 7a): `?pendencia=sem_conta` é o
+   * botão «15 contas a ler» do Mês. A aba abre com «Faltam N contas» aberto e
+   * mostra só o trabalho de LER — o envio, a fila e o que falta —, com as
+   * registradas fora até o «x» do «Mostrando só». O `?mes=` diz de que mês;
+   * lidos só na montagem, como em Unidades.
+   */
+  const [recorte, setRecorte] = useState(() => filtroDaConsulta(location.search, FILTROS_DA_TELA['/documento']));
+  const [mesPedido] = useState(() => mesDaQuery(location.search));
 
   /*
    * ==========================================================================
@@ -846,6 +858,11 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
             continuar={continuarConferencia}
             digitarConta={digitarConta}
             adicionarAoLote={adicionarAoLote}
+            recorte={
+              <MostrandoSo rotulo={rotuloDoRecorte('/documento', recorte)} focarDepois="fu-registradas-titulo"
+                           aoRemover={() => { setRecorte(''); esquecerORecorte(); }} />
+            }
+            faltam={<ContasQueFaltam mesPedido={mesPedido} versao={registrosVersao} aberto={recorte === 'sem_conta'} />}
             fila={
               <TabelaDaFila
                 itens={lote} ucs={ucsDoCadastro} cadastro={cadastroDeUcs} registrando={registrandoLote}
@@ -856,8 +873,9 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
                 limpar={() => { arquivosDoLote.current.clear(); setLote([]); setAbertoId(null); }}
               />
             }
-            registradas={
+            registradas={recorte === 'sem_conta' ? null :
               <ContasRegistradas
+                mesInicial={mesPedido}
                 cadastro={cadastroDeUcs}
                 versao={registrosVersao}
                 /* O LARANJA PASSA PARA «Gerar N cobranças» quando a fila nao tem
@@ -1044,12 +1062,17 @@ function AbaDeLeitura(p: {
   continuar: () => void;
   digitarConta: () => void;
   adicionarAoLote: (f: FileList | null) => void;
+  /** O «Mostrando só: …» do recorte do endereço (etapa 7a). */
+  recorte: ReactNode;
+  /** «Faltam N contas de <mês>» (etapa 7a). */
+  faltam: ReactNode;
   fila: ReactNode;
   registradas: ReactNode;
 }) {
   const emEdicao = !p.gaveta && Boolean(p.campos.unidade_consumidora.trim() || p.campos.cliente.trim());
   return (
     <div className="fu-leitura naoimprime">
+      {p.recorte}
       {/*
         O EMISSOR VAZIO ACUSA AQUI, e ate 08/09/2026 nao acusava em lugar nenhum
         que a operacao visse.
@@ -1115,6 +1138,9 @@ function AbaDeLeitura(p: {
         </div>
       )}
 
+      {/* O QUE FALTA LER, logo abaixo do envio e antes da fila (etapa 7a): é a
+          lista de onde a pessoa tira as contas que vai enviar. */}
+      {p.faltam}
       {p.fila}
       {p.registradas}
     </div>
@@ -1559,7 +1585,10 @@ function SerieDaUnidade({ uc, mes, versao, verNaLista }: {
  * quem sabe se falta contrato, geracao ou vencimento e a triagem, e duplicar a
  * decisao aqui daria duas respostas para a mesma pergunta.
  */
-function ContasRegistradas({ cadastro, versao, principal, unidade, aoMudarUnidade, segundaVia, emEdicao, aoMudar }: {
+function ContasRegistradas({ cadastro, versao, principal, unidade, aoMudarUnidade, segundaVia, emEdicao, aoMudar, mesInicial }: {
+  /** O mês do endereço (`?mes=`), quando o Mês mandou um (etapa 7a): a lista
+   *  abre nele em vez de no padrão. */
+  mesInicial?: string | null;
   cadastro: ReadonlyMap<string, string>;
   versao: number;
   principal: boolean;
@@ -1572,8 +1601,9 @@ function ContasRegistradas({ cadastro, versao, principal, unidade, aoMudarUnidad
   const [confirmandoSegundaVia, setConfirmandoSegundaVia] = useState<string | null>(null);
   const [lista, setLista] = useState<RegistroDeFatura[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
-  /** `undefined`: ninguem escolheu, vale o padrao (`mesPadrao`). `null`: todos. */
-  const [mesEscolhido, setMesEscolhido] = useState<string | null | undefined>(undefined);
+  /** `undefined`: ninguem escolheu, vale o padrao (`mesPadrao`). `null`: todos.
+   *  [etapa 7a] O mês do endereço conta como escolhido — o Mês escolheu. */
+  const [mesEscolhido, setMesEscolhido] = useState<string | null | undefined>(mesInicial ?? undefined);
   const [soSemCobranca, setSoSemCobranca] = useState(false);
   const [desmarcadas, setDesmarcadas] = useState<ReadonlySet<string>>(new Set());
   const [revisando, setRevisando] = useState(false);
@@ -1607,7 +1637,14 @@ function ContasRegistradas({ cadastro, versao, principal, unidade, aoMudarUnidad
 
   /* TROCAR DE UNIDADE VOLTA O MES AO PADRAO: a serie de uma unidade abre em
    * «Todos os meses», e tirar o chip volta ao mes que tem trabalho. */
-  useEffect(() => { setMesEscolhido(undefined); }, [alvo]);
+  /* O primeiro efeito NAO conta como troca: sem esta guarda, ele apagaria na
+     montagem o mes que veio do endereco (etapa 7a). */
+  const alvoAnterior = useRef(alvo);
+  useEffect(() => {
+    if (alvoAnterior.current === alvo) return;
+    alvoAnterior.current = alvo;
+    setMesEscolhido(undefined);
+  }, [alvo]);
 
   const todas = lista ?? [];
   const meses = mesesDaLista(todas);

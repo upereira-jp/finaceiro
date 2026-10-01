@@ -106,7 +106,7 @@ function PainelDoPasso({ passo, idAba, idPainel }: { passo: PassoDoMes; idAba: s
           precisa ler quatro linhas para achar a porta. O nome é o da aba, letra
           por letra (`RM13`). */}
       <p className="roteiro-painel-ir">
-        <Ligacao para={passo.destino.endereco} className="botao primario">
+        <Ligacao para={passo.ir} className="botao primario">
           Abrir {passo.destino.rotulo} <Icone nome="ir_para" tamanho={15} peso="bold" />
         </Ligacao>
       </p>

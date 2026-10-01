@@ -349,7 +349,10 @@ export function TabelaDasRegistradas(p: PropsDasRegistradas) {
     <section className="fu-bloco" aria-labelledby="fu-registradas-titulo" id="fu-registradas">
       <div className="fu-bloco-topo">
         <div className="fu-bloco-titulo">
-          <h2 id="fu-registradas-titulo">{tituloDasRegistradas(p.filtro)}</h2>
+          {/* `tabIndex={-1}`: a tela leva o foco a este título depois de excluir
+              uma linha e ao tirar um recorte (etapa 7a) — e um `h2` sem ele não
+              recebe foco, o pedido caía no vazio. */}
+          <h2 id="fu-registradas-titulo" tabIndex={-1}>{tituloDasRegistradas(p.filtro)}</h2>
           <p className="fu-bloco-resumo">{resumo}</p>
         </div>
         {!p.revisando && (
@@ -386,8 +389,13 @@ export function TabelaDasRegistradas(p: PropsDasRegistradas) {
             </button>
           </span>
         )}
+        {/* A CONTAGEM DIZ DE QUÊ (etapa 7a): «26 de 59» sozinho não dizia se
+            eram contas, unidades ou cobranças — são as contas registradas que
+            o filtro deixa à vista, de todas as que a lista trouxe. */}
         {p.lista != null && (
-          <span className="contagem">{p.visiveis.length} de {p.lista.length}</span>
+          <span className="contagem">
+            {p.visiveis.length} de {p.lista.length} {p.lista.length === 1 ? 'conta registrada' : 'contas registradas'}
+          </span>
         )}
       </div>
 

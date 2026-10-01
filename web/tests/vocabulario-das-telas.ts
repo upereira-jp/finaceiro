@@ -81,7 +81,10 @@ const semComentario = (src: string): string =>
  * coisa que alguem le — que era o defeito, e nao a existencia do ponteiro.
  */
 const semDetalheTecnico = (src: string): string =>
-  src.replace(/<DetalheTecnico>[\s\S]*?<\/DetalheTecnico>/g,
+  /* `\b[^>]*` (01/10/2026, etapa 7a): o componente ganhou a propriedade `de`
+     («ver detalhe técnico: Contrato ativo»), e `<DetalheTecnico de={…}>` deixou
+     de casar com a abertura exata — o recorte parava de recortar. */
+  src.replace(/<DetalheTecnico\b[^>]*>[\s\S]*?<\/DetalheTecnico>/g,
               (m) => '\n'.repeat((m.match(/\n/g) ?? []).length));
 
 /** Interpolacao de DADO nao e texto da tela: `${u.codigo_geradora}` vira o codigo

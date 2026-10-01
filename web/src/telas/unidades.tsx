@@ -21,13 +21,13 @@
 // (`faltamNoEndereco`), entao ela nao pode mais discordar dele.
 
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { api, type UnidadeConsumidora, type Usina } from '../api.ts';
+import { api, type UnidadeConsumidora, type Usina, type Cliente } from '../api.ts';
 import { PainelDoVinculo } from '../vinculo-do-crm-corpo.tsx';
 import type { VinculoNaTela } from '../vinculo-do-crm.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
   Pagina, Aviso, RetornoDoAto, Tabela, Busca, Campo, Ferramentas, Filtro, ThOrd, Marca, BotaoDeIcone,
-  CampoData, Icone, useOrdenacao, ordenar, contem, rotulo, DetalheTecnico,
+  CampoData, Icone, useOrdenacao, ordenar, contem, rotulo, DetalheTecnico, MostrandoSo,
 } from '../ui.tsx';
 import {
   situacaoDaUc, ehFaturavel, contarSituacoes,
@@ -38,7 +38,9 @@ import {
 import { decimalDoCadastro, decimalParaCampo, mesDaQuery } from '../dinheiro.ts';
 import { mesEmBr } from '../formato.ts';
 import { PerguntaNaTela } from '../serie.tsx';
-import { FILTROS_DA_TELA, filtroDaConsulta, unidadeDaConsulta } from '../destino-da-camada.ts';
+import {
+  FILTROS_DA_TELA, filtroDaConsulta, unidadeDaConsulta, rotuloDoRecorte, esquecerORecorte,
+} from '../destino-da-camada.ts';
 import { Ligacao } from '../rota.tsx';
 import { separarEndereco, completarVazios, faltamNaProposta, avisoDoCepDaConta } from '../endereco-da-conta.ts';
 import { cepDeOutraUf } from '../../../src/dominio/cep.ts';
@@ -46,6 +48,17 @@ import { cepDeOutraUf } from '../../../src/dominio/cep.ts';
 export function TelaUnidades() {
   const ucs = useDados<UnidadeConsumidora[]>(() => api.get('/unidades-consumidoras?limite=500'));
   const usinas = useDados<Usina[]>(() => api.get('/usinas'));
+  /*
+   * O NOME DO CLIENTE NA LINHA (01/10/2026, etapa 7a). Cada linha era
+   * identificada por número, distribuidora e usina — e ninguém reconhece uma
+   * unidade pelo número: a pessoa procura «a da Ana Lima». `escopo=todos`
+   * porque esta lista tem também as unidades que não faturam, e o recorte
+   * padrão da rota (`carteira_ativa`) deixaria essas sem nome. Falha em
+   * silêncio: sem a lista, a linha volta a ser só o número, como antes.
+   */
+  const clientes = useDados<Cliente[]>(() => api.get('/clientes?escopo=todos&limite=500'));
+  const clientePorId = new Map((clientes.dado ?? []).map((c) => [c.id, c.nome]));
+  const nomeDoCliente = (id: string): string | null => clientePorId.get(id) ?? null;
   /*
    * O ENDERECO QUE VEIO NA CONTA DA DISTRIBUIDORA — 10/09/2026.
    *
@@ -123,7 +136,7 @@ export function TelaUnidades() {
   const todas = ucs.dado ?? [];
   const visiveis = ordenar(
     todas.filter((u) =>
-      (contem(u.numero_uc, busca) || contem(u.distribuidora, busca)) &&
+      (contem(u.numero_uc, busca) || contem(u.distribuidora, busca) || contem(nomeDoCliente(u.cliente_id), busca)) &&
       (!situacao || situacaoDaUc(u) === situacao) &&
       (pendencia !== 'sem_vencimento' || !u.data_vencimento) &&
       (pendencia !== 'sem_tarifa' || !u.tarifa_reais_por_kwh) &&
@@ -318,13 +331,18 @@ export function TelaUnidades() {
       <RetornoDoAto texto={acao.sucesso} />
       {ucs.erro && <Aviso tipo="erro">{ucs.erro}</Aviso>}
 
+      {/* O RECORTE COM QUE A TELA ABRIU, dito e removível (etapa 7a): quem chega
+          de uma trava do Mês lê que a lista foi cortada, e em quê. */}
+      <MostrandoSo rotulo={rotuloDoRecorte('/unidades', pendencia)} focarDepois="unidades-busca"
+                   aoRemover={() => { setPendencia(''); esquecerORecorte(); }} />
+
       {/* A contagem diz as DUAS coisas. "41 de 41" escondia que so 29 faturam, e
           mostrar so as 29 esconderia as outras doze - o par e o que nao mente
           para nenhum dos dois lados. */}
       <Ferramentas contagem={todas.length
         ? `${visiveis.length} de ${todas.length} · ${contagem.faturaveis} faturáveis`
         : undefined}>
-        <Busca valor={busca} ao={setBusca} dica="Buscar pelo número da unidade ou pela distribuidora…" />
+        <Busca id="unidades-busca" valor={busca} ao={setBusca} dica="Buscar pelo número ou pelo cliente…" />
         {/* As opcoes saem do vocabulario FECHADO de `unidades-regras`, e nao de
             uma lista escrita aqui: uma situacao nova sem opcao de filtro ficaria
             invisivel. */}
@@ -339,7 +357,7 @@ export function TelaUnidades() {
                          { valor: 'sem_usina', texto: 'Sem usina' },
                          { valor: 'sem_endereco', texto: 'Sem endereço completo' }]} />
         {(busca || situacao || pendencia) && (
-          <button type="button" onClick={() => { setBusca(''); setSituacao(''); setPendencia(''); }}>
+          <button type="button" onClick={() => { setBusca(''); setSituacao(''); setPendencia(''); esquecerORecorte(); }}>
             <Icone nome="limpar" tamanho={15} /> Limpar filtros
           </button>
         )}
@@ -372,6 +390,11 @@ export function TelaUnidades() {
           <tr className={estaAberta ? 'linha-aberta' : undefined}>
             <td>
               <strong>{u.numero_uc}</strong>
+              {/* O CLIENTE NA IDENTIFICAÇÃO (etapa 7a), logo abaixo do número e
+                  acima da distribuidora: é por ele que a pessoa reconhece a
+                  linha — no computador e no cartão do celular, que é esta
+                  mesma célula no alto. */}
+              {nomeDoCliente(u.cliente_id) && <div className="uc-cliente">{nomeDoCliente(u.cliente_id)}</div>}
               <div className="uc-meta">
                 {u.distribuidora}
                 {usina ? <> · usina {usina}</> : null}

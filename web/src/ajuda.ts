@@ -742,7 +742,7 @@ export const TOPICOS: readonly Topico[] = [
       'O valor da comissão em si não tem tela; é definido por quem decide isso.',
     ],
     caminhos: [
-      daCamada('originador_do_contrato', 'Conferir os contratos ativos'),
+      daCamada('originador_do_contrato', 'Conferir os contratos sem quem trouxe o cliente'),
       ver('/relatorios', 'Ver o que já foi apurado'),
     ],
     camada: 'originador_do_contrato',

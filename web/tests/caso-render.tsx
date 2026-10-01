@@ -49,7 +49,7 @@ import { CAMPOS_DA_FATURA_VAZIOS, type RegistroDeFatura } from '../src/api.ts';
 import { filtrarRegistradas } from '../src/registradas-regras.ts';
 import { RevisaoDaSerie, RecusaNaTela, ResumoDaBaixa, SituacaoDaCobranca } from '../src/emissao-corpo.tsx';
 import { PerguntaNaTela } from '../src/serie.tsx';
-import { Campo, Aviso, RetornoDoAto, Tabela, Pagina } from '../src/ui.tsx';
+import { Campo, Aviso, RetornoDoAto, Tabela, Pagina, DetalheTecnico, MostrandoSo, nomeDoDetalhe } from '../src/ui.tsx';
 import { lerRecusa, recusaPrevista } from '../src/emissao-regras.ts';
 
 let falhas = 0;
@@ -849,9 +849,12 @@ const LEITURA_VAZIA = {
   chk('R16d', (html.match(/Como fazer/g) ?? []).length === 1 && (html.match(/role="tabpanel"/g) ?? []).length === 1,
       'UM painel, com UM «como fazer»: cinco instruções ao mesmo tempo é o mesmo que nenhuma');
 
-  chk('R16e', html.includes('href="/documento"') && t.includes('Abrir Contas de luz'),
-      'e o botão leva ao endereço REAL da tela onde o passo acontece, com o nome da aba — «Abrir '
-      + 'Contas de luz» —, e não a uma explicação de onde clicar');
+  /* [01/10/2026, etapa 7a] O ENDEREÇO GANHOU O RECORTE E O MÊS: «29 contas a
+     ler» abre Contas de luz na lista das que FALTAM, de julho — e não na das já
+     lidas. A rota continua a da tela (`/documento`), que é o item do menu. */
+  chk('R16e', html.includes('href="/documento?pendencia=sem_conta&amp;mes=2026-07"') && t.includes('Abrir Contas de luz'),
+      'e o botão leva ao endereço REAL da tela onde o passo acontece, já no recorte do que falta e '
+      + 'no mês da tela, com o nome da aba — «Abrir Contas de luz» —, e não a uma explicação de onde clicar');
 
   // ------------------------------------ o cadastro que trava, numa linha própria
   const travado = desenharRoteiro({
@@ -901,7 +904,7 @@ const LEITURA_VAZIA = {
   const tr = texto(risco);
   const abaEscolhida = /<button[^>]*aria-selected="true"[^>]*data-passo="([a-z]+)"/.exec(risco)?.[1];
   chk('R16j', abaEscolhida === 'cobrar' && tr.includes('Abrir Cobranças') && /recusada pelo banco/.test(tr)
-             && risco.includes('href="/faturas"'),
+             && risco.includes('href="/faturas?mes=2026-09"'),
       'com 15 contas a ler e um boleto recusado pelo banco, o painel abre no PASSO 4 — «Abrir '
       + 'Cobranças», com a recusa escrita —, e não no 1');
 
@@ -1381,6 +1384,33 @@ const LEITURA_VAZIA = {
   const iMain = casca.indexOf('<main');
   chk('R29j', iFaixa > 0 && iAjuda > iFaixa && iMain > iAjuda,
       'o botao da ajuda fica entre a faixa do celular e o conteudo: a ordem do Tab bate com a vista nas duas larguras');
+}
+
+/* ==========================================================================
+ * R30 — OS NOMES ACESSÍVEIS QUE SE REPETIAM (01/10/2026, etapa 7a)
+ * ==========================================================================
+ * A tela Mês tinha seis «ver detalhe técnico» com o mesmo nome; o leitor de
+ * tela listava seis botões iguais (crítica de 01/10, persona Sam). */
+{
+  const dois = renderToStaticMarkup(<>
+    <DetalheTecnico de="Contrato ativo"><p>a</p></DetalheTecnico>
+    <DetalheTecnico de="Geração da competência"><p>b</p></DetalheTecnico>
+  </>);
+  const nomes = [...dois.matchAll(/aria-label="([^"]+)"/g)].map((m) => m[1]);
+  chk('R30', nomes.length === 2 && new Set(nomes).size === 2
+             && nomes[0] === 'ver detalhe técnico: Contrato ativo',
+      'com `de`, cada «ver detalhe técnico» tem nome próprio, que começa pelo texto visível e diz de qual linha é');
+  const sem = renderToStaticMarkup(<DetalheTecnico><p>c</p></DetalheTecnico>);
+  chk('R30b', !/aria-label=/.test(sem) && nomeDoDetalhe(true, 'X') === 'ocultar detalhe técnico: X'
+              && nomeDoDetalhe(false, '  ') === undefined,
+      'sem `de` o botão fala por si (sem `aria-label`), e aberto o nome acompanha o texto «ocultar»');
+
+  const chip = renderToStaticMarkup(<MostrandoSo rotulo="unidades que faturam sem contrato ativo" aoRemover={() => {}} />);
+  chk('R30c', /Mostrando só/.test(texto(chip)) && texto(chip).includes('unidades que faturam sem contrato ativo')
+              && /aria-label="Mostrar tudo — tirar o recorte «unidades que faturam sem contrato ativo»"/.test(chip),
+      'o recorte com que a tela abriu é dito («Mostrando só …») e o «x» tem nome: mostrar tudo, tirando QUAL recorte');
+  chk('R30d', renderToStaticMarkup(<MostrandoSo rotulo="" aoRemover={() => {}} />) === '',
+      'sem recorte, nada — o chip só existe quando a lista foi cortada');
 }
 
 export const resultado = () => ({ falhas, feitas });

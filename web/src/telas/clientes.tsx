@@ -29,7 +29,7 @@ import { useState } from 'react';
 import { api, type Cliente } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
-  Pagina, Aviso, RetornoDoAto, Tabela, Campo, Busca, Ferramentas, Filtro, ThOrd, Marca, Icone, BotaoDeIcone,
+  Pagina, Aviso, RetornoDoAto, Tabela, Campo, Busca, Ferramentas, Filtro, ThOrd, Marca, Icone, BotaoDeIcone, MostrandoSo,
   useOrdenacao, ordenar, contem, DetalheTecnico, BotaoDeCriar, PainelDeCriar,
 } from '../ui.tsx';
 import {
@@ -39,7 +39,7 @@ import {
   ROTULO_DA_SITUACAO_DO_DOCUMENTO, ROTULO_DO_FILTRO_DE_DOCUMENTO, TOM_DA_SITUACAO_DO_DOCUMENTO,
   type FiltroDeDocumento, type MotivoDeTravaDoDocumento,
 } from '../clientes-regras.ts';
-import { FILTROS_DA_TELA, filtroDaConsulta } from '../destino-da-camada.ts';
+import { FILTROS_DA_TELA, filtroDaConsulta, rotuloDoRecorte, esquecerORecorte } from '../destino-da-camada.ts';
 
 /** As duas situações de cliente, para o filtro e para a pílula. */
 const SITUACOES = [
@@ -259,10 +259,14 @@ export function TelaClientes() {
 
       {lista.erro && <Aviso tipo="erro">{lista.erro}</Aviso>}
 
+      {/* O RECORTE COM QUE A TELA ABRIU, dito e removível (etapa 7a). */}
+      <MostrandoSo rotulo={rotuloDoRecorte('/clientes', pendencia)} focarDepois="clientes-busca"
+                   aoRemover={() => { setPendencia(''); esquecerORecorte(); }} />
+
       <Ferramentas contagem={todos.length
         ? `${visiveis.length} de ${todos.length}${escopo === 'carteira_ativa' ? ' na carteira ativa' : ' no cadastro'} · ${contagem.validados} com documento validado`
         : undefined}>
-        <Busca valor={busca} ao={setBusca} dica="Buscar por nome ou documento…" />
+        <Busca id="clientes-busca" valor={busca} ao={setBusca} dica="Buscar por nome ou documento…" />
         <Filtro valor={situacao} ao={setSituacao} rotulo="Filtrar por situação" opcoes={SITUACOES} />
         {/* As opcoes saem do vocabulario FECHADO de `clientes-regras`, e nao de
             uma lista escrita aqui: um estado novo sem opcao de filtro ficaria
@@ -280,7 +284,7 @@ export function TelaClientes() {
                 opcoes={[{ valor: 'carteira_ativa', texto: 'Só quem é cobrado' },
                          { valor: 'todos', texto: 'Todos os cadastrados' }]} />
         {(busca || situacao || pendencia) && (
-          <button type="button" onClick={() => { setBusca(''); setSituacao(''); setPendencia(''); }}>
+          <button type="button" onClick={() => { setBusca(''); setSituacao(''); setPendencia(''); esquecerORecorte(); }}>
             <Icone nome="limpar" tamanho={15} /> Limpar filtros
           </button>
         )}

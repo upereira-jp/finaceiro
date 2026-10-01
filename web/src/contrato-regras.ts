@@ -76,3 +76,44 @@ export function motivoDaTrava(e: EstadoDoFormulario): MotivoDeTrava | null {
   if (!e.temOriginador) return 'sem_originador';
   return null;
 }
+
+/* ==========================================================================
+ * OS NOMES DOS ATOS DE CADA LINHA (01/10/2026, etapa 7a do redesenho)
+ * ==========================================================================
+ *
+ * A LISTA TINHA 37 «SUSPENDER» E 37 «ENCERRAR», e para o leitor de tela os 74
+ * eram o mesmo botão: o nome acessível era o rótulo, e o rótulo não dizia de
+ * quem. A crítica de 01/10 (persona Sam) mediu isso na lista de botões do
+ * leitor — uma coluna de nomes iguais. E a pergunta de «Encerrar» dizia a
+ * unidade e não o cliente: «Encerrar o contrato da unidade 0254872026?» é uma
+ * pergunta que ninguém responde de cabeça.
+ *
+ * AGORA TODO ATO DIZ A UNIDADE E O CLIENTE, numa frase só, montada aqui — a
+ * mesma para o nome acessível, para o rótulo do menu e para a pergunta. O
+ * texto VISÍVEL do botão continua curto («Suspender o contrato…»), e o nome
+ * acessível COMEÇA por ele: quem fala com o computador diz o que lê (WCAG
+ * 2.5.3), e o leitor de tela ouve o resto.
+ */
+
+/** «unidade 0254872026, de Ana Lima» — ou só a unidade, quando o cliente não
+ *  veio. Nunca «de null»: a frase fica mais curta, e não mente. */
+export function deQuem(numeroUc: string, cliente: string | null | undefined): string {
+  const c = (cliente ?? '').trim();
+  return c ? `unidade ${numeroUc}, de ${c}` : `unidade ${numeroUc}`;
+}
+
+export type AtoNoContrato = 'menu' | 'suspender' | 'encerrar' | 'reativar' | 'criar';
+
+/** O que se LÊ no botão ou no item do menu. O nome acessível começa por isto. */
+export const ROTULO_DO_ATO: Record<AtoNoContrato, string> = {
+  menu: 'Mais ações do contrato',
+  suspender: 'Suspender o contrato',
+  encerrar: 'Encerrar o contrato',
+  reativar: 'Reativar o contrato',
+  criar: 'Criar contrato',
+};
+
+/** O nome acessível do ato: o rótulo, «da» unidade e o cliente. */
+export function nomeDoAto(ato: AtoNoContrato, numeroUc: string, cliente: string | null | undefined): string {
+  return `${ROTULO_DO_ATO[ato]} da ${deQuem(numeroUc, cliente)}`;
+}

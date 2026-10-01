@@ -99,7 +99,54 @@ export const FILTROS_DA_TELA = {
   '/clientes': ['nao_validado', 'sem_documento', 'semente_do_crm', 'digito_nao_confere', 'validado'],
   '/unidades': ['sem_vencimento', 'sem_tarifa', 'sem_usina', 'sem_endereco'],
   '/usinas': ['sem_dono'],
+  /* [01/10/2026, etapa 7a] AS DUAS TELAS QUE O MÊS APONTAVA SEM RECORTE. Até
+     aqui «Contrato ativo (6 unidades)» abria os 37 contratos que EXISTEM, e
+     «15 contas a ler» abria as 26 contas JÁ lidas — a lista do contrário do que
+     o número dizia. `sem_contrato` abre o bloco das unidades sem contrato ativo;
+     `sem_originador`, os contratos sem quem trouxe o cliente; `sem_conta`, as
+     contas que faltam ler no mês (`o-que-falta.ts` monta as três listas). */
+  '/contratos': ['sem_contrato', 'sem_originador'],
+  '/documento': ['sem_conta'],
 } as const satisfies Record<string, readonly string[]>;
+
+/**
+ * O QUE CADA RECORTE MOSTRA, na frase do «Mostrando só: …» (etapa 7a).
+ *
+ * A tela que chega filtrada DIZ que está filtrada, num chip que se tira — uma
+ * lista curta sem o aviso do recorte é o jeito de «sumir» um cadastro que está
+ * lá. A frase é o recorte em português de quem opera, no plural da lista; o
+ * `<select>` de cada tela continua com os nomes curtos dele.
+ *
+ * Um `Record` por tela, com TODOS os valores do vocabulário: valor sem frase
+ * não compila (`satisfies`), e a suíte confere a cobertura (D10).
+ */
+export const ROTULO_DO_RECORTE = {
+  '/clientes': {
+    nao_validado: 'clientes com documento que ainda não vale para o contrato',
+    sem_documento: 'clientes sem CPF/CNPJ',
+    semente_do_crm: 'clientes com o documento vindo do outro sistema, ainda não conferido',
+    digito_nao_confere: 'clientes com o dígito do documento errado',
+    validado: 'clientes com documento validado',
+  },
+  '/unidades': {
+    sem_vencimento: 'unidades sem dia de vencimento',
+    sem_tarifa: 'unidades sem o preço do kWh',
+    sem_usina: 'unidades sem usina',
+    sem_endereco: 'unidades sem o endereço do pagador completo',
+  },
+  '/usinas': { sem_dono: 'usinas sem dono' },
+  '/contratos': {
+    sem_contrato: 'unidades que faturam sem contrato ativo',
+    sem_originador: 'contratos ativos sem quem trouxe o cliente',
+  },
+  '/documento': { sem_conta: 'as contas que faltam ler no mês' },
+} as const satisfies { [R in keyof typeof FILTROS_DA_TELA]: Record<(typeof FILTROS_DA_TELA)[R][number], string> };
+
+/** A frase do recorte; vazia quando não há recorte ou a tela não o conhece. */
+export function rotuloDoRecorte(rota: string, valor: string): string {
+  const daTela = (ROTULO_DO_RECORTE as Record<string, Record<string, string>>)[rota];
+  return (valor && daTela?.[valor]) || '';
+}
 
 /**
  * CAMADA -> ONDE SE RESOLVE. As chaves sao as de `src/repos/prontidao.ts`, e a
@@ -122,14 +169,18 @@ export const DESTINO_DA_CAMADA: Record<string, DestinoDaCamada> = {
       + 'digitação linha a linha não faz isso.',
   },
 
+  /* [01/10/2026, etapa 7a] O FILTRO ENTROU: o link abria a lista dos contratos
+     que existem, e as unidades que faltavam não apareciam em lugar nenhum. */
   contrato_ativo: {
-    rota: '/contratos', filtro: null,
+    rota: '/contratos', filtro: 'sem_contrato',
     rotulo: 'Criar e ativar o contrato',
     caminho: 'npm run contratos',
-    nota: 'O formulário fica no topo da tela e cria já ativando. Ele depende das duas coisas de '
-      + 'cima: sem documento validado a R9 recusa a ativação, e sem originador cadastrado '
-      + '(`npm run originadores`) o botão nem destrava — o tipo dele congela aqui (R20-b) e não '
-      + 'há edição depois.',
+    nota: 'O filtro abre a lista das unidades que faturam sem contrato ativo, cada uma com o '
+      + 'cliente, a usina e «Criar contrato», que abre o formulário já na unidade e cria já '
+      + 'ativando. Ele depende das duas coisas de cima: sem documento validado a R9 recusa a '
+      + 'ativação, e sem originador cadastrado (`npm run originadores`) o botão nem destrava — o '
+      + 'tipo dele congela aqui (R20-b) e não há edição depois. A unidade com contrato SUSPENSO '
+      + 'entra na lista com «Reativar»: ela continua ocupada pelo contrato, e outro daria 409.',
   },
 
   rateio: {
@@ -167,7 +218,9 @@ export const DESTINO_DA_CAMADA: Record<string, DestinoDaCamada> = {
    * kWh para medir.
    */
   conta_lida_da_competencia: {
-    rota: '/documento', filtro: null,
+    /* [01/10/2026, etapa 7a] Com o recorte, a tela abre a lista «Faltam N
+       contas de <mês>» — unidade e cliente de cada uma —, e não só as lidas. */
+    rota: '/documento', filtro: 'sem_conta',
     rotulo: 'Ler a conta da distribuidora',
     caminho: null,
     nota: 'Na aba «1 · Leitura e cálculo»: sobe-se o PDF da conta, confere-se campo a campo o que '
@@ -279,8 +332,8 @@ export const DESTINO_DA_CAMADA: Record<string, DestinoDaCamada> = {
   },
 
   originador_do_contrato: {
-    rota: '/contratos', filtro: null,
-    rotulo: 'Conferir os contratos ativos',
+    rota: '/contratos', filtro: 'sem_originador',
+    rotulo: 'Conferir os contratos sem quem trouxe o cliente',
     caminho: null,
     nota: 'A tela impede o PRÓXIMO — o originador é obrigatório para criar —, e o que já está '
       + 'ativo tem custo: `originador_id` e o tier só se escrevem no rascunhar (R20-b), então '
@@ -319,11 +372,27 @@ export const DESTINO_DA_CAMADA: Record<string, DestinoDaCamada> = {
   },
 };
 
-/** O endereco do link, com o filtro ja embutido. `null` quando a camada nao tem
- *  tela — e ai a tela de Pendencias mostra o `caminho` em vez de um link morto. */
-export function enderecoDoDestino(d: DestinoDaCamada): string | null {
+/**
+ * AS TELAS QUE LEEM O MÊS DO ENDEREÇO (etapa 7a). A conta que falta é «de
+ * setembro»: sem o mês, Contas de luz teria de adivinhar qual — e o Mês sabe,
+ * porque é o que ele está mostrando. Cobranças já lia o `?mes=` desde 30/09
+ * (`mesDaQuery`). As outras telas filtram cadastro, que não tem mês, e o
+ * `?mes=` nelas seria sujeira num endereço que alguém cola no WhatsApp.
+ */
+export const TELAS_QUE_LEEM_O_MES: readonly string[] = ['/documento', '/faturas'];
+
+/** O endereco do link, com o filtro ja embutido — e o mês, quando a tela de
+ *  destino o lê (`TELAS_QUE_LEEM_O_MES`). `null` quando a camada nao tem tela —
+ *  e ai a tela de Pendencias mostra o `caminho` em vez de um link morto. */
+export function enderecoDoDestino(d: DestinoDaCamada, mes?: string | null): string | null {
   if (!d.rota) return null;
-  const base = d.filtro ? `${d.rota}?${CHAVE_DO_FILTRO}=${encodeURIComponent(d.filtro)}` : d.rota;
+  const consulta = new URLSearchParams();
+  if (d.filtro) consulta.set(CHAVE_DO_FILTRO, d.filtro);
+  if (mes && /^\d{4}-(0[1-9]|1[0-2])$/.test(mes) && TELAS_QUE_LEEM_O_MES.includes(d.rota)) {
+    consulta.set(CHAVE_DO_MES_DE_VOLTA, mes);
+  }
+  const q = consulta.toString();
+  const base = q ? `${d.rota}?${q}` : d.rota;
   // O fragmento vai por ULTIMO, sempre: `#` encerra o endereco, e um `?` depois
   // dele viraria parte do proprio fragmento em vez de consulta.
   return d.fragmento ? `${base}${d.fragmento}` : base;
@@ -382,4 +451,19 @@ export function destinoDoEndereco(numeroUc: string | null, mes: string | null): 
 export function unidadeDaConsulta(busca: string): string | null {
   const v = (new URLSearchParams(busca).get(CHAVE_DA_UNIDADE) ?? '').replace(/\D/g, '');
   return v || null;
+}
+
+/**
+ * TIRA O RECORTE DO ENDEREÇO, sem recarregar e sem empilhar histórico
+ * (01/10/2026, etapa 7a). É o «x» do «Mostrando só: …»: a tela já tirou o
+ * filtro do estado dela, e sem isto um F5 traria de volta o recorte que a
+ * pessoa acabou de tirar. Os outros parâmetros (o mês) ficam.
+ */
+export function esquecerORecorte(): void {
+  if (typeof location === 'undefined' || typeof history === 'undefined') return;
+  const q = new URLSearchParams(location.search);
+  if (!q.has(CHAVE_DO_FILTRO)) return;
+  q.delete(CHAVE_DO_FILTRO);
+  const resto = q.toString();
+  history.replaceState(history.state, '', `${location.pathname}${resto ? `?${resto}` : ''}${location.hash}`);
 }

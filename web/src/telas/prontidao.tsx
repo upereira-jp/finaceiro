@@ -370,7 +370,7 @@ export function TelaProntidao() {
                       </span>
                     </>}
                   </td>
-                  <td><OndeResolver camada={c.camada} situacao={c.situacao} /></td>
+                  <td><OndeResolver camada={c.camada} situacao={c.situacao} mes={mes} /></td>
                 </tr>
               )),
             ])}
@@ -413,8 +413,10 @@ function OQueFalta({ camada: c }: { camada: Camada }) {
       <strong>{v?.titulo ?? c.camada}</strong>
 
       {/* O TOGGLE É O `DetalheTecnico` DO `ui.tsx` desde 21/08/2026: um padrão
-          que cada tela reimplementa é um padrão que a maioria não implementa. */}
-      <DetalheTecnico>
+          que cada tela reimplementa é um padrão que a maioria não implementa.
+          [01/10/2026, etapa 7a] E ELE DIZ DE QUAL LINHA É: eram seis «ver
+          detalhe técnico» com o mesmo nome para o leitor de tela. */}
+      <DetalheTecnico de={v?.titulo ?? c.camada}>
         {v && (
           <p style={{ margin: '0 0 6px' }}>
             {v.simples}{' '}
@@ -459,7 +461,11 @@ function OQueFalta({ camada: c }: { camada: Camada }) {
  * quase sempre se destrava uma camada acima, e a nota de cada destino diz qual.
  * Esconder o caminho de quem não foi medido deixaria a linha sem saída.
  */
-function OndeResolver({ camada, situacao }: Pick<Camada, 'camada' | 'situacao'>) {
+function OndeResolver({ camada, situacao, mes }: Pick<Camada, 'camada' | 'situacao'> & {
+  /** O mês que a tela mostra — vai no link da tela que o lê (a conta que falta
+   *  ler é «de setembro»). Ver `TELAS_QUE_LEEM_O_MES`. */
+  mes: string | null;
+}) {
   const d = DESTINO_DA_CAMADA[camada];
 
   // Camada nova no servidor sem destino aqui. A suite pega isso lendo
@@ -472,7 +478,7 @@ function OndeResolver({ camada, situacao }: Pick<Camada, 'camada' | 'situacao'>)
      convencao que a coluna "Quantos" ja usa para "nao ha o que mostrar". */
   if (situacao === 'ok') return <span className="fraco">—</span>;
 
-  const endereco = enderecoDoDestino(d);
+  const endereco = enderecoDoDestino(d, mes);
   const tela = telaDoDestino(d);
 
   /*
@@ -503,7 +509,7 @@ function OndeResolver({ camada, situacao }: Pick<Camada, 'camada' | 'situacao'>)
               dado (`d.caminho`). O rótulo já diz onde se resolve; o comando fica
               para quem tem o repositório. */}
           {d.caminho && (
-            <DetalheTecnico>
+            <DetalheTecnico de={`${VERBETE_DA_CAMADA[camada]?.titulo ?? camada}, em lote`}>
               <p style={{ margin: 0 }}>Em lote: <code>{d.caminho}</code></p>
             </DetalheTecnico>
           )}

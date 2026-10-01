@@ -10,14 +10,14 @@ import { api, type Usina, type DonoUsina, type RegraRepasse } from '../api.ts';
 import { usinaNoCrm } from '../crm.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
-  Pagina, Aviso, RetornoDoAto, Tabela, Campo, Busca, Ferramentas, Filtro, ThOrd, Marca, Escolha, Icone,
+  Pagina, Aviso, RetornoDoAto, Tabela, Campo, Busca, Ferramentas, Filtro, ThOrd, Marca, Escolha, Icone, MostrandoSo,
   useOrdenacao, ordenar, contem, rotulo, linha, CampoData, BotaoDeCriar, PainelDeCriar,
 } from '../ui.tsx';
 import { naMensagem } from '../arquivo.ts';
 import { decimalTexto } from '../dinheiro.ts';
 import { diaEmBr, mesEmBr, mesDeHojeEmSP } from '../formato.ts';
 import { divisaoEmPalavras, parteDaG3, parteDaG3ComComissao, comVirgula } from '../repasse-regras.ts';
-import { FILTROS_DA_TELA, filtroDaConsulta } from '../destino-da-camada.ts';
+import { FILTROS_DA_TELA, filtroDaConsulta, rotuloDoRecorte, esquecerORecorte } from '../destino-da-camada.ts';
 
 export function TelaUsinas() {
   const usinas = useDados<Usina[]>(() => api.get('/usinas'));
@@ -147,8 +147,14 @@ export function TelaUsinas() {
       <RetornoDoAto texto={acao.sucesso} />
       {usinas.erro && <Aviso tipo="erro">{usinas.erro}</Aviso>}
 
-      <Ferramentas contagem={todas.length ? `${visiveis.length} de ${todas.length}` : undefined}>
-        <Busca valor={busca} ao={setBusca} dica="Buscar por código, apelido ou distribuidora…" />
+      {/* O RECORTE COM QUE A TELA ABRIU, dito e removível (etapa 7a). O
+          vocabulário do endereço é o das camadas (`sem_dono`); o do filtro, o
+          desta tela (`sem`) — a frase do chip é a do endereço. */}
+      <MostrandoSo rotulo={comDono === 'sem' ? rotuloDoRecorte('/usinas', 'sem_dono') : ''} focarDepois="usinas-busca"
+                   aoRemover={() => { setComDono(''); esquecerORecorte(); }} />
+
+      <Ferramentas contagem={todas.length ? `${visiveis.length} de ${todas.length} usinas` : undefined}>
+        <Busca id="usinas-busca" valor={busca} ao={setBusca} dica="Buscar por código, apelido ou distribuidora…" />
         <Filtro valor={situacao} ao={setSituacao} rotulo="Filtrar por situação"
                 opcoes={[{ valor: '', texto: 'Todas as situações' },
                          { valor: 'ativa', texto: 'Ativas' },
@@ -158,7 +164,7 @@ export function TelaUsinas() {
                          { valor: 'com', texto: 'Com dono' },
                          { valor: 'sem', texto: 'Sem dono (bloqueia o repasse)' }]} />
         {(busca || situacao || comDono) && (
-          <button type="button" onClick={() => { setBusca(''); setSituacao(''); setComDono(''); }}>
+          <button type="button" onClick={() => { setBusca(''); setSituacao(''); setComDono(''); esquecerORecorte(); }}>
             <Icone nome="limpar" tamanho={15} /> Limpar filtros
           </button>
         )}

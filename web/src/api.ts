@@ -267,6 +267,11 @@ export type Contrato = {
   id: string; cliente_id: string; unidade_consumidora_id: string; usina_id: string;
   originador_id: string | null; data_fechamento: string; status: string;
   faturas_cheias_pagas: number;
+  /** Quem trouxe o cliente, como `GET /contratos-vigentes` ja o manda junto
+   *  (`vigentesPorUC` inclui o originador). Declarado em 01/10/2026 (etapa 7a),
+   *  quando a tabela de Contratos passou a mostrar o nome; opcional porque as
+   *  outras rotas de contrato nao o incluem. */
+  originador?: { id: string; nome: string; tipo: string } | null;
 };
 
 export type Originador = {

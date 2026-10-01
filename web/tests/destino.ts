@@ -29,8 +29,8 @@
 // alcance da leitura, aqui nao.
 
 import {
-  DESTINO_DA_CAMADA, FILTROS_DA_TELA, CHAVE_DO_FILTRO,
-  enderecoDoDestino, telaDoDestino, filtroDaConsulta,
+  DESTINO_DA_CAMADA, FILTROS_DA_TELA, CHAVE_DO_FILTRO, ROTULO_DO_RECORTE, TELAS_QUE_LEEM_O_MES,
+  enderecoDoDestino, telaDoDestino, filtroDaConsulta, rotuloDoRecorte,
 } from '../src/destino-da-camada.ts';
 import { TELAS, telaDoCaminho } from '../src/navegacao.ts';
 import { FRAGMENTO_DO_CADASTRO, abaDoFragmento } from '../src/abas-da-fatura.ts';
@@ -141,8 +141,13 @@ chk('D4', typeof situacaoDaUc === 'function'
 
 chk('D5', enderecoDoDestino(DESTINO_DA_CAMADA.vencimento!) === `/unidades?${CHAVE_DO_FILTRO}=sem_vencimento`,
     'o endereco sai com o filtro embutido — e um link colavel, nao um estado de tela');
-chk('D5b', enderecoDoDestino(DESTINO_DA_CAMADA.contrato_ativo!) === '/contratos',
-    'sem filtro, e a rota limpa: `?pendencia=` vazio seria sujeira num endereco que alguem cola');
+/* [01/10/2026, etapa 7a] Era o `contrato_ativo` — que deixou de ser camada sem
+   filtro: o link dele abre a lista das unidades sem contrato. A garantia é a
+   mesma, numa camada que continua sem recorte. */
+chk('D5b', enderecoDoDestino(DESTINO_DA_CAMADA.cobranca_sicoob!) === '/cobranca'
+        && enderecoDoDestino(DESTINO_DA_CAMADA.regra_de_repasse!, '2026-09') === '/usinas',
+    'sem filtro, e a rota limpa: `?pendencia=` vazio seria sujeira num endereco que alguem cola — '
+    + 'nem o mes entra numa tela que nao o le');
 
 // D5e AS DUAS CAMADAS DO CAMINHO OFICIAL APONTAM PARA A LEITURA DA CONTA, e nao
 // para o cadastro. E a verificacao que prende a correcao de 24/08/2026: a tarifa
@@ -226,6 +231,61 @@ chk('D8d', filtroDaConsulta('?x=1&pendencia=sem_vencimento&y=2', FILTROS_DA_TELA
 chk('D8e', filtroDaConsulta('?pendencia=%3Cscript%3E', FILTROS_DA_TELA['/unidades']) === '',
     'valor arbitrario vindo de endereco editado a mao nao vira estado da tela — o vocabulario e '
     + 'uma lista fechada, e o que nao esta nela nao entra');
+
+// ------------------------- D10 a trava leva ao que falta (01/10/2026, etapa 7a)
+//
+// O DEFEITO MEDIDO PELA CRITICA DE 01/10 (P1 nº 1): «Contrato ativo (6 unidades)»
+// e «Quem trouxe o cliente (2 de 35)» levavam a `/contratos` sem recorte — a
+// lista dos 37 contratos que EXISTEM —, e «15 contas a ler» a Contas de luz, que
+// lista as ja lidas. O link levava a algum lugar, e nao ao lugar.
+
+chk('D10', enderecoDoDestino(DESTINO_DA_CAMADA.contrato_ativo!) === `/contratos?${CHAVE_DO_FILTRO}=sem_contrato`
+        && enderecoDoDestino(DESTINO_DA_CAMADA.originador_do_contrato!) === `/contratos?${CHAVE_DO_FILTRO}=sem_originador`,
+    'as duas travas de Contratos abrem a tela recortada: a das unidades sem contrato ativo e a dos '
+    + 'contratos sem quem trouxe o cliente — cada uma no recorte que ela conta');
+chk('D10b', enderecoDoDestino(DESTINO_DA_CAMADA.conta_lida_da_competencia!, '2026-09')
+             === `/documento?${CHAVE_DO_FILTRO}=sem_conta&mes=2026-09`
+        && enderecoDoDestino(DESTINO_DA_CAMADA.conta_lida_da_competencia!) === `/documento?${CHAVE_DO_FILTRO}=sem_conta`,
+    'a conta lida abre Contas de luz nas que faltam ler, DO MES que o Mes mostra — e sem mes, so o recorte');
+chk('D10c', enderecoDoDestino(DESTINO_DA_CAMADA.vencimento!, '2026-09') === `/unidades?${CHAVE_DO_FILTRO}=sem_vencimento`
+        && enderecoDoDestino(DESTINO_DA_CAMADA.emissor_da_fatura!, '2026-09') === '/documento?mes=2026-09#cadastro'
+        && enderecoDoDestino(DESTINO_DA_CAMADA.conta_lida_da_competencia!, '2026-13') === `/documento?${CHAVE_DO_FILTRO}=sem_conta`,
+    'o mes so vai para a tela que o le (`TELAS_QUE_LEEM_O_MES`), vem antes do fragmento, e mes '
+    + 'invalido nao entra');
+chk('D10d', TELAS_QUE_LEEM_O_MES.every((r) => TELAS.some((t) => t.rota === r)),
+    'toda tela que le o mes do endereco e uma tela da barra');
+
+{
+  /* TODA CAMADA COM TELA QUE PODE RECORTAR, RECORTA. As tres sem recorte sao
+     declaradas e cada uma tem o porque: o emissor e um formulario so (o
+     fragmento ja o abre), o conector tambem, e a regra de repasse mora numa
+     secao por usina que a tela le uma usina por vez — dizer quais faltam
+     exigiria uma leitura por usina (lacuna registrada na etapa 7a). A tarifa
+     zerada na conta lida e a quarta: a lista de registradas nao tem esse
+     recorte ainda. Uma camada nova com tela e sem recorte FALHA aqui. */
+  const SEM_RECORTE = new Set(['emissor_da_fatura', 'cobranca_sicoob', 'regra_de_repasse', 'tarifa_na_conta']);
+  const semFiltro = destinos.filter(([c, d]) => d.rota !== null && d.filtro === null && !SEM_RECORTE.has(c))
+    .map(([c]) => c);
+  chk('D10e', semFiltro.length === 0,
+      `toda camada com tela abre ja no recorte do que falta${semFiltro.length ? ` (sem recorte: ${semFiltro.join(', ')})` : ''}`);
+}
+
+{
+  /* O «MOSTRANDO SO: …» TEM FRASE PARA TODO VALOR DO VOCABULARIO — um recorte
+     sem frase seria uma lista cortada sem aviso. */
+  const faltando = Object.entries(FILTROS_DA_TELA).flatMap(([rota, valores]) =>
+    valores.filter((v) => !rotuloDoRecorte(rota, v)).map((v) => `${rota}?${v}`));
+  chk('D10f', faltando.length === 0
+          && Object.keys(ROTULO_DO_RECORTE).sort().join() === Object.keys(FILTROS_DA_TELA).sort().join(),
+      `todo valor de recorte de toda tela tem a frase do «Mostrando só»${faltando.length ? ` (sem frase: ${faltando.join(', ')})` : ''}`);
+  chk('D10g', rotuloDoRecorte('/contratos', '') === '' && rotuloDoRecorte('/contratos', 'sem_dono') === ''
+          && rotuloDoRecorte('/contratos', 'sem_contrato') === 'unidades que faturam sem contrato ativo',
+      'sem recorte, ou com recorte de OUTRA tela, nao ha frase — e o chip nao aparece');
+  chk('D10h', filtroDaConsulta('?pendencia=sem_originador', FILTROS_DA_TELA['/contratos']) === 'sem_originador'
+          && filtroDaConsulta('?pendencia=sem_conta&mes=2026-09', FILTROS_DA_TELA['/documento']) === 'sem_conta'
+          && filtroDaConsulta('?pendencia=sem_conta', FILTROS_DA_TELA['/contratos']) === '',
+      'a tela de destino le o proprio recorte, e o de outra tela cai em «tudo»');
+}
 
 // --------------------------------------------- D9 as camadas e a barra, coerentes
 

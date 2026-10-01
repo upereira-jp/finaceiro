@@ -28,6 +28,8 @@ import {
 } from '../src/roteiro-do-mes.ts';
 import { TELAS, caminhoNoMenu, rotuloDosPassos } from '../src/navegacao.ts';
 import { VERBETE_DA_CAMADA } from '../src/vocabulario.ts';
+import { FILTROS_DA_TELA, filtroDaConsulta } from '../src/destino-da-camada.ts';
+import { contasQueFaltam, mesDasContasQueFaltam, type UcDaLista } from '../src/o-que-falta.ts';
 
 let falhas = 0;
 const chk = (id: string, cond: boolean, d: string) => {
@@ -483,6 +485,67 @@ const passo = (e: LeituraDoMes, chave: string) => mesNoFunil(e).passos.find((p) 
   chk('RM25', divergem.length === 0 && TELAS.some((t) => t.passos?.length),
       'o número do passo que o menu mostra em cada tela é o mesmo que o funil da tela Mês e a faixa da '
       + `própria tela mostram${divergem.length ? ` (divergem: ${divergem.map((t) => `${t.titulo} menu «${rotuloDosPassos(t.passos)}»`).join(', ')})` : ''}`);
+}
+
+/* ==========================================================================
+ * RM26..RM29 — o botão leva ao que falta (01/10/2026, etapa 7a)
+ * ==========================================================================
+ *
+ * «15 contas a ler» levava a Contas de luz, que lista as JÁ lidas. Agora o
+ * botão do passo e o link de cada trava carregam o recorte e o mês — e as
+ * garantias de RM12/RM13 continuam: a ROTA do endereço é item do menu, e o
+ * nome no botão é o do item.
+ */
+{
+  const m = mesNoFunil(ler({ camadas: [...cadastroEmDia(15), camada('contrato_ativo', 'pendente', 6)] }));
+  const p1 = m.passos.find((p) => p.chave === 'ler')!;
+  const [rota, consulta] = p1.ir.split('?');
+  const menu = caminhoNoMenu(rota!);
+  chk('RM26', p1.ir === `/documento?pendencia=sem_conta&mes=${MES}` && menu !== null
+              && menu[menu.length - 1] === p1.destino.rotulo && p1.destino.endereco === rota,
+      '«15 contas a ler» abre Contas de luz no recorte das que FALTAM, do mês do funil — e a rota do '
+      + 'endereço continua sendo o item do menu, com o nome do botão letra por letra (RM12/RM13)');
+  chk('RM26b', filtroDaConsulta(`?${consulta}`, FILTROS_DA_TELA['/documento']) === 'sem_conta'
+               && MOLDES.every((mo) => !mo.recorte
+                 || (FILTROS_DA_TELA as Record<string, readonly string[]>)[mo.destino.endereco]?.includes(mo.recorte)),
+      'todo recorte de passo é do vocabulário da tela de destino — recorte que a tela ignora abriria a '
+      + 'lista inteira, e quem clicou acharia que aquilo é o que falta');
+  const p3 = m.passos.find((p) => p.chave === 'emitir')!;
+  const p5 = m.passos.find((p) => p.chave === 'receber')!;
+  chk('RM26c', p3.ir === `/faturas?mes=${MES}` && p5.ir === p5.destino.endereco,
+      'Cobranças abre no mês do funil (ela já lia `?mes=`); a tela que não lê o mês recebe a rota limpa');
+  const contrato = m.travas.find((t) => t.camada === 'contrato_ativo')!;
+  chk('RM27', contrato.endereco === '/contratos?pendencia=sem_contrato',
+      'a trava «Contrato ativo (6 unidades)» leva a Contratos já na lista das unidades sem contrato ativo');
+}
+
+{
+  /* AS CONTAS QUE FALTAM — o predicado da camada `conta_lida_da_competencia`:
+     faturável sem conta registrada NAQUELE mês, casada pelo número exato. */
+  const u = (i: number, p: Partial<UcDaLista> = {}): UcDaLista => ({
+    id: `u${i}`, numero_uc: `00${i}`, cliente_id: `c${i}`, usina_id: 'us', distribuidora: 'Equatorial Goiás',
+    status: 'ativa', rateio_situacao: 'ativado', crm_usina_cliente_id: `crm${i}`, ...p,
+  });
+  const ucs = [u(1), u(2), u(3), u(4, { rateio_situacao: 'aguardando_ativacao' }), u(5, { status: 'cancelada' }), u(6)];
+  const nomes = { cliente: (id: string) => ({ c1: 'Ana', c2: 'Bruno', c3: 'Carla', c6: 'Diego' } as Record<string, string>)[id] ?? null,
+                  usina: () => 'Usina Sol' };
+  const lidas = { lista: [{ numero_uc: '001', competencia: '2026-09-01' }, { numero_uc: '002', competencia: '2026-08-01' },
+                          { numero_uc: '3', competencia: '2026-09-01' }], parcial: false };
+  const f = contasQueFaltam(ucs, lidas, '2026-09', nomes)!;
+  chk('RM28', f.map((x) => x.numero_uc).join() === '002,003,006' && f[0]!.cliente === 'Bruno' && f[0]!.usina === 'Usina Sol',
+      'faltam as faturáveis sem conta DO MÊS — a de agosto não conta, o número casa exato como no '
+      + 'servidor («3» não é «003»), e a que não fatura ou foi cancelada fica de fora; cada uma com cliente e usina');
+  chk('RM28b', contasQueFaltam(ucs, null, '2026-09', nomes) === null
+               && contasQueFaltam(ucs, { lista: lidas.lista, parcial: true }, '2026-08', nomes) === null
+               && contasQueFaltam(ucs, { lista: lidas.lista, parcial: true }, '2026-09', nomes) !== null,
+      'sem as contas, ou com a lista no teto e o mês sendo o mais velho dela, a lista é DESCONHECIDA — '
+      + 'dar a unidade por faltante mandaria ler de novo uma conta já registrada');
+  chk('RM29', mesDasContasQueFaltam({ doEndereco: '2026-08', lembrado: '2026-07', registradas: lidas.lista, hoje: '2026-10' }) === '2026-08'
+              && mesDasContasQueFaltam({ doEndereco: null, lembrado: '2026-07', registradas: lidas.lista, hoje: '2026-10' }) === '2026-07'
+              && mesDasContasQueFaltam({ doEndereco: 'lixo', lembrado: null, registradas: lidas.lista, hoje: '2026-10' }) === '2026-09'
+              && mesDasContasQueFaltam({ doEndereco: null, lembrado: null, registradas: [], hoje: '2026-10' }) === '2026-10',
+      'o mês da lista: o do endereço (o Mês manda), o lembrado, o mais recente com conta, o de hoje — e '
+      + 'endereço inválido não vira mês');
 }
 
 console.log(`\n${falhas === 0 ? 'roteiro-do-mes: todas as verificacoes passaram'

@@ -57,7 +57,9 @@
 // quem diz onde se resolve é `destino-da-camada.ts`, e quem diz a frase em
 // português de quem opera é `VERBETE_DA_CAMADA`, de `vocabulario.ts`.
 
-import { DESTINO_DA_CAMADA, enderecoDoDestino } from './destino-da-camada.ts';
+import {
+  DESTINO_DA_CAMADA, enderecoDoDestino, CHAVE_DO_FILTRO, CHAVE_DO_MES_DE_VOLTA, TELAS_QUE_LEEM_O_MES,
+} from './destino-da-camada.ts';
 import { VERBETE_DA_CAMADA } from './vocabulario.ts';
 import { tipoDaRecusa } from './emissao-regras.ts';
 import { funilDoCaminho } from './navegacao.ts';
@@ -191,6 +193,14 @@ export type PassoDoMes = {
   comoFazer: readonly string[];
   /** Para onde o botão leva. Com risco, pode ser outra tela — a do risco. */
   destino: Destino;
+  /**
+   * O ENDEREÇO DO BOTÃO, já no recorte e no mês (01/10/2026, etapa 7a): «15
+   * contas a ler» abre Contas de luz na lista das 15, de setembro, e não na das
+   * 26 já lidas. `destino.endereco` continua sendo a ROTA pura — é por ela que
+   * `RM12`/`RM13` conferem o item do menu e que a faixa de cada tela se
+   * reconhece (`ondeEstouNoMes`).
+   */
+  ir: string;
   /** O passo que o sistema faz sozinho. Só ganha o destaque com risco: sem
    *  ele não há o que clicar, e pôr alguém a esperar seria mandá-lo olhar. */
   automatico: boolean;
@@ -216,6 +226,10 @@ type Molde = {
   /** A tela do RISCO, quando não é a mesma: a vencida se acompanha em Contas a
    *  receber, e não em Contas a pagar, onde o mês termina. */
   destinoDoRisco?: Destino;
+  /** O RECORTE com que o botão abre a tela do passo (`?pendencia=`), quando ela
+   *  tem um que mostra só o que este passo conta. Do vocabulário de
+   *  `FILTROS_DA_TELA` — a suíte confere (RM26). */
+  recorte?: string;
   automatico?: boolean;
 };
 
@@ -247,6 +261,9 @@ export const MOLDES: readonly Molde[] = [
       + 'só). Elas passam para a lista «Contas registradas», logo abaixo.',
     ],
     destino: CONTAS_DE_LUZ,
+    /* O botão abre a lista «Faltam N contas» já aberta, com unidade e cliente
+       de cada uma (etapa 7a). */
+    recorte: 'sem_conta',
   },
   {
     chave: 'gerar',
@@ -530,6 +547,8 @@ export function escolherOFoco(passos: readonly Omit<PassoDoMes, 'foco'>[]): Chav
 export function travasDe(
   camadas: readonly CamadaDoRoteiro[],
   efeitos: ReadonlyArray<CamadaDoRoteiro['efeito']>,
+  /** O mês do funil, para o destino que o lê (`TELAS_QUE_LEEM_O_MES`). */
+  mes?: string | null,
 ): TravaDoPasso[] {
   return camadas
     .filter((c) => efeitos.includes(c.efeito) && c.situacao !== 'ok' && c.camada !== CAMADA_DA_CONTA)
@@ -543,7 +562,7 @@ export function travasDe(
         faltam: c.faltam,
         contagem: v ? (c.faltam === 1 ? v.contagem.singular : v.contagem.plural) : '',
         efeito: c.efeito,
-        endereco: d ? enderecoDoDestino(d) : null,
+        endereco: d ? enderecoDoDestino(d, mes) : null,
         rotuloDoDestino: d?.rotulo ?? null,
       };
     });
@@ -619,6 +638,24 @@ function fraseDoMes(
 }
 
 /**
+ * O ENDEREÇO DO BOTÃO DE UM PASSO — a rota, o recorte e o mês (etapa 7a).
+ *
+ * O mês só vai para a tela que o lê (`TELAS_QUE_LEEM_O_MES`): Contas de luz
+ * monta com ele a lista do que falta ler e abre as registradas nele; Cobranças
+ * abre nele em vez de procurar o seu. Sem isto, escolher agosto em Mês e clicar
+ * «Abrir Cobranças» abria setembro.
+ */
+export function enderecoDoPasso(destino: Destino, recorte: string | undefined, mes: string | null | undefined): string {
+  const consulta = new URLSearchParams();
+  if (recorte) consulta.set(CHAVE_DO_FILTRO, recorte);
+  if (mes && /^\d{4}-(0[1-9]|1[0-2])$/.test(mes) && TELAS_QUE_LEEM_O_MES.includes(destino.endereco)) {
+    consulta.set(CHAVE_DO_MES_DE_VOLTA, mes);
+  }
+  const q = consulta.toString();
+  return q ? `${destino.endereco}?${q}` : destino.endereco;
+}
+
+/**
  * O MÊS INTEIRO, com números, destaque, travas e a frase.
  */
 export function mesNoFunil(l: LeituraDoMes): MesNoFunil {
@@ -626,6 +663,7 @@ export function mesNoFunil(l: LeituraDoMes): MesNoFunil {
 
   const semFoco = MOLDES.map((m, i) => {
     const x = n[m.chave];
+    const destino = x.risco && m.destinoDoRisco ? m.destinoDoRisco : m.destino;
     return {
       chave: m.chave,
       numero: i + 1,
@@ -638,7 +676,10 @@ export function mesNoFunil(l: LeituraDoMes): MesNoFunil {
       deOutrosMeses: x.deOutrosMeses ?? null,
       oQueFazer: m.oQueFazer,
       comoFazer: m.comoFazer,
-      destino: x.risco && m.destinoDoRisco ? m.destinoDoRisco : m.destino,
+      destino,
+      /* O recorte é da tela do PASSO: com o risco, o botão vai a outra tela,
+         e o recorte dela não vale lá. */
+      ir: enderecoDoPasso(destino, destino === m.destino ? m.recorte : undefined, l.mes),
       automatico: m.automatico === true,
     };
   });
@@ -646,8 +687,8 @@ export function mesNoFunil(l: LeituraDoMes): MesNoFunil {
   const chaveDoFoco = escolherOFoco(semFoco);
   const passos: PassoDoMes[] = semFoco.map((p) => ({ ...p, foco: p.chave === chaveDoFoco }));
   const foco = passos.find((p) => p.foco) ?? null;
-  const travas = travasDe(l.camadas, ['bloqueia_fatura', 'bloqueia_boleto']);
-  const travasDoRepasse = travasDe(l.camadas, ['bloqueia_split']);
+  const travas = travasDe(l.camadas, ['bloqueia_fatura', 'bloqueia_boleto'], l.mes);
+  const travasDoRepasse = travasDe(l.camadas, ['bloqueia_split'], l.mes);
 
   const deOutrosMeses = passos.find((p) => p.deOutrosMeses)?.deOutrosMeses ?? null;
 
