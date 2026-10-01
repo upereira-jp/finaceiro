@@ -72,6 +72,103 @@ import { VARIAVEIS_CSS, TIPOGRAFIA } from './tema.ts';
  */
 export const MENU_VIRA_GAVETA = 900;
 
+/**
+ * O CARTAO DA TABELA — as regras que valem DENTRO da medida em que a tabela
+ * vira lista de cartoes. Uma constante e nao texto no meio do ESTILO porque
+ * valem em dois limites: 720px para a tabela de trabalho e 440px para a tabela
+ * curta de resumo (`.estreita`). A nota inteira do desenho esta no ESTILO,
+ * em "a tabela que vira cartao".
+ */
+const CARTAO_DA_TABELA = `
+    .tabela-cartoes > .ordenar-por { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; }
+    .tabela-cartoes > .rolagem { border: 0; background: none; overflow: visible; }
+    .tabela-cartoes table, .tabela-cartoes tbody { display: block; }
+    .tabela-cartoes thead { display: none; }
+
+    .tabela-cartoes tbody > tr {
+      display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px 14px;
+      margin: 0 0 8px; padding: 12px 14px;
+      background: var(--fundo2); border: 1px solid var(--borda);
+    }
+    .tabela-cartoes tbody > tr:hover { background: var(--fundo2); }
+    .tabela-cartoes tbody > tr > td {
+      display: block; padding: 0; border: 0; text-align: left; white-space: normal; overflow-wrap: anywhere;
+      min-width: 0 !important; max-width: none !important; width: auto !important;
+    }
+    .tabela-cartoes td[data-rotulo]:not([data-rotulo=""])::before {
+      content: attr(data-rotulo); display: block; margin-bottom: 2px;
+      font-family: var(--fonte-cond); font-size: var(--rotulo-tamanho); font-weight: var(--rotulo-peso);
+      text-transform: uppercase; letter-spacing: var(--rotulo-tracking); color: var(--fraco);
+    }
+
+    /* Os quatro lugares. */
+    .tabela-cartoes tbody > tr > td:first-child, .tabela-cartoes tbody > tr > td.c-id {
+      grid-column: 1 / -1; order: -3; font-size: var(--t-corpo);
+    }
+    /* A identificacao dispensa o rotulo: o nome e o numero se explicam. O
+       "[data-rotulo]" no seletor e o que o faz vencer a regra do rotulo. */
+    .tabela-cartoes tbody > tr > td:first-child[data-rotulo]::before,
+    .tabela-cartoes tbody > tr > td.c-id[data-rotulo]::before { display: none; }
+    .tabela-cartoes tbody > tr:has(> td.c-id) > td:first-child:not(.c-id) { grid-column: auto; order: 0; }
+    .tabela-cartoes tbody > tr:has(> td.c-id) > td:first-child:not(.c-id)[data-rotulo]::before { display: block; }
+    /* A celula com campo (a data de Unidades, o documento de Clientes, o
+       rotulo impresso em Contas de luz) ocupa a largura toda: meia coluna de
+       um telefone corta a data em «15/10/». */
+    .tabela-cartoes tbody > tr > td:has(.inline, select, input:not([type="checkbox"])) { grid-column: 1 / -1; }
+    .tabela-cartoes tbody > tr > td.c-sit { order: -2; }
+    .tabela-cartoes tbody > tr > td.c-val { order: -1; }
+    .tabela-cartoes tbody > tr > td.c-aco,
+    .tabela-cartoes tbody > tr > td:last-child:not(:first-child):has(button, a[href]) {
+      grid-column: 1 / -1; order: 9;
+    }
+    .tabela-cartoes tbody > tr > td.c-aco[data-rotulo]::before,
+    .tabela-cartoes tbody > tr > td:last-child:not(:first-child):has(button, a[href])[data-rotulo]::before { display: none; }
+    .tabela-cartoes td.num { text-align: left; }
+
+    /* A LINHA QUE ATRAVESSA A TABELA (o detalhe aberto, a pergunta na linha, o
+       formulario de pagamento) cola no cartao de cima: sem a linha do alto,
+       e com a mesma moldura. */
+    .tabela-cartoes tbody > tr:not(.grupo-da-tabela):not(.linha-retorno):has(> td[colspan]:only-child) {
+      display: block; padding: 0; margin: -9px 0 8px; border-top: 0;
+    }
+    .tabela-cartoes tbody > tr:not(.grupo-da-tabela):not(.linha-retorno) > td[colspan]:only-child { padding: 12px 14px; }
+    .tabela-cartoes tbody > tr.linha-pergunta > td, .tabela-cartoes tbody > tr.usuario-retorno > td { padding: 0; }
+    .tabela-cartoes tr.linha-pergunta .pergunta { border-width: 1px 0 0; }
+    .tabela-cartoes .rolagem td > .pergunta { position: static; max-width: none; }
+    .tabela-cartoes tr.linha-aberta { background: var(--fundo-hover); }
+    .tabela-cartoes tr.linha-aberta > td { background: none; }
+
+    /* A linha do retorno nao e cartao: vazia, nao aparece; com a frase, o
+       aviso e a moldura dela. */
+    .tabela-cartoes tbody > tr.linha-retorno {
+      display: block; margin: 0; padding: 0; background: none; border: 0;
+    }
+    .tabela-cartoes tbody > tr.linha-retorno > td { padding: 0; }
+    .tabela-cartoes tr.linha-retorno .aviso { margin: 0 0 8px; }
+
+    /* O CABECALHO DE GRUPO (Mes, Contas a pagar) e titulo, e nao cartao. */
+    .tabela-cartoes tbody > tr.grupo-da-tabela {
+      display: block; margin: 0; padding: 14px 0 8px; background: none; border: 0;
+    }
+    .tabela-cartoes tr.grupo-da-tabela td > * { position: static; max-width: none; }
+
+    /* O que era desenhado para caber numa coluna estreita de tabela. O selo
+       quebra linha: «Boleto recusado pelo banco» nao cabe em meio cartao. */
+    .tabela-cartoes .uc-meta, .tabela-cartoes .marca { white-space: normal; }
+    /* [01/10, etapa 6] O SELO QUE QUEBRA LINHA ganha 8px dos dois lados e o
+       icone na altura da PRIMEIRA linha: os 6px da esquerda eram a
+       compensacao otica do icone num selo de uma linha so, e na segunda linha
+       o texto encostava na borda (o detector mediu 6px para letra de 12). */
+    .tabela-cartoes .marca { padding: 4px 8px; line-height: 1.35; align-items: flex-start; }
+    .tabela-cartoes .marca > .ic { margin-top: 2px; flex: none; }
+    .tabela-cartoes .inline { flex-wrap: nowrap; }
+    .tabela-cartoes .inline input:not(.caixa), .tabela-cartoes .inline select { width: 100% !important; min-width: 0; }
+    .tabela-cartoes .inline .campo-data { flex: 1 1 auto; min-width: 0; }
+    .tabela-cartoes .inline .campo-data input { width: 100%; }
+    /* No cartao o campo da linha deixa de parecer texto: e um campo de verdade. */
+    .tabela-cartoes .inline input, .tabela-cartoes .inline select { border-color: var(--borda); background: var(--campo); }
+`;
+
 export const ESTILO = `
   ${VARIAVEIS_CSS}
 
@@ -969,6 +1066,16 @@ export const ESTILO = `
   tbody tr { transition: background-color .12s ease; }
   tbody tr:hover { background: var(--fundo-hover); }
   td.num, th.num { text-align: right; }
+  /* [01/10, etapa 6] O NUMERO NAO QUEBRA: a coluna de valor encolhia ate
+     «R$ / 2.518,35» em Contas a receber a 1440. Ela cresce; quem quebra e a
+     coluna de texto do lado. */
+  td.num { white-space: nowrap; }
+  /* A LINHA COM CONTROLE ALINHA PELO MEIO. O topo e o certo para texto (a
+     primeira linha de cada celula na mesma altura), mas numa linha com botao
+     ou campo o texto ficava 4 a 8px acima do rotulo do botao ao lado —
+     Contratos, Unidades, Clientes, Historico. A tabela de Contas de luz e a de
+     Cobrancas ja faziam assim, com regra propria (que continua mandando). */
+  tbody tr:has(> td button, > td a.botao, > td input:not([type="checkbox"]), > td select) > td { vertical-align: middle; }
 
   /* Cabecalho ordenavel: o th vira botao sem deixar de parecer cabecalho. */
   th .ordenar {
@@ -1402,6 +1509,15 @@ export const ESTILO = `
   .kpi .nome { display: flex; align-items: center; gap: 6px; color: var(--fraco); margin-bottom: 4px; }
   .kpi .nome > .ic { flex: none; }
   .kpi .valor { font-size: 28px; font-weight: 700; line-height: 1.1; letter-spacing: 0; }
+  /* [01/10, etapa 6] NO TELEFONE, DOIS POR LINHA. Um por linha, os quatro
+     cartoes de Cobrancas e de Contas a receber ocupavam 420px antes da lista —
+     meia tela de numero grande. A 22px o maior valor do mes («R$ 123.456,78»)
+     cabe em meia largura de um telefone de 360px. */
+  @media (max-width: 720px) {
+    .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .kpi { padding: 10px 12px 12px; }
+    .kpi .valor { font-size: 22px; }
+  }
 
   /* --------------------------------------------------------- carregando
      A ENGRENAGEM COM O SOL DA G3 DENTRO. Foi o pedido literal de 30/07 para o
@@ -1840,6 +1956,10 @@ export const ESTILO = `
   .g3ref .fu-motivo.alerta { color: var(--alerta); }
   .g3ref .fu-motivo.ok { color: var(--ok); }
   .g3ref .fu-acoes { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+  /* [01/10, etapa 6] Nas contas registradas a «2ª via» fica sempre no mesmo
+     lugar: encostada a direita, ela andava para a esquerda nas linhas que tem
+     tambem «conferir antes», e a coluna deixava de ser coluna. */
+  .g3ref .fu-registradas td.c-aco .fu-acoes { justify-content: flex-start; }
   .g3ref .fu-tabela .c-sel { width: 36px; padding-right: 0; }
   .g3ref .fu-tabela .c-exc { width: 46px; }
   .g3ref .fu-tabela .c-sel input { width: 17px; height: 17px; margin: 0; display: block; }
@@ -2289,6 +2409,10 @@ export const ESTILO = `
     .em-tabela .rolagem { border: 0; background: none; }
     .em-tabela table, .em-tabela tbody, .em-tabela thead { display: block; }
     .em-tabela thead { display: none; }
+    /* [01/10, etapa 6] O cartao de Cobrancas nao tinha como ordenar: o
+       cabecalho some, e a seta ia junto. Ganha o mesmo «Ordenar por» das
+       outras tabelas. */
+    .em-tabela > .ordenar-por { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; }
     .em-tabela tbody tr {
       display: grid; gap: 6px 12px; margin-bottom: 8px; padding: 12px 14px;
       background: var(--fundo2); border: 1px solid var(--borda);
@@ -2699,6 +2823,9 @@ export const ESTILO = `
   .grupo-da-tabela p { max-width: 62ch; }
   /* A celula de tabela ignora "max-width"; quem tem a medida e o texto dentro dela. */
   .celula-frase { display: block; max-width: 62ch; }
+  /* A linha de baixo do nome em «Quem mais deve» (Contas a receber) quebra,
+     em vez de empurrar a coluna estreita para fora do telefone. */
+  .devedor-meta { white-space: normal; }
   /* O cabecalho de grupo prende os filhos a esquerda (sticky) com a medida da
      janela; a frase dele fica na medida de leitura. */
   tr.grupo-da-tabela td > p { max-width: min(62ch, calc(100vw - 96px)); }
@@ -2757,115 +2884,35 @@ export const ESTILO = `
        acao            ".c-aco", ou a ultima celula quando ela tem botao: no pe,
                        na largura toda
 
-     O CABECALHO NAO SOME: as colunas que ordenam viram uma fileira de botoes
-     «Ordenar por», a mesma ordenacao do computador. As outras saem — o nome
-     delas ja esta em cada celula ("data-rotulo", escrito pela "Tabela").
+     O CABECALHO SAI INTEIRO: o nome de cada coluna ja esta em cada celula
+     ("data-rotulo", escrito pela "Tabela"), e a ordenacao vira UM seletor
+     «Ordenar por» acima da lista (".ordenar-por", o "OrdenarPor" do "ui.tsx").
+     [01/10, etapa 6] Ate aqui as colunas que ordenam viravam uma fileira de
+     botoes de 44px — tres fileiras em Contas a pagar, antes do primeiro cartao.
 
      AS LARGURAS ESCRITAS NA CELULA ("style" de largura minima, 180px na data
      de Unidades, 210px no documento de Clientes) valem para a tabela e nao
      para o cartao: elas empurravam a coluna para fora de um telefone de 360px.
      O "!important" e o unico jeito de vencer um "style" — e e so aqui dentro. */
   .tabela-cartoes { container: tabela / inline-size; }
+  /* O SELETOR «ORDENAR POR» so existe no cartao: na tabela, a ordem e a seta
+     do cabecalho. Rotulo e campo na mesma linha, o campo do tamanho do que
+     diz — e, no telefone, os 44px que todo campo tem. */
+  .ordenar-por { display: none; }
+  .ordenar-por label { margin: 0; white-space: nowrap; }
+  .ordenar-por .campo-caixa { flex: 1 1 auto; min-width: 0; max-width: 320px; }
   @container tabela (max-width: 720px) {
-    .tabela-cartoes > .rolagem { border: 0; background: none; overflow: visible; }
-    .tabela-cartoes table, .tabela-cartoes tbody, .tabela-cartoes thead { display: block; }
-
-    .tabela-cartoes thead tr {
-      display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 10px;
-    }
-    .tabela-cartoes thead tr:not(:has(.ordenar)) { display: none; }
-    .tabela-cartoes thead tr::before {
-      content: "Ordenar por"; flex: 1 1 100%;
-      font-family: var(--fonte-cond); font-size: var(--rotulo-tamanho); font-weight: var(--rotulo-peso);
-      text-transform: uppercase; letter-spacing: var(--rotulo-tracking); color: var(--fraco);
-    }
-    .tabela-cartoes thead th { display: none; }
-    .tabela-cartoes thead th:has(.ordenar) {
-      display: block; padding: 0; background: none; border: 0; width: auto !important;
-    }
-    .tabela-cartoes th .ordenar {
-      min-height: 44px; padding: 0 10px; gap: 4px; letter-spacing: .04em;
-      border: 1px solid var(--borda); background: var(--fundo2); color: var(--texto);
-    }
-    .tabela-cartoes th[aria-sort] .ordenar { border-color: var(--acento-forte); background: var(--acento-suave); }
-
-    .tabela-cartoes tbody > tr {
-      display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px 14px;
-      margin: 0 0 8px; padding: 12px 14px;
-      background: var(--fundo2); border: 1px solid var(--borda);
-    }
-    .tabela-cartoes tbody > tr:hover { background: var(--fundo2); }
-    .tabela-cartoes tbody > tr > td {
-      display: block; padding: 0; border: 0; text-align: left; white-space: normal; overflow-wrap: anywhere;
-      min-width: 0 !important; max-width: none !important; width: auto !important;
-    }
-    .tabela-cartoes td[data-rotulo]:not([data-rotulo=""])::before {
-      content: attr(data-rotulo); display: block; margin-bottom: 2px;
-      font-family: var(--fonte-cond); font-size: var(--rotulo-tamanho); font-weight: var(--rotulo-peso);
-      text-transform: uppercase; letter-spacing: var(--rotulo-tracking); color: var(--fraco);
-    }
-
-    /* Os quatro lugares. */
-    .tabela-cartoes tbody > tr > td:first-child, .tabela-cartoes tbody > tr > td.c-id {
-      grid-column: 1 / -1; order: -3; font-size: var(--t-corpo);
-    }
-    /* A identificacao dispensa o rotulo: o nome e o numero se explicam. O
-       "[data-rotulo]" no seletor e o que o faz vencer a regra do rotulo. */
-    .tabela-cartoes tbody > tr > td:first-child[data-rotulo]::before,
-    .tabela-cartoes tbody > tr > td.c-id[data-rotulo]::before { display: none; }
-    .tabela-cartoes tbody > tr:has(> td.c-id) > td:first-child:not(.c-id) { grid-column: auto; order: 0; }
-    .tabela-cartoes tbody > tr:has(> td.c-id) > td:first-child:not(.c-id)[data-rotulo]::before { display: block; }
-    /* A celula com campo (a data de Unidades, o documento de Clientes, o
-       rotulo impresso em Contas de luz) ocupa a largura toda: meia coluna de
-       um telefone corta a data em «15/10/». */
-    .tabela-cartoes tbody > tr > td:has(.inline, select, input:not([type="checkbox"])) { grid-column: 1 / -1; }
-    .tabela-cartoes tbody > tr > td.c-sit { order: -2; }
-    .tabela-cartoes tbody > tr > td.c-val { order: -1; }
-    .tabela-cartoes tbody > tr > td.c-aco,
-    .tabela-cartoes tbody > tr > td:last-child:not(:first-child):has(button, a[href]) {
-      grid-column: 1 / -1; order: 9;
-    }
-    .tabela-cartoes tbody > tr > td.c-aco[data-rotulo]::before,
-    .tabela-cartoes tbody > tr > td:last-child:not(:first-child):has(button, a[href])[data-rotulo]::before { display: none; }
-    .tabela-cartoes td.num { text-align: left; }
-
-    /* A LINHA QUE ATRAVESSA A TABELA (o detalhe aberto, a pergunta na linha, o
-       formulario de pagamento) cola no cartao de cima: sem a linha do alto,
-       e com a mesma moldura. */
-    .tabela-cartoes tbody > tr:not(.grupo-da-tabela):not(.linha-retorno):has(> td[colspan]:only-child) {
-      display: block; padding: 0; margin: -9px 0 8px; border-top: 0;
-    }
-    .tabela-cartoes tbody > tr:not(.grupo-da-tabela):not(.linha-retorno) > td[colspan]:only-child { padding: 12px 14px; }
-    .tabela-cartoes tbody > tr.linha-pergunta > td, .tabela-cartoes tbody > tr.usuario-retorno > td { padding: 0; }
-    .tabela-cartoes tr.linha-pergunta .pergunta { border-width: 1px 0 0; }
-    .tabela-cartoes .rolagem td > .pergunta { position: static; max-width: none; }
-    .tabela-cartoes tr.linha-aberta { background: var(--fundo-hover); }
-    .tabela-cartoes tr.linha-aberta > td { background: none; }
-
-    /* A linha do retorno nao e cartao: vazia, nao aparece; com a frase, o
-       aviso e a moldura dela. */
-    .tabela-cartoes tbody > tr.linha-retorno {
-      display: block; margin: 0; padding: 0; background: none; border: 0;
-    }
-    .tabela-cartoes tbody > tr.linha-retorno > td { padding: 0; }
-    .tabela-cartoes tr.linha-retorno .aviso { margin: 0 0 8px; }
-
-    /* O CABECALHO DE GRUPO (Mes, Contas a pagar) e titulo, e nao cartao. */
-    .tabela-cartoes tbody > tr.grupo-da-tabela {
-      display: block; margin: 0; padding: 14px 0 8px; background: none; border: 0;
-    }
-    .tabela-cartoes tr.grupo-da-tabela td > * { position: static; max-width: none; }
-
-    /* O que era desenhado para caber numa coluna estreita de tabela. O selo
-       quebra linha: «Boleto recusado pelo banco» nao cabe em meio cartao. */
-    .tabela-cartoes .uc-meta, .tabela-cartoes .marca { white-space: normal; }
-    .tabela-cartoes .marca { padding-top: 4px; padding-bottom: 4px; line-height: 1.35; }
-    .tabela-cartoes .inline { flex-wrap: nowrap; }
-    .tabela-cartoes .inline input:not(.caixa), .tabela-cartoes .inline select { width: 100% !important; min-width: 0; }
-    .tabela-cartoes .inline .campo-data { flex: 1 1 auto; min-width: 0; }
-    .tabela-cartoes .inline .campo-data input { width: 100%; }
-    /* No cartao o campo da linha deixa de parecer texto: e um campo de verdade. */
-    .tabela-cartoes .inline input, .tabela-cartoes .inline select { border-color: var(--borda); background: var(--campo); }
+    ${CARTAO_DA_TABELA}
+  }
+  /* [01/10, etapa 6] A TABELA CURTA DE RESUMO (Contas a receber: as faixas de
+     atraso e quem mais deve) vira cartao so abaixo de 440px DE TABELA. Numa
+     coluna de meia tela do computador ela tem uns 500px e cabe como tabela —
+     com o limite de 720 ela virava cartao ali tambem, e «Quem mais deve» descia
+     uma tela e meia abaixo da dobra. O nome do container muda, e o mesmo
+     desenho de cartao vale nos dois limites, sem copia escrita a mao. */
+  .tabela-cartoes.estreita { container-name: tabela-estreita; }
+  @container tabela-estreita (max-width: 440px) {
+    ${CARTAO_DA_TABELA}
   }
 
   /* ---------------------------------------- o celular: alvo de 44px

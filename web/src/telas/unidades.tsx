@@ -35,7 +35,7 @@ import {
   rotuloDoEndereco, enderecoEmiteBoleto, faltasDaUc,
   type SituacaoDaUc,
 } from '../unidades-regras.ts';
-import { decimalTexto, decimalParaCampo, mesDaQuery } from '../dinheiro.ts';
+import { decimalDoCadastro, decimalParaCampo, mesDaQuery } from '../dinheiro.ts';
 import { mesEmBr } from '../formato.ts';
 import { PerguntaNaTela } from '../serie.tsx';
 import { FILTROS_DA_TELA, filtroDaConsulta, unidadeDaConsulta } from '../destino-da-camada.ts';
@@ -166,12 +166,19 @@ export function TelaUnidades() {
    * VAI COMO STRING, como o rateio: R$/kWh e `numeric(12,6)` do outro lado, e
    * truncar 1,187650 em centavos cobra R$ 2,90 a mais numa UC num mes (R22).
    */
+  /* [01/10/2026, etapa 6] O TEXTO DIGITADO PASSA POR `decimalDoCadastro`:
+   * virgula ou ponto, a frase para o ambiguo, e o mesmo texto que
+   * `decimalTexto` mandava para todo o resto (F18 em `web/tests/formato.ts`).
+   * A recusa sobe como erro do ato, pelo mesmo caminho que o `decimalTexto`
+   * ja usava. */
   async function salvarTarifa(uc: UnidadeConsumidora) {
     const v = tarifa[uc.id];
     if (v === undefined) return;
-    const ok = await acao.executar(() => api.patch(`/unidades-consumidoras/${uc.id}`, {
-      tarifa_reais_por_kwh: v.trim() ? decimalTexto(v, 6) : null,
-    }));
+    const ok = await acao.executar(() => {
+      const d = decimalDoCadastro(v, 6);
+      if (!d.ok) throw new Error(`Tarifa: ${d.erro}`);
+      return api.patch(`/unidades-consumidoras/${uc.id}`, { tarifa_reais_por_kwh: d.valor || null });
+    });
     if (ok) { acao.anunciar(`Tarifa da unidade ${uc.numero_uc} gravada.`); ucs.recarregar(); }
   }
 
@@ -199,10 +206,13 @@ export function TelaUnidades() {
     if (!pct || !uc.usina_id) return;
     // O percentual vai como STRING: a regra 1 mantem proporcao em escala decimal
     // e o repositorio recusa `number` de proposito.
-    const ok = await acao.executar(async () =>
-      api.put(`/unidades-consumidoras/${uc.id}/rateio`, {
-        usina_id: uc.usina_id, percentual_rateio: decimalTexto(pct, 4),
-      }));
+    const ok = await acao.executar(async () => {
+      const d = decimalDoCadastro(pct, 4);
+      if (!d.ok) throw new Error(`Fatia: ${d.erro}`);
+      return api.put(`/unidades-consumidoras/${uc.id}/rateio`, {
+        usina_id: uc.usina_id, percentual_rateio: d.valor,
+      });
+    });
     if (ok) { acao.anunciar(`Fatia da unidade ${uc.numero_uc} gravada.`); ucs.recarregar(); }
   }
 

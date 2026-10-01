@@ -159,8 +159,14 @@ function Bloco<T>(p: {
   const lista = p.carga.dado ?? [];
   return (
     <section style={{ marginBottom: 28 }}>
-      <div style={{ ...linha, gap: 12 }}>
-        <h2 style={{ margin: 0 }}>{p.titulo}</h2>
+      {/* [01/10/2026, etapa 6] O titulo e a nota ficam juntos, e o botao ao
+          lado deles: no telefone a nota caia DEPOIS do «Exportar CSV», separada
+          do titulo que ela explica. */}
+      <div style={{ ...linha, gap: 12, alignItems: 'flex-start' }}>
+        <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+          <h2 style={{ margin: 0 }}>{p.titulo}</h2>
+          <p className="sub" style={{ margin: '4px 0 0' }}>{p.nota}</p>
+        </div>
         <button style={{ marginLeft: 'auto' }} disabled={!lista.length}
                 onClick={() => baixarCsv(
                   nomeDoArquivo(p.csv.assunto, p.csv.mes || undefined),
@@ -169,7 +175,7 @@ function Bloco<T>(p: {
           <Icone nome="baixar" tamanho={15} /> Exportar CSV
         </button>
       </div>
-      <p className="sub">{p.nota}</p>
+      <div style={{ height: 14 }} />
       {p.detalhe}
       {p.carga.erro && (
         <Aviso tipo="erro">

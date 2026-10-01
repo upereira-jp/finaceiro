@@ -104,7 +104,7 @@ const conta = (o: Partial<ContaAPagar> = {}): ContaAPagar => ({
    * primeira versao tinha os dois erros e ficou vermelha por eles, depois de eu
    * ja ter consertado a formatacao que ela existia para pegar. */
   const p = podePagar(aberta, 100_001);
-  chk('C4c', p.pode === false && /excede o saldo/.test((p as any).porque) && /R\$ 1\.000,00/.test((p as any).porque),
+  chk('C4c', p.pode === false && /excede o saldo/.test((p as any).porque) && /R\$\u00a01\.000,00/.test((p as any).porque),
       'um centavo a mais TRAVA, e a mensagem DIZ quanto falta - "pagar duas vezes o mesmo repasse" '
       + 'e o modo de falha que a Q-PAGAMENTO-01 nomeia');
 

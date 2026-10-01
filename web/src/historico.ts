@@ -183,6 +183,18 @@ const ROTULO_DA_COLUNA: Record<string, string> = {
   linha_digitavel: 'linha digitável',
   origem_split_item_id: 'de qual parte da divisão nasceu',
   registro_id: 'registro',
+  /* [01/10/2026, etapa 6] O endereço do pagador: «endereco logradouro,
+     endereco bairro» lia o nome da coluna, sem acento e com o prefixo
+     repetido. A tabela («unidade consumidora») já diz de quem é. */
+  endereco_logradouro: 'logradouro',
+  endereco_numero: 'número do endereço',
+  endereco_complemento: 'complemento',
+  endereco_bairro: 'bairro',
+  endereco_municipio: 'município',
+  endereco_cep: 'CEP',
+  endereco_uf: 'UF',
+  data_vencimento: 'data do vencimento',
+  data_fechamento: 'data de fechamento',
 };
 
 /**

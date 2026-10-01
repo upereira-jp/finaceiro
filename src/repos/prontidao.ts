@@ -391,8 +391,8 @@ export async function prontidao(comp: Date | string): Promise<Prontidao> {
       explicacao: 'UC faturavel sem a conta da distribuidora registrada nesta competencia. Desde a ' +
         'Q-CICLO-01 o valor da fatura SAI da conta lida, entao sem ela nao ha o que cobrar - e a ' +
         'triagem do caminho oficial nem chega a rodar, porque ela percorre os registros que existem. ' +
-        'A conta entra pela aba da fatura unificada, uma por vez; se vale um caminho em lote para as ' +
-        '29 do mes e a Q-CONTA-LOTE-01, que tem dono e esta aberta. AS DUAS CAMADAS SEGUINTES CONTAM ' +
+        'A conta entra pela tela Contas de luz, uma conta ou o mes inteiro de uma vez (a fila do mes ' +
+        'registra as conferidas juntas). AS DUAS CAMADAS SEGUINTES CONTAM ' +
         'SOBRE ESTA: enquanto ela nao fechar, vencimento e tarifa aparecem como nao medidos, porque e ' +
         'a conta que traz os dois' },
 
@@ -417,7 +417,7 @@ export async function prontidao(comp: Date | string): Promise<Prontidao> {
         'na conta da distribuidora, nem como dia do mes no cadastro. A conta vem primeiro porque e mais ' +
         'especifica - ela diz o vencimento DAQUELE mes, enquanto o cadastro diz um dia fixo que ainda ' +
         'tem de ser projetado no mes seguinte. Continua sem default e vai continuar sem: escolher uma ' +
-        'data aqui seria o improviso que a regra 10 proibe. O dia do cadastro entra na aba Unidades ' +
+        'data aqui seria o improviso que a regra 10 proibe. O dia do cadastro entra na tela Unidades ' +
         'consumidoras, e ele so importa para as contas que vierem sem data impressa' },
 
     /*
@@ -442,7 +442,7 @@ export async function prontidao(comp: Date | string): Promise<Prontidao> {
         'a fatura tem CHECK (tarifa_reais_por_kwh > 0): as duas faixas nao coincidem, e a diferenca e ' +
         'exatamente o zero - que e o que esta camada conta. Uma fatura com tarifa zero imprimiria ' +
         '"R$ 0,000000 por kWh" no documento que o cliente confere. Corrige-se no campo Tarifa da ' +
-        'propria leitura, na aba da fatura unificada. A tarifa da aba Unidades consumidoras serve o ' +
+        'propria leitura, na tela Contas de luz. A tarifa da tela Unidades consumidoras serve o ' +
         'caminho em lote e NAO entra aqui - o conector continua semeando ela a partir do card' },
 
     /*
@@ -481,8 +481,8 @@ export async function prontidao(comp: Date | string): Promise<Prontidao> {
         'a linha "Atencao ao golpe do boleto: confira sempre se o beneficiario e X" nao e impressa ' +
         '- o aviso amarra no nome e some junto com ele. A conferencia do boleto importado perde o ' +
         'lado contra o qual comparar. As duas colunas sao da migration 26 (Q-DOCG3-08, ja fechada ' +
-        'no schema): o que falta e o insumo, e ele entra por UM caminho so - Fatura unificada > ' +
-        '"3 - Cadastro da fatura" (/documento#cadastro), a aba que esta oculta da barra. NAO ha ' +
+        'no schema): o que falta e o insumo, e ele entra por UM caminho so - Contas de luz > ' +
+        '"3 · Cadastro da fatura" (/documento#cadastro). NAO ha ' +
         'importador: `npm run identidade` cadastra CHAVE PIX e nao toca estas duas colunas. ' +
         'O CNPJ tem digito verificador conferido na gravacao (`CnpjDoEmissorInvalido`, 422), ' +
         'entao numero inventado nao passa' },
@@ -512,7 +512,7 @@ export async function prontidao(comp: Date | string): Promise<Prontidao> {
       explicacao: 'UC com contrato ativo sem endereco completo do pagador. A Sicoob exige logradouro, ' +
         'bairro, municipio, CEP e UF, e a emissao e RECUSADA sem eles (`PagadorSemEndereco`, 422) - a ' +
         'fatura existe e continua cobravel por Pix, o BOLETO e que nao nasce. Nao bloqueia faturar de ' +
-        'proposito. O numero nao entra na exigencia. Entra pela aba Unidades consumidoras, linha a ' +
+        'proposito. O numero nao entra na exigencia. Entra pela tela Unidades consumidoras, linha a ' +
         'linha, ou em lote por `npm run enderecos`' },
 
     { camada: 'dono_da_usina', faltam: n(l.sem_dono), total: n(l.usinas_ativas),

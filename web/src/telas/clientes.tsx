@@ -363,15 +363,18 @@ function LinhaDeCliente(p: {
     <>
       <tr>
         <td>{c.nome}</td>
-        <td style={{ minWidth: 210 }}>
+        <td style={{ minWidth: 240 }}>
           <div className="inline">
             {/* O TECLADO E O DE TEXTO, em maiuscula: o CNPJ alfanumerico existe
-                desde julho de 2026 — ver "teclado.ts". */}
+                desde julho de 2026 — ver "teclado.ts". A LARGURA E A DO CNPJ
+                MASCARADO (18 caracteres na fonte mono) [01/10/2026, etapa 6]:
+                com 150px o «82.285.141/0001-55» aparecia sem os dois digitos
+                verificadores — justo os que se conferem. */}
             <input value={valor} className="mono"
                    inputMode="text" autoCapitalize="characters" autoComplete="off" spellCheck={false}
                    aria-label={`CPF ou CNPJ de ${c.nome}`}
                    onChange={(e) => p.aoDigitar(e.target.value)}
-                   placeholder="000.000.000-00" style={{ width: 150 }} />
+                   placeholder="000.000.000-00" style={{ width: 'calc(18ch + 24px)' }} />
             <BotaoDeIcone icone="confirmar" rotulo={`Gravar o documento de ${c.nome}`}
                           ao={p.aoGravar}
                           desabilitado={!podeGravarDocumento({

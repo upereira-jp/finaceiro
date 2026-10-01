@@ -628,7 +628,9 @@ function SinaisDoConector() {
                   <Marca tom={x.tipo === 'recusa' ? 'erro' : 'nao_medido'}>{x.tipo}</Marca>
                 </td>
                 <td className="c-id"><span className="fraco">{x.entidade}</span> {x.chave}</td>
-                <td>{x.sinal}</td>
+                {/* A frase na medida de leitura (62ch): a 1440 ela corria 88
+                    caracteres por linha (detector, etapa 5). */}
+                <td><span className="celula-frase">{x.sinal}</span></td>
               </tr>
             ))}
           </Tabela>

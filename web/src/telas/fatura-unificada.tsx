@@ -47,7 +47,7 @@ import {
   escalaDaPrevia, regraDaPagina, PX_POR_MM,
   proximoNivelDoAperto, classesDoAperto, larguraDoCampoDaFolha,
 } from '../layout-regras.ts';
-import { emReais, percentualEmBr } from '../dinheiro.ts';
+import { emReais, percentualEmBr, camposParaDecimais, decimaisParaCampos } from '../dinheiro.ts';
 import { useLargura } from '../medir-largura.ts';
 import {
   ROTULO_DA_ABA, ABAS, abaDoFragmento, fragmentoDaAba, type AbaDaFatura,
@@ -583,6 +583,17 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
     c: CamposDaFatura, p: ParametrosDaEmissao, b: BoletoLido, cp: Record<string, string>,
   ) => {
     const meu = ++pedido.current;
+    /* [01/10/2026, etapa 6] OS PARAMETROS VAO NO TEXTO CANONICO, e o ambiguo
+     * NAO VAI. O campo mostra com virgula; o servidor recebe «0.029». Um
+     * desconto que a tela recusa («1.234») nao vai ao servidor — que o leria
+     * como 1,23% e comporia uma folha com esse numero; a frase fica no campo, e
+     * o aviso da composicao diz que ela parou. O pedido conta mesmo assim
+     * (`meu` acima): uma resposta antiga que chegue depois nao repoe a folha. */
+    const conv = camposParaDecimais(p);
+    if (!conv.ok) {
+      setErroDaComposicao('um dos parâmetros desta conta não é um número que a tela aceite — a frase está no campo.');
+      return;
+    }
     try {
       /*
        * O BOLETO VIAJA INTEIRO desde 14/08, e ate aqui iam QUATRO dos sete
@@ -592,7 +603,7 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
        * arquivo, em float, invisiveis para o CRM que consome a mesma rota.
        */
       const r = await api.post<ComposicaoUnificada>('/faturas/unificada/compor', {
-        campos: c, parametros: p, boleto: b, campos_personalizados: cp,
+        campos: c, parametros: conv.valor, boleto: b, campos_personalizados: cp,
       });
       if (meu !== pedido.current) return;
       setComposicao(r); setErroDaComposicao(null);
@@ -626,10 +637,10 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
        */
       if (!parametrosTocados.current && r.modelo) {
         parametrosTocados.current = true;
-        setParametros({
+        setParametros(decimaisParaCampos({
           percentual_desconto: r.modelo.percentual_desconto_padrao,
           fator_emissao: r.modelo.fator_emissao_padrao,
-        });
+        }));
       }
     } catch (e) {
       if (meu !== pedido.current) return;
@@ -681,11 +692,17 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
    * acumulada impressa na folha do cliente.
    */
   async function registrar() {
+    /* O mesmo texto canonico da composicao — e a mesma recusa (ver `compor`). */
+    const conv = camposParaDecimais(parametros);
+    if (!conv.ok) {
+      setStatusRegistro('Não foi possível registrar: um dos parâmetros desta conta não é um número que a tela aceite — a frase está no campo.');
+      return;
+    }
     setRegistrando(true);
     setStatusRegistro(null);
     try {
       await api.post('/faturas/unificada/registros', {
-        campos, parametros, boleto, campos_personalizados: personalizados,
+        campos, parametros: conv.valor, boleto, campos_personalizados: personalizados,
       });
       setStatusRegistro(`Registrada: unidade ${campos.unidade_consumidora}, `
                       + `${campos.mes_referencia}. O desconto entra na economia acumulada.`);
@@ -737,7 +754,7 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
        * E decisao registrada, e nao padrao a adotar: sobrescreve-la pelo padrao
        * de hoje faria a segunda via mentir sobre o que foi cobrado. */
       parametrosTocados.current = true;
-      setParametros(v.parametros);
+      setParametros(decimaisParaCampos(v.parametros));
       setBoleto({ ...BOLETO_LIDO_VAZIO, ...v.boleto });
       setPersonalizados({});
       /* A 2a via nao e linha da fila: a gaveta que abrir depois dela nao pode
@@ -1147,6 +1164,11 @@ function ConferenciaDaConta(p: PropsDaConferencia) {
      "<label htmlFor>"), e nao uma legenda solta ao lado de um "aria-label" com
      o mesmo texto: tocar no rotulo poe o cursor na caixa. */
   const idBoleto = useId();
+  /* A frase de cada parametro recusado — a mesma conta que `compor` faz antes
+     de mandar. */
+  const convDosParametros = camposParaDecimais(p.parametros);
+  const errosDosParametros: Partial<Record<keyof ParametrosDaEmissao, string>> =
+    convDosParametros.ok ? {} : convDosParametros.erros;
   /*
    * ==========================================================================
    * A CONFERENCIA DO BOLETO VEM PRONTA DO SERVIDOR desde 14/08.
@@ -1275,9 +1297,13 @@ function ConferenciaDaConta(p: PropsDaConferencia) {
       <div className="fu-secao">
         <div className="fu-secao-tit">Parâmetros desta conta</div>
         <div className="campos parametros">
+          {/* [01/10/2026, etapa 6] Com virgula, e a recusa do ambiguo dita no
+              proprio campo — ver `camposParaDecimais` em `dinheiro.ts`. */}
           <Campo rotulo="Desconto (%)" valor={p.parametros.percentual_desconto}
+                 erro={errosDosParametros.percentual_desconto}
                  ao={(v) => p.setParametros((s) => ({ ...s, percentual_desconto: v }))} />
           <Campo rotulo="Fator CO₂ (kg/kWh)" valor={p.parametros.fator_emissao}
+                 erro={errosDosParametros.fator_emissao}
                  ao={(v) => p.setParametros((s) => ({ ...s, fator_emissao: v }))} />
         </div>
         {/* DE ONDE O NUMERO VEIO, escrito na tela. Os dois campos sao editaveis

@@ -27,7 +27,7 @@
 // `PainelDeCriar` (listar antes de criar) e `Recolhido` (o que se confere de vez
 // em quando fica fechado, com o resumo de uma linha a vista).
 
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { Children, Fragment, isValidElement, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode, CSSProperties, KeyboardEvent as EventoDeTecla } from 'react';
 import { lerModo, aplicarModo, type ModoTema } from './tema.ts';
 import { Icone, Logotipo } from './icones.tsx';
@@ -551,7 +551,11 @@ export function Recolhido(p: {
 const useEfeitoDeLayout = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 export const Tabela = ({ cabecalho, children, vazio, cartoes = true }: {
-  cabecalho: ReactNode; children: ReactNode; vazio?: ReactNode; cartoes?: boolean;
+  cabecalho: ReactNode; children: ReactNode; vazio?: ReactNode;
+  /** `'estreita'` [01/10/2026, etapa 6]: a tabela curta de resumo, que vira
+   *  cartao so abaixo de 440px DE TABELA — numa coluna de meia tela do
+   *  computador ela continua tabela. */
+  cartoes?: boolean | 'estreita';
 }) => {
   const temLinha = Array.isArray(children) ? children.flat().filter(Boolean).length > 0 : Boolean(children);
   const caixa = useRef<HTMLDivElement>(null);
@@ -561,6 +565,10 @@ export const Tabela = ({ cabecalho, children, vazio, cartoes = true }: {
   useEfeitoDeLayout(() => {
     if (cartoes && caixa.current) rotularCelulas(caixa.current);
   });
+  /* A ORDENACAO DO CARTAO sai do proprio cabecalho: as colunas que ordenam sao
+     os `ThOrd` dele. Sem linha nao ha o que ordenar, e o seletor nao aparece. */
+  const ordenaveis = temLinha ? colunasOrdenaveis(cabecalho) : null;
+  const seletor = ordenaveis && <OrdenarPor {...ordenaveis} />;
   const corpo = (
     <div className="rolagem">
       {temLinha
@@ -568,7 +576,9 @@ export const Tabela = ({ cabecalho, children, vazio, cartoes = true }: {
         : <div className="vazio">{vazio ?? 'Nada aqui ainda.'}</div>}
     </div>
   );
-  return cartoes ? <div className="tabela-cartoes" ref={caixa}>{corpo}</div> : corpo;
+  return cartoes
+    ? <div className={cartoes === 'estreita' ? 'tabela-cartoes estreita' : 'tabela-cartoes'} ref={caixa}>{seletor}{corpo}</div>
+    : <>{seletor}{corpo}</>;
 };
 
 /**
@@ -757,6 +767,97 @@ export function ThOrd(p: {
                nome={ativa ? (p.ordem.desc ? 'ordem_decrescente' : 'ordem_crescente') : 'ordem_nenhuma'} />
       </button>
     </th>
+  );
+}
+
+/**
+ * «ORDENAR POR» NO CARTAO — UMA escolha, e nao uma fileira de botoes.
+ *
+ * [01/10/2026, etapa 6] Na etapa 5 o cabecalho que ordena virava, no cartao,
+ * uma fileira de botoes de 44px: Contas a pagar empilhava tres fileiras, e a
+ * lista comecava abaixo da metade da primeira tela de um telefone. Agora e um
+ * `<select>` com nome («Ordenar por»), e cada opcao diz a coluna E a direcao:
+ * a escolha que o computador faz em dois cliques na seta vira uma so, no
+ * seletor que o telefone ja sabe abrir — e o leitor de tela anuncia o nome, o
+ * valor e a lista.
+ *
+ * A DIRECAO E «crescente» E «decrescente» em toda coluna, e nao «de A a Z» ou
+ * «mais antigo primeiro»: varias colunas ordenam por uma CHAVE que nao e o
+ * texto que se ve (a Situacao de Cobrancas poe primeiro o que precisa de
+ * voce), e uma palavra que descreve o texto mentiria nelas. E e o mesmo nome
+ * da seta do computador (`ordem_crescente`).
+ *
+ * NAO HA UM SEGUNDO ESTADO: a escolha chama o MESMO `ao` dos cabecalhos, com o
+ * contrato de `useOrdenacao().alternar` — coluna nova comeca crescente, a
+ * mesma coluna inverte. Para cair em «decrescente» numa coluna nova, chama
+ * duas vezes; as duas atualizacoes sao funcionais e se aplicam em ordem.
+ *
+ * Aparece so quando a tabela e cartao (o CSS de `.tabela-cartoes` e o de
+ * Cobrancas, `.em-tabela`, o mostram); na tabela, a ordem continua na seta do
+ * cabecalho.
+ */
+export type ColunaOrdenavel = { chave: string; texto: string };
+
+/** O texto visivel de um no (o nome de uma coluna ordenavel). */
+function textoDoNo(n: ReactNode): string {
+  if (n == null || typeof n === 'boolean') return '';
+  if (typeof n === 'string' || typeof n === 'number') return String(n);
+  if (Array.isArray(n)) return n.map(textoDoNo).join('');
+  if (isValidElement(n)) return textoDoNo((n.props as { children?: ReactNode }).children);
+  return '';
+}
+
+/** Os `ThOrd` de um cabecalho, na ordem em que aparecem — com o `ordem` e o `ao`
+ *  que eles dividem. `null` quando nenhuma coluna ordena. */
+export function colunasOrdenaveis(cabecalho: ReactNode): {
+  colunas: ColunaOrdenavel[]; ordem: Ordem; ao: (chave: string) => void;
+} | null {
+  const colunas: ColunaOrdenavel[] = [];
+  let ordem: Ordem | null = null;
+  let ao: ((chave: string) => void) | null = null;
+  const visitar = (no: ReactNode): void => {
+    Children.forEach(no, (filho) => {
+      if (!isValidElement(filho)) return;
+      if (filho.type === ThOrd) {
+        const p = filho.props as Parameters<typeof ThOrd>[0];
+        colunas.push({ chave: p.chave, texto: textoDoNo(p.children).replace(/\s+/g, ' ').trim() });
+        ordem = p.ordem; ao = p.ao;
+      } else if (filho.type === Fragment) {
+        visitar((filho.props as { children?: ReactNode }).children);
+      }
+    });
+  };
+  visitar(cabecalho);
+  return colunas.length && ordem && ao ? { colunas, ordem, ao } : null;
+}
+
+export function OrdenarPor(p: { colunas: ColunaOrdenavel[]; ordem: Ordem; ao: (chave: string) => void }) {
+  const id = useId();
+  const valor = `${p.ordem.chave}:${p.ordem.desc ? 'desc' : 'asc'}`;
+  const escolher = (v: string): void => {
+    const i = v.lastIndexOf(':');
+    const chave = v.slice(0, i);
+    const desc = v.slice(i + 1) === 'desc';
+    if (chave !== p.ordem.chave) {
+      p.ao(chave);
+      if (desc) p.ao(chave);
+    } else if (desc !== p.ordem.desc) {
+      p.ao(chave);
+    }
+  };
+  return (
+    <div className="ordenar-por">
+      <label htmlFor={id}>Ordenar por</label>
+      <div className="campo-caixa">
+        <select id={id} value={valor} onChange={(e) => escolher(e.target.value)}>
+          {p.colunas.flatMap((c) => [
+            <option key={`${c.chave}:asc`} value={`${c.chave}:asc`}>{c.texto} (crescente)</option>,
+            <option key={`${c.chave}:desc`} value={`${c.chave}:desc`}>{c.texto} (decrescente)</option>,
+          ])}
+        </select>
+        <span className="adorno"><Icone nome="abrir_menu" tamanho={13} /></span>
+      </div>
+    </div>
   );
 }
 

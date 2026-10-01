@@ -133,7 +133,15 @@ export function TelaContasAReceber() {
           <section className="cartao secao" style={{ flex: '1 1 320px', margin: 0 }}>
             <h2 style={{ marginTop: 0 }}>Por tempo de atraso</h2>
             <p className="sub">Quanto está parado em cada faixa. Clique numa faixa para ver só ela.</p>
-            <Tabela cabecalho={<><th>Faixa</th><th className="num">Títulos</th><th className="num">Valor</th></>}
+            {/* [01/10/2026, etapa 6] AS DUAS TABELAS DE RESUMO SAO «ESTREITAS»:
+                viram cartao so abaixo de 440px de tabela, e nao de 720. Numa
+                coluna de meia tela elas tinham menos de 720px e viravam cartao
+                tambem no computador — cinco faixas em cinco cartoes e oito
+                clientes em oito, e «Quem mais deve» descia uma tela e meia
+                abaixo da primeira dobra (o detector mediu 159% da altura da
+                janela contra 74% da vizinha). No telefone continuam cartao. */}
+            <Tabela cartoes="estreita"
+                    cabecalho={<><th>Faixa</th><th className="num">Títulos</th><th className="num">Valor</th></>}
                     vazio="Nada em aberto.">
               {faixas.map((f) => (
                 <tr key={f.faixa}
@@ -165,7 +173,11 @@ export function TelaContasAReceber() {
           <section className="cartao secao" style={{ flex: '1 1 380px', margin: 0 }}>
             <h2 style={{ marginTop: 0 }}>Quem mais deve</h2>
             <p className="sub">Por cliente, somando todas as unidades dele. Clique no nome para ver só os títulos dele.</p>
-            <Tabela cabecalho={<><th>Cliente</th><th className="num">Títulos</th><th className="num">Vencido</th><th className="num">Em aberto</th><th>Atraso maior</th></>}
+            {/* Tres colunas, e nao cinco: os titulos e o atraso maior descem
+                para a linha de baixo do nome, no cinza de meta — o que se
+                compara de cliente para cliente e o dinheiro. */}
+            <Tabela cartoes="estreita"
+                    cabecalho={<><th>Cliente</th><th className="num">Vencido</th><th className="num">Em aberto</th></>}
                     vazio="Ninguém deve nada.">
               {devedores.map((d) => (
                 <tr key={d.cliente_id} style={{ cursor: 'pointer', fontWeight: busca === d.cliente ? 650 : undefined }}
@@ -175,13 +187,15 @@ export function TelaContasAReceber() {
                             onClick={(e) => { e.stopPropagation(); setBusca((atual) => (atual === d.cliente ? '' : d.cliente)); }}>
                       <strong>{d.cliente}</strong>
                     </button>
+                    <div className="uc-meta devedor-meta">
+                      {d.titulos} {d.titulos === 1 ? 'título' : 'títulos'}
+                      {d.maior_atraso_dias ? ` · ${fraseDoAtraso(d.maior_atraso_dias)}` : ''}
+                    </div>
                   </td>
-                  <td className="num">{d.titulos}</td>
                   <td className="num c-val" style={{ color: d.vencido_centavos ? 'var(--erro)' : undefined }}>
                     {emReais(d.vencido_centavos)}
                   </td>
                   <td className="num">{emReais(d.centavos)}</td>
-                  <td>{d.maior_atraso_dias ? fraseDoAtraso(d.maior_atraso_dias) : '—'}</td>
                 </tr>
               ))}
             </Tabela>

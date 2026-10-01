@@ -58,8 +58,8 @@ export class PagadorSemDocumento extends Error {
   constructor(nome: string | null, numeroUc: string) {
     super(
       `A UC ${numeroUc} nao tem CPF/CNPJ do cliente${nome ? ` (${nome})` : ''}, e boleto sem ` +
-      'identificacao do pagador o banco recusa. O dado entra pela aba Clientes, no proprio ' +
-      'sistema, ou em lote por `npm run documentos` — preenchido, peca o boleto de novo. ' +
+      'identificacao do pagador o banco recusa. O dado entra pela tela Clientes, no proprio ' +
+      'sistema — preenchido, peca o boleto de novo. ' +
       'Nada foi enviado a Sicoob e nenhum boleto foi criado.'
     );
     this.name = 'PagadorSemDocumento';
@@ -84,8 +84,8 @@ export class PagadorSemEndereco extends Error {
     super(
       `A UC ${numeroUc}${nome ? ` (${nome})` : ''} nao tem ${faltando.join(', ')} no endereco do ` +
       'cliente, e a Sicoob exige endereco completo no pagador - logradouro, bairro, cidade, CEP e ' +
-      'UF. O dado entra pela aba Clientes ou em lote por `npm run enderecos` — preenchido, peca o ' +
-      'boleto de novo. Nada foi enviado a Sicoob e nenhum boleto foi criado.'
+      'UF. Abra a unidade em Unidades consumidoras (/unidades?uc=' + numeroUc + ') e preencha o ' +
+      'endereco — preenchido, peca o boleto de novo. Nada foi enviado a Sicoob e nenhum boleto foi criado.'
     );
     this.name = 'PagadorSemEndereco';
   }

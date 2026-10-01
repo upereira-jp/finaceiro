@@ -137,7 +137,7 @@ const lido = (over: Partial<ItemDoLote> & { uc?: string; mes?: string; total?: s
 
 // -------------------------------------------------- L5 o zero, que nao e ausente
 {
-  chk('L5a', avisoDoItem(lido({ total: '0' }), UCS)?.includes('R$ 0,00') === true,
+  chk('L5a', avisoDoItem(lido({ total: '0' }), UCS)?.includes('R$\u00a00,00') === true,
       'a conta que fecha em zero AVISA (a do Fernando Albino, medida em 08/09)');
   chk('L5b', pendenciaDoItem(lido({ total: '0' }), UCS) === null,
       'e nao bloqueia: emitir fatura de valor zero e decisao da operacao, nao da tela');

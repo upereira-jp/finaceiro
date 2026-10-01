@@ -205,7 +205,7 @@ export function avisoDoItem(i: ItemDoLote, ucsDoCadastro: ReadonlySet<string>): 
    * retomada de 08/09 registra uma real — a do Fernando Albino. Registrar e
    * decisao da operacao; a tela avisa e nao decide. */
   if (i.campos.valor_total_equatorial.trim() && Number(paraNumero(i.campos.valor_total_equatorial)) === 0) {
-    return 'O total da conta fecha em R$ 0,00. Não é defeito — confira antes de registrar.';
+    return 'O total da conta fecha em R$\u00a00,00. Não é defeito — confira antes de registrar.';
   }
   return null;
 }

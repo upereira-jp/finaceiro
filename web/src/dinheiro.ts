@@ -84,13 +84,22 @@ export function paraCentavos(bruto: string): Centavos {
   return negativo ? -centavos : centavos;
 }
 
-/** 123456 -> "R$ 1.234,56". So para exibir. Nunca volta para calculo. */
+/**
+ * 123456 -> "R$ 1.234,56". So para exibir. Nunca volta para calculo.
+ *
+ * [01/10/2026, etapa 6] O ESPACO DEPOIS DO «R$» E O INSEPARAVEL (U+00A0): o
+ * valor nunca quebra entre o simbolo e o numero. Medido a 390px: «Somam R$ /
+ * 24.671,74» em Contas a pagar e «R$ / 14.416,65» na tabela de faixas de Contas
+ * a receber — o simbolo no fim de uma linha e o numero no comeco da outra.
+ * A largura e a mesma do espaco comum; so a quebra muda. A folha impressa nao
+ * passa por aqui (ela formata pelo `src/dominio/centavos.ts`).
+ */
 export function emReais(c: Centavos | null | undefined): string {
   if (c == null) return '—';
   const negativo = c < 0;
   const a = Math.abs(c);
   const inteiro = Math.trunc(a / 100).toLocaleString('pt-BR');
-  return `${negativo ? '-' : ''}R$ ${inteiro},${String(a % 100).padStart(2, '0')}`;
+  return `${negativo ? '-' : ''}R$\u00a0${inteiro},${String(a % 100).padStart(2, '0')}`;
 }
 
 /**
@@ -232,6 +241,65 @@ export function campoParaDecimal(texto: string): DecimalDoCampo {
     };
   }
   return { ok: true, valor: separador ? `${inteira}.${fracao}` : inteira };
+}
+
+/**
+ * VARIOS CAMPOS DECIMAIS DE UMA VEZ — os dois parametros da conta aberta em
+ * Contas de luz (desconto e fator de CO2). [01/10/2026, etapa 6]
+ *
+ * O MESMO RIGOR DO MODELO DA FATURA (etapa 5), aplicado a cada campo por
+ * `campoParaDecimal`: aceita virgula ou ponto, recusa o ambiguo com a frase, e
+ * devolve o texto canonico. So devolve `ok` quando TODOS passam — um parametro
+ * recusado nao vai ao servidor junto com os outros, porque o servidor compoe a
+ * fatura com os dois.
+ *
+ * O QUE MUDA NO QUE CHEGA AO SERVIDOR, provado contra o `calcular` do proprio
+ * servidor em `web/tests/formato.ts` (F17): para todo texto que ele aceitava,
+ * o canonico produz a MESMA conta, centavo por centavo. Os que ele lia como
+ * outra coisa («1.234» virava 1,23%) a tela recusa antes.
+ */
+export function camposParaDecimais<K extends string>(campos: Readonly<Record<K, string>>):
+  { ok: true; valor: Record<K, string> } | { ok: false; erros: Partial<Record<K, string>> } {
+  const valor = {} as Record<K, string>;
+  const erros: Partial<Record<K, string>> = {};
+  let ok = true;
+  for (const k of Object.keys(campos) as K[]) {
+    const r = campoParaDecimal(String(campos[k] ?? ''));
+    if (r.ok) valor[k] = r.valor;
+    else { erros[k] = r.erro; ok = false; }
+  }
+  return ok ? { ok: true, valor } : { ok: false, erros };
+}
+
+/** A volta: o que o servidor manda («0.029», «20.00») como a pessoa le
+ *  («0,029», «20,00»), campo a campo. */
+export function decimaisParaCampos<K extends string>(valores: Readonly<Record<K, string>>): Record<K, string> {
+  const r = {} as Record<K, string>;
+  for (const k of Object.keys(valores) as K[]) r[k] = decimalParaCampo(valores[k]);
+  return r;
+}
+
+/**
+ * O DECIMAL DE UM CAMPO DE CADASTRO, com o limite de casas da coluna — a fatia
+ * (4 casas) e a tarifa (6) de Unidades. [01/10/2026, etapa 6]
+ *
+ * E `campoParaDecimal` seguido de `decimalTexto`: o primeiro recusa o ambiguo
+ * («1.185» e um virgula cento e oitenta e cinco, ou mil cento e oitenta e
+ * cinco?), o segundo confere as casas. O TEXTO QUE SAI e, letra por letra, o
+ * que `decimalTexto(texto, casas)` mandava sozinho ate hoje para tudo o que
+ * ele aceitava e nao era ambiguo — F18 em `web/tests/formato.ts` prende isso.
+ * A unica diferenca e a recusa: o que antes ia como «1.185» e virava R$ 1,185
+ * em silencio, agora volta com a frase.
+ */
+export function decimalDoCadastro(texto: string, casas: number): DecimalDoCampo {
+  const r = campoParaDecimal(texto);
+  if (!r.ok) return r;
+  if (r.valor === '') return { ok: true, valor: '' };
+  try {
+    return { ok: true, valor: decimalTexto(r.valor, casas) };
+  } catch {
+    return { ok: false, erro: `«${texto.trim()}» tem mais de ${casas} casas depois da vírgula.` };
+  }
 }
 
 /**

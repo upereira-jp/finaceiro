@@ -135,7 +135,9 @@ export function TelaHistorico() {
       <div className="cartao secao" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <Interruptor ligado={rodadas} ao={setRodadas}
                      rotulo="Mostrar também as rotinas automáticas" />
-        <span className="fraco" style={{ fontSize: 12 }}>
+        {/* [01/10/2026, etapa 6] Na medida de leitura e no tamanho de meta:
+            a 12px e na largura do cartão ela corria 150 caracteres por linha. */}
+        <span className="fraco" style={{ fontSize: 'var(--t-meta)', maxWidth: '72ch' }}>
           As rotinas que rodam sozinhas se registram aqui a cada poucos minutos e respondem por
           quase toda a lista. Para saber se elas estão rodando, a resposta melhor está no rodapé
           da tela Mês, no setor Rateio.

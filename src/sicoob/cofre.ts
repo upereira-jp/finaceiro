@@ -91,7 +91,7 @@ export class CredencialIncompleta extends Error {
       'Estes campos vem da COOPERATIVA e nao se derivam de agencia, conta ou numero ' +
       'de contrato. (O numeroContratoCobranca NAO entra nesta lista: e opcional, e so ' +
       'existe para cooperado com mais de um contrato.) ' +
-      'Nenhum boleto foi enviado. Preencha na aba Emissao e cobranca e peca de novo.'
+      'Nenhum boleto foi enviado. Preencha na tela Conector Sicoob, no setor Empresa, e peca de novo.'
     );
     this.name = 'CredencialIncompleta';
   }

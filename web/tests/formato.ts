@@ -27,12 +27,14 @@ import {
 import { mesPorExtenso as mesPorExtensoDoVocabulario } from '../src/vocabulario.ts';
 import {
   decimalEmBr, kwhEmBr, decimalParaCampo, centavosParaCampo, percentualEmBr, decimalTexto, paraCentavos,
-  campoParaDecimal,
+  campoParaDecimal, camposParaDecimais, decimaisParaCampos, decimalDoCadastro, emReais,
 } from '../src/dinheiro.ts';
 import { tecladoDoCampo } from '../src/teclado.ts';
 // O PARSER DO SERVIDOR, importado e nao copiado: F13 compara o que ele grava com
 // o texto que a tela mandava antes e com o que ela manda agora.
-import { paraDecimal, decimalParaTexto } from '../../src/dominio/fatura-unificada.ts';
+import {
+  paraDecimal, decimalParaTexto, calcular, CAMPOS_VAZIOS, type CamposDaFaturaUnificada,
+} from '../../src/dominio/fatura-unificada.ts';
 import { reaisParaPlanilha } from '../src/csv.ts';
 import { erroDeLogin, casoDoErro } from '../src/login-regras.ts';
 
@@ -362,6 +364,133 @@ const gravado = (texto: string, casas: number): string => decimalParaTexto(paraD
   chk('F16b', !/multa_percentual: m\.multa_percentual/.test(doc),
       'o PUT do modelo nao manda mais o texto do campo cru');
 }
+
+// ============================================================================
+// F17 a F19 — os decimais que ficaram de fora da etapa 5 (01/10/2026, etapa 6)
+//
+//   F17  os PARAMETROS da conta aberta em Contas de luz (desconto e fator de
+//        CO2). Ate aqui a tela mandava o texto do campo cru, e o servidor o
+//        lia com `paraDecimal`. Agora manda o canonico de `camposParaDecimais`.
+//        A prova e contra o `calcular` DO SERVIDOR (importado, nao copiado),
+//        que e a funcao que a composicao e o registro chamam: para todo texto
+//        que ele aceitava, o canonico produz a MESMA conta — desconto, tarifa
+//        com desconto, total, CO2 — e o mesmo fator gravado com 6 casas;
+//   F18  a FATIA (4 casas) e a TARIFA (6) de Unidades. Ate aqui iam por
+//        `decimalTexto`. Agora por `decimalDoCadastro`, e o texto enviado e o
+//        MESMO, letra por letra, para tudo o que `decimalTexto` aceitava e nao
+//        era ambiguo; a tarifa e medida tambem no parser do servidor
+//        (`paraDecimal` + 6 casas, `tarifa()` de `repos/unidade_consumidora.ts`)
+//        e a fatia na regra do repositorio (`^\d{1,3}(\.\d{1,4})?$`);
+//   F19  o ambiguo e recusado nos tres lugares, com a frase.
+// ============================================================================
+{
+  const CAMPOS: CamposDaFaturaUnificada = {
+    ...CAMPOS_VAZIOS,
+    energia_compensada_kwh: '503.0', tarifa_kwh: '1.185396',
+    consumo_nao_compensado_kwh: '30', consumo_nao_compensado_valor: '35.56',
+    iluminacao_publica: '8.44', bandeira_valor: '0', outros_encargos: '0', valor_total_equatorial: '44.00',
+  };
+  /** O que o servidor faz com um par de parametros: a conta inteira, ou a recusa. */
+  const servidor = (p: { percentual_desconto: string; fator_emissao: string }): string => {
+    try {
+      const c = calcular(CAMPOS, p);
+      return JSON.stringify({ c, fator: decimalParaTexto(paraDecimal(p.fator_emissao), 6) });
+    } catch (e) { return `RECUSA ${(e as Error).name}`; }
+  };
+  // O que a pessoa digita hoje, nos dois campos (o fator vai junto, fixo, e vice-versa).
+  const digitados = ['20', '20,5', '20.5', '15', '0', '12,25', '2,5', ' 2,5 ', '7', '20.00', '20,00', '33.33'];
+  const fatores = ['0,029', '0.029', '0.0290', '0,1', '0.5', '1', '0,03'];
+  const divergem: string[] = [];
+  let medidos = 0;
+  for (const d of digitados) {
+    for (const f of fatores) {
+      const cru = { percentual_desconto: d, fator_emissao: f };
+      const hoje = servidor(cru);
+      if (hoje.startsWith('RECUSA')) continue; // o servidor ja recusava: nada a comparar
+      const conv = camposParaDecimais(cru);
+      if (!conv.ok) { divergem.push(`«${d}»/«${f}» RECUSADO na tela`); continue; }
+      medidos++;
+      if (servidor(conv.valor) !== hoje) divergem.push(`«${d}»/«${f}»`);
+    }
+  }
+  chk('F17', divergem.length === 0 && medidos >= 70,
+      `os parametros canonicos produzem no calcular do servidor a MESMA conta que o texto cru: ${medidos} pares medidos`
+      + `${divergem.length ? ` — DIVERGEM: ${divergem.join(', ')}` : ''}`);
+
+  // O valor que o servidor mandou e que ninguem tocou: mostrado com virgula, volta IGUAL.
+  const doServidor = { percentual_desconto: '20.00', fator_emissao: '0.029000' };
+  const naTela = decimaisParaCampos(doServidor);
+  const volta = camposParaDecimais(naTela);
+  chk('F17b', naTela.percentual_desconto === '20,00' && naTela.fator_emissao === '0,029000'
+        && volta.ok && volta.valor.percentual_desconto === '20.00' && volta.valor.fator_emissao === '0.029000',
+      'o padrao do cadastro aparece com virgula (20,00 · 0,029000) e volta ao servidor letra por letra igual');
+
+  // O que o servidor fazia com o ambiguo, e o que a tela faz agora.
+  const amb = camposParaDecimais({ percentual_desconto: '1.234', fator_emissao: '0,029' });
+  chk('F17c', servidor({ percentual_desconto: '1.234', fator_emissao: '0,029' }) !== 'RECUSA DecimalInvalido'
+        && !amb.ok && Boolean(amb.erros.percentual_desconto?.includes('1,234')) && amb.erros.fator_emissao === undefined,
+      'sem a recusa da tela o servidor aceitava «1.234» de desconto (1,23%); agora a frase sai no campo do desconto, e so nele');
+  const doisRuins = camposParaDecimais({ percentual_desconto: '2,5,1', fator_emissao: '0.0.2' });
+  chk('F17d', !doisRuins.ok && Boolean(doisRuins.erros.percentual_desconto) && Boolean(doisRuins.erros.fator_emissao),
+      'dois campos errados dao duas frases, cada uma no seu campo');
+  chk('F17e', camposParaDecimais({ percentual_desconto: '2%', fator_emissao: '0,029' }).ok
+        && servidor({ percentual_desconto: '2%', fator_emissao: '0,029' }).startsWith('RECUSA'),
+      'o «%» do fim, que o servidor recusava, a tela tira: «2%» vai como «2»');
+}
+
+{
+  /* O que cada caminho manda: o de antes (`decimalTexto`, que lanca) e o de agora. */
+  const antes = (t: string, casas: number): string => { try { return decimalTexto(t, casas); } catch { return 'LANCA'; } };
+  const agora = (t: string, casas: number): string => { const r = decimalDoCadastro(t, casas); return r.ok ? r.valor : 'RECUSA'; };
+  const tarifaNoServidor = (t: string): string | null => {
+    const s = t.trim(); if (!s) return null;
+    const d = decimalParaTexto(paraDecimal(s, 'tarifa_reais_por_kwh'), 6);
+    return Number(d) > 0 ? d : null;
+  };
+  const REGRA_DA_FATIA = /^\d{1,3}(\.\d{1,4})?$/;
+
+  const tarifas = ['1,185396', '1.185396', '1,13', '1.13', '0,936986', '0.936986', '1,1', '2', ' 1,18 ', '0,5', '1,180000', '0.9'];
+  const fatias = ['12,5', '12.5', '9,7122', '9.7122', '100', '33,3333', '0,5', '7', ' 12,5 ', '50.25'];
+  const difTarifa = tarifas.filter((t) => antes(t, 6) !== agora(t, 6) || tarifaNoServidor(antes(t, 6)) !== tarifaNoServidor(agora(t, 6)));
+  const difFatia = fatias.filter((t) => antes(t, 4) !== agora(t, 4) || !REGRA_DA_FATIA.test(agora(t, 4)));
+  chk('F18', difTarifa.length === 0 && difFatia.length === 0,
+      `a tarifa e a fatia saem LETRA POR LETRA como saiam (${tarifas.length} tarifas, ${fatias.length} fatias), `
+      + 'e passam no parser do servidor e na regra do repositorio'
+      + `${difTarifa.length + difFatia.length ? ` — DIVERGEM: ${[...difTarifa, ...difFatia].join(', ')}` : ''}`);
+  chk('F18b', agora('1,1853961', 6) === 'RECUSA' && antes('1,1853961', 6) === 'LANCA'
+        && agora('12,34567', 4) === 'RECUSA' && agora('', 6) === '',
+      'casas demais continuam recusadas (7 na tarifa, 5 na fatia), e o vazio continua vazio (a tarifa vira nula)');
+  chk('F18c', decimalParaCampo('1.185396') === '1,185396' && decimalParaCampo('9.7122') === '9,7122',
+      'e aparecem com virgula, como desde a etapa 4b');
+
+  // F19 — o ambiguo: antes passava em silencio, agora volta com a frase.
+  const ambiguos: Array<[string, number]> = [['1.185', 6], ['1.130', 6], ['12.500', 4], ['1.234,5', 6], ['1,234.5', 4]];
+  const passaram = ambiguos.filter(([t, c]) => agora(t, c) !== 'RECUSA');
+  chk('F19', passaram.length === 0,
+      `o ambiguo e recusado na tarifa e na fatia${passaram.length ? ` — PASSARAM: ${passaram.map(([t]) => t).join(', ')}` : ''}`);
+  chk('F19b', antes('1.185', 6) === '1.185' && tarifaNoServidor('1.185') === '1.185000',
+      'o que a recusa evita: «1.185» ia como R$ 1,185 por kWh sem pergunta — e podia ser «1.185,xx» com a virgula esquecida');
+  const r = decimalDoCadastro('1.185', 6);
+  chk('F19c', !r.ok && r.erro.includes('1,185') && r.erro.includes('1185'),
+      `a frase diz as duas leituras: «${r.ok ? '' : r.erro}»`);
+  chk('F19d', agora('0.936', 6) === '0.936' && agora('0,936', 6) === '0.936',
+      'com zero na parte inteira nao ha milhar possivel: «0.936» passa');
+}
+
+// As telas usam o par — e nao mandam o texto cru.
+{
+  const fu = readFileSync(fileURLToPath(new URL('../src/telas/fatura-unificada.tsx', import.meta.url)), 'utf8');
+  const un = readFileSync(fileURLToPath(new URL('../src/telas/unidades.tsx', import.meta.url)), 'utf8');
+  chk('F20', /parametros: conv\.valor, boleto: b/.test(fu) && /parametros: conv\.valor, boleto, campos_personalizados/.test(fu)
+        && !/campos: c, parametros: p, boleto: b/.test(fu) && /setParametros\(decimaisParaCampos\(v\.parametros\)\)/.test(fu),
+      'Contas de luz compoe e registra com o canonico, e a 2a via abre os parametros com virgula');
+  chk('F20b', (un.match(/decimalDoCadastro\(/g) ?? []).length === 2 && !/decimalTexto\(/.test(un),
+      'Unidades grava fatia e tarifa por decimalDoCadastro, e nao mais pelo decimalTexto sozinho');
+}
+
+// F21 — o dinheiro nao quebra entre o «R$» e o numero (01/10/2026, etapa 6).
+chk('F21', emReais(123456) === 'R$ 1.234,56' && emReais(-1) === '-R$ 0,01' && !/R\$ /.test(emReais(2467174)),
+    'o espaco depois do R$ e o inseparavel: «R$ 24.671,74» nunca vira «R$» numa linha e o numero na outra');
 
 console.log();
 if (falhas > 0) { console.log(`--- formato: ${falhas} FALHA(S)`); process.exit(1); }
