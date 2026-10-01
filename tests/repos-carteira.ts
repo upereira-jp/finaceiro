@@ -623,7 +623,11 @@ let liquidacaoJulho: string;
   chk('K17c', subiu?.name === 'PagadorSemDocumento' && subiu?.status === 422,
       'boleto de pagador sem CPF/CNPJ para AQUI, com erro nomeado e 422 - nao vira 502 da Sicoob, '
       + 'que mandaria procurar indisponibilidade de banco onde falta um campo');
-  chk('K17d', /K17-SEM-DOC/.test(subiu?.message ?? '') && /npm run documentos/.test(subiu?.message ?? ''),
+  /* "O que fazer" era `npm run documentos` ate 01/10/2026; a mensagem chega a tela de quem
+   * opera, que nao tem terminal, e passou a mandar para a tela Clientes. O comando de lote
+   * nao sumiu - so nao e mais a instrucao dada a quem le o erro. */
+  chk('K17d', /K17-SEM-DOC/.test(subiu?.message ?? '') && /tela Clientes/.test(subiu?.message ?? '')
+      && !/npm run/.test(subiu?.message ?? ''),
       'a mensagem diz QUAL UC e o que fazer - num lote de 28, "algum cliente" nao e acionavel');
 
   const nenhum = await emA(() => boleto.porFatura(alvoSemDoc.id));
