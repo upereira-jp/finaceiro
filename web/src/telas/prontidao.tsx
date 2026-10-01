@@ -23,14 +23,14 @@
 // ha tela, e a de que NAO ha - geracao e regra de comissao nao tem formulario, e
 // a coluna diz isso em vez de desenhar um link para lugar nenhum.
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   api, ErroDaApi,
   type Camada, type ExecucaoDoConector, type Automacao,
 } from '../api.ts';
 import { useDados } from '../dados.ts';
 import {
-  Pagina, Aviso, Tabela, Marca, Carregando, CampoData, AjudaDoMes, Icone, DetalheTecnico, Recolhido,
+  Pagina, Aviso, Tabela, Marca, Carregando, Icone, DetalheTecnico, Recolhido,
 } from '../ui.tsx';
 import { Ligacao } from '../rota.tsx';
 import { DESTINO_DA_CAMADA, enderecoDoDestino, telaDoDestino } from '../destino-da-camada.ts';
@@ -46,9 +46,8 @@ import {
 } from '../vocabulario.ts';
 import { CorpoDoRoteiro } from '../roteiro-corpo.tsx';
 import { mesNoFunil } from '../roteiro-do-mes.ts';
-import { useLeiturasDoMes, procurarMesDoTrabalho, armazemDoNavegador, anunciarMesEmTela } from '../leitura-do-mes.ts';
-import { fraseDaOrigem, lembrarMes, type EscolhaDoMes } from '../emissao-regras.ts';
-import { mesDaQuery } from '../dinheiro.ts';
+import { useLeiturasDoMes } from '../leitura-do-mes.ts';
+import { useMesDoTrabalho, AvisoDoMesVelho } from '../seletor-de-mes.tsx';
 import { quandoEmBr } from '../formato.ts';
 import { abrirAjuda } from '../ajuda-gatilho.tsx';
 
@@ -150,25 +149,15 @@ function SaudeDoDinheiro() {
 
 export function TelaProntidao() {
   /*
-   * O MÊS EM QUE A TELA ABRE — desde 30/09/2026 (etapa 4a), o MESMO da tela
-   * Cobranças: o do endereço (`?mes=`), senão o mais recente com trabalho
-   * (cobrança por emitir ou sem boleto no banco), senão o último escolhido,
-   * senão o mais recente com cobrança, senão o de hoje. A procura é uma só
-   * (`procurarMesComTrabalho`), e a frase ao lado do seletor diz por que a tela
-   * está nele. Até esta data a tela abria no mês de HOJE — e o mês de hoje
-   * costuma estar vazio justamente quando o trabalho está no anterior.
+   * O MÊS É O DE TRABALHO, da casca (01/10/2026, etapa 8). Até aqui a tela
+   * tinha o próprio seletor, com a mesma procura de Cobranças (etapa 4a) — e,
+   * ainda assim, duas telas com dois seletores eram duas chances de olhar o
+   * mês errado. Hoje o mês é escolhido UMA vez, no menu, e vale para Mês,
+   * Contas de luz e Cobranças; a ordem (link, lembrado, trabalho, hoje) e a
+   * frase do porquê moram em `mes-do-trabalho.ts` e no controle. `null`
+   * enquanto a procura anda.
    */
-  const [escolha, setEscolha] = useState<EscolhaDoMes | null>(() => {
-    const q = mesDaQuery(location.search);
-    return q ? { mes: q, origem: 'endereco' } : null;
-  });
-  const mes = escolha?.mes ?? null;
-  const escolherMes = (v: string) => {
-    /* Campo apagado não é mês: a tela fica no que estava, como em Cobranças. */
-    if (!/^\d{4}-\d{2}$/.test(v)) return;
-    setEscolha({ mes: v, origem: 'escolhido' });
-    lembrarMes(armazemDoNavegador(), v);
-  };
+  const { mes } = useMesDoTrabalho();
 
   /* AS CINCO LEITURAS DO MÊS, num gancho só desde 30/09/2026: a prontidão (o
    * cadastro e a conta lida), a carteira do mês, as cobranças do mês, as contas
@@ -179,19 +168,6 @@ export function TelaProntidao() {
    * das cobranças sem boleto é justamente a que a procura lê primeiro. */
   const leituras = useLeiturasDoMes(mes);
   const { dado, carregando, erro } = leituras.prontidao;
-
-  useEffect(() => {
-    if (escolha || leituras.semBoleto.carregando) return;
-    let vivo = true;
-    void procurarMesDoTrabalho(leituras.semBoleto.dado?.linhas ?? []).then((e) => { if (vivo) setEscolha(e); });
-    return () => { vivo = false; };
-  }, [escolha, leituras.semBoleto.carregando]);
-
-  /* A Central de Ajuda narra o MESMO mês que esta tela mostra (etapa 4b). */
-  useEffect(() => {
-    anunciarMesEmTela(mes);
-    return () => anunciarMesEmTela(null);
-  }, [mes]);
 
   /* AS TRES RODADAS AUTOMATICAS, LIDAS UMA VEZ SO e desenhadas em dois lugares:
    * o alarme no alto, junto das faixas do caminho do dinheiro, e a afirmacao no
@@ -235,26 +211,13 @@ export function TelaProntidao() {
       tem de chegar na mesma palavra. «Prontidão» continua sendo o nome do
       CÁLCULO no servidor (`repos/prontidao.ts`); aqui vale o nome da barra.
     */
-    <Pagina titulo="Mês"
+    /* [01/10/2026, etapa 8] O TÍTULO DIZ O MÊS — «Mês de setembro de 2026» —, e
+       o cartão do seletor que vinha logo abaixo saiu: o mês é o de trabalho,
+       escolhido no menu. Quem chega por um link sabe onde está sem abrir nada. */
+    <Pagina titulo="Mês" mes={mes ? mesPorExtenso(mes) : null}
             sub="Em que passo está cada unidade do mês, e o que o cadastro ainda trava.">
-      {/* O MÊS PRIMEIRO, com o porquê de a tela estar nele — o mesmo bloco da
-          tela Cobranças, pela mesma razão: abrir em agosto com setembro no
-          calendário parece defeito se a tela não disser por quê. */}
-      <div className="cartao secao em-mes">
-        <div className="em-mes-campo">
-          <label htmlFor="mes-da-tela">Mês de referência</label>
-          {mes
-            ? <CampoData id="mes-da-tela" mes valor={mes} ao={escolherMes} style={{ width: 'auto' }} />
-            : <span className="em-mes-procurando">Procurando…</span>}
-          <AjudaDoMes />
-        </div>
-        {escolha && escolha.origem !== 'escolhido' && (
-          <p className="em-mes-porque" role="status">
-            <Icone nome="calendario" tamanho={15} />
-            <span>{fraseDaOrigem(escolha.origem)}</span>
-          </p>
-        )}
-      </div>
+      {/* HÁ TRABALHO MAIS À FRENTE do mês lembrado: o aviso, e o atalho. */}
+      <AvisoDoMesVelho />
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
 

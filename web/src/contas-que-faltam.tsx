@@ -23,19 +23,22 @@
 import { api, type Cliente, type Prontidao, type RegistroDeFatura, type UnidadeConsumidora, type Usina } from './api.ts';
 import { useDados } from './dados.ts';
 import { Aviso, Recolhido, Tabela } from './ui.tsx';
-import { contasQueFaltam, mesDasContasQueFaltam } from './o-que-falta.ts';
+import { contasQueFaltam } from './o-que-falta.ts';
 import { LIMITE_DA_LISTA, listaParcial } from './registradas-regras.ts';
-import { mesPorExtenso, mesDeHojeEmSP } from './formato.ts';
+import { mesPorExtenso } from './formato.ts';
 import { competenciaISO } from './dinheiro.ts';
-import { lerMesLembrado } from './emissao-regras.ts';
-import { armazemDoNavegador } from './leitura-do-mes.ts';
 
 /** «15 contas», «1 conta». */
 const contas = (n: number): string => `${n} ${n === 1 ? 'conta' : 'contas'}`;
 
-export function ContasQueFaltam({ mesPedido, versao, aberto }: {
-  /** `'AAAA-MM'` do endereço (`?mes=`, que é o que o Mês manda), ou `null`. */
-  mesPedido: string | null;
+export function ContasQueFaltam({ mes, versao, aberto }: {
+  /** O MÊS DE TRABALHO, `'AAAA-MM'`, da casca — ou `null` enquanto ele é
+   *  procurado. [01/10/2026, etapa 8] Até aqui o bloco escolhia o mês sozinho
+   *  (o do endereço, o lembrado, o mais recente com conta, o de hoje —
+   *  `mesDasContasQueFaltam`), e podia contar as contas de um mês com a lista
+   *  de registradas logo abaixo em outro. Hoje é o mês do menu, o mesmo das
+   *  duas. */
+  mes: string | null;
   /** Sobe a cada conta registrada ou excluída: a lista relê e encolhe. */
   versao: number;
   /** Abre já aberto — a pessoa veio do Mês buscar estas contas. */
@@ -46,22 +49,15 @@ export function ContasQueFaltam({ mesPedido, versao, aberto }: {
   const usinas = useDados<Usina[]>(() => api.get('/usinas'));
   const registradas = useDados<RegistroDeFatura[]>(
     () => api.get(`/faturas/unificada/registros?limite=${LIMITE_DA_LISTA}`), [versao]);
-  /* O MÊS: o do endereço, o lembrado, o mais recente com conta, o de hoje — a
-     ordem e o porquê estão em `mesDasContasQueFaltam`. Sem o do endereço nem o
-     lembrado, ele depende das registradas, e a prontidão espera por elas: pedir
-     a de hoje e logo depois a do mês certo seria a consulta mais cara do
-     sistema feita duas vezes. */
-  const fixo = mesPedido ?? lerMesLembrado(armazemDoNavegador());
-  const mes = mesDasContasQueFaltam({
-    doEndereco: mesPedido, lembrado: fixo, registradas: registradas.dado, hoje: mesDeHojeEmSP(),
-  });
-  const pronto = Boolean(fixo) || registradas.dado !== null || registradas.erro !== null;
+  /* SEM MÊS AINDA, A CONFERÊNCIA ESPERA: pedir a de hoje e logo depois a do mês
+     certo seria a consulta mais cara do sistema feita duas vezes. */
   const prontidao = useDados<Prontidao | null>(
-    () => (pronto ? api.get(`/faturamento/${competenciaISO(mes)}/prontidao`) : Promise.resolve(null)),
-    [mes, versao, pronto]);
+    () => (mes ? api.get(`/faturamento/${competenciaISO(mes)}/prontidao`) : Promise.resolve(null)),
+    [mes, versao]);
 
   const clientePorId = new Map((clientes.dado ?? []).map((c) => [c.id, c.nome]));
   const usinaPorId = new Map((usinas.dado ?? []).map((u) => [u.id, u.apelido?.trim() || `Usina ${u.codigo_geradora}`]));
+  if (!mes) return null;
   const lista = contasQueFaltam(
     ucs.dado,
     registradas.dado ? { lista: registradas.dado, parcial: listaParcial(registradas.dado) } : null,

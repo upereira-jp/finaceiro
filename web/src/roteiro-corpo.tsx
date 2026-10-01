@@ -228,7 +228,12 @@ export function CorpoDoRoteiro({ competencia, ...leitura }: CorpoDoRoteiro) {
   return (
     <section className={`cartao secao roteiro estado-${mes.estado}`} aria-labelledby={`${base}-titulo`}>
       <div className="roteiro-topo">
-        <h2 id={`${base}-titulo`}>O mês de {competencia}</h2>
+        {/* [01/10/2026, etapa 8] O MÊS SAIU DA VISTA AQUI: o título da página
+            logo acima já diz «Mês de setembro de 2026», e «O mês de setembro de
+            2026» embaixo dele era a mesma frase duas vezes. Para quem ouve, a
+            seção continua com o nome inteiro — o leitor de tela pula para ela
+            pelo título, sem o h1 ao lado. */}
+        <h2 id={`${base}-titulo`}>Como está o mês<span className="so-leitor"> de {competencia}</span></h2>
         {/* A FRASE É A MESMA da tabela de conferências e da Central de Ajuda:
             as três saem de `mesNoFunil`, e não têm como discordar. */}
         <p className="roteiro-frase">

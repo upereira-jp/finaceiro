@@ -34,6 +34,7 @@ import { useCaminho, navegar } from './rota.tsx';
 import { telaDoCaminho, funilDoCaminho, funisVisiveis, destinoVisivel } from './navegacao.ts';
 import { GatilhoDeAjuda, EVENTO_ABRIR_AJUDA, ehOAtalhoDaAjuda } from './ajuda-gatilho.tsx';
 import { MenuLateral } from './menu-lateral.tsx';
+import { ProvedorDoMes, SeletorDeMes } from './seletor-de-mes.tsx';
 import { Login } from './telas/login.tsx';
 /*
  * ============================================================================
@@ -241,6 +242,16 @@ export function App() {
   const vinculo = vinculoAtual;
   const visiveis = funisVisiveis(vinculo?.setores);
   const varios = Boolean(s.sessao && s.sessao.tenants.length > 1);
+  /*
+   * O MÊS DE TRABALHO (01/10/2026, etapa 8): um para o Rateio, escolhido uma vez
+   * e válido para as telas do mês. Ele existe com a empresa escolhida e o setor
+   * Rateio entre os do vínculo; o controle só é desenhado DENTRO do Rateio — no
+   * Empresa não há mês de trabalho. A `key` é a empresa: trocar de empresa
+   * recomeça a procura do trabalho, que é de outra carteira.
+   */
+  const temRateio = visiveis.some((f) => f.chave === 'rateio');
+  const mesAtivo = Boolean(s.tenantId) && temRateio && !destino;
+  const noRateio = funil.chave === 'rateio';
 
   /*
    * O PE DO MENU: a empresa e a conta. Ate 30/09/2026 os dois moravam no canto
@@ -293,7 +304,7 @@ export function App() {
   );
 
   return (
-    <>
+    <ProvedorDoMes key={s.tenantId ?? 'sem-empresa'} rota={tela.rota} ativo={mesAtivo} noRateio={noRateio}>
       <style>{ESTILO}</style>
       {/*
         Com mais de um vinculo e nenhuma empresa escolhida, o menu abre mesmo que
@@ -302,6 +313,7 @@ export function App() {
       */}
       <MenuLateral funil={funil} visiveis={visiveis} tela={tela} pe={pe}
                    forcarAberto={varios && !s.tenantId}
+                   mes={noRateio ? (lugar) => <SeletorDeMes lugar={lugar} /> : undefined}
                    ajuda={(lugar) => (
                      /*
                        O GATILHO DA AJUDA e o balao que ensina que ele existe. Ele
@@ -351,6 +363,6 @@ export function App() {
           <PainelDeAjuda rota={tela.rota} topico={topicoDaAjuda} aoFechar={() => setAjudaAberta(false)} />
         </Suspense>
       )}
-    </>
+    </ProvedorDoMes>
   );
 }

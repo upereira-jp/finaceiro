@@ -77,3 +77,33 @@ export function tecladoDoCampo(rotulo: string, tipo?: string): Teclado {
   if (/\buf\b/.test(r)) return { ...base, autoCapitalize: 'characters', spellCheck: false };
   return base;
 }
+
+// ============================================================================
+// A TECLA DE ATALHO — ONDE ELA É LETRA (01/10/2026, etapa 8 do redesenho)
+//
+// Dois atalhos de uma tecla moram na casca: `?` abre a central de ajuda (etapa
+// 7c) e `[` / `]` trocam o mês de trabalho (etapa 8). Os dois têm a mesma
+// pergunta antes de agir — o foco está onde a tecla é uma LETRA? —, e ela era
+// escrita dentro de `ajuda-gatilho.tsx`. Com o segundo atalho, a regra desceu
+// para cá: duas cópias divergiriam no primeiro campo novo (um `contenteditable`
+// lembrado num lugar e esquecido no outro), e «[» digitado na busca da ajuda
+// trocaria o mês por baixo dela.
+//
+// Campo de texto, área de texto, lista de escolha e texto editável recebem
+// letra; caixa de marcar, botão, rádio e o resto dos `input` que não digitam,
+// não. PURA e sem `instanceof HTMLElement`, para o teste montar o alvo com um
+// objeto qualquer — o runner do teste não tem DOM.
+
+/** O alvo do evento de tecla recebe a tecla como LETRA (e o atalho não vale). */
+export function alvoRecebeLetra(alvo: unknown): boolean {
+  const a = alvo as { tagName?: string; type?: string; isContentEditable?: boolean } | null;
+  if (!a) return false;
+  if (a.isContentEditable) return true;
+  const tag = (a.tagName ?? '').toUpperCase();
+  if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  if (tag === 'INPUT') {
+    const tipo = (a.type ?? 'text').toLowerCase();
+    return !['checkbox', 'radio', 'button', 'submit', 'reset', 'range', 'color', 'file'].includes(tipo);
+  }
+  return false;
+}

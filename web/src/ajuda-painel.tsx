@@ -27,24 +27,28 @@
 // pareceria errado. E a FRASE do estado do mês sai da mesma função que escreve a
 // do alto da tela Mês — até ali a ajuda tinha a sua, e ela olhava só o cadastro.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { navegar } from './rota.tsx';
 import { passosDoEstado } from './ajuda.ts';
 import { CorpoDaAjuda } from './ajuda-corpo.tsx';
-import { useLeiturasDoMes, procurarMesDoTrabalho, mesQueATelaMostra } from './leitura-do-mes.ts';
+import { useLeiturasDoMes, mesDeHoje } from './leitura-do-mes.ts';
 import { mesNoFunil } from './roteiro-do-mes.ts';
-import { mesDaQuery } from './dinheiro.ts';
 import { mesPorExtenso } from './formato.ts';
+import { useMesDoTrabalho } from './seletor-de-mes.tsx';
 
 /*
  * [30/09/2026, etapa 4b] O MÊS NARRADO É O DA TELA. Até aqui era o mês de hoje
  * (`toISOString`, em UTC), enquanto a tela Mês abria no mês com trabalho — a
  * ajuda dizia «nada falta» de setembro com agosto inteiro por emitir à vista.
- * A ordem agora é a da tela: o mês que ela está mostrando (Mês e Cobranças o
- * anunciam), senão o do endereço (`?mes=`), senão a MESMA procura que a tela
- * Mês faz ao abrir (`procurarMesDoTrabalho`).
+ *
+ * [01/10/2026, etapa 8] E A FONTE É UMA SÓ: o MÊS DE TRABALHO da casca
+ * (`seletor-de-mes.tsx`), o mesmo que Mês, Contas de luz e Cobranças mostram.
+ * Até aqui as telas anunciavam o mês numa variável de módulo
+ * (`anunciarMesEmTela`) e a ajuda aberta de outra tela refazia a procura por
+ * conta própria — duas procuras podiam responder dois meses. Aberta no setor
+ * Empresa, ela PEDE a procura à casca (`pedir`); para um vínculo sem o Rateio,
+ * narra o mês corrente.
  */
-const mesDaTela = (): string | null => mesQueATelaMostra() ?? mesDaQuery(location.search);
 
 export function PainelDeAjuda({ rota, topico, aoFechar }: {
   rota: string;
@@ -52,19 +56,16 @@ export function PainelDeAjuda({ rota, topico, aoFechar }: {
   topico?: string | null;
   aoFechar: () => void;
 }) {
-  // O mês é lido UMA vez, na montagem: o painel abre e fecha em segundos.
-  const [mes, setMes] = useState<string | null>(mesDaTela);
+  const trabalho = useMesDoTrabalho();
+  const mes = trabalho.ativo ? trabalho.mes : mesDeHoje();
   const leituras = useLeiturasDoMes(mes);
   const { dado, erro } = leituras.prontidao;
   /* Sem mês ainda, a procura está andando: é carga, e não falha. */
   const carregando = mes === null || leituras.prontidao.carregando;
 
-  useEffect(() => {
-    if (mes || leituras.semBoleto.carregando) return;
-    let vivo = true;
-    void procurarMesDoTrabalho(leituras.semBoleto.dado?.linhas ?? []).then((e) => { if (vivo) setMes(e.mes); });
-    return () => { vivo = false; };
-  }, [mes, leituras.semBoleto.carregando]);
+  /* Fora do Rateio a casca não procura sozinha: a ajuda pede. */
+  const { pedir } = trabalho;
+  useEffect(() => { if (trabalho.ativo && trabalho.mes === null) pedir(); }, [trabalho.ativo, trabalho.mes, pedir]);
 
   const passos = useMemo(() => (dado ? passosDoEstado(dado.camadas) : []), [dado]);
   const funil = leituras.leitura ? mesNoFunil(leituras.leitura) : null;

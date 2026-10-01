@@ -272,9 +272,16 @@ export function CampoData(p: {
  * divergindo**. Se a frase estivesse copiada, ela divergiria entre as telas na
  * primeira vez que alguem a ajustasse.
  */
+export const DICA_DO_MES = 'o mês do consumo, não o mês em que a cobrança é paga';
+
+/* [01/10/2026, etapa 8] A FRASE VIROU CONSTANTE quando o seletor do mês de
+ * trabalho, na casca, passou a dizê-la também: é a mesma frase, e duas cópias
+ * divergiriam na primeira correção — o argumento acima, uma vez mais. As telas
+ * do mês não têm mais campo de mês (o mês é um só, no menu); a linha continua
+ * ao lado dos campos de data que sobraram, como o de Contas a pagar. */
 export const AjudaDoMes = () => (
   <div className="fraco" style={{ fontSize: 13, marginTop: 2 }}>
-    o mês do consumo, não o mês em que a cobrança é paga
+    {DICA_DO_MES}
   </div>
 );
 
@@ -452,29 +459,42 @@ export function BotaoDeIcone(p: {
  * criar e um botao no alto, no mesmo lugar nas cinco: quem procura «como
  * cadastro» olha para o canto do titulo uma vez e aprende as cinco telas.
  */
-export const Pagina = ({ titulo, sub, acao, children }: {
-  titulo: string; sub?: string; acao?: ReactNode; children: ReactNode;
-}) => (
-  <>
-    {acao ? (
-      /* O TÍTULO E A FRASE NUMA COLUNA, o ato na outra: no celular o ato desce
-         para DEPOIS da frase, e não fica espremido entre o título e ela. */
-      <div className="pagina-cab">
-        <div className="pagina-cab-texto">
-          <h1>{titulo}</h1>
-          {sub && <p className="sub">{sub}</p>}
+export const Pagina = ({ titulo, sub, acao, mes, children }: {
+  titulo: string; sub?: string; acao?: ReactNode;
+  /**
+   * O MÊS QUE A TELA MOSTRA, por extenso («setembro de 2026») — 01/10/2026,
+   * etapa 8. O mês de trabalho é escolhido uma vez, no menu, e vale para as
+   * telas do mês; quem chega a uma delas por um link precisa saber, sem abrir
+   * o menu, em que mês está. O título diz: «Cobranças de setembro de 2026». O
+   * nome da tela vem primeiro e intacto — é a palavra do menu (RM13) —, e o
+   * mês entra na mesma linha, no mesmo `h1`.
+   */
+  mes?: string | null;
+  children: ReactNode;
+}) => {
+  const h1 = <h1>{titulo}{mes && <span className="titulo-do-mes"> de {mes}</span>}</h1>;
+  return (
+    <>
+      {acao ? (
+        /* O TÍTULO E A FRASE NUMA COLUNA, o ato na outra: no celular o ato desce
+           para DEPOIS da frase, e não fica espremido entre o título e ela. */
+        <div className="pagina-cab">
+          <div className="pagina-cab-texto">
+            {h1}
+            {sub && <p className="sub">{sub}</p>}
+          </div>
+          <div className="pagina-acao">{acao}</div>
         </div>
-        <div className="pagina-acao">{acao}</div>
-      </div>
-    ) : (
-      <>
-        <h1>{titulo}</h1>
-        {sub && <p className="sub">{sub}</p>}
-      </>
-    )}
-    {children}
-  </>
-);
+      ) : (
+        <>
+          {h1}
+          {sub && <p className="sub">{sub}</p>}
+        </>
+      )}
+      {children}
+    </>
+  );
+};
 
 /**
  * O BOTAO «NOVO …» — o gatilho do `PainelDeCriar`.

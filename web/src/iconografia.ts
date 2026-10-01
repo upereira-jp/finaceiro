@@ -85,6 +85,10 @@ export type NomeDeIcone =
    * `ir_para` é a seta do ato que LEVA a outra tela («Completar o endereço»):
    * quem clica precisa saber antes que vai sair daqui. */
   | 'mais_acoes' | 'abrir_linha' | 'ir_para'
+  /* O PAINEL DO MÊS DE TRABALHO (01/10/2026, etapa 8): as duas setas que
+   * andam um ANO na grade dos meses. Nome próprio, e não `abrir_linha` girado:
+   * o triângulo da linha abre um painel; estes andam no tempo. */
+  | 'mes_anterior' | 'mes_seguinte'
   /* OS DESENHOS DE ESTADO QUE A ETAPA 7b TROUXE (01/10/2026), cada um porque o
    * anterior mentia:
    *   `cancelado`  o círculo cortado. A cobrança, a unidade e a conta a pagar

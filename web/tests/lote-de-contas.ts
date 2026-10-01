@@ -22,11 +22,12 @@ import {
   type ItemDoLote,
 } from '../src/lote-de-contas.ts';
 import {
-  mesPadrao, mesesDaLista, filtrarRegistradas, selecaoParaGerar, somaEmCentavos,
+  mesesDaLista, filtrarRegistradas, selecaoParaGerar, somaEmCentavos,
   economiaAcumulada, resumoDaRodada, podeGerar, rotuloDoMes, mesCurto, listaParcial,
   ordemDasRegistradas, LIMITE_DA_LISTA,
 } from '../src/registradas-regras.ts';
 import { CAMPOS_DA_FATURA_VAZIOS, type RegistroDeFatura } from '../src/api.ts';
+import { candidatosDoMes, mesSemTrabalho } from '../src/emissao-regras.ts';
 
 let falhas = 0;
 const chk = (id: string, cond: boolean, d: string) => {
@@ -279,6 +280,14 @@ const reg = (over: Partial<RegistroDeFatura> & { id: string }): RegistroDeFatura
 });
 
 // ----------------------------------------- L12 a lista abre no mes que tem trabalho
+/* [01/10/2026, etapa 8] `mesPadrao` SAIU: a lista de registradas mostra o MES
+ * DE TRABALHO da casca, e o criterio dela — o mais recente com conta por gerar,
+ * senao o mais recente — virou parte da procura do trabalho, a mesma de Mes e
+ * Cobrancas. As afirmacoes ficam, contra a fonte unica: a conta por gerar e
+ * trabalho CERTO (`candidatosDoMes`), e sem trabalho vale o mais recente com
+ * conta (`mesSemTrabalho`, origem `recente`). */
+const mesDaLista = (l: readonly RegistroDeFatura[]): string | null =>
+  candidatosDoMes([], [], l).find((c) => c.certo)?.mes ?? null;
 {
   const lista = [
     reg({ id: 's1', competencia: '2026-09-01T00:00:00.000Z', fatura_id: 'f1' }),
@@ -286,15 +295,19 @@ const reg = (over: Partial<RegistroDeFatura> & { id: string }): RegistroDeFatura
     reg({ id: 'a1', competencia: '2026-08-01', fatura_id: null }),
     reg({ id: 'j1', competencia: '2026-07-01', fatura_id: 'f3' }),
   ];
-  chk('L12a', mesPadrao(lista) === '2026-08',
-      'setembro esta todo cobrado e agosto tem uma esperando: a lista abre em AGOSTO, e nao no mais recente');
-  chk('L12b', mesPadrao(lista.map((r) => ({ ...r, fatura_id: 'x' }))) === '2026-09',
-      'sem nada por cobrar, abre no mais recente — e a confirmacao do que foi feito');
-  chk('L12c', mesPadrao([]) === null, 'lista vazia nao inventa mes');
+  chk('L12a', mesDaLista(lista) === '2026-08',
+      'setembro esta todo cobrado e agosto tem uma esperando: o trabalho esta em AGOSTO, e nao no mais recente');
+  const cobradas = lista.map((r) => ({ ...r, fatura_id: 'x' }));
+  chk('L12b', mesDaLista(cobradas) === null
+          && JSON.stringify(mesSemTrabalho(null, [], '2026-10', cobradas)) === JSON.stringify({ mes: '2026-09', origem: 'recente' }),
+      'sem nada por cobrar, nao ha trabalho, e o mes e o mais recente com conta — a confirmacao do que foi feito');
+  chk('L12c', mesDaLista([]) === null && mesSemTrabalho(null, [], '2026-10', []).origem === 'hoje',
+      'lista vazia nao inventa mes de trabalho: sem conta nem cobranca, o mes e o de hoje, e diz que e');
   chk('L12d', mesesDaLista(lista).join(',') === '2026-09,2026-08,2026-07',
       'os meses saem do mais novo para o mais velho, sem repetir — mesmo com horario no JSON');
-  chk('L12e', mesPadrao(lista.map((r) => ({ ...r, fatura_id: null, cobranca_disponivel: false }))) === '2026-09',
-      'num banco que ainda nao cobra conta lida, nada «tem trabalho»: abre no mais recente');
+  const semLigacao = lista.map((r) => ({ ...r, fatura_id: null, cobranca_disponivel: false }));
+  chk('L12e', mesDaLista(semLigacao) === null && mesSemTrabalho(null, [], '2026-10', semLigacao).mes === '2026-09',
+      'num banco que ainda nao cobra conta lida, nada «tem trabalho»: vale o mais recente');
   chk('L12f', rotuloDoMes('2026-09') === 'setembro de 2026' && mesCurto('2026-09') === '09/2026',
       'o mes se le por extenso no titulo e curto na linha');
 }

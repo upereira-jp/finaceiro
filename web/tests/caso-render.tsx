@@ -54,6 +54,7 @@ import {
   DIRECOES_DA_SITUACAO, lerEscolhaDoRecolhido,
 } from '../src/ui.tsx';
 import { lerRecusa, recusaPrevista, notaDaSituacao } from '../src/emissao-regras.ts';
+import { CorpoDoSeletorDeMes, CorpoDoAvisoDoMesVelho, notaDoSeletor } from '../src/seletor-de-mes.tsx';
 
 let falhas = 0;
 let feitas = 0;
@@ -889,9 +890,13 @@ const LEITURA_VAZIA = {
   const html = desenharRoteiro({ competencia: 'julho de 2026', ...LEITURA_VAZIA, camadas });
   const t = texto(html);
 
-  chk('R16a', html.length > 300 && t.includes('O mês de julho de 2026'),
-      `a caixa monta (${html.length} caracteres) e o título nomeia o mês por extenso - «a `
-      + 'competência 2026-07-01» é o nome que o banco dá, e não o que a pessoa fala');
+  /* [01/10/2026, etapa 8] O mês por extenso está no TÍTULO DA PÁGINA («Mês de
+     julho de 2026», R32d); a caixa diz o que ela é, e o mês vai no nome dela
+     só para quem ouve — à vista seria a mesma frase duas vezes. */
+  chk('R16a', html.length > 300 && t.includes('Como está o mês de julho de 2026')
+              && /<h2 id="[^"]+">Como está o mês<span class="so-leitor"> de julho de 2026<\/span><\/h2>/.test(html),
+      `a caixa monta (${html.length} caracteres) e o nome dela diz o mês por extenso - «a `
+      + 'competência 2026-07-01» é o nome que o banco dá, e não o que a pessoa fala; à vista, o mês fica no título da página');
 
   /* [01/10/2026, etapa 7b] O destaque sem risco diz «Próximo passo», e não mais
      «Comece aqui» — que lia como ordem também quando o destaque era de urgência. */
@@ -1162,7 +1167,7 @@ const LEITURA_VAZIA = {
   const filtro = { mes: '2026-09', soSemCobranca: false, unidade: null };
   const nada = () => {};
   const base: PropsDasRegistradas = {
-    lista, visiveis: filtrarRegistradas(lista, filtro), erro: null, filtro, meses: ['2026-09', '2026-08'],
+    lista, visiveis: filtrarRegistradas(lista, filtro), erro: null, filtro,
     parcial: false, aoFiltrar: nada, desmarcadas: new Set(['r4']), aoMarcar: nada, aoMarcarTodas: nada,
     principal: true, revisando: false, aoRevisar: nada, rodada: {}, rodadaIds: [], rodando: false,
     aoGerar: nada, ensaio: {}, ensaiando: null, aoEnsaiar: nada, aoEnsaiarTodas: nada, aoSegundaVia: nada,
@@ -1368,7 +1373,7 @@ const LEITURA_VAZIA = {
   }];
   const filtro = { mes: '2026-09', soSemCobranca: false, unidade: null };
   const segunda = renderToStaticMarkup(
-    <TabelaDasRegistradas lista={regs} visiveis={regs} erro={null} filtro={filtro} meses={['2026-09']} parcial={false}
+    <TabelaDasRegistradas lista={regs} visiveis={regs} erro={null} filtro={filtro} parcial={false}
                           aoFiltrar={nada} desmarcadas={new Set()} aoMarcar={nada} aoMarcarTodas={nada} principal
                           revisando={false} aoRevisar={nada} rodada={{}} rodadaIds={[]} rodando={false} aoGerar={nada}
                           ensaio={{}} ensaiando={null} aoEnsaiar={nada} aoEnsaiarTodas={nada} aoSegundaVia={nada}
@@ -1551,6 +1556,113 @@ const LEITURA_VAZIA = {
       'o recorte com que a tela abriu é dito («Mostrando só …») e o «x» tem nome: mostrar tudo, tirando QUAL recorte');
   chk('R30d', renderToStaticMarkup(<MostrandoSo rotulo="" aoRemover={() => {}} />) === '',
       'sem recorte, nada — o chip só existe quando a lista foi cortada');
+}
+
+/* ==========================================================================
+ * R32 — O MÊS DE TRABALHO NA CASCA (01/10/2026, etapa 8)
+ * ==========================================================================
+ * Um controle só, no alto do menu (abaixo do setor) e na faixa do celular; o
+ * nome acessível inteiro; abreviado quando recolhido; a grade com o mês aberto
+ * e o mês com trabalho; o porquê, o alcance e o atalho no painel; o aviso de
+ * mês velho; o mês no título; e a conta de outro mês na fila. */
+{
+  const nada = () => {};
+  const seletor = (lugar: 'menu' | 'faixa', p: Partial<Parameters<typeof CorpoDoSeletorDeMes>[0]> = {}) => (
+    <CorpoDoSeletorDeMes lugar={lugar} mes="2026-09" origem="trabalho" comTrabalho="2026-09" aFrente={null}
+                         como="segue" recorte={false} escolher={nada} {...p} />);
+  const casca = (rota: string, recolhido = false, p: Partial<Parameters<typeof CorpoDoSeletorDeMes>[0]> = {}) => renderToStaticMarkup(
+    <MenuLateral funil={FUNIS.find((f) => f.chave === telaDoCaminho(rota).funil)!} visiveis={FUNIS}
+                 tela={telaDoCaminho(rota)} recolhidoInicial={recolhido}
+                 pe={() => <span className="teste-pe">conta</span>}
+                 ajuda={(lugar) => <GatilhoDeAjuda lugar={lugar} aberta={false} aviso={false} aoAbrir={nada} aoFecharAviso={nada} />}
+                 mes={(lugar) => seletor(lugar, p)}>
+      <Pagina titulo="Cobranças" mes="setembro de 2026"><p>conteudo</p></Pagina>
+    </MenuLateral>);
+
+  const html = casca('/faturas');
+  const gatilhos = [...html.matchAll(/<button[^>]*class="mes-gatilho[^"]*"[^>]*>/g)].map((m) => m[0]);
+  chk('R32a', gatilhos.length === 2
+          && gatilhos.every((g) => g.includes('aria-label="Mês de trabalho: setembro de 2026. Trocar o mês"')
+                                  && g.includes('aria-keyshortcuts="[ ]"') && g.includes('aria-haspopup="dialog"')),
+      'o mês é UM controle, desenhado em dois lugares (menu e faixa do celular), com o nome inteiro, o atalho e o '
+      + 'painel anunciados');
+  const iSetor = html.indexOf('class="setor-gatilho"');
+  const iMes = html.indexOf('class="mes-seletor mes-no-menu"');
+  const iNav = html.indexOf('<nav');
+  const iSetorFaixa = html.indexOf('class="faixa-celular-setor"');
+  const iMesFaixa = html.indexOf('class="mes-seletor mes-no-faixa"');
+  const iAjudaFaixa = html.indexOf('class="ajuda-gatilho faixa-celular-ajuda"');
+  const iMain = html.indexOf('<main');
+  chk('R32b', iSetor > 0 && iMes > iSetor && iNav > iMes
+          && iSetorFaixa > 0 && iMesFaixa > iSetorFaixa && iAjudaFaixa > iMesFaixa && iMain > iAjudaFaixa,
+      'a ordem do DOM (e do Tab) é a da vista: o setor, o mês logo abaixo, as telas; na faixa, o setor, o mês e a ajuda');
+  chk('R32c', html.includes('>set/26<') && /<p class="mes-nota" id="[^"]+">o mais recente com trabalho<\/p>/.test(html)
+          && html.includes('data-dica="Mês de trabalho: setembro de 2026 · o mais recente com trabalho"'),
+      'o mês abreviado («set/26») existe para o menu recolhido e a faixa, a linha de baixo diz por quê, e a dica do '
+      + 'menu recolhido leva o nome inteiro');
+  chk('R32d', /<h1>Cobranças<span class="titulo-do-mes"> de setembro de 2026<\/span><\/h1>/.test(html),
+      'o título da tela diz o mês — «Cobranças de setembro de 2026» —, com o nome do menu primeiro e intacto');
+  chk('R32e', /class="casca recolhida"/.test(casca('/faturas', true)),
+      'recolhido, o menu continua desenhando o controle (o CSS mostra só o desenho e «set/26»)');
+
+  const aberto = renderToStaticMarkup(seletor('menu', { abertoInicial: true, origem: 'lembrado', mes: '2026-08' }));
+  const meses = [...aberto.matchAll(/<button[^>]*data-mes="(\d{4}-\d{2})"[^>]*>/g)];
+  const pressionado = meses.filter((m) => m[0].includes('aria-pressed="true"')).map((m) => m[1]);
+  const comTrabalho = meses.filter((m) => m[0].includes('class="com-trabalho"')).map((m) => m[1]);
+  const paradas = meses.filter((m) => m[0].includes('tabindex="0"')).map((m) => m[1]);
+  chk('R32f', /role="dialog" aria-label="Escolher o mês de trabalho"/.test(aberto) && meses.length === 12
+          && pressionado.join() === '2026-08' && comTrabalho.join() === '2026-09' && paradas.join() === '2026-08'
+          && aberto.includes('aria-label="setembro de 2026, tem trabalho"'),
+      'o painel é a grade do ano: o mês aberto pressionado e única parada do Tab, e o mês com trabalho marcado — '
+      + 'com a marca dita por extenso para quem ouve');
+  const ta = texto(aberto);
+  chk('R32g', /o mês do consumo, não o mês em que a cobrança é paga/.test(ta)
+          && /Aberto no último mês que você escolheu neste computador\./.test(ta)
+          && /Vale para Mês, Contas de luz e Cobranças, e para o recorte de Relatórios\. Os cadastros e o setor Empresa não mudam com ele\./.test(ta)
+          && /<kbd>\[<\/kbd> e <kbd>\]<\/kbd>/.test(aberto)
+          && /aria-label="Ano anterior, 2025"/.test(aberto) && /aria-label="Ano seguinte, 2027"/.test(aberto),
+      'o painel leva o que se espalhava pelas três telas: a dica do mês do consumo, por que este mês, o alcance '
+      + '(e o que NÃO muda) e o atalho; o ano anda pelas setas, com nome');
+
+  chk('R32h', notaDoSeletor({ como: 'nao_segue', origem: 'trabalho', aFrente: null, recorte: false }).texto === 'não muda esta tela'
+          && notaDoSeletor({ como: 'recorta', origem: 'trabalho', aFrente: null, recorte: false }).texto === 'esta tela mostra todos os meses'
+          && notaDoSeletor({ como: 'segue', origem: 'lembrado', aFrente: '2026-09', recorte: false }).aviso
+          && notaDoSeletor({ como: 'segue', origem: 'escolhido', aFrente: null, recorte: false }).texto === '',
+      'num cadastro o controle diz «não muda esta tela»; em Relatórios sem recorte, «todos os meses»; com '
+      + 'trabalho mais à frente, onde ele está; e nada quando a pessoa acabou de escolher');
+  const noCadastro = casca('/clientes', false, { como: 'nao_segue' });
+  chk('R32i', /<p class="mes-nota" id="[^"]+">não muda esta tela<\/p>/.test(noCadastro),
+      'no cadastro, à vista, que o mês não filtra o que não filtra');
+
+  const aviso = renderToStaticMarkup(<CorpoDoAvisoDoMesVelho mes="2026-08" origem="lembrado" aFrente="2026-09" ir={nada} />);
+  chk('R32j', /class="aviso alerta" role="status"/.test(aviso) && /Há trabalho em setembro de 2026\./.test(texto(aviso))
+          && /agosto de 2026, o último que você escolheu/.test(texto(aviso))
+          && /<button type="button">Ir para setembro de 2026/.test(aviso) && !/primario/.test(aviso),
+      'o aviso de mês velho diz onde está o trabalho e de onde veio o mês aberto, e oferece ir — âmbar, botão comum');
+
+  const campos = (uc: string, mes: string) =>
+    ({ ...CAMPOS_DA_FATURA_VAZIOS, unidade_consumidora: uc, mes_referencia: mes, valor_total_equatorial: '10,00', vencimento: '10/11/2026' });
+  const fila: ItemDoLote[] = [
+    { id: 'a', nome: 'a.pdf', tamanho: 1, estado: 'lido', erro: null, campos: campos('101', '09/2026') },
+    { id: 'b', nome: 'b.pdf', tamanho: 1, estado: 'lido', erro: null, campos: campos('102', '10/2026') },
+    { id: 'c', nome: 'c.pdf', tamanho: 1, estado: 'lido', erro: null, campos: campos('103', '10/2026') },
+  ];
+  const ucs = new Set(['000000000000101', '000000000000102', '000000000000103']);
+  const comMes = renderToStaticMarkup(
+    <TabelaDaFila itens={fila} ucs={ucs} registrando={false} principal mesDoTrabalho="2026-09" aoMudarMes={nada}
+                  registrar={nada} conferir={nada} remover={nada} limpar={nada} />);
+  const tf = texto(comMes);
+  chk('R32k', /2 contas da fila são de outubro de 2026/.test(tf) && /o mês de trabalho é setembro de 2026/.test(tf)
+          && /<button type="button">Mudar o mês de trabalho para outubro de 2026<\/button>/.test(comMes)
+          && (comMes.match(/class="fu-outro-mes">outro mês</g) ?? []).length === 2
+          && />Fila de envio</.test(comMes),
+      'a conta de outro mês na fila: o aviso conta quantas e de que mês, oferece mudar o mês de trabalho, e a '
+      + 'linha de cada uma diz «outro mês»; a fila se chama «Fila de envio»');
+  const semMes = renderToStaticMarkup(
+    <TabelaDaFila itens={fila.slice(0, 1)} ucs={ucs} registrando={false} principal mesDoTrabalho="2026-09"
+                  registrar={nada} conferir={nada} remover={nada} limpar={nada} />);
+  chk('R32l', !/da fila (é|são) de/.test(texto(semMes)) && !/fu-outro-mes/.test(semMes),
+      'fila só do mês de trabalho: sem aviso e sem marca');
 }
 
 export const resultado = () => ({ falhas, feitas });

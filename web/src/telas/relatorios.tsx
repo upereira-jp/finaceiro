@@ -16,12 +16,14 @@
 // uma tabela vazia que parece defeito - e diz tambem quando o vazio e falha de
 // leitura, que e a distincao da sessao 12.
 
-import { useState } from 'react';
 import { api, type Repasse, type Comissao, type UsoDaUsina } from '../api.ts';
 import { useDados } from '../dados.ts';
-import { Pagina, Aviso, Tabela, linha, Icone, CampoData, Carregando, AjudaDoMes, DetalheTecnico } from '../ui.tsx';
+import { Pagina, Aviso, Tabela, linha, Icone, Carregando, DetalheTecnico, Interruptor, DICA_DO_MES } from '../ui.tsx';
 import { competenciaISO, emReais, decimalEmBr } from '../dinheiro.ts';
-import { mesEmBr } from '../formato.ts';
+import { mesEmBr, mesPorExtenso } from '../formato.ts';
+import { navegar } from '../rota.tsx';
+import { useMesDoTrabalho, AvisoDoMesVelho } from '../seletor-de-mes.tsx';
+import { enderecoComOMes, enderecoSemOMes } from '../mes-do-trabalho.ts';
 import { paraCsv, reaisParaPlanilha, nomeDoArquivo, type Coluna } from '../csv.ts';
 import { baixarCsv } from '../baixar.ts';
 
@@ -29,29 +31,54 @@ import { baixarCsv } from '../baixar.ts';
 const comCompetencia = (base: string, mes: string) =>
   mes ? `${base}${base.includes('?') ? '&' : '?'}competencia=${competenciaISO(mes)}` : base;
 
+/*
+ * O MÊS EM RELATÓRIOS (01/10/2026, etapa 8). Até aqui a tela tinha o próprio
+ * campo de mês, vazio por padrão («Todos os meses»). Com o mês de trabalho
+ * escolhido uma vez no menu, um quarto seletor seria a mesma confusão que a
+ * etapa tirou das outras três — e Relatórios não é tela do trabalho do mês:
+ * é a SÉRIE, que o contador pede inteira (o repasse devido se acumula, a
+ * comissão vem em parcelas). Por isso:
+ *
+ *   o padrão continua «todos os meses»;
+ *   recortar num mês só é um interruptor, «Só setembro de 2026», e o mês é o
+ *   de TRABALHO — para ver outro mês, troca-se o mês no menu;
+ *   o recorte ligado é o `?mes=` no endereço: o link copiado e o F5 voltam
+ *   recortados, e quem chega com `?mes=` chega recortado (e muda o mês de
+ *   trabalho, como em qualquer tela do mês).
+ */
 export function TelaRelatorios() {
-  const [mes, setMes] = useState('');
+  const trabalho = useMesDoTrabalho();
+  const recorte = trabalho.recorte && Boolean(trabalho.mes);
+  const mes = recorte ? trabalho.mes! : '';
+  const alternarRecorte = (ligar: boolean) => {
+    const lugar = { caminho: location.pathname, busca: location.search, fragmento: location.hash };
+    /* `navegar(…, true)`: troca o endereço sem empilhar histórico e AVISA a
+       casca, que lê o recorte do endereço. */
+    if (!ligar) { navegar(enderecoSemOMes(lugar), true); return; }
+    /* Ligar é pôr o `?mes=` — como numa tela que segue o mês. */
+    const com = trabalho.mes ? enderecoComOMes(lugar, trabalho.mes, 'segue') : null;
+    if (com) navegar(com, true);
+  };
 
   const repasses = useDados<Repasse[]>(() => api.get(comCompetencia('/repasses', mes)), [mes]);
   const comissoes = useDados<Comissao[]>(() => api.get(comCompetencia('/comissoes', mes)), [mes]);
   const uso = useDados<UsoDaUsina[]>(() => api.get(comCompetencia('/carteira/uso-das-usinas', mes)), [mes]);
 
   return (
-    <Pagina titulo="Relatórios"
+    <Pagina titulo="Relatórios" mes={recorte ? mesPorExtenso(mes) : null}
             sub="Quanto cabe a cada dono de usina, a comissão e o uso de cada usina.">
-      <div className="cartao secao">
-        <div style={{ ...linha, gap: 12 }}>
-          <div>
-            <label htmlFor="relatorio-mes">Mês de referência</label>
-            <CampoData id="relatorio-mes" mes valor={mes} ao={setMes} rotuloAcessivel="Mês de referência" vazio="Todos os meses"
-                       style={{ width: 'auto', minWidth: 190 }} /><AjudaDoMes />
-          </div>
-          {mes && (
-            <button style={{ alignSelf: 'end' }} onClick={() => setMes('')}>
-              <Icone nome="limpar" tamanho={15} /> Todos os meses
-            </button>
-          )}
-        </div>
+      {recorte && <AvisoDoMesVelho />}
+      {/* O RECORTE: todos os meses (o padrão) ou só o mês de trabalho. A linha
+          diz qual está valendo, com a dica do mês do consumo ao lado. */}
+      <div className="cartao secao relatorio-recorte">
+        <Interruptor ligado={recorte} desabilitado={!trabalho.mes}
+                     rotulo={trabalho.mes ? `Só ${mesPorExtenso(trabalho.mes)}, o mês de trabalho` : 'Só o mês de trabalho'}
+                     ao={alternarRecorte} />
+        <p className="relatorio-recorte-nota">
+          {recorte
+            ? <>Mostrando só {mesPorExtenso(mes)} — {DICA_DO_MES}. Para outro mês, troque o mês de trabalho no menu.</>
+            : <>Mostrando todos os meses, um por linha.</>}
+        </p>
       </div>
 
       <Bloco titulo="Repasse por dono de usina"

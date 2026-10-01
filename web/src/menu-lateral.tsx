@@ -90,6 +90,7 @@ import { Ligacao } from './rota.tsx';
 import { SeletorDeSetor } from './seletor-de-setor.tsx';
 import { MENU_VIRA_GAVETA } from './estilo.ts';
 import type { LugarDaAjuda } from './ajuda-gatilho.tsx';
+import type { LugarDoMes } from './seletor-de-mes.tsx';
 import {
   secoesDoMenu, telasDoFunil, rotuloDosPassos, fraseDosPassos,
   type Funil, type Tela, type SecaoDoMenu,
@@ -195,6 +196,14 @@ export type PropsDoMenuLateral = {
    * canto de baixo.)
    */
   ajuda?: (lugar: LugarDaAjuda) => ReactNode;
+  /**
+   * O MÊS DE TRABALHO (01/10/2026, etapa 8), desenhado para cada lugar, como a
+   * ajuda: `'menu'` logo abaixo do seletor de setor — no computador e dentro da
+   * gaveta —, e `'faixa'` na faixa do topo do celular, antes da ajuda. Quem
+   * chama só o passa no setor Rateio: no Empresa não há mês de trabalho. Função
+   * e não nó pelo mesmo motivo da ajuda — o menu não conhece o mês.
+   */
+  mes?: (lugar: LugarDoMes) => ReactNode;
   children: ReactNode;
 };
 
@@ -261,7 +270,7 @@ export function MenuLateral(p: PropsDoMenuLateral) {
        Esc é dela, e o segundo, da gaveta. */
     const tecla = (e: globalThis.KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (lateral.current?.querySelector('.setor-painel, .menu-painel')) return;
+      if (lateral.current?.querySelector('.setor-painel, .menu-painel, .mes-painel')) return;
       fecharGaveta(true);
     };
     addEventListener('keydown', tecla);
@@ -342,8 +351,13 @@ export function MenuLateral(p: PropsDoMenuLateral) {
           há estado próprio para ele desincronizar. Trocar de setor leva à
           PRIMEIRA tela do outro lado (`primeiraTelaDoFunil`).
         */}
-        <div className="lateral-setor">
+        <div className="lateral-setor" onMouseOver={mostrarDica} onFocus={mostrarDica}
+             onMouseLeave={esconderDica} onBlur={esconderDica}>
           <SeletorDeSetor atual={p.funil} visiveis={p.visiveis} rotaAtual={p.tela.rota} />
+          {/* O MÊS DE TRABALHO, logo abaixo do setor (etapa 8): «Rateio», e
+              embaixo «setembro de 2026» — o endereço de onde se está. O porquê
+              do lugar está no cabeçalho de `seletor-de-mes.tsx`. */}
+          {p.mes?.('menu')}
         </div>
 
         <nav className="lateral-nav" aria-label={p.funil.nome}
@@ -400,8 +414,13 @@ export function MenuLateral(p: PropsDoMenuLateral) {
                     aria-controls={idMenu} aria-expanded={gavetaAberta} onClick={() => setAberta(true)}>
               <Icone nome="abrir_navegacao" tamanho={22} /> Menu
             </button>
-            <span className="marca-app"><Logotipo tamanho={20} /> Financeiro G3</span>
+            {/* O NOME DO SISTEMA sai da vista no telefone estreito (etapa 8): a
+                faixa ganhou o mês, e o logotipo sozinho já diz de quem é a
+                tela. O nome continua no DOM, para quem ouve. */}
+            <span className="marca-app"><Logotipo tamanho={20} /><span className="faixa-marca-nome"> Financeiro G3</span></span>
             <span className="faixa-celular-setor">{p.funil.rotulo}</span>
+            {/* O MÊS COM A GAVETA FECHADA: «set/26 ▾», que abre a mesma grade. */}
+            {p.mes?.('faixa')}
             {/* A AJUDA COM A GAVETA FECHADA: um botão de desenho, discreto,
                 no fim da faixa. Com a gaveta aberta ele fica sob o véu, e o
                 item do pé, dentro dela, é o que se vê. */}

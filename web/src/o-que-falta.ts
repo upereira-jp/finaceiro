@@ -252,20 +252,9 @@ export function contasQueFaltam(
       || a.numero_uc.localeCompare(b.numero_uc, 'pt-BR', { numeric: true }));
 }
 
-/**
- * O MÊS DA LISTA DE CONTAS QUE FALTAM, quando a tela não recebeu um.
- *
- * A ordem: o do endereço (`?mes=`, que é o que o Mês manda); o último que a
- * pessoa escolheu em Mês ou Cobranças; o mais recente com conta registrada; e
- * o de hoje. É o mês em que o trabalho de LER está — e a frase do bloco diz
- * qual é, então nenhum deles fica escondido.
- */
-export function mesDasContasQueFaltam(p: {
-  doEndereco: string | null; lembrado: string | null; registradas: readonly ContaLida[] | null; hoje: string;
-}): string {
-  const valido = (m: string | null | undefined): m is string => Boolean(m) && /^\d{4}-(0[1-9]|1[0-2])$/.test(m!);
-  if (valido(p.doEndereco)) return p.doEndereco;
-  if (valido(p.lembrado)) return p.lembrado;
-  const maisRecente = (p.registradas ?? []).map((r) => mesDe(r.competencia)).filter(valido).sort().reverse()[0];
-  return maisRecente ?? p.hoje;
-}
+/* O MÊS DA LISTA DE CONTAS QUE FALTAM (`mesDasContasQueFaltam`) SAIU em
+ * 01/10/2026 (etapa 8): o bloco escolhia o mês sozinho — endereço, lembrado, o
+ * mais recente com conta, hoje — e podia contar um mês com a lista de
+ * registradas, logo abaixo, em outro. Hoje ele recebe o MÊS DE TRABALHO da
+ * casca, com a mesma ordem para o sistema inteiro (`resolverMes`,
+ * `mes-do-trabalho.ts`). */

@@ -85,6 +85,7 @@ import { UserGear } from '@phosphor-icons/react/UserGear';
 import { Key } from '@phosphor-icons/react/Key';
 import { DotsThree } from '@phosphor-icons/react/DotsThree';
 import { CaretRight } from '@phosphor-icons/react/CaretRight';
+import { CaretLeft } from '@phosphor-icons/react/CaretLeft';
 import { ArrowRight } from '@phosphor-icons/react/ArrowRight';
 import { List } from '@phosphor-icons/react/List';
 import { ArrowLineLeft } from '@phosphor-icons/react/ArrowLineLeft';
@@ -223,6 +224,9 @@ const DESENHO: Record<NomeDeIcone, Icon> = {
   mais_acoes: DotsThree,
   abrir_linha: CaretRight,
   ir_para: ArrowRight,
+  // o ano anterior e o seguinte na grade do mês de trabalho (etapa 8)
+  mes_anterior: CaretLeft,
+  mes_seguinte: CaretRight,
   /* [01/10/2026, etapa 7b] OS TRES DESENHOS DE ESTADO NOVOS. `cancelado` e o
    * circulo cortado — a lixeira e o desenho do botao de apagar, e num selo ela
    * lia como acao. `a_pagar` e a MESMA mao que entrega moedas de

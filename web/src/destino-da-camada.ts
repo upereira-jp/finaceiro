@@ -46,6 +46,7 @@
 // e `navegacao.ts`.
 
 import { TELAS, type Tela } from './navegacao.ts';
+import { ROTAS_QUE_SEGUEM_O_MES } from './mes-do-trabalho.ts';
 import { FRAGMENTO_DO_CADASTRO } from './abas-da-fatura.ts';
 
 export type DestinoDaCamada = {
@@ -378,11 +379,17 @@ export const DESTINO_DA_CAMADA: Record<string, DestinoDaCamada> = {
 /**
  * AS TELAS QUE LEEM O MÊS DO ENDEREÇO (etapa 7a). A conta que falta é «de
  * setembro»: sem o mês, Contas de luz teria de adivinhar qual — e o Mês sabe,
- * porque é o que ele está mostrando. Cobranças já lia o `?mes=` desde 30/09
- * (`mesDaQuery`). As outras telas filtram cadastro, que não tem mês, e o
- * `?mes=` nelas seria sujeira num endereço que alguém cola no WhatsApp.
+ * porque é o que ele está mostrando. As outras telas filtram cadastro, que não
+ * tem mês, e o `?mes=` nelas seria sujeira num endereço que alguém cola no
+ * WhatsApp.
+ *
+ * [01/10/2026, etapa 8] A LISTA É A DO MÊS DE TRABALHO: as telas que SEGUEM o
+ * mês (`ROTAS_QUE_SEGUEM_O_MES`, `mes-do-trabalho.ts`) — Mês, Contas de luz e
+ * Cobranças. Duas listas das mesmas telas divergiriam na primeira tela nova. O
+ * link continua levando o mês, e é por ele que «quem chega pelo funil» chega
+ * no mês do funil, mesmo abrindo numa aba nova.
  */
-export const TELAS_QUE_LEEM_O_MES: readonly string[] = ['/documento', '/faturas'];
+export const TELAS_QUE_LEEM_O_MES: readonly string[] = ROTAS_QUE_SEGUEM_O_MES;
 
 /** O endereco do link, com o filtro ja embutido — e o mês, quando a tela de
  *  destino o lê (`TELAS_QUE_LEEM_O_MES`). `null` quando a camada nao tem tela —

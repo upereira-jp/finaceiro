@@ -872,7 +872,9 @@ chk('I7e', /summary:focus-visible\s*\{[^}]*outline:/.test(REGRAS),
 //   raio-pilula   as bolhas do balao de ajuda — a cauda de um balao de
 //                 pensamento e redonda por natureza
 //   sombra-3      o que FLUTUA: menu da conta, menu de setor, painel e balao de
-//                 ajuda. Ali a sombra e o que diz "isto esta por cima"
+//                 ajuda, e (01/10/2026, etapa 8) a grade do mes de trabalho,
+//                 que abre por cima do conteudo como a de setores. Ali a sombra
+//                 e o que diz "isto esta por cima"
 {
   const px = (v: string) => (v === '0' ? 0 : /^(\d+(\.\d+)?)px$/.test(v) ? Number.parseFloat(v) : Number.NaN);
   const tokens = [RITMO.raio, RITMO.raioCartao, RITMO.raioPequeno];
@@ -880,7 +882,7 @@ chk('I7e', /summary:focus-visible\s*\{[^}]*outline:/.test(REGRAS),
       `os tres raios do sistema sao retos ou quase (<= 2px) — hoje ${tokens.join(' / ')}`);
 
   const RAIO_OK = /^(0|var\(--raio(-cartao|-pequeno)?\))$/;
-  const FLUTUAM = ['.menu-painel', '.setor-painel', '.ajuda-painel', '.ajuda-balao'];
+  const FLUTUAM = ['.menu-painel', '.setor-painel', '.ajuda-painel', '.ajuda-balao', '.mes-painel'];
   const ruins: string[] = [];
   const foraDoPapel: Array<[string, string]> =
     [...foraDoDocumento.replace(/\/\*[\s\S]*?\*\//g, '').replace(/@media[^{]*\{/g, '')

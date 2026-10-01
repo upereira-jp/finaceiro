@@ -296,9 +296,10 @@ export const GLOSSARIO: readonly TermoDoGlossario[] = [
   {
     termo: 'Mês de referência',
     texto: 'O mês a que a cobrança se refere. A conta de agosto cobra a energia de agosto, mesmo '
-      + 'que ela seja paga em setembro. No sistema aparece como «competência» em alguns lugares.',
-    busca: ['mes', 'mes de referencia', 'competencia', 'periodo', 'qual mes', 'mes errado'],
-    caminhos: [{ rota: '/pendencias', rotulo: 'Escolher o mês na tela Mês', tipo: 'ver' }],
+      + 'que ela seja paga em setembro. No sistema aparece como «competência» em alguns lugares. O mês '
+      + 'de trabalho, no alto do menu, é o mês de referência que Mês, Contas de luz e Cobranças mostram.',
+    busca: ['mes', 'mes de referencia', 'competencia', 'periodo', 'qual mes', 'mes errado', 'mes de trabalho'],
+    caminhos: [{ rota: '/pendencias', rotulo: 'Ver o mês de trabalho na tela Mês', tipo: 'ver' }],
   },
   {
     termo: 'Fatia do cliente (rateio)',

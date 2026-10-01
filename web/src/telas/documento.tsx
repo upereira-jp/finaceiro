@@ -38,6 +38,9 @@ import { mover, paraEnvio, type CampoConfigurado } from '../cobranca-regras.ts';
 import { ladoDoQr } from '../layout-regras.ts';
 import { FaturaUnificada } from './fatura-unificada.tsx';
 import { FaixaDoPasso } from '../roteiro-corpo.tsx';
+import { useMesDoTrabalho, AvisoDoMesVelho } from '../seletor-de-mes.tsx';
+import { mesPorExtenso } from '../formato.ts';
+import type { AbaDaFatura } from '../abas-da-fatura.ts';
 
 /** Os 16 do enum `campo_de_fatura` (migration 19). A tela nao inventa nome de
  *  campo: o banco recusaria, e o erro sairia do lado errado. */
@@ -83,6 +86,12 @@ export function TelaDocumento() {
   /** [30/09/2026, etapa 4b] A pergunta aberta na tela — remover a logo ou voltar
    *  o layout ao padrão. Eram dois `window.confirm`. */
   const [pergunta, setPergunta] = useState<'logo' | 'layout' | null>(null);
+  /* O MÊS DE TRABALHO NO TÍTULO, só na aba que o mostra (etapa 8): «Leitura e
+     cálculo» tem o «Faltam N contas» e as registradas do mês; a folha do
+     cliente é a da conta aberta, de qualquer mês, e os dados de quem cobra não
+     têm mês. A aba vem de dentro (`aoMudarAba`). */
+  const { mes } = useMesDoTrabalho();
+  const [aba, setAba] = useState<AbaDaFatura>('leitura');
 
   // A identidade nao carrega mais a chave, so APONTA para ela (migration 25).
   // O formulario abaixo cadastra chave NOVA e nasce vazio de proposito: ele nao
@@ -235,9 +244,10 @@ export function TelaDocumento() {
    * cliente recebe, e a legenda o diz; so deixou de ser o nome da tela.
    */
   return (
-    <Pagina titulo="Contas de luz"
+    <Pagina titulo="Contas de luz" mes={aba === 'leitura' && mes ? mesPorExtenso(mes) : null}
             sub="Onde a conta de luz do mês vira cobrança e a folha do cliente se imprime.">
       <FaixaDoPasso rota="/documento" />
+      {aba === 'leitura' && <AvisoDoMesVelho />}
 
       {/*
         ====================================================================
@@ -318,6 +328,7 @@ export function TelaDocumento() {
         key={tenantId ?? 'sem-tenant'}
         logoUrl={logoUrl}
         tenantId={tenantId ?? null}
+        aoMudarAba={setAba}
         cadastro={<Cadastro>
 
       {/* -------------------------------------------------------- quem emite */}

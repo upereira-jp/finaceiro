@@ -35,10 +35,11 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { RegistroDeFatura } from './api.ts';
-import { Aviso, BotaoDeIcone, Filtro, Icone, Interruptor, Marca, Tabela } from './ui.tsx';
+import { Aviso, BotaoDeIcone, Icone, Interruptor, Marca, Tabela } from './ui.tsx';
 import { Ligacao } from './rota.tsx';
 import { emReais } from './dinheiro.ts';
-import { numeroDaUcNaTela } from './formato.ts';
+import { numeroDaUcNaTela, mesPorExtenso } from './formato.ts';
+import { contasDeOutroMes, mesDaConta } from './mes-do-trabalho.ts';
 import { ItemDaSerie, PerguntaNaTela, RevisaoEmSerie } from './serie.tsx';
 import { ICONE_DO_AVISO } from './iconografia.ts';
 import { SELO_DA_LEITURA, SELO_DO_REGISTRO } from './tom-do-estado.ts';
@@ -94,7 +95,51 @@ export type PropsDaFila = {
   conferir: (i: ItemDoLote) => void;
   remover: (id: string) => void;
   limpar: () => void;
+  /** O MÊS DE TRABALHO (etapa 8), para a fila avisar a conta de outro mês, e
+   *  o gesto que leva o mês de trabalho até ela. Sem eles, a fila não avisa. */
+  mesDoTrabalho?: string | null;
+  aoMudarMes?: (mes: string) => void;
 };
+
+/** «2 contas», «1 conta». */
+const contas = (n: number): string => `${n} ${n === 1 ? 'conta' : 'contas'}`;
+
+/**
+ * A CONTA DE OUTRO MÊS NA FILA (01/10/2026, etapa 8).
+ *
+ * A fila aceita conta de qualquer mês, e é no mês DA CONTA que ela é registrada
+ * — isso não muda. Mas com o mês de trabalho em setembro, as contas de outubro
+ * registradas aqui não aparecem na lista de registradas nem no «Faltam N contas»
+ * logo abaixo, que são de setembro; quem enviou espera vê-las. O aviso diz isso
+ * e oferece levar o mês de trabalho até elas. Âmbar, de tarefa: nada falhou, e
+ * há uma escolha a fazer. O botão é comum — o laranja da fila é «Registrar N».
+ */
+function AvisoDeOutroMes({ mes, outros, aoMudarMes }: {
+  mes: string; outros: Array<{ mes: string; quantas: number }>; aoMudarMes?: (mes: string) => void;
+}) {
+  const total = outros.reduce((n, o) => n + o.quantas, 0);
+  const alvo = outros[0]!;
+  return (
+    <Aviso tipo="alerta">
+      <span className="mes-velho">
+        <span>
+          {outros.length === 1
+            ? <><strong>{contas(total)} da fila {total === 1 ? 'é' : 'são'} de {mesPorExtenso(alvo.mes)}</strong>,
+                e o mês de trabalho é {mesPorExtenso(mes)}.</>
+            : <><strong>{contas(total)} da fila {total === 1 ? 'é' : 'são'} de outros meses</strong>
+                {' '}({outros.map((o) => `${o.quantas} de ${mesPorExtenso(o.mes)}`).join(', ')}), e o mês de
+                trabalho é {mesPorExtenso(mes)}.</>}
+          {' '}Cada conta é registrada no mês dela; é naquele mês que ela aparece nas listas abaixo.
+        </span>
+        {aoMudarMes && (
+          <button type="button" onClick={() => aoMudarMes(alvo.mes)}>
+            Mudar o mês de trabalho para {mesPorExtenso(alvo.mes)}
+          </button>
+        )}
+      </span>
+    </Aviso>
+  );
+}
 
 /**
  * A FILA DAS CONTAS DO MES — uma linha por arquivo, e o trabalho no topo.
@@ -124,6 +169,8 @@ export function TabelaDaFila(p: PropsDaFila) {
 
   if (p.itens.length === 0) return null;
   const naoRegistradas = p.itens.filter((i) => i.estado !== 'registrado').length;
+  const mesDoTrabalho = p.mesDoTrabalho ?? null;
+  const outros = contasDeOutroMes(p.itens.map(competenciaDoItem), mesDoTrabalho);
 
   const partes = [
     `${resumo.total} ${resumo.total === 1 ? 'arquivo' : 'arquivos'}`,
@@ -137,7 +184,10 @@ export function TabelaDaFila(p: PropsDaFila) {
     <section className="fu-bloco" aria-labelledby="fu-fila-titulo">
       <div className="fu-bloco-topo">
         <div className="fu-bloco-titulo">
-          <h2 id="fu-fila-titulo">Fila deste mês</h2>
+          {/* «FILA DE ENVIO», e não mais «Fila deste mês» (etapa 8): ela aceita
+              conta de qualquer mês — o mês vem da própria conta —, e com o mês de
+              trabalho no menu, «deste mês» prometia um recorte que ela não faz. */}
+          <h2 id="fu-fila-titulo">Fila de envio</h2>
           <p className="fu-bloco-resumo">{partes.join(' · ')}</p>
         </div>
         {confirmandoLimpeza ? (
@@ -171,6 +221,10 @@ export function TabelaDaFila(p: PropsDaFila) {
           </div>
         )}
       </div>
+
+      {mesDoTrabalho && outros.length > 0 && (
+        <AvisoDeOutroMes mes={mesDoTrabalho} outros={outros} aoMudarMes={p.aoMudarMes} />
+      )}
 
       {resumo.comPendencia > 0 && (
         <Aviso tipo="alerta">
@@ -214,6 +268,11 @@ export function TabelaDaFila(p: PropsDaFila) {
                 <td className="c-uc" data-rotulo="Unidade">{uc || '—'}</td>
                 <td className="c-mes" data-rotulo="Mês">
                   {competenciaDoItem(i) || (i.campos?.mes_referencia || '—')}
+                  {/* A CONTA DE OUTRO MÊS diz que é, na linha dela (etapa 8): o
+                      aviso no alto da fila conta quantas, e aqui se vê quais. */}
+                  {mesDoTrabalho && mesDaConta(competenciaDoItem(i)) && mesDaConta(competenciaDoItem(i)) !== mesDoTrabalho && (
+                    <span className="fu-outro-mes">outro mês</span>
+                  )}
                 </td>
                 <td className="c-tot num" data-rotulo="Total da conta">
                   {i.campos?.valor_total_equatorial || '—'}
@@ -258,7 +317,6 @@ export type PropsDasRegistradas = {
   visiveis: RegistroDeFatura[];
   erro: string | null;
   filtro: FiltroDasRegistradas;
-  meses: string[];
   /** A lista bateu no teto: o mes mais velho pode estar pela metade. */
   parcial: boolean;
   aoFiltrar: (f: FiltroDasRegistradas) => void;
@@ -342,10 +400,16 @@ export function TabelaDasRegistradas(p: PropsDasRegistradas) {
   const todasRef = useRef<HTMLInputElement>(null);
   useEffect(() => { if (todasRef.current) todasRef.current.indeterminate = algumas; }, [algumas]);
 
+  /* A LISTA CORTADA NO TETO e o mês de trabalho no fim dela: o mês pode estar
+     pela metade, e a linha diz. Era o «(parcial)» da opção do filtro de mês,
+     que saiu na etapa 8. */
+  const maisVelho = (p.lista ?? []).map(mesDoRegistro).filter(Boolean).sort()[0] ?? null;
+  const pelaMetade = p.parcial && Boolean(p.filtro.mes) && maisVelho !== null && p.filtro.mes! <= maisVelho;
   const resumo = p.lista == null ? 'Lendo as contas registradas…' : [
     `${p.visiveis.length} ${p.visiveis.length === 1 ? 'conta' : 'contas'}`,
     p.visiveis.length > 0 && emReais(somaEmCentavos(p.visiveis)),
     pendentes > 0 && `${pendentes} sem cobrança`,
+    pelaMetade && 'a lista traz só as mais recentes, e este mês pode estar pela metade',
   ].filter(Boolean).join(' · ');
 
   const colunas = 7 + (mostraMes ? 1 : 0);
@@ -373,17 +437,10 @@ export function TabelaDasRegistradas(p: PropsDasRegistradas) {
       </div>
 
       <div className="ferramentas fu-filtros">
-        {/* O FILTRO DE MES CONTINUA LA COM A UNIDADE LIGADA: a serie de uma
-            unidade atravessa meses, e e por isso que o chip abre em «Todos». */}
-        <Filtro rotulo="Mês de referência" valor={p.filtro.mes ?? 'todos'}
-                ao={(v) => p.aoFiltrar({ ...p.filtro, mes: v === 'todos' ? null : v })}
-                opcoes={[
-                  ...p.meses.map((m, k) => ({
-                    valor: m,
-                    texto: rotuloDoMes(m) + (p.parcial && k === p.meses.length - 1 ? ' (parcial)' : ''),
-                  })),
-                  { valor: 'todos', texto: 'Todos os meses' },
-                ]} />
+        {/* O FILTRO DE MÊS SAIU (01/10/2026, etapa 8): a lista mostra o MÊS DE
+            TRABALHO, escolhido no menu — o mesmo do Mês e de Cobranças. Era o
+            terceiro seletor de mês desta tela. A série de uma unidade, que
+            atravessa meses, continua no chip de unidade. */}
         <Interruptor ligado={p.filtro.soSemCobranca} rotulo="Só sem cobrança"
                      ao={(v) => p.aoFiltrar({ ...p.filtro, soSemCobranca: v })} />
         {p.filtro.unidade && (

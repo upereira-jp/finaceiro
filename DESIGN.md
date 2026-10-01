@@ -198,6 +198,16 @@ components:
     textColor: "{colors.navy}"
     borderBottom: "2px solid {colors.navy}"
     rounded: "{rounded.none}"
+  mes-de-trabalho:
+    backgroundColor: "{colors.navy}"
+    textColor: "{colors.creme}"
+    borderColor: "rgba(255, 255, 255, 0.20)"
+    rounded: "{rounded.none}"
+    padding: "7px 10px"
+  mes-de-trabalho-aberto:
+    backgroundColor: "{colors.navy}"
+    textColor: "{colors.cartao}"
+    rounded: "{rounded.none}"
 ---
 
 # Design System: Financeiro G3
@@ -212,7 +222,13 @@ components:
      Etapa 7c (01/10/2026): a ajuda saiu do canto para o pé do menu (com a
      tecla ?), a explicação simples ficou à vista, o «Como fazer» recolhe e
      lembra, as telas de lista alargam na janela grande, e o passo 5 passou a
-     ser dividido entre Contas a receber e Contas a pagar. -->
+     ser dividido entre Contas a receber e Contas a pagar.
+     Etapa 8 (01/10/2026): UM MÊS DE TRABALHO para o Rateio, escolhido uma vez
+     no alto do menu e válido para Mês, Contas de luz e Cobranças (e para o
+     recorte de Relatórios); a regra mora em `web/src/mes-do-trabalho.ts`, com
+     suíte (`web/tests/mes-do-trabalho.ts`), e o controle em
+     `web/src/seletor-de-mes.tsx`. Novas: a seção «O mês de trabalho», a regra
+     «The One Month Rule», e as linhas de Casca, Ordem da página e menu. -->
 
 ## Overview
 
@@ -316,11 +332,11 @@ O escuro parte do navy como superfície (`navy` → `cartao-escuro` → `hover-e
 
 ## Layout
 
-- **Casca:** menu lateral fixo à esquerda (248px; 64px recolhido), conteúdo com no máximo 1160px, 28px de respiro no alto e 20px dos lados. As **telas de lista** (`Tela.larga`: Clientes, Unidades, Contratos, Cobranças, Relatórios, Contas a receber, Contas a pagar, Histórico) vão até **1320px** quando a janela tem 1600px ou mais com o menu aberto (1400 com ele recolhido); a prosa delas não alarga (o subtítulo fica a 72ch, o texto do aviso a 96ch). Abaixo de **900px** o menu vira gaveta com foco preso, aberta pelo «Menu» da faixa do topo; a faixa tem também o botão de desenho da ajuda, para a gaveta fechada.
+- **Casca:** menu lateral fixo à esquerda (248px; 64px recolhido) — no alto, o setor e, logo abaixo dele, no Rateio, o **mês de trabalho** —, conteúdo com no máximo 1160px, 28px de respiro no alto e 20px dos lados. As **telas de lista** (`Tela.larga`: Clientes, Unidades, Contratos, Cobranças, Relatórios, Contas a receber, Contas a pagar, Histórico) vão até **1320px** quando a janela tem 1600px ou mais com o menu aberto (1400 com ele recolhido); a prosa delas não alarga (o subtítulo fica a 72ch, o texto do aviso a 96ch). Abaixo de **900px** o menu vira gaveta com foco preso, aberta pelo «Menu» da faixa do topo; a faixa tem também o botão de desenho da ajuda, para a gaveta fechada.
 - **Ritmo:** 12px entre elementos de um grupo (`gap`), 20px entre seções (`secao`) e dentro do cartão. Cartões de resumo (KPI) em grade `auto-fit` de 180px; no telefone, dois por linha.
 - **Tabela → cartões:** a medida é a da **própria tabela** (`container query`), não a da janela. Abaixo de **720px de tabela** cada linha vira cartão: identificação no alto, situação e valor logo abaixo, a ação no pé, e o nome de cada coluna escrito na célula. A tabela curta de resumo (`cartoes="estreita"`) só vira cartão abaixo de **440px**; Cobranças tem o cartão próprio abaixo de 860px. A ordenação do cartão é **um** seletor «Ordenar por» com coluna e direção.
 - **Celular:** nenhuma tela rola para o lado; todo controle tem 44px de altura e o campo usa 16px de letra (o Safari não dá zoom). Em qualquer largura nenhum alvo tem menos de 24px.
-- **Ordem da página:** título e frase de apoio (UMA linha), o ato da tela no canto do título («Novo …» dos cadastros), a faixa do passo (nas telas que são passo do mês: o que a tela é, à esquerda; o antes, o depois e o mês inteiro, à direita), avisos do que falta, ferramentas (busca, filtros, contagem «N de M»), a lista. Listar antes de criar; o que se confere de vez em quando (a geração do mês em Usinas, «Onde mora o segredo» no Conector Sicoob) é `Recolhido`, depois da lista ou antes do formulário.
+- **Ordem da página:** título — nas telas do mês, com o mês: «Cobranças de setembro de 2026» — e frase de apoio (UMA linha), o ato da tela no canto do título («Novo …» dos cadastros), a faixa do passo (nas telas que são passo do mês: o que a tela é, à esquerda; o antes, o depois e o mês inteiro, à direita), avisos do que falta, ferramentas (busca, filtros, contagem «N de M»), a lista. Listar antes de criar; o que se confere de vez em quando (a geração do mês em Usinas, «Onde mora o segredo» no Conector Sicoob) é `Recolhido`, depois da lista ou antes do formulário.
 
 ## Elevation & Depth
 
@@ -379,12 +395,27 @@ Canto reto em tudo: `--raio`, `--raio-cartao` e `--raio-pequeno` valem 0 e conti
 
 ### Navigation — o menu lateral (`MenuLateral`)
 - **Style:** faixa navy de 248px, itens em condensada com ícone Phosphor na `topo-fraco`; o ativo ganha o lastro laranja translúcido e a tinta laranja. O seletor de setor (Rateio | Empresa | Administração) no alto; no pé, a **Ajuda** (item comum, sem laranja, com a tecla `?` desenhada à direita — o atalho que abre a central de qualquer tela, menos com o foco num campo de texto) e, logo abaixo, a conta da pessoa. Recolhido, a ajuda é só o desenho, com a dica «Ajuda · tecla ?».
+- **O mês de trabalho** mora logo abaixo do seletor de setor, só no Rateio (ver «O mês de trabalho», abaixo).
 - **A ordem é a do trabalho:** Mês; os cadastros na ordem em que um depende do outro (Donos de usina → Usinas → Clientes → Unidades consumidoras → Contratos); os passos do mês com o número de cada um (Contas de luz `1–2`, Cobranças `3–4`); Relatórios. No setor Empresa: Contas a receber (`5`), Contas a pagar (`5`), Conector Sicoob, Histórico — o passo 5 é dividido: a metade «receber» (quem ainda deve) e a «repartir», onde o mês termina.
 - **O balão de primeira visita** (`financeiro.ajuda.apresentada`, uma vez por computador) sai do item da ajuda, à direita do menu, com as duas bolhas; no celular, desce do botão da faixa.
 - **Recolhe** para 64px nas telas de desenho; **vira gaveta** abaixo de 900px.
 
+### O mês de trabalho (`SeletorDeMes`, `ProvedorDoMes`, `AvisoDoMesVelho`)
+Desde 01/10/2026 (etapa 8) o Rateio tem **um mês só**, escolhido uma vez e válido para as telas do trabalho do mês. Até ali Mês, Contas de luz e Cobranças tinham, cada uma, o seu seletor e a sua regra de abertura — três chances de olhar o mês errado.
+- **Onde:** no alto do menu lateral, logo abaixo do seletor de setor — «Rateio», e embaixo «Mês de trabalho · setembro de 2026». O mês é estado do setor, não de uma tela; ao lado do setor ele lê como endereço, e não pula de lugar entre as telas. **Recolhido**, o desenho e o mês abreviado («set/26», `mesAbreviado`), com o nome inteiro no nome acessível e na dica. **No celular**, «set/26 ▾» na faixa do topo (o nome «Financeiro G3» sai da vista abaixo de 480px, o logotipo fica) e o controle inteiro na gaveta. No setor Empresa ele não é desenhado.
+- **O gatilho** é o irmão quieto do setor: mesma largura, contorno do véu, sem fundo, rótulo caixa-alta na tinta apagada e o mês no creme; sem laranja. Embaixo, **fora do botão** (é a descrição dele), uma linha de quatro palavras: por que este mês («o mais recente com trabalho», «o último que você escolheu», «aberto pelo link»), «não muda esta tela» num cadastro, «esta tela mostra todos os meses» em Relatórios sem recorte, ou «há trabalho em setembro de 2026», com o ponto laranja.
+- **O painel** é a grade do ano (4 × 3), não o `<input type="month">`: um clique por mês, setas/Home/End/PageUp/PageDown, uma parada de Tab (o mês aberto). O mês aberto é a tinta forte cheia (seleção, não ato); o mês com trabalho leva o quadradinho âmbar e o nome «…, tem trabalho». O painel diz o resto que antes se espalhava pelas três telas: a dica do mês do consumo, **por que este mês** (`fraseDaOrigem` — a única fonte da frase «Aberto no mês mais recente com trabalho…»), o **alcance** (o que muda e o que NÃO muda) e o atalho.
+- **A ordem do mês** (`resolverMes`): o `?mes=` do link; a escolha lembrada (`financeiro.emissao.mes`); o mais recente com trabalho — conta por virar cobrança, cobrança por emitir, emitida sem boleto (`procurarMesComTrabalho`) —, ou o mais recente com conta ou cobrança; o mês de hoje em São Paulo.
+- **O endereço:** trocar o mês reescreve o `?mes=` com `replaceState` (o link e o F5 ficam certos, o «voltar» não vira lista de meses); um link com `?mes=` numa tela do mês muda o mês de **todas**, sem virar a escolha lembrada. Em Unidades o `?mes=` é a volta, e não muda nada.
+- **O que segue:** Mês, Contas de luz (registradas e «Faltam N contas») e Cobranças. **Relatórios recorta**: o padrão continua «todos os meses», e o interruptor «Só setembro de 2026, o mês de trabalho» recorta no mês do menu. **Não seguem:** os cadastros e o setor Empresa.
+- **O aviso de mês velho** (`AvisoDoMesVelho`): no alto das telas do mês, âmbar, quando o mês aberto veio de lembrança ou de link e está atrás do mês com trabalho — «Há trabalho em setembro de 2026 → Ir para setembro de 2026» (botão comum). Não aparece quando a pessoa acabou de escolher, nem à frente do trabalho.
+- **A fila de envio** de Contas de luz aceita conta de qualquer mês (o mês vem da conta); a de outro mês ganha «outro mês» na linha e um aviso que oferece «Mudar o mês de trabalho para outubro de 2026».
+- **Teclado:** `[` e `]` voltam e avançam um mês nas telas do mês, fora de campo de texto e sem painel modal aberto; a região viva diz o mês novo.
+
+**The One Month Rule.** O Rateio tem UM mês de trabalho, e ele mora na casca (`useMesDoTrabalho`). Tela do Rateio não tem seletor de mês próprio, não escolhe o mês sozinha e não escreve a frase do porquê — a suíte `web/tests/mes-do-trabalho.ts` (MT9) recusa. Tela que mostra o mês diz o mês no título.
+
 ### Página (`Pagina`) e o painel de criar (`PainelDeCriar`)
-- `Pagina` põe o título, a frase de apoio e o ato da tela no canto do título. Nos cadastros o ato é «Novo …» (botão comum) e abre o `PainelDeCriar` acima da lista — não uma gaveta: cadastrar se faz vendo a lista. Esc e «Cancelar» fecham, e o foco volta ao «Novo …».
+- `Pagina` põe o título, a frase de apoio e o ato da tela no canto do título. Com `mes`, o título diz o mês na mesma linha («Cobranças de setembro de 2026», o mês um degrau de peso abaixo) — o nome da tela vem primeiro e intacto, porque é a palavra do menu. Nos cadastros o ato é «Novo …» (botão comum) e abre o `PainelDeCriar` acima da lista — não uma gaveta: cadastrar se faz vendo a lista. Esc e «Cancelar» fecham, e o foco volta ao «Novo …».
 
 ### Revisão em série (`RevisaoEmSerie`) e pergunta na tela (`PerguntaNaTela`)
 - **Revisão em série:** a casca comum de «Gerar N cobranças», «Emitir N cobranças» e «Pedir os N boletos» — antes, a lista do que vai acontecer e a soma ao lado do «Sim»; durante, o placar linha a linha; depois, o resultado e o próximo passo.
@@ -392,6 +423,7 @@ Canto reto em tudo: `--raio`, `--raio-cartao` e `--raio-pequeno` valem 0 e conti
 
 ### O funil do mês (`roteiro-corpo.tsx`)
 - Os cinco passos lado a lado com o número em quadro, a contagem do que falta em número grande e o «de N» embaixo; UM passo ganha o realce laranja, e a palavra em cima diz por quê: «Mais urgente agora» quando é o risco (a recusa do banco, a vencida), «Próximo passo» quando é só o trabalho mais perto do dinheiro. (Era «Comece aqui» nos dois casos, e lia como ordem.) O risco sai na tinta do tom dele — a recusa e a vencida em vermelho, com o octógono; o boleto só parado, em âmbar. No celular, um passo por linha.
+- O título da caixa é «Como está o mês» (etapa 8): o mês por extenso está no título da página logo acima, e vai no nome da seção só para quem ouve.
 - O «Como fazer» do passo é um `Recolhido` leve e lembrado: nasce aberto na primeira visita deste computador e, fechado uma vez, fica fechado.
 - Nas conferências do mês, cada linha em aberto mostra à vista a frase simples e a consequência (curtas, de `VERBETE_DA_CAMADA`); só a explicação do servidor, a nota do mapa, o comando e a chave ficam atrás de «ver detalhe técnico».
 
@@ -418,6 +450,7 @@ Canto reto em tudo: `--raio`, `--raio-cartao` e `--raio-pequeno` valem 0 e conti
 - **Do** usar o tom `a_fazer` (âmbar, lápis) para o que falta preencher e guardar `erro` para a falha.
 - **Do** formatar por `formato.ts` e `dinheiro.ts`: `diaEmBr`, `mesEmBr`, `mesPorExtenso`, `emReais`, `decimalParaCampo`/`campoParaDecimal`. Nada de `toLocaleDateString` ou `toFixed` espalhado.
 - **Do** manter o dinheiro em centavos inteiros e o decimal (percentual, kWh, tarifa) como texto, do banco à tela (regra 1).
+- **Do** ler o mês do Rateio de `useMesDoTrabalho()` e dizê-lo no título (`<Pagina mes=…>`); o link para uma tela do mês leva o `?mes=` (`enderecoDoPasso`, `enderecoDoDestino`).
 - **Do** escrever o nome do botão e do link letra por letra igual ao rótulo da tela a que ele leva («Abrir Cobranças» leva a «Cobranças»; RM12/RM13 em `web/tests/roteiro-do-mes.ts`).
 - **Do** listar antes de criar: a lista é a tela, o «Novo …» fica no canto do título.
 - **Do** pôr o jargão (código de questão, nome de coluna, comando) atrás de `DetalheTecnico` — e deixar à vista a explicação simples. Um detalhe técnico que esconde o português de quem opera está escondendo a coisa errada.
@@ -432,3 +465,4 @@ Canto reto em tudo: `--raio`, `--raio-cartao` e `--raio-pequeno` valem 0 e conti
 - **Don't** usar ícone fora do Phosphor nem pedir o desenho pelo nome dele: a tela pede o nome semântico de `iconografia.ts`.
 - **Don't** abrir `confirm()`, `prompt()` ou modal para pergunta que cabe na própria tela.
 - **Don't** usar o cinza G3 `#8F939D` como tinta (3,08:1).
+- **Don't** pôr campo de mês numa tela do Rateio, nem repetir o mês num subtítulo logo abaixo do título que já o diz.

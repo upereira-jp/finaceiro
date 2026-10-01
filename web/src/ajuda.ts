@@ -225,7 +225,8 @@ export const TOPICOS: readonly Topico[] = [
       + 'que passo está cada unidade e, logo abaixo dos passos, o que o cadastro ainda trava.',
     passos: [
       'Abra a tela Mês (é o primeiro item do menu, à esquerda).',
-      'Confira o mês no alto da tela: ela abre no mês mais recente com trabalho, e diz por quê ao lado.',
+      'Confira o mês de trabalho, no alto do menu, logo abaixo de «Rateio»: ele vale para Mês, Contas de luz e '
+        + 'Cobranças, e o título de cada tela diz qual é.',
       'Em «O cadastro trava parte do mês», cada item tem o link que abre a tela certa, já filtrada. '
         + 'A lista completa está na tabela mais abaixo, nas linhas marcadas como «Falta preencher».',
       'Comece pela de cima: fechar a primeira costuma destravar as de baixo.',
@@ -431,6 +432,7 @@ export const TOPICOS: readonly Topico[] = [
       'O número ao lado de Contas de luz, Cobranças e Contas a pagar é o passo do mês que acontece ali — o mesmo número dos cinco passos da tela Mês.',
       'Para ganhar espaço na tela, use «Recolher o menu», no pé dele: ficam só os desenhos, e passar o mouse (ou o Tab) num deles mostra o nome. A escolha também fica lembrada.',
       'No celular o menu fica guardado: toque em «Menu», no alto da tela, e ele abre por cima. Tocar fora dele, escolher uma tela ou apertar Esc fecha.',
+      'Logo abaixo do setor fica o mês de trabalho: ele vale para Mês, Contas de luz e Cobranças de uma vez. Com o menu recolhido ele aparece abreviado («set/26»), e no celular, ao lado de «Menu», no alto da tela.',
       'Tema, empresa e Sair estão no pé do menu, no botão com o seu nome.',
       'Esta ajuda mora no pé do menu, logo acima do seu nome, no item «Ajuda». De qualquer tela, a tecla ? também a abre — menos com o cursor dentro de um campo de texto, onde ? é só uma letra. No celular, com o menu fechado, ela está no botão de boia no alto da tela, ao lado de «Menu».',
     ],
@@ -459,21 +461,33 @@ export const TOPICOS: readonly Topico[] = [
     termos: ['amarelo', 'nao da para conferir', 'nao medido', 'zero de zero', 'linha amarela',
              'nem pronto nem pendente', 'o que significa amarelo'],
   },
+  /*
+   * O MÊS DE TRABALHO (01/10/2026, etapa 8). Até aqui cada tela de dinheiro
+   * tinha o seu campo «Mês de referência», e a resposta mandava procurá-lo no
+   * alto da tela. Hoje o mês é UM, no alto do menu, e vale para as três telas
+   * do mês ao mesmo tempo — a resposta diz onde ele está, o que ele muda e o
+   * que ele NÃO muda, a lembrança, o aviso de mês velho, o link e o atalho.
+   */
   {
     id: 'mes-de-referencia',
     pergunta: 'Como troco o mês? E qual mês eu escolho?',
-    resposta: 'O seletor de mês fica no alto das telas de dinheiro. Vale o mês da ENERGIA, não o do '
-      + 'pagamento: a conta de agosto cobra agosto, mesmo sendo paga em setembro.',
+    resposta: 'O mês de trabalho fica no alto do menu, logo abaixo de «Rateio», e vale para Mês, Contas de '
+      + 'luz e Cobranças de uma vez: troca-se num lugar, e as três telas mudam juntas. Vale o mês da '
+      + 'ENERGIA, não o do pagamento: a conta de agosto cobra agosto, mesmo sendo paga em setembro.',
     passos: [
-      'Procure o campo «Mês de referência» no alto da tela.',
-      'Escolha o mês da energia que está sendo cobrada.',
-      'Em Relatórios, deixar o campo vazio mostra o histórico inteiro em vez de um mês só.',
+      'Clique em «Mês de trabalho», no alto do menu, e escolha o mês na grade. O mês marcado com um quadradinho é o que tem trabalho por fazer. No celular, o mês fica ao lado de «Menu», no alto da tela.',
+      'Escolha o mês da energia que está sendo cobrada. O título de cada tela diz o mês que ela mostra («Cobranças de setembro de 2026»).',
+      'Fora de um campo de texto, as teclas [ e ] voltam e avançam um mês, nas telas Mês, Contas de luz e Cobranças.',
+      'O sistema lembra a sua escolha neste computador. Se houver trabalho num mês mais novo que o lembrado, a tela avisa e oferece ir até ele.',
+      'Um link que leva o mês (os botões do funil, «Ver em Cobranças» de Contas a receber) abre naquele mês e muda o mês das três telas — sem trocar a sua escolha guardada.',
+      'Os cadastros e o setor Empresa não mudam com o mês. Relatórios mostra todos os meses; o interruptor «Só …, o mês de trabalho» recorta no mês do menu.',
     ],
     caminhos: [ir('/pendencias', 'Conferir o mês na tela Mês'), ver('/faturas', 'Ver o mês em Cobranças')],
     camada: null,
-    telas: [],
+    telas: ['/pendencias', '/documento', '/faturas'],
     termos: ['mes', 'mes de referencia', 'competencia', 'trocar o mes', 'mudar o mes', 'mes errado',
-             'qual mes', 'periodo', 'data de referencia'],
+             'qual mes', 'periodo', 'data de referencia', 'mes de trabalho', 'seletor de mes', 'cade o mes',
+             'onde troco o mes', 'teclas do mes', 'colchete', 'mes lembrado', 'mes velho'],
   },
 
   /*
@@ -1256,15 +1270,16 @@ export const TOPICOS: readonly Topico[] = [
     id: 'quanto-entrou',
     pergunta: 'Onde vejo quanto entrou e quanto a empresa tem a pagar?',
     resposta: 'Na tela Relatórios: quanto cabe a cada dono de usina, quanto sai para quem trouxe os '
-      + 'clientes e quanto de cada usina foi usado. Sem escolher mês, mostra o histórico inteiro.',
+      + 'clientes e quanto de cada usina foi usado. Ela mostra o histórico inteiro, e recorta no mês de '
+      + 'trabalho quando se pede.',
     passos: [
       'Abra a tela Relatórios.',
-      'Deixe o mês vazio para ver tudo, ou escolha um mês para recortar.',
+      'A tela mostra todos os meses. Para ver um só, ligue «Só …, o mês de trabalho»: o mês é o do alto do menu.',
       /* O ENDEREÇO MUDOU EM 10/09/2026: os quatro números viviam no alto da aba
        * Faturamento, que saiu. Foram para Emissão e cobrança, e lá seguem o
        * seletor de mês em vez de mostrar sempre a competência mais nova. */
       'Faturado, recebido, a receber e vencidas em aberto aparecem no alto da tela Cobranças, '
-        + 'para o mês que estiver escolhido ali.',
+        + 'para o mês de trabalho.',
     ],
     caminhos: [ir('/relatorios', 'Abrir Relatórios'), ver('/faturas', 'Ver o resumo do mês')],
     camada: null,

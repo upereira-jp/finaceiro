@@ -80,22 +80,12 @@ export function mesesDaLista(lista: readonly RegistroDeFatura[]): string[] {
 export const listaParcial = (lista: readonly RegistroDeFatura[]): boolean =>
   lista.length >= LIMITE_DA_LISTA;
 
-/**
- * O MES QUE A LISTA ABRE: o mais recente que ainda tem conta por cobrar.
- *
- * NAO E O MES DE HOJE, e nao e o mais recente da lista. A cobranca nasce na
- * competencia da CONTA, que quase nunca e o mes corrente; e o mes mais recente
- * pode estar todo cobrado enquanto o anterior tem seis esperando. Abrir no
- * trabalho que falta e o que poe «Gerar 6 cobrancas» na primeira dobra.
- *
- * Sem nada por cobrar, abre no mais recente — e a confirmacao do que foi feito.
- * Lista vazia, `null`: nao ha mes para escolher.
- */
-export function mesPadrao(lista: readonly RegistroDeFatura[]): string | null {
-  const comTrabalho = mesesDaLista(lista.filter(podeGerar));
-  if (comTrabalho.length > 0) return comTrabalho[0]!;
-  return mesesDaLista(lista)[0] ?? null;
-}
+/* O MES QUE A LISTA ABRE (`mesPadrao`) SAIU em 01/10/2026 (etapa 8). Ele era
+ * o critério da lista de registradas — o mais recente com conta por cobrar —, e
+ * abria em outro mês que Mês e Cobranças. Hoje a lista mostra o MÊS DE
+ * TRABALHO da casca, e o critério virou parte da procura do trabalho: a conta
+ * por virar cobrança é trabalho certo em `candidatosDoMes`, e o mês mais recente
+ * com conta é o `recente` de `mesSemTrabalho` (`emissao-regras.ts`). */
 
 export type FiltroDasRegistradas = {
   /** `'AAAA-MM'`, ou `null` para todos os meses. */

@@ -105,6 +105,21 @@ export function mesPorExtenso(v: string | null | undefined): string {
   return m ? `${MESES[Number(m.mes) - 1]} de ${m.ano}` : '';
 }
 
+/** O nome do mês em três letras, `1` -> `jan` — a grade do seletor do mês de
+ *  trabalho (01/10/2026, etapa 8). */
+export const mesCurtoDoAno = (n: number): string => (MESES[n - 1] ?? '').slice(0, 3);
+
+/**
+ * O MÊS ABREVIADO, `2026-09` -> `set/26`. É a forma do lugar estreito: o menu
+ * recolhido e a faixa do topo do celular, onde «setembro de 2026» não cabe
+ * (01/10/2026, etapa 8). O nome inteiro continua no nome acessível de quem a
+ * mostra. String VAZIA quando não é mês, como `mesPorExtenso`.
+ */
+export function mesAbreviado(v: string | null | undefined): string {
+  const m = lerMes(v);
+  return m ? `${mesCurtoDoAno(Number(m.mes))}/${m.ano.slice(2)}` : '';
+}
+
 /* ======================================================= o instante */
 
 type Partes = { ano: string; mes: string; dia: string; hora: string; minuto: string };

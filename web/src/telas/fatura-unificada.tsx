@@ -44,7 +44,7 @@ import {
 import { Aviso, Campo, Icone, MostrandoSo } from '../ui.tsx';
 import { ContasQueFaltam } from '../contas-que-faltam.tsx';
 import { FILTROS_DA_TELA, filtroDaConsulta, rotuloDoRecorte, esquecerORecorte } from '../destino-da-camada.ts';
-import { mesDaQuery } from '../dinheiro.ts';
+import { useMesDoTrabalho } from '../seletor-de-mes.tsx';
 import { TrianguloDeAviso } from '../icones.tsx';
 import {
   escalaDaPrevia, regraDaPagina, PX_POR_MM,
@@ -64,7 +64,7 @@ import {
   LEITURAS_SIMULTANEAS, type ItemDoLote,
 } from '../lote-de-contas.ts';
 import {
-  LIMITE_DA_LISTA, mesesDaLista, mesPadrao, listaParcial, filtrarRegistradas, selecaoParaGerar,
+  LIMITE_DA_LISTA, listaParcial, filtrarRegistradas, selecaoParaGerar,
   ordemDasRegistradas,
   podeGerar, mesDoRegistro, mesCurto, economiaAcumulada,
   type EstadoDaGeracao, type FiltroDasRegistradas,
@@ -251,11 +251,14 @@ type Aba = AbaDaFatura;
  * pelo dono, nao um apendice. Desde 30/09 ela fica na barra (ver
  * `abas-da-fatura.ts`).
  */
-export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
+export function FaturaUnificada({ logoUrl, tenantId, cadastro, aoMudarAba }: {
   logoUrl: string | null;
   /** Do `useSessao`. E a chave do rascunho — ver `RASCUNHO`. */
   tenantId: string | null;
   cadastro?: ReactNode;
+  /** A aba aberta, para a tela dizer o mes no titulo so na aba que o mostra
+   *  (etapa 8): a folha do cliente e os dados de quem cobra nao tem mes. */
+  aoMudarAba?: (aba: Aba) => void;
 }) {
   /*
    * A ABA NASCE DO ENDERECO: `/documento#cadastro` abre direto no cadastro — e o
@@ -275,6 +278,11 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
   }, []);
   const abaAgora = useRef(aba);
   abaAgora.current = aba;
+  useEffect(() => { aoMudarAba?.(aba); }, [aba, aoMudarAba]);
+
+  /* O MES DE TRABALHO (etapa 8): a lista do que falta ler e a das registradas
+   * mostram o mes escolhido no menu, e a fila avisa a conta de outro mes. */
+  const { mes: mesDoTrabalho, escolher: escolherMes } = useMesDoTrabalho();
 
   const rascunho = lerRascunho(tenantId);
   const [campos, setCampos] = useState<CamposDaFatura>(rascunho?.campos ?? CAMPOS_DA_FATURA_VAZIOS);
@@ -331,11 +339,11 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
    * O RECORTE DO ENDEREÇO (01/10/2026, etapa 7a): `?pendencia=sem_conta` é o
    * botão «15 contas a ler» do Mês. A aba abre com «Faltam N contas» aberto e
    * mostra só o trabalho de LER — o envio, a fila e o que falta —, com as
-   * registradas fora até o «x» do «Mostrando só». O `?mes=` diz de que mês;
-   * lidos só na montagem, como em Unidades.
+   * registradas fora até o «x» do «Mostrando só». Lido só na montagem, como em
+   * Unidades. [etapa 8] O `?mes=` do mesmo link não é mais lido aqui: ele muda
+   * o MÊS DE TRABALHO, na casca, e a tela o recebe de lá.
    */
   const [recorte, setRecorte] = useState(() => filtroDaConsulta(location.search, FILTROS_DA_TELA['/documento']));
-  const [mesPedido] = useState(() => mesDaQuery(location.search));
 
   /*
    * ==========================================================================
@@ -870,9 +878,10 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
               <MostrandoSo rotulo={rotuloDoRecorte('/documento', recorte)} focarDepois="fu-registradas-titulo"
                            aoRemover={() => { setRecorte(''); esquecerORecorte(); }} />
             }
-            faltam={<ContasQueFaltam mesPedido={mesPedido} versao={registrosVersao} aberto={recorte === 'sem_conta'} />}
+            faltam={<ContasQueFaltam mes={mesDoTrabalho} versao={registrosVersao} aberto={recorte === 'sem_conta'} />}
             fila={
               <TabelaDaFila
+                mesDoTrabalho={mesDoTrabalho} aoMudarMes={escolherMes}
                 itens={lote} ucs={ucsDoCadastro} cadastro={cadastroDeUcs} registrando={registrandoLote}
                 principal={resumo.prontos > 0} abertaId={gaveta ? abertoId : null}
                 registrar={(ids) => void registrarDoLote(ids)}
@@ -883,7 +892,7 @@ export function FaturaUnificada({ logoUrl, tenantId, cadastro }: {
             }
             registradas={recorte === 'sem_conta' ? null :
               <ContasRegistradas
-                mesInicial={mesPedido}
+                mesDoTrabalho={mesDoTrabalho}
                 cadastro={cadastroDeUcs}
                 versao={registrosVersao}
                 /* O LARANJA PASSA PARA «Gerar N cobranças» quando a fila nao tem
@@ -1594,10 +1603,13 @@ function SerieDaUnidade({ uc, mes, versao, verNaLista }: {
  * quem sabe se falta contrato, geracao ou vencimento e a triagem, e duplicar a
  * decisao aqui daria duas respostas para a mesma pergunta.
  */
-function ContasRegistradas({ cadastro, versao, principal, unidade, aoMudarUnidade, segundaVia, emEdicao, aoMudar, mesInicial }: {
-  /** O mês do endereço (`?mes=`), quando o Mês mandou um (etapa 7a): a lista
-   *  abre nele em vez de no padrão. */
-  mesInicial?: string | null;
+function ContasRegistradas({ cadastro, versao, principal, unidade, aoMudarUnidade, segundaVia, emEdicao, aoMudar, mesDoTrabalho }: {
+  /** O MÊS DE TRABALHO, da casca (etapa 8) — `null` enquanto ele é procurado.
+   *  Até aqui a lista tinha o próprio filtro de mês e abria no mês mais recente
+   *  com conta por gerar (`mesPadrao`); hoje ela mostra o mês escolhido no
+   *  menu, o mesmo do Mês e de Cobranças, e o critério daquela abertura virou
+   *  parte da procura do trabalho (`procurarMesComTrabalho`). */
+  mesDoTrabalho: string | null;
   cadastro: ReadonlyMap<string, string>;
   versao: number;
   principal: boolean;
@@ -1610,9 +1622,6 @@ function ContasRegistradas({ cadastro, versao, principal, unidade, aoMudarUnidad
   const [confirmandoSegundaVia, setConfirmandoSegundaVia] = useState<string | null>(null);
   const [lista, setLista] = useState<RegistroDeFatura[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
-  /** `undefined`: ninguem escolheu, vale o padrao (`mesPadrao`). `null`: todos.
-   *  [etapa 7a] O mês do endereço conta como escolhido — o Mês escolheu. */
-  const [mesEscolhido, setMesEscolhido] = useState<string | null | undefined>(mesInicial ?? undefined);
   const [soSemCobranca, setSoSemCobranca] = useState(false);
   const [desmarcadas, setDesmarcadas] = useState<ReadonlySet<string>>(new Set());
   const [revisando, setRevisando] = useState(false);
@@ -1644,20 +1653,11 @@ function ContasRegistradas({ cadastro, versao, principal, unidade, aoMudarUnidad
     return () => { vivo = false; };
   }, [alvo, versao]);
 
-  /* TROCAR DE UNIDADE VOLTA O MES AO PADRAO: a serie de uma unidade abre em
-   * «Todos os meses», e tirar o chip volta ao mes que tem trabalho. */
-  /* O primeiro efeito NAO conta como troca: sem esta guarda, ele apagaria na
-     montagem o mes que veio do endereco (etapa 7a). */
-  const alvoAnterior = useRef(alvo);
-  useEffect(() => {
-    if (alvoAnterior.current === alvo) return;
-    alvoAnterior.current = alvo;
-    setMesEscolhido(undefined);
-  }, [alvo]);
-
+  /* A SÉRIE DE UMA UNIDADE ATRAVESSA MESES: com o chip, a lista mostra todos os
+   * meses dela; sem ele, o mês de trabalho. [etapa 8] O filtro de mês da lista
+   * saiu — era o terceiro seletor de mês da tela. */
   const todas = lista ?? [];
-  const meses = mesesDaLista(todas);
-  const mes = mesEscolhido !== undefined ? mesEscolhido : alvo ? null : mesPadrao(todas);
+  const mes = alvo ? null : mesDoTrabalho;
   const filtro: FiltroDasRegistradas = { mes, soSemCobranca, unidade: alvo || null };
   /* A ORDEM E A DO TRABALHO (`ordemDasRegistradas`), e ela so muda quando a
    * lista RECARREGA — que e no fim da rodada, nunca no meio: uma linha que vira
@@ -1751,12 +1751,11 @@ function ContasRegistradas({ cadastro, versao, principal, unidade, aoMudarUnidad
   return (
     <TabelaDasRegistradas
       cadastro={cadastro}
-      lista={lista} visiveis={visiveis} erro={erro} filtro={filtro} meses={meses}
+      /* Sem o mês de trabalho ainda (a procura anda), a lista espera: mostrar
+         todos os meses por um instante seria mostrar o recorte errado. */
+      lista={!alvo && !mesDoTrabalho ? null : lista} visiveis={visiveis} erro={erro} filtro={filtro}
       parcial={!alvo && listaParcial(todas)}
-      aoFiltrar={(f) => {
-        setMesEscolhido(f.mes);
-        setSoSemCobranca(f.soSemCobranca);
-      }}
+      aoFiltrar={(f) => setSoSemCobranca(f.soSemCobranca)}
       desmarcadas={desmarcadas}
       aoMarcar={(id, marcada) => setDesmarcadas((s) => {
         const n = new Set(s);

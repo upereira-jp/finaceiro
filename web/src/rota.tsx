@@ -49,6 +49,24 @@ export function navegar(caminho: string, substituir = false): void {
   if (location.hash !== hashAntes) dispatchEvent(new HashChangeEvent('hashchange'));
 }
 
+/**
+ * QUANTAS VEZES O ENDEREÇO MUDOU — por navegação interna ou pelo «voltar» —, e
+ * não só o caminho (01/10/2026, etapa 8). O mês de trabalho lê o `?mes=` do
+ * endereço a cada navegação: «Ver em Cobranças» leva de `/faturas?mes=2026-09`
+ * a `/faturas?mes=2026-08`, o MESMO caminho, e `useCaminho` não acusaria nada.
+ * Um contador, e não a busca: duas idas ao mesmo `?mes=` são duas navegações.
+ */
+export function useNavegacoes(): number {
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    const ao = () => setN((x) => x + 1);
+    addEventListener('popstate', ao);
+    addEventListener(EVENTO, ao);
+    return () => { removeEventListener('popstate', ao); removeEventListener(EVENTO, ao); };
+  }, []);
+  return n;
+}
+
 export function useCaminho(): string {
   const [c, setC] = useState(() => location.pathname);
   useEffect(() => {

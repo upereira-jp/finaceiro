@@ -38,6 +38,7 @@ import type { NivelDaEmissao } from './emissao-travada.ts';
 import { faltamParaOBoleto, type EnderecoDaUc } from './unidades-regras.ts';
 import { destinoDoEndereco } from './destino-da-camada.ts';
 import { SELO_DO_BOLETO_DA_COBRANCA, TENTANDO_DE_NOVO, type Selo } from './tom-do-estado.ts';
+import type { EscolhaDoMes, OrigemDoMes } from './mes-do-trabalho.ts';
 
 /** O status da cobrança, como o enum `status_fatura` do banco. */
 export type StatusDaCobranca = 'rascunho' | 'emitida' | 'paga' | 'vencida' | 'cancelada' | 'negociada';
@@ -429,45 +430,66 @@ export function paraPedirBoleto<T extends { id: string; status: StatusDaCobranca
 export const boletos = (n: number): string => `${n} ${n === 1 ? 'boleto' : 'boletos'}`;
 
 /* ==========================================================================
- * 5. O MÊS EM QUE A TELA ABRE
+ * 5. O MÊS COM TRABALHO — a procura
  * ==========================================================================
  *
- * A ORDEM DE QUEM MANDA:
+ * [01/10/2026, etapa 8] ESTA SEÇÃO DEIXOU DE DECIDIR O MÊS DA TELA. Até aqui
+ * ela era a ordem inteira de Mês e Cobranças (endereço, trabalho, lembrado,
+ * recente, hoje). Desde a etapa 8 há UM mês de trabalho para o Rateio, e a
+ * ordem mora em `resolverMes` (`mes-do-trabalho.ts`): endereço, lembrado, esta
+ * procura, hoje. O que ficou aqui é a PROCURA — «qual é o mês mais recente com
+ * trabalho?» —, que serve ao terceiro degrau e ao aviso de mês velho.
  *
- *   1. o endereço (`?mes=2026-08`) — é o que «Ver na emissão», em Contas a
- *      receber, usa para abrir no mês da fatura;
- *   2. o mês MAIS RECENTE COM TRABALHO: rascunho a emitir ou emitida sem boleto.
- *      A cobrança nasce na competência da conta, e o mês de hoje costuma estar
- *      vazio justamente quando há trabalho no anterior;
- *   3. o último mês que a pessoa escolheu aqui (lembrado no navegador);
- *   4. o mês mais recente que tem cobrança;
- *   5. o mês de hoje, que era a única regra até 30/09.
+ * O TRABALHO, e desde a etapa 8 ele tem três formas, que são os passos 2, 3 e 4
+ * do funil:
+ *
+ *   - CONTA POR VIRAR COBRANÇA (passo 2): conta registrada sem cobrança, que
+ *     pode gerar. Era o critério da lista de registradas (`mesPadrao`), que
+ *     abria em outro mês que Mês e Cobranças — e a soma das duas regras é a
+ *     razão de o dono ter pedido um mês só. Sem ela, um mês com seis contas por
+ *     gerar e nenhuma cobrança ainda abriria Contas de luz no mês anterior;
+ *   - COBRANÇA POR EMITIR (passo 3): rascunho;
+ *   - EMITIDA SEM BOLETO NO BANCO (passo 4).
  *
  * O TRABALHO SE DESCOBRE COM O QUE A API JÁ DÁ, sem rota nova (regra 3 da
- * etapa). `/emissao/travada` diz com certeza quais meses têm emitida sem boleto.
- * O rascunho não tem contagem própria: a `posicao_da_carteira` conta `faturas`,
+ * etapa). `/emissao/travada` diz com certeza quais meses têm emitida sem boleto;
+ * a lista de contas registradas diz com certeza quais têm conta por gerar. O
+ * rascunho não tem contagem própria: a `posicao_da_carteira` conta `faturas`,
  * `emitidas` (status `emitida`) e `liquidadas`, e o que sobra — nem emitida nem
- * paga — é rascunho, vencida ou negociada. Esse mês é CANDIDATO, e a tela
- * confere lendo o próprio mês antes de abrir nele.
+ * paga — é rascunho, vencida ou negociada. Esse mês é CANDIDATO, e a procura
+ * confere lendo o próprio mês antes de responder.
  */
-export type OrigemDoMes = 'endereco' | 'trabalho' | 'lembrado' | 'recente' | 'hoje' | 'escolhido';
+export type { OrigemDoMes, EscolhaDoMes } from './mes-do-trabalho.ts';
+/* A lembrança desceu para `mes-do-trabalho.ts` (etapa 8), que é o que a casca
+ * carrega; ela continua sendo exportada daqui para quem já a lia deste lugar. */
+export { CHAVE_DO_MES_LEMBRADO, lerMesLembrado, lembrarMes } from './mes-do-trabalho.ts';
 
 export type CandidatoDoMes = {
   mes: string;
-  /** `true`: há emitida sem boleto (certeza de `/emissao/travada`). `false`: há
-   *  cobrança nem emitida nem paga, e só lendo o mês se sabe se é rascunho. */
+  /** `true`: o trabalho é certo — há emitida sem boleto (`/emissao/travada`)
+   *  ou conta registrada por virar cobrança. `false`: há cobrança nem emitida
+   *  nem paga, e só lendo o mês se sabe se é rascunho. */
   certo: boolean;
 };
 
 const mesDe = (competencia: string): string => String(competencia ?? '').slice(0, 7);
 const MES_VALIDO = /^\d{4}-(0[1-9]|1[0-2])$/;
 
+/** A conta registrada que pode virar cobrança — o mesmo predicado de
+ *  `podeGerar` (`registradas-regras.ts`), sem importar a lista inteira. */
+type ContaRegistrada = { competencia: string; fatura_id?: string | null; cobranca_disponivel?: boolean };
+const porGerar = (r: ContaRegistrada): boolean => r.fatura_id == null && r.cobranca_disponivel === true;
+
 /** Os meses com trabalho possível, do mais recente para o mais antigo. */
 export function candidatosDoMes(
   carteira: ReadonlyArray<{ competencia: string; faturas: number; emitidas: number; liquidadas: number }>,
   travadas: ReadonlyArray<{ competencia: string }>,
+  registradas: ReadonlyArray<ContaRegistrada> = [],
 ): CandidatoDoMes[] {
-  const certos = new Set(travadas.map((l) => mesDe(l.competencia)).filter((m) => MES_VALIDO.test(m)));
+  const certos = new Set([
+    ...travadas.map((l) => mesDe(l.competencia)),
+    ...registradas.filter(porGerar).map((r) => mesDe(r.competencia)),
+  ].filter((m) => MES_VALIDO.test(m)));
   const possiveis = new Set(carteira
     .filter((p) => p.faturas > p.emitidas + p.liquidadas)
     .map((p) => mesDe(p.competencia))
@@ -477,39 +499,39 @@ export function candidatosDoMes(
     .map((mes) => ({ mes, certo: certos.has(mes) }));
 }
 
-/** Quantos meses candidatos a tela confere lendo, no máximo. Cada um é um pedido
- *  em série antes de a tabela aparecer; três cobrem o mês corrente e os dois
- *  anteriores, que é onde a conta da distribuidora mora. */
+/** Quantos meses candidatos a procura confere lendo, no máximo. Cada um é um
+ *  pedido em série; três cobrem o mês corrente e os dois anteriores, que é onde
+ *  a conta da distribuidora mora. */
 export const MESES_A_CONFERIR = 3;
 
-/** Sem trabalho em mês nenhum: o lembrado, senão o mais recente com cobrança,
- *  senão o de hoje. */
+/** Sem trabalho em mês nenhum: o lembrado, senão o mais recente com cobrança ou
+ *  com conta registrada, senão o de hoje. (O lembrado só chega aqui quando quem
+ *  chama o passa — a casca passa `null`, porque nela o lembrado vem antes.) */
 export function mesSemTrabalho(
   lembrado: string | null,
   carteira: ReadonlyArray<{ competencia: string; faturas: number }>,
   hoje: string,
+  registradas: ReadonlyArray<{ competencia: string }> = [],
 ): { mes: string; origem: OrigemDoMes } {
   if (lembrado && MES_VALIDO.test(lembrado)) return { mes: lembrado, origem: 'lembrado' };
-  const recente = carteira.filter((p) => p.faturas > 0).map((p) => mesDe(p.competencia))
-    .filter((m) => MES_VALIDO.test(m)).sort().reverse()[0];
+  const recente = [
+    ...carteira.filter((p) => p.faturas > 0).map((p) => mesDe(p.competencia)),
+    ...registradas.map((r) => mesDe(r.competencia)),
+  ].filter((m) => MES_VALIDO.test(m)).sort().reverse()[0];
   if (recente) return { mes: recente, origem: 'recente' };
   return { mes: hoje, origem: 'hoje' };
 }
 
-/** O mês em que a tela abre, e por quê. */
-export type EscolhaDoMes = { mes: string; origem: OrigemDoMes; certo?: boolean };
-
 /**
- * A PROCURA INTEIRA, com a rede POR PARÂMETRO — e ela é uma só para as duas
- * telas que abrem no mês com trabalho: Cobranças e, desde 30/09/2026 (etapa 4a),
- * Mês. Até esta data ela morava dentro de `telas/faturas.tsx`, e a tela Mês
- * abria no mês de HOJE; a segunda cópia divergiria na primeira correção, e as
- * duas telas voltariam a abrir em meses diferentes com o mesmo trabalho na mesa.
+ * A PROCURA INTEIRA, com a rede POR PARÂMETRO — uma só para o sistema. Até
+ * 30/09/2026 ela morava dentro de `telas/faturas.tsx`; na etapa 4a passou a
+ * servir também a tela Mês; desde a etapa 8 ela serve o mês de trabalho da
+ * casca, e por ele as três telas do mês.
  *
- * O que já se sabe sem ler nada (`travadas`, que as duas telas buscam de
- * qualquer jeito) decide sozinho; o mês que só PODE ter rascunho é lido antes —
- * no máximo `MESES_A_CONFERIR`, em série. Qualquer leitura que falhe só tira
- * aquele candidato: o pior caso é abrir no mês lembrado ou no de hoje.
+ * O que já se sabe sem ler nada (`travadas`, e as registradas por gerar) decide
+ * sozinho; o mês que só PODE ter rascunho é lido antes — no máximo
+ * `MESES_A_CONFERIR`, em série. Qualquer leitura que falhe só tira aquele
+ * candidato: o pior caso é o mês lembrado ou o de hoje.
  *
  * A REDE ENTRA POR PARÂMETRO pelo motivo de sempre deste arquivo: sem ela, a
  * procura é testável sem servidor. Quem liga à API é `procurarMesDoTrabalho`,
@@ -519,13 +541,18 @@ export async function procurarMesComTrabalho(p: {
   travadas: ReadonlyArray<{ competencia: string }>;
   carteira: () => Promise<ReadonlyArray<{ competencia: string; faturas: number; emitidas: number; liquidadas: number }>>;
   cobrancasDoMes: (mes: string) => Promise<ReadonlyArray<{ status: string }>>;
+  /** As contas registradas (a lista de Contas de luz). Opcional: sem ela, a
+   *  procura olha só as cobranças, como até 30/09. */
+  registradas?: () => Promise<ReadonlyArray<ContaRegistrada>>;
   lembrado: string | null;
   hoje: string;
 }): Promise<EscolhaDoMes> {
   let carteira: ReadonlyArray<{ competencia: string; faturas: number; emitidas: number; liquidadas: number }> = [];
   try { carteira = await p.carteira(); } catch { /* segue só com a lista do banco */ }
+  let registradas: ReadonlyArray<ContaRegistrada> = [];
+  try { registradas = p.registradas ? await p.registradas() : []; } catch { /* segue sem as contas */ }
   let lidos = 0;
-  for (const c of candidatosDoMes(carteira, p.travadas)) {
+  for (const c of candidatosDoMes(carteira, p.travadas, registradas)) {
     if (c.certo) return { mes: c.mes, origem: 'trabalho', certo: true };
     if (lidos >= MESES_A_CONFERIR) continue;
     lidos++;
@@ -534,42 +561,10 @@ export async function procurarMesComTrabalho(p: {
       if (l.some((f) => f.status === 'rascunho')) return { mes: c.mes, origem: 'trabalho', certo: false };
     } catch { /* mês que não se lê não é aberto por palpite */ }
   }
-  return mesSemTrabalho(p.lembrado, carteira, p.hoje);
+  return mesSemTrabalho(p.lembrado, carteira, p.hoje, registradas);
 }
 
-/** A FRASE AO LADO DO SELETOR, dizendo por que a tela está neste mês. Sem ela,
- *  abrir em agosto com setembro no calendário parece defeito. */
-export function fraseDaOrigem(origem: OrigemDoMes): string {
-  switch (origem) {
-    case 'endereco': return 'Aberto no mês pedido pelo link.';
-    /* UMA FRASE SÓ para os dois motivos: o mês que tem emitida sem boleto
-       quase sempre tem rascunho também, e dizer só um dos dois soaria como se
-       o outro não estivesse lá. */
-    case 'trabalho': return 'Aberto no mês mais recente com trabalho: cobrança por emitir ou sem boleto no banco.';
-    case 'lembrado': return 'Nenhum mês tem cobrança por emitir. Aberto no último mês que você escolheu.';
-    case 'recente': return 'Nenhum mês tem cobrança por emitir. Aberto no mês mais recente com cobranças.';
-    case 'hoje': return 'Nenhum mês tem cobrança ainda. Aberto no mês corrente.';
-    case 'escolhido': return '';
-  }
-}
-
-/** A chave do mês lembrado. Uma por navegador: é conveniência de quem opera,
- *  não dado do sistema — outra pessoa, noutra máquina, abre no trabalho dela. */
-export const CHAVE_DO_MES_LEMBRADO = 'financeiro.emissao.mes';
-
-/**
- * LER E GUARDAR NUNCA DERRUBAM A TELA. `localStorage` levanta em janela privada
- * de alguns navegadores e com o armazenamento bloqueado; aí a tela só não
- * lembra. O armazém vem por parâmetro para a suíte poder passar um falso.
- */
-export function lerMesLembrado(armazem: Pick<Storage, 'getItem'> | null | undefined): string | null {
-  try {
-    const v = armazem?.getItem(CHAVE_DO_MES_LEMBRADO) ?? null;
-    return v && MES_VALIDO.test(v) ? v : null;
-  } catch { return null; }
-}
-
-export function lembrarMes(armazem: Pick<Storage, 'setItem'> | null | undefined, mes: string): void {
-  if (!MES_VALIDO.test(mes)) return;
-  try { armazem?.setItem(CHAVE_DO_MES_LEMBRADO, mes); } catch { /* sem armazenamento, sem lembrança */ }
-}
+/* A FRASE AO LADO DO SELETOR (`fraseDaOrigem`) saiu daqui em 01/10/2026 (etapa
+ * 8): ela era escrita por Mês e por Cobranças, uma cópia por tela, e hoje sai
+ * de um lugar só — o controle do mês de trabalho, por `fraseDaOrigem` de
+ * `mes-do-trabalho.ts`, com a ordem nova (o lembrado antes do trabalho). */

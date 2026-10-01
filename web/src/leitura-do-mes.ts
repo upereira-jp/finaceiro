@@ -25,7 +25,7 @@ import { mesDeHojeEmSP } from './formato.ts';
 import type { EmissaoTravadaNaTela } from './emissao-travada.ts';
 import { LIMITE_DA_LISTA, listaParcial } from './registradas-regras.ts';
 import type { LeituraDoMes } from './roteiro-do-mes.ts';
-import { procurarMesComTrabalho, lerMesLembrado, type EscolhaDoMes } from './emissao-regras.ts';
+import { procurarMesComTrabalho, type EscolhaDoMes } from './emissao-regras.ts';
 
 export type LeiturasDoMes = {
   prontidao: Carga<Prontidao>;
@@ -85,37 +85,26 @@ export function mesDeHoje(): string {
 }
 
 /*
- * O MÊS QUE A TELA ESTÁ MOSTRANDO AGORA (30/09/2026, etapa 4b).
- *
- * A Central de Ajuda narra «como está o mês», e até aqui narrava o mês de HOJE
- * (em UTC) enquanto a tela Mês abria no mês com trabalho — a mesma pergunta
- * respondida sobre dois meses diferentes, lado a lado. Agora as duas telas que
- * escolhem mês (Mês e Cobranças) avisam aqui qual está à vista, e a ajuda narra
- * ESSE. Aberta de outra tela, ela faz a mesma procura que a tela Mês faria
- * (`procurarMesDoTrabalho`).
- *
- * Uma variável de módulo, e não um contexto de React: há uma tela à vista por
- * vez, o painel lê o valor uma vez ao abrir, e nada precisa redesenhar quando
- * ele muda.
+ * O MÊS QUE A TELA ESTÁ MOSTRANDO — `anunciarMesEmTela` e `mesQueATelaMostra`
+ * SAÍRAM em 01/10/2026 (etapa 8). Eram uma variável de módulo em que Mês e
+ * Cobranças avisavam o mês à vista, para a Central de Ajuda narrar o mesmo; a
+ * ajuda aberta de outra tela refazia a procura. Com UM mês de trabalho para o
+ * Rateio (`seletor-de-mes.tsx`), a ajuda lê a mesma fonte que as telas, e não
+ * há o que anunciar.
  */
-let mesEmTela: string | null = null;
 
-/** A tela diz qual mês está mostrando; `null` ao sair. */
-export function anunciarMesEmTela(mes: string | null): void { mesEmTela = mes; }
-
-/** O mês à vista na tela aberta, se ela escolhe mês. */
-export const mesQueATelaMostra = (): string | null => mesEmTela;
-
-/** O armazenamento do navegador, ou nada. Acessar `localStorage` levanta em
- *  alguns navegadores com o armazenamento bloqueado. */
-export function armazemDoNavegador(): Storage | null {
-  try { return window.localStorage; } catch { return null; }
-}
+/* O armazém do navegador desceu para `mes-do-trabalho.ts` (etapa 8), com a
+ * lembrança que o usa; segue exportado daqui para quem o lia deste lugar. */
+export { armazemDoNavegador } from './mes-do-trabalho.ts';
 
 /**
- * EM QUE MÊS A TELA ABRE — a procura de `emissao-regras.ts` ligada à API. Uma
- * só para Cobranças e Mês (30/09/2026, etapa 4a): as duas abrem no mês mais
- * recente com trabalho, pela mesma ordem, e lembram o mesmo mês escolhido.
+ * O MÊS MAIS RECENTE COM TRABALHO — a procura de `emissao-regras.ts` ligada à
+ * API. Uma só para o sistema desde a etapa 8: quem a chama é a casca
+ * (`seletor-de-mes.tsx`), e por ela as três telas do mês.
+ *
+ * `lembrado: null` DE PROPÓSITO: no mês de trabalho, a lembrança vem ANTES da
+ * procura (`resolverMes`), e a procura responde só «onde está o trabalho» —
+ * que é também o que o aviso de mês velho precisa saber.
  */
 export function procurarMesDoTrabalho(
   travadas: ReadonlyArray<{ competencia: string }>,
@@ -124,7 +113,17 @@ export function procurarMesDoTrabalho(
     travadas,
     carteira: () => api.get<PosicaoDaCarteira[]>('/carteira'),
     cobrancasDoMes: (m) => api.get<Fatura[]>(`/faturamento/${competenciaISO(m)}`),
-    lembrado: lerMesLembrado(armazemDoNavegador()),
+    registradas: () => api.get<RegistroDeFatura[]>(`/faturas/unificada/registros?limite=${LIMITE_DA_LISTA}`),
+    lembrado: null,
     hoje: mesDeHoje(),
   });
+}
+
+/** A procura inteira, a partir do nada: lê as cobranças sem boleto e procura.
+ *  É o que a casca chama — sob demanda, para este arquivo e a regra da
+ *  emissão não entrarem no pedaço de entrada. */
+export async function procurarDoZero(): Promise<EscolhaDoMes> {
+  let travadas: ReadonlyArray<{ competencia: string }> = [];
+  try { travadas = (await api.get<EmissaoTravadaNaTela>('/emissao/travada')).linhas ?? []; } catch { /* sem a lista do banco */ }
+  return procurarMesDoTrabalho(travadas);
 }

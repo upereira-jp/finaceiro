@@ -106,6 +106,7 @@
 // em toda tela, porque quem trava não sabe que vai travar.
 
 import { Icone } from './ui.tsx';
+import { alvoRecebeLetra } from './teclado.ts';
 
 /** Onde o gatilho mora: o item do pé do menu lateral, ou o botão de desenho da
  *  faixa do topo do celular. */
@@ -211,16 +212,9 @@ export function ehOAtalhoDaAjuda(e: {
   isComposing?: boolean; defaultPrevented?: boolean; target: EventTarget | null;
 }): boolean {
   if (e.key !== TECLA_DA_AJUDA || e.ctrlKey || e.metaKey || e.altKey || e.isComposing || e.defaultPrevented) return false;
-  const alvo = e.target as { tagName?: string; type?: string; isContentEditable?: boolean } | null;
-  if (!alvo) return true;
-  if (alvo.isContentEditable) return false;
-  const tag = (alvo.tagName ?? '').toUpperCase();
-  if (tag === 'TEXTAREA' || tag === 'SELECT') return false;
-  if (tag === 'INPUT') {
-    const tipo = (alvo.type ?? 'text').toLowerCase();
-    return ['checkbox', 'radio', 'button', 'submit', 'reset', 'range', 'color', 'file'].includes(tipo);
-  }
-  return true;
+  /* [01/10/2026, etapa 8] A pergunta «o foco está onde a tecla é letra?» mora
+     em `teclado.ts` desde que o mês de trabalho ganhou o atalho `[` / `]`. */
+  return !alvoRecebeLetra(e.target);
 }
 
 /* ==========================================================================

@@ -561,11 +561,22 @@ export const ESTILO = `
     }
     .lateral-recolher { display: none; }
     .lateral .setor-painel { left: 0; right: 0; width: auto; }
+    .lateral .mes-painel { left: 0; right: 0; width: auto; }
+    /* [etapa 8] A FAIXA GANHOU O MES, e no telefone estreito o nome do sistema
+       sai da vista para ele caber: o logotipo fica, e o nome continua no DOM. */
+    .faixa-celular-linha { gap: 8px; }
+  }
+  @media (max-width: 479.98px) {
+    .faixa-marca-nome {
+      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+      overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+    }
   }
   /* NO TOQUE, 44px DE ALVO em todo item, em qualquer largura: um notebook com
      tela de toque tem o menu aberto e o dedo de um celular. */
   @media (pointer: coarse) {
-    .lateral-item, .lateral-conta > button, .lateral-recolher button, button.lateral-ajuda { min-height: 44px; }
+    .lateral-item, .lateral-conta > button, .lateral-recolher button, button.lateral-ajuda,
+    button.mes-gatilho, .mes-grade button { min-height: 44px; }
   }
 
   /* -------------------------------------------------- o menu suspenso
@@ -650,6 +661,125 @@ export const ESTILO = `
   }
   .recolhida button.lateral-ajuda { justify-content: center; padding: 8px 0; }
   .recolhida .lateral-tecla { display: none; }
+
+  /* ------------------------------------------- o mes de trabalho
+     [01/10/2026, etapa 8] UM MES PARA O RATEIO, escolhido uma vez e valido para
+     Mes, Contas de luz e Cobrancas. O controle mora logo abaixo do setor — o
+     porque do lugar esta no cabecalho de seletor-de-mes.tsx; aqui fica a
+     mecanica.
+
+     O GATILHO E O IRMAO QUIETO DO SETOR: a mesma largura, o contorno do veu e
+     nenhum fundo — o setor, acima, e o bloco cheio; o mes e um atributo dele.
+     Tres linhas: o rotulo em caixa alta na tinta apagada (4,54:1 sobre o navy),
+     o mes no creme e na condensada (14,31:1), e, FORA do botao, a linha do
+     porque. Nenhum laranja: o laranja do menu e o «voce esta aqui», e o mes
+     nao e lugar. O ponto do aviso (ha trabalho mais a frente) e o laranja
+     sobre o navy, 5,93:1 — grafico, e nao texto. */
+  .lateral-setor { display: grid; gap: 10px; }
+  .mes-seletor { position: relative; min-width: 0; }
+  button.mes-gatilho {
+    width: 100%; justify-content: flex-start; gap: 10px; padding: 7px 10px; text-align: left;
+    background: none; border-color: var(--topo-veu-forte); box-shadow: none; color: var(--topo-texto);
+    font-weight: 600; letter-spacing: normal;
+  }
+  button.mes-gatilho:hover:not(:disabled), button.mes-gatilho[aria-expanded="true"] {
+    background: var(--topo-veu); border-color: var(--topo-veu-forte); color: var(--topo-texto); transform: none;
+  }
+  button.mes-gatilho:focus-visible { outline-offset: -2px; }
+  .mes-gatilho-icone { position: relative; flex: none; display: grid; place-items: center; color: var(--topo-fraco); }
+  button.mes-gatilho:hover:not(:disabled) .mes-gatilho-icone { color: var(--topo-texto); }
+  .mes-gatilho-texto { display: grid; gap: 1px; min-width: 0; line-height: 1.2; }
+  .mes-gatilho-rotulo {
+    font-size: var(--rotulo-tamanho); font-weight: var(--rotulo-peso); text-transform: uppercase;
+    letter-spacing: var(--rotulo-tracking); color: var(--topo-fraco);
+  }
+  .mes-gatilho-valor { font-size: 16.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mes-gatilho-curto { display: none; font-size: 14px; letter-spacing: .01em; white-space: nowrap; }
+  .mes-gatilho .mes-gatilho-seta { margin-left: auto; color: var(--topo-fraco); }
+  .mes-gatilho[aria-expanded="true"] .mes-gatilho-seta { transform: rotate(180deg); }
+  /* O PONTO: quadrado, como todo canto do sistema; so o desenho, e o porque vai
+     na linha de baixo e no nome acessivel. */
+  .mes-marca { display: inline-block; width: 7px; height: 7px; flex: none; background: var(--alerta); }
+  .mes-gatilho-icone .mes-marca { position: absolute; top: -2px; right: -3px; background: var(--acento); }
+  /* A LINHA DO PORQUE, sob o gatilho: Barlow regular, 13px, na tinta apagada da
+     faixa. Com trabalho mais a frente ela ganha o creme e o ponto — e a unica
+     que pede algo. */
+  .mes-nota {
+    margin: 5px 0 0; padding: 0 2px 0 11px;
+    font-family: var(--fonte); font-size: 13px; line-height: 1.35; color: var(--topo-fraco);
+  }
+  .mes-nota.com-aviso { color: var(--topo-texto); }
+  .mes-nota.com-aviso::before {
+    content: ''; display: inline-block; width: 7px; height: 7px; margin: 0 7px 1px 0;
+    background: var(--acento); vertical-align: middle;
+  }
+
+  /* O PAINEL: a superficie flutuante do menu de setores (mesma borda, sombra do
+     terceiro degrau e entrada), aberto para baixo e para a direita — com o menu
+     recolhido ele sai por cima do conteudo. A grade e de quatro colunas: tres
+     linhas de meses cabem sem rolar, e o ano anda pelas setas. */
+  .mes-painel {
+    position: absolute; left: 0; top: calc(100% + 6px); z-index: 30;
+    width: 304px; padding: 12px 12px 10px;
+    background: var(--fundo2); color: var(--texto);
+    border: 1px solid var(--borda); border-radius: var(--raio-cartao); box-shadow: var(--sombra-3);
+    animation: descer-suave .14s ease-out;
+    font-family: var(--fonte); font-weight: 400; text-align: left;
+  }
+  .mes-painel p { margin: 0; font-size: var(--t-meta); line-height: 1.45; }
+  .mes-painel-dica { color: var(--fraco); }
+  .mes-painel-dica strong { color: var(--texto); font-family: var(--fonte-cond); font-weight: 600; }
+  .mes-painel-ano {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    margin: 10px 0 6px;
+  }
+  .mes-painel-ano strong { font-family: var(--fonte-cond); font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .mes-painel-ano button.so-icone { width: 34px; height: 34px; border-color: transparent; background: none; color: var(--fraco); }
+  .mes-painel-ano button.so-icone:hover:not(:disabled) { background: var(--fundo-hover); color: var(--texto); }
+  .mes-grade { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+  .mes-grade button {
+    position: relative; min-height: 40px; padding: 6px 0;
+    background: none; border-color: transparent; box-shadow: none; color: var(--texto);
+    font-size: var(--t-corpo); font-weight: 500; letter-spacing: .01em;
+  }
+  .mes-grade button:hover:not(:disabled) { background: var(--fundo-hover); border-color: transparent; color: var(--texto); }
+  .mes-grade button:focus-visible { outline-offset: -2px; }
+  /* O MES ABERTO E A TINTA FORTE CHEIA (navy, creme por cima: 15,97:1) — a
+     selecao do sistema, como a aba ativa; o laranja fica para o ato. */
+  .mes-grade button[aria-pressed="true"],
+  .mes-grade button[aria-pressed="true"]:hover:not(:disabled) {
+    background: var(--texto); border-color: var(--texto); color: var(--fundo2); font-weight: 600;
+  }
+  .mes-grade .mes-marca { position: absolute; top: 5px; right: 6px; width: 6px; height: 6px; }
+  /* No mes aberto a marca e a superficie do painel por cima da tinta cheia —
+     o laranja (claro) e o ouro (escuro) sobre ela davam de 1,8 a 5,9:1, e o
+     inverso da 15:1 nos dois temas. A marca ja e dita na legenda e no nome. */
+  .mes-grade button[aria-pressed="true"] .mes-marca { background: var(--fundo2); }
+  .mes-painel-legenda { display: flex; align-items: center; gap: 7px; margin-top: 8px !important; color: var(--fraco); }
+  .mes-painel-porque { margin-top: 10px !important; padding-top: 9px; border-top: 1px solid var(--borda-suave); }
+  .mes-painel-alcance { margin-top: 8px !important; color: var(--fraco); }
+  .mes-painel-porque + .mes-painel-alcance { margin-top: 6px !important; }
+  .mes-painel-legenda + .mes-painel-alcance { margin-top: 10px !important; padding-top: 9px; border-top: 1px solid var(--borda-suave); }
+  .mes-painel kbd {
+    padding: 0 4px; border: 1px solid var(--borda); background: var(--fundo-recuo); color: var(--texto);
+    font-family: var(--fonte-cond); font-size: 12px; font-weight: 600;
+  }
+
+  /* RECOLHIDO: o desenho em cima e o mes abreviado embaixo («set/26»); o nome
+     inteiro fica no nome acessivel e na dica do menu recolhido. A linha do
+     porque sai da vista — ela vai na dica. */
+  .recolhida .lateral-setor { gap: 8px; }
+  .recolhida button.mes-gatilho { flex-direction: column; justify-content: center; gap: 3px; padding: 7px 0 6px; }
+  .recolhida .mes-gatilho-texto, .recolhida .mes-gatilho-seta, .recolhida .mes-nota { display: none; }
+  .recolhida .mes-gatilho-curto { display: block; font-size: 13px; }
+
+  /* O CONTROLE NA FAIXA DO CELULAR: «set/26 ▾», com 44px de alvo e o contorno
+     do veu. Ele so existe abaixo de ${MENU_VIRA_GAVETA}px, como a faixa. */
+  .mes-no-faixa { flex: none; }
+  .mes-no-faixa button.mes-gatilho { width: auto; min-height: 40px; gap: 7px; padding: 0 9px; }
+  .mes-no-faixa .mes-gatilho-texto, .mes-no-faixa + .mes-nota, .mes-no-faixa .mes-nota { display: none; }
+  .mes-no-faixa .mes-gatilho-curto { display: block; }
+  .mes-no-faixa .mes-painel { left: auto; right: 0; width: min(304px, calc(100vw - 24px)); }
 
   /* O BALAO DE PRIMEIRA VISITA. Um gatilho que mudou de lugar e mudo para quem
      entra pela primeira vez. NAO E MODAL de proposito: nao escurece a tela, nao
@@ -2098,6 +2228,12 @@ export const ESTILO = `
   .g3ref .fu-motivo.alerta { color: var(--alerta); }
   .g3ref .fu-motivo.ok { color: var(--ok); }
   .g3ref .fu-motivo.erro { color: var(--erro); }
+  /* A CONTA DE OUTRO MES na fila (etapa 8): «outro mes» sob o mes dela, na
+     tinta de tarefa — o aviso no alto da fila diz quantas e o que fazer. */
+  .g3ref .fu-outro-mes {
+    display: block; margin-top: 2px; font-family: var(--fonte); font-size: var(--t-meta);
+    font-weight: 500; color: var(--alerta); white-space: nowrap;
+  }
   .g3ref .fu-acoes { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
   /* [01/10, etapa 6] Nas contas registradas a «2ª via» fica sempre no mesmo
      lugar: encostada a direita, ela andava para a esquerda nas linhas que tem
@@ -2390,22 +2526,34 @@ export const ESTILO = `
     text-decoration-color: currentColor; text-decoration-thickness: 2px;
   }
 
-  /* O MES: o campo, o porque de a tela estar nele, e o CSV no canto. */
-  .em-mes {
-    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center;
-    gap: 10px 22px; padding: 14px 18px;
+  /* O CARTAO DO MES (".em-mes": o campo, o porque e o CSV no canto) SAIU em
+     01/10/2026, etapa 8: o mes e o de trabalho, no menu. O porque mora no
+     painel do controle, e o CSV na linha da ordem (".em-csv", abaixo). */
+
+  /* O MES NO TITULO da pagina (etapa 8): «Cobranças de setembro de 2026». O
+     mesmo h1, um degrau de peso abaixo — o nome da tela continua a palavra do
+     menu, e o mes se le junto sem disputar com ele. */
+  .titulo-do-mes { font-weight: 500; }
+
+  /* O AVISO DO MES VELHO e o da conta de outro mes na fila: a frase e o botao
+     que leva o mes ate o trabalho, lado a lado; no celular o botao desce. */
+  .mes-velho { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; }
+  .mes-velho > span { flex: 1 1 32ch; min-width: 0; }
+  .mes-velho > button { flex: none; }
+  @media (max-width: 720px) { .mes-velho > button { width: 100%; } }
+
+  /* O RECORTE DE RELATORIOS (etapa 8): o interruptor «So setembro de 2026, o
+     mes de trabalho» e a linha que diz o que esta valendo. */
+  .relatorio-recorte { display: flex; align-items: center; gap: 6px 18px; flex-wrap: wrap; padding: 12px 16px; }
+  .relatorio-recorte-nota { margin: 0; font-size: var(--t-meta); color: var(--fraco); max-width: 72ch; }
+
+  /* O «EXPORTAR CSV» na linha da ordem de Cobrancas (etapa 8). */
+  button.em-link.em-csv {
+    display: inline-flex; align-items: center; gap: 5px; min-height: 24px; margin-left: 2px;
+    vertical-align: middle;
   }
-  .em-mes-campo label { margin-bottom: 4px; }
-  .em-mes-procurando { display: block; padding: 8px 0; color: var(--fraco); font-size: var(--t-corpo); }
-  .em-mes-porque {
-    display: flex; align-items: flex-start; gap: 8px; margin: 0;
-    font-size: var(--t-ui); line-height: 1.45; color: var(--texto); max-width: 60ch;
-  }
-  .em-mes-porque > .ic { margin-top: 2px; flex: none; color: var(--fraco); }
-  @media (max-width: 720px) {
-    .em-mes { grid-template-columns: minmax(0, 1fr); padding: 12px 14px; }
-    .em-mes-csv { justify-self: start; }
-  }
+  button.em-link.em-csv:disabled { color: var(--fraco); text-decoration: none; cursor: default; }
+  @media (pointer: coarse) { button.em-link.em-csv { min-height: 44px; } }
 
   /* O BLOCO DO MES: titulo e resumo a esquerda, o ato a direita, e a revisao e
      a tabela embaixo. Ritmo de dois passos, como na aba 1 da Fatura unificada:

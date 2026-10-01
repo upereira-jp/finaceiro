@@ -70,8 +70,8 @@ import {
 import { useAcao, useDados } from '../dados.ts';
 import {
   Pagina, Aviso, RetornoDoAto, Tabela, Marca, rotulo, linha, useOrdenacao, ordenar, ThOrd, Kpi,
-  Icone, CampoData, Carregando, AjudaDoMes, DetalheTecnico, Menu, DIRECOES_DA_SITUACAO } from '../ui.tsx';
-import { competenciaISO, emReais, paraCentavos, mesDaQuery, kwhEmBr, centavosParaCampo } from '../dinheiro.ts';
+  Icone, Carregando, DetalheTecnico, Menu, DIRECOES_DA_SITUACAO } from '../ui.tsx';
+import { competenciaISO, emReais, paraCentavos, kwhEmBr, centavosParaCampo } from '../dinheiro.ts';
 import { paraCsv, reaisParaPlanilha, nomeDoArquivo } from '../csv.ts';
 import { baixarCsv } from '../baixar.ts';
 import { lerBase64, mimeDo, reenviavel, naMensagem } from '../arquivo.ts';
@@ -84,11 +84,10 @@ import {
 } from '../cobranca-regras.ts';
 import {
   chaveDaOrdemDeAcao, acaoDaLinha, notaDaSituacao, notaDaRecusaCrua, recusaDaLinha, tipoDaRecusa, paraPedirBoleto,
-  fraseDaOrigem, lembrarMes,
-  type EstadoDaVez, type EscolhaDoMes, type NotaDaSituacao, type RecusaLida,
+  type EstadoDaVez, type NotaDaSituacao, type RecusaLida,
 } from '../emissao-regras.ts';
 import { SELO_DE_ORIGEM, seloDoStatusDoBoleto } from '../tom-do-estado.ts';
-import { procurarMesDoTrabalho, armazemDoNavegador, anunciarMesEmTela } from '../leitura-do-mes.ts';
+import { useMesDoTrabalho, AvisoDoMesVelho } from '../seletor-de-mes.tsx';
 import {
   SituacaoDaCobranca, RecusaNaTela, BotaoDaSaida, RevisaoDaSerie, ResumoDaBaixa, type LinhaDaSerie,
 } from '../emissao-corpo.tsx';
@@ -110,20 +109,17 @@ type Serie = {
 };
 
 /* A PROCURA DO MES EM QUE A TELA ABRE saiu daqui em 30/09/2026 (etapa 4a) e
- * mora em `procurarMesComTrabalho` (`emissao-regras.ts`), ligada a API por
- * `procurarMesDoTrabalho` (`leitura-do-mes.ts`) — a tela Mes passou a abrir pelo
- * MESMO criterio, e duas copias divergiriam na primeira correcao. */
+ * foi para `procurarMesComTrabalho` (`emissao-regras.ts`). Em 01/10/2026
+ * (etapa 8) saiu tambem o SELETOR: o mes e o de trabalho, escolhido uma vez no
+ * menu e valido para Mes, Contas de luz e Cobrancas (`seletor-de-mes.tsx`). */
 
 export function TelaFaturas() {
-  /* O MES VEM DO ENDERECO QUANDO ALGUEM O PEDIU (`?mes=2026-08`) — e o que faz
-   * «Ver na emissao», em Contas a receber, abrir ESTA tela ja no mes da fatura.
-   * Sem pedido, ele e PROCURADO (ver `procurarMesComTrabalho`), e ate a resposta a tabela
+  /* O MES E O DE TRABALHO (etapa 8). O `?mes=` de um link — «Ver em
+   * Cobranças», em Contas a receber; «Abrir Cobranças», no funil — continua
+   * abrindo esta tela no mes pedido, e agora muda o mes de TODAS as telas do
+   * mes. Sem pedido nem lembranca ele e PROCURADO, e ate a resposta a tabela
    * diz que esta procurando em vez de mostrar o mes errado por um instante. */
-  const [escolha, setEscolha] = useState<EscolhaDoMes | null>(() => {
-    const q = mesDaQuery(location.search);
-    return q ? { mes: q, origem: 'endereco' } : null;
-  });
-  const mes = escolha?.mes ?? null;
+  const { mes } = useMesDoTrabalho();
   const acao = useAcao();
   /* A ORDEM PADRAO E A DE ACAO, e ela e uma coluna como as outras: clicar em
      «Vencimento» troca, e «Voltar a ordem de acao» (ou o cabecalho «Situacao»)
@@ -153,18 +149,16 @@ export function TelaFaturas() {
    */
   const emissao = useDados<EmissaoTravadaNaTela>(() => api.get('/emissao/travada'));
 
-  useEffect(() => {
-    if (escolha || emissao.carregando) return;
-    let vivo = true;
-    void procurarMesDoTrabalho(emissao.dado?.linhas ?? []).then((e) => { if (vivo) setEscolha(e); });
-    return () => { vivo = false; };
-  }, [escolha, emissao.carregando]);
-
-  /* A Central de Ajuda narra o MESMO mês que esta tela mostra (etapa 4b). */
-  useEffect(() => {
-    anunciarMesEmTela(mes);
-    return () => anunciarMesEmTela(null);
-  }, [mes]);
+  /* TROCAR O MES FECHA O QUE ESTAVA ABERTO NO MES ANTERIOR — o painel da
+   * linha, a pergunta de cancelar, a revisao em serie e o retorno do ato. Ate a
+   * etapa 8 isso morava no seletor desta tela; hoje o mes muda no menu (ou pelo
+   * teclado), e a tela reage a ele. */
+  const [mesVisto, setMesVisto] = useState(mes);
+  if (mesVisto !== mes) {
+    setMesVisto(mes);
+    setAberta(null); setCancelando(null); setRevisando(null); setSerie(null);
+    acao.limpar();
+  }
 
   const faturas = useDados<Fatura[] | null>(
     () => (mes ? api.get(`/faturamento/${competenciaISO(mes)}`) : Promise.resolve(null)), [mes]);
@@ -220,13 +214,6 @@ export function TelaFaturas() {
 
   const recarregar = () => { faturas.recarregar(); emissao.recarregar(); carteira.recarregar(); };
 
-  function escolherMes(v: string) {
-    if (!/^\d{4}-\d{2}$/.test(v)) return;
-    setEscolha({ mes: v, origem: 'escolhido' });
-    lembrarMes(armazemDoNavegador(), v);
-    setAberta(null); setCancelando(null); setRevisando(null); setSerie(null);
-    acao.limpar();
-  }
 
   /** Uma so, pela linha. Sem pergunta: o valor esta na propria linha, e emitir
    *  uma de cada vez e o caminho de quem quer olhar uma por uma. */
@@ -434,7 +421,10 @@ export function TelaFaturas() {
   return (
     /* O TITULO E O NOME DA ABA, «Cobranças», desde 30/09/2026 (etapa 3; antes
        «Emissão e cobrança»): os passos 3 e 4 do mes. A rota `/faturas` ficou. */
-    <Pagina titulo="Cobranças"
+    /* [01/10/2026, etapa 8] O TITULO DIZ O MES — «Cobranças de setembro de
+       2026». O cartao do seletor saiu; o «Exportar CSV» que morava nele foi
+       para o canto do bloco do mes, junto dos atos da lista. */
+    <Pagina titulo="Cobranças" mes={mes ? rotuloDoMes(mes) : null}
             sub="Cada cobrança do mês: emitir, pedir o boleto e dar baixa.">
       {/* ONDE ESTA TELA FICA NO MÊS — 10/09/2026. Quem chega aqui vindo de fora
           do roteiro não sabia que existem dois passos antes deste, nem que há um
@@ -442,27 +432,8 @@ export function TelaFaturas() {
           tela Mês, então as duas não têm como discordar. */}
       <FaixaDoPasso rota="/faturas" />
 
-      {/* O MÊS PRIMEIRO, e depois os números dele: a faixa diz QUAL mês, e por
-          que a tela abriu nele. Até 30/09 os números vinham antes do seletor que
-          os governa. */}
-      <div className="cartao secao em-mes">
-        <div className="em-mes-campo">
-          <label htmlFor="mes-da-tela">Mês de referência</label>
-          {mes
-            ? <CampoData id="mes-da-tela" mes valor={mes} ao={escolherMes} style={{ width: 'auto' }} />
-            : <span className="em-mes-procurando">Procurando…</span>}
-          <AjudaDoMes />
-        </div>
-        {escolha && escolha.origem !== 'escolhido' && (
-          <p className="em-mes-porque" role="status">
-            <Icone nome="calendario" tamanho={15} />
-            <span>{fraseDaOrigem(escolha.origem)}</span>
-          </p>
-        )}
-        <button type="button" className="discreto em-mes-csv" onClick={exportar} disabled={!lista.length}>
-          <Icone nome="baixar" tamanho={15} /> Exportar CSV
-        </button>
-      </div>
+      {/* HÁ TRABALHO MAIS À FRENTE do mês lembrado: o aviso, e o atalho. */}
+      <AvisoDoMesVelho />
 
       {/* SO DESENHA COM LINHA NO BANCO. Um mes sem fatura nenhuma nao tem linha
           na `posicao_da_carteira`, e quatro zeros seriam uma afirmacao sobre um
@@ -481,9 +452,9 @@ export function TelaFaturas() {
       <section className="em-bloco secao" aria-labelledby="em-mes-titulo">
         <div className="em-bloco-topo">
           <div className="em-bloco-titulo">
-            <h2 id="em-mes-titulo" tabIndex={-1}>
-              {mes ? `Cobranças de ${mesPorExtenso}` : 'Cobranças do mês'}
-            </h2>
+            {/* [etapa 8] O MÊS ESTÁ NO TÍTULO DA PÁGINA, logo acima — aqui ele
+                seria a mesma frase duas vezes. A seção é a lista do mês. */}
+            <h2 id="em-mes-titulo" tabIndex={-1}>Cobranças do mês</h2>
             {resumo && <p className="em-bloco-resumo">{resumo}</p>}
           </div>
           {/* O LARANJA SEGUE O PASSO DO MÊS: com rascunho, é «Emitir N»; sem,
@@ -527,6 +498,14 @@ export function TelaFaturas() {
               </a>: o resumo logo abaixo da tabela leva a cada mês.
             </>
           )}
+          {/* [etapa 8] O «EXPORTAR CSV» veio do cartão do seletor de mês, que
+              saiu. Ele mora na linha que descreve a lista — é dela que ele
+              tira a planilha —, depois dos atos e antes da tabela, na mesma
+              ordem para o olho e para o Tab, em qualquer largura. */}
+          {' '}
+          <button type="button" className="em-link em-csv" onClick={exportar} disabled={!lista.length}>
+            <Icone nome="baixar" tamanho={14} /> Exportar CSV
+          </button>
         </p>
 
         {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
@@ -594,8 +573,8 @@ export function TelaFaturas() {
                          trabalho, entao o vazio aqui e um mes escolhido sem
                          cobranca, e o texto diz onde elas nascem. */
                       : `Nenhuma cobrança em ${mesPorExtenso}. A cobrança nasce no mês da CONTA da `
-                        + 'distribuidora — troque o mês acima. Ela é gerada na tela Contas de luz, '
-                        + 'em «Gerar N cobranças».'}>
+                        + 'distribuidora — troque o mês de trabalho, no alto do menu. Ela é gerada na '
+                        + 'tela Contas de luz, em «Gerar N cobranças».'}>
             {lista.map((f) => {
               const t = travadaPorFatura.get(f.id);
               const recusa = recusaDe(f);

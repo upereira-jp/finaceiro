@@ -30,7 +30,9 @@ import {
 import { TELAS, caminhoNoMenu, rotuloDosPassos } from '../src/navegacao.ts';
 import { VERBETE_DA_CAMADA } from '../src/vocabulario.ts';
 import { FILTROS_DA_TELA, filtroDaConsulta } from '../src/destino-da-camada.ts';
-import { contasQueFaltam, mesDasContasQueFaltam, type UcDaLista } from '../src/o-que-falta.ts';
+import { contasQueFaltam, type UcDaLista } from '../src/o-que-falta.ts';
+import { resolverMes } from '../src/mes-do-trabalho.ts';
+import { mesSemTrabalho } from '../src/emissao-regras.ts';
 
 let falhas = 0;
 const chk = (id: string, cond: boolean, d: string) => {
@@ -592,12 +594,17 @@ const passo = (e: LeituraDoMes, chave: string) => mesNoFunil(e).passos.find((p) 
                && contasQueFaltam(ucs, { lista: lidas.lista, parcial: true }, '2026-09', nomes) !== null,
       'sem as contas, ou com a lista no teto e o mês sendo o mais velho dela, a lista é DESCONHECIDA — '
       + 'dar a unidade por faltante mandaria ler de novo uma conta já registrada');
-  chk('RM29', mesDasContasQueFaltam({ doEndereco: '2026-08', lembrado: '2026-07', registradas: lidas.lista, hoje: '2026-10' }) === '2026-08'
-              && mesDasContasQueFaltam({ doEndereco: null, lembrado: '2026-07', registradas: lidas.lista, hoje: '2026-10' }) === '2026-07'
-              && mesDasContasQueFaltam({ doEndereco: 'lixo', lembrado: null, registradas: lidas.lista, hoje: '2026-10' }) === '2026-09'
-              && mesDasContasQueFaltam({ doEndereco: null, lembrado: null, registradas: [], hoje: '2026-10' }) === '2026-10',
-      'o mês da lista: o do endereço (o Mês manda), o lembrado, o mais recente com conta, o de hoje — e '
-      + 'endereço inválido não vira mês');
+  /* [01/10/2026, etapa 8] `mesDasContasQueFaltam` SAIU: o «Faltam N contas»
+     recebe o MÊS DE TRABALHO da casca. A ordem que este teste prendia é a do
+     sistema inteiro agora (`resolverMes`), com a procura no terceiro degrau. */
+  const mesDaLista = (doEndereco: string | null, lembrado: string | null, registradas: readonly { competencia: string }[]) =>
+    resolverMes({ doEndereco, lembrado, procurado: mesSemTrabalho(null, [], '2026-10', registradas), procurando: false, hoje: '2026-10' })?.mes;
+  chk('RM29', mesDaLista('2026-08', '2026-07', lidas.lista) === '2026-08'
+              && mesDaLista(null, '2026-07', lidas.lista) === '2026-07'
+              && mesDaLista('lixo', null, lidas.lista) === '2026-09'
+              && mesDaLista(null, null, []) === '2026-10',
+      'o mês da lista é o de trabalho: o do endereço (o Mês manda), o lembrado, o mais recente com conta, o de '
+      + 'hoje — e endereço inválido não vira mês');
 }
 
 console.log(`\n${falhas === 0 ? 'roteiro-do-mes: todas as verificacoes passaram'
