@@ -608,6 +608,14 @@ export type FolhaUnificada = {
       pix_texto: string | null;
       barras: { svg: string } | null; barras_motivo: string | null;
       linha_formatada: string | null; rodape_legal: string[];
+      /** De onde veio o boleto impresso: registrado no `banco` (a conta ja e
+       *  cobranca com boleto), enviado na `tela`, ou `null` sem boleto. */
+      boleto_origem: 'banco' | 'tela' | null;
+      /** De onde veio o QR: Pix do proprio `boleto`, ou `estatico` da chave
+       *  padrao (baixa manual). `null` sem QR. */
+      pix_origem: 'boleto' | 'estatico' | null;
+      /** A nota do QR estatico para quem opera. So tela, nunca papel. */
+      pix_nota: string | null;
       /** A conferencia ARITMETICA do boleto: valor e vencimento saem dos 44
        *  digitos do codigo de barras e sao comparados com a conta. Vai no
        *  payload, NUNCA no papel - o CRM consome a mesma rota. */

@@ -33,7 +33,7 @@ import { conferirLinhaDigitavel, linhaDigitavelFormatada, conferirBoleto, explic
 import { barrasDoCodigo } from './codigo-de-barras.ts';
 import { anteciparVencimento } from './faturamento.ts';
 import { svgDoBrCode } from './qrcode.ts';
-import { normalizarBrCode, crcConfere } from './brcode.ts';
+import { normalizarBrCode, crcConfere, pixEstatico } from './brcode.ts';
 
 /**
  * O BOLETO LIDO, INTEIRO — e ate 14/08 ele chegava pela metade.
@@ -61,6 +61,70 @@ export const BOLETO_VAZIO: DadosDoBoleto = {
   linha_digitavel: '', pix_copia_e_cola: '', nosso_numero: '', instrucoes: [],
   beneficiario: '', vencimento: '', valor: '',
 };
+
+/**
+ * O BOLETO QUE JA ESTA REGISTRADO NO BANCO para esta conta — emitido pela API ou
+ * importado do portal. Vem da tabela `boleto`, pela fatura em que a conta virou.
+ *
+ * ATE 01/10/2026 A FOLHA NAO O VIA. Ela imprimia so o que estava na TELA (o PDF
+ * enviado ou a linha colada), e a conta que virou cobranca e ganhou boleto pela
+ * API saia na segunda via sem codigo de barras: o titulo existia no banco e o
+ * papel do cliente nao o mostrava.
+ */
+export type BoletoDoBanco = {
+  linha_digitavel: string;
+  pix_copia_e_cola: string | null;
+  nosso_numero: string | null;
+  origem: 'api_sicoob' | 'importado';
+};
+
+/** A chave Pix PADRAO do tenant — so o que o BR Code estatico precisa. */
+export type ChaveDoPixEstatico = {
+  chave: string;
+  recebedor_nome: string;
+  recebedor_cidade: string;
+  apelido?: string | null;
+};
+
+/**
+ * QUAL BOLETO A FOLHA IMPRIME: o do banco, quando existe; senao o da tela.
+ *
+ * O DO BANCO VENCE porque ele e o titulo que o banco honra. Uma linha diferente
+ * na tela e de OUTRO titulo — imprimi-la daria ao cliente um codigo que nao
+ * quita esta conta —, entao ela sai da folha e vira alerta. Os textos lidos do
+ * PDF da tela (beneficiario, vencimento, valor) saem junto: eles descrevem
+ * aquele outro titulo, e conferi-los contra esta conta acusaria o que nao e.
+ *
+ * O PIX DA TELA SO SOBREVIVE SE A LINHA FOR A MESMA: e o caso do PDF do proprio
+ * boleto registrado, que traz o Pix dele impresso. O Pix do banco, quando vem,
+ * vence os dois.
+ */
+export function boletoDaFolha(
+  tela: DadosDoBoleto, banco: BoletoDoBanco | null,
+): { boleto: DadosDoBoleto; origem: 'banco' | 'tela' | null; aviso: string | null } {
+  const daTela = tela.linha_digitavel.replace(/\D/g, '');
+  if (!banco) return { boleto: tela, origem: daTela ? 'tela' : null, aviso: null };
+
+  const doBanco = banco.linha_digitavel.replace(/\D/g, '');
+  const mesmaLinha = daTela === doBanco;
+  const outroTitulo = daTela.length > 0 && !mesmaLinha;
+  const nn = String(banco.nosso_numero ?? '').trim();
+  return {
+    boleto: {
+      ...tela,
+      linha_digitavel: banco.linha_digitavel,
+      pix_copia_e_cola: String(banco.pix_copia_e_cola ?? '').trim()
+        || (mesmaLinha ? tela.pix_copia_e_cola : ''),
+      nosso_numero: nn || (mesmaLinha ? tela.nosso_numero : ''),
+      ...(outroTitulo ? { beneficiario: '', vencimento: '', valor: '' } : {}),
+    },
+    origem: 'banco',
+    aviso: outroTitulo
+      ? 'A linha digitável da tela é de outro boleto: esta conta já tem boleto registrado no banco'
+        + `${nn ? ` (nosso número ${nn})` : ''}, e a folha imprime o do banco.`
+      : null,
+  };
+}
 
 export type Par = { rotulo: string; valor: string };
 
@@ -134,6 +198,14 @@ export type FolhaUnificada = {
       barras_motivo: string | null;
       linha_formatada: string | null;
       rodape_legal: string[];
+      /** De onde veio o boleto impresso: registrado no `banco`, enviado na
+       *  `tela`, ou `null` sem boleto. */
+      boleto_origem: 'banco' | 'tela' | null;
+      /** De onde veio o QR: o Pix do proprio `boleto` (concilia sozinho) ou o
+       *  `estatico` da chave padrao (baixa manual). `null` sem QR. */
+      pix_origem: 'boleto' | 'estatico' | null;
+      /** O que quem opera precisa saber do QR estatico. So TELA, nunca papel. */
+      pix_nota: string | null;
       /** A conferencia ARITMETICA do boleto contra a conta: valor e vencimento
        *  saem dos 44 digitos do codigo de barras. Vai no payload, NUNCA no papel
        *  - o CRM consome a mesma rota e precisa saber tanto quanto a nossa tela,
@@ -247,6 +319,10 @@ export type ExtrasDaFolha = {
   economia_acumulada_centavos?: Centavos;
   /** "com a G3 Solar desde <isto>". A competencia do registro mais antigo. */
   desde?: string;
+  /** O boleto registrado no banco para esta UC e competencia. Ver `boletoDaFolha`. */
+  boleto_do_banco?: BoletoDoBanco | null;
+  /** A chave Pix padrao. Desenha o QR ESTATICO quando nenhum boleto traz Pix. */
+  chave_pix?: ChaveDoPixEstatico | null;
 };
 
 /**
@@ -263,9 +339,14 @@ export function comporFolhas(
   campos: CamposDaFaturaUnificada,
   conta: ContaDaFatura,
   emissor: EmissorDaFatura,
-  boleto: DadosDoBoleto,
+  boletoDaTela: DadosDoBoleto,
   extras: ExtrasDaFolha = {},
 ): FolhaUnificada {
+  /* DAQUI PARA BAIXO `boleto` E O QUE A FOLHA IMPRIME — o do banco quando a
+   * conta ja tem um registrado, senao o da tela. A conferencia, as barras e o
+   * Pix leem todos dele, e nunca dos dois. */
+  const efetivo = boletoDaFolha(boletoDaTela, extras.boleto_do_banco ?? null);
+  const boleto = efetivo.boleto;
   const textos = extras.modelo ?? TEXTOS_PADRAO;
   const linhaEmissor = linhaDoEmissor(emissor);
   const mes = competencia(campos.mes_referencia);
@@ -490,7 +571,8 @@ export function comporFolhas(
           nota: textos.nota_do_fator,
         },
       },
-      pagamento: comporPagamento(boleto, campos, emissor, venc, conta, textos, conferencia, conf, cod),
+      pagamento: comporPagamento(boleto, campos, emissor, venc, conta, textos, conferencia, conf, cod,
+                                 efetivo, extras.chave_pix ?? null),
       rodape: {
         telefone: extras.contato?.telefone?.trim() || '',
         emissor: linhaEmissor,
@@ -596,6 +678,8 @@ function comporPagamento(
   conferencia: ConferenciaDoBoleto,
   conf: ReturnType<typeof conferirLinhaDigitavel>,
   codigo: string | null,
+  origem: ReturnType<typeof boletoDaFolha>,
+  chave: ChaveDoPixEstatico | null,
 ): FolhaUnificada['folha2']['pagamento'] {
   /*
    * `normalizarBrCode` E NAO `replace(/\s+/g, '')` — conserto medido em 17/08.
@@ -607,9 +691,53 @@ function comporPagamento(
    * falha era o pior possivel — o QR era DESENHADO do mesmo jeito, com aparencia
    * perfeita, e o aplicativo do banco simplesmente nao o lia.
    */
-  const pix = normalizarBrCode(b.pix_copia_e_cola);
+  const doBoleto = normalizarBrCode(b.pix_copia_e_cola);
+  let pix = doBoleto;
+  let pixOrigem: 'boleto' | 'estatico' | null = null;
+  let pixNota: string | null = null;
   let qr: { svg: string; versao: number } | null = null;
   let qrMotivo: string | null = null;
+  /*
+   * O PIX ESTATICO E A RESERVA, e so entra quando NENHUM boleto traz Pix.
+   *
+   * A decisao 5 da `Q-DOCFATURA-01` (30/07) pos o QR estatico da chave padrao na
+   * folha enquanto nao ha Pix do banco. A folha unificada de 14/08 so lia o Pix
+   * de dentro do boleto e a perdeu: sem boleto enviado, o papel do cliente saia
+   * sem forma de pagamento nenhuma — e a tela dizia «a folha sai só com o Pix».
+   *
+   * ELE CONVIVE COM O BOLETO, por decisao do dono em 01/10/2026: o boleto da API
+   * sai sem Pix enquanto a chave aleatoria nao estiver vinculada ao contrato de
+   * cobranca (`Q-SICOOB-PIXCHAVE-01`), e ate la o estatico ocupa o lugar. No dia
+   * em que o banco devolver o Pix do boleto, ele vence sozinho: e o primeiro
+   * ramo abaixo, e o estatico deixa de ser desenhado sem mudar uma linha.
+   *
+   * O CUSTO, que a nota diz a quem opera: o estatico nao tem `txid`, entao o
+   * dinheiro chega sem dizer de qual cobranca e — a baixa e manual. E o Pix que
+   * VEIO e nao fecha o CRC NAO e trocado pelo estatico: isso esconderia um boleto
+   * corrompido atras de um QR que funciona.
+   */
+  if (doBoleto.length < 20 && chave) {
+    if (conta.total_centavos > 0) {
+      try {
+        pix = pixEstatico({
+          chave: chave.chave,
+          recebedorNome: chave.recebedor_nome,
+          recebedorCidade: chave.recebedor_cidade,
+          valorCentavos: conta.total_centavos,
+        });
+        pixOrigem = 'estatico';
+        pixNota = `QR do Pix estático${chave.apelido ? ` (chave «${chave.apelido}»)` : ''}: o pagamento `
+          + 'chega sem dizer de qual cobrança é, e a baixa é manual. Ele sai até o banco devolver o Pix '
+          + 'do próprio boleto.';
+      } catch (e) { qrMotivo = e instanceof Error ? e.message : String(e); }
+    } else {
+      qrMotivo = 'Sem valor a cobrar — um QR Pix sem valor deixaria o cliente digitar a quantia.';
+    }
+  } else if (doBoleto.length < 20) {
+    qrMotivo = 'Sem Pix no boleto e sem chave Pix padrão em «Dados de quem cobra».';
+  } else {
+    pixOrigem = 'boleto';
+  }
   if (pix.length >= 20) {
     /*
      * E O CRC PASSOU A DECIDIR SE DESENHA. Um payload que nao fecha o proprio
@@ -629,6 +757,7 @@ function comporPagamento(
       } catch (e) { qrMotivo = e instanceof Error ? e.message : String(e); }
     }
   }
+  if (!qr) { pixOrigem = null; pixNota = null; }
 
   let barras: { svg: string } | null = null;
   let barrasMotivo: string | null = null;
@@ -655,6 +784,9 @@ function comporPagamento(
     qr, qr_motivo: qrMotivo,
     pix_texto: pix.length >= 20 ? pix : null,
     barras, barras_motivo: barrasMotivo,
+    boleto_origem: origem.origem,
+    pix_origem: pixOrigem,
+    pix_nota: pixNota,
     /*
      * A LINHA SO SAI NO PAPEL QUANDO CONFERE, e ate 14/08 ela saia sempre.
      *
@@ -670,7 +802,10 @@ function comporPagamento(
     linha_formatada: conf.valida ? linhaDigitavelFormatada(b.linha_digitavel) : null,
     rodape_legal: textos.rodape_legal.map((t) => String(t ?? '').trim()).filter(Boolean),
     conferencia,
-    alertas: alertasDoBoleto(b, campos, conta, conferencia, emissor, vencimento),
+    alertas: [
+      ...(origem.aviso ? [origem.aviso] : []),
+      ...alertasDoBoleto(b, campos, conta, conferencia, emissor, vencimento),
+    ],
   };
 }
 

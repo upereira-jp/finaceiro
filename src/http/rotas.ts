@@ -2019,14 +2019,31 @@ export const ROTAS: Rota[] = [
        * tecla e uma tela que pisca erro enquanto a pessoa trabalha.
        */
       let economia: registro.EconomiaAcumulada | null = null;
+      let competencia: Date | null = null;
       if (campos.unidade_consumidora.trim() && campos.mes_referencia.trim()) {
+        try { competencia = registro.primeiroDiaDaCompetencia(campos.mes_referencia); }
+        catch { competencia = null; }
+      }
+      if (competencia) {
         try {
-          economia = await registro.economiaAcumulada(
-            campos.unidade_consumidora,
-            registro.primeiroDiaDaCompetencia(campos.mes_referencia),
-          );
+          economia = await registro.economiaAcumulada(campos.unidade_consumidora, competencia);
         } catch { economia = null; }
       }
+
+      /*
+       * O BOLETO QUE O BANCO JA TEM PARA ESTA CONTA (01/10/2026). Quando a conta
+       * virou cobranca e o boleto saiu pela API (ou foi importado do portal), e
+       * ELE que a folha imprime — a segunda via nao traz a linha, porque ela
+       * nasceu depois do registro. Ver `boletoDaFolha`.
+       */
+      const boleto_do_banco = competencia
+        ? await registro.boletoRegistradoDaConta(campos.unidade_consumidora, competencia)
+        : null;
+
+      /* A CHAVE PADRAO, para o QR estatico de reserva. Chave desativada nao
+       * entra: imprimir uma chave que o tenant aposentou mandaria dinheiro para
+       * onde ele nao confere mais. */
+      const chave = ident?.chave_pix && ident.chave_pix.ativa !== false ? ident.chave_pix : null;
 
       const folhas = comporFolhas(
         campos, conta,
@@ -2045,6 +2062,11 @@ export const ROTAS: Rota[] = [
           ...(economia && economia.faturas > 1
             ? { economia_acumulada_centavos: economia.centavos, desde: economia.desde ?? undefined }
             : {}),
+          boleto_do_banco,
+          chave_pix: chave && {
+            chave: chave.chave, recebedor_nome: chave.recebedor_nome,
+            recebedor_cidade: chave.recebedor_cidade, apelido: chave.apelido,
+          },
         },
       );
       /* A CONTA VIAJA JUNTO com as folhas, e nao so o que esta impresso: o painel

@@ -17,7 +17,8 @@
 //   3. QUE O QR E AS BARRAS FALHEM SEPARADO. Sao dois caminhos de pagamento; um
 //      derrubar o outro tira do cliente a forma que ainda funcionava.
 
-import { comporFolhas, BOLETO_VAZIO, type DadosDoBoleto } from '../src/dominio/folha-unificada.ts';
+import { comporFolhas, BOLETO_VAZIO, type DadosDoBoleto,
+         type BoletoDoBanco, type ChaveDoPixEstatico } from '../src/dominio/folha-unificada.ts';
 import { calcular, CAMPOS_VAZIOS, PARAMETROS_PADRAO, paraDecimal, decimalBr,
          type CamposDaFaturaUnificada } from '../src/dominio/fatura-unificada.ts';
 import type { EmissorDaFatura } from '../src/dominio/folha-g3.ts';
@@ -410,6 +411,101 @@ const folhas = comporFolhas(COMPLETA, contaCompleta, EMISSOR,
       'boleto emitido na data da Equatorial E acusado, e a frase diz a data que deveria ter');
 }
 
+// ---------------- P o Pix estatico de reserva e o boleto que o banco ja tem
+//
+// O DEFEITO DE 01/10/2026: um boleto de teste em /documento saiu sem QR e sem
+// barras. A folha so lia o Pix de DENTRO do boleto da tela, entao sem boleto
+// enviado o papel do cliente nao tinha forma de pagamento nenhuma — e a decisao
+// 5 da `Q-DOCFATURA-01` (QR estatico da chave padrao) tinha se perdido na troca
+// de 14/08. E a conta que ja virou cobranca com boleto pela API nao via aquele
+// boleto: a folha so conhecia o que estava na tela.
+{
+  const CHAVE: ChaveDoPixEstatico = {
+    chave: '12345678000195', recebedor_nome: 'G3 SOLAR', recebedor_cidade: 'GOIANIA', apelido: 'CNPJ G3',
+  };
+  const DIGITOS_BONS = LINHA_BOA.replace(/\D/g, '');
+  const BANCO: BoletoDoBanco = {
+    linha_digitavel: DIGITOS_BONS, pix_copia_e_cola: null, nosso_numero: '0000000070', origem: 'api_sicoob',
+  };
+  /* O campo 54 do BR Code e o valor em REAIS com ponto, montado de centavos
+   * inteiros — a regra 1 vale tambem no teste. */
+  const t = contaCompleta.total_centavos;
+  const reais = `${Math.trunc(t / 100)}.${String(t % 100).padStart(2, '0')}`;
+  const campo54 = `54${String(reais.length).padStart(2, '0')}${reais}`;
+
+  const soChave = comporFolhas(COMPLETA, contaCompleta, EMISSOR, BOLETO_VAZIO, { chave_pix: CHAVE });
+  const pg = soChave.folha2.pagamento;
+  chk('P1', pg.qr !== null && pg.pix_origem === 'estatico' && pg.barras === null,
+      'SEM BOLETO NENHUM, a folha sai com o QR estatico da chave padrao — era papel sem forma de pagamento');
+  chk('P1b', pg.pix_texto !== null && crcConfere(pg.pix_texto) && pg.pix_texto.includes(campo54)
+       && pg.pix_texto.includes('12345678000195'),
+      `o QR e da chave cadastrada, fecha o CRC e carrega o TOTAL desta conta (${campo54})`);
+  chk('P1c', (pg.pix_nota ?? '').includes('baixa é manual') && pg.boleto_origem === null,
+      'e quem opera le o custo: o estatico chega sem dizer de qual cobranca e');
+
+  const comBoletoSemPix = comporFolhas(COMPLETA, contaCompleta, EMISSOR,
+    boletoCom({ linha_digitavel: LINHA_BOA }), { chave_pix: CHAVE });
+  const pb = comBoletoSemPix.folha2.pagamento;
+  chk('P2', pb.barras !== null && pb.qr !== null && pb.pix_origem === 'estatico' && pb.boleto_origem === 'tela',
+      'BOLETO SEM PIX + CHAVE: as duas vias saem juntas, como na conta da Equatorial (decisao de 01/10)');
+
+  const comPix = comporFolhas(COMPLETA, contaCompleta, EMISSOR,
+    boletoCom({ linha_digitavel: LINHA_BOA, pix_copia_e_cola: PIX_BOM }), { chave_pix: CHAVE });
+  chk('P3', comPix.folha2.pagamento.pix_origem === 'boleto' && comPix.folha2.pagamento.pix_texto === PIX_BOM
+       && comPix.folha2.pagamento.pix_nota === null,
+      'O PIX DO BOLETO VENCE o estatico: ele concilia sozinho, e no dia em que vier o estatico some');
+
+  const pixRuim = `${PIX_BOM.slice(0, -4)}0000`;
+  const corrompido = comporFolhas(COMPLETA, contaCompleta, EMISSOR,
+    boletoCom({ linha_digitavel: LINHA_BOA, pix_copia_e_cola: pixRuim }), { chave_pix: CHAVE });
+  chk('P4', corrompido.folha2.pagamento.qr === null
+       && (corrompido.folha2.pagamento.qr_motivo ?? '').includes('CRC'),
+      'Pix do boleto que nao fecha o CRC NAO e trocado pelo estatico — isso esconderia o boleto corrompido');
+
+  const semChave = comporFolhas(COMPLETA, contaCompleta, EMISSOR, BOLETO_VAZIO);
+  chk('P5', semChave.folha2.pagamento.qr === null
+       && (semChave.folha2.pagamento.qr_motivo ?? '').includes('chave Pix padrão'),
+      'sem boleto e sem chave, a tela diz que a folha nao tem forma de pagamento — em vez de silencio');
+
+  const zerada = comporFolhas(CAMPOS_VAZIOS, calcular(CAMPOS_VAZIOS, PARAMETROS_PADRAO), EMISSOR,
+    BOLETO_VAZIO, { chave_pix: CHAVE });
+  chk('P6', zerada.folha2.pagamento.qr === null
+       && (zerada.folha2.pagamento.qr_motivo ?? '').includes('Sem valor'),
+      'conta sem total NAO ganha QR estatico — sem valor o cliente digitaria a quantia');
+
+  const doBanco = comporFolhas(COMPLETA, contaCompleta, EMISSOR, BOLETO_VAZIO,
+    { chave_pix: CHAVE, boleto_do_banco: BANCO });
+  const pc = doBanco.folha2.pagamento;
+  chk('P7', pc.boleto_origem === 'banco' && pc.barras !== null && pc.linha_formatada !== null
+       && pc.campos.find((c) => c.rotulo === 'Nosso número')?.valor === '0000000070',
+      'A CONTA COM BOLETO REGISTRADO imprime o do banco, com a tela vazia — linha, barras e nosso numero');
+  chk('P7b', pc.pix_origem === 'estatico',
+      'e enquanto o banco nao devolve o Pix do boleto (chave aleatoria nao vinculada), o estatico fica ao lado');
+
+  const hibrido = comporFolhas(COMPLETA, contaCompleta, EMISSOR, BOLETO_VAZIO,
+    { chave_pix: CHAVE, boleto_do_banco: { ...BANCO, pix_copia_e_cola: PIX_BOM } });
+  chk('P8', hibrido.folha2.pagamento.pix_origem === 'boleto' && hibrido.folha2.pagamento.pix_texto === PIX_BOM,
+      'NO DIA DO VINCULO o Pix do banco assume sozinho, sem mudar codigo');
+
+  const outra = `${DIGITOS_BONS.slice(0, 3)}${(Number(DIGITOS_BONS[3]) + 1) % 10}${DIGITOS_BONS.slice(4)}`;
+  const divergente = comporFolhas(COMPLETA, contaCompleta, EMISSOR,
+    boletoCom({ linha_digitavel: outra, pix_copia_e_cola: PIX_BOM, valor: '1,00' }),
+    { chave_pix: CHAVE, boleto_do_banco: BANCO });
+  const pd = divergente.folha2.pagamento;
+  chk('P9', pd.alertas.some((a) => a.includes('outro boleto')) && pd.barras !== null
+       && pd.linha_formatada !== null && pd.linha_formatada.replace(/\D/g, '') === DIGITOS_BONS,
+      'LINHA DA TELA DE OUTRO TITULO: a folha imprime a do banco e a tela e avisada');
+  chk('P9b', pd.pix_origem === 'estatico' && !pd.alertas.some((a) => a.includes('R$ 1,00')),
+      'e o Pix e os textos lidos daquele outro boleto nao entram — eles nao quitam esta conta');
+
+  const mesmoTitulo = comporFolhas(COMPLETA, contaCompleta, EMISSOR,
+    boletoCom({ linha_digitavel: LINHA_BOA, pix_copia_e_cola: PIX_BOM }),
+    { chave_pix: CHAVE, boleto_do_banco: BANCO });
+  chk('P10', mesmoTitulo.folha2.pagamento.pix_origem === 'boleto'
+       && !mesmoTitulo.folha2.pagamento.alertas.some((a) => a.includes('outro boleto')),
+      'o PDF do PROPRIO boleto registrado traz o Pix dele, e esse Pix vale');
+}
+
 console.log();
 if (falhas > 0) { console.log(`--- folhas unificadas: ${falhas} FALHA(S)`); process.exit(1); }
-console.log('--- as duas folhas compostas: 43 verificacoes, 0 falhas');
+console.log('--- as duas folhas compostas: 64 verificacoes, 0 falhas');

@@ -1238,6 +1238,16 @@ function ConferenciaDaConta(p: PropsDaConferencia) {
   const temBoleto = Boolean(p.boleto.linha_digitavel.trim() || p.boleto.valor.trim()
                             || p.boleto.pix_copia_e_cola.trim());
   const linhaConferida = Boolean(p.composicao?.folha2.pagamento.barras);
+  /* [01/10/2026] O ESTADO DIZ DE ONDE VEM O QUE A FOLHA IMPRIME. Ate aqui o
+     resumo prometia «a folha sai só com o Pix» sem boleto nenhum — e a folha
+     saia sem Pix tambem. Agora o QR estatico existe de verdade, e a conta que ja
+     tem boleto no banco imprime o dele, mesmo com os campos abaixo vazios. */
+  const pagamento = p.composicao?.folha2.pagamento ?? null;
+  const doBanco = pagamento?.boleto_origem === 'banco';
+  const nossoNumero = pagamento?.campos.find((c) => c.rotulo === 'Nosso número')?.valor;
+  const semBoleto = pagamento?.pix_origem === 'estatico'
+    ? 'Nenhum boleto enviado — a folha sai com o QR do Pix estático.'
+    : 'Nenhum boleto enviado e sem chave Pix padrão — a folha sai sem forma de pagamento.';
   const competencia = lerCompetencia(p.campos.mes_referencia);
   const mesDaConta = competencia ? `${competencia.ano}-${competencia.mes}` : null;
 
@@ -1369,15 +1379,25 @@ function ConferenciaDaConta(p: PropsDaConferencia) {
           conferida, ou a primeira divergencia —, e abre sozinho quando ha
           boleto, que e quando a conferencia dele importa. `<details>` nativo: o
           teclado ja chega nele e o leitor de tela anuncia aberto/fechado. */}
-      <details className="fu-detalhe" open={temBoleto || undefined}>
+      <details className="fu-detalhe" open={temBoleto || doBanco || undefined}>
         <summary>
           <Icone nome="descer" tamanho={13} peso="bold" />
           <span className="fu-secao-tit">Boleto do banco</span>
           <span className="fu-detalhe-estado">
-            {linhaConferida ? 'Linha conferida · código de barras gerado.'
-              : alertas[0] ?? (temBoleto ? 'Nada a apontar.' : 'Nenhum boleto enviado — a folha sai só com o Pix.')}
+            {doBanco
+              ? `Boleto registrado no banco${nossoNumero && nossoNumero !== '—' ? ` · nosso número ${nossoNumero}` : ''} · a folha imprime o dele.`
+              : linhaConferida ? 'Linha conferida · código de barras gerado.'
+              : alertas[0] ?? (temBoleto ? 'Nada a apontar.' : semBoleto)}
           </span>
         </summary>
+
+        {doBanco && (
+          <div className="fu-status">
+            Esta conta já é cobrança e tem boleto registrado no banco: a folha imprime a linha, o
+            código de barras e o Pix dele. Os campos abaixo só valem para um boleto que ainda não
+            está no banco.
+          </div>
+        )}
 
         {/* `curta`: o envio da conta e o primeiro ato da tela e e maior de
             proposito; este e secundario. */}
@@ -1440,10 +1460,12 @@ function ConferenciaDaConta(p: PropsDaConferencia) {
                       ...s, pix_copia_e_cola: e.target.value.replace(/\s+/g, ''),
                     }))} />
           <div className="fu-status rente">
-            {p.composicao?.folha2.pagamento.qr
-              ? `Payload EMV reconhecido · QR gerado (versão ${p.composicao.folha2.pagamento.qr.versao}).`
-              : p.composicao?.folha2.pagamento.qr_motivo
-                ? `O QR não pôde ser desenhado: ${p.composicao.folha2.pagamento.qr_motivo}`
+            {pagamento?.qr
+              ? pagamento.pix_origem === 'estatico'
+                ? pagamento.pix_nota ?? 'QR do Pix estático gerado.'
+                : `Payload EMV reconhecido · QR gerado (versão ${pagamento.qr.versao}).`
+              : pagamento?.qr_motivo
+                ? `O QR não pôde ser desenhado: ${pagamento.qr_motivo}`
                 : 'Sem PIX — o documento sai apenas com boleto.'}
           </div>
         </div>
@@ -2227,6 +2249,7 @@ function LinhaDoDetalhe({ l }: { l: LinhaDetalhada }) {
 function CaixaDePagamento({ p, logoUrl }: {
   p: ComposicaoUnificada['folha2']['pagamento']; logoUrl: string | null;
 }) {
+  const soPix = Boolean(p.qr) && !p.barras && !p.linha_formatada;
   return (
     <div className="faixa-pgto">
       <div className="faixa-pgto-topo">
@@ -2259,9 +2282,11 @@ function CaixaDePagamento({ p, logoUrl }: {
       )}
 
       {/* DUAS VIAS SO QUANDO HA DUAS. Sem QR, a via do boleto ocupa a faixa
-          inteira em vez de dividir com uma coluna vazia. */}
+          inteira em vez de dividir com uma coluna vazia — e sem boleto, desde
+          01/10, e o Pix que a ocupa: a via do boleto fica so na tela, com o
+          motivo, e o papel nao imprime «Pague com boleto —». */}
       <div className="faixa-pgto-vias"
-           style={{ gridTemplateColumns: p.qr ? '0.8fr 1.2fr' : '1fr' }}>
+           style={{ gridTemplateColumns: p.qr && !soPix ? '0.8fr 1.2fr' : '1fr' }}>
         {p.qr && (
           <div className="faixa-pgto-via">
             <div className="faixa-pgto-rot" style={{ textAlign: 'center' }}>Pague com PIX</div>
@@ -2274,10 +2299,12 @@ function CaixaDePagamento({ p, logoUrl }: {
               Aponte a câmera do app do seu banco
             </div>
             {p.pix_texto && <div className="faixa-pgto-codigo">{p.pix_texto}</div>}
+            {/* O CUSTO DO ESTATICO E DE QUEM OPERA, nao do cliente: so na tela. */}
+            {p.pix_nota && <div className="g3-pendente naoimprime">{p.pix_nota}</div>}
           </div>
         )}
 
-        <div className="faixa-pgto-via">
+        <div className={soPix ? 'faixa-pgto-via naoimprime' : 'faixa-pgto-via'}>
           <div className="faixa-pgto-rot" style={{ textAlign: 'center' }}>Pague com boleto</div>
           {p.barras
             ? (
@@ -2297,6 +2324,15 @@ function CaixaDePagamento({ p, logoUrl }: {
           )}
         </div>
       </div>
+
+      {/* O PIX ESTATICO E O BOLETO SAO DUAS COBRANCAS SOLTAS: pagar um nao
+          baixa o outro, como faria o Pix do proprio boleto. A frase vai no
+          papel porque e o cliente quem pagaria duas vezes. */}
+      {p.pix_origem === 'estatico' && p.barras && (
+        <div className="faixa-pgto-nota" style={{ textAlign: 'center' }}>
+          Pague por uma das formas — Pix ou boleto —, não pelas duas.
+        </div>
+      )}
 
       <div className="faixa-pgto-rodape">
         {p.rodape_legal.map((t) => <div key={t}>{t}</div>)}

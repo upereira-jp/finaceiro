@@ -34,7 +34,7 @@ import {
   paraDecimal, decimalParaTexto, calcular,
   type CamposDaFaturaUnificada, type ContaDaFatura, type ParametrosDaEmissao,
 } from '../dominio/fatura-unificada.ts';
-import type { DadosDoBoleto } from '../dominio/folha-unificada.ts';
+import type { DadosDoBoleto, BoletoDoBanco } from '../dominio/folha-unificada.ts';
 import {
   segundaViaDoRegistro, divergenciasDaSegundaVia, type LinhaGravada,
 } from '../dominio/segunda-via.ts';
@@ -473,4 +473,43 @@ export async function economiaAcumulada(
     ? `${MES[primeira.getUTCMonth()]} de ${primeira.getUTCFullYear()}`
     : null;
   return { centavos, desde, faturas: r._count._all };
+}
+
+/**
+ * O BOLETO REGISTRADO NO BANCO PARA UMA CONTA (UC + competencia), ou `null`.
+ *
+ * O caminho e o da junção da migration 34: a conta lida aponta para a fatura em
+ * que virou (`fatura_id`), e a fatura tem no maximo um boleto. So conta o boleto
+ * `registrado` e com linha: `pendente` e `erro` ainda nao existem no banco, e
+ * `liquidado`, `baixado` e `cancelado` ja nao cobram — imprimir o codigo de um
+ * deles poria na mao do cliente um titulo que nao quita mais nada.
+ *
+ * A UC E RESOLVIDA PELO NUMERO, como em `economiaAcumulada`: e a chave de negocio
+ * da tabela, e a composicao a recebe da tela.
+ */
+export async function boletoRegistradoDaConta(
+  numeroUc: string, competencia: Date,
+): Promise<BoletoDoBanco | null> {
+  await exigir('ler');
+  const numero_uc = String(numeroUc ?? '').trim();
+  if (!numero_uc) return null;
+  const tenant_id = tenantCorrente();
+
+  const conta = await dbt().registro_de_fatura_unificada.findFirst({
+    where: { tenant_id, numero_uc, competencia, fatura_id: { not: null } },
+    select: { fatura_id: true },
+  });
+  if (!conta?.fatura_id) return null;
+
+  const b = await dbt().boleto.findFirst({
+    where: { tenant_id, fatura_id: conta.fatura_id, status: 'registrado', linha_digitavel: { not: null } },
+    select: { linha_digitavel: true, pix_copia_e_cola: true, nosso_numero: true, origem: true },
+  });
+  if (!b?.linha_digitavel) return null;
+  return {
+    linha_digitavel: b.linha_digitavel,
+    pix_copia_e_cola: b.pix_copia_e_cola,
+    nosso_numero: b.nosso_numero,
+    origem: b.origem,
+  };
 }

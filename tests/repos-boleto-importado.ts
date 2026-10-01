@@ -29,6 +29,9 @@ import * as contrato from '../src/repos/contrato.ts';
 import * as regras from '../src/repos/regras.ts';
 import * as fatura from '../src/repos/fatura.ts';
 import * as boleto from '../src/repos/boleto.ts';
+import * as registro from '../src/repos/registro-unificado.ts';
+import { calcular, CAMPOS_VAZIOS, PARAMETROS_PADRAO } from '../src/dominio/fatura-unificada.ts';
+import { BOLETO_VAZIO } from '../src/dominio/folha-unificada.ts';
 import { montarLinhaDigitavel, digitosDaLinha } from '../src/dominio/linha-digitavel.ts';
 import { pixEstatico } from '../src/dominio/brcode.ts';
 
@@ -324,6 +327,53 @@ const linhaDaFatura = (valor = valorTotal, iso = vencimentoIso) =>
   const abertos = await emA(() => boleto.emAberto(500));
   chk('Y8d', !abertos.some((x: any) => x.fatura_id === faturaTres),
       'e ele nao entra na consulta ativa - nem pela origem, nem pelo `nosso_numero` nulo');
+}
+
+// ------------- Y9 a folha acha o boleto que o banco ja tem para a conta (01/10/2026)
+{
+  /*
+   * A FOLHA SO VIA O BOLETO DA TELA. A conta lida que virou cobranca e ganhou
+   * boleto (pela API ou importado) saia na segunda via sem codigo de barras,
+   * porque a linha nasceu DEPOIS do registro e mora na tabela `boleto`. A ponte
+   * e `boletoRegistradoDaConta`: conta lida -> `fatura_id` -> boleto.
+   *
+   * O registro e gravado pelo repositorio e LIGADO a mao a fatura do Y8: o
+   * caminho de faturar exige contrato, triagem e vencimento que esta suite nao
+   * monta, e o que se prova aqui e a leitura, nao a juncao.
+   */
+  const campos = {
+    ...CAMPOS_VAZIOS, cliente: 'Cliente da fixture', unidade_consumidora: 'BOLIMP-UC-3',
+    mes_referencia: '03/2027', vencimento: '15/04/2027',
+    energia_compensada_kwh: '480', tarifa_kwh: '1.185396',
+    consumo_nao_compensado_kwh: '50', consumo_nao_compensado_valor: '59.27',
+    iluminacao_publica: '44.00', bandeira_valor: '8.40', outros_encargos: '12.33',
+    valor_total_equatorial: '124.00',
+  };
+  const competencia = mes(2027, 3);
+  const antes = await emA(() => registro.boletoRegistradoDaConta('BOLIMP-UC-3', competencia));
+  chk('Y9', antes === null, 'sem conta lida nao ha boleto a achar — e a resposta e nula, nao erro');
+
+  const r = await emA(() => registro.registrar({
+    campos, parametros: PARAMETROS_PADRAO, conta: calcular(campos, PARAMETROS_PADRAO), boleto: BOLETO_VAZIO,
+  }));
+  const semFatura = await emA(() => registro.boletoRegistradoDaConta('BOLIMP-UC-3', competencia));
+  chk('Y9b', semFatura === null, 'conta lida que ainda nao virou cobranca nao tem boleto do banco');
+
+  await emA(() => db().$executeRaw`
+    UPDATE registro_de_fatura_unificada SET fatura_id = ${faturaTres}::uuid WHERE id = ${r.id}::uuid`);
+  const achado = await emA(() => registro.boletoRegistradoDaConta(' BOLIMP-UC-3 ', competencia));
+  chk('Y9c', achado !== null && achado.linha_digitavel === digitosDaLinha(linhaDaFatura(valorTres))
+       && achado.origem === 'importado',
+      'conta que virou cobranca com boleto REGISTRADO devolve a linha do banco — e a UC com espaco casa');
+
+  const outroMes = await emA(() => registro.boletoRegistradoDaConta('BOLIMP-UC-3', mes(2027, 4)));
+  chk('Y9d', outroMes === null, 'outra competencia da mesma UC nao herda o boleto deste mes');
+
+  await emA(() => db().$executeRaw`
+    UPDATE boleto SET status = 'baixado', baixado_em = now() WHERE fatura_id = ${faturaTres}::uuid`);
+  const baixado = await emA(() => registro.boletoRegistradoDaConta('BOLIMP-UC-3', competencia));
+  chk('Y9e', baixado === null,
+      'boleto BAIXADO nao volta para a folha — o codigo de um titulo que nao cobra mais nao quita nada');
 }
 
 // ---------------------- Y6 a constraint do banco, e ela nao depende do repositorio

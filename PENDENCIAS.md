@@ -11,7 +11,34 @@
 | **Estado da suíte** | Sem banco: `typecheck` + `documento` + `brcode` + `dominio` + `web` → **`EXIT=0`, 2.420 linhas `ok`** (28/08, madrugada), e desde 27/08 com as verificações de `tests/sicoob-http.ts` — hoje **63** — dentro do `test:dominio`. Fora da suíte, contra a Sicoob de verdade: `npm run ensaio-sicoob` → **6 de 6**. `test:repos` e `test:isolamento` **não rodam nesta VPS** (exigem PostgreSQL local) |
 | **Produção** | `financeiro.blackhaus.io` · **35 migrations no ar** (a 34 em 21/08, a **35 em 28/08**) · a **36 escrita e NÃO aplicada** · Pix estático e boleto importado no ar · central de ajuda em toda tela · **a conta unificada lida já vira cobrança** (migration 34) · o conector roda sozinho a cada 15 min pelo `financeiro-ciclo.timer`, e desde **28/08** a agenda de cobrança roda sozinha em três timers (`fila` 5 min · `consulta` e `certificado` diárias) |
 
-> ## 🆕 27/09/2026 — ENDEREÇOS, CANCELAMENTOS E O CONECTOR
+> ## 🆕 01/10/2026 — A FOLHA VOLTA A TER FORMA DE PAGAMENTO
+>
+> **O sintoma:** um boleto de teste em `/documento?mes=2026-10` saiu sem QR e sem
+> código de barras. A folha unificada só lia o Pix e a linha **do boleto enviado
+> na tela**; sem boleto, o papel não tinha forma de pagamento nenhuma — e a tela
+> dizia «a folha sai só com o Pix». A decisão 5 da `Q-DOCFATURA-01` (QR estático
+> da chave padrão) tinha ficado no documento antigo na troca de 14/08.
+>
+> **O que mudou (`comporFolhas` + `POST /faturas/unificada/compor`):**
+>
+> | Ordem | De onde vem | Quando |
+> |---|---|---|
+> | Boleto | o **registrado no banco** (API ou importado), achado por UC + competência → `fatura_id` → `boleto` | a conta já virou cobrança e o boleto está `registrado` |
+> | Boleto | o **enviado ou colado na tela** | não há boleto no banco |
+> | Pix | o **do próprio boleto** (concilia sozinho) | o banco ou o PDF trazem o Pix |
+> | Pix | o **estático da chave padrão**, com o total da conta | nenhum boleto traz Pix |
+>
+> **Decisão do dono, 01/10/2026:** o estático fica **ao lado do boleto** até a
+> chave aleatória ser vinculada ao contrato de cobrança (`Q-SICOOB-PIXCHAVE-01`,
+> ainda não vinculada). No dia do vínculo, o Pix do banco vence sozinho, sem mudar
+> código. **O custo aceito:** são duas cobranças soltas — o Pix estático chega sem
+> `txid` (baixa manual) e o cliente poderia pagar as duas. A folha imprime
+> «Pague por uma das formas — Pix ou boleto —, não pelas duas» quando as duas saem.
+>
+> Verificações: `P1`–`P10` em `tests/folha-unificada.ts` (64 no arquivo) e
+> `Y9`–`Y9e` em `tests/repos-boleto-importado.ts` (roda no CI, precisa de banco).
+
+> ## 27/09/2026 — ENDEREÇOS, CANCELAMENTOS E O CONECTOR
 >
 > A lista inteira, por dono, e a ordem da próxima sessão estão em
 > **`RETOMADA-2026-09-27.md`**. O que muda aqui:
