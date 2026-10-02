@@ -17,6 +17,11 @@
 // planilha não conhecia pagamento parcial), e a série é um id, não o texto do
 // histórico.
 //
+// A DÍVIDA COM O SÓCIO (Q-SOCIOS-01, decisão do dono em 02/10/2026): quando um
+// sócio paga do bolso, nasce uma conta a pagar a ele. Ela é DÍVIDA, não despesa —
+// a despesa é a conta que ele quitou —, e por isso Painel e Projeção a deixam de
+// fora (`daEmpresa`) e ela aparece somada à parte (`devidoAosSocios`).
+//
 // Toda data chega como texto ISO; o dia é `AAAA-MM-DD` e o mês, `AAAA-MM`.
 // Dinheiro é inteiro de centavos do começo ao fim (regra 1).
 
@@ -70,19 +75,25 @@ export const ROTULO_DO_TIPO_DE_ORIGEM: Record<TipoDeOrigem, string> = {
 
 // ------------------------------------------------------ a situação
 
-/** A coluna «SITUAÇÃO» da planilha, mais a cancelada que ela não tinha. */
-export type SituacaoDaDespesa = 'vencida' | 'vence_hoje' | 'a_vencer' | 'paga' | 'cancelada';
+/** A coluna «SITUAÇÃO» da planilha, mais a cancelada que ela não tinha e a
+ *  dívida com o sócio, que não vence: é devida desde o dia em que ele pagou. */
+export type SituacaoDaDespesa = 'vencida' | 'vence_hoje' | 'a_vencer' | 'a_reembolsar' | 'paga' | 'cancelada';
 
-export const SITUACOES_DA_DESPESA: readonly SituacaoDaDespesa[] = ['vencida', 'vence_hoje', 'a_vencer', 'paga', 'cancelada'];
+export const SITUACOES_DA_DESPESA: readonly SituacaoDaDespesa[] = ['vencida', 'vence_hoje', 'a_vencer', 'a_reembolsar', 'paga', 'cancelada'];
 
 export const ROTULO_DA_SITUACAO_DA_DESPESA: Record<SituacaoDaDespesa, string> = {
-  vencida: 'Vencida', vence_hoje: 'Vence hoje', a_vencer: 'A vencer', paga: 'Paga', cancelada: 'Cancelada',
+  vencida: 'Vencida', vence_hoje: 'Vence hoje', a_vencer: 'A vencer', a_reembolsar: 'A reembolsar',
+  paga: 'Paga', cancelada: 'Cancelada',
 };
 
+/** A conta é a dívida com um sócio que pagou do bolso? */
+export const ehReembolso = (d: Pick<Despesa, 'reembolso_de_pagamento_id'>): boolean => !!d.reembolso_de_pagamento_id;
+
 /** «Vencido é a data, não o status» — a regra de Contas a receber vale aqui. */
-export function situacao(d: Pick<Despesa, 'status' | 'vencimento'>, hoje: string): SituacaoDaDespesa {
+export function situacao(d: Pick<Despesa, 'status' | 'vencimento' | 'reembolso_de_pagamento_id'>, hoje: string): SituacaoDaDespesa {
   if (d.status === 'cancelada') return 'cancelada';
   if (d.status === 'paga') return 'paga';
+  if (ehReembolso(d)) return 'a_reembolsar';
   const n = diasAte(d.vencimento, hoje);
   return n < 0 ? 'vencida' : n === 0 ? 'vence_hoje' : 'a_vencer';
 }
@@ -125,17 +136,21 @@ export type PainelDoMes = {
   titulos_do_mes: number;
 };
 
+/** O que é DESPESA da empresa: tudo, menos a dívida com sócio (que já foi contada
+ *  como a despesa que ele quitou). */
+export const daEmpresa = (d: Despesa): boolean => !ehReembolso(d);
+
 const doMes = (linhas: readonly Despesa[], mes: string) =>
-  linhas.filter((d) => viva(d) && mesDe(d.vencimento) === mes);
+  linhas.filter((d) => viva(d) && daEmpresa(d) && mesDe(d.vencimento) === mes);
 
 export function painelDoMes(linhas: readonly Despesa[], mes: string, hoje: string): PainelDoMes {
   const domes = doMes(linhas, mes);
   const previsto = domes.reduce((s, d) => s + d.valor_centavos, 0);
   const pago = domes.reduce((s, d) => s + pagoEmCaixa(d), 0);
   const em_aberto = domes.reduce((s, d) => s + saldo(d), 0);
-  const vencidas = linhas.filter((d) => viva(d) && d.status !== 'paga' && diasAte(d.vencimento, hoje) < 0);
+  const vencidas = linhas.filter((d) => viva(d) && daEmpresa(d) && d.status !== 'paga' && diasAte(d.vencimento, hoje) < 0);
   const em7 = linhas.filter((d) => {
-    if (!viva(d) || d.status === 'paga') return false;
+    if (!viva(d) || !daEmpresa(d) || d.status === 'paga') return false;
     const n = diasAte(d.vencimento, hoje);
     return n >= 0 && n <= 7;
   });
@@ -306,7 +321,7 @@ export function projetar(linhas: readonly Despesa[], inicio: string, quantos = 2
   };
 
   for (const d of linhas) {
-    if (!viva(d)) continue;
+    if (!viva(d) || !daEmpresa(d)) continue;
     const m = meses.get(mesDe(d.vencimento));
     if (!m) continue;
     m.lancado += d.valor_centavos;
@@ -367,6 +382,24 @@ export function projecaoPorPlano(p: Projecao, de: string, ate: string, categoria
     { categoria_id: null, nome: SEM_PLANO, total: somas.get(null) ?? 0 },
   ].filter((l) => l.total > 0);
   return { linhas, total: linhas.reduce((s, l) => s + l.total, 0) };
+}
+
+// ------------------------------------------------------ o que a empresa deve aos sócios
+
+export type DevidoAoSocio = { nome: string; centavos: number; titulos: number };
+
+/** A dívida em aberto com cada sócio (o saldo dos reembolsos), do maior para o menor. */
+export function devidoAosSocios(linhas: readonly Despesa[]): { socios: DevidoAoSocio[]; total: number } {
+  const por = new Map<string, DevidoAoSocio>();
+  for (const d of linhas) {
+    if (!ehReembolso(d) || !viva(d) || saldo(d) <= 0) continue;
+    const nome = d.beneficiario_nome ?? 'Sócio';
+    const s = por.get(nome) ?? { nome, centavos: 0, titulos: 0 };
+    s.centavos += saldo(d); s.titulos += 1;
+    por.set(nome, s);
+  }
+  const socios = [...por.values()].sort((a, b) => b.centavos - a.centavos || a.nome.localeCompare(b.nome));
+  return { socios, total: socios.reduce((s, x) => s + x.centavos, 0) };
 }
 
 // ------------------------------------------------------ a baixa

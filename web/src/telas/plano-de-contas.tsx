@@ -44,7 +44,7 @@ export function TelaPlanoDeContas() {
 
   async function comecar() {
     const ok = await acao.executar(() => api.post('/plano-de-contas/planilha', {}));
-    if (ok) { acao.anunciar('O plano da planilha entrou: 12 itens e a Conta PJ G3 Solar.'); carga.recarregar(); }
+    if (ok) { acao.anunciar('O plano da planilha entrou: 12 itens, a Conta PJ G3 Solar e os sócios Vinicius Leal e Renata Estevam.'); carga.recarregar(); }
   }
 
   return (
@@ -60,15 +60,16 @@ export function TelaPlanoDeContas() {
           <h2>Comece pelo plano que a empresa já usa</h2>
           <p>
             A planilha <em>G3Solar_Financeiro</em> tem 12 itens de plano de contas — de Despesas
-            Administrativas a Outras Despesas — e a Conta PJ G3 Solar como origem. Um clique e eles
-            passam a valer aqui; depois é renomear, reordenar ou desativar o que não servir.
+            Administrativas a Outras Despesas. As origens são a Conta PJ G3 Solar e os sócios Vinicius Leal e
+            Renata Estevam. Um clique e tudo passa a valer aqui; depois é renomear, reordenar ou desativar o
+            que não servir.
           </p>
           <div style={linha}>
             <button type="button" className="primario" disabled={acao.ocupado} onClick={comecar}>
               Começar com o plano da planilha
             </button>
           </div>
-          <p className="sub">Os adiantamentos de sócio não entram sozinhos: escreva o nome de cada sócio em «De onde sai o dinheiro».</p>
+          <p className="sub">Quando um sócio paga do bolso, a empresa passa a dever a ele — e o reembolso aparece em Despesas.</p>
         </section>
       )}
 
@@ -195,7 +196,8 @@ function ListaDeOrigens(p: { origens: readonly OrigemDePagamento[]; acao: Acao; 
     <section className="cartao pc-lista" aria-labelledby="pc-origens">
       <h2 id="pc-origens">De onde sai o dinheiro</h2>
       <p className="sub">
-        A conta da empresa, ou o sócio que pagou do bolso e a quem a empresa fica devendo.
+        A conta da empresa, ou o sócio que pagou do bolso. O que sai do bolso de um sócio vira dívida da
+        empresa com ele, em «Devido aos sócios», na tela Despesas.
       </p>
       <Tabela cartoes="estreita"
               cabecalho={<><th>Nome</th><th>Tipo</th><th>Situação</th><th><span className="so-leitor">Ações</span></th></>}
@@ -217,7 +219,7 @@ function ListaDeOrigens(p: { origens: readonly OrigemDePagamento[]; acao: Acao; 
         ))}
       </Tabela>
       <form className="pc-novo" onSubmit={(e) => { e.preventDefault(); if (nome.trim()) criar(); }}>
-        <Campo rotulo="Nova origem" valor={nome} ao={setNome} dica="Ex.: Adiantamento — Ana" />
+        <Campo rotulo="Nova origem" valor={nome} ao={setNome} dica="Ex.: Conta Sicoob" />
         <Escolha valor={tipo} rotuloAcessivel="Tipo da nova origem" opcoes={OPCOES_DE_TIPO}
                  ao={(v) => setTipo(v as TipoDeOrigem)} />
         <button type="submit" disabled={p.acao.ocupado || !nome.trim()}>Acrescentar</button>

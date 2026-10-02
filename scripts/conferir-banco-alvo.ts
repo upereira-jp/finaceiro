@@ -600,7 +600,8 @@ async function migration42(): Promise<void> {
              WHERE table_schema = 'public' AND table_name = 'conta_pagar'
                AND column_name IN ('natureza','recorrencia','recorrente_ate','serie_id','parcela_numero',
                                    'parcela_total','forma_prevista','origem_pagamento_id','numero_documento',
-                                   'comprovante_url','observacao'))                        AS colunas_conta,
+                                   'comprovante_url','observacao','reembolso_de_pagamento_id',
+                                   'reembolso_chave'))                                     AS colunas_conta,
            (SELECT count(*) FROM information_schema.columns
              WHERE table_schema = 'public' AND table_name = 'pagamento'
                AND column_name IN ('acrescimo_centavos','desconto_centavos','origem_pagamento_id')) AS colunas_pagamento,
@@ -620,7 +621,7 @@ async function migration42(): Promise<void> {
                AND finished_at IS NOT NULL AND rolled_back_at IS NULL)                     AS registro`);
 
   const faltando = [
-    Number(r!.colunas_conta) === 11 ? null : `as 11 colunas novas de conta_pagar (achei ${r!.colunas_conta})`,
+    Number(r!.colunas_conta) === 13 ? null : `as 13 colunas novas de conta_pagar (achei ${r!.colunas_conta})`,
     Number(r!.colunas_pagamento) === 3 ? null : `as 3 colunas novas de pagamento (achei ${r!.colunas_pagamento})`,
     Number(r!.ordem) === 1 ? null : 'a coluna categoria.ordem',
     Number(r!.formas) === 2 ? null : `as formas cartao_credito e debito_automatico (achei ${r!.formas})`,
@@ -631,7 +632,7 @@ async function migration42(): Promise<void> {
   ].filter(Boolean);
 
   if (faltando.length) throw new ConferenciaFalhou(`a migration 42 nao esta completa no banco. Falta: ${faltando.join('; ')}.`);
-  console.log('migration 42 OK — origem_pagamento com RLS e trilha, 11 colunas novas no titulo, 3 na baixa, '
+  console.log('migration 42 OK — origem_pagamento com RLS e trilha, 13 colunas novas no titulo (com o reembolso ao socio), 3 na baixa, '
     + 'categoria.ordem e as formas cartao_credito e debito_automatico.');
 }
 

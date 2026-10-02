@@ -334,17 +334,21 @@ model conta_pagar {
   numero_documento        String?
   comprovante_url         String?
   observacao              String?
+  reembolso_de_pagamento_id String?          @db.Uuid
+  reembolso_chave         String?            @default(dbgenerated("COALESCE(reembolso_de_pagamento_id, id)")) @db.Uuid
   categoria               categoria?         @relation(fields: [tenant_id, categoria_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "conta_pagar_categoria_fk")
   centro_custo            centro_custo?      @relation(fields: [tenant_id, centro_custo_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "conta_pagar_centro_custo_fk")
   dono_usina              dono_usina?        @relation(fields: [tenant_id, dono_usina_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "conta_pagar_dono_fk")
   originador              originador?        @relation(fields: [tenant_id, originador_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "conta_pagar_originador_fk")
   origem_pagamento        origem_pagamento?  @relation(fields: [tenant_id, origem_pagamento_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "conta_pagar_origem_pagamento_fk")
+  pagamento_conta_pagar_tenant_id_reembolso_de_pagamento_idTopagamento pagamento? @relation("conta_pagar_tenant_id_reembolso_de_pagamento_idTopagamento", fields: [tenant_id, reembolso_de_pagamento_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "conta_pagar_reembolso_fk")
   split_item              split_item?        @relation(fields: [tenant_id, origem_split_item_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "conta_pagar_split_fk")
   tenant                  tenant             @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "conta_pagar_tenant_fk")
   pagamento               pagamento[]
 
   @@unique([tenant_id, id], map: "conta_pagar_id_tenant")
   @@unique([tenant_id, origem_split_item_chave], map: "conta_pagar_origem_unica")
+  @@unique([tenant_id, reembolso_chave], map: "conta_pagar_reembolso_unico")
   @@index([tenant_id, vencimento], map: "conta_pagar_aberta_idx", where: raw("(status = ANY (ARRAY['aberta'::status_conta_pagar, 'parcial'::status_conta_pagar]))"))
   @@index([tenant_id, competencia], map: "conta_pagar_competencia_idx")
   @@index([tenant_id, serie_id], map: "conta_pagar_serie_idx", where: raw("(serie_id IS NOT NULL)"))
@@ -599,6 +603,7 @@ model pagamento {
   desconto_centavos  Int                @default(0)
   origem_pagamento_id String?           @db.Uuid
   origem_pagamento   origem_pagamento?  @relation(fields: [tenant_id, origem_pagamento_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "pagamento_origem_pagamento_fk")
+  conta_pagar_conta_pagar_tenant_id_reembolso_de_pagamento_idTopagamento conta_pagar[] @relation("conta_pagar_tenant_id_reembolso_de_pagamento_idTopagamento")
   conta_pagar        conta_pagar        @relation(fields: [tenant_id, conta_pagar_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "pagamento_conta_fk")
   tenant             tenant             @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "pagamento_tenant_fk")
 

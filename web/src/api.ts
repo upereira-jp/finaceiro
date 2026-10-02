@@ -895,6 +895,8 @@ export type Despesa = {
   numero_documento: string | null;
   comprovante_url: string | null;
   observacao: string | null;
+  /** Preenchido na DÍVIDA COM UM SÓCIO que pagou do bolso (Q-SOCIOS-01): o pagamento que ele fez. */
+  reembolso_de_pagamento_id: string | null;
   pagamento: PagamentoDaDespesa[];
 };
 

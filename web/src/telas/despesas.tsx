@@ -32,7 +32,7 @@ import { diaEmBr, mesPorExtenso, mesEmBr } from '../formato.ts';
 import { ROTULO_DA_FORMA, type FormaDePagamento } from '../contas-regras.ts';
 import {
   situacao, saldo, diasAte, mesDe, dia, textoDaSerie, pagoEmCaixa, ajusteDasBaixas, saidaDoPagamento,
-  seriesQueProjetam, decomporBaixa, ROTULO_DA_SITUACAO_DA_DESPESA, ROTULO_DA_RECORRENCIA, ROTULO_DA_NATUREZA,
+  seriesQueProjetam, decomporBaixa, devidoAosSocios, ehReembolso, ROTULO_DA_SITUACAO_DA_DESPESA, ROTULO_DA_RECORRENCIA, ROTULO_DA_NATUREZA,
   INTERVALO_EM_MESES, type SerieQueProjeta, type MotivoDaDiferenca,
 } from '../despesas-regras.ts';
 import { SELO_DA_DESPESA } from '../tom-do-estado.ts';
@@ -40,11 +40,11 @@ import { paraCsv, reaisParaPlanilha, nomeDoArquivo, type Coluna } from '../csv.t
 import { baixarCsv } from '../baixar.ts';
 
 /** O recorte da lista. «A pagar» é o padrão: é o que pede alguém hoje. */
-type Vista = 'a_pagar' | 'vencidas' | 'semana' | 'mes' | 'pagas' | 'todas';
+type Vista = 'a_pagar' | 'vencidas' | 'semana' | 'mes' | 'socios' | 'pagas' | 'todas';
 
 const ROTULO_DA_VISTA: Record<Vista, string> = {
   a_pagar: 'A pagar', vencidas: 'Vencidas', semana: 'Vencem em 7 dias', mes: 'Vencem este mês',
-  pagas: 'Pagas', todas: 'Todas',
+  socios: 'Devido aos sócios', pagas: 'Pagas', todas: 'Todas',
 };
 
 const OPCOES_DE_FORMA = (Object.keys(ROTULO_DA_FORMA) as FormaDePagamento[])
@@ -61,6 +61,7 @@ function fraseDoPrazo(d: Despesa, hoje: string): string {
     const ultimo = d.pagamento[d.pagamento.length - 1];
     return ultimo ? `paga em ${diaEmBr(ultimo.data_pagamento)}` : 'paga';
   }
+  if (ehReembolso(d)) return 'pago do bolso do sócio';
   const n = diasAte(d.vencimento, hoje);
   if (n === 0) return 'vence hoje';
   return n < 0 ? `há ${plural(-n, 'dia', 'dias')}` : `em ${plural(n, 'dia', 'dias')}`;
@@ -73,7 +74,11 @@ export function TelaDespesas() {
 
   const [criando, setCriando] = useState(false);
   const [editando, setEditando] = useState<Despesa | null>(null);
-  const [vista, setVista] = useState<Vista>('a_pagar');
+  /* `?vista=socios` é o link do Painel («Reembolsar em Despesas»). */
+  const [vista, setVista] = useState<Vista>(() => {
+    const v = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('vista');
+    return v && v in ROTULO_DA_VISTA ? (v as Vista) : 'a_pagar';
+  });
   const [plano, setPlano] = useState('');
   const [mes, setMes] = useState('');
   const [busca, setBusca] = useState('');
@@ -93,10 +98,11 @@ export function TelaDespesas() {
   const naVista = (d: Despesa): boolean => {
     const sit = situacao(d, hoje);
     switch (vista) {
-      case 'a_pagar': return sit === 'vencida' || sit === 'vence_hoje' || sit === 'a_vencer';
+      case 'a_pagar': return sit === 'vencida' || sit === 'vence_hoje' || sit === 'a_vencer' || sit === 'a_reembolsar';
+      case 'socios': return sit === 'a_reembolsar';
       case 'vencidas': return sit === 'vencida';
-      case 'semana': { const n = diasAte(d.vencimento, hoje); return sit !== 'paga' && sit !== 'cancelada' && n >= 0 && n <= 7; }
-      case 'mes': return sit !== 'cancelada' && mesDe(d.vencimento) === mesDe(hoje);
+      case 'semana': { const n = diasAte(d.vencimento, hoje); return (sit === 'vence_hoje' || sit === 'a_vencer') && n <= 7; }
+      case 'mes': return sit !== 'cancelada' && !ehReembolso(d) && mesDe(d.vencimento) === mesDe(hoje);
       case 'pagas': return sit === 'paga';
       case 'todas': return true;
     }
@@ -113,7 +119,11 @@ export function TelaDespesas() {
     const ls = todas.filter((d) => filtroDaVista(v, d, hoje));
     return { n: ls.length, centavos: ls.reduce((s, d) => s + saldo(d), 0) };
   };
-  const atalhos = dados ? (['vencidas', 'semana', 'mes'] as const).map((v) => ({ v, ...contar(v) })) : [];
+  const devido = devidoAosSocios(todas);
+  const atalhos = dados
+    ? [...(['vencidas', 'semana', 'mes'] as const).map((v) => ({ v: v as Vista, ...contar(v) })),
+       ...(devido.total > 0 ? [{ v: 'socios' as Vista, n: devido.socios.reduce((s, x) => s + x.titulos, 0), centavos: devido.total }] : [])]
+    : [];
   const mesesComTitulo = [...new Set(todas.map((d) => mesDe(d.vencimento)))].sort();
 
   const recarregar = () => { carga.recarregar(); };
@@ -220,11 +230,12 @@ export function TelaDespesas() {
   );
 }
 
+/** Os atalhos contam DESPESA: a dívida com o sócio tem o atalho dela. */
 function filtroDaVista(v: Vista, d: Despesa, hoje: string): boolean {
   const sit = situacao(d, hoje);
   if (v === 'vencidas') return sit === 'vencida';
-  if (v === 'semana') { const n = diasAte(d.vencimento, hoje); return sit !== 'paga' && sit !== 'cancelada' && n >= 0 && n <= 7; }
-  if (v === 'mes') return sit !== 'paga' && sit !== 'cancelada' && mesDe(d.vencimento) === mesDe(hoje);
+  if (v === 'semana') { const n = diasAte(d.vencimento, hoje); return (sit === 'vence_hoje' || sit === 'a_vencer') && n <= 7; }
+  if (v === 'mes') return (sit === 'vencida' || sit === 'vence_hoje' || sit === 'a_vencer') && mesDe(d.vencimento) === mesDe(hoje);
   return false;
 }
 
@@ -269,8 +280,8 @@ function LinhaDaDespesa(p: {
           </button>
           <div className="sub">{d.beneficiario_nome}</div>
         </td>
-        <td>{p.plano ?? <span className="sub">Sem plano</span>}</td>
-        <td>{serieTexto ?? <span className="sub">Avulsa</span>}</td>
+        <td>{ehReembolso(d) ? <span className="sub">Dívida com sócio</span> : p.plano ?? <span className="sub">Sem plano</span>}</td>
+        <td>{ehReembolso(d) ? <span className="sub">—</span> : serieTexto ?? <span className="sub">Avulsa</span>}</td>
         <td className="num">
           {emReais(d.valor_centavos)}
           {d.status === 'parcial' && <div className="sub">falta {emReais(resta)}</div>}
@@ -288,7 +299,7 @@ function LinhaDaDespesa(p: {
             <button type="button" role="menuitem" onClick={() => alternar('detalhe')}>
               <Icone nome="abrir_linha" tamanho={16} /> {aberto === 'detalhe' ? 'Fechar o detalhe' : 'Ver o detalhe'}
             </button>
-            {viva && (
+            {viva && !ehReembolso(d) && (
               <button type="button" role="menuitem" onClick={p.aoEditar}>
                 <Icone nome="alterou" tamanho={16} /> Editar…
               </button>
@@ -382,7 +393,9 @@ function FormularioDeBaixa(p: {
   const [saiu, setSaiu] = useState(centavosParaCampo(resta));
   const [data, setData] = useState(p.hoje);
   const [forma, setForma] = useState<string>(p.d.forma_prevista ?? 'pix');
-  const [origem, setOrigem] = useState(p.d.origem_pagamento_id ?? '');
+  const [origem, setOrigem] = useState(
+    p.d.origem_pagamento_id
+    ?? (ehReembolso(p.d) ? (p.cadastros?.origens ?? []).find((o) => o.ativo && o.tipo === 'conta_bancaria')?.id ?? '' : ''));
   const [motivo, setMotivo] = useState<MotivoDaDiferenca | ''>('');
   const [referencia, setReferencia] = useState('');
 
@@ -390,7 +403,11 @@ function FormularioDeBaixa(p: {
   try { centavos = paraCentavos(saiu); } catch { centavos = null; }
   const baixa = centavos === null ? 'Escreva o valor como 1.234,56.' : decomporBaixa(resta, centavos, motivo || null);
   const futura = data > p.hoje;
-  const origens = (p.cadastros?.origens ?? []).filter((o) => o.ativo || o.id === origem);
+  const reembolso = ehReembolso(p.d);
+  /* O reembolso ao sócio sai da conta da empresa — nunca do bolso de um sócio. */
+  const origens = (p.cadastros?.origens ?? [])
+    .filter((o) => (o.ativo || o.id === origem) && !(reembolso && o.tipo === 'socio'));
+  const socio = (p.cadastros?.origens ?? []).find((o) => o.id === origem && o.tipo === 'socio') ?? null;
 
   async function pagar() {
     if (typeof baixa === 'string' || futura) return;
@@ -414,7 +431,7 @@ function FormularioDeBaixa(p: {
                erro={futura ? 'A data não pode ser depois de hoje.' : null} />
         <Campo rotulo="Forma" valor={forma} ao={setForma} opcoes={OPCOES_DE_FORMA} />
         <Campo rotulo="Saiu de" valor={origem} ao={setOrigem}
-               opcoes={origens.map((o) => ({ valor: o.id, texto: o.nome }))} />
+               opcoes={origens.map((o) => ({ valor: o.id, texto: o.tipo === 'socio' ? `${o.nome} (sócio, do bolso)` : o.nome }))} />
         <Campo rotulo="Referência (opcional)" valor={referencia} ao={setReferencia} dica="nº do comprovante, end-to-end do Pix" />
       </div>
       {centavos !== null && centavos > 0 && centavos < resta && (
@@ -426,6 +443,13 @@ function FormularioDeBaixa(p: {
       )}
       {typeof baixa === 'object' && baixa.acrescimo_centavos > 0 && (
         <p className="sub">Os {emReais(baixa.acrescimo_centavos)} a mais ficam registrados como juros/multa.</p>
+      )}
+      {socio && typeof baixa === 'object' && (
+        <p className="sub dp-aviso-socio">
+          Saiu do bolso de {socio.nome}: a empresa passa a dever a ele{' '}
+          <strong>{emReais(baixa.valor_centavos + baixa.acrescimo_centavos - baixa.desconto_centavos)}</strong>,
+          {' '}em «Devido aos sócios».
+        </p>
       )}
       {p.acao.erro && <Aviso tipo="erro">{p.acao.erro}</Aviso>}
       <div style={linha}>

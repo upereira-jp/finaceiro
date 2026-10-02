@@ -92,6 +92,7 @@ const ESPERADO: Readonly<Record<string, TomDoSelo>> = {
   'despesa.vencida': 'erro',
   'despesa.vence_hoje': 'a_fazer',
   'despesa.a_vencer': 'a_fazer',
+  'despesa.a_reembolsar': 'a_fazer',
   'despesa.paga': 'ok',
   'despesa.cancelada': 'neutro',
   'espera_do_repasse.sem_dono': 'a_fazer',

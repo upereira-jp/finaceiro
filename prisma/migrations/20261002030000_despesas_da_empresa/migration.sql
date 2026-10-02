@@ -110,6 +110,36 @@ ALTER TABLE conta_pagar
 
 CREATE INDEX conta_pagar_serie_idx ON conta_pagar (tenant_id, serie_id) WHERE serie_id IS NOT NULL;
 
+-- ------------------------------------------------------------ o socio que pagou do bolso
+--
+-- DECISAO DO DONO, 02/10/2026 (Q-SOCIOS-01): «quando paga do bolso e uma divida
+-- da empresa com ele». A baixa cuja origem e um socio faz nascer, na MESMA
+-- transacao, uma conta a pagar AO SOCIO no valor que saiu do bolso dele
+-- (valor + acrescimo - desconto). Ela e quitada como qualquer outra - por um
+-- pagamento que sai da conta da empresa - e e assim que o caixa continua com um
+-- tipo so de saida (principio 1 do plano de 22/09).
+--
+-- E DIVIDA, NAO DESPESA: a despesa ja foi contada quando o socio pagou. Por isso
+-- o Painel e a Projecao leem `reembolso_de_pagamento_id IS NULL`, e o reembolso
+-- aparece a parte, como «Devido aos socios».
+--
+-- UM REEMBOLSO POR PAGAMENTO, com a chave gerada da regra 11 (a mesma forma de
+-- `origem_split_item_chave`): indice unico PARCIAL sobre as colunas da FK e
+-- proibido, porque o `db pull` o le como relacao to-one.
+ALTER TABLE conta_pagar
+  ADD COLUMN reembolso_de_pagamento_id uuid,
+  ADD COLUMN reembolso_chave uuid GENERATED ALWAYS AS (coalesce(reembolso_de_pagamento_id, id)) STORED,
+  ADD CONSTRAINT conta_pagar_reembolso_fk
+    FOREIGN KEY (tenant_id, reembolso_de_pagamento_id) REFERENCES pagamento (tenant_id, id),
+  ADD CONSTRAINT conta_pagar_reembolso_e_divida CHECK (
+    reembolso_de_pagamento_id IS NULL
+    OR (origem_split_item_id IS NULL AND recorrencia IS NULL AND serie_id IS NULL AND natureza IS NULL));
+
+CREATE UNIQUE INDEX conta_pagar_reembolso_unico ON conta_pagar (tenant_id, reembolso_chave);
+
+COMMENT ON COLUMN conta_pagar.reembolso_de_pagamento_id IS
+  'Preenchida quando a conta e a divida da empresa com um socio que pagou do bolso: o pagamento que ele fez. Divida, nao despesa.';
+
 COMMENT ON COLUMN conta_pagar.serie_id IS
   'Os titulos de uma mesma conta recorrente ou parcelada. O ultimo (maior vencimento) e o molde da projecao.';
 

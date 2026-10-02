@@ -44,8 +44,10 @@ const iso = (d: Date) => d.toISOString().slice(0, 10);
   const r1 = await emA(() => despesa.comecarPelaPlanilha());
   const r2 = await emA(() => despesa.comecarPelaPlanilha());
   const cad = await emA(() => despesa.cadastros());
-  chk('E1', r1.categorias_criadas === 12 && r1.origem_criada && r2.categorias_criadas === 0 && !r2.origem_criada,
-      'começar pelo plano da planilha grava os 12 itens e a Conta PJ, e a segunda vez não duplica nada');
+  chk('E1', r1.categorias_criadas === 12 && r1.origens_criadas === 3 && r2.categorias_criadas === 0 && r2.origens_criadas === 0,
+      'começar pelo plano da planilha grava os 12 itens e as 3 origens (Conta PJ e os dois sócios), e a segunda vez não duplica nada');
+  chk('E1g', cad.origens.filter((o) => o.tipo === 'socio').map((o) => o.nome).join() === 'Vinicius Leal,Renata Estevam',
+      'os sócios são os que o dono nomeou em 02/10/2026, com o tipo sócio');
   chk('E1b', cad.categorias[0]!.nome === 'Despesas Administrativas' && cad.categorias.at(-1)!.nome === 'Outras Despesas',
       'na ordem da planilha: Administrativas primeiro, Outras por último');
   const ids = cad.categorias.map((c) => c.id);
@@ -62,7 +64,9 @@ const iso = (d: Date) => d.toISOString().slice(0, 10);
 
 const { categorias, origens } = await emA(() => despesa.cadastros());
 const ADM = categorias.find((c) => c.nome === 'Despesas Administrativas')!.id;
-const PJ = origens[0]!.id;
+const PJ = origens.find((o) => o.nome === 'Conta PJ G3 Solar')!.id;
+const VINICIUS = origens.find((o) => o.nome === 'Vinicius Leal')!.id;
+const RENATA = origens.find((o) => o.nome === 'Renata Estevam')!.id;
 
 // ---------------------------------------------------------------- lançar
 {
@@ -141,6 +145,38 @@ const PJ = origens[0]!.id;
     data_pagamento: dia(2026, 10, 27), valor_centavos: 1, desconto_centavos: 2, forma: 'pix',
   })));
   chk('E7c', desc !== null, 'desconto maior que o abatido é recusado');
+}
+
+// ---------------------------------------------------------------- o socio que pagou do bolso
+{
+  const [net] = await emA(() => despesa.lancar({
+    descricao: 'Internet fibra', fornecedor: 'Vivo', valor_centavos: 34990,
+    competencia: dia(2026, 10, 1), vencimento: dia(2026, 10, 2),
+  }));
+  const pg = await emA(() => contaPagar.registrarPagamento(net!.id, {
+    data_pagamento: dia(2026, 10, 3), valor_centavos: 34990, acrescimo_centavos: 1000, forma: 'pix', origem_pagamento_id: VINICIUS,
+  }));
+  const todas = (await emA(() => despesa.listar())).linhas;
+  const divida = todas.find((l) => l.reembolso_de_pagamento_id === pg.id);
+  chk('E9', !!divida && divida.valor_centavos === 35990 && divida.beneficiario_nome === 'Vinicius Leal'
+        && iso(divida.vencimento) === '2026-10-03' && divida.status === 'aberta',
+      'pago do bolso do Vinicius: nasce a dívida da empresa com ele, no que saiu do bolso (34990 + 1000 de juros), devida desde o dia');
+  chk('E9b', todas.find((l) => l.id === net!.id)!.status === 'paga', 'e a despesa em si fica paga');
+
+  const deOutroSocio = await lancou(() => emA(() => contaPagar.registrarPagamento(divida!.id, {
+    data_pagamento: dia(2026, 10, 10), valor_centavos: 35990, forma: 'pix', origem_pagamento_id: RENATA,
+  })));
+  chk('E9c', deOutroSocio !== null && deOutroSocio.status === 422, 'o reembolso não se paga do bolso de outro sócio');
+  const mudarValor = await lancou(() => emA(() => despesa.editar(divida!.id, { valor_centavos: 1 })));
+  chk('E9d', mudarValor !== null && mudarValor.status === 422, 'o valor do reembolso não se edita: é o que saiu do bolso');
+
+  await emA(() => contaPagar.registrarPagamento(divida!.id, {
+    data_pagamento: dia(2026, 10, 10), valor_centavos: 35990, forma: 'ted', origem_pagamento_id: PJ,
+  }));
+  const depois = (await emA(() => despesa.listar())).linhas;
+  chk('E9e', depois.find((l) => l.id === divida!.id)!.status === 'paga'
+        && depois.filter((l) => l.reembolso_de_pagamento_id !== null).length === 1,
+      'reembolsado pela Conta PJ: a dívida fecha, e pagar da conta da empresa não cria dívida nenhuma');
 }
 
 // ---------------------------------------------------------------- o que nao e da planilha

@@ -296,13 +296,32 @@ export async function registrarPagamento(contaPagarId: string, p: NovoPagamento)
   if (c.valor_pago_centavos + p.valor_centavos > c.valor_centavos) {
     throw new PagamentoExcedeSaldo(c.valor_centavos, c.valor_pago_centavos, p.valor_centavos);
   }
+  /*
+   * O SOCIO QUE PAGOU DO BOLSO (decisao do dono, 02/10/2026 - Q-SOCIOS-01):
+   * «quando paga do bolso e uma divida da empresa com ele». A origem `socio`
+   * faz nascer, logo abaixo e na MESMA transacao, a conta a pagar AO socio.
+   * A divida ao socio nao se paga do bolso de um socio: isso trocaria uma divida
+   * por outra igual, e o reembolso nunca terminaria.
+   */
+  const origemId = p.origem_pagamento_id?.trim() || null;
+  const origem = origemId ? await dbt().origem_pagamento.findFirst({ where: { id: origemId } }) : null;
+  if (origemId && !origem) {
+    throw Object.assign(new Error('A origem do pagamento nao foi encontrada.'), { status: 404 });
+  }
+  const socio = origem?.tipo === 'socio' ? origem : null;
+  if (socio && c.reembolso_de_pagamento_id) {
+    throw Object.assign(new Error(
+      'O reembolso a um socio sai da conta da empresa, nao do bolso de um socio: escolha a conta da empresa em «Saiu de».'),
+      { status: 422 });
+  }
+
   const acrescimo = centavosNaoNegativos(p.acrescimo_centavos, 'acrescimo_centavos');
   const desconto = centavosNaoNegativos(p.desconto_centavos, 'desconto_centavos');
   if (desconto > p.valor_centavos) {
     throw Object.assign(new Error('O desconto nao pode ser maior que o valor abatido do titulo.'), { status: 422 });
   }
 
-  return dbt().pagamento.create({
+  const pagamento = await dbt().pagamento.create({
     data: {
       tenant_id: tenantCorrente(),
       conta_pagar_id: contaPagarId,
@@ -313,9 +332,30 @@ export async function registrarPagamento(contaPagarId: string, p: NovoPagamento)
       observacao: p.observacao?.trim() || null,
       acrescimo_centavos: acrescimo,
       desconto_centavos: desconto,
-      origem_pagamento_id: p.origem_pagamento_id?.trim() || null,
+      origem_pagamento_id: origemId,
     },
   });
+
+  /* A divida com o socio: o que saiu do bolso dele (valor + juros - desconto),
+   * devida desde o dia em que ele pagou. E divida, nao despesa - a despesa e a
+   * conta que ele quitou -, e por isso fica fora do Painel e da Projecao. */
+  const saiu = p.valor_centavos + acrescimo - desconto;
+  if (socio && saiu > 0) {
+    const d = p.data_pagamento;
+    await dbt().conta_pagar.create({
+      data: {
+        tenant_id: tenantCorrente(),
+        descricao: `Reembolso a ${socio.nome} — ${c.descricao}`,
+        beneficiario_tipo: 'outro' as TipoBeneficiario,
+        beneficiario_nome: socio.nome,
+        valor_centavos: saiu,
+        competencia: new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)),
+        vencimento: d,
+        reembolso_de_pagamento_id: pagamento.id,
+      },
+    });
+  }
+  return pagamento;
 }
 
 // ------------------------------------------------------ leitura

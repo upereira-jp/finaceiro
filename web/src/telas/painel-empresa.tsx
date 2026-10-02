@@ -31,6 +31,7 @@ import { emReais } from '../dinheiro.ts';
 import { mesPorExtenso, mesCurtoDoAno } from '../formato.ts';
 import {
   mesDe, somarMeses, painelDoMes, situacaoDoMes, porPlanoNoMes, anoMesAMes, projetar, indicadoresDoPeriodo,
+  devidoAosSocios,
 } from '../despesas-regras.ts';
 
 // ------------------------------------------------------ o gráfico de colunas
@@ -182,6 +183,7 @@ function Conteudo({ dados, hoje, mes, ano, categorias }: {
   const porPlano = porPlanoNoMes(linhas, mes, categorias);
   const doAno = anoMesAMes(linhas, ano);
   const proximos12 = indicadoresDoPeriodo(projetar(linhas, mesDe(hoje), 12), mesDe(hoje), somarMeses(mesDe(hoje), 11)).proximos_12;
+  const devido = devidoAosSocios(linhas);
   const nomeDoMes = mesPorExtenso(mes);
   const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`;
 
@@ -208,6 +210,17 @@ function Conteudo({ dados, hoje, mes, ano, categorias }: {
              valor={<>{emReais(proximos12)}<span className="kpi-nota">
                <Ligacao para="/projecao">Lançado e recorrente, na Projeção</Ligacao></span></>} />
       </div>
+
+      {/* A DÍVIDA COM OS SÓCIOS (Q-SOCIOS-01): fica FORA dos seis números — a
+          despesa que o sócio pagou já está neles — e aparece aqui, de qualquer
+          mês, até a empresa reembolsar. */}
+      {devido.total > 0 && (
+        <p className="painel-socios">
+          <strong>A empresa deve {emReais(devido.total)} aos sócios</strong>
+          {' — '}{devido.socios.map((x) => `${x.nome} ${emReais(x.centavos)}`).join(' · ')}.
+          {' '}<Ligacao para="/despesas?vista=socios">Reembolsar em Despesas</Ligacao>
+        </p>
+      )}
 
       {/* [02/10, revisão visual] A SITUAÇÃO VEM PRIMEIRO e as duas ocupam a
           largura toda: lado a lado, a tabela por plano cortava a coluna «% do

@@ -22,6 +22,13 @@ export const ESTILO_DESPESAS = `
   .dp-atalho-valor { font-size: var(--t-h2); font-weight: 700; font-variant-numeric: tabular-nums; }
   .dp-atalho-conta { font-size: var(--t-meta); color: var(--fraco); }
   .dp-vencidas .dp-atalho-valor { color: var(--erro); }
+  .dp-aviso-socio { color: var(--texto); }
+
+  /* -------- Painel: a dívida com os sócios, fora dos seis números */
+  .painel-socios {
+    margin: 0 0 var(--gap-secao); padding: 12px 16px; background: var(--fundo2);
+    border: 1px solid var(--borda); font-size: var(--t-corpo);
+  }
 
   /* -------- a lista */
   button.dp-nome, button.pc-nome {

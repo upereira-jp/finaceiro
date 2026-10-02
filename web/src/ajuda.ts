@@ -1302,18 +1302,38 @@ export const TOPICOS: readonly Topico[] = [
     id: 'plano-de-contas',
     pergunta: 'Onde cadastro o plano de contas e a conta de onde sai o dinheiro?',
     resposta: 'Na tela Plano de contas, no setor Empresa. Vazia, ela oferece «Começar com o plano da '
-      + 'planilha» (os 12 itens da planilha e a Conta PJ G3 Solar). Depois é acrescentar, renomear, '
-      + 'reordenar ou desativar — nada se apaga, porque há despesa classificada.',
+      + 'planilha»: os 12 itens da planilha e, como origens, a Conta PJ G3 Solar e os sócios Vinicius '
+      + 'Leal e Renata Estevam. Depois é acrescentar, renomear, reordenar ou desativar — nada se apaga, '
+      + 'porque há despesa classificada.',
     passos: [
       'No setor Empresa, abra Plano de contas.',
       'Na primeira vez, clique «Começar com o plano da planilha».',
-      'Em «De onde sai o dinheiro», acrescente o adiantamento de cada sócio com o nome dele.',
+      'Para uma conta bancária nova, use «Nova origem» em «De onde sai o dinheiro».',
     ],
     caminhos: [ir('/plano-de-contas', 'Abrir Plano de contas')],
     camada: null,
     telas: ['/plano-de-contas'],
     termos: ['plano de contas', 'categoria', 'categorias', 'classificar despesa', 'conta bancaria',
-             'origem do pagamento', 'adiantamento de socio', 'socio pagou', 'conta pj', 'cadastros da empresa'],
+             'origem do pagamento', 'conta pj', 'cadastros da empresa'],
+  },
+  {
+    id: 'socio-pagou-do-bolso',
+    pergunta: 'Um sócio pagou uma despesa do bolso. Como fica?',
+    resposta: 'Na baixa, escolha o sócio em «Saiu de». A despesa fica paga e, na mesma hora, a empresa passa '
+      + 'a dever a ele o que saiu do bolso (com juros e desconto, se houve). A dívida aparece em Despesas, '
+      + 'no atalho «Devido aos sócios», e no Painel da empresa; para reembolsar, é «Dar baixa» nela saindo '
+      + 'da conta da empresa.',
+    porque: 'É dívida, não despesa: o gasto já foi contado quando o sócio pagou. Por isso o reembolso '
+      + 'não entra nos números do Painel nem na Projeção — senão a mesma despesa contaria duas vezes.',
+    passos: [
+      'Em Despesas, clique «Dar baixa» na despesa que o sócio pagou e escolha o nome dele em «Saiu de».',
+      'Para reembolsar, abra o atalho «Devido aos sócios» e dê baixa saindo da Conta PJ.',
+    ],
+    caminhos: [ir('/despesas', 'Abrir Despesas'), ver('/empresa', 'Ver no Painel da empresa')],
+    camada: null,
+    telas: ['/despesas', '/empresa'],
+    termos: ['socio pagou', 'pagou do bolso', 'adiantamento de socio', 'reembolso', 'reembolsar socio',
+             'devido aos socios', 'divida com socio', 'vinicius', 'renata'],
   },
 
   // ============================================== a folha que o cliente recebe
@@ -1711,10 +1731,11 @@ export const PALAVRAS_DA_TELA: Record<string, readonly string[]> = {
   '/empresa': ['painel', 'painel da empresa', 'dashboard', 'visao dos socios', 'previsto x realizado',
                'gastos do mes', 'quanto gastamos'],
   '/despesas': ['despesas', 'despesa', 'lancamentos', 'lancar despesa', 'gasto', 'gastos', 'aluguel',
-                'conta fixa', 'parcelada', 'juros', 'desconto', 'planilha da empresa'],
+                'conta fixa', 'parcelada', 'juros', 'desconto', 'planilha da empresa', 'reembolso',
+                'devido aos socios'],
   '/projecao': ['projecao', 'projecao de gastos', 'proximos meses', 'previsao', 'orcamento'],
   '/plano-de-contas': ['plano de contas', 'categoria', 'categorias', 'origem do pagamento',
-                       'conta bancaria', 'adiantamento de socio'],
+                       'conta bancaria', 'socios'],
   /* «historico» SAIU DAQUI EM 10/09/2026, e a troca e o proprio ponto: ate essa
      data a palavra caia em Relatorios por falta de destino melhor. Agora ha uma
      tela que E o historico, e deixar o apelido nas duas mandaria metade das

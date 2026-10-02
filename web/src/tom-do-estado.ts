@@ -200,6 +200,7 @@ export const SELO_DA_DESPESA: Readonly<Record<SituacaoDaDespesa, Selo>> = {
   vencida: selo('erro', 'vencidas'),
   vence_hoje: selo('a_fazer', 'a_pagar'),
   a_vencer: selo('a_fazer', 'calendario'),
+  a_reembolsar: selo('a_fazer', 'a_pagar'),
   paga: selo('ok', 'confirmar'),
   cancelada: selo('neutro', 'cancelado'),
 };

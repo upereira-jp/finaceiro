@@ -18,7 +18,7 @@ SET client_min_messages = notice;
 
 DO $bloco$
 DECLARE
-  T uuid; T2 uuid; o uuid; o2 uuid; c uuid;
+  T uuid; T2 uuid; o uuid; o2 uuid; c uuid; pg uuid;
   falhas int := 0; st text; pago int;
 BEGIN
   INSERT INTO tenant (razao_social, cnpj) VALUES ('Despesas','00000000000272') RETURNING id INTO T;
@@ -144,6 +144,27 @@ BEGIN
   ELSE
     RAISE WARNING 'FALHA D10 os privilegios de app_financeiro em origem_pagamento nao sao os declarados'; falhas := falhas + 1;
   END IF;
+
+  -- ---------------------------------------------------- D11 a divida com o socio (Q-SOCIOS-01)
+  SELECT id INTO pg FROM pagamento WHERE conta_pagar_id = c LIMIT 1;
+  INSERT INTO conta_pagar (tenant_id, descricao, beneficiario_tipo, beneficiario_nome, valor_centavos,
+                           competencia, vencimento, reembolso_de_pagamento_id)
+    VALUES (T, 'Reembolso a Vinicius Leal', 'outro', 'Vinicius Leal', 440538, '2026-10-01', '2026-10-12', pg);
+  RAISE NOTICE 'ok  D11 a divida com o socio aponta para o pagamento que ele fez';
+  BEGIN
+    INSERT INTO conta_pagar (tenant_id, descricao, beneficiario_tipo, beneficiario_nome, valor_centavos,
+                             competencia, vencimento, reembolso_de_pagamento_id)
+      VALUES (T, 'Reembolso em dobro', 'outro', 'Vinicius Leal', 440538, '2026-10-01', '2026-10-12', pg);
+    RAISE WARNING 'FALHA D11b aceitou dois reembolsos do mesmo pagamento'; falhas := falhas + 1;
+  EXCEPTION WHEN unique_violation THEN
+    RAISE NOTICE 'ok  D11b um reembolso por pagamento: o segundo e recusado (conta_pagar_reembolso_unico, regra 11)';
+  END;
+  BEGIN
+    UPDATE conta_pagar SET natureza = 'fixa' WHERE reembolso_de_pagamento_id = pg;
+    RAISE WARNING 'FALHA D11c o reembolso virou despesa fixa'; falhas := falhas + 1;
+  EXCEPTION WHEN check_violation THEN
+    RAISE NOTICE 'ok  D11c reembolso e divida, nao despesa: nao tem natureza nem recorrencia';
+  END;
 
   IF falhas = 0 THEN RAISE NOTICE 'despesas: nenhuma falha'; END IF;
 END $bloco$;

@@ -46,9 +46,14 @@ export const PLANO_DA_PLANILHA = [
   'Outras Despesas',
 ] as const;
 
-/** A primeira origem da planilha. «Adiantamento Sócio 1/2» NÃO entram: a própria
- *  planilha pedia para trocar pelos nomes, e nome de sócio é o dono quem escreve. */
-export const ORIGEM_DA_PLANILHA = 'Conta PJ G3 Solar';
+/** As origens da planilha: a Conta PJ e os sócios. «Adiantamento Sócio 1/2» da
+ *  planilha viraram os nomes que o dono deu em 02/10/2026 (Q-SOCIOS-01). Baixa que
+ *  sai de um sócio vira dívida da empresa com ele (`registrarPagamento`). */
+export const ORIGENS_DA_PLANILHA: ReadonlyArray<{ nome: string; tipo: TipoOrigem }> = [
+  { nome: 'Conta PJ G3 Solar', tipo: 'conta_bancaria' },
+  { nome: 'Vinicius Leal', tipo: 'socio' },
+  { nome: 'Renata Estevam', tipo: 'socio' },
+];
 
 export const FORMAS: readonly FormaDePagamento[] = [
   'pix', 'boleto', 'ted', 'doc', 'cartao_credito', 'debito_automatico', 'dinheiro', 'compensacao',
@@ -109,7 +114,7 @@ export async function cadastros() {
 
 /**
  * «COMEÇAR COM O PLANO DA PLANILHA»: grava os itens da planilha que ainda não
- * existem, na ordem dela, e a Conta PJ se não houver origem nenhuma.
+ * existem, na ordem dela, e as origens (a Conta PJ e os dois sócios) que faltam.
  *
  * Idempotente por nome — rodar duas vezes não duplica, e um item que o analista
  * já criou com o mesmo nome fica como está. Em SÉRIE, nunca `Promise.all`:
@@ -125,12 +130,14 @@ export async function comecarPelaPlanilha() {
     await dbt().categoria.create({ data: { tenant_id, nome, ordem: i + 1 } });
     criadas++;
   }
-  let origem = false;
-  if ((await dbt().origem_pagamento.count()) === 0) {
-    await dbt().origem_pagamento.create({ data: { tenant_id, nome: ORIGEM_DA_PLANILHA, tipo: 'conta_bancaria', ordem: 1 } });
-    origem = true;
+  const jaHa = new Set((await dbt().origem_pagamento.findMany({ select: { nome: true } })).map((o) => o.nome));
+  let origens = 0;
+  for (const [i, o] of ORIGENS_DA_PLANILHA.entries()) {
+    if (jaHa.has(o.nome)) continue;
+    await dbt().origem_pagamento.create({ data: { tenant_id, nome: o.nome, tipo: o.tipo, ordem: i + 1 } });
+    origens++;
   }
-  return { categorias_criadas: criadas, origem_criada: origem };
+  return { categorias_criadas: criadas, origens_criadas: origens };
 }
 
 export async function criarCategoria(e: { nome: unknown }) {
@@ -317,6 +324,9 @@ export async function editar(id: string, e: Partial<NovaDespesa>) {
     if (!t) throw erro(422, 'O fornecedor não pode ficar vazio.');
     data.beneficiario_nome = t;
   }
+  if (c.reembolso_de_pagamento_id && (e.valor_centavos !== undefined || e.recorrencia !== undefined)) {
+    throw erro(422, 'O reembolso ao sócio vale o que saiu do bolso dele e não se repete: valor e recorrência não mudam aqui.');
+  }
   if (e.valor_centavos !== undefined) {
     const v = centavos(e.valor_centavos, 'valor_centavos');
     if (v < c.valor_pago_centavos) {
@@ -441,7 +451,7 @@ export async function listar(limite = 2000) {
       competencia: true, vencimento: true, status: true, criado_em: true, cancelada_em: true,
       categoria_id: true, natureza: true, recorrencia: true, recorrente_ate: true, serie_id: true,
       parcela_numero: true, parcela_total: true, forma_prevista: true, origem_pagamento_id: true,
-      numero_documento: true, comprovante_url: true, observacao: true,
+      numero_documento: true, comprovante_url: true, observacao: true, reembolso_de_pagamento_id: true,
       pagamento: {
         select: {
           id: true, data_pagamento: true, valor_centavos: true, acrescimo_centavos: true,

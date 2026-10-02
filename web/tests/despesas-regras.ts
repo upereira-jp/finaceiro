@@ -9,7 +9,7 @@
 import {
   situacao, diasAte, somarMeses, somarMesesAoDia, mesesEntre, saldo, pagoEmCaixa, ajusteDasBaixas, textoDaSerie,
   painelDoMes, situacaoDoMes, porPlanoNoMes, anoMesAMes, seriesQueProjetam, projetar, indicadoresDoPeriodo,
-  projecaoPorPlano, decomporBaixa, SEM_PLANO, ROTULO_DA_SITUACAO_DA_DESPESA, ROTULO_DA_RECORRENCIA,
+  projecaoPorPlano, decomporBaixa, devidoAosSocios, SEM_PLANO, ROTULO_DA_SITUACAO_DA_DESPESA, ROTULO_DA_RECORRENCIA,
 } from '../src/despesas-regras.ts';
 import type { Despesa, CategoriaDaEmpresa } from '../src/api.ts';
 import { SELO_DA_DESPESA } from '../src/tom-do-estado.ts';
@@ -32,7 +32,7 @@ const despesa = (p: Partial<Despesa>): Despesa => ({
   status: 'aberta', criado_em: `2026-10-02T00:00:${String(seq).padStart(2, '0')}.000Z`, cancelada_em: null,
   categoria_id: 'adm', natureza: 'fixa', recorrencia: 'avulsa', recorrente_ate: null, serie_id: null,
   parcela_numero: null, parcela_total: null, forma_prevista: 'boleto', origem_pagamento_id: null,
-  numero_documento: null, comprovante_url: null, observacao: null, pagamento: [], ...p,
+  numero_documento: null, comprovante_url: null, observacao: null, reembolso_de_pagamento_id: null, pagamento: [], ...p,
 });
 
 const CATEGORIAS: CategoriaDaEmpresa[] = [
@@ -167,6 +167,24 @@ chk('J12', ind.total === 6 * 431_900 && ind.media === 431_900 && ind.meses === 6
 const pplano = projecaoPorPlano(proj, '2026-10', '2027-03', CATEGORIAS);
 chk('J13', pplano.linhas.length === 1 && pplano.linhas[0]!.nome === 'Despesas Administrativas' && pplano.total === ind.total,
     'por plano no período bate com o total do período');
+
+// ------------------------------------------------------ a dívida com o sócio (Q-SOCIOS-01)
+const reembolso = despesa({ descricao: 'Reembolso a Vinicius Leal — Internet', beneficiario_nome: 'Vinicius Leal',
+  valor_centavos: 35_990, categoria_id: null, natureza: null, vencimento: '2026-09-20', competencia: '2026-09-01',
+  reembolso_de_pagamento_id: 'pg1' });
+const reembolsoRenata = despesa({ beneficiario_nome: 'Renata Estevam', valor_centavos: 10_000, natureza: null,
+  categoria_id: null, reembolso_de_pagamento_id: 'pg2', status: 'parcial', valor_pago_centavos: 4_000 });
+const COM_SOCIOS = [...LINHAS, reembolso, reembolsoRenata];
+chk('Q1', situacao(reembolso, HOJE) === 'a_reembolsar', 'a dívida com o sócio não «vence»: é «A reembolsar», mesmo com a data passada');
+const pq = painelDoMes(COM_SOCIOS, '2026-10', HOJE);
+chk('Q2', pq.previsto === p.previsto && pq.vencido_acumulado === p.vencido_acumulado && pq.vence_em_7_dias === p.vence_em_7_dias,
+    'o Painel não muda com a dívida ao sócio: ela é dívida, e a despesa que ele pagou já foi contada');
+chk('Q3', projetar(COM_SOCIOS, '2026-09', 3).meses.map((m) => m.lancado).join() === projetar(LINHAS, '2026-09', 3).meses.map((m) => m.lancado).join(),
+    'a Projeção também a deixa de fora');
+const ds = devidoAosSocios(COM_SOCIOS);
+chk('Q4', ds.total === 35_990 + 6_000 && ds.socios.map((x) => `${x.nome}:${x.centavos}`).join() === 'Vinicius Leal:35990,Renata Estevam:6000',
+    'devido aos sócios: o saldo de cada um, do maior para o menor (a Renata já recebeu 40,00 dos 100,00)');
+chk('Q5', devidoAosSocios(LINHAS).total === 0, 'sem reembolso, ninguém deve a sócio nenhum');
 
 const rotulos = [...Object.values(ROTULO_DA_SITUACAO_DA_DESPESA), ...Object.values(ROTULO_DA_RECORRENCIA)];
 chk('V1', rotulos.every((r) => !/[a-z]_[a-z]/.test(r)), 'nenhum rótulo mostra nome de coluna');

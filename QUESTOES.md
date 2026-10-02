@@ -1481,8 +1481,18 @@ migration 42 (`20261002030000_despesas_da_empresa`). Responde as duas referênci
 
 ### O que fica com o dono
 
-- **`Q-SOCIOS-01` · dono: Vinicius · aberta.** Os nomes dos sócios para as origens «Adiantamento — …»; e se o
-  adiantamento do sócio precisa virar conta a pagar AO sócio (hoje é só a origem do dinheiro, como na planilha).
+- **`Q-SOCIOS-01` · dono: Vinicius · status: decidida em 02/10/2026 e construída.** *«Sócios são: Vinicius Leal e
+  Renata Estevam; quando paga do bolso é uma dívida da empresa com ele.»* Move dinheiro, por isso é do dono.
+  - «Começar com o plano da planilha» grava as duas origens do tipo sócio (`ORIGENS_DA_PLANILHA`).
+  - A baixa cuja origem é um sócio faz nascer, na MESMA transação (`registrarPagamento`), uma conta a pagar ao
+    sócio no que saiu do bolso dele (valor + juros − desconto). Ela é devida desde o dia do pagamento e ligada ao
+    pagamento por `conta_pagar.reembolso_de_pagamento_id`. Há um reembolso por pagamento, garantido pela chave
+    gerada `reembolso_chave` com índice único cheio (regra 11).
+  - **É dívida, não despesa:** Painel e Projeção a deixam de fora, porque a despesa que o sócio pagou já está
+    neles. Ela aparece à parte, como «Devido aos sócios» (atalho em Despesas e linha no Painel), com a situação
+    «A reembolsar», que não vence.
+  - O reembolso sai da conta da empresa: pagar o reembolso do bolso de um sócio é recusado (422), e o valor dele
+    não se edita.
 - **`Q-PLANILHA-HISTORICO-01` · dono: Vinicius · aberta.** A planilha enviada tem só o lançamento de exemplo. Se
   existir um histórico real (meses anteriores) em outra cópia, ele entra por importação — o formato das colunas
   já é o da tela.
