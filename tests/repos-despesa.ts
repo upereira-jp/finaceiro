@@ -48,14 +48,19 @@ const iso = (d: Date) => d.toISOString().slice(0, 10);
       'começar pelo plano da planilha grava os 12 itens e as 3 origens (Conta PJ e os dois sócios), e a segunda vez não duplica nada');
   chk('E1g', cad.origens.filter((o) => o.tipo === 'socio').map((o) => o.nome).join() === 'Vinicius Leal,Renata Estevam',
       'os sócios são os que o dono nomeou em 02/10/2026, com o tipo sócio');
-  chk('E1b', cad.categorias[0]!.nome === 'Despesas Administrativas' && cad.categorias.at(-1)!.nome === 'Outras Despesas',
+  /* Só os itens DA PLANILHA, na ordem relativa: no CI o tenant A já chega com a
+     categoria que a suite de contas a pagar criou antes (02/10: esta linha supunha
+     plano vazio e caiu no `fin_repos` compartilhado). */
+  const daPlanilha = cad.categorias.filter((c) => (despesa.PLANO_DA_PLANILHA as readonly string[]).includes(c.nome));
+  chk('E1b', daPlanilha.map((c) => c.nome).join('|') === despesa.PLANO_DA_PLANILHA.join('|'),
       'na ordem da planilha: Administrativas primeiro, Outras por último');
   const ids = cad.categorias.map((c) => c.id);
   await emA(() => despesa.ordenarCategorias([ids[1], ids[0], ...ids.slice(2)]));
   const depois = await emA(() => despesa.cadastros());
   chk('E1c', depois.categorias[0]!.id === ids[1], 'reordenar troca a ordem que Painel e Projeção leem');
+  const maior = Math.max(...depois.categorias.map((c) => c.ordem));
   const nova = await emA(() => despesa.criarCategoria({ nome: 'Seguros' }));
-  chk('E1d', nova.ordem === 13, 'item novo entra no fim da ordem');
+  chk('E1d', nova.ordem === maior + 1, `item novo entra no fim da ordem (${nova.ordem} depois de ${maior})`);
   const deB = await emB(() => despesa.cadastros());
   chk('E1e', !deB.categorias.some((c) => ids.includes(c.id)), 'o plano do tenant A não aparece no B');
   const e = await lancou(() => emALei(() => despesa.comecarPelaPlanilha()));
