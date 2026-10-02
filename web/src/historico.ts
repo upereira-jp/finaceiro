@@ -104,7 +104,8 @@ export const ROTULO_DA_TABELA: Record<string, string> = {
   split_item: 'parte da divisão do dinheiro',
   conta_pagar: 'conta a pagar',
   pagamento: 'pagamento de conta',
-  categoria: 'categoria de despesa',
+  categoria: 'item do plano de contas',
+  origem_pagamento: 'origem do pagamento',
   centro_custo: 'centro de custo',
 
   // a fatura que o cliente recebe

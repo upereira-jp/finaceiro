@@ -1199,21 +1199,121 @@ export const TOPICOS: readonly Topico[] = [
              'inadimplente', 'atrasados', 'vencidas', 'devedores', 'quanto falta entrar',
              'titulos em aberto', 'carteira em aberto'],
   },
+  /* A PLANILHA DA EMPRESA (02/10/2026): `G3Solar_Financeiro.xlsx` virou as
+   * telas Painel da empresa, Despesas, Projeção de gastos e Plano de contas.
+   * «Nova despesa avulsa» saiu de Contas a pagar e virou a «Nova despesa» de
+   * Despesas — um caminho só para lançar o que a empresa paga. */
   {
     id: 'despesa-avulsa',
     pergunta: 'Como lanço uma despesa da empresa?',
-    resposta: 'Na tela Contas a pagar tem um cadastro de conta avulsa, para o que não nasce de uma '
-      + 'cobrança — a conta da concessionária e as despesas do dia a dia.',
+    resposta: 'Na tela Despesas, no setor Empresa: é a aba de lançamentos da planilha da empresa '
+      + 'dentro do sistema. Cada despesa tem histórico, fornecedor, plano de contas, valor, '
+      + 'vencimento e competência, e pode ser avulsa, repetir todo mês (ou a cada 3, 6 ou 12) ou '
+      + 'ser parcelada.',
+    porque: 'Repasse ao dono da usina e comissão nascem sozinhos da divisão do dinheiro e ficam em '
+      + 'Contas a pagar. Aqui entra o resto: aluguel, contador, software, imposto.',
     passos: [
-      'Abra a tela Contas a pagar.',
-      'Clique «Nova despesa avulsa», no alto, ao lado do título.',
-      'Preencha o que é, para quem, o valor e o vencimento, e clique «Lançar».',
+      'No alto do menu, escolha o setor «Empresa» e abra a tela Despesas.',
+      'Clique «Nova despesa», no alto, ao lado do título.',
+      'Preencha o histórico, o fornecedor, o plano de contas, o valor e o vencimento. A competência '
+        + 'acompanha o mês do vencimento até você mudar.',
+      'Em «Recorrência», escolha Mensal para o que se repete (os próximos meses aparecem na '
+        + 'Projeção) ou Parcelada para lançar todas as parcelas de uma vez.',
+      'Clique «Lançar a despesa».',
     ],
-    caminhos: [ir('/contas-a-pagar', 'Abrir Contas a pagar')],
+    caminhos: [ir('/despesas', 'Abrir Despesas'), ver('/plano-de-contas', 'Ver o plano de contas')],
     camada: null,
-    telas: ['/contas-a-pagar'],
+    telas: ['/despesas'],
     termos: ['despesa', 'conta avulsa', 'lancar despesa', 'conta de energia da empresa',
-             'concessionaria', 'gasto', 'nova conta a pagar'],
+             'gasto', 'nova conta a pagar', 'lancamento', 'lancamentos', 'aluguel', 'parcelada',
+             'parcelamento', 'recorrente', 'planilha da empresa', 'contas a pagar da empresa'],
+  },
+  {
+    id: 'baixa-de-despesa',
+    pergunta: 'Paguei uma despesa com juros (ou com desconto). Como registro?',
+    resposta: 'Em Despesas, clique «Dar baixa» na linha e escreva quanto saiu do banco. Se saiu mais '
+      + 'que o saldo, a diferença fica registrada como juros/multa; se saiu menos, o sistema pergunta '
+      + 'se foi desconto (a despesa fecha) ou o pagamento de uma parte (o resto continua em aberto).',
+    passos: [
+      'Abra a tela Despesas e ache a linha (o atalho «Vencidas» ajuda).',
+      'Clique «Dar baixa».',
+      'Escreva quanto saiu do banco, a data (nunca depois de hoje), a forma e de onde saiu.',
+      'Se o valor for menor que o saldo, diga se foi desconto ou parte, e clique «Registrar a baixa».',
+    ],
+    caminhos: [ir('/despesas', 'Abrir Despesas')],
+    camada: null,
+    telas: ['/despesas'],
+    termos: ['juros', 'multa', 'desconto', 'baixa de despesa', 'paguei a despesa', 'paguei com atraso',
+             'valor pago diferente', 'acrescimo', 'pagamento parcial'],
+  },
+  {
+    id: 'despesa-do-proximo-mes',
+    pergunta: 'Como lanço o aluguel (ou outra conta fixa) do mês seguinte?',
+    resposta: 'Na linha do último mês lançado, abra «⋯» e escolha «Lançar o próximo». Ele copia a '
+      + 'despesa um intervalo adiante; ajuste o valor se a conta variou. Para parar de repetir, use '
+      + '«Encerrar a recorrência» no mesmo menu.',
+    passos: [
+      'Abra a tela Despesas e mostre «Todas» ou procure pelo histórico.',
+      'Na linha mais recente da conta, abra o menu «⋯» e escolha «Lançar o próximo».',
+      'Confira o valor e o vencimento e clique «Lançar».',
+    ],
+    caminhos: [ir('/despesas', 'Abrir Despesas'), ver('/projecao', 'Ver a Projeção de gastos')],
+    camada: null,
+    telas: ['/despesas', '/projecao'],
+    termos: ['proximo mes', 'repetir despesa', 'conta fixa', 'mensalidade', 'encerrar recorrencia',
+             'parar de repetir', 'recorrente ate', 'lancar o proximo'],
+  },
+  {
+    id: 'painel-da-empresa',
+    pergunta: 'Quanto a empresa tem para pagar este mês, e quanto já pagou?',
+    resposta: 'No Painel da empresa, a primeira tela do setor Empresa: previsto, pago e em aberto do '
+      + 'mês, o vencido acumulado, o que vence em 7 dias e os próximos 12 meses. Embaixo, o mês por '
+      + 'plano de contas e o ano mês a mês, com fixas e variáveis — o Dashboard da planilha.',
+    porque: 'O mês conta pelo VENCIMENTO, como na planilha, para os números baterem com o que os '
+      + 'sócios viam. O vencido é de qualquer mês: atraso de setembro continua aparecendo em outubro.',
+    passos: [
+      'No alto do menu, escolha o setor «Empresa»; o Painel é a primeira tela.',
+      'Use as setas ao lado do título para andar de mês.',
+    ],
+    caminhos: [ir('/empresa', 'Abrir o Painel da empresa'), ver('/despesas', 'Ver as despesas')],
+    camada: null,
+    telas: ['/empresa'],
+    termos: ['painel', 'dashboard', 'visao dos socios', 'quanto gastamos', 'gastos do mes',
+             'previsto', 'realizado', 'previsto x realizado', 'liquidado', 'fixas', 'variaveis'],
+  },
+  {
+    id: 'projecao-de-gastos',
+    pergunta: 'Quanto a empresa vai gastar nos próximos meses?',
+    resposta: 'Na Projeção de gastos: 24 meses a partir do mês escolhido, somando o que já está '
+      + 'lançado com a repetição das despesas mensais, trimestrais, semestrais e anuais — cada uma a '
+      + 'partir do último mês lançado, até o «repete até». Avulsa e parcelada não projetam.',
+    passos: [
+      'No setor Empresa, abra a Projeção de gastos.',
+      'Escolha o período de análise (de, até) para ver o total, a média e o maior mês.',
+      'Em «De onde vem o projetado» estão as despesas que repetem.',
+    ],
+    caminhos: [ir('/projecao', 'Abrir a Projeção de gastos')],
+    camada: null,
+    telas: ['/projecao'],
+    termos: ['projecao', 'previsao de gastos', 'proximos meses', 'proximos 12 meses', 'futuro',
+             'quanto vamos gastar', 'orcamento'],
+  },
+  {
+    id: 'plano-de-contas',
+    pergunta: 'Onde cadastro o plano de contas e a conta de onde sai o dinheiro?',
+    resposta: 'Na tela Plano de contas, no setor Empresa. Vazia, ela oferece «Começar com o plano da '
+      + 'planilha» (os 12 itens da planilha e a Conta PJ G3 Solar). Depois é acrescentar, renomear, '
+      + 'reordenar ou desativar — nada se apaga, porque há despesa classificada.',
+    passos: [
+      'No setor Empresa, abra Plano de contas.',
+      'Na primeira vez, clique «Começar com o plano da planilha».',
+      'Em «De onde sai o dinheiro», acrescente o adiantamento de cada sócio com o nome dele.',
+    ],
+    caminhos: [ir('/plano-de-contas', 'Abrir Plano de contas')],
+    camada: null,
+    telas: ['/plano-de-contas'],
+    termos: ['plano de contas', 'categoria', 'categorias', 'classificar despesa', 'conta bancaria',
+             'origem do pagamento', 'adiantamento de socio', 'socio pagou', 'conta pj', 'cadastros da empresa'],
   },
 
   // ============================================== a folha que o cliente recebe
@@ -1605,7 +1705,16 @@ export const PALAVRAS_DA_TELA: Record<string, readonly string[]> = {
   '/contas-a-receber': ['contas a receber', 'a receber', 'quem deve', 'quem esta devendo', 'devedores',
                         'inadimplencia', 'inadimplente', 'atrasados', 'em atraso', 'vencidas', 'vencido',
                         'quanto falta entrar', 'caixa a entrar', 'o que vai entrar'],
-  '/contas-a-pagar': ['contas a pagar', 'a pagar', 'despesa', 'o que a empresa deve', 'pagar'],
+  '/contas-a-pagar': ['contas a pagar', 'a pagar', 'o que a empresa deve', 'pagar', 'repasse a pagar'],
+  /* A planilha da empresa (02/10/2026). «despesa» saiu de Contas a pagar e veio
+     para Despesas, que é onde ela se lança desde então. */
+  '/empresa': ['painel', 'painel da empresa', 'dashboard', 'visao dos socios', 'previsto x realizado',
+               'gastos do mes', 'quanto gastamos'],
+  '/despesas': ['despesas', 'despesa', 'lancamentos', 'lancar despesa', 'gasto', 'gastos', 'aluguel',
+                'conta fixa', 'parcelada', 'juros', 'desconto', 'planilha da empresa'],
+  '/projecao': ['projecao', 'projecao de gastos', 'proximos meses', 'previsao', 'orcamento'],
+  '/plano-de-contas': ['plano de contas', 'categoria', 'categorias', 'origem do pagamento',
+                       'conta bancaria', 'adiantamento de socio'],
   /* «historico» SAIU DAQUI EM 10/09/2026, e a troca e o proprio ponto: ate essa
      data a palavra caia em Relatorios por falta de destino melhor. Agora ha uma
      tela que E o historico, e deixar o apelido nas duas mandaria metade das

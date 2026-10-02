@@ -192,6 +192,11 @@ echo
 echo "=== contas a pagar: quitacao do repasse e da comissao (PRD 4.4)"
 node --experimental-strip-types tests/repos-conta-pagar.ts
 echo
+# A planilha da empresa (02/10/2026, migration 42): o plano da planilha, a serie
+# (lancar o proximo, encerrar), as parcelas e a baixa com juros e desconto.
+echo "=== despesas da empresa: a planilha G3Solar_Financeiro dentro do sistema"
+node --experimental-strip-types tests/repos-despesa.ts
+echo
 # Q-SPEC001-02. O dia de vencimento varia por UC (dono, 03/08), entao entra por
 # planilha. O V6 amarra a coluna que este modulo grava a que a R25 da SPEC-002
 # protege do conector - antes de 03/08 o ciclo a apagava.

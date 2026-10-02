@@ -72,6 +72,10 @@ const TelaCobranca = lazy(() => import('./telas/cobranca.tsx').then((m) => ({ de
 const TelaRelatorios = lazy(() => import('./telas/relatorios.tsx').then((m) => ({ default: m.TelaRelatorios })));
 const TelaDocumento = lazy(() => import('./telas/documento.tsx').then((m) => ({ default: m.TelaDocumento })));
 const TelaContasAReceber = lazy(() => import('./telas/contas-a-receber.tsx').then((m) => ({ default: m.TelaContasAReceber })));
+const TelaPainelDaEmpresa = lazy(() => import('./telas/painel-empresa.tsx').then((m) => ({ default: m.TelaPainelDaEmpresa })));
+const TelaDespesas = lazy(() => import('./telas/despesas.tsx').then((m) => ({ default: m.TelaDespesas })));
+const TelaProjecao = lazy(() => import('./telas/projecao.tsx').then((m) => ({ default: m.TelaProjecao })));
+const TelaPlanoDeContas = lazy(() => import('./telas/plano-de-contas.tsx').then((m) => ({ default: m.TelaPlanoDeContas })));
 const TelaContasAPagar = lazy(() => import('./telas/contas-a-pagar.tsx').then((m) => ({ default: m.TelaContasAPagar })));
 const TelaHistorico = lazy(() => import('./telas/historico.tsx').then((m) => ({ default: m.TelaHistorico })));
 const TelaUsuarios = lazy(() => import('./telas/usuarios.tsx').then((m) => ({ default: m.TelaUsuarios })));
@@ -134,6 +138,10 @@ const RENDER: Record<string, () => ReactElement> = {
   '/faturas': () => <TelaFaturas />,
   '/cobranca': () => <TelaCobranca />,
   '/documento': () => <TelaDocumento />,
+  '/empresa': () => <TelaPainelDaEmpresa />,
+  '/despesas': () => <TelaDespesas />,
+  '/projecao': () => <TelaProjecao />,
+  '/plano-de-contas': () => <TelaPlanoDeContas />,
   '/contas-a-receber': () => <TelaContasAReceber />,
   '/contas-a-pagar': () => <TelaContasAPagar />,
   '/historico': () => <TelaHistorico />,

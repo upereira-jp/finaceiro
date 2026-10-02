@@ -253,7 +253,25 @@ export type NovoPagamento = {
   forma: FormaDePagamento;
   referencia_externa?: string | null;
   observacao?: string | null;
+  /**
+   * JUROS/MULTA E DESCONTO (02/10/2026, a planilha da empresa). Ficam FORA de
+   * `valor_centavos`, que continua sendo o que ABATE do titulo - assim o CHECK
+   * contra pagar a mais nao muda. O que saiu do banco e valor + acrescimo -
+   * desconto. Sem os dois, o pagamento e o de sempre.
+   */
+  acrescimo_centavos?: number;
+  desconto_centavos?: number;
+  /** De onde saiu o dinheiro (Conta PJ, adiantamento de socio). */
+  origem_pagamento_id?: string | null;
 };
+
+function centavosNaoNegativos(v: unknown, campo: string): number {
+  if (v === undefined || v === null) return 0;
+  if (typeof v !== 'number' || !Number.isInteger(v) || v < 0) {
+    throw Object.assign(new Error(`${campo} precisa ser um inteiro de centavos >= 0.`), { status: 422 });
+  }
+  return v;
+}
 
 /**
  * Registra que uma conta foi paga, no todo ou em parte.
@@ -278,6 +296,11 @@ export async function registrarPagamento(contaPagarId: string, p: NovoPagamento)
   if (c.valor_pago_centavos + p.valor_centavos > c.valor_centavos) {
     throw new PagamentoExcedeSaldo(c.valor_centavos, c.valor_pago_centavos, p.valor_centavos);
   }
+  const acrescimo = centavosNaoNegativos(p.acrescimo_centavos, 'acrescimo_centavos');
+  const desconto = centavosNaoNegativos(p.desconto_centavos, 'desconto_centavos');
+  if (desconto > p.valor_centavos) {
+    throw Object.assign(new Error('O desconto nao pode ser maior que o valor abatido do titulo.'), { status: 422 });
+  }
 
   return dbt().pagamento.create({
     data: {
@@ -288,6 +311,9 @@ export async function registrarPagamento(contaPagarId: string, p: NovoPagamento)
       forma: p.forma,
       referencia_externa: p.referencia_externa?.trim() || null,
       observacao: p.observacao?.trim() || null,
+      acrescimo_centavos: acrescimo,
+      desconto_centavos: desconto,
+      origem_pagamento_id: p.origem_pagamento_id?.trim() || null,
     },
   });
 }

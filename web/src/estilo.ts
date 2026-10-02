@@ -62,6 +62,8 @@
 // do `.g3ref` em volta, e essa herança foi cortada: o `.g3` crava a própria.
 
 import { VARIAVEIS_CSS, TIPOGRAFIA } from './tema.ts';
+import { ESTILO_GRAFICOS } from './estilo-graficos.ts';
+import { ESTILO_DESPESAS } from './estilo-despesas.ts';
 
 /**
  * ONDE O MENU LATERAL VIRA GAVETA (30/09/2026, etapa 3b). Uma constante e nao
@@ -169,7 +171,7 @@ const CARTAO_DA_TABELA = `
     .tabela-cartoes .inline input, .tabela-cartoes .inline select { border-color: var(--borda); background: var(--campo); }
 `;
 
-export const ESTILO = `
+const ESTILO_BASE = `
   ${VARIAVEIS_CSS}
 
   /* ------------------------------------------------------------------ base */
@@ -3956,3 +3958,7 @@ export const ESTILO = `
     background: var(--fundo);
   }
 `;
+
+/* As telas da planilha da empresa (02/10/2026) trazem o próprio estilo, em
+ * arquivos à parte, e entram pelo fim: o que vem depois vence no empate. */
+export const ESTILO = ESTILO_BASE + ESTILO_GRAFICOS + ESTILO_DESPESAS;

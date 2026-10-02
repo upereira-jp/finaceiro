@@ -344,6 +344,20 @@ export const TELAS: readonly Tela[] = [
 
   // ====================================================== FINANCEIRO EMPRESA
   /*
+   * A PLANILHA DA EMPRESA (02/10/2026): `G3Solar_Financeiro.xlsx` virou quatro
+   * telas, e elas abrem o setor porque são o controle do que a EMPRESA paga —
+   * o pedido foi «o controle financeiro da empresa, não do rateio».
+   *
+   * O PAINEL ABRE O SETOR: era o Dashboard da planilha, a «visão dos sócios».
+   * O PLANO DE CONTAS é o cadastro que vem antes de lançar (a aba Cadastros).
+   * DESPESAS é a aba Lançamentos, e a PROJEÇÃO a aba Projeção; as duas são caixa,
+   * ao lado do que entra e do que se reparte.
+   */
+  { funil: 'empresa', rota: '/empresa',          titulo: 'Painel da empresa', icone: 'painel_empresa', grupo: 'abertura', larga: true },
+  { funil: 'empresa', rota: '/plano-de-contas',  titulo: 'Plano de contas', icone: 'plano_de_contas', grupo: 'cadastro' },
+  { funil: 'empresa', rota: '/despesas',         titulo: 'Despesas', icone: 'despesas', grupo: 'caixa', larga: true },
+  { funil: 'empresa', rota: '/projecao',         titulo: 'Projeção de gastos', icone: 'projecao', grupo: 'caixa', larga: true },
+  /*
    * A PONTE ENTRE OS DOIS FUNIS, e a primeira tela da Empresa de propósito: quem
    * abre este lado quer saber quanto vai entrar. Lê toda fatura emitida e ainda
    * não paga, de qualquer mês, com os dias de atraso e a situação do boleto. Não

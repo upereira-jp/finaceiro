@@ -32,6 +32,7 @@ import * as boleto from '../repos/boleto.ts';
 import * as liquidacao from '../repos/liquidacao.ts';
 import * as split from '../repos/split.ts';
 import * as contaPagar from '../repos/conta_pagar.ts';
+import * as despesa from '../repos/despesa.ts';
 import * as contaReceber from '../repos/conta_receber.ts';
 import * as documento from '../repos/documento.ts';
 import * as registro from '../repos/registro-unificado.ts';
@@ -1767,8 +1768,10 @@ export const ROTAS: Rota[] = [
     handler: (req, app) => emTenant(app, req, async () => ok(await contaPagar.listarCategorias())),
   },
   {
+    /* Desde 02/10/2026 e a tela Plano de contas que cria, e o item novo entra no
+     * FIM da ordem (`despesa.criarCategoria`). */
     metodo: 'POST', padrao: '/categorias',
-    handler: (req, app) => emTenant(app, req, async () => criado(await contaPagar.criarCategoria(req.corpo?.nome))),
+    handler: (req, app) => emTenant(app, req, async () => criado(await despesa.criarCategoria(req.corpo ?? {}))),
   },
   {
     metodo: 'GET', padrao: '/centros-de-custo',
@@ -1777,6 +1780,88 @@ export const ROTAS: Rota[] = [
   {
     metodo: 'POST', padrao: '/centros-de-custo',
     handler: (req, app) => emTenant(app, req, async () => criado(await contaPagar.criarCentroDeCusto(req.corpo?.nome))),
+  },
+
+  // ------------------------------------------- despesas da empresa (a planilha, 02/10/2026)
+  /*
+   * A planilha `G3Solar_Financeiro.xlsx` dentro do sistema
+   * (`PLANO-planilha-empresa-2026-10-02.md`). UMA leitura (`GET /despesas`)
+   * alimenta as tres telas - Despesas, Painel e Projecao -, porque as tres sao
+   * contas sobre a mesma lista e a planilha tambem era uma aba so de dados.
+   * A baixa continua sendo `POST /contas-a-pagar/:id/pagamentos`, agora com
+   * acrescimo, desconto e origem; o cancelamento, `.../cancelar`.
+   */
+  {
+    metodo: 'GET', padrao: '/despesas',
+    handler: (req, app) => emTenant(app, req, async () => ok(await despesa.listar(limite(req.query)))),
+  },
+  {
+    metodo: 'POST', padrao: '/despesas',
+    handler: (req, app) => emTenant(app, req, async () => criado(await despesa.lancar({
+      ...req.corpo,
+      competencia: data(req.corpo?.competencia, 'competencia'),
+      vencimento: data(req.corpo?.vencimento, 'vencimento'),
+      recorrente_ate: dataOuNull(req.corpo?.recorrente_ate, 'recorrente_ate'),
+    }))),
+  },
+  {
+    metodo: 'PATCH', padrao: '/despesas/:id',
+    handler: (req, app) => emTenant(app, req, async () => {
+      const c = req.corpo ?? {};
+      await despesa.editar(req.params.id, {
+        ...c,
+        competencia: c.competencia === undefined ? undefined : data(c.competencia, 'competencia'),
+        vencimento: c.vencimento === undefined ? undefined : data(c.vencimento, 'vencimento'),
+      });
+      return semConteudo();
+    }),
+  },
+  {
+    metodo: 'POST', padrao: '/despesas/series/:serie/proximo',
+    handler: (req, app) => emTenant(app, req, async () => criado(await despesa.lancarProximo(req.params.serie, {
+      valor_centavos: req.corpo?.valor_centavos,
+      vencimento: dataOuNull(req.corpo?.vencimento, 'vencimento'),
+    }))),
+  },
+  {
+    metodo: 'POST', padrao: '/despesas/series/:serie/encerrar',
+    handler: (req, app) => emTenant(app, req, async () => {
+      await despesa.encerrarRecorrencia(req.params.serie, dataOuNull(req.corpo?.ate, 'ate'));
+      return semConteudo();
+    }),
+  },
+  {
+    metodo: 'GET', padrao: '/plano-de-contas',
+    handler: (req, app) => emTenant(app, req, async () => ok(await despesa.cadastros())),
+  },
+  {
+    metodo: 'POST', padrao: '/plano-de-contas/planilha',
+    handler: (req, app) => emTenant(app, req, async () => ok(await despesa.comecarPelaPlanilha())),
+  },
+  {
+    metodo: 'PUT', padrao: '/plano-de-contas/categorias/ordem',
+    handler: (req, app) => emTenant(app, req, async () => {
+      await despesa.ordenarCategorias(req.corpo?.ids);
+      return semConteudo();
+    }),
+  },
+  {
+    metodo: 'PATCH', padrao: '/plano-de-contas/categorias/:id',
+    handler: (req, app) => emTenant(app, req, async () => {
+      await despesa.alterarCategoria(req.params.id, req.corpo ?? {});
+      return semConteudo();
+    }),
+  },
+  {
+    metodo: 'POST', padrao: '/plano-de-contas/origens',
+    handler: (req, app) => emTenant(app, req, async () => criado(await despesa.criarOrigem(req.corpo ?? {}))),
+  },
+  {
+    metodo: 'PATCH', padrao: '/plano-de-contas/origens/:id',
+    handler: (req, app) => emTenant(app, req, async () => {
+      await despesa.alterarOrigem(req.params.id, req.corpo ?? {});
+      return semConteudo();
+    }),
   },
 
   // ------------------------------------------- documento de cobranca (Q-DOCFATURA-01)

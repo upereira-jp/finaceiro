@@ -1438,6 +1438,55 @@ O critique de 30/09 deu **21/40**; o desenho que saiu das sete etapas está desc
   tela, e não embaixo do campo (o desconto e o fator de Contas de luz mostram embaixo do campo). E uma mudança
   deliberada: «2%» no desconto, que o servidor recusava, agora vai como «2».
 
+## 2.w Decisões de 02/10/2026 — a planilha da empresa vira telas
+
+**Dono: o implementador** (memória `autonomia-tecnica-e-foco-ui`), salvo o que está marcado como do dono.
+Pedido do dono em 02/10/2026: a planilha `G3Solar_Financeiro.xlsx` (commit `9ea5752`) é o controle financeiro
+da **empresa**, não do rateio, e passa a funcionar no sistema. Plano e brief de disposição em
+`PLANO-planilha-empresa-2026-10-02.md`; branch `empresa-planilha`, worktree `/opt/financeiro/redesenho`;
+migration 42 (`20261002030000_despesas_da_empresa`). Responde as duas referências que a onda 1 do
+`PLANO-financeiro-empresa-2026-09-22` esperava (§2.1 plano de contas atual, §2.2 lista de origens) —
+**`Q-PLANO-CONTAS-01` passa a ter a resposta do dono: os 12 itens da planilha.**
+
+- **Uma tabela só para o que sai.** Todo lançamento da planilha é `conta_pagar` manual (`beneficiario_tipo =
+  outro`); nada de tabela paralela de despesas (princípio 1 do plano de 22/09).
+- **A série é `serie_id`, e não o texto do histórico** como na planilha (uma vírgula a mais quebrava a
+  recorrência). Recorrência é enum (`avulsa`, `mensal`, `trimestral`, `semestral`, `anual`, `parcelada`), não
+  cadastro: a projeção depende do intervalo de cada valor. Parcelada grava todas as parcelas de uma vez; periódica
+  grava o primeiro título, e «Lançar o próximo» copia o último. Nenhuma tarefa da agenda provisiona sozinha —
+  os timers rodam da árvore de trabalho, e o pedido era a planilha no sistema, não automação nova.
+- **Juros/multa e desconto ficam no `pagamento`** (`acrescimo_centavos`, `desconto_centavos`), fora de
+  `valor_centavos`, que segue sendo o que abate do título: o gatilho e o `CHECK conta_pagar_nao_paga_demais`
+  não mudam. O que saiu do banco é `valor + acréscimo − desconto`. A tela pergunta «quanto saiu do banco» e,
+  se for menos que o saldo, se foi desconto ou parte.
+- **Painel e Projeção são leituras puras no navegador** (`web/src/despesas-regras.ts`, suíte própria) sobre
+  `GET /despesas`, com o `hoje` do banco. Os critérios são os da planilha: previsto, pago e em aberto do mês
+  pelo **vencimento**; vencido acumulado; «vence em 7 dias» de hoje a hoje+7. Duas diferenças a favor da
+  exatidão: «em aberto» é o SALDO (pagamento parcial), e a barra de situação diz «Liquidado» (o abatido) para
+  não se confundir com «Pago no mês» (o que saiu do banco, com juros e descontos).
+- **Empresa é o que nasce à mão.** Despesas, Painel e Projeção leem só `origem_split_item_id IS NULL`; repasse
+  e comissão do rateio ficam em Contas a pagar (passo 5) e não entram duas vezes. O CHECK
+  `conta_pagar_planilha_so_a_mao` impede recorrência em conta nascida de split.
+- **Nada semeado** (`Q-CONTAPAGAR-01` c): «Começar com o plano da planilha» grava os 12 itens e a Conta PJ G3
+  Solar com um clique, idempotente por nome. Os adiantamentos de sócio **não** entram sozinhos — a planilha
+  pedia os nomes, e nome de sócio é o dono quem escreve, na tela.
+- **«Nova despesa avulsa» saiu de Contas a pagar** e virou a «Nova despesa» de Despesas — um caminho só. A
+  rota `POST /categorias` ganhou tela (saiu da lista de exceções de `rotas-com-tela`) e passou a pôr o item no
+  fim da ordem.
+- **O setor Empresa abre no Painel da empresa** (era Contas a receber). Ordem do menu: Painel da empresa ‖
+  Cadastros: Plano de contas ‖ Caixa: Despesas, Projeção de gastos, Contas a receber, Contas a pagar ‖ Apoio.
+- **Formas novas no enum:** `cartao_credito` e `debito_automatico`, as duas da planilha.
+- **Comprovante é LINK** (`https://…`), como na planilha. Anexar arquivo é outra decisão (armazenamento), e
+  fica para quando o dono pedir.
+
+### O que fica com o dono
+
+- **`Q-SOCIOS-01` · dono: Vinicius · aberta.** Os nomes dos sócios para as origens «Adiantamento — …»; e se o
+  adiantamento do sócio precisa virar conta a pagar AO sócio (hoje é só a origem do dinheiro, como na planilha).
+- **`Q-PLANILHA-HISTORICO-01` · dono: Vinicius · aberta.** A planilha enviada tem só o lançamento de exemplo. Se
+  existir um histórico real (meses anteriores) em outra cópia, ele entra por importação — o formato das colunas
+  já é o da tela.
+
 ## 3. F0 — o que falta para fechar
 
 Entregas da F0 conforme `PRD-v2.2` §10:

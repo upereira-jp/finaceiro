@@ -82,6 +82,10 @@ import { ChartPieSlice } from '@phosphor-icons/react/ChartPieSlice';
 import { Briefcase } from '@phosphor-icons/react/Briefcase';
 import { ShieldCheck } from '@phosphor-icons/react/ShieldCheck';
 import { UserGear } from '@phosphor-icons/react/UserGear';
+import { PresentationChart } from '@phosphor-icons/react/PresentationChart';
+import { ListNumbers } from '@phosphor-icons/react/ListNumbers';
+import { Invoice } from '@phosphor-icons/react/Invoice';
+import { TrendUp } from '@phosphor-icons/react/TrendUp';
 import { Key } from '@phosphor-icons/react/Key';
 import { DotsThree } from '@phosphor-icons/react/DotsThree';
 import { CaretRight } from '@phosphor-icons/react/CaretRight';
@@ -148,6 +152,12 @@ const DESENHO: Record<NomeDeIcone, Icon> = {
    * lista de quem paga — `clientes` já é o grupo de pessoas (`UsersFour`), e o
    * mesmo desenho nas duas faria «Usuários» parecer outro nome para «Clientes». */
   usuarios: UserGear,
+  /* A planilha da empresa (02/10/2026): o painel dos sócios, a nota do que
+     se paga, a tendência da projeção e a lista numerada do plano. */
+  painel_empresa: PresentationChart,
+  despesas: Invoice,
+  projecao: TrendUp,
+  plano_de_contas: ListNumbers,
 
   // os cinco tons do selo — glifo nu, porque a pílula já é a moldura
   ok: Check,

@@ -27,6 +27,8 @@ export type NomeDeIcone =
   | 'prontidao' | 'clientes' | 'unidades' | 'contratos' | 'usinas' | 'donos' | 'vigencia'
   | 'carteira' | 'faturas' | 'cobranca' | 'documento' | 'relatorios'
   | 'contas_a_receber' | 'contas_a_pagar' | 'historico' | 'usuarios'
+  /* As quatro telas da planilha da empresa (02/10/2026). */
+  | 'painel_empresa' | 'despesas' | 'projecao' | 'plano_de_contas'
   /* `cadastros` SAIU EM 30/09/2026 (etapa 3b), no mesmo dia em que entrou: era
    * o desenho do gatilho «Cadastros ▾» da barra, e no menu lateral os cadastros
    * são uma seção com título, sem gatilho para desenhar. */

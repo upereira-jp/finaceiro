@@ -16,6 +16,7 @@
 // jogaria fora o trabalho que o servidor fez.
 
 import { datasDoTextoEmBr } from './formato.ts';
+import type { FormaDePagamento } from './contas-regras.ts';
 
 export class ErroDaApi extends Error {
   readonly status: number;
@@ -848,3 +849,57 @@ export type Prontidao = {
   pode_faturar: boolean; pode_cobrar: boolean; pode_repartir: boolean;
   camadas: Camada[];
 };
+
+// ------------------------------------------------------ despesas da empresa (02/10/2026)
+/*
+ * `GET /despesas` e `GET /plano-de-contas` — a planilha `G3Solar_Financeiro.xlsx`
+ * dentro do sistema. Espelho de `src/repos/despesa.ts`; as contas sobre esta
+ * lista (Painel, Projeção) moram em `despesas-regras.ts`.
+ */
+export type NaturezaDaDespesa = 'fixa' | 'variavel';
+export type RecorrenciaDaDespesa = 'avulsa' | 'mensal' | 'trimestral' | 'semestral' | 'anual' | 'parcelada';
+export type TipoDeOrigem = 'conta_bancaria' | 'socio' | 'outra';
+
+export type PagamentoDaDespesa = {
+  id: string;
+  data_pagamento: string;
+  valor_centavos: number;
+  acrescimo_centavos: number;
+  desconto_centavos: number;
+  forma: FormaDePagamento;
+  origem_pagamento_id: string | null;
+  referencia_externa: string | null;
+  observacao: string | null;
+};
+
+export type Despesa = {
+  id: string;
+  descricao: string;
+  beneficiario_nome: string | null;
+  valor_centavos: number;
+  valor_pago_centavos: number;
+  competencia: string;
+  vencimento: string;
+  status: 'aberta' | 'parcial' | 'paga' | 'cancelada';
+  criado_em: string;
+  cancelada_em: string | null;
+  categoria_id: string | null;
+  natureza: NaturezaDaDespesa | null;
+  recorrencia: RecorrenciaDaDespesa | null;
+  recorrente_ate: string | null;
+  serie_id: string | null;
+  parcela_numero: number | null;
+  parcela_total: number | null;
+  forma_prevista: FormaDePagamento | null;
+  origem_pagamento_id: string | null;
+  numero_documento: string | null;
+  comprovante_url: string | null;
+  observacao: string | null;
+  pagamento: PagamentoDaDespesa[];
+};
+
+export type ListaDeDespesas = { hoje: string; total: number; linhas: Despesa[] };
+
+export type CategoriaDaEmpresa = { id: string; nome: string; ativo: boolean; ordem: number };
+export type OrigemDePagamento = { id: string; nome: string; tipo: TipoDeOrigem; ativo: boolean; ordem: number };
+export type CadastrosDaEmpresa = { categorias: CategoriaDaEmpresa[]; origens: OrigemDePagamento[] };

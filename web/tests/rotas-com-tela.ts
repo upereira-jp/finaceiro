@@ -154,10 +154,9 @@ const EXCECOES: Record<string, string> = {
     + 'rastro de que mudou. O caminho da tela e cadastrar a chave certa e torna-la padrao - duas '
     + 'coisas que a aba de documento faz -, e a antiga fica no historico.',
 
-  'POST /categorias':
-    'categoria e centro de custo sao classificacao OPCIONAL de conta a pagar, e o lancamento '
-    + 'manual nem os pede. Nenhum relatorio depende deles: o resumo agrupa por beneficiario. Se '
-    + 'um dia depender, e esta linha que precisa cair.',
+  /* 'POST /categorias' SAIU DAQUI em 02/10/2026: a linha dizia «se um dia um
+   * relatorio depender da categoria, e esta linha que precisa cair» - e o Painel
+   * da empresa agrupa por ela. A tela Plano de contas cria. */
   'POST /centros-de-custo':
     'como a categoria: classificacao opcional que o lancamento manual nao pede e que nenhum '
     + 'relatorio le. Enquanto for assim, uma tela para ela seria um campo que ninguem preenche.',

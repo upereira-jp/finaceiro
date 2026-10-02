@@ -66,6 +66,7 @@ import type { SituacaoDaUc, SituacaoDoEndereco } from './unidades-regras.ts';
 import type { SituacaoDoDocumento } from './clientes-regras.ts';
 import type { MotivoDaEspera } from './repasse-pendente.ts';
 import type { EstadoDoItem } from './lote-de-contas.ts';
+import type { SituacaoDaDespesa } from './despesas-regras.ts';
 
 /** O selo inteiro: a cor (pelo nome do que ela quer dizer) e o desenho. */
 export type Selo = Readonly<{ tom: TomDoSelo; icone: NomeDeIcone }>;
@@ -190,6 +191,17 @@ export const SELO_DA_CONTA_A_PAGAR: Readonly<Record<'aberta' | 'parcial' | 'paga
   paga: selo('ok', 'confirmar'),
   cancelada: selo('neutro', 'cancelado'),
   vencida: selo('erro', 'vencidas'),
+};
+
+/** A DESPESA DA EMPRESA (a planilha, 02/10/2026): a mesma leitura da conta a
+ *  pagar, com a situação POR DATA da coluna «SITUAÇÃO». Vence hoje e a vencer
+ *  são tarefa (pagar); o calendário distingue a que ainda tem prazo. */
+export const SELO_DA_DESPESA: Readonly<Record<SituacaoDaDespesa, Selo>> = {
+  vencida: selo('erro', 'vencidas'),
+  vence_hoje: selo('a_fazer', 'a_pagar'),
+  a_vencer: selo('a_fazer', 'calendario'),
+  paga: selo('ok', 'confirmar'),
+  cancelada: selo('neutro', 'cancelado'),
 };
 
 /** O DINHEIRO QUE ENTROU E AINDA NÃO FOI REPARTIDO. Aguardar o banco não é
@@ -375,6 +387,7 @@ export const MAPA_DE_SELOS: Readonly<Record<string, Readonly<Record<string, Selo
   origem: SELO_DE_ORIGEM,
   atraso: { ...SELO_DO_ATRASO, faixa_vazia: SELO_DA_FAIXA_VAZIA },
   conta_a_pagar: SELO_DA_CONTA_A_PAGAR,
+  despesa: SELO_DA_DESPESA,
   espera_do_repasse: SELO_DA_ESPERA_DO_REPASSE,
   unidade: SELO_DA_UNIDADE,
   endereco: SELO_DO_ENDERECO,

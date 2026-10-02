@@ -54,7 +54,8 @@ export type PagamentoDaConta = {
   observacao: string | null;
 };
 
-export type FormaDePagamento = 'pix' | 'ted' | 'doc' | 'boleto' | 'dinheiro' | 'compensacao';
+export type FormaDePagamento =
+  'pix' | 'ted' | 'doc' | 'boleto' | 'dinheiro' | 'compensacao' | 'cartao_credito' | 'debito_automatico';
 
 /**
  * QUANTO AINDA FALTA. Subtracao de inteiros, sem float em ponto nenhum.
@@ -173,6 +174,9 @@ export const ROTULO_DA_FORMA: Record<FormaDePagamento, string> = {
    * G3 e a divida foi abatida, sem dinheiro sair. Chamar isso de Pix faria a
    * conciliacao bancaria nunca fechar. */
   compensacao: 'Compensação (encontro de contas)',
+  /* As duas da planilha da empresa (02/10/2026, migration 42). */
+  cartao_credito: 'Cartão de crédito',
+  debito_automatico: 'Débito automático',
 };
 
 /**

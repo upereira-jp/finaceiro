@@ -280,7 +280,7 @@ chk('I3e', /animation-delay:\s*0s?\s*!important/.test(bloqueio)
 /* QUATORZE desde 30/09/2026 - entrou «Usuarios», a primeira tela da pasta
  * «Administracao da plataforma» (pedido do dono: cadastrar pessoas e marcar, por
  * caixa, os setores que cada uma ve). */
-chk('I4', TELAS.length === 14, `sao 14 telas (contadas: ${TELAS.length})`);
+chk('I4', TELAS.length === 18, `sao 18 telas — 14 ate 02/10/2026, mais as quatro da planilha da empresa (contadas: ${TELAS.length})`);
 chk('I4b', new Set(TELAS.map((t) => t.rota)).size === TELAS.length,
     'nenhuma rota repetida — rota repetida faz a segunda tela ser inalcancavel');
 chk('I4c', new Set(TELAS.map((t) => t.titulo)).size === TELAS.length,
@@ -320,9 +320,10 @@ chk('I4f', TELAS[0]!.funil === 'rateio' && TELAS[0]!.grupo === 'abertura' && TEL
                               + 'Contratos ‖ O mês, passo a passo: Contas de luz, Cobranças ‖ Resultado: Relatórios',
       `o Rateio segue o trabalho: Mês, os cadastros na ordem de dependencia, os passos do mes e o resultado `
       + `(hoje: ${nomes('rateio')})`);
-  chk('I4o2', nomes('empresa') === 'Caixa: Contas a receber, Contas a pagar ‖ Apoio: Conector Sicoob, Histórico'
+  chk('I4o2', nomes('empresa') === '·: Painel da empresa ‖ Cadastros: Plano de contas ‖ Caixa: Despesas, Projeção de gastos, '
+             + 'Contas a receber, Contas a pagar ‖ Apoio: Conector Sicoob, Histórico'
            && nomes('administracao') === '·: Usuários',
-      `a Empresa: primeiro o que entra, depois o que se paga, e o apoio por ultimo; a Administracao, a tela dela `
+      `a Empresa (02/10/2026, a planilha): o Painel abre, o plano de contas antes de lancar, o caixa (despesas, projecao, o que entra, o que se paga) e o apoio por ultimo; a Administracao, a tela dela `
       + `(hoje: ${nomes('empresa')} / ${nomes('administracao')})`);
   /* OS CADASTROS NA ORDEM DE DEPENDENCIA, par a par, com o motivo de cada um —
    * a ordem de I4o dita por que. Um cadastro reordenado por gosto quebra aqui
@@ -419,9 +420,9 @@ for (const f of funisDaPasta('setores')) {
 }
 
 chk('I4l', primeiraTelaDoFunil('rateio').rota === '/pendencias'
-        && primeiraTelaDoFunil('empresa').rota === '/contas-a-receber'
+        && primeiraTelaDoFunil('empresa').rota === '/empresa'
         && primeiraTelaDoFunil('administracao').rota === '/usuarios',
-    'trocar de funil leva a tela que abre cada lado: o que falta (Rateio), o que vai entrar (Empresa) '
+    'trocar de funil leva a tela que abre cada lado: o que falta (Rateio), o Painel da empresa (Empresa, desde 02/10/2026) '
     + 'e quem entra (Administracao)');
 
 /*
@@ -436,8 +437,8 @@ chk('I4n', funisVisiveis(undefined).map((f) => f.chave).join() === 'rateio,empre
         && funisVisiveis(['empresa', 'administracao']).map((f) => f.chave).join() === 'empresa,administracao',
     'setores ausentes ou vazios: os dois financeiros e nunca a Administracao; presentes: so eles, na ordem do menu');
 chk('I4n2', destinoVisivel('/usuarios', ['rateio', 'empresa']) === '/pendencias'
-        && destinoVisivel('/faturas', ['empresa']) === '/contas-a-receber'
-        && destinoVisivel('/', ['empresa']) === '/contas-a-receber'
+        && destinoVisivel('/faturas', ['empresa']) === '/empresa'
+        && destinoVisivel('/', ['empresa']) === '/empresa'
         && destinoVisivel('/historico', ['empresa']) === null
         && destinoVisivel('/usuarios', ['rateio', 'administracao']) === null
         && destinoVisivel('/usuarios', undefined) === '/pendencias',

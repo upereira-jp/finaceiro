@@ -26,7 +26,7 @@ import { api } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
   Pagina, Aviso, RetornoDoAto, Tabela, Campo, Busca, Ferramentas, Filtro, ThOrd, Marca, Icone, DetalheTecnico,
-  Carregando, AjudaDoMes, CampoData, useOrdenacao, ordenar, contem, BotaoDeCriar, PainelDeCriar, DIRECOES_DA_SITUACAO,
+  Carregando, useOrdenacao, ordenar, contem, DIRECOES_DA_SITUACAO,
 } from '../ui.tsx';
 import { Ligacao } from '../rota.tsx';
 import { SELO_DA_CONTA_A_PAGAR, SELO_DA_ESPERA_DO_REPASSE, tipoDoAviso, pesoDoSelo } from '../tom-do-estado.ts';
@@ -79,7 +79,6 @@ export function TelaContasAPagar() {
      entre o resumo por beneficiário e a lista — um botão, ou um formulário
      inteiro, cortando a tela ao meio. Agora é o padrão das telas de cadastro:
      «Nova despesa avulsa» ao lado do título, e o painel logo abaixo dele. */
-  const [lancando, setLancando] = useState(false);
 
   /*
    * `hoje` é calculado UMA vez por render e passado às funções puras, em vez de
@@ -128,14 +127,12 @@ export function TelaContasAPagar() {
   return (
     <Pagina titulo="Contas a pagar"
             sub="O que a empresa deve: a parte do dono da usina, a comissão e as despesas."
-            acao={<BotaoDeCriar controla="nova-despesa" aberto={lancando} ao={() => setLancando(!lancando)}>
-              Nova despesa avulsa
-            </BotaoDeCriar>}>
-      {lancando && (
-        <FormularioDeConta acao={acao} aoFechar={() => setLancando(false)}
-                           aoCriar={() => { contas.recarregar(); resumo.recarregar(); }} />
-      )}
-      <RetornoDoAto texto={!lancando && acao.sucesso} />
+            /* [02/10/2026] «Nova despesa avulsa» SAIU DAQUI e virou a «Nova despesa»
+               da tela Despesas, que é a planilha da empresa dentro do sistema: um
+               caminho só para lançar, com plano de contas, recorrência e parcelas.
+               O que se lança lá continua aparecendo aqui, com o resto do que se deve. */
+            acao={<Ligacao para="/despesas" className="botao">Lançar em Despesas</Ligacao>}>
+      <RetornoDoAto texto={acao.sucesso} />
 
       {/*
         O FIM DO MÊS DO RATEIO MORA AQUI, do outro lado da barra (30/09/2026). O
@@ -472,94 +469,6 @@ function FormularioDePagamento(p: {
   );
 }
 
-// ------------------------------------------------------- a conta lançada à mão
-
-function FormularioDeConta(p: {
-  acao: ReturnType<typeof useAcao>; aoCriar: () => void; aoFechar: () => void;
-}) {
-  const [f, setF] = useState({
-    descricao: '', beneficiario_nome: '', valor: '', competencia: '', vencimento: '',
-  });
-  const campo = (k: keyof typeof f) => (v: string) => setF({ ...f, [k]: v });
-
-  let centavos = 0;
-  try { centavos = paraCentavos(f.valor); } catch { centavos = 0; }
-
-  const trava = podeCriar({
-    descricao: f.descricao, beneficiario_nome: f.beneficiario_nome, valorCentavos: centavos,
-    competencia: f.competencia, vencimento: f.vencimento,
-  });
-
-  async function criar() {
-    const ok = await p.acao.executar(() => api.post('/contas-a-pagar', {
-      descricao: f.descricao.trim(), beneficiario_nome: f.beneficiario_nome.trim(),
-      valor_centavos: centavos,
-      competencia: competenciaISO(f.competencia),
-      vencimento: f.vencimento,
-    }));
-    if (ok) {
-      p.acao.anunciar('Conta a pagar lançada.');
-      p.aoCriar();
-      p.aoFechar();
-    }
-  }
-
-  return (
-    <PainelDeCriar id="nova-despesa" titulo="Nova despesa avulsa" aoFechar={p.aoFechar}>
-      <div className="campos">
-        <Campo rotulo="Descrição" valor={f.descricao} ao={campo('descricao')} dica="Aluguel do escritório" />
-        <Campo rotulo="Quem recebe" porqueDe="pagar-dono" valor={f.beneficiario_nome} ao={campo('beneficiario_nome')} />
-        <Campo rotulo="Valor (R$)" valor={f.valor} ao={campo('valor')} dica="0,00" />
-        <div>
-          <label htmlFor="despesa-mes">Mês de referência</label>
-          <CampoData id="despesa-mes" mes valor={f.competencia} ao={campo('competencia')} />
-          <AjudaDoMes />
-        </div>
-        <Campo rotulo="Vencimento" porqueDe="pagar-dono" valor={f.vencimento} ao={campo('vencimento')} tipo="date" />
-      </div>
-      {/* A frase existe porque a ausência do caminho é a regra, e ausência não
-          se explica sozinha — quem procurar "lançar um repasse" precisa achar
-          por que não há. */}
-      <p className="nota-do-painel">
-        Para despesa avulsa — aluguel, serviço, imposto. <strong>Repasse e comissão não se lançam
-        aqui:</strong> nascem sozinhos quando o cliente paga, e um segundo caminho lançaria a mesma
-        despesa duas vezes para o mesmo beneficiário.
-      </p>
-      {p.acao.erro && <Aviso tipo="erro">{p.acao.erro}</Aviso>}
-      <div className="painel-criar-pe">
-        <button className="primario" disabled={!trava.pode || p.acao.ocupado} onClick={() => void criar()}>
-          <Icone nome="confirmar" tamanho={15} /> Lançar
-        </button>
-        <button type="button" onClick={p.aoFechar}>Cancelar</button>
-        {!trava.pode && <span className="nota">{trava.porque}</span>}
-      </div>
-    </PainelDeCriar>
-  );
-}
-
-/* ================================================ o dinheiro que espera
- *
- * DINHEIRO QUE ENTROU E AINDA NAO VIROU CONTA A PAGAR — o cartao entrou em
- * 08/09/2026 e fecha um vao que era invisivel nesta tela: o banco avisa o
- * pagamento, e o repasse espera a CONFIRMACAO dele. Entre um e outro o dinheiro
- * existe, e esta tela dizia "nada a pagar". Some quando nao ha espera: fila
- * vazia e o estado normal.
- *
- * [30/09/2026, etapa 4a] A EXPLICACAO E DITA UMA VEZ, POR GRUPO. Em cada uma
- * das dezesseis linhas havia tres linhas de prosa — a mesma, dezesseis vezes —,
- * e a tabela passava de uma tela e meia so para repetir que falta o dono. Agora
- * as linhas se agrupam pelo motivo da espera; o cabecalho do grupo diz o que e
- * e como destrava (os dois passos de «falta o dono», com os links), e a linha
- * fica com o estado curto e a acao ou o destino.
- *
- * [01/10/2026, etapa 7c] E A LINHA PASSOU A SER A USINA. Ainda eram dezesseis
- * linhas «Sem dono · Vincular em Usinas» para duas usinas — o mesmo ato
- * dezesseis vezes, e no celular dezesseis cartoes antes da lista do que pagar.
- * Agora e uma linha por usina (`agruparPorUsina`): quantos pagamentos, de
- * quando a quando, os meses, a soma e o ato UMA vez; os pagamentos ficam no
- * expansor da linha. Repartir, quando da, continua sendo pagamento por
- * pagamento no servidor — o botao da usina pede um de cada vez.
- */
 function DinheiroParado(p: {
   linhas: readonly RepassePendente[]; ocupado: boolean;
   repartir: (l: RepassePendente) => Promise<void>;

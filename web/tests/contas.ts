@@ -168,7 +168,7 @@ const conta = (o: Partial<ContaAPagar> = {}): ContaAPagar => ({
     ...Object.values(ROTULO_DA_FORMA),
     ...Object.values(ROTULO_DO_BENEFICIARIO),
   ];
-  chk('C7a', todos.length === 4 + 6 + 4 && todos.every((r) => r.trim().length > 2),
+  chk('C7a', todos.length === 4 + 8 + 4 && todos.every((r) => r.trim().length > 2),
       `os ${todos.length} rotulos existem e nenhum e vazio - `
       + 'vazio compila e sai como celula em branco na tela');
 

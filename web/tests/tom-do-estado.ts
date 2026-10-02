@@ -89,6 +89,11 @@ const ESPERADO: Readonly<Record<string, TomDoSelo>> = {
   'conta_a_pagar.paga': 'ok',
   'conta_a_pagar.cancelada': 'neutro',
   'conta_a_pagar.vencida': 'erro',
+  'despesa.vencida': 'erro',
+  'despesa.vence_hoje': 'a_fazer',
+  'despesa.a_vencer': 'a_fazer',
+  'despesa.paga': 'ok',
+  'despesa.cancelada': 'neutro',
   'espera_do_repasse.sem_dono': 'a_fazer',
   'espera_do_repasse.aguardando_banco': 'neutro',
   'espera_do_repasse.pronto': 'a_fazer',
@@ -269,7 +274,7 @@ chk('T2l', seloDoContrato('ativo').tom === 'ok' && seloDoContrato('qualquer-outr
   const FALHAS = new Set([
     'cobranca.vencida', 'boleto_da_cobranca.recusado', 'boleto_da_cobranca.esperando',
     'boleto_da_cobranca.insistindo', 'boleto_da_cobranca.parado', 'boleto.boleto_recusado',
-    'atraso.ate_30', 'atraso.ate_60', 'atraso.ate_90', 'atraso.acima_90', 'conta_a_pagar.vencida',
+    'atraso.ate_30', 'atraso.ate_60', 'atraso.ate_90', 'atraso.acima_90', 'conta_a_pagar.vencida', 'despesa.vencida',
     'leitura_do_crm.recusa', 'vez.recusada', 'leitura.falhou', 'registro.recusada',
   ]);
   const vermelhosAMais = NO_MAPA.filter(([k, s]) => s.tom === 'erro' && !FALHAS.has(k)).map(([k]) => k);
