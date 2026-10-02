@@ -133,6 +133,7 @@ model categoria {
   nome        String
   ativo       Boolean       @default(true)
   criado_em   DateTime      @default(now()) @db.Timestamptz(6)
+  ordem       Int           @default(0) @db.SmallInt
   tenant      tenant        @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "categoria_tenant_fk")
   conta_pagar conta_pagar[]
 
@@ -322,10 +323,22 @@ model conta_pagar {
   origem_split_item_chave String?            @default(dbgenerated("COALESCE(origem_split_item_id, id)")) @db.Uuid
   criado_em               DateTime           @default(now()) @db.Timestamptz(6)
   cancelada_em            DateTime?          @db.Timestamptz(6)
+  natureza                natureza_despesa?
+  recorrencia             recorrencia_despesa?
+  recorrente_ate          DateTime?          @db.Date
+  serie_id                String?            @db.Uuid
+  parcela_numero          Int?               @db.SmallInt
+  parcela_total           Int?               @db.SmallInt
+  forma_prevista          forma_de_pagamento?
+  origem_pagamento_id     String?            @db.Uuid
+  numero_documento        String?
+  comprovante_url         String?
+  observacao              String?
   categoria               categoria?         @relation(fields: [tenant_id, categoria_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "conta_pagar_categoria_fk")
   centro_custo            centro_custo?      @relation(fields: [tenant_id, centro_custo_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "conta_pagar_centro_custo_fk")
   dono_usina              dono_usina?        @relation(fields: [tenant_id, dono_usina_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "conta_pagar_dono_fk")
   originador              originador?        @relation(fields: [tenant_id, originador_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "conta_pagar_originador_fk")
+  origem_pagamento        origem_pagamento?  @relation(fields: [tenant_id, origem_pagamento_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "conta_pagar_origem_pagamento_fk")
   split_item              split_item?        @relation(fields: [tenant_id, origem_split_item_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "conta_pagar_split_fk")
   tenant                  tenant             @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "conta_pagar_tenant_fk")
   pagamento               pagamento[]
@@ -334,6 +347,7 @@ model conta_pagar {
   @@unique([tenant_id, origem_split_item_chave], map: "conta_pagar_origem_unica")
   @@index([tenant_id, vencimento], map: "conta_pagar_aberta_idx", where: raw("(status = ANY (ARRAY['aberta'::status_conta_pagar, 'parcial'::status_conta_pagar]))"))
   @@index([tenant_id, competencia], map: "conta_pagar_competencia_idx")
+  @@index([tenant_id, serie_id], map: "conta_pagar_serie_idx", where: raw("(serie_id IS NOT NULL)"))
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -519,6 +533,25 @@ model logo_de_cobranca {
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model origem_pagamento {
+  id          String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id   String                @db.Uuid
+  nome        String
+  tipo        tipo_origem_pagamento @default(conta_bancaria)
+  ativo       Boolean               @default(true)
+  ordem       Int                   @default(0) @db.SmallInt
+  criado_em   DateTime              @default(now()) @db.Timestamptz(6)
+  tenant      tenant                @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "origem_pagamento_tenant_fk")
+  conta_pagar conta_pagar[]
+  pagamento   pagamento[]
+
+  @@unique([tenant_id, id], map: "origem_pagamento_id_tenant")
+  @@unique([tenant_id, nome], map: "origem_pagamento_nome_unico")
+}
+
 model originador {
   id                 String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenant_id          String               @db.Uuid
@@ -562,6 +595,10 @@ model pagamento {
   referencia_externa String?
   observacao         String?
   criado_em          DateTime           @default(now()) @db.Timestamptz(6)
+  acrescimo_centavos Int                @default(0)
+  desconto_centavos  Int                @default(0)
+  origem_pagamento_id String?           @db.Uuid
+  origem_pagamento   origem_pagamento?  @relation(fields: [tenant_id, origem_pagamento_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "pagamento_origem_pagamento_fk")
   conta_pagar        conta_pagar        @relation(fields: [tenant_id, conta_pagar_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "pagamento_conta_fk")
   tenant             tenant             @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "pagamento_tenant_fk")
 
@@ -698,6 +735,7 @@ model tenant {
   modelo_de_fatura              modelo_de_fatura[]
   originador                    originador[]
   pagamento                     pagamento[]
+  origem_pagamento              origem_pagamento[]
   registro_de_fatura_unificada  registro_de_fatura_unificada[]
   regra_comissao                regra_comissao[]
   regra_repasse                 regra_repasse[]
@@ -995,6 +1033,28 @@ enum forma_de_pagamento {
   boleto
   dinheiro
   compensacao
+  cartao_credito
+  debito_automatico
+}
+
+enum natureza_despesa {
+  fixa
+  variavel
+}
+
+enum recorrencia_despesa {
+  avulsa
+  mensal
+  trimestral
+  semestral
+  anual
+  parcelada
+}
+
+enum tipo_origem_pagamento {
+  conta_bancaria
+  socio
+  outra
 }
 
 enum natureza_pessoa {

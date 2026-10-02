@@ -49,6 +49,7 @@ const MIGRATION_38 = '20260910001500_ato_externo_sem_returning';
 const MIGRATION_39 = '20260910010000_limpar_ensaio_da_trilha';
 const MIGRATION_40 = '20260910160000_chave_do_vendedor_no_crm';
 const MIGRATION_41 = '20260930120000_administracao_da_plataforma';
+const MIGRATION_42 = '20261002030000_despesas_da_empresa';
 
 class ConferenciaFalhou extends Error {}
 
@@ -62,6 +63,7 @@ const DIRETORIO: Record<string, string> = {
   'migration-39': MIGRATION_39,
   'migration-40': MIGRATION_40,
   'migration-41': MIGRATION_41,
+  'migration-42': MIGRATION_42,
 };
 
 /**
@@ -127,7 +129,7 @@ if (!url || !url.trim()) {
 }
 
 const modo = process.argv[2] ?? '';
-const MODOS = ['identidade', 'migration-32', 'migration-35', 'migration-36', 'migration-37', 'migration-38', 'migration-39', 'migration-40', 'migration-41'];
+const MODOS = ['identidade', 'migration-32', 'migration-35', 'migration-36', 'migration-37', 'migration-38', 'migration-39', 'migration-40', 'migration-41', 'migration-42'];
 if (!MODOS.includes(modo)) {
   console.error(`modo desconhecido: ${JSON.stringify(modo)}. Conheco: ${MODOS.join(', ')}.`);
   process.exit(1);
@@ -581,9 +583,62 @@ async function migration41(): Promise<void> {
     + `executavel, e ${r!.administram} vinculo(s) com a Administracao.`);
 }
 
+/**
+ * MIGRATION 42 — a planilha da empresa vira dado (PLANO-planilha-empresa-2026-10-02).
+ *
+ * Confere o que a tela Despesas le no ARRANQUE: sem estas colunas o
+ * `conferirClienteGerado()` derruba o servico com `ColunaAusenteNoBanco`.
+ */
+async function migration42(): Promise<void> {
+  await migration41();
+
+  const { rows: [r] } = await cliente.query<{
+    colunas_conta: string; colunas_pagamento: string; ordem: string; formas: string;
+    rls: boolean; trilha: string; grant_origem: boolean; registro: string;
+  }>(`
+    SELECT (SELECT count(*) FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'conta_pagar'
+               AND column_name IN ('natureza','recorrencia','recorrente_ate','serie_id','parcela_numero',
+                                   'parcela_total','forma_prevista','origem_pagamento_id','numero_documento',
+                                   'comprovante_url','observacao'))                        AS colunas_conta,
+           (SELECT count(*) FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'pagamento'
+               AND column_name IN ('acrescimo_centavos','desconto_centavos','origem_pagamento_id')) AS colunas_pagamento,
+           (SELECT count(*) FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'categoria' AND column_name = 'ordem') AS ordem,
+           (SELECT count(*) FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
+             WHERE t.typname = 'forma_de_pagamento'
+               AND e.enumlabel IN ('cartao_credito','debito_automatico'))                   AS formas,
+           (SELECT relrowsecurity AND relforcerowsecurity FROM pg_class
+             WHERE oid = 'public.origem_pagamento'::regclass)                               AS rls,
+           (SELECT count(*) FROM pg_trigger
+             WHERE tgrelid = 'public.origem_pagamento'::regclass
+               AND tgname = 'auditar_origem_pagamento')                                    AS trilha,
+           has_table_privilege('app_financeiro', 'public.origem_pagamento', 'INSERT')        AS grant_origem,
+           (SELECT count(*) FROM _prisma_migrations
+             WHERE migration_name = '${MIGRATION_42}'
+               AND finished_at IS NOT NULL AND rolled_back_at IS NULL)                     AS registro`);
+
+  const faltando = [
+    Number(r!.colunas_conta) === 11 ? null : `as 11 colunas novas de conta_pagar (achei ${r!.colunas_conta})`,
+    Number(r!.colunas_pagamento) === 3 ? null : `as 3 colunas novas de pagamento (achei ${r!.colunas_pagamento})`,
+    Number(r!.ordem) === 1 ? null : 'a coluna categoria.ordem',
+    Number(r!.formas) === 2 ? null : `as formas cartao_credito e debito_automatico (achei ${r!.formas})`,
+    r!.rls ? null : 'RLS com FORCE em origem_pagamento',
+    Number(r!.trilha) === 1 ? null : 'o gatilho de auditoria de origem_pagamento',
+    r!.grant_origem ? null : 'o INSERT de app_financeiro em origem_pagamento',
+    Number(r!.registro) === 1 ? null : `o registro de ${MIGRATION_42} em _prisma_migrations`,
+  ].filter(Boolean);
+
+  if (faltando.length) throw new ConferenciaFalhou(`a migration 42 nao esta completa no banco. Falta: ${faltando.join('; ')}.`);
+  console.log('migration 42 OK — origem_pagamento com RLS e trilha, 11 colunas novas no titulo, 3 na baixa, '
+    + 'categoria.ordem e as formas cartao_credito e debito_automatico.');
+}
+
 try {
   await cliente.connect();
   if (modo === 'identidade') await identidade();
+  else if (modo === 'migration-42') await migration42();
   else if (modo === 'migration-41') await migration41();
   else if (modo === 'migration-40') await migration40();
   else if (modo === 'migration-39') await migration39();
