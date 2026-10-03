@@ -5,11 +5,26 @@
 | **Para quem** | Quem quiser, em uma tela, a lista viva do que falta — e de quem é cada item |
 | **O que é** | O **índice único** das pendências. Consolida e substitui os dois trackers datados que existiam soltos |
 | **Substitui e apaga** | `PENDENCIAS-2026-08-05.md` e `PROXIMOS-PASSOS-2026-08-09.md` — vencidos, e agora removidos do repo |
-| **NÃO substitui** | `QUESTOES.md` (registro datado, dono por entrada — regra 10) · **`RETOMADA-2026-09-27.md`** (onde tudo parou — a mais nova; antes dela, a de 11/09) · os `RESUMO-SESSAO-*` (memória datada). Estes continuam sendo a fonte; aqui é o **apontador** |
-| **Data** | 14/08/2026 · rev. **10/09/2026 (varredura completa)** · rev. 17/08 · rev. 19/08 · rev. 21/08 · rev. 27/08 · rev. 28/08 · rev. 08/09 · rev. **09/09/2026** · rev. **09/09/2026, noite** · rev. **09/09/2026, madrugada** · rev. **10/09/2026** · rev. **11/09/2026 (conferência de produção)** · rev. 26/09 · rev. **27/09/2026** |
+| **NÃO substitui** | `QUESTOES.md` (registro datado, dono por entrada — regra 10) · **`RETOMADA-2026-10-03.md`** (onde tudo está — a mais nova, medida em produção; antes dela, a de 27/09) · os `RESUMO-SESSAO-*` (memória datada). Estes continuam sendo a fonte; aqui é o **apontador** |
+| **Data** | 14/08/2026 · rev. **10/09/2026 (varredura completa)** · rev. 17/08 · rev. 19/08 · rev. 21/08 · rev. 27/08 · rev. 28/08 · rev. 08/09 · rev. **09/09/2026** · rev. **09/09/2026, noite** · rev. **09/09/2026, madrugada** · rev. **10/09/2026** · rev. **11/09/2026 (conferência de produção)** · rev. 26/09 · rev. 27/09 · rev. **03/10/2026** |
 | ⚠️ **Leia primeiro** | Este arquivo ficou **congelado entre 28/08 e 08/09** enquanto a operação andava, e a `RETOMADA-2026-09-08` continuou mandando o leitor para cá como *"o índice único"*. O bloco **«O que mudou desde 28/08»**, logo abaixo do cabeçalho, é a correção — o corpo antigo fica intacto porque é registro datado, e reescrevê-lo falsificaria a história (mesma decisão do `PATCH-citacoes-2026-07-24`) |
 | **Estado da suíte** | Sem banco: `typecheck` + `documento` + `brcode` + `dominio` + `web` → **`EXIT=0`, 2.420 linhas `ok`** (28/08, madrugada), e desde 27/08 com as verificações de `tests/sicoob-http.ts` — hoje **63** — dentro do `test:dominio`. Fora da suíte, contra a Sicoob de verdade: `npm run ensaio-sicoob` → **6 de 6**. `test:repos` e `test:isolamento` **não rodam nesta VPS** (exigem PostgreSQL local) |
 | **Produção** | `financeiro.blackhaus.io` · **35 migrations no ar** (a 34 em 21/08, a **35 em 28/08**) · a **36 escrita e NÃO aplicada** · Pix estático e boleto importado no ar · central de ajuda em toda tela · **a conta unificada lida já vira cobrança** (migration 34) · o conector roda sozinho a cada 15 min pelo `financeiro-ciclo.timer`, e desde **28/08** a agenda de cobrança roda sozinha em três timers (`fila` 5 min · `consulta` e `certificado` diárias) |
+
+> ## 🆕 03/10/2026 — PENDÊNCIAS REMEDIDAS EM PRODUÇÃO
+>
+> Entre 27/09 e 03/10 entraram ~30 commits sem retomada. A lista foi refeita contra a
+> produção e está em **`RETOMADA-2026-10-03.md`**. O que muda aqui:
+>
+> | Item | Situação |
+> |---|---|
+> | Carla (G3-0229/0221) sem contrato | ✅ **dois contratos ativos** na 0002 |
+> | Endereço do pagador | ✅ **faltam 3** (eram 22); só um deles fatura |
+> | PAT do Supabase de 21/09 | ✅ **revogado** — DDL agora só pelo `migrate-financeiro` |
+> | 🔴 **`Q-PARCERIA-01`** | **entrou no caminho do dinheiro**: 5 UCs com rateio ativado e sem contrato, R$ 5.006,00/mês |
+> | 🔴 Avisos de pagamento do Sicoob ignorados | **6** (eram 3); o sistema tem 0 boletos, então são boletos do portal |
+> | 🔴 Primeira fatura | 0 contas da Equatorial lidas; 46 contratos ativos esperando |
+> | `PATCH /webhooks/{id}/reativar` | ❌ sai da lista de código: há decisão registrada contra ele (QUESTOES, religamento do aviso, decisão 1) |
 
 > ## 🆕 01/10/2026 — A FOLHA VOLTA A TER FORMA DE PAGAMENTO
 >
