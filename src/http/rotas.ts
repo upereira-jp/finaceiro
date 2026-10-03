@@ -1226,10 +1226,11 @@ export const ROTAS: Rota[] = [
     metodo: 'GET', padrao: '/auditoria',
     handler: (req, app) => emRelatorio(app, req, async () => {
       const desde = req.query.get('desde') ? data(req.query.get('desde'), 'desde') : undefined;
+      const antesDe = auditoria.cursorDaTrilha(req.query.get('antes_de'));
       /* AS DUAS EM SERIE - `db/em-serie.ts`. Foi ESTA rota, aberta pela aba
        * «Historico» as 17:39:59 de 10/09/2026, que fez o `pg` gravar em producao
        * o aviso de que duas consultas dividiam a mesma conexao. */
-      const [linhas, tabelas] = await emSerie(
+      const [pagina, tabelas] = await emSerie(
         () => auditoria.trilha({
           tabela: req.query.get('tabela') ?? undefined,
           registro_id: req.query.get('registro') ?? undefined,
@@ -1241,13 +1242,17 @@ export const ROTAS: Rota[] = [
            * medida em `repos/auditoria.ts`: 96% da trilha sao as tres tabelas
            * de rodada, e sem isto a tela abriria mostrando so elas. */
           incluir_rodadas: req.query.get('rodadas') === '1',
+          antes_de: antesDe,
         }),
-        () => auditoria.tabelasDaTrilha(desde),
+        /* A CONTAGEM POR TABELA SO NA PRIMEIRA PAGINA: ela serve o filtro, que a
+         * tela ja montou, e um `groupBy` sobre a trilha inteira a cada «Carregar
+         * as anteriores» seria a consulta mais cara da rota repetida a toa. */
+        async () => (antesDe === undefined ? auditoria.tabelasDaTrilha(desde) : []),
       );
       /* O TETO VAI JUNTO DA RESPOSTA porque a tela precisa poder dizer "sao as
        * 100 mais recentes, e ha mais" em vez de deixar quem le achar que acabou.
        * Mesma disciplina da resposta que DIZ quando cortou, em `boleto.ts`. */
-      return ok({ linhas, tabelas, teto: auditoria.TETO });
+      return ok({ linhas: pagina.linhas, tabelas, teto: auditoria.TETO, proximo: pagina.proximo });
     }),
   },
   {

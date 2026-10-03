@@ -57,8 +57,15 @@ export type LinhaDaTrilha = {
 
 export type RespostaDaTrilha = {
   linhas: LinhaDaTrilha[];
+  /** Só na primeira página: a contagem por tabela serve o filtro, que já está montado. */
   tabelas: Array<{ tabela: string; linhas: number }>;
   teto: number;
+  /**
+   * O cursor da página anterior no tempo: o `id` da última linha desta. `null`
+   * quando a história acabou. Ver `PaginaDaTrilha` em `src/repos/auditoria.ts`
+   * para por que é o `id`, e não a data.
+   */
+  proximo?: string | null;
 };
 
 /* ==========================================================================
@@ -367,11 +374,49 @@ export function porDia(linhas: readonly LinhaDaTrilha[], hoje: string): DiaDaTri
 export const horaDaLinha = (iso: string): string => horaEmSP(iso);
 
 /**
- * A RESPOSTA ESTÁ CHEIA? — e por que a tela precisa perguntar isso.
+ * HÁ MAIS PARA TRÁS? — e por que a tela precisa perguntar isso.
  *
- * Quando voltam exatamente tantas linhas quanto o teto, a lista não terminou:
- * ela foi cortada. Sem dizer isso, "as últimas alterações" pareceria a história
- * inteira, e a alteração que interessa poderia estar logo abaixo do corte.
+ * Até 03/10/2026 a resposta só trazia as linhas, e a tela deduzia o corte por
+ * contagem ("voltou tanto quanto pedi, então cortou"), sem ter como ir além: a
+ * linha 201 da trilha não era alcançável pela tela. Agora o servidor diz
+ * (`proximo`), e a tela carrega a página anterior a partir dele. Sem dizer isso,
+ * "as últimas alterações" pareceria a história inteira.
  */
-export const veioCortada = (r: RespostaDaTrilha, pedido: number): boolean =>
-  r.linhas.length >= Math.min(pedido, r.teto);
+export const temAnteriores = (r: { proximo?: string | null }): boolean =>
+  r.proximo != null;
+
+/**
+ * AS PÁGINAS QUE A PESSOA JÁ PEDIU, presas à primeira página que as originou.
+ *
+ * A primeira página vem do `useDados`, que a refaz a cada troca de filtro. As
+ * seguintes são acrescentadas por clique. A amarra em `base` é o que impede a
+ * mistura: se os filtros mudaram (ou a primeira página foi relida), as
+ * anteriores pertencem a OUTRA consulta e são descartadas — inclusive uma
+ * resposta que chega depois da troca, porque ela traz a `base` antiga.
+ */
+export type Anteriores = {
+  base: RespostaDaTrilha | null;
+  linhas: LinhaDaTrilha[];
+  proximo: string | null;
+};
+
+export const semAnteriores = (base: RespostaDaTrilha | null): Anteriores =>
+  ({ base, linhas: [], proximo: base?.proximo ?? null });
+
+/** As anteriores valem só para a primeira página de onde vieram. */
+export const anterioresDe = (a: Anteriores, base: RespostaDaTrilha | null): Anteriores =>
+  (a.base === base ? a : semAnteriores(base));
+
+/**
+ * Acrescenta uma página. Uma linha que já está na tela não entra de novo: o
+ * cursor não repete, mas a defesa custa um `Set` e a duplicata custaria uma
+ * alteração contada duas vezes no cabeçalho do dia.
+ */
+export function acrescentarPagina(a: Anteriores, pagina: RespostaDaTrilha): Anteriores {
+  const vistas = new Set([...(a.base?.linhas ?? []), ...a.linhas].map((l) => l.id));
+  return {
+    base: a.base,
+    linhas: [...a.linhas, ...pagina.linhas.filter((l) => !vistas.has(l.id))],
+    proximo: pagina.proximo ?? null,
+  };
+}

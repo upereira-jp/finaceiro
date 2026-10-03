@@ -24,8 +24,9 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
   ROTULO_DA_TABELA, RODADAS_AUTOMATICAS, rotuloDaTabela, rotuloDaColuna, valorNaTela,
-  quemFez, resumoDaLinha, porDia, tituloDoDia, horaDaLinha, veioCortada, ehRodadaAutomatica,
-  VERBO, type LinhaDaTrilha,
+  quemFez, resumoDaLinha, porDia, tituloDoDia, horaDaLinha, temAnteriores, ehRodadaAutomatica,
+  semAnteriores, anterioresDe, acrescentarPagina,
+  VERBO, type LinhaDaTrilha, type RespostaDaTrilha,
 } from '../src/historico.ts';
 
 let falhas = 0;
@@ -287,19 +288,50 @@ chk('H7f', horaDaLinha('2026-09-10T13:24:40.000Z') === '10:24',
 }
 
 // ============================================================================
-// H8 — a lista cortada
+// H8 — há mais para trás? (até 03/10/2026: «a lista cortada», sem saída)
 // ============================================================================
 
 {
-  const cheia = { linhas: new Array(200).fill(linha({})), tabelas: [], teto: 500 };
-  const curta = { linhas: new Array(12).fill(linha({})), tabelas: [], teto: 500 };
-  chk('H8', veioCortada(cheia, 200) === true,
-      'quando voltam tantas linhas quantas foram pedidas, a lista NAO terminou: ela foi cortada, '
-      + 'e a tela precisa dizer isso');
-  chk('H8b', veioCortada(curta, 200) === false,
-      'e uma lista menor que o pedido acabou de verdade');
-  chk('H8c', veioCortada({ linhas: new Array(500).fill(linha({})), tabelas: [], teto: 500 }, 9000) === true,
-      'pedir acima do teto tambem devolve cortada — o teto do servidor vence o pedido da tela');
+  const comMais = { linhas: new Array(200).fill(linha({})), tabelas: [], teto: 500, proximo: '9001' };
+  const acabou = { linhas: new Array(200).fill(linha({})), tabelas: [], teto: 500, proximo: null };
+  chk('H8', temAnteriores(comMais) === true,
+      'com cursor na resposta, a história NAO terminou: a tela oferece a página anterior');
+  chk('H8b', temAnteriores(acabou) === false,
+      'proximo null é o começo da história — mesmo com a página cheia, que é o caso que a contagem '
+      + 'antiga acusava como corte sem ser');
+  const semCampo: RespostaDaTrilha = { linhas: [], tabelas: [], teto: 500 };
+  chk('H8c', temAnteriores(semCampo) === false,
+      'resposta sem o campo (servidor antigo) não inventa um botão que levaria a um 400');
+}
+
+// ============================================================================
+// H9 — as páginas anteriores, presas à consulta que as originou
+// ============================================================================
+
+{
+  const p1 = { linhas: [linha({ id: '30' }), linha({ id: '29' })], tabelas: [], teto: 500, proximo: '29' };
+  const p2 = { linhas: [linha({ id: '28' }), linha({ id: '27' })], tabelas: [], teto: 500, proximo: '27' };
+  const p3 = { linhas: [linha({ id: '27' }), linha({ id: '26' })], tabelas: [], teto: 500, proximo: null };
+
+  const a0 = semAnteriores(p1);
+  chk('H9', a0.linhas.length === 0 && a0.proximo === '29',
+      'sem clique, nada além da primeira página, e o cursor é o dela');
+
+  const a1 = acrescentarPagina(a0, p2);
+  chk('H9b', a1.linhas.map((l) => l.id).join(',') === '28,27' && a1.proximo === '27' && a1.base === p1,
+      'cada clique acrescenta a página anterior e avança o cursor, sem trocar a base');
+
+  const a2 = acrescentarPagina(a1, p3);
+  chk('H9c', a2.linhas.map((l) => l.id).join(',') === '28,27,26' && a2.proximo === null,
+      'uma linha que já está na tela não entra de novo, e o fim da história zera o cursor');
+
+  const outraConsulta = { linhas: [linha({ id: '99' })], tabelas: [], teto: 500, proximo: null };
+  const depoisDoFiltro = anterioresDe(a2, outraConsulta);
+  chk('H9d', depoisDoFiltro.linhas.length === 0 && depoisDoFiltro.base === outraConsulta,
+      'trocar o filtro relê a primeira página, e as anteriores da consulta velha somem — '
+      + 'misturar as duas mostraria linhas que o filtro novo exclui');
+  chk('H9e', anterioresDe(a2, p1) === a2,
+      'com a mesma primeira página, as anteriores ficam onde estão');
 }
 
 console.log();

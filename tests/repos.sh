@@ -244,3 +244,9 @@ node --experimental-strip-types tests/auth-jwt.ts
 echo
 echo "=== conector do CRM: dedup, idempotencia, recusas e reconciliacao"
 node --experimental-strip-types tests/conector.ts
+echo
+# A TRILHA POR CURSOR (03/10/2026). POR ULTIMO de proposito: ela cria 30 clientes
+# no tenant A e altera os 30 duas vezes, e a trilha nao se apaga — uma suite
+# depois dela que contasse clientes ou linhas de trilha contaria as dela.
+echo "=== historico: a trilha por cursor, o milissegundo compartilhado e a RLS no cursor"
+node --experimental-strip-types tests/repos-trilha.ts

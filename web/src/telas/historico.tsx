@@ -43,8 +43,9 @@ import {
 } from '../ui.tsx';
 import {
   porDia, quemFez, resumoDaLinha, rotuloDaTabela, rotuloDaColuna, valorNaTela,
-  horaDaLinha, veioCortada, ehRodadaAutomatica, VERBO,
-  type LinhaDaTrilha, type RespostaDaTrilha,
+  horaDaLinha, temAnteriores, ehRodadaAutomatica, VERBO,
+  semAnteriores, anterioresDe, acrescentarPagina,
+  type LinhaDaTrilha, type RespostaDaTrilha, type Anteriores,
 } from '../historico.ts';
 import { SELO_DA_TRILHA } from '../tom-do-estado.ts';
 import { hojeEmSP } from '../formato.ts';
@@ -68,16 +69,46 @@ export function TelaHistorico() {
 
   const PEDIDO = 200;
 
-  const trilha = useDados<RespostaDaTrilha>(() => {
+  /* A MESMA CONSULTA para a primeira página e para as anteriores: o cursor só
+     faz sentido sobre os mesmos filtros que produziram a linha de onde ele saiu. */
+  const consulta = () => {
     const q = new URLSearchParams({ limite: String(PEDIDO) });
     if (tabela) q.set('tabela', tabela);
     if (operacao) q.set('operacao', operacao);
     if (desde) q.set('desde', `${desde}T00:00:00.000Z`);
     if (rodadas) q.set('rodadas', '1');
-    return api.get(`/auditoria?${q.toString()}`);
-  }, [tabela, operacao, desde, rodadas]);
+    return q;
+  };
 
-  const linhas = trilha.dado?.linhas ?? [];
+  const trilha = useDados<RespostaDaTrilha>(
+    () => api.get(`/auditoria?${consulta().toString()}`),
+    [tabela, operacao, desde, rodadas]);
+
+  /* As páginas anteriores, presas à primeira (ver `Anteriores`): trocar um
+     filtro relê a primeira, e as anteriores da consulta velha somem sozinhas. */
+  const [maisAntigas, setMaisAntigas] = useState<Anteriores>(() => semAnteriores(null));
+  const [carregandoAnteriores, setCarregandoAnteriores] = useState(false);
+  const [erroAnteriores, setErroAnteriores] = useState<string | null>(null);
+  const anteriores = anterioresDe(maisAntigas, trilha.dado);
+
+  async function carregarAnteriores() {
+    if (!anteriores.proximo || carregandoAnteriores) return;
+    const de = anteriores;
+    setCarregandoAnteriores(true);
+    setErroAnteriores(null);
+    try {
+      const q = consulta();
+      q.set('antes_de', de.proximo!);
+      const pagina = await api.get<RespostaDaTrilha>(`/auditoria?${q.toString()}`);
+      setMaisAntigas(acrescentarPagina(de, pagina));
+    } catch (e) {
+      setErroAnteriores(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCarregandoAnteriores(false);
+    }
+  }
+
+  const linhas = [...(trilha.dado?.linhas ?? []), ...anteriores.linhas];
   const visiveis = busca
     ? linhas.filter((l) => contem(quemFez(l), busca)
         || contem(rotuloDaTabela(l.tabela), busca)
@@ -86,7 +117,7 @@ export function TelaHistorico() {
     : linhas;
 
   const dias = porDia(visiveis, hojeISO());
-  const cortada = trilha.dado ? veioCortada(trilha.dado, PEDIDO) : false;
+  const haAnteriores = trilha.dado ? temAnteriores(anteriores) : false;
 
   /* As tabelas do filtro vêm do que EXISTE na trilha, e não de uma lista
      escrita — que envelheceria na primeira migration. O batimento da máquina só
@@ -144,11 +175,13 @@ export function TelaHistorico() {
 
       {trilha.erro && <Aviso tipo="erro">Não foi possível ler o histórico: {trilha.erro}</Aviso>}
 
-      {cortada && (
+      {/* A BUSCA OLHA SÓ O QUE ESTÁ NA TELA, e com mais para trás isso precisa ser
+          dito: «nada encontrado» nas 200 carregadas não é «nada na história». */}
+      {haAnteriores && busca && (
         <Aviso tipo="alerta">
-          <strong>Esta é só a parte mais recente.</strong> A lista foi cortada no que cabe de uma
-          vez, então o que você procura pode estar antes do começo dela. Escolha uma data em
-          «Desde», ou filtre por um tipo, para chegar mais perto.
+          <strong>A busca olha só as {linhas.length} alterações carregadas.</strong> O que você
+          procura pode estar mais para trás: carregue as anteriores no fim da lista, ou escolha
+          uma data em «Desde» para começar mais perto.
         </Aviso>
       )}
 
@@ -167,6 +200,27 @@ export function TelaHistorico() {
             <Dia key={d.dia} titulo={d.titulo} linhas={d.linhas} />
           ))}
         </Tabela>
+      )}
+
+      {/* O FIM DA LISTA DIZ SE A HISTÓRIA ACABOU. Com mais para trás, o botão
+          traz a página anterior no tempo; sem, a frase diz que é o começo — e
+          não deixa a pessoa rolando à procura de um botão que não existe. */}
+      {!trilha.carregando && trilha.dado && linhas.length > 0 && (
+        <div className="secao" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          {haAnteriores ? (
+            <button type="button" onClick={() => void carregarAnteriores()} disabled={carregandoAnteriores}>
+              <Icone nome="ordem_decrescente" tamanho={15} />{' '}
+              {carregandoAnteriores ? 'Carregando…' : `Carregar as ${PEDIDO} anteriores`}
+            </button>
+          ) : (
+            <span className="fraco" style={{ fontSize: 'var(--t-meta)' }}>
+              Este é o começo da história dentro desses filtros.
+            </span>
+          )}
+          {erroAnteriores && (
+            <Aviso tipo="erro">Não foi possível carregar as anteriores: {erroAnteriores}</Aviso>
+          )}
+        </div>
       )}
     </Pagina>
   );
