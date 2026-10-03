@@ -250,3 +250,8 @@ echo
 # depois dela que contasse clientes ou linhas de trilha contaria as dela.
 echo "=== historico: a trilha por cursor, o milissegundo compartilhado e a RLS no cursor"
 node --experimental-strip-types tests/repos-trilha.ts
+echo
+# A LISTA DE CONTAS A PAGAR NO SERVIDOR (03/10/2026). Tambem no fim: ela cria
+# sete contas no tenant A, e as suites de despesas contam conta_pagar.
+echo "=== contas a pagar: busca, filtro, ordem, blocos e totais no servidor"
+node --experimental-strip-types tests/repos-lista-de-contas.ts

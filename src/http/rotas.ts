@@ -18,6 +18,7 @@ import * as cliente from '../repos/cliente.ts';
 import * as conectorExecucao from '../repos/conector-execucao.ts';
 import * as automacoes from '../repos/automacoes.ts';
 import * as auditoria from '../repos/auditoria.ts';
+import * as listaDeContas from '../dominio/lista-de-contas.ts';
 import * as emissao from '../repos/emissao.ts';
 import * as destrave from '../repos/destrave.ts';
 import * as uc from '../repos/unidade_consumidora.ts';
@@ -1723,11 +1724,22 @@ export const ROTAS: Rota[] = [
    */
   {
     metodo: 'GET', padrao: '/contas-a-pagar',
-    handler: (req, app) => emTenant(app, req, async () => ok(await contaPagar.listar({
-      status: (req.query.get('status') ?? undefined) as any,
-      competencia: req.query.get('competencia')
-        ? data(req.query.get('competencia'), 'competencia') : undefined,
+    /*
+     * UM BLOCO DA LISTA, filtrado, buscado e ordenado NO SERVIDOR (03/10/2026).
+     * Ate aqui a rota devolvia a tabela ate 500, em ordem de vencimento crescente,
+     * e a tela filtrava e somava no navegador — acima de 500 as contas mais novas
+     * sumiam sem aviso e os totais erravam. A resposta agora traz o bloco, quantas
+     * casam, quantas existem e os totais da tabela inteira. Ver
+     * `dominio/lista-de-contas.ts`. `status` e `competencia` sairam: nenhum
+     * chamador os mandava.
+     */
+    handler: (req, app) => emTenant(app, req, async () => ok(await contaPagar.pagina({
+      inicio: listaDeContas.inicioDoBloco(req.query.get('inicio')),
       limite: limite(req.query),
+      busca: req.query.get('busca') ?? undefined,
+      situacao: listaDeContas.situacaoDaLista(req.query.get('situacao')),
+      ordem: listaDeContas.ordemDaLista(req.query.get('ordem')),
+      desc: req.query.get('desc') === '1',
     }))),
   },
   {

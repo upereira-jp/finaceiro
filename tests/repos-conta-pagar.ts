@@ -203,7 +203,7 @@ let contaCiclo: string;
 {
   const c = await emA(() => novaConta('Conta da matriz', 7_000));
 
-  const leu = await lancou(() => emACob(() => contaPagar.listar({})));
+  const leu = await lancou(() => emACob(() => contaPagar.pagina({})));
   chk('P6a', leu !== null && /ler_corporativo|permiss|papel/i.test(String(leu?.message ?? leu)),
       'papel `cobranca` NAO LE contas a pagar - a matriz do PRD 3 lhe da traco em Corporativo, '
       + 'e usar `ler` aqui lhe daria a lista de quanto a empresa deve a cada dono de usina');
@@ -218,7 +218,7 @@ let contaCiclo: string;
       'e `financeiro` PAGA - a mesma matriz lhe da TOTAL em Corporativo, e e o unico papel '
       + 'alem de admin que a coluna contempla');
 
-  const lei = await lancou(() => emALei(() => contaPagar.listar({})));
+  const lei = await lancou(() => emALei(() => contaPagar.pagina({})));
   chk('P6d', lei === null, '`leitura` le, e nao escreve - conferido na linha seguinte');
   const leiEscreve = await lancou(() => emALei(() => novaConta('Nao deve entrar', 1_000)));
   chk('P6e', leiEscreve !== null, 'e `leitura` NAO escreve');
