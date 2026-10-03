@@ -42,10 +42,16 @@ const chk = (id: string, cond: boolean, d: string) => {
 };
 
 const PREFIXO = `Trilha paginada ${Date.now()}`;
-/* A JANELA DO TESTE: so as linhas que ele mesmo gravou (com folga de 2 s para o
- * relogio do Node e o do Postgres). As suites anteriores deixaram trilha de
- * cliente no tenant A, e sem a janela a referencia dependeria de quantas. */
-const DESDE = new Date(Date.now() - 2000);
+/* A JANELA DO TESTE: so as linhas que ele mesmo gravou. As suites anteriores
+ * deixaram trilha de cliente no tenant A — o conector do CRM, logo antes desta,
+ * grava centenas —, e sem a janela a referencia dependeria de quantas.
+ *
+ * ⚠️ O INICIO DA JANELA E O RELOGIO DO POSTGRES, lido logo antes da primeira
+ * escrita, e nao `Date.now()` com folga. A primeira versao usou "agora menos 2 s"
+ * do Node e pegou mais de 500 linhas do conector no CI (02/10/2026, run
+ * 37089381101): a folga que protegia contra relogios diferentes abria a janela
+ * para a suite anterior. */
+let DESDE = new Date(0);
 const ms = (l: LinhaDaTrilha) => new Date(l.ocorrido_em).getTime();
 
 /** Le a trilha inteira de `cliente`, pagina por pagina, seguindo o cursor. */
@@ -59,7 +65,9 @@ async function seguirCursor(limite: number): Promise<{ ids: string[]; paginas: n
     ids.push(...p.linhas.map((l) => l.id));
     if (p.proximo === null) break;
     cursor = p.proximo;
-    if (paginas > 400) throw new Error('o cursor nao termina');
+    /* A trava conta paginas, e o teto e o que a janela pode ter: 60 linhas do
+     * cenario + 30 do TR6, de 1 em 1. Passar disso e cursor andando em circulo. */
+    if (paginas > 200) throw new Error(`o cursor nao termina (${ids.length} linhas em ${paginas} paginas)`);
   }
   return { ids, paginas };
 }
@@ -68,6 +76,10 @@ try {
   // ------------------------------------------------------------- o cenario
   // 30 clientes criados de uma vez e depois alterados de uma vez: 60 linhas de
   // trilha, e o UPDATE grava as 30 dele dentro de um unico comando.
+  DESDE = await emA(async () => {
+    const [{ agora }] = await dbt().$queryRaw<Array<{ agora: Date }>>`SELECT clock_timestamp() AS agora`;
+    return agora;
+  });
   await emA(async () => {
     await dbt().cliente.createMany({
       data: Array.from({ length: 30 }, (_, i) => ({ tenant_id: A, nome: `${PREFIXO} ${String(i).padStart(2, '0')}` })),
