@@ -27,6 +27,7 @@ import { api, type ListaDeDespesas, type CadastrosDaEmpresa } from '../api.ts';
 import { useDados } from '../dados.ts';
 import { Pagina, Aviso, Tabela, Kpi, Carregando, BotaoDeIcone, linha } from '../ui.tsx';
 import { Ligacao } from '../rota.tsx';
+import { PainelDeSaude } from '../painel-de-saude-tela.tsx';
 import { emReais } from '../dinheiro.ts';
 import { mesPorExtenso, mesCurtoDoAno } from '../formato.ts';
 import {
@@ -169,6 +170,12 @@ export function TelaPainelDaEmpresa() {
       {dados && hoje && mes && ano !== null && linhas.length > 0 && (
         <Conteudo dados={dados} hoje={hoje} mes={mes} ano={ano} categorias={categorias} />
       )}
+
+      {/* O PAINEL DE SAÚDE NA PRIMEIRA TELA DE CADA SETOR (03/10/2026, plano de
+          22/09 §5): o mesmo do Mês, no Rateio. Fora das condições de cima de
+          propósito — «o sistema está de pé?» não depende de as despesas terem
+          sido lidas. */}
+      <PainelDeSaude />
     </Pagina>
   );
 }

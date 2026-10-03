@@ -244,3 +244,19 @@ node --experimental-strip-types tests/auth-jwt.ts
 echo
 echo "=== conector do CRM: dedup, idempotencia, recusas e reconciliacao"
 node --experimental-strip-types tests/conector.ts
+echo
+# A TRILHA POR CURSOR (03/10/2026). POR ULTIMO de proposito: ela cria 30 clientes
+# no tenant A e altera os 30 duas vezes, e a trilha nao se apaga — uma suite
+# depois dela que contasse clientes ou linhas de trilha contaria as dela.
+echo "=== historico: a trilha por cursor, o milissegundo compartilhado e a RLS no cursor"
+node --experimental-strip-types tests/repos-trilha.ts
+echo
+# A LISTA DE CONTAS A PAGAR NO SERVIDOR (03/10/2026). Tambem no fim: ela cria
+# sete contas no tenant A, e as suites de despesas contam conta_pagar.
+echo "=== contas a pagar: busca, filtro, ordem, blocos e totais no servidor"
+node --experimental-strip-types tests/repos-lista-de-contas.ts
+echo
+# O AVISO DE PAGAMENTO IGNORADO (migration 43, 03/10/2026): o que o banco avisou e o
+# sistema nao baixou, guardado para o painel de saude. Append-only por privilegio.
+echo "=== aviso de pagamento ignorado: grava pelo papel do webhook, append-only, por motivo"
+node --experimental-strip-types tests/repos-aviso-ignorado.ts

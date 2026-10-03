@@ -15,8 +15,13 @@
 // ate o dia em que um segundo caminho escrever na tabela - e o segundo caminho
 // aqui e o proprio split, que roda sozinho, sem ninguem por perto.
 
+import { Prisma } from '../generated/prisma/client.ts';
 import { dbt } from '../db/tipado.ts';
 import { tenantCorrente, exigir } from '../db/contexto.ts';
+import {
+  PESO_DA_SITUACAO, ACENTUADAS, SEM_ACENTO, padraoDeBusca, tamanhoDoBloco,
+  type OrdemDaLista, type SituacaoDaLista,
+} from '../dominio/lista-de-contas.ts';
 import type {
   tipo_beneficiario as TipoBeneficiario,
   forma_de_pagamento as FormaDePagamento,
@@ -374,48 +379,171 @@ export async function porId(id: string) {
   });
 }
 
-export async function listar(opcoes: {
-  status?: StatusContaPagar;
-  competencia?: Date;
+/**
+ * O QUE CADA CONTA DA LISTA TRAZ JUNTO — o nome de quem recebe, a categoria e os
+ * pagamentos.
+ *
+ * OS PAGAMENTOS VEM JUNTO desde 10/09/2026, e a ausencia deles era um furo
+ * de operacao e nao um detalhe de tela.
+ *
+ * A tela de Contas a pagar REGISTRA pagamento (`POST .../pagamentos`) e
+ * nao mostrava nenhum: depois de pagar, a unica coisa visivel era o saldo
+ * mudar. Numa conta paga em duas vezes ninguem conseguia responder "quando
+ * foi a primeira, e por qual chave?" sem abrir o banco - e a razao pela
+ * qual esta tela existe (`Q-PAGAMENTO-01`) e justamente que o sistema
+ * sabia o quanto e nao sabia o SE.
+ *
+ * VEM NA LISTA e nao numa segunda chamada por conta: sao poucas linhas por
+ * conta (uma ou duas), e uma leitura por linha aberta transformaria a tela
+ * num enxame de requisicoes. O bloco (`TETO_DO_BLOCO`) e o que limita o peso.
+ */
+const RELACOES_DA_LISTA = {
+  dono_usina: { select: { nome: true } },
+  originador: { select: { nome: true } },
+  categoria: { select: { nome: true } },
+  pagamento: {
+    select: {
+      id: true, data_pagamento: true, valor_centavos: true,
+      forma: true, referencia_externa: true, observacao: true,
+    },
+    orderBy: [{ data_pagamento: 'asc' }],
+  },
+} satisfies Prisma.conta_pagarInclude;
+
+export type FiltroDaLista = {
+  /** Onde o bloco comeca: 0 e a primeira conta na ordem pedida. */
+  inicio?: number;
   limite?: number;
-} = {}) {
+  /** Pedaco do nome de quem recebe ou da descricao. Sem acento dos dois lados. */
+  busca?: string;
+  situacao?: SituacaoDaLista;
+  ordem?: OrdemDaLista;
+  desc?: boolean;
+};
+
+/** Contagem e saldo de um recorte. Dinheiro em centavos, inteiro (regra 1). */
+export type Total = { qtd: number; saldo_centavos: number };
+
+/*
+ * AS EXPRESSOES DA LISTA, uma vez so. Cada uma e a regra da tela escrita em SQL:
+ *
+ *   NOME      `nomeDoBeneficiario` — dono da usina, senao originador, senao o
+ *             nome escrito, senao «(sem nome)». Nunca nulo, entao a ordem por
+ *             ele nao precisa decidir onde mora o nulo.
+ *   SALDO     `saldoCentavos` — o que falta, nunca negativo.
+ *   HOJE      O DIA DE GOIANIA, e nao `current_date`: a sessao do banco esta em
+ *             UTC, e das 21h a meia-noite o «hoje» dela ja e amanha — uma conta
+ *             que vence hoje sairia vencida a noite.
+ *   SITUACAO  `estaAtrasada` + `pesoDoSelo`: a aberta ou parcial vencida antes
+ *             de hoje pesa como vencida; o resto, pelo status.
+ */
+const NOME = Prisma.sql`COALESCE(d.nome, o.nome, cp.beneficiario_nome, '(sem nome)')`;
+const SALDO = Prisma.sql`GREATEST(0, cp.valor_centavos - cp.valor_pago_centavos)`;
+const HOJE = Prisma.sql`(now() AT TIME ZONE 'America/Sao_Paulo')::date`;
+const EM_ABERTO = Prisma.sql`cp.status IN ('aberta', 'parcial')`;
+const VENCIDA = Prisma.sql`(${EM_ABERTO} AND cp.vencimento < ${HOJE})`;
+const PESO = Prisma.sql`CASE
+  WHEN ${VENCIDA} THEN ${PESO_DA_SITUACAO.vencida}::int
+  WHEN cp.status = 'aberta' THEN ${PESO_DA_SITUACAO.aberta}::int
+  WHEN cp.status = 'parcial' THEN ${PESO_DA_SITUACAO.parcial}::int
+  WHEN cp.status = 'paga' THEN ${PESO_DA_SITUACAO.paga}::int
+  ELSE ${PESO_DA_SITUACAO.cancelada}::int END`;
+/** `normalizar` da tela, em SQL: sem acento e minusculo. Ver `lista-de-contas.ts`. */
+const semAcento = (expr: Prisma.Sql) => Prisma.sql`lower(translate(${expr}, ${ACENTUADAS}, ${SEM_ACENTO}))`;
+
+const EXPRESSAO_DA_ORDEM: Readonly<Record<OrdemDaLista, Prisma.Sql>> = {
+  vencimento: Prisma.sql`cp.vencimento`,
+  beneficiario: semAcento(NOME),
+  descricao: semAcento(Prisma.sql`cp.descricao`),
+  valor: Prisma.sql`cp.valor_centavos`,
+  saldo: SALDO,
+  situacao: PESO,
+};
+
+const DE_ONDE = Prisma.sql`FROM conta_pagar cp
+  LEFT JOIN dono_usina d ON d.tenant_id = cp.tenant_id AND d.id = cp.dono_usina_id
+  LEFT JOIN originador o ON o.tenant_id = cp.tenant_id AND o.id = cp.originador_id`;
+
+/**
+ * UM BLOCO DA LISTA, na ordem pedida, e os numeros da tabela inteira.
+ *
+ * O FILTRO E A ORDEM SAO SQL, e a pagina de contas e lida depois pelo Prisma: o
+ * SQL decide QUAIS ids e em que ordem (o nome do beneficiario vem de tres
+ * lugares, e o Prisma nao ordena por `COALESCE`); o `findMany` traz as relacoes
+ * desses ids, que e o que ele faz bem. A RLS vale nas duas leituras — mesma
+ * transacao, mesmo contexto de tenant —, e o `LEFT JOIN` em dono e originador
+ * tambem passa por ela.
+ *
+ * O DESEMPATE E O DA TELA ANTIGA: vencimento, criacao e id, sempre crescentes.
+ * Era a ordem em que a lista chegava, e o `sort` estavel do navegador a
+ * preservava entre iguais; trocar o desempate faria contas de mesmo valor
+ * mudarem de lugar sem ninguem ter pedido.
+ *
+ * Os totais NAO obedecem a busca nem ao filtro, e e de proposito: sao o que a
+ * tela sempre mostrou — o saldo em aberto da empresa e as vencidas —, e um aviso
+ * de vencidas que encolhesse com a busca esconderia a divida de quem nao foi
+ * buscado.
+ */
+export async function pagina(f: FiltroDaLista = {}) {
   await exigir('ler_corporativo');
-  return dbt().conta_pagar.findMany({
-    where: {
-      ...(opcoes.status === undefined ? {} : { status: opcoes.status }),
-      ...(opcoes.competencia === undefined ? {} : { competencia: opcoes.competencia }),
-    },
-    include: {
-      dono_usina: { select: { nome: true } },
-      originador: { select: { nome: true } },
-      categoria: { select: { nome: true } },
-      /*
-       * OS PAGAMENTOS VEM JUNTO desde 10/09/2026, e a ausencia deles era um furo
-       * de operacao e nao um detalhe de tela.
-       *
-       * A tela de Contas a pagar REGISTRA pagamento (`POST .../pagamentos`) e
-       * nao mostrava nenhum: depois de pagar, a unica coisa visivel era o saldo
-       * mudar. Numa conta paga em duas vezes ninguem conseguia responder "quando
-       * foi a primeira, e por qual chave?" sem abrir o banco - e a razao pela
-       * qual esta tela existe (`Q-PAGAMENTO-01`) e justamente que o sistema
-       * sabia o quanto e nao sabia o SE.
-       *
-       * VEM NA LISTA e nao numa segunda chamada por conta: sao poucas linhas por
-       * conta (uma ou duas), e uma leitura por linha aberta transformaria a tela
-       * num enxame de requisicoes. O teto de 2.000 contas da propria funcao e o
-       * que limita o peso.
-       */
-      pagamento: {
-        select: {
-          id: true, data_pagamento: true, valor_centavos: true,
-          forma: true, referencia_externa: true, observacao: true,
-        },
-        orderBy: [{ data_pagamento: 'asc' }],
-      },
-    },
-    orderBy: [{ vencimento: 'asc' }, { criado_em: 'asc' }],
-    take: Math.min(opcoes.limite ?? 500, 2000),
+  const db = dbt();
+  const inicio = Math.max(f.inicio ?? 0, 0);
+  const limite = tamanhoDoBloco(f.limite);
+  const padrao = padraoDeBusca(f.busca);
+
+  const condicoes: Prisma.Sql[] = [];
+  if (f.situacao) condicoes.push(Prisma.sql`cp.status = ${f.situacao}::status_conta_pagar`);
+  if (padrao) {
+    condicoes.push(Prisma.sql`(${semAcento(Prisma.sql`cp.descricao`)} LIKE ${padrao} ESCAPE '\\'
+      OR ${semAcento(NOME)} LIKE ${padrao} ESCAPE '\\')`);
+  }
+  const onde = condicoes.length ? Prisma.sql`WHERE ${Prisma.join(condicoes, ' AND ')}` : Prisma.empty;
+  const direcao = f.desc ? Prisma.sql`DESC` : Prisma.sql`ASC`;
+  const ordem = EXPRESSAO_DA_ORDEM[f.ordem ?? 'vencimento'];
+
+  /* EM SERIE, uma depois da outra: a transacao tem UMA conexao, e o `pg` acusa
+   * duas consultas dividindo-a (`db/conexao-em-serie.ts`, 26/09). */
+  const ids = await db.$queryRaw<Array<{ id: string }>>`
+    SELECT cp.id::text AS id ${DE_ONDE} ${onde}
+    ORDER BY ${ordem} ${direcao}, cp.vencimento ASC, cp.criado_em ASC, cp.id ASC
+    LIMIT ${limite} OFFSET ${inicio}`;
+
+  const [{ n }] = await db.$queryRaw<Array<{ n: number }>>`
+    SELECT count(*)::int AS n ${DE_ONDE} ${onde}`;
+
+  const [t] = await db.$queryRaw<Array<{
+    geral: number; aberto_qtd: number; aberto_saldo: bigint; vencidas_qtd: number; vencidas_saldo: bigint; hoje: string;
+  }>>`
+    SELECT count(*)::int AS geral,
+           count(*) FILTER (WHERE ${EM_ABERTO})::int AS aberto_qtd,
+           COALESCE(sum(${SALDO}) FILTER (WHERE ${EM_ABERTO}), 0)::bigint AS aberto_saldo,
+           count(*) FILTER (WHERE ${VENCIDA})::int AS vencidas_qtd,
+           COALESCE(sum(${SALDO}) FILTER (WHERE ${VENCIDA}), 0)::bigint AS vencidas_saldo,
+           ${HOJE}::text AS hoje
+    FROM conta_pagar cp`;
+
+  const linhas = ids.length === 0 ? [] : await db.conta_pagar.findMany({
+    where: { id: { in: ids.map((x) => x.id) } },
+    include: RELACOES_DA_LISTA,
   });
+  const posicao = new Map(ids.map((x, i) => [x.id, i]));
+  linhas.sort((a, b) => posicao.get(a.id)! - posicao.get(b.id)!);
+
+  return {
+    itens: linhas,
+    /** Quantas casam com a busca e o filtro. */
+    total: n,
+    /** Quantas existem, sem busca nem filtro — o «de 1.340» da tela. */
+    total_geral: t.geral,
+    inicio,
+    limite,
+    /** O dia de Goiania que o servidor usou para «vencida». A tela usa o mesmo. */
+    hoje: t.hoje,
+    totais: {
+      em_aberto: { qtd: t.aberto_qtd, saldo_centavos: Number(t.aberto_saldo) } as Total,
+      vencidas: { qtd: t.vencidas_qtd, saldo_centavos: Number(t.vencidas_saldo) } as Total,
+    },
+  };
 }
 
 /**

@@ -12,7 +12,7 @@
 // fonte nossa para ler.
 //
 // Entao esta suite prova o COMPORTAMENTO, com o Prisma de verdade, o adaptador
-// de verdade, o pool de verdade e a funcao de verdade (`contaPagar.listar`) - e
+// de verdade, o pool de verdade e a funcao de verdade (`contaPagar.porId`; ate 03/10/2026, `listar`) - e
 // so a conexao falsa. A conexao falsa conta quantas consultas estao em voo ao
 // mesmo tempo nela, que e exatamente o que o `pg` avisa.
 //
@@ -137,7 +137,12 @@ class ConexaoFalsa extends pg.Client {
   }
 }
 
-async function medirListar(Conexao: new () => pg.Client): Promise<Medida[]> {
+/* MEDIDO EM `porId`, e ate 03/10/2026 era em `listar`. O defeito e do `include`
+ * com varias relacoes dentro de transacao interativa, e as duas tinham: `listar`
+ * pedia quatro, `porId` pede cinco. `listar` saiu (a lista virou `pagina()`, que
+ * escolhe os ids em SQL e so carrega relacao quando ha linha — com a conexao
+ * falsa devolvendo vazio, ela nem chegaria ao `include`). */
+async function medirInclude(Conexao: new () => pg.Client): Promise<Medida[]> {
   const conexoes: ConexaoFalsa[] = [];
   class Registrada extends (Conexao as any) {
     constructor(...a: any[]) { super(...a); conexoes.push(this as any); }
@@ -148,7 +153,7 @@ async function medirListar(Conexao: new () => pg.Client): Promise<Medida[]> {
     await withTenantEm(prisma as any, {
       tenantId: '00000000-0000-4000-8000-000000000001',
       usuarioId: '00000000-0000-4000-8000-000000000002',
-    }, () => contaPagar.listar());
+    }, () => contaPagar.porId('00000000-0000-4000-8000-000000000003'));
   } finally {
     await prisma.$disconnect();
     await pool.end();
@@ -157,15 +162,15 @@ async function medirListar(Conexao: new () => pg.Client): Promise<Medida[]> {
 }
 
 {
-  const antes = await medirListar(ConexaoFalsa);
+  const antes = await medirInclude(ConexaoFalsa);
   const pior = Math.max(0, ...antes.map((m) => m.maxEmVoo));
   chk('CE5', pior >= 3,
-      `SEM a fila, \`contaPagar.listar()\` dentro de uma transacao poe ${pior} consultas em voo na MESMA `
-      + 'conexao - e o Prisma carregando as quatro relacoes do `include` em paralelo. E o defeito de '
+      `SEM a fila, \`contaPagar.porId()\` dentro de uma transacao poe ${pior} consultas em voo na MESMA `
+      + 'conexao - e o Prisma carregando as cinco relacoes do `include` em paralelo. E o defeito de '
       + 'producao, reproduzido: o `pg` avisa a partir da terceira. Se esta linha ficar vermelha, o '
       + 'Prisma passou a serializar sozinho e `db/conexao-em-serie.ts` pode sair');
 
-  const depois = await medirListar(emSerieNaConexao(ConexaoFalsa));
+  const depois = await medirInclude(emSerieNaConexao(ConexaoFalsa));
   const piorDepois = Math.max(0, ...depois.map((m) => m.maxEmVoo));
   const consultas = depois.reduce((s, m) => s + m.ordem.length, 0);
   chk('CE6', piorDepois === 1 && consultas >= 5,

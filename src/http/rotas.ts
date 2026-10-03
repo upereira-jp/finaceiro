@@ -18,6 +18,7 @@ import * as cliente from '../repos/cliente.ts';
 import * as conectorExecucao from '../repos/conector-execucao.ts';
 import * as automacoes from '../repos/automacoes.ts';
 import * as auditoria from '../repos/auditoria.ts';
+import * as listaDeContas from '../dominio/lista-de-contas.ts';
 import * as emissao from '../repos/emissao.ts';
 import * as destrave from '../repos/destrave.ts';
 import * as uc from '../repos/unidade_consumidora.ts';
@@ -30,6 +31,7 @@ import * as regras from '../repos/regras.ts';
 import * as fatura from '../repos/fatura.ts';
 import * as boleto from '../repos/boleto.ts';
 import * as liquidacao from '../repos/liquidacao.ts';
+import * as avisoIgnorado from '../repos/aviso-ignorado.ts';
 import * as split from '../repos/split.ts';
 import * as contaPagar from '../repos/conta_pagar.ts';
 import * as despesa from '../repos/despesa.ts';
@@ -474,6 +476,28 @@ const conferirOVinculo = async (app: App, req: Requisicao, ucId: string) => {
  *  slot com o caminho transacional - o motivo esta em src/db/pools.ts. */
 const emRelatorio = (app: App, req: Requisicao, f: (tx: ClientTx, v: VinculoDaSessao) => Promise<Resultado>) =>
   app.withRelatorio(req.sessao, req.tenantProposto, f);
+
+/**
+ * GUARDA O AVISO IGNORADO, e NUNCA derruba o webhook por isso.
+ *
+ * A resposta a Sicoob continua 200 mesmo que a gravacao falhe — inclusive com a
+ * migration 43 ainda nao aplicada: 4xx/5xx fariam o banco reprocessar o mesmo
+ * aviso para sempre, e o aviso nao e mais nem menos ignoravel por ter ou nao
+ * sido guardado. O desfecho vai no corpo (`registro`), e o servidor o escreve na
+ * linha do journal quando nao e «gravado».
+ *
+ * ⚠️ Uma falha aqui deixa a transacao abortada no Postgres; o `COMMIT` do fim vira
+ * `ROLLBACK` sem erro, e como o caminho do ignorado nao escreve mais nada, nao ha
+ * o que perder.
+ */
+async function guardarAvisoIgnorado(a: avisoIgnorado.AvisoIgnorado): Promise<string> {
+  try {
+    await avisoIgnorado.registrar(a);
+    return 'gravado';
+  } catch (e) {
+    return `nao gravado (${e instanceof Error ? e.name : 'erro'})`;
+  }
+}
 
 const limite = (q: URLSearchParams) => {
   const v = q.get('limite');
@@ -1226,10 +1250,11 @@ export const ROTAS: Rota[] = [
     metodo: 'GET', padrao: '/auditoria',
     handler: (req, app) => emRelatorio(app, req, async () => {
       const desde = req.query.get('desde') ? data(req.query.get('desde'), 'desde') : undefined;
+      const antesDe = auditoria.cursorDaTrilha(req.query.get('antes_de'));
       /* AS DUAS EM SERIE - `db/em-serie.ts`. Foi ESTA rota, aberta pela aba
        * «Historico» as 17:39:59 de 10/09/2026, que fez o `pg` gravar em producao
        * o aviso de que duas consultas dividiam a mesma conexao. */
-      const [linhas, tabelas] = await emSerie(
+      const [pagina, tabelas] = await emSerie(
         () => auditoria.trilha({
           tabela: req.query.get('tabela') ?? undefined,
           registro_id: req.query.get('registro') ?? undefined,
@@ -1241,13 +1266,17 @@ export const ROTAS: Rota[] = [
            * medida em `repos/auditoria.ts`: 96% da trilha sao as tres tabelas
            * de rodada, e sem isto a tela abriria mostrando so elas. */
           incluir_rodadas: req.query.get('rodadas') === '1',
+          antes_de: antesDe,
         }),
-        () => auditoria.tabelasDaTrilha(desde),
+        /* A CONTAGEM POR TABELA SO NA PRIMEIRA PAGINA: ela serve o filtro, que a
+         * tela ja montou, e um `groupBy` sobre a trilha inteira a cada «Carregar
+         * as anteriores» seria a consulta mais cara da rota repetida a toa. */
+        async () => (antesDe === undefined ? auditoria.tabelasDaTrilha(desde) : []),
       );
       /* O TETO VAI JUNTO DA RESPOSTA porque a tela precisa poder dizer "sao as
        * 100 mais recentes, e ha mais" em vez de deixar quem le achar que acabou.
        * Mesma disciplina da resposta que DIZ quando cortou, em `boleto.ts`. */
-      return ok({ linhas, tabelas, teto: auditoria.TETO });
+      return ok({ linhas: pagina.linhas, tabelas, teto: auditoria.TETO, proximo: pagina.proximo });
     }),
   },
   {
@@ -1372,6 +1401,15 @@ export const ROTAS: Rota[] = [
         ...await conferirAvisoDePagamento(app.cobranca, c.credencial_ref, urlDoWebhook(tenantCorrente())),
       });
     }),
+  },
+  {
+    /*
+     * OS AVISOS DE PAGAMENTO QUE O SISTEMA NAO BAIXOU (migration 43, 03/10/2026),
+     * para o painel de saude. Leitura pura: caminho de relatorio. Ver
+     * `repos/aviso-ignorado.ts`.
+     */
+    metodo: 'GET', padrao: '/conector-cobranca/avisos-ignorados',
+    handler: (req, app) => emRelatorio(app, req, async () => ok(await avisoIgnorado.recentes())),
   },
   {
     /*
@@ -1589,14 +1627,29 @@ export const ROTAS: Rota[] = [
        * a Sicoob reprocessar, e reprocessar nao conserta um evento que decidimos
        * nao tratar - so faz o mesmo evento voltar para sempre. O motivo vai no
        * corpo e no journal, e nao no silencio. */
-      if (evento.tipo === 'ignorado') return ok({ ignorado: evento.motivo });
+      if (evento.tipo === 'ignorado') {
+        const registro = await guardarAvisoIgnorado({ motivo: 'evento_ignorado', detalhe: evento.motivo });
+        return ok({ ignorado: evento.motivo, registro });
+      }
 
       const b = await boleto.porNossoNumero(evento.nossoNumero);
       /* Titulo que nao e nosso tambem sai 200, e pela mesma razao: nenhuma
        * repeticao vai fazer ele existir. Se for engano de cadastro da URL, a
-       * linha no journal e o que denuncia. */
+       * linha no journal e o que denuncia.
+       *
+       * E DESDE 03/10/2026 ELE FICA GUARDADO, com valor, data e o id do pagamento
+       * (migration 43): eram seis em dez dias, todos de boleto emitido a mao no
+       * portal — dinheiro entrando que so quem lia o journal via. O painel de
+       * saude o mostra. */
       if (!b) {
-        return ok({ ignorado: `nosso_numero ${evento.nossoNumero} nao pertence a este tenant` });
+        const registro = await guardarAvisoIgnorado({
+          motivo: 'titulo_desconhecido',
+          nosso_numero: evento.nossoNumero,
+          valor_centavos: evento.valorLiquidadoCentavos,
+          data_liquidacao: evento.dataLiquidacao,
+          id_externo: evento.idExterno,
+        });
+        return ok({ ignorado: `nosso_numero ${evento.nossoNumero} nao pertence a este tenant`, registro });
       }
 
       return ok(await liquidacao.baixar({
@@ -1718,11 +1771,22 @@ export const ROTAS: Rota[] = [
    */
   {
     metodo: 'GET', padrao: '/contas-a-pagar',
-    handler: (req, app) => emTenant(app, req, async () => ok(await contaPagar.listar({
-      status: (req.query.get('status') ?? undefined) as any,
-      competencia: req.query.get('competencia')
-        ? data(req.query.get('competencia'), 'competencia') : undefined,
+    /*
+     * UM BLOCO DA LISTA, filtrado, buscado e ordenado NO SERVIDOR (03/10/2026).
+     * Ate aqui a rota devolvia a tabela ate 500, em ordem de vencimento crescente,
+     * e a tela filtrava e somava no navegador — acima de 500 as contas mais novas
+     * sumiam sem aviso e os totais erravam. A resposta agora traz o bloco, quantas
+     * casam, quantas existem e os totais da tabela inteira. Ver
+     * `dominio/lista-de-contas.ts`. `status` e `competencia` sairam: nenhum
+     * chamador os mandava.
+     */
+    handler: (req, app) => emTenant(app, req, async () => ok(await contaPagar.pagina({
+      inicio: listaDeContas.inicioDoBloco(req.query.get('inicio')),
       limite: limite(req.query),
+      busca: req.query.get('busca') ?? undefined,
+      situacao: listaDeContas.situacaoDaLista(req.query.get('situacao')),
+      ordem: listaDeContas.ordemDaLista(req.query.get('ordem')),
+      desc: req.query.get('desc') === '1',
     }))),
   },
   {

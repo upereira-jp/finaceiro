@@ -223,3 +223,133 @@ export const ROTULO_DO_BENEFICIARIO: Record<ContaAPagar['beneficiario_tipo'], st
   concessionaria: 'Concessionária',
   outro: 'Outro',
 };
+
+// ------------------------------------------------- a lista, vinda do servidor
+
+/**
+ * UM BLOCO DA LISTA, como `GET /contas-a-pagar` devolve desde 03/10/2026.
+ *
+ * Até essa data a rota devolvia a tabela inteira até 500, ordenada por
+ * vencimento crescente, e a tela filtrava, ordenava e somava aqui. Acima de 500
+ * as contas MAIS NOVAS sumiam sem aviso, e os totais eram somados sobre o que
+ * tinha chegado. Agora quem busca, filtra, ordena e soma é o servidor
+ * (`src/dominio/lista-de-contas.ts`); a tela mostra o bloco e diz quanto falta.
+ */
+export type BlocoDeContas = {
+  itens: ContaAPagar[];
+  /** Quantas casam com a busca e a situação. */
+  total: number;
+  /** Quantas existem, sem busca nem filtro. */
+  total_geral: number;
+  inicio: number;
+  limite: number;
+  /** O dia de Goiânia que o servidor usou para «vencida» (AAAA-MM-DD). */
+  hoje: string;
+  /** Da tabela INTEIRA: não encolhem com a busca nem com o filtro. */
+  totais: {
+    em_aberto: { qtd: number; saldo_centavos: number };
+    vencidas: { qtd: number; saldo_centavos: number };
+  };
+};
+
+export type PedidoDaLista = {
+  busca: string;
+  situacao: '' | ContaAPagar['status'];
+  ordem: string;
+  desc: boolean;
+  inicio?: number;
+  limite?: number;
+};
+
+/** A query string do pedido. O que está vazio não vai — o servidor tem padrão. */
+export function consultaDaLista(p: PedidoDaLista): string {
+  const q = new URLSearchParams();
+  if (p.busca.trim()) q.set('busca', p.busca.trim());
+  if (p.situacao) q.set('situacao', p.situacao);
+  if (p.ordem && p.ordem !== 'vencimento') q.set('ordem', p.ordem);
+  if (p.desc) q.set('desc', '1');
+  if (p.inicio) q.set('inicio', String(p.inicio));
+  if (p.limite) q.set('limite', String(p.limite));
+  const s = q.toString();
+  return s ? `?${s}` : '';
+}
+
+/**
+ * O «HOJE» DO SERVIDOR COMO `Date` LOCAL, ao meio-dia. `estaAtrasada` compara
+ * o dia local de um `Date`; um `new Date('2026-10-03')` seria meia-noite UTC —
+ * no Brasil, 21h do dia 2, e a conta que vence dia 3 sairia vencida. O
+ * meio-dia fica longe das duas bordas.
+ */
+export const hojeDoServidor = (dia: string): Date => new Date(`${dia}T12:00:00`);
+
+/**
+ * OS BLOCOS QUE A PESSOA JÁ PEDIU, presos ao primeiro (mesma amarra do
+ * Histórico, `web/src/historico.ts`): trocar a busca, o filtro ou a ordem relê o
+ * primeiro bloco, e os seguintes da consulta velha somem — inclusive uma
+ * resposta que chega depois da troca, porque ela traz a `base` antiga.
+ */
+export type BlocosSeguintes = {
+  base: BlocoDeContas | null;
+  itens: ContaAPagar[];
+  /** Quantos blocos já vieram depois do primeiro. Conta à parte porque a
+   *  deduplicação faz `itens.length` deixar de dizer quanto foi lido. */
+  blocos: number;
+};
+
+export const semSeguintes = (base: BlocoDeContas | null): BlocosSeguintes => ({ base, itens: [], blocos: 0 });
+
+export const seguintesDe = (s: BlocosSeguintes, base: BlocoDeContas | null): BlocosSeguintes =>
+  (s.base === base ? s : semSeguintes(base));
+
+/** Acrescenta um bloco. Conta que já está na tela não entra de novo: entre um
+ *  clique e outro uma conta pode ter mudado de lugar na ordem. */
+export function acrescentarBloco(s: BlocosSeguintes, bloco: BlocoDeContas): BlocosSeguintes {
+  const vistas = new Set([...(s.base?.itens ?? []), ...s.itens].map((c) => c.id));
+  return {
+    base: s.base,
+    itens: [...s.itens, ...bloco.itens.filter((c) => !vistas.has(c.id))],
+    blocos: s.blocos + 1,
+  };
+}
+
+/** Onde o próximo bloco começa: logo depois do último que foi PEDIDO. */
+export const inicioDoProximo = (s: BlocosSeguintes): number =>
+  (s.base ? s.base.inicio + s.base.limite * (1 + s.blocos) : 0);
+
+/**
+ * HÁ MAIS PARA MOSTRAR? Medido pelo deslocamento contra o total, e não pelo que
+ * está na tela: com uma repetida descartada, «na tela» ficaria uma abaixo do
+ * total para sempre, e o botão nunca sumiria.
+ */
+export const haMaisContas = (s: BlocosSeguintes): boolean =>
+  s.base !== null && inicioDoProximo(s) < s.base.total;
+
+/**
+ * A CONTAGEM DA LISTA, dita como fato: «12 de 312», e quando a busca ou o filtro
+ * recortam, de quantas no total. É a frase que impede «a lista acabou» de ser
+ * confundido com «a lista foi cortada» — a disciplina do DESIGN.md, «sem
+ * paginação escondida».
+ */
+export function contagemDaLista(carregadas: number, b: Pick<BlocoDeContas, 'total' | 'total_geral'>): string {
+  const recorte = b.total !== b.total_geral ? ` (de ${b.total_geral} no total)` : '';
+  if (carregadas >= b.total) return `${b.total} ${b.total === 1 ? 'conta' : 'contas'}${recorte}`;
+  return `${carregadas} de ${b.total}${recorte}`;
+}
+
+/**
+ * O CSV LEVA TUDO O QUE CASA COM O FILTRO, e não o que está na tela. Com a
+ * lista em blocos, exportar só o carregado entregaria uma planilha cortada sem
+ * aviso — o defeito que esta lista existe para não ter. Lê bloco a bloco, na
+ * ordem da tela, até o total que o servidor disse; repetida não entra duas vezes.
+ */
+export async function lerTodasAsContas(
+  buscar: (inicio: number, limite: number) => Promise<BlocoDeContas>, limite = 500,
+): Promise<ContaAPagar[]> {
+  const todas: ContaAPagar[] = [];
+  const vistas = new Set<string>();
+  for (let inicio = 0; ; inicio += limite) {
+    const b = await buscar(inicio, limite);
+    for (const c of b.itens) if (!vistas.has(c.id)) { vistas.add(c.id); todas.push(c); }
+    if (b.itens.length === 0 || inicio + limite >= b.total) return todas;
+  }
+}

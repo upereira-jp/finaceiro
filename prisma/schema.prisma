@@ -72,6 +72,25 @@ model auditoria {
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+/// Aviso de pagamento da Sicoob que o sistema respondeu e NAO baixou (migration 43, 03/10/2026).
+/// Append-only: so SELECT e INSERT. Nao e baixa nem entra em relatorio de dinheiro.
+model aviso_pagamento_ignorado {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id       String    @db.Uuid
+  recebido_em     DateTime  @default(now()) @db.Timestamptz(6)
+  motivo          String
+  nosso_numero    String?
+  valor_centavos  Int?
+  data_liquidacao DateTime? @db.Date
+  id_externo      String?
+  detalhe         String?
+  tenant          tenant    @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "aviso_pagamento_ignorado_tenant_fk")
+
+  @@unique([tenant_id, id], map: "aviso_pagamento_ignorado_id_tenant")
+  @@unique([tenant_id, id_externo], map: "aviso_pagamento_ignorado_externo_unico", where: raw("(id_externo IS NOT NULL)"))
+  @@index([tenant_id, recebido_em(sort: Desc)], map: "aviso_pagamento_ignorado_recente_idx")
+}
+
 model boleto {
   id                        String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenant_id                 String        @db.Uuid
@@ -741,6 +760,7 @@ model tenant {
   originador                    originador[]
   pagamento                     pagamento[]
   origem_pagamento              origem_pagamento[]
+  aviso_pagamento_ignorado      aviso_pagamento_ignorado[]
   registro_de_fatura_unificada  registro_de_fatura_unificada[]
   regra_comissao                regra_comissao[]
   regra_repasse                 regra_repasse[]

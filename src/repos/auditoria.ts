@@ -126,7 +126,49 @@ export type Filtro = {
   limite?: number;
   /** Traz tambem o batimento da maquina. Ver `RODADAS_AUTOMATICAS`. */
   incluir_rodadas?: boolean;
+  /**
+   * A PAGINA SEGUINTE: o `id` da ultima linha que a tela ja tem. Ver
+   * `PaginaDaTrilha` para por que o cursor e o `id` e nao a data.
+   */
+  antes_de?: string;
 };
+
+/**
+ * UMA PAGINA DA TRILHA, e o cursor da seguinte.
+ *
+ * ============================================================================
+ * POR QUE CURSOR, E NAO "PAGINA 2"
+ *
+ * A trilha cresce PELO TOPO, de 5 em 5 minutos (a fila de boleto) e de 15 em 15
+ * (o conector). Uma pagina por deslocamento (`skip: 200`) andaria junto com o
+ * topo: entre a primeira leitura e o clique em «Carregar as anteriores», as
+ * linhas novas empurram tudo para baixo, e a pagina 2 repete o fim da 1. O
+ * cursor ancora na ultima linha VISTA, e o que entra no topo nao mexe nele.
+ *
+ * POR QUE O CURSOR E O `id`, E NAO A DATA. `ocorrido_em` e `clock_timestamp()`
+ * em `timestamptz(6)` — microssegundos —, e o `Date` do JavaScript guarda
+ * MILISSEGUNDOS. Um cursor "antes de 10:00:00.123" montado no cliente pularia
+ * em silencio toda linha entre .123000 e .123455: e exatamente o que acontece
+ * quando UM `UPDATE` toca varias linhas e o gatilho grava uma por linha, no
+ * mesmo milissegundo. O cursor nativo do Prisma (`cursor: { id }`) compara
+ * contra os valores DA LINHA DO CURSOR dentro do SQL, com a precisao inteira — e
+ * a linha do cursor passa pela RLS: um `id` de outro tenant nao e encontrado, e
+ * a pagina vem vazia em vez de vazar a posicao de nada.
+ *
+ * `proximo` e `null` quando acabou. Para saber sem uma ida a mais ao banco, a
+ * consulta pede UMA linha alem do pedido: se ela vier, ha mais.
+ * ============================================================================
+ */
+export type PaginaDaTrilha = { linhas: LinhaDaTrilha[]; proximo: string | null };
+
+/** O cursor e um `bigint` em texto. Qualquer outra coisa e pedido malformado. */
+export function cursorDaTrilha(v: string | null | undefined): string | undefined {
+  if (v == null || v === '') return undefined;
+  if (!/^[1-9][0-9]{0,18}$/.test(v)) {
+    throw new TypeError(`antes_de deve ser o id de uma linha da trilha, recebeu ${JSON.stringify(v)}`);
+  }
+  return v;
+}
 
 /**
  * A trilha, do mais recente para o mais antigo.
@@ -142,7 +184,7 @@ export type Filtro = {
  * de alguem de outro tenant — e a tela diz "de fora deste sistema" em vez de
  * inventar.
  */
-export async function trilha(f: Filtro = {}): Promise<LinhaDaTrilha[]> {
+export async function trilha(f: Filtro = {}): Promise<PaginaDaTrilha> {
   await exigir('ler_corporativo');
   const db = dbt();
 
@@ -150,8 +192,10 @@ export async function trilha(f: Filtro = {}): Promise<LinhaDaTrilha[]> {
    * filtro esta perguntando justamente por ela, e devolver vazio seria a tela
    * ignorando em silencio o que a pessoa pediu. */
   const escondidas = f.tabela || f.incluir_rodadas ? [] : RODADAS_AUTOMATICAS;
+  const pedido = Math.min(Math.max(f.limite ?? PADRAO, 1), TETO);
+  const antesDe = cursorDaTrilha(f.antes_de);
 
-  const linhas = await db.auditoria.findMany({
+  const encontradas = await db.auditoria.findMany({
     where: {
       ...(f.tabela ? { tabela: f.tabela } : {}),
       ...(escondidas.length ? { tabela: { notIn: [...escondidas] } } : {}),
@@ -169,8 +213,11 @@ export async function trilha(f: Filtro = {}): Promise<LinhaDaTrilha[]> {
       operacao: true, usuario_id: true, tier: true, antes: true, depois: true,
     },
     orderBy: [{ ocorrido_em: 'desc' }, { id: 'desc' }],
-    take: Math.min(Math.max(f.limite ?? PADRAO, 1), TETO),
+    ...(antesDe === undefined ? {} : { cursor: { id: BigInt(antesDe) }, skip: 1 }),
+    take: pedido + 1,
   });
+  const haMais = encontradas.length > pedido;
+  const linhas = haMais ? encontradas.slice(0, pedido) : encontradas;
 
   const ids = [...new Set(linhas.map((l) => l.usuario_id).filter((x): x is string => !!x))];
   const pessoas = ids.length === 0 ? [] : await db.usuario.findMany({
@@ -179,7 +226,7 @@ export async function trilha(f: Filtro = {}): Promise<LinhaDaTrilha[]> {
   });
   const nome = new Map(pessoas.map((p) => [p.id, p.nome]));
 
-  return linhas.map((l) => {
+  const pagina = linhas.map((l): LinhaDaTrilha => {
     const operacao = String(l.operacao).trim() as OperacaoDaTrilha;
     return {
       id: String(l.id),
@@ -193,6 +240,7 @@ export async function trilha(f: Filtro = {}): Promise<LinhaDaTrilha[]> {
       mudancas: mudancas(operacao, l.antes as LinhaEmJson, l.depois as LinhaEmJson),
     };
   });
+  return { linhas: pagina, proximo: haMais ? String(linhas[linhas.length - 1].id) : null };
 }
 
 /**

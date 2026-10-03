@@ -22,6 +22,8 @@ import { ROTAS, type Requisicao, type RequisicaoPublica, type Resultado,
 import { evidenciaDaRequisicao, lerConfig, verificarOrigem } from './origem-do-webhook.ts';
 import { authUserIdDeServico, ehUuid } from '../auth/usuario-de-servico.ts';
 import { traduzir, ehInesperado } from './erros.ts';
+import { montarLinha, logDeRequisicaoPadrao, type ContextoDaRequisicao,
+  type LinhaDeRequisicao } from './log-de-requisicao.ts';
 
 /** Devolve o auth_user_id de quem chamou, ou lanca com status 401. */
 export type Autenticador = (req: IncomingMessage) => Promise<string>;
@@ -33,6 +35,14 @@ export type OpcoesDoServidor = {
   maxCorpoBytes?: number;
   /** Onde vai o detalhe do 500. Nunca na resposta. */
   log?: (mensagem: string, erro: unknown) => void;
+  /**
+   * Uma linha por chamada a API: rota, status, duracao, tenant, papel. Ver
+   * `log-de-requisicao.ts` para o que fica de fora e por que. O padrao e o
+   * real, e nao um no-op: quem monta o processo nao precisa lembrar de ligar —
+   * a licao do `logPadrao` (HL-3) e que o default que producao nao chama
+   * apodrece calado.
+   */
+  logRequisicao?: (linha: LinhaDeRequisicao) => void;
   /**
    * Prefixo da API. Tudo fora dele vai para os estaticos.
    *
@@ -143,7 +153,7 @@ async function servirEstatico(raiz: string, caminho: string, res: ServerResponse
   }
 }
 
-type Compilada = { metodo: string; segmentos: string[]; nomes: (string | null)[] };
+type Compilada = { metodo: string; padrao: string; segmentos: string[]; nomes: (string | null)[] };
 
 /* O MODO VIAJA JUNTO COM A ROTA ate o despacho. Um `RotaCompilada` que perdesse o
  * `auth` obrigaria o servidor a procurar de novo qual rota casou - e "procurar de
@@ -157,6 +167,7 @@ const compilar = (): RotaCompilada[] => ROTAS.map((r) => {
   const segmentos = r.padrao.split('/').filter(Boolean);
   const base: Compilada = {
     metodo: r.metodo,
+    padrao: r.padrao,
     segmentos: segmentos.map((s) => (s.startsWith(':') ? '*' : s)),
     nomes: segmentos.map((s) => (s.startsWith(':') ? s.slice(1) : null)),
   };
@@ -290,6 +301,7 @@ function responder(req: IncomingMessage, res: ServerResponse, r: Resultado): voi
 export function criarServidor(o: OpcoesDoServidor): http.Server {
   const max = o.maxCorpoBytes ?? 1_000_000;
   const log = o.log ?? logPadrao;
+  const logRequisicao = o.logRequisicao ?? logDeRequisicaoPadrao;
   const prefixo = o.prefixoApi ?? '/api';
   const raizEstatica = o.estaticos ? path.resolve(o.estaticos) : null;
 
@@ -308,13 +320,16 @@ export function criarServidor(o: OpcoesDoServidor): http.Server {
    * proximo `throw` que nascesse acima de um `try`. Aqui a promessa e sempre
    * consumida, e o pior desfecho passa a ser um 500 nesta conexao.
    */
-  const atender = async (req: http.IncomingMessage, res: ServerResponse): Promise<void> => {
+  const atender = async (
+    req: http.IncomingMessage, res: ServerResponse, ctx: ContextoDaRequisicao,
+  ): Promise<void> => {
     const url = new URL(req.url ?? '/', 'http://interno');
     const metodo = (req.method ?? 'GET').toUpperCase();
 
     // A API mora sob o prefixo; todo o resto e a SPA. Sem estaticos configurados
     // o servidor e so API, que e como as suites o usam.
     const naApi = url.pathname === prefixo || url.pathname.startsWith(prefixo + '/');
+    ctx.naApi = naApi;
     if (!naApi) {
       if (raizEstatica) return servirEstatico(raizEstatica, url.pathname, res);
       return responder(req, res, { status: 404, corpo: {
@@ -323,6 +338,7 @@ export function criarServidor(o: OpcoesDoServidor): http.Server {
       } });
     }
     const caminho = url.pathname.slice(prefixo.length) || '/';
+    ctx.caminho = caminho;
 
     try {
       const achou = casar(metodo, caminho);
@@ -333,6 +349,8 @@ export function criarServidor(o: OpcoesDoServidor): http.Server {
           mensagem: `${metodo} ${caminho}`,
         } });
       }
+      ctx.rota = achou.rota.padrao;
+      ctx.modo = achou.rota.auth;
 
       /*
        * O DESPACHO POR MODO DECLARADO. `ADR-0006`, Decisao 4. Antes de 28/08 o
@@ -385,6 +403,8 @@ export function criarServidor(o: OpcoesDoServidor): http.Server {
         let sessaoDeServico: Sessao;
         try {
           sessaoDeServico = await o.app.login(authUserIdDeServico(tenantDaRota));
+          ctx.sessao = sessaoDeServico;
+          ctx.tenantProposto = tenantDaRota;
         } catch (e: any) {
           if (e?.name !== 'UsuarioNaoProvisionado') throw e;
           log(`[financeiro] webhook de origem VERIFICADA (${origem.sujeito} @ ${origem.ip}) e sem ` +
@@ -449,8 +469,12 @@ export function criarServidor(o: OpcoesDoServidor): http.Server {
          * fronteira, onde o `log` mora.
          */
         const ignorado = (r.corpo as any)?.ignorado;
+        /* O aviso ignorado passou a ser GUARDADO (migration 43); quando a gravacao
+         * falha, a linha diz — e o unico lugar onde isso aparece. */
+        const registro = (r.corpo as any)?.registro;
         log(`[financeiro] webhook ${r.status} em ${caminho}` +
-            (ignorado ? ` - IGNORADO: ${ignorado}` : ''), undefined);
+            (ignorado ? ` - IGNORADO: ${ignorado}` : '') +
+            (ignorado && registro && registro !== 'gravado' ? ` - aviso ${registro}` : ''), undefined);
         return responder(req, res, r);
       }
 
@@ -464,6 +488,8 @@ export function criarServidor(o: OpcoesDoServidor): http.Server {
 
       const cabecalho = req.headers['x-tenant-id'];
       const tenantProposto = Array.isArray(cabecalho) ? cabecalho[0] : cabecalho;
+      ctx.sessao = sessao;
+      ctx.tenantProposto = tenantProposto || undefined;
 
       const requisicao: Requisicao = {
         metodo, caminho, params: achou.params, query: url.searchParams,
@@ -501,7 +527,34 @@ export function criarServidor(o: OpcoesDoServidor): http.Server {
   };
 
   return http.createServer((req, res) => {
-    void atender(req, res).catch((e) => {
+    const ctx: ContextoDaRequisicao = {
+      inicio: process.hrtime.bigint(),
+      metodo: (req.method ?? 'GET').toUpperCase(),
+      naApi: false,
+    };
+    /*
+     * A LINHA SAI QUANDO A RESPOSTA TERMINA, e nao quando o handler volta: o
+     * status so e definitivo depois do `writeHead`, e a duracao que importa e a
+     * que o cliente sentiu. `close` sem `finish` e o cliente que desistiu no
+     * meio — sai a mesma linha, marcada `abortado`. A trava `emitido` existe
+     * porque, numa resposta normal, os DOIS eventos disparam.
+     *
+     * E o log NUNCA derruba o pedido: ele roda depois da resposta, e qualquer
+     * falha dele morre aqui dentro.
+     */
+    let emitido = false;
+    const emitir = (abortado: boolean): void => {
+      if (emitido || !ctx.naApi) return;
+      emitido = true;
+      try {
+        const ms = Number(process.hrtime.bigint() - ctx.inicio) / 1e6;
+        logRequisicao(montarLinha(ctx, res.statusCode, ms, abortado));
+      } catch { /* o log de requisicao e observacao, nao pode virar falha */ }
+    };
+    res.on('finish', () => emitir(false));
+    res.on('close', () => emitir(!res.writableFinished));
+
+    void atender(req, res, ctx).catch((e) => {
       log('[financeiro] o handler falhou fora de todo try - pedido recusado com 500', e);
       /* `headersSent` porque a falha pode ter acontecido DEPOIS de a resposta
        * comecar a sair; escrever cabecalho duas vezes levantaria de novo, agora

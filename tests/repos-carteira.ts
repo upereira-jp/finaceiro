@@ -366,7 +366,7 @@ let liquidacaoJulho: string;
       `o split provisionou 3 contas a pagar na MESMA transacao da CONFIRMACAO - uma por item `
       + `de despesa, e nenhuma para liquido_g3, que e receita (veio ${conf.split!.contas_a_pagar})`);
 
-  const contas = await emA(() => contaPagar.listar({}));
+  const contas = (await emA(() => contaPagar.pagina({}))).itens;
   const porBenef = (t: string) => contas.find((c: any) => c.beneficiario_tipo === t)!;
 
   chk('K7i', porBenef('dono_usina')?.valor_centavos === por('repasse_usina').valor_centavos

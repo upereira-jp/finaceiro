@@ -1497,6 +1497,76 @@ migration 42 (`20261002030000_despesas_da_empresa`). Responde as duas referênci
   existir um histórico real (meses anteriores) em outra cópia, ele entra por importação — o formato das colunas
   já é o da tela.
 
+## 2.x Decisões técnicas de 03/10/2026 — o log por requisição e as listas no servidor
+
+**Dono: o implementador.** Itens de código da `RETOMADA-2026-10-03.md` §3, vindos do
+`PLANO-global-por-etapas-2026-09-22` §5 (etapa 5, escala). Branch `escala-log-e-paginacao`, worktree
+`/opt/financeiro/wt-escala`. Nenhuma migration. Pedido do dono no dia: *«comece pelos itens de código»* e,
+depois, *«siga com contas a pagar e após isso o painel de saúde»*.
+
+- **Log por requisição: uma linha JSON por chamada à API, no stdout** (`[financeiro] requisicao {…}`), com
+  rota (o PADRÃO, `/faturas/:id`), status, duração, tenant, papel e usuário. **Ficam de fora a query, o corpo e
+  a credencial** — a busca no servidor manda nome de cliente pela query, e o journal não tem o gate de PII da
+  ficha. O tenant é o que `selecionarTenant` escolheu, nunca o `X-Tenant-ID` cru. Estáticos da SPA não geram
+  linha. O destino padrão é o real, e não um no-op (a lição do HL-3).
+- **Uma tela de lista não troca de página: carrega em blocos e diz quantas há.** O `DESIGN.md` pede
+  *«tabelas inteiras, sem paginação escondida»* e o plano pede paginação no servidor; os dois cabem juntos se a
+  tabela continua uma só, cresce por «Carregar as anteriores» / «Mostrar mais» no fim, e a contagem está
+  sempre à vista («200 de 1.340», «3 contas (de 9 no total)»). Nada de «Anterior/Próxima».
+- **A trilha (Histórico) pagina por CURSOR, e o cursor é o `id`.** Ela cresce pelo topo de 5 em 5 minutos —
+  deslocamento por número de página andaria junto. E `ocorrido_em` é `clock_timestamp()` com microssegundos,
+  que o `Date` do JavaScript não guarda: medido no CI, 59 de 60 linhas de um mesmo `UPDATE` no mesmo
+  milissegundo, e um cursor por data perderia linha em 54 cortes. O cursor do Prisma compara contra a linha
+  do cursor dentro do SQL e passa pela RLS.
+- **Contas a pagar pagina por deslocamento**, e não por cursor: a ordem é escolhida pela pessoa (seis chaves,
+  dois sentidos) e a tabela não cresce pelo topo. Repetida entre blocos é descartada pelo `id`; depois de um ato
+  a lista relê o primeiro bloco.
+- **O SQL da lista é a regra da tela, e há teste de que é.** Nome do beneficiário por `COALESCE` (dono,
+  originador, nome escrito, «(sem nome)»), saldo nunca negativo, situação pelo `pesoDoSelo` (cópia no servidor
+  em `PESO_DA_SITUACAO`, com anti-deriva em `web/tests/contas.ts` L6 e `tom-do-estado.ts` T5c), desempate da
+  lista antiga (vencimento, criação, id). `tests/repos-lista-de-contas.ts` compara as seis ordens nos dois
+  sentidos com uma ordenação de referência. **Diferença aceita:** a tela ordenava texto com
+  `localeCompare(…, { numeric: true })` («Parcela 2» antes de «Parcela 10»); o SQL ordena o texto sem acento
+  pelo collation do banco. Ordem numérica dentro de texto exigiria collation ICU nova (migration).
+- **A busca no servidor é sem acento, sem extensão.** O banco não tem `unaccent`; a coluna passa por
+  `lower(translate(…))` com um mapa DERIVADO de `normalizarBusca` (a primeira versão, escrita à mão, tinha uma
+  letra sobrando e trocava «Ú» por «o» — pego antes do commit). `%`, `_` e `\` do termo são escapados.
+- **«Hoje» é o dia de Goiânia no SQL** (`now() AT TIME ZONE 'America/Sao_Paulo'`), e não `current_date`: a
+  sessão está em UTC, e das 21h à meia-noite uma conta que vence hoje sairia vencida. O servidor devolve o dia
+  que usou, e a tela marca as linhas com ele — o selo e o total não discordam. ⚠️ `despesa.listar()` ainda usa
+  `current_date`: mesmo defeito, fora deste corte.
+- **Os totais de Contas a pagar são da tabela inteira e não encolhem com a busca nem com o filtro**, como já
+  eram na tela: o aviso de vencidas é da empresa, não do recorte. **O CSV leva tudo o que casa com o filtro**,
+  lido bloco a bloco, e não só o carregado.
+- **`PATCH /webhooks/{id}/reativar` continua fora**, pela decisão 1 do religamento do aviso (09/09): o verbo
+  nunca foi exercido contra a Sicoob, e o caminho provado (`POST /conector-cobranca/aviso-pagamento`) já
+  existe.
+- **De passagem:** a tela de Contas a pagar guardava o erro de cancelar e de pagar e não o mostrava em lugar
+  nenhum — o servidor recusava e a tela ficava calada. Agora o `acao.erro` aparece no alto, como em Despesas.
+- **Painel único de saúde** (`painel-de-saude.ts`), no pé do Mês (no lugar do rodapé das três rodadas) e
+  do Painel da empresa — a primeira tela de cada setor. Uma linha por peça, SEMPRE: as três rodadas, o
+  certificado, o aviso de pagamento, os pagamentos avisados que não entraram, o backup e o caixa. As faixas de
+  alarme do alto do Mês continuam; o painel afirma, elas gritam. Ele lê das MESMAS cargas que as faixas
+  (`useSaudeDoSistema`), e não desenha nada antes da primeira resposta.
+- **«Não existe» é neutro, e não alarme.** O backup (`Q-BACKUP-01`, do dono) e o caixa (depende das contas
+  bancárias) aparecem como o que ainda não existe e não impedem o resumo de dizer «o que existe está de pé» —
+  vermelho permanente é alarme desligado. «Não medido» é dito à parte: ninguém sabe ≠ está quebrado.
+- **Migration 43, `aviso_pagamento_ignorado`.** O webhook passa a GUARDAR o aviso que responde e não baixa —
+  título que não é deste tenant (com nosso número, valor, data e o id do pagamento) ou evento que não é
+  pagamento. Append-only por privilégio (só SELECT e INSERT) e auditada (inv. 17), então o aviso também aparece
+  no Histórico. **A gravação é de melhor esforço:** falhou (inclusive sem a migration aplicada), o webhook
+  continua respondendo 200 e a linha do journal diz «aviso não gravado». Conferência `migration-43`, que vira o
+  default do `migrate-financeiro`. **Ordem de subida: a migration antes do deploy.** Os seis avisos de 22/09 a
+  02/10 (45, 50, 51, 62, 63 e 72) estão só no journal, sem valor nem data — não foram copiados para a tabela.
+- **Pagamento e não-pagamento contados à parte.** «N pagamentos avisados não eram de boleto deste sistema,
+  somando R$ X» conta só o título desconhecido; o evento que não é pagamento (cancelamento de baixa) é contado
+  em separado e o motivo técnico dele fica atrás do «ver detalhe técnico».
+- **O 403 do papel `leitura` deixou de ser alarme sobre o banco.** Perguntar ao banco pelo aviso exige
+  `escrever_carteira`; até aqui o 403 caía no mesmo `catch` da rede caída e o Mês mostrava a quem só lê «Não deu
+  para perguntar ao banco». Agora vem marcado: sem faixa, e o painel diz que é o papel.
+
+---
+
 ## 3. F0 — o que falta para fechar
 
 Entregas da F0 conforme `PRD-v2.2` §10:

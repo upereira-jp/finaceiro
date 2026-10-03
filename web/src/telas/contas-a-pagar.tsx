@@ -21,15 +21,15 @@
 // E O PAPEL `cobrança` NÃO ENTRA AQUI. A matriz do PRD §3 lhe dá traço na coluna
 // Corporativo, e a rota responde 403 — não é defeito, é a coluna funcionando.
 
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { api } from '../api.ts';
 import { useAcao, useDados } from '../dados.ts';
 import {
   Pagina, Aviso, RetornoDoAto, Tabela, Campo, Busca, Ferramentas, Filtro, ThOrd, Marca, Icone, DetalheTecnico,
-  Carregando, useOrdenacao, ordenar, contem, DIRECOES_DA_SITUACAO,
+  Carregando, useOrdenacao, DIRECOES_DA_SITUACAO,
 } from '../ui.tsx';
 import { Ligacao } from '../rota.tsx';
-import { SELO_DA_CONTA_A_PAGAR, SELO_DA_ESPERA_DO_REPASSE, tipoDoAviso, pesoDoSelo } from '../tom-do-estado.ts';
+import { SELO_DA_CONTA_A_PAGAR, SELO_DA_ESPERA_DO_REPASSE, tipoDoAviso } from '../tom-do-estado.ts';
 import { emReais, paraCentavos, competenciaISO, centavosParaCampo } from '../dinheiro.ts';
 import { diaEmBr, mesEmBr, hojeEmSP, contagem } from '../formato.ts';
 import { PerguntaNaTela } from '../serie.tsx';
@@ -37,7 +37,10 @@ import {
   saldoCentavos, nomeDoBeneficiario, estaAtrasada, recibo, emBr,
   podePagar, podeCancelar, podeCriar,
   ROTULO_DO_STATUS, ROTULO_DA_FORMA, ROTULO_DO_BENEFICIARIO,
+  consultaDaLista, hojeDoServidor, semSeguintes, seguintesDe, acrescentarBloco, inicioDoProximo,
+  haMaisContas, contagemDaLista, lerTodasAsContas,
   type ContaAPagar, type FormaDePagamento, type PagamentoDaConta,
+  type BlocoDeContas, type BlocosSeguintes, type PedidoDaLista,
 } from '../contas-regras.ts';
 import {
   agruparPorUsina, resumoDaEspera, totalCentavos,
@@ -66,50 +69,78 @@ type ItemSemConta = {
  * (em curso, sem voce: o sistema pergunta ao banco todo dia). */
 
 export function TelaContasAPagar() {
-  const contas = useDados<ContaAPagar[]>(() => api.get('/contas-a-pagar'));
+  const [busca, setBusca] = useState('');
+  /* A BUSCA ESPERA 300 ms ANTES DE IR AO SERVIDOR: ela mora lá desde 03/10/2026,
+     e uma ida por tecla seria uma consulta por letra digitada. O campo responde
+     na hora; a lista, quando a pessoa para de digitar. */
+  const [buscaPedida, setBuscaPedida] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setBuscaPedida(busca), 300);
+    return () => clearTimeout(t);
+  }, [busca]);
+  const [situacao, setSituacao] = useState<PedidoDaLista['situacao']>('');
+  const { ordem, alternar } = useOrdenacao('vencimento');
+
+  /*
+   * A LISTA VEM DO SERVIDOR JÁ BUSCADA, FILTRADA E ORDENADA, em blocos de 200
+   * (03/10/2026). Até aqui vinha a tabela inteira até 500, ordenada por
+   * vencimento crescente: acima disso as contas MAIS NOVAS sumiam sem aviso, e o
+   * saldo em aberto e as vencidas eram somados sobre o que tinha chegado. Os
+   * totais agora são do servidor e da tabela inteira. A tela diz quantas há e
+   * oferece o resto no fim — nada de «Anterior/Próxima», que o DESIGN.md recusa
+   * («tabelas inteiras, sem paginação escondida»).
+   */
+  const pedido: PedidoDaLista = { busca: buscaPedida, situacao, ordem: ordem.chave, desc: ordem.desc };
+  const contas = useDados<BlocoDeContas>(
+    () => api.get(`/contas-a-pagar${consultaDaLista(pedido)}`),
+    [buscaPedida, situacao, ordem.chave, ordem.desc]);
   const resumo = useDados<ResumoLinha[]>(() => api.get('/contas-a-pagar/resumo'));
   const semProvisao = useDados<ItemSemConta[]>(() => api.get('/contas-a-pagar/sem-provisao'));
   const espera = useDados<RepassePendente[]>(() => api.get('/liquidacoes/pendentes-de-split'));
   const acao = useAcao();
 
-  const [busca, setBusca] = useState('');
-  const [situacao, setSituacao] = useState('');
-  const { ordem, alternar } = useOrdenacao('vencimento');
+  /* Os blocos seguintes, presos ao primeiro (`BlocosSeguintes`): trocar a busca,
+     o filtro ou a ordem relê o primeiro, e os da consulta velha somem sozinhos. */
+  const [seguintesGuardados, setSeguintes] = useState<BlocosSeguintes>(() => semSeguintes(null));
+  const [carregandoMais, setCarregandoMais] = useState(false);
+  const [erroMais, setErroMais] = useState<string | null>(null);
+  const seguintes = seguintesDe(seguintesGuardados, contas.dado);
+
+  async function mostrarMais() {
+    if (!haMaisContas(seguintes) || carregandoMais) return;
+    const de = seguintes;
+    setCarregandoMais(true);
+    setErroMais(null);
+    try {
+      const bloco = await api.get<BlocoDeContas>(`/contas-a-pagar${consultaDaLista({
+        ...pedido, inicio: inicioDoProximo(de), limite: de.base!.limite })}`);
+      setSeguintes(acrescentarBloco(de, bloco));
+    } catch (e) {
+      setErroMais(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCarregandoMais(false);
+    }
+  }
+
+  /* O RECARREGAR DEPOIS DE UM ATO relê o primeiro bloco, o que zera os
+     seguintes: a conta paga pode ter mudado de lugar na ordem, e um bloco antigo
+     colado embaixo repetiria ou pularia linhas. */
+  const recarregarLista = () => { contas.recarregar(); resumo.recarregar(); };
+
   /* O LANÇAMENTO À MÃO SAIU DO MEIO DA TELA (30/09/2026, etapa 4a). Ele ficava
      entre o resumo por beneficiário e a lista — um botão, ou um formulário
      inteiro, cortando a tela ao meio. Agora é o padrão das telas de cadastro:
      «Nova despesa avulsa» ao lado do título, e o painel logo abaixo dele. */
 
   /*
-   * `hoje` é calculado UMA vez por render e passado às funções puras, em vez de
-   * cada uma chamar `new Date()`. Duas leituras do relógio na mesma tela podem
-   * cair em dias diferentes à meia-noite, e a lista mostraria uma conta atrasada
-   * na coluna e não-atrasada no total.
+   * `hoje` é o DIA DO SERVIDOR (Goiânia), o mesmo que ele usou para somar as
+   * vencidas: o selo «vencida» de cada linha e o total do aviso não podem
+   * discordar. Antes da primeira resposta, o relógio daqui.
    */
-  const hoje = new Date();
+  const hoje = contas.dado ? hojeDoServidor(contas.dado.hoje) : new Date();
 
-  const todas = contas.dado ?? [];
-  const visiveis = ordenar(
-    todas.filter((c) =>
-      (contem(c.descricao, busca) || contem(nomeDoBeneficiario(c), busca))
-      && (!situacao || c.status === situacao)),
-    ordem,
-    {
-      vencimento: (c) => c.vencimento,
-      beneficiario: (c) => nomeDoBeneficiario(c),
-      descricao: (c) => c.descricao,
-      valor: (c) => c.valor_centavos,
-      saldo: (c) => saldoCentavos(c),
-      /* O peso do tom e nao o texto do estado (etapa 7c): a vencida, a em
-         aberto, a cancelada e a paga, nessa ordem. */
-      situacao: (c) => pesoDoSelo(estaAtrasada(c, hoje) ? SELO_DA_CONTA_A_PAGAR.vencida : SELO_DA_CONTA_A_PAGAR[c.status]),
-    },
-  );
-
-  const emAberto = todas.filter((c) => c.status === 'aberta' || c.status === 'parcial');
-  const totalSaldo = emAberto.reduce((a, c) => a + saldoCentavos(c), 0);
-  const atrasadas = emAberto.filter((c) => estaAtrasada(c, hoje));
-  const totalAtrasado = atrasadas.reduce((a, c) => a + saldoCentavos(c), 0);
+  const visiveis = [...(contas.dado?.itens ?? []), ...seguintes.itens];
+  const totais = contas.dado?.totais;
 
   const COLUNAS: Coluna<ContaAPagar>[] = [
     { titulo: 'Vencimento', de: (c) => String(c.vencimento).slice(0, 10) },
@@ -133,6 +164,10 @@ export function TelaContasAPagar() {
                O que se lança lá continua aparecendo aqui, com o resto do que se deve. */
             acao={<Ligacao para="/despesas" className="botao">Lançar em Despesas</Ligacao>}>
       <RetornoDoAto texto={acao.sucesso} />
+      {/* O ERRO DO ATO APARECE (03/10/2026). Até aqui esta tela guardava o erro
+          de cancelar, pagar ou exportar e não o mostrava em lugar nenhum: o
+          servidor recusava e a tela ficava calada. */}
+      {acao.erro && <Aviso tipo="erro">{acao.erro}</Aviso>}
 
       {/*
         O FIM DO MÊS DO RATEIO MORA AQUI, do outro lado da barra (30/09/2026). O
@@ -163,9 +198,9 @@ export function TelaContasAPagar() {
       {/* [01/10/2026, etapa 7b] O AVISO TEM O TOM DO SELO DE QUE ELE FALA: era
           âmbar em cima de linhas com o selo VENCIDA vermelho. `tipoDoAviso` lê
           o mesmo selo das linhas, e os dois não têm mais como discordar. */}
-      {atrasadas.length > 0 && (
+      {(totais?.vencidas.qtd ?? 0) > 0 && (
         <Aviso tipo={tipoDoAviso(SELO_DA_CONTA_A_PAGAR.vencida)}>
-          {contagem(atrasadas.length, 'conta vencida', 'contas vencidas')}, somando <strong>{emReais(totalAtrasado)}</strong>.
+          {contagem(totais!.vencidas.qtd, 'conta vencida', 'contas vencidas')}, somando <strong>{emReais(totais!.vencidas.saldo_centavos)}</strong>.
         </Aviso>
       )}
 
@@ -187,7 +222,7 @@ export function TelaContasAPagar() {
                         repartir={async (l) => {
                           const ok = await acao.executar(
                             () => api.post(`/liquidacoes/${l.liquidacao_id}/repartir`, {}));
-                          if (ok) { espera.recarregar(); contas.recarregar(); resumo.recarregar(); }
+                          if (ok) { espera.recarregar(); recarregarLista(); }
                         }} />
       )}
 
@@ -227,22 +262,32 @@ export function TelaContasAPagar() {
       </div>
 
       {/* ------------------------------------------------------------ a lista */}
-      <Ferramentas contagem={`${visiveis.length} de ${todas.length} · saldo em aberto ${emReais(totalSaldo)}`}>
+      <Ferramentas contagem={contas.dado
+                    ? `${contagemDaLista(visiveis.length, contas.dado)} · saldo em aberto ${emReais(totais!.em_aberto.saldo_centavos)}`
+                    : undefined}>
         <Busca valor={busca} ao={setBusca} dica="beneficiário ou descrição" />
-        <Filtro valor={situacao} ao={setSituacao} rotulo="Situação" opcoes={[
+        <Filtro valor={situacao} ao={(v) => setSituacao(v as PedidoDaLista['situacao'])} rotulo="Situação" opcoes={[
           { valor: '', texto: 'Todas as situações' },
           { valor: 'aberta', texto: ROTULO_DO_STATUS.aberta },
           { valor: 'parcial', texto: ROTULO_DO_STATUS.parcial },
           { valor: 'paga', texto: ROTULO_DO_STATUS.paga },
           { valor: 'cancelada', texto: ROTULO_DO_STATUS.cancelada },
         ]} />
-        <button disabled={visiveis.length === 0}
-                onClick={() => baixarCsv(nomeDoArquivo('contas-a-pagar'), paraCsv(COLUNAS, visiveis))}>
+        {/* O CSV LEVA TUDO O QUE CASA COM O FILTRO, lido do servidor bloco a
+            bloco na ordem da tela — e não só o que está carregado aqui. */}
+        <button disabled={!contas.dado || contas.dado.total === 0 || acao.ocupado}
+                onClick={() => void acao.executar(async () => {
+                  const todas = await lerTodasAsContas((inicio, limite) =>
+                    api.get<BlocoDeContas>(`/contas-a-pagar${consultaDaLista({ ...pedido, inicio, limite })}`));
+                  baixarCsv(nomeDoArquivo('contas-a-pagar'), paraCsv(COLUNAS, todas));
+                })}>
           <Icone nome="baixar" tamanho={15} /> CSV
         </button>
       </Ferramentas>
 
-      {contas.carregando ? <Carregando /> : contas.erro ? (
+      {/* CARREGANDO SÓ NA PRIMEIRA VEZ: depois, a lista anterior fica na tela
+          enquanto a busca nova chega, em vez de piscar a cada pausa na digitação. */}
+      {contas.carregando && !contas.dado ? <Carregando /> : contas.erro ? (
         <Aviso tipo="erro">Não foi possível ler as contas a pagar: {contas.erro}</Aviso>
       ) : (
         /* [01/10/2026, etapa 7c] AS COLUNAS REBALANCEADAS (`.lista-de-caixa`):
@@ -250,7 +295,7 @@ export function TelaContasAPagar() {
            quebra dentro dele, e a largura que sobra vai para o beneficiário e
            a descrição — que quebravam em quatro e cinco linhas a 1440. */
         <div className="lista-de-caixa">
-        <Tabela vazio={todas.length === 0
+        <Tabela vazio={(contas.dado?.total_geral ?? 0) === 0
                   ? 'Nenhuma conta a pagar. As de repasse e comissão aparecem quando a primeira cobrança for paga.'
                   : 'Nenhuma conta com esses filtros.'}
                 cabecalho={<>
@@ -264,9 +309,24 @@ export function TelaContasAPagar() {
                 </>}>
           {visiveis.map((c) => (
             <LinhaDeConta key={c.id} conta={c} hoje={hoje} acao={acao}
-                          aoMudar={() => { contas.recarregar(); resumo.recarregar(); }} />
+                          aoMudar={recarregarLista} />
           ))}
         </Tabela>
+        </div>
+      )}
+
+      {/* O FIM DA LISTA DIZ SE HÁ MAIS. Com mais, o botão traz o próximo bloco na
+          mesma ordem; sem, a contagem do alto já diz que é tudo. */}
+      {contas.dado && haMaisContas(seguintes) && (
+        <div className="secao" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <button type="button" onClick={() => void mostrarMais()} disabled={carregandoMais}>
+            <Icone nome="ordem_decrescente" tamanho={15} />{' '}
+            {carregandoMais ? 'Carregando…' : `Mostrar mais ${Math.min(contas.dado.limite, contas.dado.total - inicioDoProximo(seguintes))}`}
+          </button>
+          <span className="fraco" style={{ fontSize: 'var(--t-meta)' }}>
+            {contagemDaLista(visiveis.length, contas.dado)}
+          </span>
+          {erroMais && <Aviso tipo="erro">Não foi possível carregar mais: {erroMais}</Aviso>}
         </div>
       )}
     </Pagina>

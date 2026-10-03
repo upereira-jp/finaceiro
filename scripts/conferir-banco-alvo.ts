@@ -50,6 +50,7 @@ const MIGRATION_39 = '20260910010000_limpar_ensaio_da_trilha';
 const MIGRATION_40 = '20260910160000_chave_do_vendedor_no_crm';
 const MIGRATION_41 = '20260930120000_administracao_da_plataforma';
 const MIGRATION_42 = '20261002030000_despesas_da_empresa';
+const MIGRATION_43 = '20261003120000_aviso_pagamento_ignorado';
 
 class ConferenciaFalhou extends Error {}
 
@@ -64,6 +65,7 @@ const DIRETORIO: Record<string, string> = {
   'migration-40': MIGRATION_40,
   'migration-41': MIGRATION_41,
   'migration-42': MIGRATION_42,
+  'migration-43': MIGRATION_43,
 };
 
 /**
@@ -129,7 +131,7 @@ if (!url || !url.trim()) {
 }
 
 const modo = process.argv[2] ?? '';
-const MODOS = ['identidade', 'migration-32', 'migration-35', 'migration-36', 'migration-37', 'migration-38', 'migration-39', 'migration-40', 'migration-41', 'migration-42'];
+const MODOS = ['identidade', 'migration-32', 'migration-35', 'migration-36', 'migration-37', 'migration-38', 'migration-39', 'migration-40', 'migration-41', 'migration-42', 'migration-43'];
 if (!MODOS.includes(modo)) {
   console.error(`modo desconhecido: ${JSON.stringify(modo)}. Conheco: ${MODOS.join(', ')}.`);
   process.exit(1);
@@ -636,9 +638,52 @@ async function migration42(): Promise<void> {
     + 'categoria.ordem e as formas cartao_credito e debito_automatico.');
 }
 
+/**
+ * MIGRATION 43 — o aviso de pagamento ignorado. Confere o que faz dela o que ela
+ * diz ser: a tabela com as colunas, RLS com FORCE, a trilha, o INSERT para quem
+ * grava (o usuario de servico do webhook) e — a metade que um `GRANT ALL` por
+ * engano desfaria em silencio — NENHUM UPDATE nem DELETE: e um registro de aviso,
+ * e append-only e o que o torna confiavel.
+ */
+async function migration43(): Promise<void> {
+  await migration42();
+
+  const { rows: [r] } = await cliente.query<{
+    colunas: string; rls: boolean; trilha: string; insere: boolean; altera: boolean; apaga: boolean; registro: string;
+  }>(`
+    SELECT (SELECT count(*) FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'aviso_pagamento_ignorado'
+               AND column_name IN ('id','tenant_id','recebido_em','motivo','nosso_numero','valor_centavos',
+                                   'data_liquidacao','id_externo','detalhe'))               AS colunas,
+           (SELECT relrowsecurity AND relforcerowsecurity FROM pg_class
+             WHERE oid = 'public.aviso_pagamento_ignorado'::regclass)                     AS rls,
+           (SELECT count(*) FROM pg_trigger
+             WHERE tgrelid = 'public.aviso_pagamento_ignorado'::regclass
+               AND tgname = 'auditar_aviso_pagamento_ignorado')                          AS trilha,
+           has_table_privilege('app_financeiro', 'public.aviso_pagamento_ignorado', 'INSERT') AS insere,
+           has_table_privilege('app_financeiro', 'public.aviso_pagamento_ignorado', 'UPDATE') AS altera,
+           has_table_privilege('app_financeiro', 'public.aviso_pagamento_ignorado', 'DELETE') AS apaga,
+           (SELECT count(*) FROM _prisma_migrations
+             WHERE migration_name = '${MIGRATION_43}'
+               AND finished_at IS NOT NULL AND rolled_back_at IS NULL)                   AS registro`);
+
+  const faltando = [
+    Number(r!.colunas) === 9 ? null : `as 9 colunas de aviso_pagamento_ignorado (achei ${r!.colunas})`,
+    r!.rls ? null : 'RLS com FORCE em aviso_pagamento_ignorado',
+    Number(r!.trilha) === 1 ? null : 'o gatilho de auditoria de aviso_pagamento_ignorado',
+    r!.insere ? null : 'o INSERT de app_financeiro em aviso_pagamento_ignorado',
+    !r!.altera && !r!.apaga ? null : 'append-only: app_financeiro NAO pode ter UPDATE nem DELETE em aviso_pagamento_ignorado',
+    Number(r!.registro) === 1 ? null : `o registro de ${MIGRATION_43} em _prisma_migrations`,
+  ].filter(Boolean);
+
+  if (faltando.length) throw new ConferenciaFalhou(`a migration 43 nao esta completa no banco. Falta: ${faltando.join('; ')}.`);
+  console.log('migration 43 OK — aviso_pagamento_ignorado com RLS e trilha, append-only (so SELECT e INSERT).');
+}
+
 try {
   await cliente.connect();
   if (modo === 'identidade') await identidade();
+  else if (modo === 'migration-43') await migration43();
   else if (modo === 'migration-42') await migration42();
   else if (modo === 'migration-41') await migration41();
   else if (modo === 'migration-40') await migration40();

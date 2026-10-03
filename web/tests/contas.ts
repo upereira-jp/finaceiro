@@ -14,8 +14,13 @@ import {
   saldoCentavos, nomeDoBeneficiario, estaAtrasada, diaISO, recibo, emBr,
   podePagar, podeCancelar, podeCriar,
   ROTULO_DO_STATUS, ROTULO_DA_FORMA, ROTULO_DO_BENEFICIARIO,
-  type ContaAPagar, type PagamentoDaConta,
+  consultaDaLista, hojeDoServidor, semSeguintes, seguintesDe, acrescentarBloco, inicioDoProximo,
+  haMaisContas, contagemDaLista, lerTodasAsContas,
+  type ContaAPagar, type PagamentoDaConta, type BlocoDeContas,
 } from '../src/contas-regras.ts';
+import { readFileSync } from 'node:fs';
+import { pesoDoSelo, SELO_DA_CONTA_A_PAGAR } from '../src/tom-do-estado.ts';
+import { PESO_DA_SITUACAO, normalizarBusca } from '../../src/dominio/lista-de-contas.ts';
 
 let falhas = 0;
 const chk = (id: string, cond: boolean, d: string) => {
@@ -223,6 +228,92 @@ const conta = (o: Partial<ContaAPagar> = {}): ContaAPagar => ({
 
   chk('C8f', emBr('2026-09-03') === '03/09/2026' && emBr('2026-09-03T00:00:00.000Z') === '03/09/2026',
       'a data sai brasileira venha ela como `date` puro ou com horario junto');
+}
+
+// ============================================================================
+// L — a lista que vem do servidor em blocos (03/10/2026)
+// ============================================================================
+
+const bloco = (ids: string[], o: Partial<BlocoDeContas> = {}): BlocoDeContas => ({
+  itens: ids.map((id) => conta({ id })),
+  total: 5, total_geral: 9, inicio: 0, limite: 2, hoje: '2026-10-03',
+  totais: { em_aberto: { qtd: 0, saldo_centavos: 0 }, vencidas: { qtd: 0, saldo_centavos: 0 } },
+  ...o,
+});
+
+{
+  chk('L1', consultaDaLista({ busca: '', situacao: '', ordem: 'vencimento', desc: false }) === '',
+      'o pedido padrao nao manda nada: o servidor ja ordena por vencimento crescente');
+  const q = new URLSearchParams(consultaDaLista({
+    busca: '  João  ', situacao: 'parcial', ordem: 'saldo', desc: true, inicio: 400, limite: 200 }).slice(1));
+  chk('L1b', q.get('busca') === 'João' && q.get('situacao') === 'parcial' && q.get('ordem') === 'saldo'
+          && q.get('desc') === '1' && q.get('inicio') === '400' && q.get('limite') === '200',
+      'busca (aparada, com acento — quem tira e o servidor), situacao, ordem, direcao e o bloco vao na query');
+}
+
+{
+  const h = hojeDoServidor('2026-10-03');
+  chk('L2', h.getFullYear() === 2026 && h.getMonth() === 9 && h.getDate() === 3,
+      'o «hoje» do servidor vira o dia 3 LOCAL — `new Date(\'2026-10-03\')` seria meia-noite UTC, 21h do dia 2 no Brasil');
+  chk('L2b', estaAtrasada(conta({ vencimento: '2026-10-02' }), h) && !estaAtrasada(conta({ vencimento: '2026-10-03' }), h),
+      'com o hoje do servidor, a que venceu ontem e vencida e a que vence hoje nao — o selo da linha e o total do aviso usam o mesmo dia');
+}
+
+{
+  const b1 = bloco(['a', 'b']);
+  const s0 = semSeguintes(b1);
+  chk('L3', inicioDoProximo(s0) === 2 && haMaisContas(s0),
+      'depois do primeiro bloco de 2 (de 5), o proximo comeca na 3a linha e ha mais');
+  const s1 = acrescentarBloco(s0, bloco(['c', 'd'], { inicio: 2 }));
+  chk('L3b', s1.itens.map((c) => c.id).join(',') === 'c,d' && inicioDoProximo(s1) === 4 && haMaisContas(s1),
+      'cada bloco acrescenta e avanca o inicio pelo tamanho do bloco');
+  const s2 = acrescentarBloco(s1, bloco(['d', 'e'], { inicio: 4 }));
+  chk('L3c', s2.itens.map((c) => c.id).join(',') === 'c,d,e' && inicioDoProximo(s2) === 6 && !haMaisContas(s2),
+      'conta repetida entre blocos nao entra duas vezes, e o fim e medido pelo INICIO contra o total — '
+      + 'pela contagem na tela (5 de 5 so por acaso) o botao poderia nunca sumir');
+  const outra = bloco(['z']);
+  chk('L3d', seguintesDe(s2, outra).itens.length === 0 && seguintesDe(s2, b1) === s2,
+      'trocar busca/filtro/ordem rele o primeiro bloco e descarta os seguintes da consulta velha');
+}
+
+{
+  chk('L4', contagemDaLista(2, { total: 5, total_geral: 5 }) === '2 de 5',
+      'com mais por carregar, a contagem diz quantas faltam — nada de «paginacao escondida»');
+  chk('L4b', contagemDaLista(5, { total: 5, total_geral: 5 }) === '5 contas'
+          && contagemDaLista(1, { total: 1, total_geral: 1 }) === '1 conta',
+      'tudo carregado: diz o numero, no singular quando e uma');
+  chk('L4c', contagemDaLista(3, { total: 3, total_geral: 9 }) === '3 contas (de 9 no total)',
+      'com busca ou filtro recortando, diz de quantas no total — «3» sozinho pareceria a tabela inteira');
+}
+
+{
+  const pedidos: Array<[number, number]> = [];
+  const universo = ['1', '2', '3', '4', '5'];
+  const todas = await lerTodasAsContas(async (inicio, limite) => {
+    pedidos.push([inicio, limite]);
+    // a 4a aparece de novo no bloco seguinte, como se uma conta tivesse mudado de lugar
+    const ids = universo.slice(inicio, inicio + limite);
+    if (inicio === 2) ids.push('2');
+    return bloco(ids, { total: universo.length, inicio, limite });
+  }, 2);
+  chk('L5', todas.map((c) => c.id).join(',') === '1,2,3,4,5' && pedidos.map((p) => p[0]).join(',') === '0,2,4',
+      'o CSV le TODAS as que casam, bloco a bloco ate o total, sem repetir — e nao so as carregadas na tela');
+  const vazio = await lerTodasAsContas(async () => bloco([], { total: 0 }), 500);
+  chk('L5b', vazio.length === 0, 'lista vazia: uma ida so, e acaba');
+}
+
+{
+  const chaves = ['vencida', 'aberta', 'parcial', 'paga', 'cancelada'] as const;
+  const diverge = chaves.filter((k) => PESO_DA_SITUACAO[k] !== pesoDoSelo(SELO_DA_CONTA_A_PAGAR[k]));
+  chk('L6', diverge.length === 0,
+      'o peso de cada situacao no SQL do servidor e o `pesoDoSelo` da tela concordam nas cinco — '
+      + `a ordem «o que precisa de voce primeiro» e uma so (divergem: ${diverge.join(', ') || 'nenhuma'})`);
+
+  const ui = readFileSync(new URL('../src/ui.tsx', import.meta.url), 'utf8');
+  const amostras = ['João', 'ÇAÇÃO', 'Érica Ünder', 'ação de cobrança'];
+  chk('L6b', /export function normalizar\(s: string\): string \{\s*return s\.toLowerCase\(\)\.normalize\('NFD'\)/.test(ui)
+          && amostras.every((a) => normalizarBusca(a) === a.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')),
+      'a busca do servidor normaliza como a da tela (minusculo + NFD sem marca): «joao» continua achando «João»');
 }
 
 console.log(`\n${falhas === 0 ? 'TODAS PASSARAM' : `${falhas} FALHA(S)`}`);

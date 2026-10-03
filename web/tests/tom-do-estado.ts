@@ -32,6 +32,7 @@ import {
 import { ICONE_DO_ESTADO, TONS_DO_SELO, type TomDoSelo } from '../src/iconografia.ts';
 import { notaDaSituacao, notaDaRecusaCrua, seloDaRecusa, lerRecusa, recusaPrevista } from '../src/emissao-regras.ts';
 import { FAIXAS } from '../src/receber-regras.ts';
+import { PESO_DA_SITUACAO } from '../../src/dominio/lista-de-contas.ts';
 
 let falhas = 0;
 let feitas = 0;
@@ -98,6 +99,12 @@ const ESPERADO: Readonly<Record<string, TomDoSelo>> = {
   'espera_do_repasse.sem_dono': 'a_fazer',
   'espera_do_repasse.aguardando_banco': 'neutro',
   'espera_do_repasse.pronto': 'a_fazer',
+  // o painel de saúde (03/10/2026): o que ainda não existe é neutro, e não alarme
+  'saude.em_dia': 'ok',
+  'saude.atencao': 'a_fazer',
+  'saude.falha': 'erro',
+  'saude.nao_medido': 'nao_medido',
+  'saude.nao_existe': 'neutro',
   // o cadastro
   'unidade.ativa': 'ok',
   'unidade.aguardando_ativacao': 'neutro',
@@ -241,7 +248,9 @@ chk('T2f', SELO_DA_FAIXA_VAZIA.tom === 'neutro' && SELO_DA_FAIXA_VAZIA.icone !==
 {
   const pagar = readFileSync(new URL('../src/telas/contas-a-pagar.tsx', import.meta.url), 'utf8');
   chk('T2h', tipoDoAviso(SELO_DA_CONTA_A_PAGAR.vencida) === 'erro'
-          && /\{atrasadas\.length > 0 && \(\s*<Aviso tipo=\{tipoDoAviso\(SELO_DA_CONTA_A_PAGAR\.vencida\)\}>/.test(pagar),
+          /* Desde 03/10/2026 a contagem das vencidas vem do SERVIDOR (`totais`),
+             somada sobre a tabela inteira; o tom continua o do selo das linhas. */
+          && /\{\(totais\?\.vencidas\.qtd \?\? 0\) > 0 && \(\s*<Aviso tipo=\{tipoDoAviso\(SELO_DA_CONTA_A_PAGAR\.vencida\)\}>/.test(pagar),
       'o aviso «N contas vencidas» lê o tom do MESMO selo VENCIDA das linhas — `erro`; era âmbar');
   const app = readFileSync(new URL('../src/app.tsx', import.meta.url), 'utf8');
   chk('T2m', /<Aviso tipo="alerta">\s*Escolha a empresa/.test(app) && !/<Aviso tipo="erro">\s*Escolha a empresa/.test(app),
@@ -277,6 +286,8 @@ chk('T2l', seloDoContrato('ativo').tom === 'ok' && seloDoContrato('qualquer-outr
     'boleto_da_cobranca.insistindo', 'boleto_da_cobranca.parado', 'boleto.boleto_recusado',
     'atraso.ate_30', 'atraso.ate_60', 'atraso.ate_90', 'atraso.acima_90', 'conta_a_pagar.vencida', 'despesa.vencida',
     'leitura_do_crm.recusa', 'vez.recusada', 'leitura.falhou', 'registro.recusada',
+    // a peça do painel de saúde que quebrou: rodada parada, certificado vencido, aviso desligado (03/10/2026)
+    'saude.falha',
   ]);
   const vermelhosAMais = NO_MAPA.filter(([k, s]) => s.tom === 'erro' && !FALHAS.has(k)).map(([k]) => k);
   chk('T3a', vermelhosAMais.length === 0,
@@ -338,7 +349,16 @@ const FONTES = todosOsArquivos(SRC).map((f) => [f, semComentario(readFileSync(SR
       + 'receber a recusa vem antes do boleto a pedir, que vem antes do que já está no banco');
   const telas = ['contas-a-pagar', 'contas-a-receber', 'contratos', 'unidades']
     .map((t) => [t, semComentario(readFileSync(new URL(`../src/telas/${t}.tsx`, import.meta.url), 'utf8'))] as const);
-  const sem = telas.filter(([, t]) => !/pesoDoSelo\(/.test(t) || !/direcoes=\{DIRECOES_DA_SITUACAO\}/.test(t)).map(([n]) => n);
+  /* A ORDEM QUE MUDOU PARA O SERVIDOR (Contas a pagar, 03/10/2026) nao tem
+     `pesoDoSelo(` na tela: quem ordena e o SQL, com `PESO_DA_SITUACAO`. Para ela a
+     exigencia e a mesma por outro caminho — o peso do servidor IGUAL ao do tom nas
+     cinco situacoes. Sem isto a coluna poderia ordenar diferente do que diz. */
+  const NO_SERVIDOR: Record<string, () => boolean> = {
+    'contas-a-pagar': () => (['vencida', 'aberta', 'parcial', 'paga', 'cancelada'] as const)
+      .every((k) => PESO_DA_SITUACAO[k] === pesoDoSelo(SELO_DA_CONTA_A_PAGAR[k])),
+  };
+  const sem = telas.filter(([n, t]) => !/direcoes=\{DIRECOES_DA_SITUACAO\}/.test(t)
+    || !(NO_SERVIDOR[n] ? NO_SERVIDOR[n]() : /pesoDoSelo\(/.test(t))).map(([n]) => n);
   chk('T5c', sem.length === 0,
       'as colunas de estado que dizem «o que precisa de você primeiro» ordenam pelo peso do tom — a palavra e a '
       + `ordem são a mesma coisa${sem.length ? ` — FALTA EM: ${sem.join(', ')}` : ''}`);
