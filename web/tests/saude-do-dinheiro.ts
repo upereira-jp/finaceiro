@@ -159,7 +159,9 @@ function avisos2(): NivelDoAviso[] { return ['url_divergente', 'inativado', 'aus
    * baixado. Um mes inteiro de camadas fechadas nao vale nada com o caminho do
    * dinheiro quebrado, e quem le de cima para baixo tem de encontrar a pergunta
    * mais alta primeiro. */
-  const iFaixa = tela.indexOf('<SaudeDoDinheiro />');
+  /* `<SaudeDoDinheiro` e nao `<SaudeDoDinheiro />`: desde 03/10/2026 a faixa
+   * recebe as cargas compartilhadas com o painel de saude (`cargas={saude}`). */
+  const iFaixa = tela.indexOf('<SaudeDoDinheiro');
   const iTabela = tela.indexOf('<Tabela cabecalho=');
   chk('SD-13', iFaixa > 0 && iTabela > iFaixa,
       'e ela fica ACIMA da tabela das camadas — a pergunta «o dinheiro anda?» e mais alta que '

@@ -1543,6 +1543,27 @@ depois, *«siga com contas a pagar e após isso o painel de saúde»*.
   existe.
 - **De passagem:** a tela de Contas a pagar guardava o erro de cancelar e de pagar e não o mostrava em lugar
   nenhum — o servidor recusava e a tela ficava calada. Agora o `acao.erro` aparece no alto, como em Despesas.
+- **Painel único de saúde** (`painel-de-saude.ts`), no pé do Mês (no lugar do rodapé das três rodadas) e
+  do Painel da empresa — a primeira tela de cada setor. Uma linha por peça, SEMPRE: as três rodadas, o
+  certificado, o aviso de pagamento, os pagamentos avisados que não entraram, o backup e o caixa. As faixas de
+  alarme do alto do Mês continuam; o painel afirma, elas gritam. Ele lê das MESMAS cargas que as faixas
+  (`useSaudeDoSistema`), e não desenha nada antes da primeira resposta.
+- **«Não existe» é neutro, e não alarme.** O backup (`Q-BACKUP-01`, do dono) e o caixa (depende das contas
+  bancárias) aparecem como o que ainda não existe e não impedem o resumo de dizer «o que existe está de pé» —
+  vermelho permanente é alarme desligado. «Não medido» é dito à parte: ninguém sabe ≠ está quebrado.
+- **Migration 43, `aviso_pagamento_ignorado`.** O webhook passa a GUARDAR o aviso que responde e não baixa —
+  título que não é deste tenant (com nosso número, valor, data e o id do pagamento) ou evento que não é
+  pagamento. Append-only por privilégio (só SELECT e INSERT) e auditada (inv. 17), então o aviso também aparece
+  no Histórico. **A gravação é de melhor esforço:** falhou (inclusive sem a migration aplicada), o webhook
+  continua respondendo 200 e a linha do journal diz «aviso não gravado». Conferência `migration-43`, que vira o
+  default do `migrate-financeiro`. **Ordem de subida: a migration antes do deploy.** Os seis avisos de 22/09 a
+  02/10 (45, 50, 51, 62, 63 e 72) estão só no journal, sem valor nem data — não foram copiados para a tabela.
+- **Pagamento e não-pagamento contados à parte.** «N pagamentos avisados não eram de boleto deste sistema,
+  somando R$ X» conta só o título desconhecido; o evento que não é pagamento (cancelamento de baixa) é contado
+  em separado e o motivo técnico dele fica atrás do «ver detalhe técnico».
+- **O 403 do papel `leitura` deixou de ser alarme sobre o banco.** Perguntar ao banco pelo aviso exige
+  `escrever_carteira`; até aqui o 403 caía no mesmo `catch` da rede caída e o Mês mostrava a quem só lê «Não deu
+  para perguntar ao banco». Agora vem marcado: sem faixa, e o painel diz que é o papel.
 
 ---
 

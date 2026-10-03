@@ -67,6 +67,7 @@ import type { SituacaoDoDocumento } from './clientes-regras.ts';
 import type { MotivoDaEspera } from './repasse-pendente.ts';
 import type { EstadoDoItem } from './lote-de-contas.ts';
 import type { SituacaoDaDespesa } from './despesas-regras.ts';
+import type { EstadoDaPeca } from './painel-de-saude.ts';
 
 /** O selo inteiro: a cor (pelo nome do que ela quer dizer) e o desenho. */
 export type Selo = Readonly<{ tom: TomDoSelo; icone: NomeDeIcone }>;
@@ -212,6 +213,18 @@ export const SELO_DA_ESPERA_DO_REPASSE: Readonly<Record<MotivoDaEspera, Selo>> =
   sem_dono: selo('a_fazer'),
   aguardando_banco: selo('neutro', 'a_receber'),
   pronto: selo('a_fazer', 'pode_repartir'),
+};
+
+/** O PAINEL DE SAÚDE (03/10/2026): cada peça do caminho do dinheiro. Em dia
+ *  fechou; atenção é tarefa — alguém confere —; falha é erro; não medido é o
+ *  «ninguém sabe»; e o que ainda não existe é neutro — não é alarme, senão o
+ *  backup por decidir deixaria o painel vermelho para sempre. */
+export const SELO_DA_PECA_DE_SAUDE: Readonly<Record<EstadoDaPeca, Selo>> = {
+  em_dia: selo('ok'),
+  atencao: selo('a_fazer'),
+  falha: selo('erro'),
+  nao_medido: selo('nao_medido'),
+  nao_existe: selo('neutro'),
 };
 
 /* ==========================================================================
@@ -404,4 +417,5 @@ export const MAPA_DE_SELOS: Readonly<Record<string, Readonly<Record<string, Selo
   vez: SELO_DA_VEZ,
   leitura: SELO_DA_LEITURA,
   registro: SELO_DO_REGISTRO,
+  saude: SELO_DA_PECA_DE_SAUDE,
 };

@@ -99,6 +99,12 @@ const ESPERADO: Readonly<Record<string, TomDoSelo>> = {
   'espera_do_repasse.sem_dono': 'a_fazer',
   'espera_do_repasse.aguardando_banco': 'neutro',
   'espera_do_repasse.pronto': 'a_fazer',
+  // o painel de saúde (03/10/2026): o que ainda não existe é neutro, e não alarme
+  'saude.em_dia': 'ok',
+  'saude.atencao': 'a_fazer',
+  'saude.falha': 'erro',
+  'saude.nao_medido': 'nao_medido',
+  'saude.nao_existe': 'neutro',
   // o cadastro
   'unidade.ativa': 'ok',
   'unidade.aguardando_ativacao': 'neutro',
@@ -280,6 +286,8 @@ chk('T2l', seloDoContrato('ativo').tom === 'ok' && seloDoContrato('qualquer-outr
     'boleto_da_cobranca.insistindo', 'boleto_da_cobranca.parado', 'boleto.boleto_recusado',
     'atraso.ate_30', 'atraso.ate_60', 'atraso.ate_90', 'atraso.acima_90', 'conta_a_pagar.vencida', 'despesa.vencida',
     'leitura_do_crm.recusa', 'vez.recusada', 'leitura.falhou', 'registro.recusada',
+    // a peça do painel de saúde que quebrou: rodada parada, certificado vencido, aviso desligado (03/10/2026)
+    'saude.falha',
   ]);
   const vermelhosAMais = NO_MAPA.filter(([k, s]) => s.tom === 'erro' && !FALHAS.has(k)).map(([k]) => k);
   chk('T3a', vermelhosAMais.length === 0,

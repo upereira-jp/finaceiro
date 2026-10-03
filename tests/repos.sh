@@ -255,3 +255,8 @@ echo
 # sete contas no tenant A, e as suites de despesas contam conta_pagar.
 echo "=== contas a pagar: busca, filtro, ordem, blocos e totais no servidor"
 node --experimental-strip-types tests/repos-lista-de-contas.ts
+echo
+# O AVISO DE PAGAMENTO IGNORADO (migration 43, 03/10/2026): o que o banco avisou e o
+# sistema nao baixou, guardado para o painel de saude. Append-only por privilegio.
+echo "=== aviso de pagamento ignorado: grava pelo papel do webhook, append-only, por motivo"
+node --experimental-strip-types tests/repos-aviso-ignorado.ts

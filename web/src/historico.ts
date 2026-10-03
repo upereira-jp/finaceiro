@@ -127,6 +127,9 @@ export const ROTULO_DA_TABELA: Record<string, string> = {
 
   // o que liga este sistema aos outros
   conector_cobranca: 'ligação com o banco',
+  /* [03/10/2026] Migration 43: o aviso que o banco mandou e o sistema respondeu
+     sem baixar. No Histórico ele lê «criou um aviso de pagamento não baixado». */
+  aviso_pagamento_ignorado: 'aviso de pagamento não baixado',
   conector_crm: 'ligação com o outro sistema',
   conector_execucao: 'rodada da leitura do outro sistema',
   agenda_execucao: 'rodada automática da cobrança',

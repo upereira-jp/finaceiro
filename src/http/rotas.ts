@@ -31,6 +31,7 @@ import * as regras from '../repos/regras.ts';
 import * as fatura from '../repos/fatura.ts';
 import * as boleto from '../repos/boleto.ts';
 import * as liquidacao from '../repos/liquidacao.ts';
+import * as avisoIgnorado from '../repos/aviso-ignorado.ts';
 import * as split from '../repos/split.ts';
 import * as contaPagar from '../repos/conta_pagar.ts';
 import * as despesa from '../repos/despesa.ts';
@@ -475,6 +476,28 @@ const conferirOVinculo = async (app: App, req: Requisicao, ucId: string) => {
  *  slot com o caminho transacional - o motivo esta em src/db/pools.ts. */
 const emRelatorio = (app: App, req: Requisicao, f: (tx: ClientTx, v: VinculoDaSessao) => Promise<Resultado>) =>
   app.withRelatorio(req.sessao, req.tenantProposto, f);
+
+/**
+ * GUARDA O AVISO IGNORADO, e NUNCA derruba o webhook por isso.
+ *
+ * A resposta a Sicoob continua 200 mesmo que a gravacao falhe — inclusive com a
+ * migration 43 ainda nao aplicada: 4xx/5xx fariam o banco reprocessar o mesmo
+ * aviso para sempre, e o aviso nao e mais nem menos ignoravel por ter ou nao
+ * sido guardado. O desfecho vai no corpo (`registro`), e o servidor o escreve na
+ * linha do journal quando nao e «gravado».
+ *
+ * ⚠️ Uma falha aqui deixa a transacao abortada no Postgres; o `COMMIT` do fim vira
+ * `ROLLBACK` sem erro, e como o caminho do ignorado nao escreve mais nada, nao ha
+ * o que perder.
+ */
+async function guardarAvisoIgnorado(a: avisoIgnorado.AvisoIgnorado): Promise<string> {
+  try {
+    await avisoIgnorado.registrar(a);
+    return 'gravado';
+  } catch (e) {
+    return `nao gravado (${e instanceof Error ? e.name : 'erro'})`;
+  }
+}
 
 const limite = (q: URLSearchParams) => {
   const v = q.get('limite');
@@ -1381,6 +1404,15 @@ export const ROTAS: Rota[] = [
   },
   {
     /*
+     * OS AVISOS DE PAGAMENTO QUE O SISTEMA NAO BAIXOU (migration 43, 03/10/2026),
+     * para o painel de saude. Leitura pura: caminho de relatorio. Ver
+     * `repos/aviso-ignorado.ts`.
+     */
+    metodo: 'GET', padrao: '/conector-cobranca/avisos-ignorados',
+    handler: (req, app) => emRelatorio(app, req, async () => ok(await avisoIgnorado.recentes())),
+  },
+  {
+    /*
      * RELIGAR O AVISO — o botao, e ele fecha a metade que faltava do alerta.
      *
      * Desde 09/09/2026 o sistema percebe sozinho quando a Sicoob desliga o aviso
@@ -1595,14 +1627,29 @@ export const ROTAS: Rota[] = [
        * a Sicoob reprocessar, e reprocessar nao conserta um evento que decidimos
        * nao tratar - so faz o mesmo evento voltar para sempre. O motivo vai no
        * corpo e no journal, e nao no silencio. */
-      if (evento.tipo === 'ignorado') return ok({ ignorado: evento.motivo });
+      if (evento.tipo === 'ignorado') {
+        const registro = await guardarAvisoIgnorado({ motivo: 'evento_ignorado', detalhe: evento.motivo });
+        return ok({ ignorado: evento.motivo, registro });
+      }
 
       const b = await boleto.porNossoNumero(evento.nossoNumero);
       /* Titulo que nao e nosso tambem sai 200, e pela mesma razao: nenhuma
        * repeticao vai fazer ele existir. Se for engano de cadastro da URL, a
-       * linha no journal e o que denuncia. */
+       * linha no journal e o que denuncia.
+       *
+       * E DESDE 03/10/2026 ELE FICA GUARDADO, com valor, data e o id do pagamento
+       * (migration 43): eram seis em dez dias, todos de boleto emitido a mao no
+       * portal — dinheiro entrando que so quem lia o journal via. O painel de
+       * saude o mostra. */
       if (!b) {
-        return ok({ ignorado: `nosso_numero ${evento.nossoNumero} nao pertence a este tenant` });
+        const registro = await guardarAvisoIgnorado({
+          motivo: 'titulo_desconhecido',
+          nosso_numero: evento.nossoNumero,
+          valor_centavos: evento.valorLiquidadoCentavos,
+          data_liquidacao: evento.dataLiquidacao,
+          id_externo: evento.idExterno,
+        });
+        return ok({ ignorado: `nosso_numero ${evento.nossoNumero} nao pertence a este tenant`, registro });
       }
 
       return ok(await liquidacao.baixar({

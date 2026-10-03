@@ -226,21 +226,35 @@ chk('AU-11', cadencia(300) === 'a cada 5 minutos' && cadencia(900) === 'a cada 1
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
     .replace(/^\s*\/\/.*$/gm, ' ');
 
-  const importa = /import \{ FaixasDasAutomacoes, PainelDasAutomacoes \} from '\.\.\/automacoes-corpo\.tsx'/.test(tela);
-  const monta = /<FaixasDasAutomacoes\b/.test(tela) && /<PainelDasAutomacoes\b/.test(tela);
-  const busca = /api\.get\('\/automacoes'\)/.test(tela);
+  /* [03/10/2026] A AFIRMAÇÃO VIROU O PAINEL DE SAÚDE (`CorpoDoPainelDeSaude`), e
+   * a busca saiu da tela para `painel-de-saude-tela.tsx` (`useSaudeDoSistema`),
+   * de onde o Mês e o Painel da empresa leem. As três ligações continuam
+   * provadas, cada uma no lugar onde mora agora. */
+  const hook = readFileSync(new URL('../src/painel-de-saude-tela.tsx', import.meta.url), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ');
+  const importa = /import \{ FaixasDasAutomacoes \} from '\.\.\/automacoes-corpo\.tsx'/.test(tela)
+    && /import \{ CorpoDoPainelDeSaude \} from '\.\.\/painel-de-saude-corpo\.tsx'/.test(tela)
+    && /import \{ useSaudeDoSistema, leituraDaSaude[^}]*\} from '\.\.\/painel-de-saude-tela\.tsx'/.test(tela);
+  const monta = /<FaixasDasAutomacoes\b/.test(tela) && /<CorpoDoPainelDeSaude leitura=\{leituraDaSaude\(saude\)\}/.test(tela);
+  const busca = /useSaudeDoSistema\(\)/.test(tela) && /api\.get\('\/automacoes'\)/.test(hook);
   chk('AU-16', importa && monta && busca,
-      'a tela Mes (ate 30/09 Pendencias) - a PRIMEIRA da barra - importa, BUSCA `/automacoes` e monta as duas '
-      + 'metades. Sem esta linha, apagar qualquer uma das tres coisas passaria em todo o resto e o '
-      + 'sintoma seria silencio');
+      'a tela Mes (ate 30/09 Pendencias) - a PRIMEIRA da barra - importa, BUSCA `/automacoes` (pelo gancho '
+      + 'compartilhado) e monta as duas metades: o alarme e o painel de saude. Sem esta linha, apagar '
+      + 'qualquer uma das tres coisas passaria em todo o resto e o sintoma seria silencio');
 
   const iFaixa = tela.indexOf('<FaixasDasAutomacoes');
   const iTabela = tela.indexOf('<Tabela cabecalho=');
-  const iPainel = tela.indexOf('<PainelDasAutomacoes');
+  const iPainel = tela.indexOf('<CorpoDoPainelDeSaude');
   chk('AU-17', iFaixa > 0 && iTabela > iFaixa && iPainel > iTabela,
-      'o ALARME fica acima da tabela das camadas e a AFIRMACAO abaixo dela - a pergunta «o sistema '
-      + 'esta andando?» e mais alta que «o mes fecha?», e a afirmacao de rotina nao pode disputar '
-      + 'o alto da tela com o que exige acao');
+      'o ALARME fica acima da tabela das camadas e a AFIRMACAO (o painel de saude) abaixo dela - a pergunta '
+      + '«o sistema esta andando?» e mais alta que «o mes fecha?», e a afirmacao de rotina nao pode '
+      + 'disputar o alto da tela com o que exige acao');
+
+  const empresa = readFileSync(new URL('../src/telas/painel-empresa.tsx', import.meta.url), 'utf8')
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ');
+  chk('AU-18', /import \{ PainelDeSaude \} from '\.\.\/painel-de-saude-tela\.tsx'/.test(empresa) && /<PainelDeSaude \/>/.test(empresa),
+      'o Painel da empresa — a PRIMEIRA tela do outro setor — monta o mesmo painel de saude (plano de 22/09 §5: '
+      + '«na primeira tela de cada funil»)');
 }
 
 console.log(`\n${falhas === 0 ? 'automacoes: todas as verificacoes passaram'

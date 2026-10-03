@@ -11,10 +11,11 @@
 //                           faixas do caminho do dinheiro. Só aparece quando há
 //                           o que gritar — um alarme que fala todo dia é um
 //                           alarme que se aprende a ignorar;
-//   `PainelDasAutomacoes`   a AFIRMAÇÃO, no rodapé da mesma tela, ao lado do que
-//                           o conector achou. Aparece SEMPRE, inclusive com tudo
-//                           em dia, porque a coisa que se quer poder perceber é
-//                           uma AUSÊNCIA — e ausência não tem como gritar.
+//   a AFIRMAÇÃO             no rodapé da mesma tela. Aparece SEMPRE, inclusive com
+//                           tudo em dia, porque a coisa que se quer poder perceber
+//                           é uma AUSÊNCIA — e ausência não tem como gritar. Desde
+//                           03/10/2026 ela mora no PAINEL DE SAÚDE
+//                           (`painel-de-saude-corpo.tsx`), com as outras peças.
 //
 // Se só existisse o alarme, o dia em que ele quebrasse seria idêntico ao dia em
 // que está tudo bem. Foi exatamente esse o defeito que o dono observou em
@@ -29,8 +30,8 @@
 // sem tempo — e `caso-render.tsx` monta os seis níveis. É o mesmo par de
 // `saude-do-dinheiro.ts` + `saude-corpo.tsx`, pelo mesmo motivo escrito lá.
 
-import { Aviso, DetalheTecnico, Icone, Recolhido } from './ui.tsx';
-import { faixasDasAutomacoes, linhasDasAutomacoes, type RodadaNaTela } from './automacoes.ts';
+import { Aviso, DetalheTecnico } from './ui.tsx';
+import { faixasDasAutomacoes, type RodadaNaTela } from './automacoes.ts';
 
 export type CorpoDasAutomacoes = {
   /** `null` enquanto a leitura não voltou, e ausência de resposta não é resposta:
@@ -69,72 +70,8 @@ export function FaixasDasAutomacoes({ rodadas }: CorpoDasAutomacoes) {
   );
 }
 
-/**
- * A AFIRMAÇÃO, no rodapé — e ela desenha ATÉ quando está tudo bem.
- *
- * A ordem das linhas é a que o servidor mandou, e ela é de consequência: a
- * conferência de pagamentos primeiro, porque é a única porta automática de
- * baixa; o envio de boletos depois; a leitura do outro sistema por último,
- * porque cadastro velho atrasa cadastro, e não dinheiro.
- */
-export function PainelDasAutomacoes({ rodadas, erro }: CorpoDasAutomacoes) {
-  const linhas = rodadas ? linhasDasAutomacoes(rodadas) : [];
-  if (erro) {
-    return (
-      <Aviso tipo="alerta">
-        <strong>Não foi possível saber se as rodadas automáticas aconteceram.</strong>{' '}
-        Isso não quer dizer que elas pararam — quer dizer que ninguém sabe. O motivo foi: {erro}
-      </Aviso>
-    );
-  }
-  if (linhas.length === 0) return null;
-
-  /* O RESUMO DE UMA LINHA, e ele é o que se lê com a seção fechada (30/09/2026,
-     etapa 4a). Em dia, ele diz isso — e é a afirmação que importa: sem ela,
-     «não estou vendo aviso nenhum» significaria as duas coisas ao mesmo tempo.
-     Com alguma parada, ele a nomeia (o alarme já está no alto da tela). */
-  const paradas = linhas.filter((l) => !l.saudavel);
-  const resumo = paradas.length === 0
-    ? (linhas.length === 1 ? 'A rodada está em dia.' : `As ${linhas.length === 3 ? 'três' : linhas.length} rodadas estão em dia.`)
-    : `${paradas.length} ${paradas.length === 1 ? 'não está em dia' : 'não estão em dia'}: `
-      + `${paradas.map((l) => l.nome.charAt(0).toLowerCase() + l.nome.slice(1)).join(', ')}.`;
-
-  return (
-    <Recolhido icone="calendario" titulo="O que o sistema fez sozinho" resumo={resumo}>
-      <p className="sub" style={{ marginBottom: 12 }}>
-        Estas rodadas acontecem sem ninguém pedir, e quando uma para o aviso sobe para o alto
-        desta tela.
-      </p>
-      {/*
-        ⚠️ A SUPERFICIE NAO E ENFEITE, e ela foi paga com o dono abrindo a tela em
-        10/09/2026: *"está apenas com o texto solto embaixo das pendências, mas
-        existe"*. Uma lista de estado desenhada como parágrafo lê como rodapé.
-
-        [30/09/2026, etapa 4a] A SUPERFÍCIE AGORA É O `Recolhido`: a seção fecha
-        com o resumo de uma linha à vista, e é ela que tem borda e fundo. O
-        cartão de dentro saiu — cartão dentro de cartão é o erro que a casa
-        recusa —, e a lista mora direto na superfície de fora.
-      */}
-      <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 12 }}>
-          {linhas.map((l, i) => (
-            <li key={l.chave}
-                style={{
-                  display: 'flex', gap: 9, alignItems: 'baseline',
-                  /* A régua separa as três sem desenhar grade — a mesma decisão
-                     da tabela da casa, que só tem linha horizontal. */
-                  borderTop: i === 0 ? undefined : '1px solid var(--borda-suave)',
-                  paddingTop: i === 0 ? 0 : 12,
-                }}>
-              {/* O ícone é o SEGUNDO sinal, e não a informação: quem não distingue
-                  a cor lê a mesma frase inteira. Restrição 3 do tema. */}
-              <Icone nome={l.saudavel ? 'ok' : 'falha'} tamanho={15} peso="bold" />
-              <span style={{ lineHeight: 1.55 }}>
-                <strong>{l.nome}</strong> {l.quando}
-                {l.fez && <span className="fraco"> — {l.fez}</span>}
-              </span>
-            </li>
-          ))}
-      </ul>
-    </Recolhido>
-  );
-}
+/* A AFIRMAÇÃO (`PainelDasAutomacoes`) SAIU DAQUI EM 03/10/2026 e virou parte do
+ * PAINEL DE SAÚDE (`painel-de-saude.ts` + `painel-de-saude-corpo.tsx`): as três
+ * rodadas continuam lá, uma linha cada, SEMPRE — com o certificado, o aviso de
+ * pagamento, os pagamentos avisados que não entraram, o backup e o caixa. O
+ * argumento acima vale inteiro para o painel; as `R13*` agora o montam. */

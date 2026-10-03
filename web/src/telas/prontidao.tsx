@@ -25,8 +25,8 @@
 
 import { useState } from 'react';
 import {
-  api, ErroDaApi,
-  type Camada, type ExecucaoDoConector, type Automacao,
+  api,
+  type Camada, type ExecucaoDoConector,
 } from '../api.ts';
 import { useDados } from '../dados.ts';
 import {
@@ -36,8 +36,9 @@ import { Ligacao } from '../rota.tsx';
 import { DESTINO_DA_CAMADA, enderecoDoDestino, telaDoDestino } from '../destino-da-camada.ts';
 import { estadoDoCertificado } from '../cobranca-regras.ts';
 import { CorpoDaSaude } from '../saude-corpo.tsx';
-import { FaixasDasAutomacoes, PainelDasAutomacoes } from '../automacoes-corpo.tsx';
-import type { NivelDoAviso } from '../saude-do-dinheiro.ts';
+import { FaixasDasAutomacoes } from '../automacoes-corpo.tsx';
+import { useSaudeDoSistema, leituraDaSaude, type CargasDaSaude } from '../painel-de-saude-tela.tsx';
+import { CorpoDoPainelDeSaude } from '../painel-de-saude-corpo.tsx';
 import { SELO_DA_CONFERENCIA, SELO_DA_LEITURA_DO_CRM } from '../tom-do-estado.ts';
 import {
   VERBETE_DA_CAMADA, SITUACAO,
@@ -89,43 +90,13 @@ import { abrirAjuda } from '../ajuda-gatilho.tsx';
  * construcao, e a leitura so acontece na montagem (o `useDados` nao faz polling).
  * Se um dia isso deixar de ser verdade, o lugar do cache e o servidor, e nao aqui.
  */
-type CertificadoNaTela = { dias: number | null; expira_em: string | null } | null;
-
-const certificadoOuNada = async (): Promise<CertificadoNaTela> => {
-  try {
-    return await api.get<{ dias: number | null; expira_em: string | null }>(
-      '/conector-cobranca/certificado');
-  } catch (e) {
-    /* O 412 e RESPOSTA ("nao ha conector"), nao falha de leitura — mesma
-     * distincao de `cobranca.tsx`. Aqui os dois casos caem no mesmo `null`
-     * porque `sem_conector` e `nao_medido` nao geram faixa nem um nem outro:
-     * o que esta tela nao pode e inventar alarme sobre um banco que ninguem
-     * ligou. Ver `faixasDaSaude`. */
-    void (e instanceof ErroDaApi);
-    return null;
-  }
-};
-
-/** `sem_conector` vem do servidor como campo proprio, e nao como um quinto
- *  nivel — ver o comentario da rota. Ele e o que impede esta tela de acusar
- *  ambar para sempre numa instalacao que ainda nao ligou banco nenhum.
- *
- *  Falha de leitura vira `sem_conector: false` + `nao_verificavel`: e a leitura
- *  honesta dos dois casos juntos, porque a tela PERGUNTOU e nao soube. O unico
- *  silencio autorizado e o de quem nao tem banco. */
-type LeituraDoAviso = { sem_conector: boolean; nivel: NivelDoAviso };
-
-const avisoOuNaoVerificavel = async (): Promise<LeituraDoAviso> => {
-  try {
-    return await api.get<LeituraDoAviso>('/conector-cobranca/aviso-pagamento');
-  } catch {
-    return { sem_conector: false, nivel: 'nao_verificavel' };
-  }
-};
-
-function SaudeDoDinheiro() {
-  const cert = useDados<CertificadoNaTela>(certificadoOuNada);
-  const aviso = useDados<LeituraDoAviso>(avisoOuNaoVerificavel);
+/* AS DUAS LEITURAS (o certificado e o aviso de pagamento, perguntado ao banco)
+ * MUDARAM-SE PARA `painel-de-saude-tela.tsx` em 03/10/2026, com o porquê de cada
+ * escolha acima: o Mês e o Painel da empresa leem do mesmo lugar, e o Mês usa as
+ * MESMAS cargas para estas faixas e para o painel de saúde do rodapé. */
+function SaudeDoDinheiro({ cargas }: { cargas: CargasDaSaude }) {
+  const cert = cargas.certificado;
+  const aviso = cargas.aviso;
 
   /* SEM CONECTOR NAO GERA FAIXA NENHUMA, nem do A1 nem do aviso: nao ha banco
    * ligado, entao nao ha caminho do dinheiro sobre o qual alarmar. Enquanto a
@@ -142,7 +113,7 @@ function SaudeDoDinheiro() {
   return (
     <CorpoDaSaude
       certificado={estadoDoCertificado({ temConector, dias: cert.dado?.dias ?? null })}
-      aviso={temConector ? aviso.dado!.nivel : null}
+      aviso={temConector && !aviso.dado!.sem_permissao ? aviso.dado!.nivel : null}
     />
   );
 }
@@ -180,7 +151,8 @@ export function TelaProntidao() {
    *
    * E NAO BLOQUEIA A TELA, pelo mesmo motivo da faixa vizinha: e `useDados`
    * proprio, entao a tabela das camadas renderiza no tempo dela. */
-  const automacoes = useDados<Automacao[]>(() => api.get('/automacoes'));
+  const saude = useSaudeDoSistema();
+  const automacoes = saude.automacoes;
 
   /*
    * A FAIXA «N FATURAS EMITIDAS ESTÃO SEM BOLETO» SAIU DESTA TELA EM 30/09/2026,
@@ -224,7 +196,7 @@ export function TelaProntidao() {
       {/* ANTES DO FUNIL, e de proposito. O funil diz o que falta fazer no mes;
           esta faixa diz se o que ja foi faturado consegue ser cobrado e baixado.
           E a pergunta mais alta das duas, e so aparece quando ha o que dizer. */}
-      <SaudeDoDinheiro />
+      <SaudeDoDinheiro cargas={saude} />
       {/* LOGO ABAIXO DA VIZINHA: a de cima diz que o caminho do dinheiro esta
           quebrado; esta diz que o sistema parou de andar por ele. */}
       <FaixasDasAutomacoes rodadas={automacoes.dado} />
@@ -344,8 +316,12 @@ export function TelaProntidao() {
 
       {/* FORA DO `{dado && ...}` DE PROPOSITO. O painel responde "o sistema esta
           trabalhando?", e essa resposta nao pode depender de a leitura do MES ter
-          dado certo. [30/09, etapa 4a] Recolhido, com o resumo de uma linha. */}
-      <PainelDasAutomacoes rodadas={automacoes.dado} erro={automacoes.erro} />
+          dado certo. [30/09, etapa 4a] Recolhido, com o resumo de uma linha.
+          [03/10/2026] O rodapé das três rodadas virou o PAINEL DE SAÚDE: as
+          rodadas, o certificado, o aviso de pagamento, os pagamentos avisados
+          que não entraram aqui, o backup e o caixa — as mesmas cargas das
+          faixas do alto. */}
+      <CorpoDoPainelDeSaude leitura={leituraDaSaude(saude)} />
     </Pagina>
   );
 }

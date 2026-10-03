@@ -31,7 +31,9 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { CorpoDaAjuda } from '../src/ajuda-corpo.tsx';
 import { CorpoDaSaude } from '../src/saude-corpo.tsx';
 import { CorpoDoRoteiro, FaixaDoPasso, CHAVE_DO_COMO_FAZER } from '../src/roteiro-corpo.tsx';
-import { FaixasDasAutomacoes, PainelDasAutomacoes } from '../src/automacoes-corpo.tsx';
+import { FaixasDasAutomacoes } from '../src/automacoes-corpo.tsx';
+import { CorpoDoPainelDeSaude } from '../src/painel-de-saude-corpo.tsx';
+import type { LeituraDaSaude, AvisosIgnoradosNaTela } from '../src/painel-de-saude.ts';
 import { PainelDaEmissao } from '../src/emissao-travada-corpo.tsx';
 import { PainelDoVinculo } from '../src/vinculo-do-crm-corpo.tsx';
 import type { VinculoNaTela } from '../src/vinculo-do-crm.ts';
@@ -598,8 +600,17 @@ const TRES_EM_DIA: RodadaNaTela[] = [
   rodada('ciclo_do_crm', 'em_dia', 400),
 ];
 
+/* DESDE 03/10/2026 A AFIRMAÇÃO É O PAINEL DE SAÚDE (o rodapé das três rodadas
+ * virou uma das peças dele). Aqui ele é montado só com as rodadas e um tenant SEM
+ * banco ligado — as outras peças têm as `R33*` —, e as garantias das `R13*` são
+ * as mesmas: fala com tudo em dia, traz os números, diz «ninguém sabe» quando a
+ * leitura falha e não desenha nada antes da primeira resposta. */
+const leituraSoDasRodadas = (r: RodadaNaTela[] | null, erro: string | null): LeituraDaSaude => ({
+  rodadas: r, erroDasRodadas: erro, semConector: r || erro ? true : null,
+  diasDoCertificado: undefined, aviso: null, avisoSemPermissao: false, ignorados: null, erroDosIgnorados: false,
+});
 const desenharPainel = (r: RodadaNaTela[] | null, erro: string | null = null): string =>
-  renderToStaticMarkup(<PainelDasAutomacoes rodadas={r} erro={erro} />);
+  renderToStaticMarkup(<CorpoDoPainelDeSaude leitura={leituraSoDasRodadas(r, erro)} />);
 const desenharFaixas = (r: RodadaNaTela[] | null): string =>
   renderToStaticMarkup(<FaixasDasAutomacoes rodadas={r} />);
 
@@ -678,7 +689,7 @@ const desenharFaixas = (r: RodadaNaTela[] | null): string =>
   /* [30/09/2026, etapa 4a] A SUPERFICIE PASSOU A SER O `Recolhido` — a secao
    * fecha com o resumo de uma linha a vista, e e ela que tem borda e fundo. A
    * garantia e a mesma: nao e texto solto. E o resumo fala mesmo fechado. */
-  chk('R13k', /<details class="recolhido"/.test(bom) && /class="recolhido-resumo">As tr[eê]s rodadas est[aã]o em dia/.test(bom),
+  chk('R13k', /<details class="recolhido"/.test(bom) && /class="recolhido-resumo">O que existe está de pé/.test(bom),
       'o painel desenha sobre uma superficie da casa (o `Recolhido`, com borda e fundo), e nao como '
       + 'texto solto no pe da pagina - foi assim que ele chegou em producao na primeira vez, e o dono '
       + 'viu antes de qualquer suite; e fechado ele ainda afirma que as tres estao em dia');
@@ -1663,6 +1674,85 @@ const LEITURA_VAZIA = {
                   registrar={nada} conferir={nada} remover={nada} limpar={nada} />);
   chk('R32l', !/da fila (é|são) de/.test(texto(semMes)) && !/fu-outro-mes/.test(semMes),
       'fila só do mês de trabalho: sem aviso e sem marca');
+}
+
+// ============================================================================
+// R33 — O PAINEL DE SAÚDE, peça por peça (03/10/2026)
+// ============================================================================
+//
+// As `R13*` provam as rodadas dentro do painel. Estas montam o resto: o banco
+// ligado, o certificado, o aviso de pagamento, os pagamentos avisados que não
+// entraram, e o que ainda não existe. Os textos são de `painel-de-saude.ts`; aqui
+// se prova que eles CHEGAM ao HTML, e no lugar certo.
+
+const IGNORADOS: AvisosIgnoradosNaTela = {
+  janela_em_dias: 30,
+  titulo_desconhecido: { total: 2, valor_centavos: 123_456 },
+  evento_ignorado: { total: 1 },
+  avisos: [
+    { id: 'a1', recebido_em: '2026-10-02T17:40:06.000Z', motivo: 'titulo_desconhecido', nosso_numero: '0000000072',
+      valor_centavos: 100_000, data_liquidacao: '2026-10-02', detalhe: null },
+    { id: 'a2', recebido_em: '2026-10-01T11:33:31.000Z', motivo: 'titulo_desconhecido', nosso_numero: '0000000063',
+      valor_centavos: 23_456, data_liquidacao: '2026-10-01', detalhe: null },
+    { id: 'a3', recebido_em: '2026-09-30T10:00:00.000Z', motivo: 'evento_ignorado', nosso_numero: null,
+      valor_centavos: null, data_liquidacao: null, detalhe: 'baixa sem `valorPagamento` - baixa nem sempre e pagamento' },
+  ],
+};
+const leituraCompleta = (o: Partial<LeituraDaSaude> = {}): LeituraDaSaude => ({
+  rodadas: TRES_EM_DIA, erroDasRodadas: null, semConector: false, diasDoCertificado: 318,
+  aviso: 'ativo', avisoSemPermissao: false,
+  ignorados: { ...IGNORADOS, titulo_desconhecido: { total: 0, valor_centavos: 0 }, evento_ignorado: { total: 0 }, avisos: [] },
+  erroDosIgnorados: false, ...o,
+});
+const desenharPainelDeSaude = (l: LeituraDaSaude) => renderToStaticMarkup(<CorpoDoPainelDeSaude leitura={l} />);
+
+{
+  const sao = desenharPainelDeSaude(leituraCompleta());
+  const t = texto(sao);
+  chk('R33a', /class="recolhido-resumo">O que existe está de pé/.test(sao) && !/<details class="recolhido"[^>]*open/.test(sao),
+      'tudo de pé: o resumo AFIRMA, e o painel nasce fechado — nada a conferir');
+  chk('R33b', t.includes('vale por mais 318 dias') && t.includes('está ligado') && /nenhum nos últimos 30 dias/.test(t)
+          && t.includes('backup') && t.includes('saldo em caixa'),
+      'as peças chegam inteiras: certificado com os dias, aviso ligado, nenhum pagamento sem registro, '
+      + 'e o backup e o caixa ditos como o que ainda não existe');
+
+  const comAvisos = desenharPainelDeSaude(leituraCompleta({ ignorados: IGNORADOS }));
+  const ta = texto(comAvisos);
+  chk('R33c', /<details class="recolhido"[^>]*open/.test(comAvisos) && /1 pede atenção: os avisos de pagamento/.test(ta),
+      'com pagamento avisado e não registrado, o painel ABRE sozinho e o resumo nomeia a peça');
+  chk('R33d', ta.includes('2 pagamentos avisados') && ta.replace(/\s/g, ' ').includes('R$ 1.234,56') && ta.includes('nosso número 0000000072')
+          && ta.includes('pago em 02/10/2026') && ta.includes('1 aviso não era pagamento'),
+      'cada pagamento chega com nosso número, valor e data, a soma é dos dois, e o aviso que não é '
+      + 'pagamento é contado À PARTE — somá-lo faria um cancelamento parecer dinheiro');
+  chk('R33e', !comAvisos.includes('valorPagamento') && /ver detalhe técnico/.test(ta),
+      'o motivo técnico do aviso ignorado (o nome do campo do banco) fica ATRÁS do «ver detalhe técnico», '
+      + 'que nasce fechado — nada dele na frase (que ele vai para o detalhe, a `PS*` prova)');
+
+  const semPapel = texto(desenharPainelDeSaude(leituraCompleta({ aviso: 'nao_verificavel', avisoSemPermissao: true })));
+  chk('R33f', semPapel.includes('seu papel de acesso') && !semPapel.includes('não deu para perguntar'),
+      'o 403 do papel `leitura` não vira «não deu para perguntar ao banco»: o painel diz que é o papel, '
+      + 'e não acusa o banco');
+
+  const vencendo = texto(desenharPainelDeSaude(leituraCompleta({ diasDoCertificado: 12 })));
+  chk('R33g', vencendo.includes('vence em 12 dias') && /pede atenção: o certificado/.test(vencendo),
+      'certificado perto de vencer é atenção, com os dias e o aviso de que renovar não é um clique');
+
+  const lendo = desenharPainelDeSaude(leituraCompleta({ aviso: null, diasDoCertificado: undefined, ignorados: null }));
+  chk('R33h', /class="recolhido-resumo">Lendo o restante/.test(lendo) && !/está de pé/.test(texto(lendo)),
+      'com peça ainda por voltar, o resumo diz que está lendo — e NÃO afirma «de pé» sobre o que não mediu');
+
+  const vazio = desenharPainelDeSaude({ ...leituraCompleta(), rodadas: null, semConector: null, ignorados: null });
+  chk('R33i', vazio === '',
+      'antes da primeira resposta o painel não desenha nada: backup e caixa são fatos fixos, e um painel só '
+      + 'com eles diria «de pé» sem ter medido nada');
+
+  const semBanco = texto(desenharPainelDeSaude(leituraCompleta({ semConector: true })));
+  chk('R33j', semBanco.includes('ainda não foi ligada') && !semBanco.includes('certificado do banco'),
+      'sem banco ligado, UMA linha diz isso — e não três peças acusando um banco que ninguém ligou');
+
+  for (const regra of [/\bwebhook\b/i, /\bendpoint\b/i, /\bmTLS\b/i, /\btoken\b/i, /\bAPI\b/, /\bsplit\b/i]) {
+    chk('R33k', !regra.test(ta.replace(/ver detalhe técnico[\s\S]*$/i, '')), `o que a pessoa lê no painel não casa com ${regra}`);
+  }
 }
 
 export const resultado = () => ({ falhas, feitas });

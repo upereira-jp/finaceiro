@@ -469,8 +469,12 @@ export function criarServidor(o: OpcoesDoServidor): http.Server {
          * fronteira, onde o `log` mora.
          */
         const ignorado = (r.corpo as any)?.ignorado;
+        /* O aviso ignorado passou a ser GUARDADO (migration 43); quando a gravacao
+         * falha, a linha diz — e o unico lugar onde isso aparece. */
+        const registro = (r.corpo as any)?.registro;
         log(`[financeiro] webhook ${r.status} em ${caminho}` +
-            (ignorado ? ` - IGNORADO: ${ignorado}` : ''), undefined);
+            (ignorado ? ` - IGNORADO: ${ignorado}` : '') +
+            (ignorado && registro && registro !== 'gravado' ? ` - aviso ${registro}` : ''), undefined);
         return responder(req, res, r);
       }
 
