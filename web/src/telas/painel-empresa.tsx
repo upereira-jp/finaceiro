@@ -21,19 +21,51 @@
 // O MÊS É DESTA TELA, e não o mês de trabalho do Rateio: a planilha tinha o
 // próprio seletor, e o mês de trabalho segue as telas do mês (Mês, Contas de
 // luz, Cobranças). Abre no mês de hoje — o `hoje` do SERVIDOR.
+//
+// 06/10/2026 (etapa 1 do controle total) — o que a auditoria da planilha achou:
+//   - o mês se DIGITA (as células amarelas da planilha), além das setas, e vai
+//     para a URL (`?mes=AAAA-MM`): o link e o F5 abrem no mesmo mês (lacuna 13);
+//   - a SITUAÇÃO DOS TÍTULOS da planilha soma a carteira INTEIRA, sem filtro de
+//     mês; a tela mostrava só a do mês. Agora mostra as duas (lacuna 2);
+//   - IMPRIMIR: a planilha tinha área de impressão no Dashboard (lacuna 15). A
+//     folha é o `#documento` — o mesmo caminho de impressão da fatura unificada,
+//     que imprime só ele; esta é outra rota, então nunca há dois na tela;
+//   - o plano mostra a subcategoria dentro do grupo, e marca o grupo que sai do
+//     caixa sem ser despesa (investimento, retirada de sócio).
 
 import { useState, type ReactNode } from 'react';
 import { api, type ListaDeDespesas, type CadastrosDaEmpresa } from '../api.ts';
 import { useDados } from '../dados.ts';
-import { Pagina, Aviso, Tabela, Kpi, Carregando, BotaoDeIcone, linha } from '../ui.tsx';
+import { Pagina, Aviso, Tabela, Kpi, Carregando, BotaoDeIcone, CampoData, Icone, linha } from '../ui.tsx';
 import { Ligacao } from '../rota.tsx';
 import { PainelDeSaude } from '../painel-de-saude-tela.tsx';
 import { emReais } from '../dinheiro.ts';
 import { mesPorExtenso, mesCurtoDoAno } from '../formato.ts';
 import {
-  mesDe, somarMeses, painelDoMes, situacaoDoMes, porPlanoNoMes, anoMesAMes, projetar, indicadoresDoPeriodo,
-  devidoAosSocios,
+  mesDe, somarMeses, painelDoMes, situacaoDoMes, situacaoDaCarteira, porPlanoNoMes, anoMesAMes, projetar,
+  indicadoresDoPeriodo, devidoAosSocios, mesDaBusca, buscaComMes,
 } from '../despesas-regras.ts';
+
+/**
+ * O mês guardado na URL (`?mes=`), lido uma vez e reescrito a cada troca com
+ * `replaceState` — o link e o F5 ficam certos, e o «voltar» não vira uma lista de
+ * meses. É o mesmo comportamento do mês de trabalho do Rateio.
+ */
+export function useMesDaUrl(): [string | null, (m: string | null) => void] {
+  const [mes, setMes] = useState<string | null>(() => (typeof window === 'undefined' ? null : mesDaBusca(window.location.search)));
+  const trocar = (m: string | null) => {
+    setMes(m);
+    try { window.history.replaceState(window.history.state, '', `${window.location.pathname}${buscaComMes(window.location.search, m)}`); } catch { /* sem history: só a tela muda */ }
+  };
+  return [mes, trocar];
+}
+
+/** «Imprimir»: o navegador imprime só o `#documento` da tela (estilo.ts). */
+export const BotaoDeImprimir = () => (
+  <button type="button" className="discreto naoimprime" onClick={() => window.print()}>
+    <Icone nome="imprimir" tamanho={15} /> Imprimir
+  </button>
+);
 
 // ------------------------------------------------------ o gráfico de colunas
 //
@@ -57,6 +89,12 @@ export function GraficoDeColunas<T>(p: {
   destaque?: (t: T) => boolean;
   /** Muitas colunas (24): no celular o eixo mostra um mês a cada três. */
   denso?: boolean;
+  /**
+   * Uma LINHA por cima das colunas, com escala própria: um valor de 0 a 1 por
+   * coluna (o acumulado da Projeção, que a planilha desenhava no gráfico de 24
+   * meses — lacuna 8). Passa pelo meio de cada coluna.
+   */
+  linha?: readonly number[];
 }) {
   const [foco, setFoco] = useState<number | null>(null);
   const n = p.itens.length;
@@ -86,6 +124,12 @@ export function GraficoDeColunas<T>(p: {
             {p.desenho(t, altura)}
           </div>
         ))}
+        {p.linha && p.linha.length === n && (
+          <svg className="grafico-curva" viewBox={`0 0 ${n} 100`} preserveAspectRatio="none" aria-hidden="true">
+            <polyline points={p.linha.map((v, i) => `${i + 0.5},${100 - Math.max(0, Math.min(1, v)) * 100}`).join(' ')}
+                      vectorEffect="non-scaling-stroke" />
+          </svg>
+        )}
         {emFoco && foco !== null && (
           <div className="dica-grafico" aria-hidden="true"
                style={{ left: `clamp(84px, ${((foco + 0.5) / n) * 100}%, calc(100% - 84px))` }}>
@@ -118,7 +162,7 @@ const mesCurto = (mes: string): string => mesCurtoDoAno(Number(mes.slice(5, 7)))
 export function TelaPainelDaEmpresa() {
   const carga = useDados<ListaDeDespesas>(() => api.get('/despesas'));
   const cadastros = useDados<CadastrosDaEmpresa>(() => api.get('/plano-de-contas'));
-  const [escolhido, setEscolhido] = useState<string | null>(null);
+  const [escolhido, setEscolhido] = useMesDaUrl();
 
   const dados = carga.dado;
   const hoje = dados?.hoje ?? null;
@@ -129,12 +173,14 @@ export function TelaPainelDaEmpresa() {
   const ano = mes ? Number(mes.slice(0, 4)) : null;
 
   const acao = mes && (
-    <div style={{ ...linha, gap: 6 }}>
+    <div className="naoimprime" style={{ ...linha, gap: 6 }}>
       <BotaoDeIcone icone="mes_anterior" rotulo="Mês anterior" ao={() => setEscolhido(somarMeses(mes, -1))} />
+      <div className="pe-mes"><CampoData mes valor={mes} rotuloAcessivel="Mês do painel" ao={(v) => { if (v) setEscolhido(v); }} /></div>
       <BotaoDeIcone icone="mes_seguinte" rotulo="Mês seguinte" ao={() => setEscolhido(somarMeses(mes, 1))} />
       {mesDeHoje && mes !== mesDeHoje && (
         <button type="button" className="discreto" onClick={() => setEscolhido(null)}>Voltar para este mês</button>
       )}
+      {(dados?.linhas.length ?? 0) > 0 && <BotaoDeImprimir />}
     </div>
   );
 
@@ -168,7 +214,10 @@ export function TelaPainelDaEmpresa() {
       )}
 
       {dados && hoje && mes && ano !== null && linhas.length > 0 && (
-        <Conteudo dados={dados} hoje={hoje} mes={mes} ano={ano} categorias={categorias} />
+        <div id="documento" className="pe-folha">
+          <h1 className="so-impressao">Painel da empresa — {mesPorExtenso(mes)}</h1>
+          <Conteudo dados={dados} hoje={hoje} mes={mes} ano={ano} categorias={categorias} />
+        </div>
       )}
 
       {/* O PAINEL DE SAÚDE NA PRIMEIRA TELA DE CADA SETOR (03/10/2026, plano de
@@ -187,6 +236,7 @@ function Conteudo({ dados, hoje, mes, ano, categorias }: {
   const linhas = dados.linhas;
   const p = painelDoMes(linhas, mes, hoje);
   const situacao = situacaoDoMes(linhas, mes, hoje);
+  const carteira = situacaoDaCarteira(linhas, hoje);
   const porPlano = porPlanoNoMes(linhas, mes, categorias);
   const doAno = anoMesAMes(linhas, ano);
   const proximos12 = indicadoresDoPeriodo(projetar(linhas, mesDe(hoje), 12), mesDe(hoje), somarMeses(mesDe(hoje), 11)).proximos_12;
@@ -234,9 +284,19 @@ function Conteudo({ dados, hoje, mes, ano, categorias }: {
           total» a 1366px, e a barra da situação é uma faixa, não um bloco. */}
       <div className="painel-pilha">
         <section className="cartao">
-          <h2>Situação dos títulos do mês</h2>
-          <p className="sub">Do valor dos títulos de {nomeDoMes}: o que já foi liquidado, o que ainda vem e o que atrasou. Juros e descontos ficam no «Pago no mês», acima.</p>
-          <BarraDaSituacao {...situacao} />
+          <h2>Situação dos títulos</h2>
+          <p className="sub">O que já foi liquidado, o que ainda vem e o que atrasou. Juros e descontos ficam no «Pago no mês», acima.</p>
+          <div className="pe-situacoes">
+            <div>
+              <h3>Em {nomeDoMes}</h3>
+              <BarraDaSituacao {...situacao} vazio={`Nenhum título vence em ${nomeDoMes}`} />
+            </div>
+            <div>
+              <h3>Na carteira inteira</h3>
+              <BarraDaSituacao {...carteira} vazio="Nenhum título lançado" />
+              <p className="sub">Todos os títulos, de todos os meses — como a situação da planilha.</p>
+            </div>
+          </div>
         </section>
         {/*
           POR PLANO DE CONTAS, na ordem do plano (a da planilha). Os itens sem
@@ -249,9 +309,9 @@ function Conteudo({ dados, hoje, mes, ano, categorias }: {
           <Tabela cartoes="estreita" vazio={`Nada vence em ${nomeDoMes}.`}
                   cabecalho={<><th>Plano de contas</th><th className="num">Previsto</th><th className="num">Pago</th>
                     <th className="num">Em aberto</th><th className="num">% do total</th></>}>
-            {porPlano.linhas.map((l) => (
+            {porPlano.linhas.flatMap((l) => [
               <tr key={l.categoria_id ?? 'sem'}>
-                <td>{l.nome}</td>
+                <td>{l.nome}{l.fora_do_resultado && <div className="sub">fora do resultado: sai do caixa, não é despesa</div>}</td>
                 <td className="num c-val">{emReais(l.previsto)}</td>
                 <td className="num">{emReais(l.pago)}</td>
                 <td className="num">{emReais(l.em_aberto)}</td>
@@ -261,8 +321,17 @@ function Conteudo({ dados, hoje, mes, ano, categorias }: {
                     <span className="trilho" aria-hidden="true"><span style={{ width: `${Math.min(100, l.pct)}%` }} /></span>
                   </span>
                 </td>
-              </tr>
-            ))}
+              </tr>,
+              ...(l.subs ?? []).map((s) => (
+                <tr key={s.categoria_id} className="pc-sub">
+                  <td>{s.nome}</td>
+                  <td className="num">{emReais(s.previsto)}</td>
+                  <td className="num">{emReais(s.pago)}</td>
+                  <td className="num">{emReais(s.em_aberto)}</td>
+                  <td />
+                </tr>
+              )),
+            ])}
             {porPlano.linhas.length > 0 && (
               <tr className="linha-total">
                 <td>Total</td>
@@ -335,7 +404,9 @@ function Conteudo({ dados, hoje, mes, ano, categorias }: {
 }
 
 /** A PIZZA DA PLANILHA, em barra: pago · a vencer · vencido, com valor e % escritos. */
-function BarraDaSituacao({ pago, a_vencer, vencido }: { pago: number; a_vencer: number; vencido: number }) {
+function BarraDaSituacao({ pago, a_vencer, vencido, vazio = 'Nenhum título no mês' }: {
+  pago: number; a_vencer: number; vencido: number; vazio?: string;
+}) {
   const total = pago + a_vencer + vencido;
   const partes = [
     { classe: 'st-pago', rotulo: 'Liquidado', valor: pago },
@@ -347,7 +418,7 @@ function BarraDaSituacao({ pago, a_vencer, vencido }: { pago: number; a_vencer: 
     <>
       <div className={`barra-empilhada${total ? '' : ' vazia'}`} role="img"
            aria-label={total ? partes.map((x) => `${x.rotulo}: ${emReais(x.valor)} (${pctEmBr(pct(x.valor))})`).join('; ')
-                             : 'Nenhum título no mês'}>
+                             : vazio}>
         {partes.filter((x) => x.valor > 0).map((x) => (
           <span key={x.classe} className={`seg ${x.classe}`} style={{ flexGrow: x.valor, flexBasis: 0 }} />
         ))}

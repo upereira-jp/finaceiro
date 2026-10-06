@@ -1215,10 +1215,14 @@ export const TOPICOS: readonly Topico[] = [
     passos: [
       'No alto do menu, escolha o setor «Empresa» e abra a tela Despesas.',
       'Clique «Nova despesa», no alto, ao lado do título.',
-      'Preencha o histórico, o fornecedor, o plano de contas, o valor e o vencimento. A competência '
+      'Preencha o histórico, o plano de contas, o valor e o vencimento. A competência '
         + 'acompanha o mês do vencimento até você mudar.',
+      'Em «Fornecedor», escreva o nome: o cadastro sugere, e escolher um traz o plano e o centro de '
+        + 'costume dele. Um nome fora do cadastro vale também (como na planilha), com «Cadastrar» ao lado.',
       'Em «Recorrência», escolha Mensal para o que se repete (os próximos meses aparecem na '
-        + 'Projeção) ou Parcelada para lançar todas as parcelas de uma vez.',
+        + 'Projeção) ou Parcelada para lançar as parcelas — se o parcelamento já está andando, diga em '
+        + 'que parcela ele começa.',
+      'Em «Mais detalhes», anexe o comprovante (PDF ou foto), se já o tiver.',
       'Clique «Lançar a despesa».',
     ],
     caminhos: [ir('/despesas', 'Abrir Despesas'), ver('/plano-de-contas', 'Ver o plano de contas')],
@@ -1226,7 +1230,8 @@ export const TOPICOS: readonly Topico[] = [
     telas: ['/despesas'],
     termos: ['despesa', 'conta avulsa', 'lancar despesa', 'conta de energia da empresa',
              'gasto', 'nova conta a pagar', 'lancamento', 'lancamentos', 'aluguel', 'parcelada',
-             'parcelamento', 'recorrente', 'planilha da empresa', 'contas a pagar da empresa'],
+             'parcelamento', 'recorrente', 'planilha da empresa', 'contas a pagar da empresa',
+             'parcela em andamento', 'centro de custo da despesa'],
   },
   {
     id: 'baixa-de-despesa',
@@ -1256,6 +1261,8 @@ export const TOPICOS: readonly Topico[] = [
       'Abra a tela Despesas e mostre «Todas» ou procure pelo histórico.',
       'Na linha mais recente da conta, abra o menu «⋯» e escolha «Lançar o próximo».',
       'Confira o valor e o vencimento e clique «Lançar».',
+      'O fim da recorrência é o último MÊS DE VENCIMENTO, como na planilha: «repete até novembro» lança '
+        + 'a conta que vence em novembro e para.',
     ],
     caminhos: [ir('/despesas', 'Abrir Despesas'), ver('/projecao', 'Ver a Projeção de gastos')],
     camada: null,
@@ -1273,7 +1280,10 @@ export const TOPICOS: readonly Topico[] = [
       + 'sócios viam. O vencido é de qualquer mês: atraso de setembro continua aparecendo em outubro.',
     passos: [
       'No alto do menu, escolha o setor «Empresa»; o Painel é a primeira tela.',
-      'Use as setas ao lado do título para andar de mês.',
+      'Use as setas ao lado do título para andar de mês, ou digite o mês no campo do meio. O mês vai '
+        + 'para o endereço da página: o link e o F5 abrem no mesmo mês.',
+      'A situação dos títulos aparece duas vezes: a do mês e a da carteira inteira, como na planilha.',
+      '«Imprimir» tira o menu e os botões e imprime só o painel.',
     ],
     caminhos: [ir('/empresa', 'Abrir o Painel da empresa'), ver('/despesas', 'Ver as despesas')],
     camada: null,
@@ -1290,7 +1300,9 @@ export const TOPICOS: readonly Topico[] = [
     passos: [
       'No setor Empresa, abra a Projeção de gastos.',
       'Escolha o período de análise (de, até) para ver o total, a média e o maior mês.',
+      'A linha por cima das colunas é o acumulado; «Por plano de contas, mês a mês» abre o período por grupo.',
       'Em «De onde vem o projetado» estão as despesas que repetem.',
+      '«Baixar CSV» leva os 24 meses, com o acumulado e uma coluna por grupo; «Imprimir» imprime só a projeção.',
     ],
     caminhos: [ir('/projecao', 'Abrir a Projeção de gastos')],
     camada: null,
@@ -1304,17 +1316,99 @@ export const TOPICOS: readonly Topico[] = [
     resposta: 'Na tela Plano de contas, no setor Empresa. Vazia, ela oferece «Começar com o plano da '
       + 'planilha»: os 12 itens da planilha e, como origens, a Conta PJ G3 Solar e os sócios Vinicius '
       + 'Leal e Renata Estevam. Depois é acrescentar, renomear, reordenar ou desativar — nada se apaga, '
-      + 'porque há despesa classificada.',
+      + 'porque há despesa classificada. Da conta bancária, guarda-se o banco, a agência e só o final '
+      + '(os 4 últimos dígitos): o número inteiro não fica no sistema.',
     passos: [
       'No setor Empresa, abra Plano de contas.',
       'Na primeira vez, clique «Começar com o plano da planilha».',
-      'Para uma conta bancária nova, use «Nova origem» em «De onde sai o dinheiro».',
+      'Para uma conta bancária nova, use «Nova origem» em «De onde sai o dinheiro»; clique no nome dela '
+        + 'para escrever o banco, a agência e o final.',
     ],
     caminhos: [ir('/plano-de-contas', 'Abrir Plano de contas')],
     camada: null,
     telas: ['/plano-de-contas'],
     termos: ['plano de contas', 'categoria', 'categorias', 'classificar despesa', 'conta bancaria',
-             'origem do pagamento', 'conta pj', 'cadastros da empresa'],
+             'origem do pagamento', 'conta pj', 'cadastros da empresa', 'final da conta', 'agencia'],
+  },
+  /* O CHÃO DA EMPRESA (06/10/2026, migration 44): fornecedor, comprovante como
+   * arquivo, desfazer a baixa, subcategorias e centros de custo. */
+  {
+    id: 'fornecedores',
+    pergunta: 'Onde cadastro um fornecedor, e como vejo quanto pagamos a ele?',
+    resposta: 'Na tela Fornecedores, no setor Empresa: um cadastro por fornecedor, com o CPF ou CNPJ '
+      + '(conferido pelo dígito), o contato, a chave Pix ou a conta para pagar e o plano e o centro de '
+      + 'costume. A lista diz, de cada um, quanto saiu para ele nos últimos 12 meses e quanto está em aberto.',
+    porque: 'Na planilha o fornecedor era texto: «Imobiliária X» num mês e «Imob. X» no outro eram dois '
+      + 'credores, e ninguém sabia quanto se pagou a um deles no ano.',
+    passos: [
+      'No setor Empresa, abra Fornecedores e clique «Novo fornecedor».',
+      'Ou, ao lançar uma despesa, escreva o nome no campo Fornecedor e clique «Cadastrar».',
+      'Clique no nome de um fornecedor para ver os dados de pagamento e as despesas dele.',
+    ],
+    caminhos: [ir('/fornecedores', 'Abrir Fornecedores'), ver('/despesas', 'Ver as despesas')],
+    camada: null,
+    telas: ['/fornecedores', '/despesas'],
+    termos: ['fornecedor', 'fornecedores', 'credor', 'credores', 'cadastrar fornecedor',
+             'quanto pagamos', 'pix do fornecedor'],
+  },
+  {
+    id: 'comprovante-anexo',
+    pergunta: 'Como anexo o comprovante de uma despesa?',
+    resposta: 'Em Despesas, abra a linha (clique no histórico) e use «Anexar comprovante»: PDF ou foto '
+      + '(PNG, JPEG ou WEBP), até 8 MB. A foto grande do celular é reduzida antes de subir. Ao lançar uma '
+      + 'despesa nova, o campo está em «Mais detalhes». O clipe na linha diz quantos arquivos ela tem.',
+    porque: 'O link de uma pasta quebra quando a pasta muda de dono; o arquivo anexado fica no sistema, '
+      + 'com quem mandou e quando. Tirar um anexo não o apaga: ele continua no histórico.',
+    passos: [
+      'Em Despesas, clique no histórico da despesa para abrir o detalhe.',
+      'Em «Comprovantes», clique «Anexar comprovante» e escolha o arquivo.',
+      'Para abrir, clique no nome do arquivo; para tirar o errado, «Tirar».',
+    ],
+    caminhos: [ir('/despesas', 'Abrir Despesas')],
+    camada: null,
+    telas: ['/despesas'],
+    termos: ['comprovante', 'anexo', 'anexar', 'nota fiscal', 'recibo', 'foto do comprovante', 'pdf',
+             'clipe'],
+  },
+  {
+    id: 'desfazer-baixa',
+    pergunta: 'Dei baixa errada numa despesa. Como desfaço?',
+    resposta: 'No menu «⋯» da linha, «Desfazer a última baixa», com o motivo. A baixa não é apagada: '
+      + 'fica marcada como desfeita (riscada no detalhe, com o motivo), e a despesa volta a ter o valor em '
+      + 'aberto. Depois é dar a baixa certa. Se a baixa saiu do bolso de um sócio, a dívida com ele some junto.',
+    porque: 'O pagamento é prova de dinheiro e não se apaga. Se a empresa já reembolsou o sócio, desfaça '
+      + 'primeiro a baixa do reembolso. A baixa de um repasse ou de uma comissão do rateio não se desfaz '
+      + 'aqui: ela mexe na divisão do dinheiro do cliente.',
+    passos: [
+      'Em Despesas, ache a linha (mostre «Pagas» ou «Todas»).',
+      'Abra o menu «⋯» e escolha «Desfazer a última baixa».',
+      'Escreva por que (data errada, valor errado, pagou duas vezes) e confirme.',
+    ],
+    caminhos: [ir('/despesas', 'Abrir Despesas')],
+    camada: null,
+    telas: ['/despesas'],
+    termos: ['desfazer baixa', 'estorno', 'estornar', 'baixa errada', 'paguei errado', 'voltar a aberta',
+             'cancelar pagamento', 'desfazer pagamento'],
+  },
+  {
+    id: 'subcategorias-e-centros',
+    pergunta: 'Como separo os gastos com mais detalhe — por subcategoria e por área da empresa?',
+    resposta: 'Em Plano de contas. Os 12 itens da planilha são os grupos, e embaixo de cada um entram '
+      + 'subcategorias (aluguel, IPTU, salários, combustível…) — à mão, com «+ subcategoria», ou de uma vez '
+      + 'com «Ampliar com as subcategorias sugeridas». Os centros de custo dizem ONDE o gasto acontece '
+      + '(Administrativo, Comercial, Operação das usinas). O Painel e a Projeção somam a subcategoria no grupo.',
+    porque: 'Investimento (equipamento, construção de usina) e retirada de sócio saem do caixa e não são '
+      + 'despesa: a natureza do grupo diz isso, e a subcategoria segue a do grupo.',
+    passos: [
+      'Em Plano de contas, clique «+ subcategoria» ao lado de um grupo, ou «Ampliar com as subcategorias sugeridas».',
+      'Em «Centros de custo», acrescente as áreas da empresa.',
+      'Ao lançar uma despesa, escolha a subcategoria e o centro.',
+    ],
+    caminhos: [ir('/plano-de-contas', 'Abrir Plano de contas')],
+    camada: null,
+    telas: ['/plano-de-contas'],
+    termos: ['subcategoria', 'subcategorias', 'centro de custo', 'centros de custo', 'area da empresa',
+             'investimento', 'retirada de socio', 'distribuicao de lucros', 'natureza'],
   },
   {
     id: 'socio-pagou-do-bolso',
@@ -1735,7 +1829,9 @@ export const PALAVRAS_DA_TELA: Record<string, readonly string[]> = {
                 'devido aos socios'],
   '/projecao': ['projecao', 'projecao de gastos', 'proximos meses', 'previsao', 'orcamento'],
   '/plano-de-contas': ['plano de contas', 'categoria', 'categorias', 'origem do pagamento',
-                       'conta bancaria', 'socios'],
+                       'conta bancaria', 'socios', 'subcategoria', 'centro de custo'],
+  /* O chão da empresa (06/10/2026): a quem a empresa paga. */
+  '/fornecedores': ['fornecedores', 'fornecedor', 'credor', 'credores', 'quem a empresa paga'],
   /* «historico» SAIU DAQUI EM 10/09/2026, e a troca e o proprio ponto: ate essa
      data a palavra caia em Relatorios por falta de destino melhor. Agora ha uma
      tela que E o historico, e deixar o apelido nas duas mandaria metade das

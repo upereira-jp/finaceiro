@@ -56,6 +56,9 @@ import { CalendarBlank } from '@phosphor-icons/react/CalendarBlank';
 import { Broom } from '@phosphor-icons/react/Broom';
 import { DownloadSimple } from '@phosphor-icons/react/DownloadSimple';
 import { Printer } from '@phosphor-icons/react/Printer';
+import { Storefront } from '@phosphor-icons/react/Storefront';
+import { Paperclip } from '@phosphor-icons/react/Paperclip';
+import { ArrowCounterClockwise } from '@phosphor-icons/react/ArrowCounterClockwise';
 import { Copy } from '@phosphor-icons/react/Copy';
 import { ArrowUp } from '@phosphor-icons/react/ArrowUp';
 import { ArrowDown } from '@phosphor-icons/react/ArrowDown';
@@ -158,6 +161,7 @@ const DESENHO: Record<NomeDeIcone, Icon> = {
   despesas: Invoice,
   projecao: TrendUp,
   plano_de_contas: ListNumbers,
+  fornecedores: Storefront,
 
   // os cinco tons do selo — glifo nu, porque a pílula já é a moldura
   ok: Check,
@@ -186,6 +190,8 @@ const DESENHO: Record<NomeDeIcone, Icon> = {
   fechar: X,
   baixar: DownloadSimple,
   imprimir: Printer,
+  anexo: Paperclip,
+  desfazer: ArrowCounterClockwise,
   copiar: Copy,
   subir: ArrowUp,
   descer: ArrowDown,

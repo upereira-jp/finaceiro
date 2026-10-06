@@ -92,7 +92,9 @@ const ESPERADO: Readonly<Record<string, TomDoSelo>> = {
   'conta_a_pagar.vencida': 'erro',
   'despesa.vencida': 'erro',
   'despesa.vence_hoje': 'a_fazer',
-  'despesa.a_vencer': 'a_fazer',
+  /* 06/10/2026 (lacuna 11 da auditoria da planilha): «a vencer» deixa de ter o tom
+     de «vence hoje» — ainda vai vencer é neutro, como o `atraso.a_vencer` acima. */
+  'despesa.a_vencer': 'neutro',
   'despesa.a_reembolsar': 'a_fazer',
   'despesa.paga': 'ok',
   'despesa.cancelada': 'neutro',

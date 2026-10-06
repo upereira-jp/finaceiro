@@ -195,12 +195,14 @@ export const SELO_DA_CONTA_A_PAGAR: Readonly<Record<'aberta' | 'parcial' | 'paga
 };
 
 /** A DESPESA DA EMPRESA (a planilha, 02/10/2026): a mesma leitura da conta a
- *  pagar, com a situação POR DATA da coluna «SITUAÇÃO». Vence hoje e a vencer
- *  são tarefa (pagar); o calendário distingue a que ainda tem prazo. */
+ *  pagar, com a situação POR DATA da coluna «SITUAÇÃO». VENCE HOJE é tarefa de
+ *  hoje (âmbar, como na planilha); A VENCER «ainda vai vencer» — e isso é neutro
+ *  pelo vocabulário acima. Até 06/10 as duas tinham o mesmo tom, e a planilha as
+ *  distingue (âmbar × azul): a lacuna 11 da auditoria. */
 export const SELO_DA_DESPESA: Readonly<Record<SituacaoDaDespesa, Selo>> = {
   vencida: selo('erro', 'vencidas'),
   vence_hoje: selo('a_fazer', 'a_pagar'),
-  a_vencer: selo('a_fazer', 'calendario'),
+  a_vencer: selo('neutro', 'calendario'),
   a_reembolsar: selo('a_fazer', 'a_pagar'),
   paga: selo('ok', 'confirmar'),
   cancelada: selo('neutro', 'cancelado'),

@@ -20,19 +20,30 @@
 // sem origem: cada série que projeta está ali, com o valor que ela repete.
 //
 // O QUE ELA NÃO FAZ: lançar. «Lançar o próximo» de uma série mora em Despesas.
+//
+// 06/10/2026 (etapa 1 do controle total) — o que a auditoria da planilha achou:
+//   - a PROJEÇÃO POR PLANO MÊS A MÊS (a matriz D41:AA58): uma linha por grupo do
+//     plano e uma coluna por mês do período de análise (lacuna 7);
+//   - o ACUMULADO NO GRÁFICO, que a planilha desenhava e a tela só tinha na
+//     tabela: a linha por cima das colunas (lacuna 8);
+//   - o mês de início se DIGITA e vai para a URL (lacuna 13);
+//   - IMPRIMIR e BAIXAR O CSV dos 24 meses, com o acumulado e uma coluna por
+//     grupo (lacuna 15). A folha impressa é o `#documento`, como no Painel.
 
 import { useState } from 'react';
 import { api, type ListaDeDespesas, type CadastrosDaEmpresa } from '../api.ts';
 import { useDados } from '../dados.ts';
-import { Pagina, Aviso, Tabela, Kpi, Carregando, BotaoDeIcone, Escolha, linha } from '../ui.tsx';
+import { Pagina, Aviso, Tabela, Kpi, Carregando, BotaoDeIcone, CampoData, Escolha, Icone, linha } from '../ui.tsx';
 import { Ligacao } from '../rota.tsx';
 import { emReais } from '../dinheiro.ts';
 import { mesPorExtenso, mesAbreviado, mesCurtoDoAno, diaEmBr } from '../formato.ts';
 import {
-  mesDe, somarMeses, mesesEntre, dia, projetar, indicadoresDoPeriodo, projecaoPorPlano, seriesQueProjetam,
-  ROTULO_DA_RECORRENCIA,
+  mesDe, somarMeses, mesesEntre, dia, projetar, indicadoresDoPeriodo, matrizPorPlano, linhaDoAcumulado,
+  csvDaProjecao, seriesQueProjetam, ROTULO_DA_RECORRENCIA, SEM_PLANO,
 } from '../despesas-regras.ts';
-import { GraficoDeColunas } from './painel-empresa.tsx';
+import { nomeDoArquivo } from '../csv.ts';
+import { baixarCsv } from '../baixar.ts';
+import { GraficoDeColunas, useMesDaUrl, BotaoDeImprimir } from './painel-empresa.tsx';
 
 /** Os 24 meses da planilha. */
 const HORIZONTE = 24;
@@ -42,9 +53,10 @@ const PERIODO_PADRAO = 6;
 export function TelaProjecao() {
   const carga = useDados<ListaDeDespesas>(() => api.get('/despesas'));
   const cadastros = useDados<CadastrosDaEmpresa>(() => api.get('/plano-de-contas'));
-  const [inicioEscolhido, setInicio] = useState<string | null>(null);
+  const [inicioEscolhido, setInicio] = useMesDaUrl();
   const [de, setDe] = useState<string | null>(null);
   const [ate, setAte] = useState<string | null>(null);
+  const periodo = { de, ate };
 
   const dados = carga.dado;
   const hoje = dados?.hoje ?? null;
@@ -55,13 +67,26 @@ export function TelaProjecao() {
      meses novos mostraria um período vazio sem dizer por quê. */
   const mudarInicio = (novo: string | null) => { setInicio(novo); setDe(null); setAte(null); };
 
+  const temLinhas = (dados?.linhas.length ?? 0) > 0;
   const acao = inicio && (
-    <div style={{ ...linha, gap: 6 }}>
+    <div className="naoimprime" style={{ ...linha, gap: 6 }}>
       <BotaoDeIcone icone="mes_anterior" rotulo="Começar um mês antes" ao={() => mudarInicio(somarMeses(inicio, -1))} />
+      <div className="pe-mes"><CampoData mes valor={inicio} rotuloAcessivel="Mês de início da projeção" ao={(v) => { if (v) mudarInicio(v); }} /></div>
       <BotaoDeIcone icone="mes_seguinte" rotulo="Começar um mês depois" ao={() => mudarInicio(somarMeses(inicio, 1))} />
       {mesDeHoje && inicio !== mesDeHoje && (
         <button type="button" className="discreto" onClick={() => mudarInicio(null)}>Começar neste mês</button>
       )}
+      {temLinhas && dados && (
+        <button type="button" className="discreto" onClick={() => {
+          const p = projetar(dados.linhas, inicio, HORIZONTE);
+          const de = periodo.de ?? inicio;
+          const ate = periodo.ate ?? somarMeses(inicio, PERIODO_PADRAO - 1);
+          baixarCsv(nomeDoArquivo('projecao', inicio), csvDaProjecao(p, cadastros.dado?.categorias ?? [], de, ate < de ? de : ate));
+        }}>
+          <Icone nome="baixar" tamanho={15} /> Baixar CSV
+        </button>
+      )}
+      {temLinhas && <BotaoDeImprimir />}
     </div>
   );
 
@@ -92,8 +117,11 @@ export function TelaProjecao() {
       )}
 
       {dados && inicio && dados.linhas.length > 0 && (
-        <Conteudo dados={dados} inicio={inicio} de={de} ate={ate} setDe={setDe} setAte={setAte}
-                  categorias={cadastros.dado?.categorias ?? []} />
+        <div id="documento" className="pe-folha">
+          <h1 className="so-impressao">Projeção de gastos — 24 meses a partir de {mesPorExtenso(inicio)}</h1>
+          <Conteudo dados={dados} inicio={inicio} de={de} ate={ate} setDe={setDe} setAte={setAte}
+                    categorias={cadastros.dado?.categorias ?? []} />
+        </div>
       )}
     </Pagina>
   );
@@ -119,7 +147,11 @@ function Conteudo(p: {
   const noPeriodo = (m: string) => m >= de && m <= ate;
 
   const ind = indicadoresDoPeriodo(proj, de, ate);
-  const porPlano = projecaoPorPlano(proj, de, ate, p.categorias);
+  const matriz = matrizPorPlano(proj, p.categorias);
+  const colunasDoPeriodo = matriz.meses.map((m, i) => ({ m, i })).filter((x) => noPeriodo(x.m));
+  const totalNoPeriodo = (l: { meses: number[] }) => colunasDoPeriodo.reduce((s, x) => s + (l.meses[x.i] ?? 0), 0);
+  const linhasDaMatriz = matriz.linhas.filter((l) => totalNoPeriodo(l) > 0);
+  const acumulado = linhaDoAcumulado(proj);
   const series = seriesQueProjetam(dados.linhas);
   const opcoes = proj.meses.map((m) => ({ valor: m.mes, texto: mesAbreviado(m.mes) }));
   const nomeDoPeriodo = de === ate ? mesPorExtenso(de) : `${mesAbreviado(de)} a ${mesAbreviado(ate)}`;
@@ -157,6 +189,7 @@ function Conteudo(p: {
         <ul className="legenda">
           <li><span className="amostra lancado" />Lançado</li>
           <li><span className="amostra projetado" />Projetado (repetição das recorrentes)</li>
+          <li><span className="amostra acumulado" />Acumulado (escala própria: o topo é {emReais(ind.proximos_24)})</li>
         </ul>
         <GraficoDeColunas
           itens={proj.meses}
@@ -169,7 +202,9 @@ function Conteudo(p: {
           dica={(m) => [
             { classe: 'lancado', rotulo: 'Lançado', valor: m.lancado },
             { classe: 'projetado', rotulo: 'Projetado', valor: m.projetado },
+            { classe: 'acumulado', rotulo: 'Acumulado', valor: m.acumulado },
           ]}
+          linha={acumulado}
           destaque={(m) => noPeriodo(m.mes)}
           desenho={(m, altura) => (
             <span className="pilha" style={{ height: altura(m.total) }}>
@@ -200,26 +235,41 @@ function Conteudo(p: {
         </Tabela>
       </section>
 
-      <div className="duas-colunas">
-        <section className="cartao">
-          <h2>Por plano de contas no período</h2>
-          <p className="sub">Lançado e projetado de {nomeDoPeriodo}, na ordem do plano de contas.</p>
-          <Tabela cartoes="estreita" vazio="Nenhum gasto no período."
-                  cabecalho={<><th>Plano de contas</th><th className="num">No período</th></>}>
-            {porPlano.linhas.map((l) => (
+      {/*
+        POR PLANO DE CONTAS, MÊS A MÊS — a matriz D41:AA58 da planilha, no período
+        de análise (as colunas são os meses dele; o CSV leva os 24). Uma linha por
+        GRUPO: a subcategoria soma no grupo dela. A matriz é a única coisa da tela
+        que pode ser mais larga que a tela, e por isso rola sozinha, de lado.
+      */}
+      <section className="cartao secao">
+        <h2>Por plano de contas, mês a mês</h2>
+        <p className="sub">Lançado e projetado de {nomeDoPeriodo}, por grupo do plano de contas. Para os 24 meses, baixe o CSV.</p>
+        <div className="pj-matriz">
+          <Tabela cartoes="larga" vazio="Nenhum gasto no período."
+                  cabecalho={<>
+                    <th>Plano de contas</th>
+                    {colunasDoPeriodo.map((x) => <th key={x.m} className="num">{mesAbreviado(x.m)}</th>)}
+                    <th className="num">No período</th>
+                  </>}>
+            {linhasDaMatriz.map((l) => (
               <tr key={l.categoria_id ?? 'sem'}>
-                <td>{l.nome}</td>
-                <td className="num c-val">{emReais(l.total)}</td>
+                <td>{l.categoria_id === null ? SEM_PLANO : l.nome}</td>
+                {colunasDoPeriodo.map((x) => <td key={x.m} className="num">{l.meses[x.i] ? emReais(l.meses[x.i]!) : '—'}</td>)}
+                <td className="num c-val">{emReais(totalNoPeriodo(l))}</td>
               </tr>
             ))}
-            {porPlano.linhas.length > 0 && (
+            {linhasDaMatriz.length > 0 && (
               <tr className="linha-total">
-                <td>Total projetado</td>
-                <td className="num c-val">{emReais(porPlano.total)}</td>
+                <td>Total</td>
+                {colunasDoPeriodo.map((x) => <td key={x.m} className="num">{emReais(proj.meses[x.i]!.total)}</td>)}
+                <td className="num c-val">{emReais(ind.total)}</td>
               </tr>
             )}
           </Tabela>
-        </section>
+        </div>
+      </section>
+
+      <div>
 
         {/*
           DE ONDE VEM O PROJETADO. Sem esta lista, a coluna laranja seria um

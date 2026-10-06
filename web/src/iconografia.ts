@@ -29,6 +29,8 @@ export type NomeDeIcone =
   | 'contas_a_receber' | 'contas_a_pagar' | 'historico' | 'usuarios'
   /* As quatro telas da planilha da empresa (02/10/2026). */
   | 'painel_empresa' | 'despesas' | 'projecao' | 'plano_de_contas'
+  /* Fornecedores (06/10/2026, etapa 1 do controle total da empresa). */
+  | 'fornecedores'
   /* `cadastros` SAIU EM 30/09/2026 (etapa 3b), no mesmo dia em que entrou: era
    * o desenho do gatilho «Cadastros ▾» da barra, e no menu lateral os cadastros
    * são uma seção com título, sem gatilho para desenhar. */
@@ -102,6 +104,8 @@ export type NomeDeIcone =
    *   `alterou`    o verbo da trilha. As duas setas da troca — de um valor para
    *                outro, que é o que a linha aberta mostra (antes → depois). */
   | 'cancelado' | 'a_pagar' | 'alterou'
+  /* O comprovante anexado e o desfazer da baixa (06/10/2026, migration 44). */
+  | 'anexo' | 'desfazer'
   // cobrança e documento
   | 'boleto' | 'pix' | 'certificado'
   // movimento: as duas que existem para ANIMAR, não para informar

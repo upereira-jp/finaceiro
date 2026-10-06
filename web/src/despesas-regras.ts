@@ -24,10 +24,20 @@
 //
 // Toda data chega como texto ISO; o dia é `AAAA-MM-DD` e o mês, `AAAA-MM`.
 // Dinheiro é inteiro de centavos do começo ao fim (regra 1).
+//
+// A ETAPA 1 DO CONTROLE TOTAL (06/10/2026, migration 44) trouxe para cá o que a
+// auditoria da planilha achou faltando: a situação da carteira INTEIRA (lacuna 2),
+// o «recorrente até» pelo mês do VENCIMENTO (lacuna 3), a Projeção por plano mês a
+// mês e o acumulado no gráfico (7 e 8), os filtros e a ordem da lista (10), o mês na
+// URL (13), o nº e os dias no CSV (14), o CSV da Projeção (15) — e as subcategorias
+// somadas no grupo, e a baixa desfeita (estorno) fora de toda soma.
 
 import type {
   Despesa, PagamentoDaDespesa, CategoriaDaEmpresa, RecorrenciaDaDespesa, NaturezaDaDespesa, TipoDeOrigem,
+  NaturezaDaCategoria,
 } from './api.ts';
+import { paraCsv, reaisParaPlanilha, type Coluna } from './csv.ts';
+import { ROTULO_DA_FORMA } from './contas-regras.ts';
 
 // ------------------------------------------------------ datas
 
@@ -106,13 +116,20 @@ export const saldo = (d: Pick<Despesa, 'valor_centavos' | 'valor_pago_centavos' 
 export const saidaDoPagamento = (p: Pick<PagamentoDaDespesa, 'valor_centavos' | 'acrescimo_centavos' | 'desconto_centavos'>): number =>
   p.valor_centavos + p.acrescimo_centavos - p.desconto_centavos;
 
+/** As baixas que VALEM: a desfeita (estorno, migration 44) fica na lista, marcada, e não soma em nada. */
+export const baixasVivas = <P extends Pick<PagamentoDaDespesa, 'estornado_em'>>(d: { pagamento: readonly P[] }): P[] =>
+  d.pagamento.filter((p) => !p.estornado_em);
+
 /** A coluna «VALOR PAGO (R$)» da planilha: o que saiu, somando as baixas. */
 export const pagoEmCaixa = (d: Pick<Despesa, 'pagamento'>): number =>
-  d.pagamento.reduce((s, p) => s + saidaDoPagamento(p), 0);
+  baixasVivas(d).reduce((s, p) => s + saidaDoPagamento(p), 0);
 
 /** Juros/multa menos desconto, somado nas baixas: a coluna «ACRÉSCIMOS (+) / DESCONTOS (−)». */
 export const ajusteDasBaixas = (d: Pick<Despesa, 'pagamento'>): number =>
-  d.pagamento.reduce((s, p) => s + p.acrescimo_centavos - p.desconto_centavos, 0);
+  baixasVivas(d).reduce((s, p) => s + p.acrescimo_centavos - p.desconto_centavos, 0);
+
+/** A data da última baixa que vale, ou nada. */
+export const ultimaBaixa = (d: Pick<Despesa, 'pagamento'>): PagamentoDaDespesa | null => baixasVivas(d).at(-1) ?? null;
 
 /** «Mensal», «Trimestral», «3/10» — o que diz que o título faz parte de uma série. */
 export function textoDaSerie(d: Pick<Despesa, 'recorrencia' | 'parcela_numero' | 'parcela_total'>): string | null {
@@ -177,6 +194,56 @@ export function situacaoDoMes(linhas: readonly Despesa[], mes: string, hoje: str
   return { pago, a_vencer, vencido };
 }
 
+/**
+ * A SITUAÇÃO DOS TÍTULOS DA CARTEIRA INTEIRA — a base O11:P13 do Dashboard e a rosca
+ * «Situação dos títulos»: na planilha ela soma TODOS os títulos, sem filtro de mês
+ * (lacuna 2 de 06/10). O Painel mostra as duas: a do mês e esta.
+ */
+export function situacaoDaCarteira(linhas: readonly Despesa[], hoje: string) {
+  let pago = 0, a_vencer = 0, vencido = 0;
+  for (const d of linhas) {
+    if (!viva(d) || !daEmpresa(d)) continue;
+    pago += d.valor_pago_centavos;
+    if (d.status === 'paga') continue;
+    if (diasAte(d.vencimento, hoje) < 0) vencido += saldo(d); else a_vencer += saldo(d);
+  }
+  return { pago, a_vencer, vencido };
+}
+
+// ------------------------------------------------------ o plano em dois níveis
+
+/** O GRUPO de uma categoria: ela mesma, se é grupo; o pai, se é subcategoria; nada, se não existe. */
+export function grupoDe(categoriaId: string | null, categorias: readonly CategoriaDaEmpresa[]): string | null {
+  if (!categoriaId) return null;
+  const c = categorias.find((x) => x.id === categoriaId);
+  if (!c) return null;
+  return c.pai_id && categorias.some((x) => x.id === c.pai_id) ? c.pai_id : c.id;
+}
+
+/** Os grupos (primeiro nível), na ordem do plano. */
+export const gruposDoPlano = (categorias: readonly CategoriaDaEmpresa[]): CategoriaDaEmpresa[] =>
+  [...categorias].filter((c) => !c.pai_id).sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome));
+
+/** As subcategorias de um grupo, na ordem dele. */
+export const subcategoriasDe = (grupoId: string, categorias: readonly CategoriaDaEmpresa[]): CategoriaDaEmpresa[] =>
+  [...categorias].filter((c) => c.pai_id === grupoId).sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome));
+
+/** Fora do resultado: investimento e retirada de sócio saem do caixa e não são despesa. */
+export const foraDoResultado = (n: NaturezaDaCategoria | undefined): boolean => !!n && n !== 'despesa';
+
+export const ROTULO_DA_NATUREZA_DA_CATEGORIA: Record<NaturezaDaCategoria, string> = {
+  despesa: 'Despesa', investimento: 'Investimento', retirada_socio: 'Retirada de sócio',
+};
+
+/** «Despesas Administrativas › Aluguel e condomínio», ou só o grupo. */
+export function nomeNoPlano(categoriaId: string | null, categorias: readonly CategoriaDaEmpresa[]): string | null {
+  if (!categoriaId) return null;
+  const c = categorias.find((x) => x.id === categoriaId);
+  if (!c) return null;
+  const pai = c.pai_id ? categorias.find((x) => x.id === c.pai_id) : null;
+  return pai ? `${pai.nome} › ${c.nome}` : c.nome;
+}
+
 export type LinhaPorPlano = {
   categoria_id: string | null;
   nome: string;
@@ -185,20 +252,24 @@ export type LinhaPorPlano = {
   em_aberto: number;
   /** % do previsto do mês, com uma casa. */
   pct: number;
+  /** O grupo é de investimento ou retirada de sócio (sai do caixa e não é despesa). */
+  fora_do_resultado?: boolean;
+  /** O detalhe por subcategoria, quando o grupo tem despesa nelas (a do grupo direto vai como o próprio grupo). */
+  subs?: Array<{ categoria_id: string; nome: string; previsto: number; pago: number; em_aberto: number }>;
 };
 
 export const SEM_PLANO = 'Sem plano de contas';
 
-/** «DESPESAS POR PLANO DE CONTAS — mês selecionado», na ordem do plano. Os
- *  itens sem movimento no mês ficam de fora; o sem plano vai por último. */
+/** «DESPESAS POR PLANO DE CONTAS — mês selecionado», por GRUPO e na ordem do plano:
+ *  a subcategoria soma no grupo dela e aparece no detalhe (`subs`). Os grupos sem
+ *  movimento no mês ficam de fora; o sem plano vai por último. */
 export function porPlanoNoMes(
   linhas: readonly Despesa[], mes: string, categorias: readonly CategoriaDaEmpresa[],
 ): { linhas: LinhaPorPlano[]; total: Omit<LinhaPorPlano, 'categoria_id' | 'nome'> } {
   const domes = doMes(linhas, mes);
-  const conhecidas = new Set(categorias.map((c) => c.id));
-  const chave = (d: Despesa) => (d.categoria_id && conhecidas.has(d.categoria_id) ? d.categoria_id : null);
-  const ordem: Array<{ id: string | null; nome: string }> = [
-    ...[...categorias].sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome)).map((c) => ({ id: c.id, nome: c.nome })),
+  const chave = (d: Despesa) => grupoDe(d.categoria_id, categorias);
+  const ordem: Array<{ id: string | null; nome: string; natureza?: NaturezaDaCategoria }> = [
+    ...gruposDoPlano(categorias).map((c) => ({ id: c.id, nome: c.nome, natureza: c.natureza })),
     { id: null, nome: SEM_PLANO },
   ];
   const previstoTotal = domes.reduce((s, d) => s + d.valor_centavos, 0);
@@ -207,11 +278,26 @@ export function porPlanoNoMes(
     const delas = domes.filter((d) => chave(d) === c.id);
     if (!delas.length) continue;
     const previsto = delas.reduce((s, d) => s + d.valor_centavos, 0);
+    const subs = c.id
+      ? subcategoriasDe(c.id, categorias)
+        .map((sub) => {
+          const daSub = delas.filter((d) => d.categoria_id === sub.id);
+          return {
+            categoria_id: sub.id, nome: sub.nome,
+            previsto: daSub.reduce((s, d) => s + d.valor_centavos, 0),
+            pago: daSub.reduce((s, d) => s + pagoEmCaixa(d), 0),
+            em_aberto: daSub.reduce((s, d) => s + saldo(d), 0),
+          };
+        })
+        .filter((x) => x.previsto > 0)
+      : [];
     saida.push({
       categoria_id: c.id, nome: c.nome, previsto,
       pago: delas.reduce((s, d) => s + pagoEmCaixa(d), 0),
       em_aberto: delas.reduce((s, d) => s + saldo(d), 0),
       pct: previstoTotal ? Math.round((previsto * 1000) / previstoTotal) / 10 : 0,
+      ...(foraDoResultado(c.natureza) ? { fora_do_resultado: true } : {}),
+      ...(subs.length ? { subs } : {}),
     });
   }
   return {
@@ -275,7 +361,8 @@ export function seriesQueProjetam(linhas: readonly Despesa[]): SerieQueProjeta[]
     .map((molde) => {
       const intervalo = INTERVALO_EM_MESES[molde.recorrencia!]!;
       const comp = somarMeses(mesDe(molde.competencia), intervalo);
-      const acabou = molde.recorrente_ate !== null && comp > mesDe(molde.recorrente_ate);
+      /* O corte é o MÊS DO VENCIMENTO, como a coluna W da planilha (lacuna 3). */
+      const acabou = molde.recorrente_ate !== null && somarMeses(mesDe(molde.vencimento), intervalo) > mesDe(molde.recorrente_ate);
       return {
         serie_id: molde.serie_id!, molde, intervalo,
         proximo_vencimento: acabou ? null : somarMesesAoDia(dia(molde.vencimento), intervalo),
@@ -306,8 +393,10 @@ export type Projecao = {
  * Lançado é todo título vivo que vence no mês, pago ou não (coluna C). Projetado
  * é a repetição do molde de cada série (coluna D): a k-ésima repetição tem
  * competência = competência do molde + k·intervalo e vence no mesmo dia, k·
- * intervalo meses adiante; entra enquanto a competência não passar do
- * «recorrente até». Cai no mês do VENCIMENTO, como na planilha.
+ * intervalo meses adiante; entra enquanto o MÊS DO VENCIMENTO não passar do
+ * «recorrente até» (a coluna W da planilha contra o mês da coluna I — até 06/10 a
+ * conta era pela competência, e uma série com competência atrás do vencimento
+ * projetava um mês a mais). Cai no mês do VENCIMENTO, como na planilha.
  */
 export function projetar(linhas: readonly Despesa[], inicio: string, quantos = 24): Projecao {
   const fim = somarMeses(inicio, quantos - 1);
@@ -331,9 +420,8 @@ export function projetar(linhas: readonly Despesa[], inicio: string, quantos = 2
   for (const s of seriesQueProjetam(linhas)) {
     const ate = s.molde.recorrente_ate ? mesDe(s.molde.recorrente_ate) : null;
     for (let k = 1; ; k++) {
-      const comp = somarMeses(mesDe(s.molde.competencia), k * s.intervalo);
-      if (ate && comp > ate) break;
       const venc = somarMeses(mesDe(s.molde.vencimento), k * s.intervalo);
+      if (ate && venc > ate) break;
       if (venc > fim) break;
       const m = meses.get(venc);
       if (!m) continue;
@@ -370,13 +458,12 @@ export function indicadoresDoPeriodo(p: Projecao, de: string, ate: string) {
 
 /** «PROJEÇÃO POR PLANO DE CONTAS» no período, na ordem do plano, sem plano no fim. */
 export function projecaoPorPlano(p: Projecao, de: string, ate: string, categorias: readonly CategoriaDaEmpresa[]) {
-  const conhecidas = new Map(categorias.map((c) => [c.id, c]));
   const somas = new Map<string | null, number>();
   for (const [cat, porMes] of p.porPlano) {
-    const chave = cat && conhecidas.has(cat) ? cat : null;
+    const chave = grupoDe(cat, categorias);
     for (const [mes, v] of porMes) if (mes >= de && mes <= ate) somas.set(chave, (somas.get(chave) ?? 0) + v);
   }
-  const ordenadas = [...categorias].sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome));
+  const ordenadas = gruposDoPlano(categorias);
   const linhas = [
     ...ordenadas.map((c) => ({ categoria_id: c.id as string | null, nome: c.nome, total: somas.get(c.id) ?? 0 })),
     { categoria_id: null, nome: SEM_PLANO, total: somas.get(null) ?? 0 },
@@ -430,4 +517,240 @@ export function decomporBaixa(saldoDoTitulo: number, saiu: number, motivo: Motiv
   }
   if (motivo === 'parcial') return { valor_centavos: saiu, acrescimo_centavos: 0, desconto_centavos: 0 };
   return 'Saiu menos que o saldo: diga se foi desconto ou pagamento de uma parte.';
+}
+
+// ------------------------------------------------------ a Projeção por plano, mês a mês
+
+export type LinhaDaMatriz = { categoria_id: string | null; nome: string; meses: number[]; total: number };
+
+/**
+ * «PROJEÇÃO POR PLANO DE CONTAS» mês a mês — a matriz D41:AA58 da planilha (lacuna 7
+ * de 06/10): uma linha por GRUPO (a subcategoria soma no grupo), uma coluna por mês
+ * da projeção, o «Sem plano» no fim e só as linhas com algum valor. A soma de cada
+ * coluna é o total do mês da Projeção — o K5 da suíte prende isso.
+ */
+export function matrizPorPlano(p: Projecao, categorias: readonly CategoriaDaEmpresa[]): { linhas: LinhaDaMatriz[]; meses: string[] } {
+  const meses = p.meses.map((m) => m.mes);
+  const indice = new Map(meses.map((m, i) => [m, i]));
+  const porGrupo = new Map<string | null, number[]>();
+  for (const [cat, porMes] of p.porPlano) {
+    const chave = grupoDe(cat, categorias);
+    const linha = porGrupo.get(chave) ?? meses.map(() => 0);
+    for (const [mes, v] of porMes) {
+      const i = indice.get(mes);
+      if (i !== undefined) linha[i]! += v;
+    }
+    porGrupo.set(chave, linha);
+  }
+  const ordem: Array<{ id: string | null; nome: string }> = [
+    ...gruposDoPlano(categorias).map((c) => ({ id: c.id, nome: c.nome })),
+    { id: null, nome: SEM_PLANO },
+  ];
+  const linhas = ordem
+    .map((c) => {
+      const v = porGrupo.get(c.id) ?? meses.map(() => 0);
+      return { categoria_id: c.id, nome: c.nome, meses: v, total: v.reduce((s, x) => s + x, 0) };
+    })
+    .filter((l) => l.total > 0);
+  return { linhas, meses };
+}
+
+/**
+ * O ACUMULADO NO GRÁFICO (lacuna 8): a planilha desenha a série «acumulado» no
+ * gráfico de 24 meses, e a tela só a mostrava na tabela. Devolve, por mês, a fração
+ * (0 a 1) do acumulado sobre o total do período — a altura da linha no gráfico.
+ */
+export function linhaDoAcumulado(p: Projecao): number[] {
+  const total = p.meses.at(-1)?.acumulado ?? 0;
+  return p.meses.map((m) => (total > 0 ? m.acumulado / total : 0));
+}
+
+// ------------------------------------------------------ a lista: o recorte, os filtros e a ordem
+
+/** O recorte da lista. «A pagar» é o padrão: é o que pede alguém hoje. */
+export type Vista = 'a_pagar' | 'vencidas' | 'semana' | 'mes' | 'socios' | 'pagas' | 'todas';
+
+export const ROTULO_DA_VISTA: Record<Vista, string> = {
+  a_pagar: 'A pagar', vencidas: 'Vencidas', semana: 'Vencem em 7 dias', mes: 'Vencem este mês',
+  socios: 'Devido aos sócios', pagas: 'Pagas', todas: 'Todas',
+};
+
+export function naVista(d: Despesa, vista: Vista, hoje: string): boolean {
+  const sit = situacao(d, hoje);
+  switch (vista) {
+    case 'a_pagar': return sit === 'vencida' || sit === 'vence_hoje' || sit === 'a_vencer' || sit === 'a_reembolsar';
+    case 'socios': return sit === 'a_reembolsar';
+    case 'vencidas': return sit === 'vencida';
+    case 'semana': { const n = diasAte(d.vencimento, hoje); return (sit === 'vence_hoje' || sit === 'a_vencer') && n <= 7; }
+    case 'mes': return sit !== 'cancelada' && !ehReembolso(d) && mesDe(d.vencimento) === mesDe(hoje);
+    case 'pagas': return sit === 'paga';
+    case 'todas': return true;
+  }
+}
+
+/** Os filtros da lista — o autofiltro A4:U504 da planilha, coluna a coluna (lacuna 10). Vazio é «todos». */
+export type FiltroDeDespesas = {
+  vista: Vista;
+  /** Mês do VENCIMENTO, `AAAA-MM`. */
+  mes?: string;
+  /** Mês da COMPETÊNCIA, `AAAA-MM`. */
+  competencia?: string;
+  /** Um grupo (pega as subcategorias dele), uma subcategoria, ou «-» para sem plano. */
+  plano?: string;
+  /** `fixa`, `variavel` ou «-» para sem tipo. */
+  natureza?: string;
+  recorrencia?: string;
+  forma?: string;
+  /** A origem prevista do título («sai de»). */
+  origem?: string;
+  /** O fornecedor do cadastro, ou «-» para os sem fornecedor do cadastro. */
+  fornecedor?: string;
+  /** O centro de custo, ou «-» para sem centro. */
+  centro?: string;
+  busca?: string;
+};
+
+const semAcento = (t: string) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+const casaOuSem = (valor: string | null | undefined, filtro: string | undefined): boolean =>
+  !filtro || (filtro === '-' ? !valor : valor === filtro);
+
+/** A busca olha histórico, fornecedor, documento, OBSERVAÇÕES e o nº («37» ou «#37»). */
+function casaABusca(d: Despesa, termo: string): boolean {
+  const t = semAcento(termo.trim());
+  if (!t) return true;
+  const numero = /^#?(\d+)$/.exec(t)?.[1];
+  if (numero && d.numero === Number(numero)) return true;
+  return [d.descricao, d.beneficiario_nome, d.numero_documento, d.observacao]
+    .some((x) => !!x && semAcento(x).includes(t));
+}
+
+export function filtrarDespesas(
+  linhas: readonly Despesa[], f: FiltroDeDespesas, hoje: string, categorias: readonly CategoriaDaEmpresa[],
+): Despesa[] {
+  return linhas.filter((d) => naVista(d, f.vista, hoje)
+    && (!f.mes || mesDe(d.vencimento) === f.mes)
+    && (!f.competencia || mesDe(d.competencia) === f.competencia)
+    && (!f.plano || (f.plano === '-' ? !d.categoria_id : d.categoria_id === f.plano || grupoDe(d.categoria_id, categorias) === f.plano))
+    && casaOuSem(d.natureza, f.natureza)
+    && (!f.recorrencia || (d.recorrencia ?? 'avulsa') === f.recorrencia)
+    && (!f.forma || d.forma_prevista === f.forma)
+    && casaOuSem(d.origem_pagamento_id, f.origem)
+    && casaOuSem(d.fornecedor_id, f.fornecedor)
+    && casaOuSem(d.centro_custo_id, f.centro)
+    && casaABusca(d, f.busca ?? ''));
+}
+
+/** As colunas pelas quais a lista ordena (o clique no cabeçalho). */
+export type OrdemDeDespesas = 'vencimento' | 'numero' | 'descricao' | 'fornecedor' | 'plano' | 'valor' | 'situacao' | 'competencia';
+
+const PESO_NA_LISTA: Record<SituacaoDaDespesa, number> = {
+  vencida: 0, vence_hoje: 1, a_vencer: 2, a_reembolsar: 3, paga: 4, cancelada: 5,
+};
+
+/**
+ * A ORDEM DA LISTA. Desempate sempre pelo vencimento e pelo nº, para duas
+ * despesas iguais na coluna pedida não trocarem de lugar a cada recarga.
+ */
+export function ordenarDespesas(
+  linhas: readonly Despesa[], ordem: OrdemDeDespesas, sentido: 'asc' | 'desc', hoje: string,
+  nomeDoPlano: (id: string | null) => string = () => '',
+): Despesa[] {
+  const chave = (d: Despesa): string | number => {
+    switch (ordem) {
+      case 'vencimento': return dia(d.vencimento);
+      case 'competencia': return mesDe(d.competencia);
+      case 'numero': return d.numero ?? 0;
+      case 'descricao': return semAcento(d.descricao);
+      case 'fornecedor': return semAcento(d.beneficiario_nome ?? '');
+      case 'plano': return semAcento(nomeDoPlano(d.categoria_id));
+      case 'valor': return d.valor_centavos;
+      case 'situacao': return PESO_NA_LISTA[situacao(d, hoje)];
+    }
+  };
+  const fator = sentido === 'asc' ? 1 : -1;
+  return [...linhas].sort((a, b) => {
+    const x = chave(a), y = chave(b);
+    const c = typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y));
+    return fator * c || dia(a.vencimento).localeCompare(dia(b.vencimento)) || (a.numero ?? 0) - (b.numero ?? 0);
+  });
+}
+
+// ------------------------------------------------------ o mês na URL (lacuna 13)
+
+/** `?mes=AAAA-MM` válido (anos 2000–2100, meses 01–12), ou nada. */
+export function mesDaBusca(search: string, chave = 'mes'): string | null {
+  const v = new URLSearchParams(search).get(chave);
+  if (!v || !/^\d{4}-\d{2}$/.test(v)) return null;
+  const ano = +v.slice(0, 4), mes = +v.slice(5, 7);
+  return ano >= 2000 && ano <= 2100 && mes >= 1 && mes <= 12 ? v : null;
+}
+
+/** A busca da URL com o mês trocado (ou tirado), sem mexer nos outros parâmetros. */
+export function buscaComMes(search: string, mes: string | null, chave = 'mes'): string {
+  const q = new URLSearchParams(search);
+  if (mes) q.set(chave, mes); else q.delete(chave);
+  const t = q.toString();
+  return t ? `?${t}` : '';
+}
+
+// ------------------------------------------------------ o CSV da lista e o da Projeção
+
+export type NomesDaLista = {
+  plano: (id: string | null) => string;
+  origem: (id: string | null) => string;
+  centro: (id: string | null) => string;
+};
+
+/**
+ * AS COLUNAS DA PLANILHA, na ordem dela, mais o que o sistema sabe a mais (centro,
+ * anexos). O nº do lançamento é a coluna A e os dias, a O (lacuna 14): positivo é
+ * quanto falta para vencer, negativo é o atraso, e vazio quando já está paga ou
+ * cancelada — como a fórmula da planilha.
+ */
+export function colunasDoCsvDeDespesas(n: NomesDaLista, hoje: string): Coluna<Despesa>[] {
+  return [
+    { titulo: 'No lancamento', de: (d) => d.numero ?? '' },
+    { titulo: 'Historico', de: (d) => d.descricao },
+    { titulo: 'Fornecedor / credor', de: (d) => d.beneficiario_nome ?? '' },
+    { titulo: 'Plano de contas', de: (d) => n.plano(d.categoria_id) },
+    { titulo: 'Tipo de despesa', de: (d) => (d.natureza ? ROTULO_DA_NATUREZA[d.natureza] : '') },
+    { titulo: 'Recorrencia', de: (d) => ROTULO_DA_RECORRENCIA[d.recorrencia ?? 'avulsa'] },
+    { titulo: 'Parcela', de: (d) => (d.parcela_numero ? `${d.parcela_numero}/${d.parcela_total}` : '') },
+    { titulo: 'Competencia', de: (d) => mesDe(d.competencia) },
+    { titulo: 'Vencimento', de: (d) => dia(d.vencimento) },
+    { titulo: 'Valor original R$', de: (d) => reaisParaPlanilha(d.valor_centavos) },
+    { titulo: 'Data de pagamento', de: (d) => (ultimaBaixa(d) ? dia(ultimaBaixa(d)!.data_pagamento) : '') },
+    { titulo: 'Valor pago R$', de: (d) => (ultimaBaixa(d) ? reaisParaPlanilha(pagoEmCaixa(d)) : '') },
+    { titulo: 'Acrescimos/descontos R$', de: (d) => (ultimaBaixa(d) ? reaisParaPlanilha(ajusteDasBaixas(d)) : '') },
+    { titulo: 'Situacao', de: (d) => ROTULO_DA_SITUACAO_DA_DESPESA[situacao(d, hoje)] },
+    { titulo: 'Dias a vencer (+) / em atraso (-)', de: (d) => (d.status === 'paga' || d.status === 'cancelada' || ehReembolso(d) ? '' : diasAte(d.vencimento, hoje)) },
+    { titulo: 'Forma de pagamento', de: (d) => (d.forma_prevista ? ROTULO_DA_FORMA[d.forma_prevista] ?? d.forma_prevista : '') },
+    { titulo: 'Conta / origem', de: (d) => n.origem(d.origem_pagamento_id) },
+    { titulo: 'Centro de custo', de: (d) => n.centro(d.centro_custo_id ?? null) },
+    { titulo: 'Numero do documento', de: (d) => d.numero_documento ?? '' },
+    { titulo: 'Comprovante', de: (d) => d.comprovante_url ?? '' },
+    { titulo: 'Anexos', de: (d) => (d.anexo ?? []).map((a) => a.nome_arquivo).join(' | ') },
+    { titulo: 'Observacoes', de: (d) => d.observacao ?? '' },
+    { titulo: 'Recorrente ate', de: (d) => (d.recorrente_ate ? mesDe(d.recorrente_ate) : '') },
+  ];
+}
+
+/**
+ * O CSV DA PROJEÇÃO (lacuna 15): os meses da projeção com lançado, projetado, total,
+ * acumulado e a marca do período — a tabela B13:G36 —, e uma coluna por grupo do
+ * plano, a matriz D41:AA58 virada para caber numa planilha.
+ */
+export function csvDaProjecao(p: Projecao, categorias: readonly CategoriaDaEmpresa[], de: string, ate: string): string {
+  const matriz = matrizPorPlano(p, categorias);
+  const colunas: Coluna<{ i: number; m: MesDaProjecao }>[] = [
+    { titulo: 'Mes', de: (x) => x.m.mes },
+    { titulo: 'Lancado R$', de: (x) => reaisParaPlanilha(x.m.lancado) },
+    { titulo: 'Projetado R$', de: (x) => reaisParaPlanilha(x.m.projetado) },
+    { titulo: 'Total R$', de: (x) => reaisParaPlanilha(x.m.total) },
+    { titulo: 'Acumulado R$', de: (x) => reaisParaPlanilha(x.m.acumulado) },
+    { titulo: 'No periodo', de: (x) => (x.m.mes >= de && x.m.mes <= ate ? 'sim' : '') },
+    ...matriz.linhas.map((l) => ({ titulo: `${l.nome} R$`, de: (x: { i: number }) => reaisParaPlanilha(l.meses[x.i] ?? 0) })),
+  ];
+  return paraCsv(colunas, p.meses.map((m, i) => ({ i, m })));
 }

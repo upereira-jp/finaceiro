@@ -870,6 +870,17 @@ export type PagamentoDaDespesa = {
   origem_pagamento_id: string | null;
   referencia_externa: string | null;
   observacao: string | null;
+  /** A baixa DESFEITA (migration 44): continua na lista, marcada, e não soma em nada. */
+  estornado_em?: string | null;
+  motivo_estorno?: string | null;
+};
+
+/** Um comprovante anexado (ADR-0009). Os bytes vêm por `GET /anexos/:id`. */
+export type AnexoDaDespesa = {
+  id: string;
+  nome_arquivo: string;
+  enviado_em: string;
+  anexo_conteudo: { tipo: string; tamanho_bytes: number };
 };
 
 export type Despesa = {
@@ -897,11 +908,53 @@ export type Despesa = {
   observacao: string | null;
   /** Preenchido na DÍVIDA COM UM SÓCIO que pagou do bolso (Q-SOCIOS-01): o pagamento que ele fez. */
   reembolso_de_pagamento_id: string | null;
+  /** O «Nº LANÇ.» da planilha: sequencial por empresa, dado pelo banco (migration 44). */
+  numero?: number | null;
+  fornecedor_id?: string | null;
+  centro_custo_id?: string | null;
+  anexo?: AnexoDaDespesa[];
   pagamento: PagamentoDaDespesa[];
 };
 
 export type ListaDeDespesas = { hoje: string; total: number; linhas: Despesa[] };
 
-export type CategoriaDaEmpresa = { id: string; nome: string; ativo: boolean; ordem: number };
-export type OrigemDePagamento = { id: string; nome: string; tipo: TipoDeOrigem; ativo: boolean; ordem: number };
-export type CadastrosDaEmpresa = { categorias: CategoriaDaEmpresa[]; origens: OrigemDePagamento[] };
+/** O que sai do caixa e não é despesa fica fora do resultado (migration 44). */
+export type NaturezaDaCategoria = 'despesa' | 'investimento' | 'retirada_socio';
+/** `pai_id` nulo é GRUPO (os 12 da planilha, e os que vierem); preenchido é subcategoria. */
+export type CategoriaDaEmpresa = {
+  id: string; nome: string; ativo: boolean; ordem: number;
+  pai_id?: string | null; natureza?: NaturezaDaCategoria;
+};
+export type OrigemDePagamento = {
+  id: string; nome: string; tipo: TipoDeOrigem; ativo: boolean; ordem: number;
+  banco?: string | null; agencia?: string | null; conta_final?: string | null;
+};
+export type CentroDeCusto = { id: string; nome: string; ativo: boolean; ordem: number };
+export type CadastrosDaEmpresa = {
+  categorias: CategoriaDaEmpresa[]; origens: OrigemDePagamento[]; centros?: CentroDeCusto[];
+};
+
+// ------------------------------------------------------ fornecedores (06/10/2026)
+/* `GET /fornecedores` e `GET /fornecedores/:id` — espelho de `src/repos/fornecedor.ts`. */
+export type Fornecedor = {
+  id: string; nome: string; documento: string | null; documento_tipo: 'cpf' | 'cnpj' | null;
+  contato: string | null; categoria_padrao_id: string | null; centro_padrao_id: string | null;
+  banco: string | null; agencia: string | null; conta: string | null; tipo_conta: 'corrente' | 'poupanca' | null;
+  chave_pix: string | null; tipo_chave_pix: 'cpf' | 'cnpj' | 'email' | 'telefone' | 'aleatoria' | null;
+  observacao: string | null; ativo: boolean;
+};
+export type ResumoDoFornecedor = Fornecedor & {
+  /** O que SAIU para ele em 12 meses: baixas não desfeitas, com juros e menos desconto. */
+  pago_12_meses_centavos: number;
+  em_aberto_centavos: number;
+  despesas: number;
+  ultimo_vencimento: string | null;
+};
+export type FichaDoFornecedor = {
+  fornecedor: Fornecedor;
+  despesas: Array<{
+    id: string; numero: number | null; descricao: string; valor_centavos: number; valor_pago_centavos: number;
+    status: Despesa['status']; competencia: string; vencimento: string; categoria_id: string | null;
+    pagamento: Array<{ id: string; data_pagamento: string; valor_centavos: number; acrescimo_centavos: number; desconto_centavos: number }>;
+  }>;
+};

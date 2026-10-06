@@ -280,7 +280,7 @@ chk('I3e', /animation-delay:\s*0s?\s*!important/.test(bloqueio)
 /* QUATORZE desde 30/09/2026 - entrou «Usuarios», a primeira tela da pasta
  * «Administracao da plataforma» (pedido do dono: cadastrar pessoas e marcar, por
  * caixa, os setores que cada uma ve). */
-chk('I4', TELAS.length === 18, `sao 18 telas — 14 ate 02/10/2026, mais as quatro da planilha da empresa (contadas: ${TELAS.length})`);
+chk('I4', TELAS.length === 19, `sao 19 telas — 14 ate 02/10/2026, mais as quatro da planilha da empresa e Fornecedores (06/10/2026) (contadas: ${TELAS.length})`);
 chk('I4b', new Set(TELAS.map((t) => t.rota)).size === TELAS.length,
     'nenhuma rota repetida — rota repetida faz a segunda tela ser inalcancavel');
 chk('I4c', new Set(TELAS.map((t) => t.titulo)).size === TELAS.length,
@@ -320,10 +320,10 @@ chk('I4f', TELAS[0]!.funil === 'rateio' && TELAS[0]!.grupo === 'abertura' && TEL
                               + 'Contratos ‖ O mês, passo a passo: Contas de luz, Cobranças ‖ Resultado: Relatórios',
       `o Rateio segue o trabalho: Mês, os cadastros na ordem de dependencia, os passos do mes e o resultado `
       + `(hoje: ${nomes('rateio')})`);
-  chk('I4o2', nomes('empresa') === '·: Painel da empresa ‖ Cadastros: Plano de contas ‖ Caixa: Despesas, Projeção de gastos, '
+  chk('I4o2', nomes('empresa') === '·: Painel da empresa ‖ Cadastros: Plano de contas, Fornecedores ‖ Caixa: Despesas, Projeção de gastos, '
              + 'Contas a receber, Contas a pagar ‖ Apoio: Conector Sicoob, Histórico'
            && nomes('administracao') === '·: Usuários',
-      `a Empresa (02/10/2026, a planilha): o Painel abre, o plano de contas antes de lancar, o caixa (despesas, projecao, o que entra, o que se paga) e o apoio por ultimo; a Administracao, a tela dela `
+      `a Empresa (02/10/2026, a planilha; Fornecedores em 06/10): o Painel abre, os cadastros antes de lancar (o plano, depois quem aponta para ele), o caixa (despesas, projecao, o que entra, o que se paga) e o apoio por ultimo; a Administracao, a tela dela `
       + `(hoje: ${nomes('empresa')} / ${nomes('administracao')})`);
   /* OS CADASTROS NA ORDEM DE DEPENDENCIA, par a par, com o motivo de cada um —
    * a ordem de I4o dita por que. Um cadastro reordenado por gosto quebra aqui

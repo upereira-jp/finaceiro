@@ -355,6 +355,10 @@ export const TELAS: readonly Tela[] = [
    */
   { funil: 'empresa', rota: '/empresa',          titulo: 'Painel da empresa', icone: 'painel_empresa', grupo: 'abertura', larga: true },
   { funil: 'empresa', rota: '/plano-de-contas',  titulo: 'Plano de contas', icone: 'plano_de_contas', grupo: 'cadastro' },
+  /* FORNECEDORES (06/10/2026, etapa 1 do controle total): a quem a empresa paga, um
+   * cadastro por credor. Depois do plano de contas porque o fornecedor aponta para o
+   * plano de costume dele — a ordem dos cadastros é a ordem em que um depende do outro. */
+  { funil: 'empresa', rota: '/fornecedores',     titulo: 'Fornecedores', icone: 'fornecedores', grupo: 'cadastro', larga: true },
   { funil: 'empresa', rota: '/despesas',         titulo: 'Despesas', icone: 'despesas', grupo: 'caixa', larga: true },
   { funil: 'empresa', rota: '/projecao',         titulo: 'Projeção de gastos', icone: 'projecao', grupo: 'caixa', larga: true },
   /*

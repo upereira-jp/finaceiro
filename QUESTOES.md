@@ -1201,12 +1201,12 @@ O dono pediu *"um planejamento do que mais deve e pode ser adicionado em empresa
 | ID | Nível | Pergunta |
 |---|:-:|---|
 | `Q-PLANO-CONTAS-01` | 🟢 | aprovar ou substituir o plano de contas inicial (§7 do plano) |
-| `Q-CARTOES-01` | 🟢 | lista dos cartões (banco, final, fechamento, vencimento, conta de débito, portador) e um extrato real em CSV/OFX |
-| `Q-FOLHA-01` | 🟡 | regime das pessoas (CLT/PJ/pró-labore), quem calcula a folha, formato da planilha do contador, datas de pagamento, benefícios |
-| `Q-FOLHA-RBAC-01` | 🟡 | quem vê salário nome a nome — só `admin`, ou também o analista |
+| `Q-CARTOES-01` | 🟢 | lista dos cartões (banco, final, fechamento, vencimento, conta de débito, portador) e um extrato real em CSV/OFX — **06/10: tipos decididos (crédito, débito PJ, pessoal) e cadastro pela tela; falta só o arquivo real (§2.y)** |
+| `Q-FOLHA-01` | 🟡 | regime das pessoas (CLT/PJ/pró-labore), quem calcula a folha, formato da planilha do contador, datas de pagamento, benefícios — **06/10: «ainda não há funcionários»; falta o formato do contador, no primeiro CLT (§2.y)** |
+| `Q-FOLHA-RBAC-01` | 🟡 | quem vê salário nome a nome — só `admin`, ou também o analista — **✅ 06/10: sócios nome a nome, analista só totais (§2.y)** |
 | `Q-ALCADA-01` | 🟢 | acima de que valor a conta a pagar exige aprovação do dono; conta nascida do split exige? |
 | `Q-CONTADOR-FORMATO-01` | 🟢 | o que o contador quer receber todo mês, e em que formato |
-| `Q-ANEXO-01` | técnica | comprovantes em Supabase Storage e não em `bytea` — decisão do implementador, vira ADR na onda 2 |
+| `Q-ANEXO-01` | técnica | comprovantes em Supabase Storage e não em `bytea` — decisão do implementador, vira ADR na onda 2 — **✅ 06/10: no Postgres, ADR-0009** |
 
 ---
 
@@ -1566,6 +1566,82 @@ depois, *«siga com contas a pagar e após isso o painel de saúde»*.
   para perguntar ao banco». Agora vem marcado: sem faixa, e o painel diz que é o papel.
 
 ---
+
+## 2.y Decisões de 06/10/2026 — a Empresa com controle total, etapa 1 (o chão e o resto da planilha)
+
+**Pedido do dono no dia:** conferir o que da `G3Solar_Financeiro.xlsx` não chegou às telas, e planejar o controle
+máximo da empresa — *«controle de cartões (sem expor nenhum cartão, apenas ter o cadastro de cada cartão e
+monitorar os gastos desses), e controle de gastos com funcionários, … tudo que uma empresa pode gastar»*. O plano,
+aprovado no mesmo dia, está em **`PLANO-empresa-controle-total-2026-10-06.md`** (cinco etapas). Esta seção registra
+as respostas do dono e as decisões técnicas da **etapa 1**, construída no branch `empresa-controle` (migration 44).
+
+**Respostas do dono (06/10/2026), que fecham ou estreitam questões abertas:**
+
+- **`Q-FOLHA-01` — fechada em parte:** *«Ainda não há funcionários.»* O módulo Pessoas (etapa 3) nasce sem dado
+  legado. Fica aberto só o formato do holerite do contador, que se decide quando entrar o primeiro CLT. O sistema
+  **não calcula** INSS, IRRF nem FGTS (já era a recomendação de 22/09).
+- **`Q-FOLHA-RBAC-01` — fechada:** *«Sócios veem tudo, analista vê só totais.»* O papel `admin` vê salário nome a
+  nome; o `financeiro` vê o custo agregado por centro e por competência. Na etapa 3 isso vale **no banco** (RLS que
+  exige `admin` em `remuneracao` e `lancamento_folha`, e função `SECURITY DEFINER` que só devolve agregados), e não
+  só na tela — o setor governa a tela e não o dado (`Q-SETOR-DADO-01`).
+- **`Q-CARTOES-01` — fechada em parte:** os tipos são **crédito corporativo, débito da conta PJ e cartão pessoal
+  usado pela empresa** (que vira reembolso/dívida, como o sócio que paga do bolso). **Pré-pago e cartão-benefício
+  ficam fora.** Os cartões se cadastram pela tela; fica aberto só um arquivo real da fatura (CSV/OFX) para a
+  importação da etapa 5.
+
+**Decisões técnicas da etapa 1 (dono: o implementador):**
+
+- **Fornecedor é cadastro, e continua opcional** (lacuna 4). `fornecedor` com documento NORMALIZADO e conferido pelo
+  dígito, único por tenant (índice cheio: documento nulo não colide); o mesmo nome sem acento e sem caixa é recusado
+  nomeando o que existe; chave Pix pelo `conferirChavePix`. A despesa aceita o fornecedor do cadastro (o nome gravado
+  é o dele), só o nome escrito, ou nada — o `CHECK conta_pagar_beneficiario_coerente` deixou de exigir nome no
+  `outro`, que só nasce à mão. Renomear o fornecedor muda o nome das despesas EM ABERTO; as pagas guardam o nome com
+  que foram pagas.
+- **O plano de contas tem DOIS níveis e a natureza é do grupo.** `categoria.pai_id` (gatilho recusa o neto e o grupo
+  com filhos virando filho) e `categoria.natureza` (`despesa`, `investimento`, `retirada_socio`), que a subcategoria
+  herda e não escolhe. Painel e Projeção somam a subcategoria no grupo. «Ampliar com as subcategorias sugeridas» é um
+  botão idempotente por nome (80 subcategorias nos 12 grupos + os grupos Investimentos e Retiradas dos sócios).
+- **Centros de custo ganham tela** (criar, renomear, ordenar, desativar), e o `POST /centros-de-custo` sem tela sai.
+- **Da conta bancária, só o final.** `origem_pagamento` ganha banco, agência e `conta_final` com `CHECK ^[0-9]{4}$`; o
+  número inteiro é recusado com a frase — nunca truncado em silêncio — e banco só existe em origem do tipo conta.
+- **O comprovante é arquivo no Postgres** (ADR-0009, fecha `Q-ANEXO-01` no sentido contrário ao anunciado).
+- **Desfazer a baixa é estorno marcado, só na despesa à mão** (lacuna 6). `pagamento.estornado_em` + motivo
+  obrigatório; o gatilho de recálculo ignora o estornado; o estorno é definitivo e não muda a baixa; leva junto a
+  dívida do sócio em aberto e é recusado com ela já paga; a referência da baixa estornada fica livre por coluna
+  gerada (`referencia_viva`, regra 11 e CAT-9). **`Q-ESTORNO-01` continua aberta** para o rateio (repasse,
+  comissão, liquidação), que toca o split — o gatilho recusa estornar conta do split.
+- **Nº do lançamento** (a coluna A da planilha): `conta_pagar.numero` sequencial por tenant sob lock consultivo, só
+  na despesa à mão, imutável, índice único cheio; as manuais existentes foram numeradas pela ordem de criação.
+- **O «hoje» de Despesas é o de Goiânia** (lacuna 1), o mesmo `HOJE` de Contas a pagar.
+- **«Recorrente até» corta pelo MÊS DO VENCIMENTO** (lacuna 3), como a coluna W da planilha — no lançar, no «Lançar o
+  próximo», no encerrar e na Projeção. **Muda comportamento:** até 06/10 o corte era pela competência, e uma série com
+  competência um mês atrás do vencimento projetava (e deixava lançar) um mês a mais. Os títulos já lançados não mudam.
+- **«A vencer» deixa de ter o tom de «vence hoje»** (lacuna 11): `neutro`, como o `atraso.a_vencer` de Contas a receber.
+- **Painel e Projeção imprimem pelo caminho da fatura** (lacuna 15): a raiz da tela é o `#documento`, que o CSS de
+  impressão já isola; são rotas diferentes da Fatura unificada, então nunca há dois na árvore. Controles levam
+  `naoimprime`.
+- **O mês do Painel e da Projeção vai para a URL** (`?mes=`, `replaceState`) e se digita (lacuna 13).
+- **A view `relatorio.v_pagamento` do conector de leitura deixa de contar a baixa estornada.** Reaplicar
+  `services/relatorio-mcp/sql/03-espelho-movimento.sql` **depois** da migration 44.
+- **Mantida de propósito (lacuna 12):** a forma de pagamento continua enum — na etapa 2 ela passa a ligar ao cartão.
+- **Adiada (lacuna 16):** importar histórico da planilha só se houver histórico (`Q-PLANILHA-HISTORICO-01`).
+
+**Decididas para quando as etapas 2 e 3 entrarem** (registradas agora para não serem redecididas):
+
+- **Cartão sem expor número:** nenhuma coluna para o número completo, CVV, validade ou CPF do titular; `final` com
+  `CHECK ^[0-9]{4}$`; apelido recusa 12+ dígitos seguidos; todo texto livre de cartão e despesa passa por
+  `pareceNumeroDeCartao` (13 a 19 dígitos que passam no Luhn), testado nos dois sentidos.
+- **A fatura do cartão de crédito vira UMA conta a pagar** ao emissor; Painel e Projeção a abrem nas categorias das
+  compras. A compra no débito nasce conta a pagar já quitada. O fechamento é manual, com alerta.
+- **A folha fechada gera UMA conta a pagar «Folha líquida MM/AAAA»** com o total, para nome e valor de cada pessoa
+  não aparecerem em Despesas; as guias e os benefícios são contas próprias.
+
+**Novas questões, com o dono:**
+
+| ID | Nível | Pergunta |
+|---|:-:|---|
+| `Q-FOLHA-PAGADOR-01` | 🟡 | Quem faz o PIX do salário de cada pessoa? Se for o analista, ele vê o valor no banco — o sistema esconde o nome a nome na tela e no dado, mas não tem como esconder o que a pessoa digita no internet banking |
+| `Q-PLANO-NATUREZA-01` | 🟢 | Os grupos «Investimentos» e «Retiradas dos sócios» ficam fora das despesas (proposta do plano; o botão das sugeridas os cria, e dá para desativar)? |
 
 ## 3. F0 — o que falta para fechar
 
