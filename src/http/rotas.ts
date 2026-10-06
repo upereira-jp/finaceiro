@@ -35,6 +35,8 @@ import * as avisoIgnorado from '../repos/aviso-ignorado.ts';
 import * as split from '../repos/split.ts';
 import * as contaPagar from '../repos/conta_pagar.ts';
 import * as despesa from '../repos/despesa.ts';
+import * as fornecedor from '../repos/fornecedor.ts';
+import * as anexo from '../repos/anexo.ts';
 import * as contaReceber from '../repos/conta_receber.ts';
 import * as documento from '../repos/documento.ts';
 import * as registro from '../repos/registro-unificado.ts';
@@ -1841,10 +1843,9 @@ export const ROTAS: Rota[] = [
     metodo: 'GET', padrao: '/centros-de-custo',
     handler: (req, app) => emTenant(app, req, async () => ok(await contaPagar.listarCentrosDeCusto())),
   },
-  {
-    metodo: 'POST', padrao: '/centros-de-custo',
-    handler: (req, app) => emTenant(app, req, async () => criado(await contaPagar.criarCentroDeCusto(req.corpo?.nome))),
-  },
+  /* `POST /centros-de-custo` SAIU em 06/10/2026: nunca teve tela, e a tela Plano de
+   * contas cria o centro por `POST /plano-de-contas/centros` (com ordem e com a
+   * recusa do nome repetido). Dois caminhos para a mesma escrita é um sobrando. */
 
   // ------------------------------------------- despesas da empresa (a planilha, 02/10/2026)
   /*
@@ -1924,6 +1925,91 @@ export const ROTAS: Rota[] = [
     metodo: 'PATCH', padrao: '/plano-de-contas/origens/:id',
     handler: (req, app) => emTenant(app, req, async () => {
       await despesa.alterarOrigem(req.params.id, req.corpo ?? {});
+      return semConteudo();
+    }),
+  },
+  {
+    /* A ordem das origens na tela e nos menus de «Sai de» (lacuna 9 de 06/10). */
+    metodo: 'PUT', padrao: '/plano-de-contas/origens/ordem',
+    handler: (req, app) => emTenant(app, req, async () => {
+      await despesa.ordenarOrigens(req.corpo?.ids);
+      return semConteudo();
+    }),
+  },
+  {
+    /* «Ampliar com as subcategorias sugeridas» (seção B do plano de 06/10). */
+    metodo: 'POST', padrao: '/plano-de-contas/sugeridas',
+    handler: (req, app) => emTenant(app, req, async () => ok(await despesa.ampliarComSugeridas())),
+  },
+  {
+    metodo: 'POST', padrao: '/plano-de-contas/centros',
+    handler: (req, app) => emTenant(app, req, async () => criado(await despesa.criarCentro(req.corpo ?? {}))),
+  },
+  {
+    metodo: 'PUT', padrao: '/plano-de-contas/centros/ordem',
+    handler: (req, app) => emTenant(app, req, async () => {
+      await despesa.ordenarCentros(req.corpo?.ids);
+      return semConteudo();
+    }),
+  },
+  {
+    metodo: 'PATCH', padrao: '/plano-de-contas/centros/:id',
+    handler: (req, app) => emTenant(app, req, async () => {
+      await despesa.alterarCentro(req.params.id, req.corpo ?? {});
+      return semConteudo();
+    }),
+  },
+  {
+    /* Desfazer a baixa de uma despesa da empresa (o estorno, migration 44). */
+    metodo: 'POST', padrao: '/despesas/pagamentos/:id/estornar',
+    handler: (req, app) => emTenant(app, req, async () => ok(await despesa.estornarBaixa(req.params.id, req.corpo ?? {}))),
+  },
+
+  // ------------------------------------------- fornecedores (migration 44, 06/10/2026)
+  {
+    metodo: 'GET', padrao: '/fornecedores',
+    handler: (req, app) => emTenant(app, req, async () => ok(await fornecedor.listar({ busca: req.query.get('busca') }))),
+  },
+  {
+    metodo: 'POST', padrao: '/fornecedores',
+    handler: (req, app) => emTenant(app, req, async () => criado(await fornecedor.criar(req.corpo ?? {}))),
+  },
+  {
+    metodo: 'GET', padrao: '/fornecedores/:id',
+    handler: (req, app) => emTenant(app, req, async () => ok(await fornecedor.ficha(req.params.id))),
+  },
+  {
+    metodo: 'PATCH', padrao: '/fornecedores/:id',
+    handler: (req, app) => emTenant(app, req, async () => {
+      await fornecedor.alterar(req.params.id, req.corpo ?? {});
+      return semConteudo();
+    }),
+  },
+
+  // ------------------------------------------- o comprovante como arquivo (ADR-0009)
+  /*
+   * O corpo é o mesmo da leitura de fatura (`conteudo_base64` + `tipo`), e a
+   * assinatura é conferida duas vezes: aqui (`arquivoDoCorpo`, para a mensagem) e
+   * no gatilho do banco, que é quem decide o tipo gravado. O teto é o mesmo: 8 MB.
+   */
+  {
+    metodo: 'POST', padrao: '/contas-a-pagar/:id/anexos',
+    handler: (req, app) => emTenant(app, req, async () => {
+      const { conteudo } = arquivoDoCorpo(req.corpo);
+      return criado(await anexo.anexar(req.params.id, { nome_arquivo: req.corpo?.nome_arquivo, conteudo }));
+    }),
+  },
+  {
+    metodo: 'GET', padrao: '/anexos/:id',
+    handler: (req, app) => emTenant(app, req, async () => {
+      const a = await anexo.baixar(req.params.id);
+      return { status: 200, corpo: a.conteudo, tipo: a.tipo, etag: `"${a.sha256}"` };
+    }),
+  },
+  {
+    metodo: 'POST', padrao: '/anexos/:id/desvincular',
+    handler: (req, app) => emTenant(app, req, async () => {
+      await anexo.desvincular(req.params.id);
       return semConteudo();
     }),
   },

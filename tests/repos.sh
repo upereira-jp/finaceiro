@@ -197,6 +197,14 @@ echo
 echo "=== despesas da empresa: a planilha G3Solar_Financeiro dentro do sistema"
 node --experimental-strip-types tests/repos-despesa.ts
 echo
+# O chao da empresa (06/10/2026, migration 44): o fornecedor como cadastro e o
+# comprovante como arquivo. Depois das despesas, porque as duas lancam despesa no A.
+echo "=== fornecedores: documento conferido, nome repetido, busca sem acento, o que se pagou"
+node --experimental-strip-types tests/repos-fornecedor.ts
+echo
+echo "=== anexos: o comprovante como arquivo, um por sha256, sem apagar, pela RLS"
+node --experimental-strip-types tests/repos-anexo.ts
+echo
 # Q-SPEC001-02. O dia de vencimento varia por UC (dono, 03/08), entao entra por
 # planilha. O V6 amarra a coluna que este modulo grava a que a R25 da SPEC-002
 # protege do conector - antes de 03/08 o ciclo a apagava.

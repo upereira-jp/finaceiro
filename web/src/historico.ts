@@ -113,6 +113,9 @@ export const ROTULO_DA_TABELA: Record<string, string> = {
   pagamento: 'pagamento de conta',
   categoria: 'item do plano de contas',
   origem_pagamento: 'origem do pagamento',
+  fornecedor: 'fornecedor',
+  anexo: 'comprovante anexado',
+  anexo_conteudo: 'arquivo de comprovante',
   centro_custo: 'centro de custo',
 
   // a fatura que o cliente recebe

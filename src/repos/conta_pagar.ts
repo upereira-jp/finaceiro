@@ -94,11 +94,6 @@ export async function listarCategorias() {
   return dbt().categoria.findMany({ orderBy: [{ nome: 'asc' }] });
 }
 
-export async function criarCentroDeCusto(nome: string) {
-  await exigir('escrever_corporativo');
-  return dbt().centro_custo.create({ data: { tenant_id: tenantCorrente(), nome: nome.trim() } });
-}
-
 export async function listarCentrosDeCusto() {
   await exigir('ler_corporativo');
   return dbt().centro_custo.findMany({ orderBy: [{ nome: 'asc' }] });
@@ -439,7 +434,7 @@ export type Total = { qtd: number; saldo_centavos: number };
  */
 const NOME = Prisma.sql`COALESCE(d.nome, o.nome, cp.beneficiario_nome, '(sem nome)')`;
 const SALDO = Prisma.sql`GREATEST(0, cp.valor_centavos - cp.valor_pago_centavos)`;
-const HOJE = Prisma.sql`(now() AT TIME ZONE 'America/Sao_Paulo')::date`;
+export const HOJE = Prisma.sql`(now() AT TIME ZONE 'America/Sao_Paulo')::date`;
 const EM_ABERTO = Prisma.sql`cp.status IN ('aberta', 'parcial')`;
 const VENCIDA = Prisma.sql`(${EM_ABERTO} AND cp.vencimento < ${HOJE})`;
 const PESO = Prisma.sql`CASE

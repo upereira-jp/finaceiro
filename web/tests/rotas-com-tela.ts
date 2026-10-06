@@ -157,9 +157,10 @@ const EXCECOES: Record<string, string> = {
   /* 'POST /categorias' SAIU DAQUI em 02/10/2026: a linha dizia «se um dia um
    * relatorio depender da categoria, e esta linha que precisa cair» - e o Painel
    * da empresa agrupa por ela. A tela Plano de contas cria. */
-  'POST /centros-de-custo':
-    'como a categoria: classificacao opcional que o lancamento manual nao pede e que nenhum '
-    + 'relatorio le. Enquanto for assim, uma tela para ela seria um campo que ninguem preenche.',
+  /* 'POST /centros-de-custo' SAIU DAQUI em 06/10/2026, e a rota com ela: a tela
+   * Plano de contas cria o centro por 'POST /plano-de-contas/centros', e Despesas
+   * classifica por ele - a linha dizia «uma tela para ela seria um campo que
+   * ninguem preenche», e o campo passou a existir. */
 };
 
 // ============================================================================

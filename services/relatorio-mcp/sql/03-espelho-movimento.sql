@@ -154,8 +154,12 @@ select p.tenant_id, t.razao_social as tenant,
   join public.tenant t on t.id = p.tenant_id
   join public.conta_pagar cp on cp.id = p.conta_pagar_id and cp.tenant_id = p.tenant_id
   left join public.dono_usina d on d.id = cp.dono_usina_id and d.tenant_id = cp.tenant_id
-  left join public.originador o on o.id = cp.originador_id and o.tenant_id = cp.tenant_id;
-comment on view relatorio.v_pagamento is 'Baixas das contas a pagar. Periodo natural: data_pagamento.';
+  left join public.originador o on o.id = cp.originador_id and o.tenant_id = cp.tenant_id
+ -- A baixa ESTORNADA (migration 44, 06/10/2026) nao e baixa: o gatilho de recalculo
+ -- ja nao a soma no titulo, e uma pergunta sobre «quanto foi pago» nao pode soma-la
+ -- aqui. Reaplicar este arquivo SO DEPOIS da migration 44 (a coluna nasce nela).
+ where p.estornado_em is null;
+comment on view relatorio.v_pagamento is 'Baixas das contas a pagar (sem as estornadas). Periodo natural: data_pagamento.';
 
 -- ------------------------------------------------------------- geracao
 create or replace view relatorio.v_usina_geracao as
