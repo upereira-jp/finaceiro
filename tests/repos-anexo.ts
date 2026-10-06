@@ -55,13 +55,13 @@ const [d2] = await emA(() => despesa.lancar({
 // ---------------------------------------------------------------- A1 anexar
 const a1 = await emA(() => anexo.anexar(d1!.id, { nome_arquivo: 'C:\\Users\\x\\boleto-pago.pdf', conteudo: pdf }));
 const naLista = (await emA(() => despesa.listar())).linhas.find((l) => l.id === d1!.id)!;
-chk('A1', a1.tipo === 'application/pdf' && a1.tamanho_bytes === pdf.length && a1.nome_arquivo === 'boleto-pago.pdf'
+chk('AN1', a1.tipo === 'application/pdf' && a1.tamanho_bytes === pdf.length && a1.nome_arquivo === 'boleto-pago.pdf'
       && naLista.anexo.length === 1 && naLista.anexo[0]!.id === a1.id,
     'o PDF entra com tipo e tamanho do banco, o nome sem o caminho do computador, e aparece na despesa');
 
 // ---------------------------------------------------------------- A2 o que não é comprovante
 const exe = await lancou(() => emA(() => anexo.anexar(d1!.id, { nome_arquivo: 'nota.pdf', conteudo: Buffer.from('MZ\x90\x00 executavel') })));
-chk('A2', exe !== null && exe.status === 422 && /PDF ou foto/.test(String(exe.message)),
+chk('AN2', exe !== null && exe.status === 422 && /PDF ou foto/.test(String(exe.message)),
     'um executável com nome de .pdf é recusado pelos bytes, com a frase da tela (e não um 500)');
 
 // ---------------------------------------------------------------- A3 o mesmo arquivo duas vezes
@@ -71,11 +71,11 @@ await su.connect();
 const { rows: [{ n }] } = await su.query(
   `SELECT count(*)::int AS n FROM anexo_conteudo WHERE tenant_id = $1 AND sha256 = encode(sha256($2::bytea), 'hex')`, [A, pdf]);
 await su.end();
-chk('A3', a3.id !== a1.id && n === 1, 'o mesmo PDF em duas despesas: dois vínculos, um arquivo só no banco');
+chk('AN3', a3.id !== a1.id && n === 1, 'o mesmo PDF em duas despesas: dois vínculos, um arquivo só no banco');
 
 // ---------------------------------------------------------------- A4 baixar
 const b = await emA(() => anexo.baixar(a3.id));
-chk('A4', Buffer.compare(Buffer.from(b.conteudo), pdf) === 0 && b.tipo === 'application/pdf' && /^[0-9a-f]{64}$/.test(b.sha256),
+chk('AN4', Buffer.compare(Buffer.from(b.conteudo), pdf) === 0 && b.tipo === 'application/pdf' && /^[0-9a-f]{64}$/.test(b.sha256),
     'baixar devolve os mesmos bytes, o tipo e o sha256 (que serve de ETag)');
 
 // ---------------------------------------------------------------- A5 desvincular, sem apagar
@@ -84,21 +84,21 @@ await emA(() => anexo.desvincular(a5.id));
 const deNovo = await lancou(() => emA(() => anexo.desvincular(a5.id)));
 const daD2 = await emA(() => anexo.daConta(d2!.id));
 const aindaLe = await lancou(() => emA(() => anexo.baixar(a5.id)));
-chk('A5', !daD2.some((x) => x.id === a5.id) && daD2.some((x) => x.id === a3.id) && deNovo?.status === 409 && aindaLe === null,
+chk('AN5', !daD2.some((x) => x.id === a5.id) && daD2.some((x) => x.id === a3.id) && deNovo?.status === 409 && aindaLe === null,
     'desvinculado, sai da despesa e o arquivo continua no banco (nada se apaga); desvincular de novo é 409');
 
 // ---------------------------------------------------------------- A6 o tenant B
 const bBaixa = await lancou(() => emB(() => anexo.baixar(a1.id)));
 const bAnexa = await lancou(() => emB(() => anexo.anexar(d1!.id, { nome_arquivo: 'x.pdf', conteudo: pdf })));
 const bTira = await lancou(() => emB(() => anexo.desvincular(a1.id)));
-chk('A6', bBaixa?.status === 404 && bAnexa?.status === 404 && bTira?.status === 404,
+chk('AN6', bBaixa?.status === 404 && bAnexa?.status === 404 && bTira?.status === 404,
     'o B não baixa, não anexa e não tira anexo de despesa do A — 404, pela RLS');
 
 // ---------------------------------------------------------------- A7 quem só lê
 const lAnexa = await lancou(() => emALei(() => anexo.anexar(d1!.id, { nome_arquivo: 'y.pdf', conteudo: pdf })));
 const lTira = await lancou(() => emALei(() => anexo.desvincular(a1.id)));
 const lBaixa = await lancou(() => emALei(() => anexo.baixar(a1.id)));
-chk('A7', lAnexa !== null && lTira !== null && lBaixa === null, 'quem só lê abre o comprovante e não anexa nem tira');
+chk('AN7', lAnexa !== null && lTira !== null && lBaixa === null, 'quem só lê abre o comprovante e não anexa nem tira');
 
 console.log(`\n${falhas === 0 ? 'anexos: todas as verificacoes passaram' : `anexos: ${falhas} FALHA(S)`}`);
 await prisma.$disconnect();
