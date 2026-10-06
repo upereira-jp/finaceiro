@@ -51,6 +51,7 @@ const MIGRATION_40 = '20260910160000_chave_do_vendedor_no_crm';
 const MIGRATION_41 = '20260930120000_administracao_da_plataforma';
 const MIGRATION_42 = '20261002030000_despesas_da_empresa';
 const MIGRATION_43 = '20261003120000_aviso_pagamento_ignorado';
+const MIGRATION_44 = '20261006120000_empresa_chao';
 
 class ConferenciaFalhou extends Error {}
 
@@ -66,6 +67,7 @@ const DIRETORIO: Record<string, string> = {
   'migration-41': MIGRATION_41,
   'migration-42': MIGRATION_42,
   'migration-43': MIGRATION_43,
+  'migration-44': MIGRATION_44,
 };
 
 /**
@@ -131,7 +133,7 @@ if (!url || !url.trim()) {
 }
 
 const modo = process.argv[2] ?? '';
-const MODOS = ['identidade', 'migration-32', 'migration-35', 'migration-36', 'migration-37', 'migration-38', 'migration-39', 'migration-40', 'migration-41', 'migration-42', 'migration-43'];
+const MODOS = ['identidade', 'migration-32', 'migration-35', 'migration-36', 'migration-37', 'migration-38', 'migration-39', 'migration-40', 'migration-41', 'migration-42', 'migration-43', 'migration-44'];
 if (!MODOS.includes(modo)) {
   console.error(`modo desconhecido: ${JSON.stringify(modo)}. Conheco: ${MODOS.join(', ')}.`);
   process.exit(1);
@@ -680,9 +682,96 @@ async function migration43(): Promise<void> {
   console.log('migration 43 OK — aviso_pagamento_ignorado com RLS e trilha, append-only (so SELECT e INSERT).');
 }
 
+/**
+ * A 44 (06/10/2026, o chao da empresa — PLANO-empresa-controle-total, etapa 1). O
+ * que ela tem de deixar no catalogo, e o que um apply pela metade esconderia:
+ *   - as tres tabelas novas com RLS FORCE, policy e o gatilho de trilha — o do
+ *     `anexo_conteudo` e o `auditar_sem_conteudo` (os bytes nao vao para a trilha);
+ *   - os bytes do anexo append-only, e do vinculo so o desvincular e alteravel;
+ *   - o estorno: as tres colunas, o gatilho que o guarda e o recalculo que ignora o
+ *     estornado (a funcao nova menciona `estornado_em`);
+ *   - o numero do lancamento com o indice unico CHEIO e o gatilho;
+ *   - o plano em dois niveis (pai_id, natureza e o gatilho) e o final da conta.
+ */
+async function migration44(): Promise<void> {
+  await migration43();
+
+  const { rows: [r] } = await cliente.query<{
+    rls: string; politicas: string; trilhas: string; sem_conteudo: string;
+    conteudo_altera: boolean; conteudo_apaga: boolean; anexo_apaga: boolean; anexo_troca_dono: boolean; anexo_desvincula: boolean;
+    estorno_colunas: string; estorno_gatilho: string; recalculo_ignora: boolean;
+    numero_indice: string; numero_gatilho: string; plano_colunas: string; plano_gatilho: string;
+    fornecedor_na_conta: string; conta_final: string; registro: string;
+  }>(`
+    SELECT (SELECT count(*) FROM pg_class
+             WHERE oid IN ('public.fornecedor'::regclass, 'public.anexo'::regclass, 'public.anexo_conteudo'::regclass)
+               AND relrowsecurity AND relforcerowsecurity)                                 AS rls,
+           (SELECT count(DISTINCT polrelid) FROM pg_policy
+             WHERE polrelid IN ('public.fornecedor'::regclass, 'public.anexo'::regclass,
+                                'public.anexo_conteudo'::regclass))                        AS politicas,
+           (SELECT count(*) FROM pg_trigger
+             WHERE tgname IN ('auditar_fornecedor', 'auditar_anexo', 'auditar_anexo_conteudo')) AS trilhas,
+           (SELECT count(*) FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid
+             WHERE t.tgname = 'auditar_anexo_conteudo' AND p.proname = 'auditar_sem_conteudo') AS sem_conteudo,
+           has_table_privilege('app_financeiro', 'public.anexo_conteudo', 'UPDATE')        AS conteudo_altera,
+           has_table_privilege('app_financeiro', 'public.anexo_conteudo', 'DELETE')        AS conteudo_apaga,
+           has_table_privilege('app_financeiro', 'public.anexo', 'DELETE')                 AS anexo_apaga,
+           has_column_privilege('app_financeiro', 'public.anexo', 'conta_pagar_id', 'UPDATE') AS anexo_troca_dono,
+           has_column_privilege('app_financeiro', 'public.anexo', 'desvinculado_em', 'UPDATE') AS anexo_desvincula,
+           (SELECT count(*) FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'pagamento'
+               AND column_name IN ('estornado_em','estornado_por','motivo_estorno','referencia_viva')) AS estorno_colunas,
+           (SELECT count(*) FROM pg_trigger WHERE tgrelid = 'public.pagamento'::regclass
+               AND tgname = 'pagamento_estorno')                                          AS estorno_gatilho,
+           (SELECT prosrc LIKE '%estornado_em IS NULL%' FROM pg_proc
+             WHERE proname = 'recalcular_conta_pagar')                                    AS recalculo_ignora,
+           (SELECT count(*) FROM pg_index
+             WHERE indexrelid = 'public.conta_pagar_numero_unico'::regclass
+               AND indisunique AND indpred IS NULL)                                      AS numero_indice,
+           (SELECT count(*) FROM pg_trigger WHERE tgrelid = 'public.conta_pagar'::regclass
+               AND tgname = 'conta_pagar_numero')                                         AS numero_gatilho,
+           (SELECT count(*) FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'categoria'
+               AND column_name IN ('pai_id','natureza'))                                  AS plano_colunas,
+           (SELECT count(*) FROM pg_trigger WHERE tgrelid = 'public.categoria'::regclass
+               AND tgname IN ('categoria_dois_niveis','categoria_natureza_desce'))       AS plano_gatilho,
+           (SELECT count(*) FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'conta_pagar'
+               AND column_name IN ('fornecedor_id','numero'))                             AS fornecedor_na_conta,
+           (SELECT count(*) FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'origem_pagamento'
+               AND column_name IN ('banco','agencia','conta_final'))                      AS conta_final,
+           (SELECT count(*) FROM _prisma_migrations
+             WHERE migration_name = '${MIGRATION_44}'
+               AND finished_at IS NOT NULL AND rolled_back_at IS NULL)                    AS registro`);
+
+  const faltando = [
+    Number(r!.rls) === 3 ? null : `RLS com FORCE em fornecedor, anexo e anexo_conteudo (achei ${r!.rls} de 3)`,
+    Number(r!.politicas) === 3 ? null : `policy nas tres tabelas novas (achei ${r!.politicas})`,
+    Number(r!.trilhas) === 3 ? null : `os tres gatilhos de trilha (achei ${r!.trilhas})`,
+    Number(r!.sem_conteudo) === 1 ? null : 'a trilha do anexo_conteudo pelo auditar_sem_conteudo (sem os bytes)',
+    !r!.conteudo_altera && !r!.conteudo_apaga ? null : 'os bytes do anexo append-only (sem UPDATE nem DELETE)',
+    !r!.anexo_apaga && !r!.anexo_troca_dono && r!.anexo_desvincula ? null : 'o anexo: sem DELETE, sem trocar de dono, so o desvincular',
+    Number(r!.estorno_colunas) === 4 ? null : `as 4 colunas do estorno em pagamento (achei ${r!.estorno_colunas})`,
+    Number(r!.estorno_gatilho) === 1 ? null : 'o gatilho pagamento_estorno',
+    r!.recalculo_ignora ? null : 'o recalculo que ignora o pagamento estornado',
+    Number(r!.numero_indice) === 1 ? null : 'o indice unico CHEIO conta_pagar_numero_unico',
+    Number(r!.numero_gatilho) === 1 ? null : 'o gatilho do numero do lancamento',
+    Number(r!.plano_colunas) === 2 && Number(r!.plano_gatilho) === 2 ? null : 'o plano em dois niveis (pai_id, natureza e os dois gatilhos)',
+    Number(r!.fornecedor_na_conta) === 2 ? null : 'conta_pagar.fornecedor_id e conta_pagar.numero',
+    Number(r!.conta_final) === 3 ? null : 'banco, agencia e conta_final em origem_pagamento',
+    Number(r!.registro) === 1 ? null : `o registro de ${MIGRATION_44} em _prisma_migrations`,
+  ].filter(Boolean);
+
+  if (faltando.length) throw new ConferenciaFalhou(`a migration 44 nao esta completa no banco. Falta: ${faltando.join('; ')}.`);
+  console.log('migration 44 OK — fornecedor, anexo e anexo_conteudo com RLS e trilha (os bytes fora dela), estorno da baixa manual, '
+    + 'numero do lancamento, plano em dois niveis e o final da conta.');
+}
+
 try {
   await cliente.connect();
   if (modo === 'identidade') await identidade();
+  else if (modo === 'migration-44') await migration44();
   else if (modo === 'migration-43') await migration43();
   else if (modo === 'migration-42') await migration42();
   else if (modo === 'migration-41') await migration41();

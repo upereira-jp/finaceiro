@@ -344,6 +344,14 @@ BEGIN
    * chamado `auditar_qualquer_coisa` que nao auditasse NADA. Este fecha o furo: a
    * excecao tem de estar nomeada aqui, com o mecanismo. A lista branca e de UMA
    * linha de proposito; a segunda entrada deve doer.
+   *
+   * A SEGUNDA ENTRADA (06/10/2026, migration 44): `anexo_conteudo`, os bytes do
+   * comprovante de uma despesa. O mecanismo e outro que o da logo e e AUDITORIA de
+   * verdade, nao propagacao: `app.auditar_sem_conteudo()` grava a mesma linha que
+   * `app.auditar()` gravaria, menos a coluna `conteudo` - o sha256, o tipo e o
+   * tamanho ficam na trilha, os 2 MB de um PDF (4 MB em jsonb) nao. Doeu o
+   * bastante para a prova estar ao lado: o D16e de `tests/despesas.sql` confere
+   * que a linha chega a trilha com o sha256 e sem os bytes.
    */
   SELECT string_agg(format('%s.%s -> %s', c.relname, t.tgname, p.proname), ', ') INTO txt
   FROM pg_trigger t
@@ -352,7 +360,7 @@ BEGIN
   JOIN pg_proc p ON p.oid = t.tgfoid
   WHERE t.tgname LIKE 'auditar_%' AND NOT t.tgisinternal
     AND p.proname <> 'auditar'
-    AND c.relname NOT IN ('logo_de_cobranca');
+    AND c.relname NOT IN ('logo_de_cobranca', 'anexo_conteudo');
   IF txt IS NULL THEN RAISE NOTICE 'ok   G2b  inv.17-b gatilho auditar_* executa app.auditar(), fora da lista branca nomeada';
   ELSE RAISE WARNING 'FALHA G2b inv.17-b gatilho que nao audita: %', txt; falhas := falhas + 1; END IF;
 
@@ -499,10 +507,16 @@ BEGIN
     -- `plataforma_admin`, e o administrador de uma empresa nao tem tier. As duas
     -- reimpoem a autoridade (`app.administra_a_plataforma()`), tiram o tenant do
     -- contexto e RECUSAM com 42501 — `tests/administracao.sql` prende as tres.
+    --
+    -- `auditar_sem_conteudo` entra em 06/10/2026 (migration 44, o anexo da
+    -- despesa) pelo MESMO motivo de `auditar`, de que e copia: so roda como
+    -- `auditor_financeiro` quem escreve na trilha append-only sob FORCE RLS. Ela
+    -- nao le nada e nao escolhe tenant - grava a linha do gatilho menos a coluna
+    -- `conteudo`, e o D16e de `tests/despesas.sql` prova o que chega la.
     AND p.proname NOT IN ('membros_do_tenant','tem_vinculo_no_tenant',
                           'resolver_login','auditar','exigir_trilha_de_plataforma',
                           'resolver_credencial_cobranca','registrar_ato_externo',
-                          'usuarios_do_tenant','vincular_usuario');
+                          'usuarios_do_tenant','vincular_usuario','auditar_sem_conteudo');
   IF txt IS NULL THEN RAISE NOTICE 'ok   G4   inv.19 nenhum SECURITY DEFINER fora da lista branca';
   ELSE RAISE WARNING 'FALHA G4 inv.19 fora da lista: %', txt; falhas := falhas + 1; END IF;
 

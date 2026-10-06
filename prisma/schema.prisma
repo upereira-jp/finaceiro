@@ -23,6 +23,45 @@ model acesso_plataforma_log {
   @@index([tenant_id, ocorrido_em(sort: Desc)], map: "acesso_plataforma_log_tenant_idx")
 }
 
+/// O comprovante de uma despesa (migration 44). Nunca se apaga: desvincular marca desvinculado_em. ADR-0009.
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model anexo {
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id        String         @db.Uuid
+  conteudo_id      String         @db.Uuid
+  conta_pagar_id   String?        @db.Uuid
+  nome_arquivo     String
+  enviado_por      String?        @default(dbgenerated("app.current_usuario_id()")) @db.Uuid
+  enviado_em       DateTime       @default(now()) @db.Timestamptz(6)
+  desvinculado_em  DateTime?      @db.Timestamptz(6)
+  desvinculado_por String?        @db.Uuid
+  conta_pagar      conta_pagar?   @relation(fields: [tenant_id, conta_pagar_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "anexo_conta_pagar_fk")
+  anexo_conteudo   anexo_conteudo @relation(fields: [tenant_id, conteudo_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "anexo_conteudo_fk")
+  tenant           tenant         @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "anexo_tenant_fk")
+
+  @@unique([tenant_id, id], map: "anexo_id_tenant")
+  @@index([tenant_id, conta_pagar_id], map: "anexo_conta_pagar_idx", where: raw("(conta_pagar_id IS NOT NULL)"))
+}
+
+/// Os bytes de um anexo, um por sha256 no tenant; sha256, tipo e tamanho sao carimbados pelo gatilho. ADR-0009.
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model anexo_conteudo {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id     String   @db.Uuid
+  sha256        String
+  tipo          String
+  tamanho_bytes Int
+  conteudo      Bytes
+  criado_em     DateTime @default(now()) @db.Timestamptz(6)
+  anexo         anexo[]
+  tenant        tenant   @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "anexo_conteudo_tenant_fk")
+
+  @@unique([tenant_id, id], map: "anexo_conteudo_id_tenant")
+  @@unique([tenant_id, sha256], map: "anexo_conteudo_sha_unico")
+}
+
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 /// This table contains exclusion constraints and requires additional setup for migrations. Visit https://pris.ly/d/exclusion-constraints for more info.
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -153,11 +192,17 @@ model categoria {
   ativo       Boolean       @default(true)
   criado_em   DateTime      @default(now()) @db.Timestamptz(6)
   ordem       Int           @default(0) @db.SmallInt
+  pai_id      String?       @db.Uuid
+  natureza    natureza_da_categoria @default(despesa)
   tenant      tenant        @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "categoria_tenant_fk")
+  categoria   categoria?    @relation("categoriaTocategoria", fields: [tenant_id, pai_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "categoria_pai_fk")
+  other_categoria categoria[] @relation("categoriaTocategoria")
   conta_pagar conta_pagar[]
+  fornecedor  fornecedor[]
 
   @@unique([tenant_id, id], map: "categoria_id_tenant")
   @@unique([tenant_id, nome], map: "categoria_nome_unico")
+  @@index([tenant_id, pai_id], map: "categoria_pai_idx", where: raw("(pai_id IS NOT NULL)"))
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -168,8 +213,10 @@ model centro_custo {
   nome        String
   ativo       Boolean       @default(true)
   criado_em   DateTime      @default(now()) @db.Timestamptz(6)
+  ordem       Int           @default(0) @db.SmallInt
   tenant      tenant        @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "centro_custo_tenant_fk")
   conta_pagar conta_pagar[]
+  fornecedor  fornecedor[]
 
   @@unique([tenant_id, id], map: "centro_custo_id_tenant")
   @@unique([tenant_id, nome], map: "centro_custo_nome_unico")
@@ -355,6 +402,10 @@ model conta_pagar {
   observacao              String?
   reembolso_de_pagamento_id String?          @db.Uuid
   reembolso_chave         String?            @default(dbgenerated("COALESCE(reembolso_de_pagamento_id, id)")) @db.Uuid
+  fornecedor_id           String?            @db.Uuid
+  numero                  Int?
+  anexo                   anexo[]
+  fornecedor              fornecedor?        @relation(fields: [tenant_id, fornecedor_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "conta_pagar_fornecedor_fk")
   categoria               categoria?         @relation(fields: [tenant_id, categoria_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "conta_pagar_categoria_fk")
   centro_custo            centro_custo?      @relation(fields: [tenant_id, centro_custo_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "conta_pagar_centro_custo_fk")
   dono_usina              dono_usina?        @relation(fields: [tenant_id, dono_usina_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "conta_pagar_dono_fk")
@@ -368,6 +419,8 @@ model conta_pagar {
   @@unique([tenant_id, id], map: "conta_pagar_id_tenant")
   @@unique([tenant_id, origem_split_item_chave], map: "conta_pagar_origem_unica")
   @@unique([tenant_id, reembolso_chave], map: "conta_pagar_reembolso_unico")
+  @@unique([tenant_id, numero], map: "conta_pagar_numero_unico")
+  @@index([tenant_id, fornecedor_id], map: "conta_pagar_fornecedor_idx", where: raw("(fornecedor_id IS NOT NULL)"))
   @@index([tenant_id, vencimento], map: "conta_pagar_aberta_idx", where: raw("(status = ANY (ARRAY['aberta'::status_conta_pagar, 'parcial'::status_conta_pagar]))"))
   @@index([tenant_id, competencia], map: "conta_pagar_competencia_idx")
   @@index([tenant_id, serie_id], map: "conta_pagar_serie_idx", where: raw("(serie_id IS NOT NULL)"))
@@ -485,6 +538,36 @@ model fatura {
   @@index([tenant_id, usina_id, competencia], map: "fatura_usina_competencia_idx")
 }
 
+/// A quem a empresa paga (o fornecedor / credor da planilha). Desativar, nunca apagar. Migration 44.
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model fornecedor {
+  id                  String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id           String               @db.Uuid
+  nome                String
+  documento           String?
+  documento_tipo      documento_tipo?
+  contato             String?
+  categoria_padrao_id String?              @db.Uuid
+  centro_padrao_id    String?              @db.Uuid
+  banco               String?
+  agencia             String?
+  conta               String?
+  tipo_conta          tipo_conta_bancaria?
+  chave_pix           String?
+  tipo_chave_pix      tipo_chave_pix?
+  observacao          String?
+  ativo               Boolean              @default(true)
+  criado_em           DateTime             @default(now()) @db.Timestamptz(6)
+  conta_pagar         conta_pagar[]
+  categoria           categoria?           @relation(fields: [tenant_id, categoria_padrao_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "fornecedor_categoria_fk")
+  centro_custo        centro_custo?        @relation(fields: [tenant_id, centro_padrao_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "fornecedor_centro_fk")
+  tenant              tenant               @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fornecedor_tenant_fk")
+
+  @@unique([tenant_id, id], map: "fornecedor_id_tenant")
+  @@unique([tenant_id, documento], map: "fornecedor_documento_unico")
+}
+
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -567,6 +650,9 @@ model origem_pagamento {
   ativo       Boolean               @default(true)
   ordem       Int                   @default(0) @db.SmallInt
   criado_em   DateTime              @default(now()) @db.Timestamptz(6)
+  banco       String?
+  agencia     String?
+  conta_final String?
   tenant      tenant                @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "origem_pagamento_tenant_fk")
   conta_pagar conta_pagar[]
   pagamento   pagamento[]
@@ -621,13 +707,17 @@ model pagamento {
   acrescimo_centavos Int                @default(0)
   desconto_centavos  Int                @default(0)
   origem_pagamento_id String?           @db.Uuid
+  estornado_em       DateTime?          @db.Timestamptz(6)
+  estornado_por      String?            @db.Uuid
+  motivo_estorno     String?
+  referencia_viva    String?            @default(dbgenerated("\nCASE\n    WHEN (estornado_em IS NULL) THEN referencia_externa\n    ELSE NULL::text\nEND"))
   origem_pagamento   origem_pagamento?  @relation(fields: [tenant_id, origem_pagamento_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "pagamento_origem_pagamento_fk")
   conta_pagar_conta_pagar_tenant_id_reembolso_de_pagamento_idTopagamento conta_pagar[] @relation("conta_pagar_tenant_id_reembolso_de_pagamento_idTopagamento")
   conta_pagar        conta_pagar        @relation(fields: [tenant_id, conta_pagar_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction, map: "pagamento_conta_fk")
   tenant             tenant             @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "pagamento_tenant_fk")
 
   @@unique([tenant_id, id], map: "pagamento_id_tenant")
-  @@unique([tenant_id, referencia_externa], map: "pagamento_referencia_unica", where: raw("(referencia_externa IS NOT NULL)"))
+  @@unique([tenant_id, referencia_viva], map: "pagamento_referencia_unica", where: raw("(referencia_viva IS NOT NULL)"))
   @@index([tenant_id, conta_pagar_id], map: "pagamento_conta_idx")
   @@index([tenant_id, data_pagamento], map: "pagamento_data_idx")
 }
@@ -741,6 +831,8 @@ model tenant {
   boleto                        boleto[]
   campo_do_documento            campo_do_documento[]
   campo_personalizado_da_fatura campo_personalizado_da_fatura[]
+  anexo                         anexo[]
+  anexo_conteudo                anexo_conteudo[]
   categoria                     categoria[]
   centro_custo                  centro_custo[]
   chave_pix                     chave_pix[]
@@ -750,6 +842,7 @@ model tenant {
   conector_crm                  conector_crm?
   conector_execucao             conector_execucao[]
   conta_pagar                   conta_pagar[]
+  fornecedor                    fornecedor[]
   contrato                      contrato[]
   dono_usina                    dono_usina[]
   fatura                        fatura[]
@@ -1060,6 +1153,12 @@ enum forma_de_pagamento {
   compensacao
   cartao_credito
   debito_automatico
+}
+
+enum natureza_da_categoria {
+  despesa
+  investimento
+  retirada_socio
 }
 
 enum natureza_despesa {
