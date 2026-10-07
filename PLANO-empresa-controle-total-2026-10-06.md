@@ -311,7 +311,9 @@ a entrevista do shape não houve: o dono delegou UI/UX (08/09/2026) e aprovou, n
 
 ## F. O que a etapa 1 deixa para o dono, nesta ordem (migration antes do código)
 
-1. `! git -C /opt/financeiro/redesenho push origin empresa-controle`
+1. `! git -C /opt/financeiro/redesenho -c safe.directory='*' push origin empresa-controle` — o worktree é do usuário
+   `financeiro`, e o git como root recusa a pasta sem o `safe.directory`. Depois do push,
+   `! chown financeiro:financeiro /opt/financeiro/app/.git/refs/remotes/origin/empresa-controle` (o `.git` é o de produção).
 2. `! gh workflow run migrate-financeiro.yml -R upereira-jp/finaceiro --ref empresa-controle -f confirmar=aplicar -f conferencia=migration-44`
    — e conferir «migration 44 OK» no run. Entre a migration e o deploy a guarda `ClienteGeradoDesatualizado` dos
    timers dispara (esperado; some com o deploy).
