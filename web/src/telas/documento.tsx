@@ -272,6 +272,12 @@ export function TelaDocumento() {
         conta e o painel navy (a grade de duas colunas saiu na etapa 1, 30/09).
         Fonte, cor, campo, botao e aviso sao os do sistema. O bloco de CSS esta
         em `estilo.ts`, secao "A FATURA UNIFICADA E A REFERENCIA".
+
+        E EM 14/10/2026 A ILHA VOLTOU, a pedido do dono (*"restaure o design e
+        funções para como existe em g3-fatura-unificada.vercel.app"*): a
+        paleta medida na referencia (`--g3ref-*`, em `tema.ts`), a barra navy,
+        a grade de duas colunas e os cartoes dela. A gaveta saiu; o desenho de
+        30/09 esta na tag `design-contas-de-luz-2026-10-14`.
       */}
       <div className="g3ref">
 

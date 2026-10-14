@@ -522,7 +522,7 @@ export function BotaoDeCriar(p: { controla: string; aberto: boolean; ao: () => v
  * ==========================================================================
  * POR QUE PAINEL E NAO GAVETA (30/09/2026, etapa 4a)
  *
- * A `GavetaDaConta` da tela Contas de luz e MODAL por um motivo que la existe:
+ * A gaveta da conta que Contas de luz teve de 30/09 a 14/10 era MODAL por um motivo que la existia:
  * conferir uma conta e um subtrabalho com ato proprio, e as acoes da fila atras
  * ficariam cobertas. Cadastrar um cliente, um dono ou uma usina nao tem nada
  * disso: sao dois a cinco campos, e ver a lista enquanto se digita AJUDA (o
@@ -544,7 +544,7 @@ export function PainelDeCriar(p: {
 }) {
   const caixa = useRef<HTMLElement>(null);
   /* A referencia guarda o `aoFechar` mais novo sem reinstalar o efeito — o mesmo
-     cuidado da `GavetaDaConta`: remontar a cada tecla arrancaria o cursor. */
+     cuidado da antiga gaveta de Contas de luz: remontar a cada tecla arrancaria o cursor. */
   const fechar = useRef(p.aoFechar);
   fechar.current = p.aoFechar;
   const devolver = useRef(p.devolverA);

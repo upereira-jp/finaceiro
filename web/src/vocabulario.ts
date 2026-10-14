@@ -418,7 +418,7 @@ export const GLOSSARIO: readonly TermoDoGlossario[] = [
     termo: 'Fatura unificada',
     texto: 'A folha que o cliente recebe, juntando a conta da distribuidora com a cobrança da G3 num '
       + 'papel só. Ela não cria a cobrança nem recebe dinheiro — só apresenta. Monta-se e imprime-se '
-      + 'na tela Contas de luz, em «Folha do cliente».',
+      + 'na tela Contas de luz, na aba «Emissão».',
     busca: ['fatura unificada', 'folha', 'papel do cliente', 'documento do cliente', 'unificada',
             'conta junta'],
     caminhos: [{ rota: '/documento', rotulo: 'Abrir Contas de luz', tipo: 'resolver' }],

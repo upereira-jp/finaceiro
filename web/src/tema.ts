@@ -683,6 +683,59 @@ const variaveis = (p: Paleta) => `
     --alerta: ${p.alerta}; --alerta-fundo: ${p.alertaFundo};`;
 
 /**
+ * ============================================================================
+ * [14/10/2026] A PALETA DA REFERÊNCIA VOLTOU — SÓ NA ABA CONTAS DE LUZ.
+ *
+ * O pedido do dono: *"na aba Contas de luz, restaure o design e funções para
+ * como existe em g3-fatura-unificada.vercel.app"* (o desenho de antes ficou na
+ * tag `design-contas-de-luz-2026-10-14`). É o mesmo pedido de 14/08 (*"sem tirar
+ * nem pôr ... sistema de cores"*), e a mesma resposta daquele dia: a ilha `.g3ref`
+ * com os valores MEDIDOS na referência no ar (commit `a43b1f3`), e não os
+ * derivados AA do sistema.
+ *
+ * O QUE ISTO REABRE, dito com o número: três pares da referência reprovam AA
+ * em texto — o Gray `#8F939D` (3,08:1 no branco), o laranja cru como tinta
+ * (2,69:1) e o branco sobre o laranja (2,69:1). Fora desta aba nada muda: os
+ * tokens são `--g3ref-*`, declarados SÓ no escopo `.g3ref`, e o sistema continua
+ * com `--fraco`, `--acento-forte` e `--acento-texto` (I1d–I1f e I8h prendem a
+ * fronteira). O anel de foco NÃO volta ao laranja cru: continua `--foco`.
+ *
+ * O ESCURO NÃO TEM REFERÊNCIA (a do Vercel é só clara), e por isso cada token
+ * tem par no escuro apontando para o equivalente medido da casa — sem o par, o
+ * escuro herdaria o literal claro em silêncio (I8b3).
+ */
+type PaletaDaReferencia = Record<
+  'tinta' | 'apagado' | 'papel' | 'fundo' | 'fundo-hover' | 'borda' | 'borda-campo' | 'borda-forte'
+  | 'campo' | 'regua' | 'laranja' | 'laranja-hover' | 'laranja-tinta' | 'aviso'
+  | 'navy' | 'navy-tinta' | 'navy-hover' | 'navy-apagado' | 'navy-legenda' | 'navy-regua' | 'navy-traco'
+  | 'navy-rotulo' | 'ok' | 'alerta' | 'erro', string>;
+
+/** Os valores do template da referência, um a um (o `style=` de cada elemento). */
+export const PALETA_DA_REFERENCIA: PaletaDaReferencia = {
+  tinta: '#14213D', apagado: '#8F939D', papel: '#FFFFFF', fundo: '#F6F2EA', 'fundo-hover': '#FBF7F0',
+  borda: '#E4DED2', 'borda-campo': '#DDD6C8', 'borda-forte': '#C9C1B1', campo: '#FBF9F5', regua: '#EFEAE0',
+  laranja: '#E8843C', 'laranja-hover': '#D3742F', 'laranja-tinta': '#FFFFFF', aviso: '#FBF1E4',
+  navy: '#14213D', 'navy-tinta': '#F6F2EA', 'navy-hover': '#1C2C4E', 'navy-apagado': '#B6BBC7',
+  'navy-legenda': '#8F939D', 'navy-regua': '#2C3A56', 'navy-traco': '#3A4763', 'navy-rotulo': '#F4A65A',
+  ok: '#3B7A57', alerta: '#B07A2B', erro: '#A8452F',
+};
+
+/** O mesmo papel de cada token no escuro, nos tokens da casa. */
+export const REFERENCIA_NO_ESCURO: PaletaDaReferencia = {
+  tinta: 'var(--texto)', apagado: 'var(--fraco)', papel: 'var(--fundo2)', fundo: 'var(--fundo)',
+  'fundo-hover': 'var(--fundo-hover)', borda: 'var(--borda)', 'borda-campo': 'var(--borda)',
+  'borda-forte': 'var(--borda-forte)', campo: 'var(--campo)', regua: 'var(--borda-suave)',
+  laranja: 'var(--acento)', 'laranja-hover': 'var(--acento-hover)', 'laranja-tinta': 'var(--acento-texto)',
+  aviso: 'var(--alerta-fundo)', navy: 'var(--topo)', 'navy-tinta': 'var(--topo-texto)',
+  'navy-hover': 'color-mix(in srgb, var(--topo) 86%, var(--topo-texto))', 'navy-apagado': 'var(--topo-fraco)',
+  'navy-legenda': 'var(--topo-fraco)', 'navy-regua': 'var(--topo-veu-forte)', 'navy-traco': 'var(--topo-veu-forte)',
+  'navy-rotulo': 'var(--acento)', ok: 'var(--ok)', alerta: 'var(--alerta)', erro: 'var(--erro)',
+};
+
+const tokensDaReferencia = (p: PaletaDaReferencia): string =>
+  Object.entries(p).map(([k, v]) => `\n    --g3ref-${k}: ${v};`).join('');
+
+/**
  * As custom properties dos dois temas. `ui.tsx` cola isto no topo do CSS.
  *
  * O SELETOR É `data-tema`, NÃO `prefers-color-scheme` — a media query deixou de
@@ -692,6 +745,7 @@ const variaveis = (p: Paleta) => `
  *
  * ==========================================================================
  * O BLOCO `.g3ref { --g3ref-* }` SAIU EM 30/09, e o que ele era fica registrado.
+ * [14/10/2026] E VOLTOU, só para a aba Contas de luz — ver `PALETA_DA_REFERENCIA`.
  *
  * De 14/08 a 30/09 a aba Documento (hoje Fatura unificada) tinha uma paleta
  * inteira própria, medida no template da referência `g3-fatura-unificada` e com
@@ -738,6 +792,10 @@ export const VARIAVEIS_CSS = `
   }
   :root[data-tema="escuro"] {${variaveis(ESCURO)}
     color-scheme: dark;
+  }
+  .g3ref {${tokensDaReferencia(PALETA_DA_REFERENCIA)}
+  }
+  :root[data-tema="escuro"] .g3ref {${tokensDaReferencia(REFERENCIA_NO_ESCURO)}
   }
 `;
 

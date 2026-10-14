@@ -18,7 +18,7 @@ import { readFileSync } from 'node:fs';
 import {
   recusaDoArquivo, normalizarUc, competenciaDoItem, chaveDoItem,
   pendenciaDoItem, avisoDoItem, chavesRepetidas, podeRegistrar,
-  resumoDoLote, ordemDaFila, corrigirItem, vizinhosNaFila, TETO_DO_ARQUIVO, LEITURAS_SIMULTANEAS,
+  resumoDoLote, ordemDaFila, corrigirItem, TETO_DO_ARQUIVO, LEITURAS_SIMULTANEAS,
   type ItemDoLote,
 } from '../src/lote-de-contas.ts';
 import {
@@ -247,25 +247,7 @@ const lido = (over: Partial<ItemDoLote> & { uc?: string; mes?: string; total?: s
 }
 
 // ------------------------- L11 «Anterior» e «Proxima» andam pelo que falta
-{
-  const fila = [
-    lido({ id: 'ok1' }),
-    lido({ id: 'pend', uc: '' }),
-    lido({ id: 'ok2', uc: '000091670201219' }),
-    lido({ id: 'feita', uc: '000307301401201', estado: 'registrado' }),
-    { ...lido({ id: 'lendo' }), estado: 'lendo' as const, campos: null },
-  ];
-  // Ordem da tabela: pendencia primeiro, depois as conferidas, a registrada no fim.
-  const v = vizinhosNaFila(fila, UCS, 'ok1');
-  chk('L11a', v.total === 3 && v.posicao === 2 && v.anterior === 'pend' && v.proxima === 'ok2',
-      `anda na ordem da tabela e so pelo que espera registro (${JSON.stringify(v)})`);
-  const depois = vizinhosNaFila(fila, UCS, 'feita');
-  chk('L11b', depois.posicao === null && depois.proxima === 'pend',
-      'quem acabou de ser registrada sai da conta, e «Proxima» leva a primeira que falta');
-  chk('L11c', vizinhosNaFila(fila, UCS, 'ok2').proxima === null,
-      'na ultima, nao ha proxima — o botao desliga em vez de dar a volta');
-  chk('L11d', vizinhosNaFila([], UCS, null).total === 0, 'fila vazia, nada a andar');
-}
+/* L11a–L11d (`vizinhosNaFila`, a navegação da gaveta) sairam com ela em 14/10/2026. */
 
 // ============================================================================
 // AS CONTAS REGISTRADAS (`registradas-regras.ts`) — 30/09/2026

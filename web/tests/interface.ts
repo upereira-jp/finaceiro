@@ -58,6 +58,14 @@ const chk = (id: string, cond: boolean, d: string) => {
 // tema). O que interessa aqui e o resto: as REGRAS.
 const REGRAS = ESTILO.replace(VARIAVEIS_CSS, '');
 
+/** As regras como pares (seletor, declaracoes), sem comentarios e sem cabecalho
+ *  de `@media`/`@container`. Funcao, e nao constante, porque e usada antes de
+ *  `REGRAS_PARES` (mais abaixo) existir. */
+function REGRAS_SEM_COMENTARIO_PARES(): Array<[string, string]> {
+  return [...REGRAS.replace(/\/\*[\s\S]*?\*\//g, '').replace(/@(media|container)[^{]*\{/g, '')
+    .matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => [m[1]!.trim().replace(/\s+/g, ' '), m[2]!]);
+}
+
 // ------------------------------------------------- I1 cor literal, lista fechada
 
 const MARCA_INICIO = 'INICIO-DOCUMENTO-IMPRESSO';
@@ -186,16 +194,35 @@ chk('I1c', JSON.stringify(achadas) === JSON.stringify(ESPERADAS),
 chk('I1d', !REGRAS.includes('#8F939D'),
     'fora do bloco de variaveis o Gray #8F939D nao pinta nada');
 
-chk('I1e', !VARIAVEIS_CSS.includes('#8F939D'),
-    'e no bloco de variaveis tambem nao — a excecao da ilha (Q-DOCG3-15) fechou em 30/09; '
-    + '--fraco (#66686F, 5,56:1) e a tinta apagada do sistema inteiro');
-
+/* [14/10/2026] A EXCECAO DA ILHA VOLTOU, e com a fronteira de 14/08. O dono
+ * pediu a aba Contas de luz de volta ao `g3-fatura-unificada.vercel.app` —
+ * «design e funções» —, e a paleta medida la (o Gray, o laranja como tinta, o
+ * branco sobre o laranja) voltou SO para dentro de `.g3ref`. As tres linhas
+ * abaixo voltam a prender a fronteira, e nao a ausencia:
+ *
+ *   I1e   no bloco de variaveis o Gray so aparece dentro do escopo `.g3ref`
+ *   I1f   os tokens `--g3ref-*` so sao declarados no escopo `.g3ref`, todo token
+ *         do claro tem par no escuro (sem o par o escuro herdaria o literal claro
+ *         em silencio), e so regras `.g3ref` os leem. */
+const blocosDaIlha = [...VARIAVEIS_CSS.matchAll(/(^|\n)\s*((?::root\[data-tema="escuro"\]\s+)?\.g3ref)\s*\{([^}]*)\}/g)]
+  .map((m) => ({ seletor: m[2]!, corpo: m[3]! }));
+const foraDaIlha = blocosDaIlha.reduce((v, b) => v.replace(b.corpo, ''), VARIAVEIS_CSS);
+chk('I1e', blocosDaIlha.length === 2 && !foraDaIlha.includes('#8F939D'),
+    'no bloco de variaveis o Gray #8F939D so existe dentro do escopo .g3ref (a aba Contas de luz) — '
+    + 'o resto do sistema continua com --fraco (#66686F, 5,56:1)');
 {
-  const semComentario = ESTILO.replace(/\/\*[\s\S]*?\*\//g, '');
-  const tokensDaIlha = [...new Set([...semComentario.matchAll(/--g3ref-[\w-]+/g)].map((m) => m[0]))];
-  chk('I1f', tokensDaIlha.length === 0,
-      'nenhum token --g3ref-* e declarado nem lido — a paleta paralela da ilha saiu inteira '
-      + `(achados: ${tokensDaIlha.join(', ') || 'nenhum'})`);
+  const tokens = (corpo: string) => [...corpo.matchAll(/(--g3ref-[\w-]+):/g)].map((m) => m[1]!).sort();
+  const claro = tokens(blocosDaIlha.find((b) => b.seletor === '.g3ref')?.corpo ?? '');
+  const escuro = tokens(blocosDaIlha.find((b) => b.seletor !== '.g3ref')?.corpo ?? '');
+  const declaradosFora = [...foraDaIlha.matchAll(/--g3ref-[\w-]+:/g)].length;
+  const lidosFora = REGRAS_SEM_COMENTARIO_PARES()
+    .filter(([sel, decl]) => /var\(--g3ref-/.test(decl) && !sel.split(',').every((s) => s.trim().startsWith('.g3ref')))
+    .map(([sel]) => sel);
+  chk('I1f', claro.length >= 20 && JSON.stringify(claro) === JSON.stringify(escuro)
+          && declaradosFora === 0 && lidosFora.length === 0,
+      `os ${claro.length} tokens --g3ref-* sao declarados so no escopo .g3ref, com par no escuro para cada um, `
+      + `e so regras .g3ref os leem (sem par: ${claro.filter((k) => !escuro.includes(k)).join(', ') || 'nenhum'}; `
+      + `lidos fora: ${lidosFora.join(' · ') || 'nenhum'})`);
 }
 
 // ------------------------------------------------------- I2 o movimento, fechado
@@ -708,11 +735,13 @@ for (const base of HOVERS_DE_BOTAO) {
    * e do ato da tela (The One Orange Rule), e a aba ativa era o segundo laranja
    * da mesma area. A verificacao prende as duas metades: ha sublinhado, e o
    * laranja nao voltou. */
+  /* [14/10/2026] VOLTOU A SER O BLOCO LARANJA CHEIO, como na referencia: a
+   * superficie inteira (fundo) e a tinta sobre ela. O que a verificacao segue
+   * proibindo e o defeito original: a ativa distinguida SO pela cor do texto. */
   const a = regraDe('.g3ref .fu-aba[aria-selected="true"]');
-  chk('I7c', /border-bottom:\s*2px solid var\(--texto\)/.test(a) && /color:\s*var\(--texto\)/.test(a)
-          && !/var\(--acento/.test(a),
-      'a aba selecionada se distingue por FORMA (o sublinhado de 2px na tinta forte) e nao so por cor '
-      + 'de texto — e nao e mais laranja: o laranja e do ato da tela (One Orange)');
+  chk('I7c', /background:\s*var\(--g3ref-laranja\)/.test(a) && /color:\s*var\(--g3ref-laranja-tinta\)/.test(a),
+      'a aba selecionada se distingue por FORMA — a superficie laranja inteira da referencia, com a tinta '
+      + 'dela por cima — e nao so por cor de texto');
 }
 
 // O ANEL DE FOCO E SEMPRE `--foco`. Ele e o unico token medido contra 3:1 em toda
@@ -857,9 +886,11 @@ chk('I7e', /summary:focus-visible\s*\{[^}]*outline:/.test(REGRAS),
      que escopar. [30/09, etapa 1] A grade de duas colunas (`.fu-grade`) saiu:
      o lote foi para a largura total e a conta aberta para a GAVETA, que e o
      terceiro desenho so desta tela. */
+  /* [14/10/2026] A GRADE "380px 1fr" VOLTOU e a gaveta saiu, com a aba de
+     volta ao desenho da referencia. */
   chk('I8b2', seletores.has('.g3ref .fu-aba') && seletores.has('.g3ref .fu-painel')
-          && seletores.has('.g3ref .fu-gaveta'),
-      'e o que so a Fatura unificada tem continua escopado nela: abas de etapa, gaveta e painel navy');
+          && seletores.has('.g3ref .fu-grade') && !seletores.has('.g3ref .fu-gaveta'),
+      'e o que so a Fatura unificada tem continua escopado nela: abas de etapa, a grade de duas colunas e painel navy');
 }
 
 // --- I8c raio e sombra, no sistema inteiro
@@ -996,8 +1027,14 @@ chk('I9', ABAS.length === 3 && ABAS[0] === 'leitura' && ABAS[1] === 'emissao' &&
  * logo abaixo eram uma segunda numeracao que nao casava com a primeira. A
  * terceira tambem mudou de nome: «Cadastro da fatura» nao cadastra fatura — e
  * o emissor, quem cobra. Ver `abas-da-fatura.ts`. */
-chk('I9b', ABAS.every((a) => !/\d|·/.test(ROTULO_DA_ABA[a])),
-    `nenhuma aba carrega numero — a tela ja numera os passos do mes (hoje: ${ABAS.map((a) => ROTULO_DA_ABA[a]).join(' | ')})`);
+/* [14/10/2026] O NUMERO VOLTOU, com a aba de volta a referencia: ela escreve
+ * «1 · Leitura e cálculo» e «2 · Emissão». A terceira, que ela nao tem, NAO e
+ * passo (e o cadastro do emissor) e fica sem numero, depois de uma divisa. A
+ * I9b prende os rotulos letra por letra. */
+chk('I9b', ROTULO_DA_ABA.leitura === '1 · Leitura e cálculo' && ROTULO_DA_ABA.emissao === '2 · Emissão'
+        && ROTULO_DA_ABA.cadastro === 'Dados de quem cobra',
+    `as duas abas da referencia, numeradas como la, e o cadastro sem numero — ele nao e passo `
+    + `(hoje: ${ABAS.map((a) => ROTULO_DA_ABA[a]).join(' | ')})`);
 chk('I9b2', ROTULO_DA_ABA.cadastro === 'Dados de quem cobra' && !/fatura/i.test(ABAS.map((a) => ROTULO_DA_ABA[a]).join(' ')),
     'a terceira diz o que guarda — os dados de quem cobra — e nenhuma diz «fatura», que na tela e so a folha impressa');
 {
@@ -1008,10 +1045,15 @@ chk('I9b2', ROTULO_DA_ABA.cadastro === 'Dados de quem cobra' && !/fatura/i.test(
   const arquivos = (dir: string): string[] => readdirSync(new URL(dir, raiz), { withFileTypes: true })
     .flatMap((e) => (e.isDirectory() ? arquivos(`${dir}${e.name}/`) : /\.(ts|tsx)$/.test(e.name) ? [`${dir}${e.name}`] : []));
   const semComentario = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(?<!:)\/\/[^\n]*/g, '');
+  /* [14/10/2026] O rotulo numerado mora SO em `abas-da-fatura.ts`; quem manda
+     para uma aba a cita pelo NOME («Leitura e cálculo», «Emissão», «Dados de
+     quem cobra») — e o nome de 30/09 («Folha do cliente») nao existe mais. */
   const velhos = [...arquivos('web/src/'), ...arquivos('src/')]
-    .filter((f) => /\d · (Leitura e c|Folha do cliente|Cadastro da fatura)/.test(semComentario(readFileSync(new URL(f, raiz), 'utf8'))));
+    .filter((f) => f !== 'web/src/abas-da-fatura.ts')
+    .filter((f) => /\d · (Leitura e c|Emissão\b|Dados de quem|Folha do cliente|Cadastro da fatura)|Folha do cliente/
+      .test(semComentario(readFileSync(new URL(f, raiz), 'utf8'))));
   chk('I9b3', velhos.length === 0,
-      `nenhum texto da web nem do servidor cita uma aba numerada${velhos.length ? ` — ACHADO: ${velhos.join(', ')}` : ''}`);
+      `nenhum texto da web nem do servidor cita uma aba pelo numero nem pelo nome velho${velhos.length ? ` — ACHADO: ${velhos.join(', ')}` : ''}`);
   const doServidor = ['src/repos/documento.ts', 'src/repos/prontidao.ts']
     .every((f) => readFileSync(new URL(f, raiz), 'utf8').includes('"Dados de quem cobra"'));
   chk('I9b4', doServidor && readFileSync(new URL('src/dominio/fatura-do-registro.ts', raiz), 'utf8').includes('"Leitura e cálculo"'),
@@ -1028,11 +1070,14 @@ chk('I9d', abaDoFragmento('') === null && abaDoFragmento('#') === null
         && abaDoFragmento('#emissao') === null && abaDoFragmento('#cadastro-de-outra-coisa') === null,
     'e nenhum outro fragmento abre aba nenhuma — inclusive o vazio, que e o caso normal');
 
-// A ABA 2 NAO DIZ «EMISSAO». Ela e a folha que o cliente recebe, para conferir e
-// imprimir; «2 · Emissão» fazia quem estava no passo 1 procurar ali o passo 3 do
-// mes, que e a tela «Emissão e cobrança» (critica de 30/09, heuristica 2).
-chk('I9e', !/emiss/i.test(ROTULO_DA_ABA.emissao) && /folha/i.test(ROTULO_DA_ABA.emissao),
-    `a aba 2 diz o que mostra — a folha — e nao «Emissão» (hoje: «${ROTULO_DA_ABA.emissao}»)`);
+// A ABA 2 DIZ «EMISSÃO» DE NOVO (14/10/2026), como na referencia. De 30/09 a
+// 14/10 ela foi «Folha do cliente», porque «2 · Emissão» fazia quem estava no
+// passo 1 procurar ali o passo 3, a tela «Emissão e cobrança». Essa tela hoje se
+// chama «Cobranças» — e o que a I9e prende agora e que a colisao nao volte:
+// nenhuma tela do menu se chama «Emissão…».
+chk('I9e', ROTULO_DA_ABA.emissao === '2 · Emissão' && !TELAS.some((t) => /^emiss/i.test(t.titulo)),
+    `a aba 2 e a «2 · Emissão» da referencia, e nenhuma tela do menu se chama «Emissão…» `
+    + `(hoje: aba «${ROTULO_DA_ABA.emissao}», telas ${TELAS.filter((t) => /emiss/i.test(t.titulo)).map((t) => t.titulo).join(', ') || 'nenhuma'})`);
 
 // O ENDERECO ACOMPANHA A ABA. Com `#cadastro` parado no endereco depois de
 // sair do cadastro, um link para `/documento#cadastro` nao mudava o fragmento,

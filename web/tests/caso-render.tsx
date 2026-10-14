@@ -45,7 +45,7 @@ import { GatilhoDeAjuda, ehOAtalhoDaAjuda } from '../src/ajuda-gatilho.tsx';
 import { MenuLateral } from '../src/menu-lateral.tsx';
 import { FUNIS, telaDoCaminho } from '../src/navegacao.ts';
 import { passosDoEstado, type CamadaLida } from '../src/ajuda.ts';
-import { TabelaDaFila, TabelaDasRegistradas, GavetaDaConta, type PropsDasRegistradas } from '../src/fatura-lote-corpo.tsx';
+import { TabelaDaFila, TabelaDasRegistradas, type PropsDasRegistradas } from '../src/fatura-lote-corpo.tsx';
 import type { ItemDoLote } from '../src/lote-de-contas.ts';
 import { CAMPOS_DA_FATURA_VAZIOS, type RegistroDeFatura } from '../src/api.ts';
 import { filtrarRegistradas } from '../src/registradas-regras.ts';
@@ -1242,17 +1242,7 @@ const LEITURA_VAZIA = {
   const vazia = desenharReg({ lista: [], visiveis: [] });
   chk('R21c', /Nenhuma conta registrada ainda/.test(texto(vazia)) && /vira cobrança/.test(texto(vazia)),
       'a lista vazia ensina de onde as linhas vem e para onde vao');
-
-  const gaveta = renderToStaticMarkup(
-    <GavetaDaConta titulo="Conferência da conta" sub="Conferindo «conta.pdf»." aoFechar={nada}
-                   rodape={<button type="button" className="primario">Registrar este mês</button>}>
-      <p>campos</p>
-    </GavetaDaConta>);
-  chk('R21d', /role="dialog"/.test(gaveta) && /aria-modal="true"/.test(gaveta)
-          && /aria-labelledby="fu-gaveta-titulo"/.test(gaveta) && /id="fu-gaveta-titulo"/.test(gaveta),
-      'a gaveta e um dialogo modal de verdade, com nome — o titulo dela');
-  chk('R21e', gaveta.includes('aria-label="Fechar a conferência"') && /data-foco-inicial/.test(gaveta),
-      'fechar tem nome, e o foco sabe onde nascer');
+  /* R21d e R21e (a gaveta da conta) sairam com ela em 14/10/2026. */
 }
 
 // ============================================================================

@@ -197,12 +197,31 @@ const TELAS = readdirSync(SRC + 'telas').filter((f) => f.endsWith('.tsx')).sort(
 chk('T0', TELAS.length >= 12,
     `ha ${TELAS.length} arquivos de tela para varrer — a suite nao esta olhando para uma pasta vazia`);
 
+/**
+ * [14/10/2026] AS PALAVRAS DA REFERÊNCIA, e só elas, e só em Contas de luz.
+ *
+ * O dono pediu a aba de volta ao `g3-fatura-unificada.vercel.app` — «design e
+ * funções» —, e a referência escreve «Faturas registradas nesta UC», «Emissão de
+ * faturas», «Fatura da Equatorial Goiás», «Ver a fatura do cliente». São textos
+ * LITERAIS daquela página, listados um a um; qualquer outro «fatura» ou «UC» no
+ * mesmo arquivo continua reprovando, e em qualquer outro arquivo também.
+ */
+const PALAVRAS_DA_REFERENCIA: Readonly<Record<string, readonly string[]>> = {
+  'fatura-unificada.tsx': [
+    'Emissão de faturas', 'Fatura da Equatorial Goiás', 'Faturas registradas nesta UC',
+    'Nenhuma fatura registrada ainda.', 'Ver a fatura do cliente',
+  ],
+};
+const daReferencia = (arq: string, txt: string): boolean =>
+  (PALAVRAS_DA_REFERENCIA[arq.replace(/^telas\//, '')] ?? []).includes(txt.trim());
+
 for (const arq of TELAS) {
   const src = semIcones(semDetalheTecnico(semComentario(ler(`telas/${arq}`))));
   const achados: string[] = [];
 
   for (const [linha, cru] of visiveis(src)) {
     const txt = semInterpolacao(cru);
+    if (daReferencia(arq, txt)) continue;
     for (const [regra, porque] of PROIBIDO) {
       const m = regra.exec(txt);
       if (m) { achados.push(`${arq}:${linha} "${m[0]}" (${porque}) em «${txt.slice(0, 60)}»`); break; }
@@ -490,7 +509,8 @@ const TEXTO_DA_TELA = FONTES.filter((f) => !EXCECOES_T6.has(f) || f === 'destino
 
 {
   const achados = TEXTO_DA_TELA.flatMap(([arq, frases]) =>
-    frases.filter(([, t]) => FATURA_SUBSTANTIVO.test(t)).map(([l, t]) => `${arq}:${l} «${t.trim().slice(0, 70)}»`));
+    frases.filter(([, t]) => FATURA_SUBSTANTIVO.test(t) && !daReferencia(arq, t))
+      .map(([l, t]) => `${arq}:${l} «${t.trim().slice(0, 70)}»`));
   chk('T9', TEXTO_DA_TELA.length > 40 && achados.length === 0,
       `«fatura» só como o nome da folha impressa (a Fatura unificada), em ${TEXTO_DA_TELA.length} arquivos de `
       + `web/src — a cobrança da G3 se chama cobrança${achados.length ? ` — ACHADO: ${achados.join(' · ')}` : ''}`);
@@ -520,9 +540,17 @@ const TEXTO_DA_TELA = FONTES.filter((f) => !EXCECOES_T6.has(f) || f === 'destino
   chk('T9b', /Para gerar as cobranças de \$\{mes\}/.test(mes) && /cobranças emitidas/.test(travada)
           && /A cobrança foi emitida e o boleto ainda não foi pedido/.test(travada),
       'o Mês diz «Para gerar as cobranças de setembro», e Cobranças diz «cobranças emitidas ainda sem boleto»');
-  const fu = ler('telas/fatura-unificada.tsx');
-  chk('T9c', /'Descartar e começar outra conta'/.test(fu) && !/'Nova fatura'/.test(fu),
-      '«Nova fatura» virou «Descartar e começar outra conta» — o botão diz o que faz: descarta a conta em edição');
+  /* [14/10/2026] A T9c INVERTEU. De 01/10 a 14/10 ela prendia «Descartar e
+     começar outra conta» no lugar de «Nova fatura»; com a aba de volta à
+     referência, prende os rótulos DELA — e a exceção acima não vira porta: só as
+     frases listadas passam, e só neste arquivo. */
+  const fu = semComentario(ler('telas/fatura-unificada.tsx'));
+  const ROTULOS_DA_REFERENCIA = ['Nova fatura', 'Ver a fatura do cliente', 'Registrar este mês', 'Ler boleto com IA',
+    'Voltar ao painel', 'Imprimir fatura', 'Boleto a gerar no banco', 'Conferência dos dados'];
+  const faltam = ROTULOS_DA_REFERENCIA.filter((r) => !fu.includes(r));
+  chk('T9c', faltam.length === 0 && !fu.includes('Descartar e começar outra conta'),
+      'Contas de luz fala com os rótulos da referência (g3-fatura-unificada.vercel.app) — '
+      + `faltando: ${faltam.join(', ') || 'nenhum'}`);
 }
 
 console.log();

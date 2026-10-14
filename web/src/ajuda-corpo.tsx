@@ -100,7 +100,7 @@ export function CorpoDaAjuda(p: CorpoDaAjuda) {
    * de trás, coberta pelo véu, e o foco sumia de vista), e ao fechar o foco
    * VOLTA a quem abriu — o gatilho da ajuda, ou o «Como ler esta lista» da tela
    * Mês. Antes ele caía no `body`, e o próximo Tab recomeçava do alto da
-   * página. O mesmo desenho da gaveta de Contas de luz (`GavetaDaConta`).
+   * página. Era o mesmo desenho da gaveta que Contas de luz teve de 30/09 a 14/10.
    *
    * `aoFechar` mora numa referência: quem chama passa uma função nova a cada
    * render, e reinstalar o efeito a cada tecla devolveria o foco à busca no

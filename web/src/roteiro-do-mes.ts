@@ -275,7 +275,8 @@ export const MOLDES: readonly Molde[] = [
       'Abra «Contas de luz» e envie TODAS de uma vez na aba «Leitura e cálculo». '
       + 'Não precisa ser uma por vez: o sistema lê em fila.',
       'Cada conta lida vira uma linha da fila. A que estiver com pendência aparece no topo, com o '
-      + 'motivo — clique «Conferir», corrija o campo na gaveta que abre, e a linha se resolve.',
+      + 'motivo — clique «Conferir», corrija o campo na «Conferência dos dados», no alto da aba, e a '
+      + 'linha se resolve.',
       'Com as linhas conferidas, clique «Registrar N contas conferidas» (ou «Registrar» numa linha '
       + 'só). Elas passam para a lista «Contas registradas», logo abaixo.',
     ],

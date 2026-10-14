@@ -887,8 +887,10 @@ export const TOPICOS: readonly Topico[] = [
       'Confira antes a tela Mês: o que o cadastro ainda trava lá vira recusa aqui.',
       'Abra a tela Contas de luz, em «Leitura e cálculo».',
       'Envie as contas da distribuidora — uma, ou todas as do mês de uma vez.',
-      'Confira cada linha da fila: unidade, mês, total e vencimento. Corrija o que precisar.',
-      'Clique em «Registrar N contas conferidas».',
+      'Uma conta só: ela enche a «Conferência dos dados». Confira campo a campo e clique em '
+        + '«Registrar este mês».',
+      'Várias de uma vez: cada uma vira uma linha da fila. Confira unidade, mês, total e vencimento '
+        + '(«Conferir» leva a linha para a «Conferência dos dados») e clique em «Registrar N contas conferidas».',
       'Na lista de contas registradas, use «conferir antes» para ver se ela virará cobrança — '
         + 'isso não grava nada — e então «Gerar N cobranças», que mostra o resumo antes de gravar.',
       'Emitir e cobrar acontecem na tela Cobranças, no mês DA CONTA.',
@@ -1438,12 +1440,12 @@ export const TOPICOS: readonly Topico[] = [
      * luz. A resposta dizia ainda «isso é Faturamento e Emissão e cobrança» —
      * uma aba que saiu em 10/09 e outra que mudou de nome. */
     resposta: 'A Fatura unificada: uma folha só, que junta a conta da distribuidora com a cobrança '
-      + 'da G3. Ela se monta e se imprime na tela Contas de luz, em «Folha do cliente» — e só '
+      + 'da G3. Ela se monta e se imprime na tela Contas de luz, na aba «Emissão» — e só '
       + 'apresenta: quem cria a cobrança é o «Gerar N cobranças», e quem cobra é a tela Cobranças.',
     passos: [
       'Abra a tela Contas de luz.',
       'Suba a conta de energia daquele cliente e registre a leitura.',
-      'Abra «Folha do cliente» para conferir e imprimir a folha — ou use «2ª via» na lista de '
+      'Abra a aba «Emissão» para conferir e imprimir a folha — ou use «2ª via» na lista de '
         + 'contas registradas.',
     ],
     caminhos: [

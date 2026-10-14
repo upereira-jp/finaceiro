@@ -324,7 +324,7 @@ export const TELAS: readonly Tela[] = [
    * «CONTAS DE LUZ», E ANTES «FATURA UNIFICADA» (17/08) E «DOCUMENTO». É a tela
    * dos passos 1 e 2: a conta da distribuidora entra, é conferida, registrada e
    * vira cobrança — e a folha do cliente, a Fatura unificada, se imprime aqui na
-   * aba «Folha do cliente». A ROTA NÃO MUDA: `/documento#cadastro` abre
+   * aba «Emissão» («Folha do cliente» de 30/09 a 14/10/2026). A ROTA NÃO MUDA: `/documento#cadastro` abre
    * direto a aba do emissor, «Dados de quem cobra».
    */
   { funil: 'rateio', rota: '/documento',  titulo: 'Contas de luz', icone: 'documento', grupo: 'passos', passos: [1, 2] },

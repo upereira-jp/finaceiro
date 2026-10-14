@@ -1169,8 +1169,8 @@ const ESTILO_BASE = `
   .mostrando-so {
     display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin: 0 0 20px;
   }
-  /* Dentro da aba de leitura de Contas de luz o ritmo e o "gap" da coluna. */
-  .g3ref .fu-leitura > .mostrando-so, .g3ref .fu-leitura > .recolhido { margin: 0; }
+  /* Dentro de Contas de luz o ritmo e o "gap" da secao do mes (14/10/2026). */
+  .g3ref .fu-mes > .mostrando-so { margin: 0; }
   .mostrando-so-rot {
     font-family: var(--fonte-cond); font-size: var(--rotulo-tamanho); font-weight: var(--rotulo-peso);
     text-transform: uppercase; letter-spacing: var(--rotulo-tracking); color: var(--fraco);
@@ -1828,136 +1828,326 @@ const ESTILO_BASE = `
   .aviso.erro > .ic-aviso_erro { animation: pulsar 1.1s ease-in-out 2; }
   .aviso.ok > .ic-aviso_ok { animation: traco-do-check .42s ease-out; }
 
-  /* ======================= A FATURA UNIFICADA E A REFERENCIA (14/08/2026)
-     PEDIDO DO DONO, literal, em 14/08: *"quero ajustar o layout da interface da
-     aba documentos. A referência exata deve ser g3-fatura-unificada.vercel.app,
-     sem tirar nem por, deve ser exatamente igual, com bordas iguais, sistema de
-     cores, tipografia"*.
+  /* ======================= A FATURA UNIFICADA E A REFERENCIA (14/08 · 30/09 · 14/10/2026)
+     TRÊS PEDIDOS DO DONO, e esta seção é a resposta ao último.
 
-     DE ONDE SAEM OS NÚMEROS. Do template desempacotado do commit "36e964e" — o
-     mesmo bundle que a Vercel serve —, não de olhar a página renderizada. É dele
-     que vem cada "padding", cada grade e cada tamanho de título abaixo. É a
-     mesma fonte de "REFERENCIA-fatura-unificada-2026-08-13.md".
+       14/08  *"a referência exata deve ser g3-fatura-unificada.vercel.app, sem
+              tirar nem pôr, ... com bordas iguais, sistema de cores, tipografia"*
+              — a ilha ".g3ref": a grade "380px 1fr", a paleta medida, raio zero.
+       30/09  o g3ref vira o desenho do sistema inteiro (Barlow, canto reto, sem
+              sombra), com os derivados AA; e a aba 1 vira a tela do LOTE — fila e
+              registradas em largura total, a conta aberta numa gaveta.
+       14/10  *"na aba Contas de luz, restaure o design e funções para como existe
+              em g3-fatura-unificada.vercel.app"*. O desenho de 30/09 está na tag
+              "design-contas-de-luz-2026-10-14".
 
-     ============================ O QUE MUDOU EM 30/09 — A ILHA VIROU A FUNDAÇÃO
-     De 14/08 a 30/09 esta seção era uma ILHA declarada: outra fonte, outra
-     paleta ("--g3ref-*"), raio zero e sombra nenhuma, tudo prefixado por
-     ".g3ref" para não escapar para as outras telas. Em 30/09 o dono decidiu que
-     o desenho dela é o do sistema INTEIRO, e as regras gerais do começo deste
-     arquivo passaram a ser escritas na língua dela.
+     O QUE ESTÁ AQUI DESDE 14/10 É O TEMPLATE DA REFERÊNCIA NO AR (commit
+     "a43b1f3"), regra a regra: a barra navy com as abas «1 · Leitura e cálculo»
+     e «2 · Emissão», «Nova fatura» no alto à direita, a grade "380px 1fr" com os
+     cinco cartões da esquerda (a conta da Equatorial, o painel navy, o boleto
+     Sicoob, os parâmetros, as faturas registradas da UC) e a «Conferência dos
+     dados» à direita, e a barra da aba 2 com «Voltar ao painel» e «Imprimir
+     fatura». Os números são os do "style=" de cada elemento do template, e a
+     prova é de navegador: o critério G2 da restauração mede o estilo CALCULADO
+     da referência no ar e o desta aba, propriedade a propriedade.
 
-     Consequência aqui: o que a ilha repetia para se diferenciar da casa SAIU —
-     fonte do escopo, cartão, rótulo de campo, campo, placeholder, foco, botão
-     comum, botão primário, aviso, cabeçalho de tabela, h2, h3, ".sub". Tudo isso
-     é herdado agora, sem cópia. O que FICOU é o que só esta tela tem: a grade de
-     duas colunas, as abas de etapa, a área de envio, o painel navy, as grades
-     fixas de campos, o histórico em fichas, a lista de registros e os botões de
-     largura cheia e de imprimir.
+     A PALETA É A DA REFERÊNCIA ("--g3ref-*", em "tema.ts"), só neste escopo — o
+     resto do sistema continua com os derivados AA. Ver a nota de lá.
 
-     E TRÊS DECISÕES DE 14/08 FORAM DESFEITAS, POR CONTRASTE. A referência pinta
-     o rótulo apagado com o Gray puro (3,08:1), o título de seção com o laranja
-     cru (2,69:1), a tinta do botão laranja de branco (2,69:1) e o anel de foco
-     com o laranja cru (2,41:1). Na ilha isso era a exceção nomeada "Q-DOCG3-15";
-     espalhado pelo sistema seriam quatorze telas reprovando AA. Os quatro usam
-     agora "--fraco", "--acento-forte", "--acento-texto" e "--foco".
+     O QUE NÃO VEIO, e as razões de 14/08 continuam valendo:
+       1. o ícone das linhas de status de SUCESSO e FALHA fica (a referência os
+          separa só pela cor do texto) — a linha neutra é texto puro, como lá;
+       2. o anel de foco é o "--foco" do sistema, e não o laranja cru;
+       3. o input de arquivo é invisível E focável ("display: none" o tiraria do
+          teclado);
+       4. abaixo de 860px de largura a grade empilha, e nada rola para o lado — a
+          referência rola 330px num celular.
 
-     O QUE CONTINUA NÃO TENDO VINDO, e as razões de 14/08 seguem valendo:
-
-       1. O ÍCONE DO ".fu-status" e do ".aviso" FICA. A referência diz sucesso e
-          falha com 13px de texto colorido e mais nada — quem não separa laranja
-          de verde lê as duas iguais (restrição 3 do tema).
-       2. O ANEL DE FOCO DE BOTÃO FICA — a referência não desenha nenhum.
-       3. A BARRA NAVY DA REFERÊNCIA NÃO ENTROU — decisão do dono ("Só o
-          conteúdo"): o sistema já tem uma faixa navy no topo.
-
-     O PREFIXO "fu-" CONTINUA: ele nomeia o que a esteira de conferência É
-     (fatura unificada). E ".g3ref" continua sendo a classe da raiz da tela,
-     posta uma vez em "documento.tsx" — hoje ela só dá escopo às regras que são
-     desta tela, e não troca mais fonte nem paleta. */
-
-  /* -------------------------------------------------- as abas de etapa
-     O DESENHO É O DA BARRA NAVY DA REFERÊNCIA, com uma troca obrigatória: lá as
-     abas pousam sobre o navy, e aqui sobre o creme da página. A inativa é a
-     tinta apagada do sistema ("--fraco", 4,98:1 no creme).
-
-     [01/10/2026, etapa 7b] A ATIVA DEIXOU O LARANJA. Ela era o bloco laranja
-     cheio, e a tela tinha dois laranjas na mesma área: a aba e o ato da tela
-     («Gerar N cobranças», «Registrar N contas conferidas»). The One Orange Rule
-     (DESIGN.md) guarda o laranja para o ato — então a aba ativa é a tinta
-     forte ("--texto", o navy no claro) com o SUBLINHADO de 2px na mesma tinta.
-     Forma e cor juntas, como antes: não é só a cor do texto que muda. A borda
-     de baixo transparente na inativa reserva os 2px, e a barra não pula. */
-  /* [30/09, etapa 1] A BARRA TEM DUAS PARTES: o "tablist" com as tres abas e,
-     do lado de fora dele, o «Nova fatura» — dentro, a seta do teclado o pularia
-     e o leitor de tela o contaria como quarta aba. Em tela estreita as abas
-     QUEBRAM LINHA em vez de rolar: aba escondida atras de uma rolagem lateral e
-     aba que ninguem acha (a barra do topo ja ensinou isso). */
-  .g3ref .fu-abas {
-    display: flex; align-items: center; justify-content: space-between; gap: 10px 16px;
-    flex-wrap: wrap; border-bottom: 0; padding-bottom: 0; margin-bottom: 22px;
+     O QUE FICOU DO SISTEMA, porque a referência não tem e o mês precisa: a fila
+     do lote (várias contas de uma vez), «Faltam N contas» e as contas
+     registradas do mês, com «Gerar N cobranças» — embaixo da grade, nas tabelas
+     da casa (as regras ".fu-bloco" e ".fu-tabela" abaixo). E a terceira aba,
+     «3 · Dados de quem cobra». */
+  .g3ref .fu-ref { container: fatura / inline-size; }
+  /* O CORPO DA REFERÊNCIA: Barlow 16px, entrelinha e tracking "normal" — ela
+     não declara nenhum dos dois, e o corpo do sistema declara. Só nas peças
+     dela: as tabelas do mês e o cadastro, embaixo e na aba 3, seguem o corpo
+     do sistema. */
+  .g3ref .fu-topo, .g3ref .fu-topo-acoes, .g3ref .fu-grade, .g3ref .fu-barra {
+    font-family: var(--fonte); font-size: 16px; line-height: normal; letter-spacing: normal;
+    color: var(--g3ref-tinta);
   }
+
+  /* ------------------------------------------------------------- a barra navy
+     A da referência: 70px, a marca e «Emissão de faturas» à esquerda, as abas à
+     direita. Em 14/08 ela não veio («Só o conteúdo»: o sistema tinha uma faixa
+     navy no topo e seriam duas empilhadas); desde 30/09 o navy do sistema é o
+     menu LATERAL, e a barra volta sem empilhar nada. */
+  .g3ref .fu-topo {
+    background: var(--g3ref-navy); color: var(--g3ref-navy-tinta); padding: 14px 28px; min-height: 70px;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px 24px; flex-wrap: wrap;
+  }
+  .g3ref .fu-topo-marca { display: flex; align-items: center; gap: 16px; min-width: 0; }
+  .g3ref .fu-topo-marca img { display: block; height: 26px; width: auto; max-width: 180px; object-fit: contain; }
+  .g3ref .fu-topo-rotulo { font-size: 13px; color: var(--g3ref-navy-legenda); letter-spacing: .14em; text-transform: uppercase; }
   .g3ref .fu-abas-lista { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  /* A ESPECIFICIDADE FOI DEFEITO MEDIDO EM 14/08 e continua valendo aqui:
-     "button:hover:not(:disabled)" lá em cima é (0,2,1), e uma regra de aba com
-     (0,2,0) perde para ela. Com ".g3ref" na frente estas são (0,3,x) e ganham.
-     O invariante I7 prende isto. */
+  /* A ESPECIFICIDADE FOI DEFEITO MEDIDO EM 14/08: "button:hover:not(:disabled)"
+     é (0,2,1), e uma regra de aba com (0,2,0) perde para ela. Com ".g3ref" na
+     frente estas são (0,3,x) e ganham. O invariante I7 prende isto. */
   .g3ref .fu-aba {
-    background: transparent; border: none; border-bottom: 2px solid transparent;
-    border-radius: var(--raio); box-shadow: none;
-    padding: 9px 16px; margin-bottom: 0;
-    font-size: var(--t-corpo); font-weight: 600;
-    letter-spacing: .06em; text-transform: uppercase;
-    color: var(--fraco); cursor: pointer;
-    transition: background-color .16s ease, color .16s ease;
+    border: none; border-radius: 0; box-shadow: none; padding: 9px 16px; margin: 0;
+    background: transparent; color: var(--g3ref-navy-apagado);
+    font-family: var(--fonte-cond); font-size: 15px; font-weight: 600; line-height: normal;
+    letter-spacing: .06em; text-transform: uppercase; cursor: pointer;
   }
-  /* "box-shadow: none" e "transform: none" continuam escritos mesmo com o botão
-     geral sem sombra e sem subida: a I7b os exige, e é ela que impede a aba de
-     voltar a flutuar no dia em que alguém devolver sombra ao botão. */
   .g3ref .fu-aba:hover:not(:disabled) {
-    background: transparent; color: var(--texto);
-    border-color: transparent; box-shadow: none; transform: none;
+    background: transparent; color: var(--g3ref-navy-tinta); border-color: transparent; box-shadow: none; transform: none;
   }
-  .g3ref .fu-aba[aria-selected="true"] {
-    background: transparent; color: var(--texto);
-    border-color: transparent; border-bottom: 2px solid var(--texto);
-  }
-  .g3ref .fu-aba[aria-selected="true"]:hover:not(:disabled) {
-    background: transparent; color: var(--texto); border-bottom-color: var(--texto);
-  }
-  .g3ref .fu-aba-traco { width: 26px; height: 1px; background: var(--borda); }
-  /* NO CELULAR AS TRES ABAS SAO UMA FILEIRA SO, em tres colunas iguais, e o
-     rotulo quebra DENTRO da aba — «Leitura e / cálculo». Soltas, cada uma
-     ocupava uma linha com o traco pendurado, e a barra comia 200px antes do
-     trabalho. Sem o traco, a inativa ganha contorno: e o que ainda a desenha
-     como aba, e nao como texto. */
-  @media (max-width: 720px) {
-    .g3ref .fu-abas-lista { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; width: 100%; }
-    .g3ref .fu-aba-traco { display: none; }
-    .g3ref .fu-aba {
-      padding: 7px 9px; font-size: var(--rotulo-tamanho); letter-spacing: .03em; line-height: 1.3;
-      white-space: normal; text-align: center; border: 1px solid var(--borda); border-bottom-width: 2px;
-    }
-    /* No celular a ativa e a caixa contornada na tinta forte, com o sublinhado
-       de 2px embaixo — as inativas tem o contorno claro. */
-    .g3ref .fu-aba[aria-selected="true"],
-    .g3ref .fu-aba[aria-selected="true"]:hover:not(:disabled) { border-color: var(--texto); }
-    .g3ref .fu-abas > button { margin-left: auto; }
+  /* A ATIVA É O BLOCO LARANJA CHEIO, como na referência: forma (uma superfície
+     inteira) e cor juntas — nunca só a cor do texto (I7c). */
+  .g3ref .fu-aba[aria-selected="true"] { background: var(--g3ref-laranja); color: var(--g3ref-laranja-tinta); }
+  .g3ref .fu-aba[aria-selected="true"]:hover:not(:disabled) { background: var(--g3ref-laranja); color: var(--g3ref-laranja-tinta); }
+  .g3ref .fu-aba-traco { width: 26px; height: 1px; background: var(--g3ref-navy-traco); }
+  .g3ref .fu-aba-divisa { width: 1px; height: 20px; background: var(--g3ref-navy-traco); }
+  @container fatura (max-width: 720px) {
+    .g3ref .fu-topo { padding: 12px 16px; }
+    .g3ref .fu-abas-lista { gap: 6px; }
+    .g3ref .fu-aba-traco, .g3ref .fu-aba-divisa { display: none; }
+    .g3ref .fu-aba { padding: 8px 10px; font-size: 13px; letter-spacing: .04em; }
   }
 
-  /* ------------------------------------------- a aba 1 em largura total
-     [30/09, etapa 1] A GRADE "380px 1fr" DA REFERENCIA SAIU. Ela era o desenho
-     de uma fatura avulsa: o envio e o painel navy na coluna estreita, o
-     formulario na larga. Com o lote do mes, a coluna estreita virou o lugar do
-     trabalho — a fila de 754px mostrava 332 — e a larga, um formulario vazio.
+  /* ------------------------------------------------ «Nova fatura» e a grade */
+  .g3ref .fu-topo-acoes { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 28px; flex-wrap: wrap; }
+  .g3ref .fu-topo-acoes > .pergunta { flex: 1 1 auto; max-width: 720px; }
+  .g3ref .fu-grade { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 24px; align-items: start; margin-top: 18px; }
+  .g3ref .fu-coluna { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+  @container fatura (max-width: 860px) { .g3ref .fu-grade { grid-template-columns: minmax(0, 1fr); } }
+  .g3ref .fu-leitura > .aviso, .g3ref .fu-leitura > .mostrando-so, .g3ref .fu-leitura > .recolhido { margin: 18px 0 0; }
 
-     Agora a aba 1 e uma pilha de blocos em largura total, na ordem do mes:
-     envio, conta em edicao, fila, registradas. O RITMO E DE DOIS PASSOS: 28px
-     entre blocos (sao assuntos diferentes) e 12px dentro de cada um (titulo,
-     aviso e tabela sao o mesmo assunto). A conta aberta nao e mais uma coluna:
-     e a gaveta, mais abaixo. */
-  .g3ref .fu-leitura { display: flex; flex-direction: column; gap: 28px; }
-  .g3ref .fu-leitura > .aviso { margin: 0; }
+  /* ----------------------------------------------------------- os cartões
+     Branco, a linha clara de 1px, canto reto, sem sombra. 22px na esquerda,
+     26px na direita — a coluna que se lê campo a campo ganha 4px. */
+  .g3ref .fu-cartao {
+    background: var(--g3ref-papel); border: 1px solid var(--g3ref-borda); border-radius: 0; box-shadow: none;
+    padding: 22px; min-width: 0;
+  }
+  .g3ref .fu-cartao.largo { padding: 26px; }
+  .g3ref .fu-rot {
+    font-family: var(--fonte-cond); font-size: 12px; font-weight: 400; line-height: normal; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--g3ref-apagado); margin: 0 0 14px;
+  }
+  .g3ref .fu-rot.m8 { margin-bottom: 8px; }
+  .g3ref .fu-rot.m12 { margin-bottom: 12px; }
 
+  /* ------------------------------------------------------- a área de envio
+     "<label>" e não "<div onClick>": clicar na área é clicar no input, sem uma
+     linha de JavaScript no meio. */
+  .g3ref .fu-solta {
+    display: block; border: 1px dashed var(--g3ref-borda-forte); border-radius: 0; background: var(--g3ref-fundo);
+    padding: 24px 18px; margin: 0; text-align: center; cursor: pointer; color: var(--g3ref-tinta);
+    font-size: 16px; font-weight: 400; line-height: normal; letter-spacing: normal; text-transform: none;
+    transition: border-color .15s ease, background .15s ease;
+  }
+  .g3ref .fu-solta.curta { padding: 20px 18px; }
+  .g3ref .fu-solta:hover { border-color: var(--g3ref-laranja); background: var(--g3ref-fundo-hover); }
+  .g3ref .fu-solta:focus-within { border-color: var(--g3ref-laranja); outline: 2px solid var(--foco); outline-offset: 0; }
+  .g3ref .fu-solta input[type="file"] {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+  }
+  .g3ref .fu-solta-titulo { display: block; font-family: var(--fonte-cond); font-size: 19px; font-weight: 600; }
+  .g3ref .fu-solta.curta .fu-solta-titulo { font-size: 18px; }
+  .g3ref .fu-solta-sub { display: block; font-size: 13px; color: var(--g3ref-apagado); margin-top: 4px; }
+
+  /* ------------------------------------------------------------- o status
+     Texto apagado de 13px, com as três margens da referência: 12px depois do
+     envio da conta, 10px no caso geral, 8px sob o botão do boleto, 6px colado no
+     campo que acabou de ser digitado. */
+  .g3ref .fu-status { font-size: 13px; color: var(--g3ref-apagado); margin-top: 10px; line-height: normal; overflow-wrap: anywhere; }
+  .g3ref .fu-status.solto { margin-top: 12px; }
+  .g3ref .fu-status.m8 { margin-top: 8px; }
+  .g3ref .fu-status.rente { margin-top: 6px; }
+  .g3ref .fu-status.ok { color: var(--g3ref-ok); }
+  .g3ref .fu-status.alerta { color: var(--g3ref-alerta); }
+  .g3ref .fu-status.erro { color: var(--g3ref-erro); }
+  .g3ref .fu-status.com-icone { display: flex; align-items: flex-start; gap: 6px; }
+  .g3ref .fu-status.com-icone > .ic { flex: none; margin-top: 1px; }
+
+  /* ------------------------------------------------------ o painel navy
+     O único bloco de fundo cheio da aba, e o motivo é de uso: é o número que se
+     digita no internet banking. 52px, como na referência. */
+  .g3ref .fu-painel { background: var(--g3ref-navy); color: var(--g3ref-navy-tinta); padding: 24px; border-radius: 0; min-width: 0; }
+  .g3ref .fu-painel-rot {
+    font-family: var(--fonte-cond); text-transform: uppercase; letter-spacing: .14em; font-size: 12px;
+    color: var(--g3ref-navy-rotulo);
+  }
+  .g3ref .fu-painel-total {
+    font-family: var(--fonte-cond); font-size: 52px; font-weight: 700; line-height: 1.05; margin-top: 6px;
+    overflow-wrap: anywhere;
+  }
+  .g3ref .fu-painel-sub { font-size: 14px; color: var(--g3ref-navy-apagado); margin-top: 4px; }
+  .g3ref .fu-painel-par {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; padding-top: 18px;
+    border-top: 1px solid var(--g3ref-navy-regua); font-size: 13px;
+  }
+  .g3ref .fu-painel-cap { color: var(--g3ref-navy-legenda); }
+  .g3ref .fu-painel-val { font-size: 17px; font-weight: 600; }
+
+  /* -------------------------------------------------------------- os botões
+     Os cinco da referência, cada um com o seu "style=": o laranja cheio (o ato),
+     o contorno navy em caixa alta, o leve de linha clara, o navy de imprimir e o
+     «excluir» só de texto. São botões de verdade — o foco e o teclado vêm do
+     "<button>", e o anel é o "--foco" do sistema. */
+  .g3ref button.fu-laranja {
+    display: inline-block; border: none; border-radius: 0; box-shadow: none; margin: 0;
+    background: var(--g3ref-laranja); color: var(--g3ref-laranja-tinta); padding: 13px 22px;
+    font-family: var(--fonte-cond); font-size: 16px; font-weight: 600; line-height: normal;
+    letter-spacing: .06em; text-transform: uppercase; cursor: pointer;
+  }
+  .g3ref button.fu-laranja:hover:not(:disabled) { background: var(--g3ref-laranja-hover); color: var(--g3ref-laranja-tinta); border-color: transparent; }
+  .g3ref button.fu-laranja.largo { display: block; width: 100%; padding: 12px; font-size: 15px; margin-top: 12px; }
+  .g3ref button.fu-laranja:disabled { background: var(--g3ref-borda-campo); color: var(--g3ref-tinta); cursor: default; }
+  .g3ref button.fu-contorno {
+    display: inline-block; border: 1px solid var(--g3ref-tinta); border-radius: 0; box-shadow: none; margin: 0;
+    background: transparent; color: var(--g3ref-tinta); padding: 11px 20px;
+    font-family: var(--fonte-cond); font-size: 15px; font-weight: 600; line-height: normal;
+    letter-spacing: .06em; text-transform: uppercase; cursor: pointer;
+  }
+  .g3ref button.fu-contorno:hover:not(:disabled) { background: var(--g3ref-tinta); color: var(--g3ref-fundo); border-color: var(--g3ref-tinta); }
+  .g3ref button.fu-contorno.largo { display: block; width: 100%; margin-top: 16px; padding: 11px; background: var(--g3ref-papel); }
+  .g3ref button.fu-contorno.largo:hover:not(:disabled) { background: var(--g3ref-tinta); }
+  .g3ref button.fu-contorno:disabled { border-color: var(--g3ref-borda-campo); color: var(--g3ref-apagado); background: var(--g3ref-papel); cursor: default; }
+  .g3ref button.fu-leve {
+    display: inline-block; background: none; border: 1px solid var(--g3ref-borda-campo); border-radius: 0; box-shadow: none; margin: 0;
+    color: var(--g3ref-apagado); padding: 13px 18px; font-family: var(--fonte); font-size: 14px; font-weight: 400;
+    line-height: normal; letter-spacing: normal; text-transform: none; cursor: pointer;
+  }
+  .g3ref button.fu-leve:hover:not(:disabled) { background: none; color: var(--g3ref-tinta); border-color: var(--g3ref-tinta); }
+  .g3ref button.fu-leve.voltar { color: var(--g3ref-tinta); padding: 11px 18px; }
+  .g3ref button.fu-imprimir {
+    background: var(--g3ref-navy); color: var(--g3ref-navy-tinta); border: none; border-radius: 0; box-shadow: none; margin: 0;
+    padding: 11px 22px; font-family: var(--fonte-cond); font-size: 15px; font-weight: 600; line-height: normal;
+    letter-spacing: .06em; text-transform: uppercase; cursor: pointer;
+  }
+  .g3ref button.fu-imprimir:hover:not(:disabled) { background: var(--g3ref-navy-hover); color: var(--g3ref-navy-tinta); }
+  .g3ref button.fu-excluir {
+    background: none; border: none; border-radius: 0; box-shadow: none; margin: 0; color: var(--g3ref-apagado);
+    padding: 2px 4px; font-family: var(--fonte); font-size: 13px; font-weight: 400; letter-spacing: normal;
+    line-height: normal; cursor: pointer;
+  }
+  .g3ref button.fu-excluir:hover:not(:disabled) { color: var(--g3ref-tinta); background: none; border-color: transparent; }
+
+  /* ---------------------------------------------- os campos e as legendas
+     A legenda é texto corrido apagado (12px sobre o campo, 13px no boleto), não
+     o rótulo geral do sistema. O campo: a linha e o fundo de campo dela, 15px.
+     Os dois parâmetros são os únicos com a linha forte e o fundo da página —
+     são decisão de quem opera, não dado lido da conta. */
+  .g3ref .fu-leg {
+    display: block; font-family: var(--fonte); font-size: 12px; font-weight: 400; line-height: normal;
+    letter-spacing: normal; text-transform: none; color: var(--g3ref-apagado); margin: 0 0 4px;
+  }
+  .g3ref .fu-par .fu-leg { font-size: 13px; margin-bottom: 3px; }
+  .g3ref .fu-leg.area { font-size: 13px; margin: 14px 0 3px; }
+  .g3ref .fu-leg-nota { color: var(--g3ref-borda-forte); }
+  .g3ref .fu-campo {
+    display: block; width: 100%; border: 1px solid var(--g3ref-borda-campo); border-radius: 0; box-shadow: none;
+    background: var(--g3ref-campo); padding: 8px 10px; font-family: var(--fonte); font-size: 15px;
+    line-height: normal; letter-spacing: normal; color: var(--g3ref-tinta);
+  }
+  .g3ref .fu-campo::placeholder { color: var(--g3ref-apagado); }
+  .g3ref .fu-campo:hover:not(:disabled) { border-color: var(--g3ref-borda-forte); }
+  .g3ref .fu-campo:focus { outline: 2px solid var(--foco); outline-offset: 0; border-color: var(--g3ref-borda-campo); }
+  .g3ref .fu-campo.forte { border-color: var(--g3ref-borda-forte); background: var(--g3ref-fundo); }
+  .g3ref textarea.fu-campo { padding: 10px; font-size: 13px; line-height: 1.5; resize: vertical; }
+  .g3ref textarea.fu-campo.mono { font-family: ui-monospace, 'SF Mono', Menlo, monospace; line-height: normal; word-break: break-all; }
+  .g3ref textarea.fu-campo.mono.miudo { font-size: 12px; }
+  .g3ref .fu-campo-erro { margin-top: 4px; font-size: 12px; line-height: 1.4; color: var(--g3ref-erro); }
+  .g3ref .fu-par { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 13px; }
+  .g3ref .fu-par.um { grid-template-columns: 1fr; margin-top: 12px; }
+  .g3ref .fu-par2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .g3ref .fu-nota { font-size: 12px; color: var(--g3ref-apagado); margin: 10px 0 0; line-height: 1.5; }
+
+  /* A CONFERÊNCIA DO BOLETO separa por régua EM CIMA, e o alerta é a faixa
+     creme com o filete laranja de 3px. */
+  .g3ref .fu-conf { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--g3ref-regua); }
+  .g3ref .fu-alerta {
+    background: var(--g3ref-aviso); border-left: 3px solid var(--g3ref-laranja); padding: 9px 11px;
+    font-size: 13px; line-height: 1.45; margin-bottom: 8px; color: var(--g3ref-tinta);
+  }
+  .g3ref .fu-alerta.grande { margin: 18px 0 0; padding: 12px 14px; font-size: 14px; line-height: normal; }
+
+  /* AS FATURAS REGISTRADAS NESTA UC: mês, total e «excluir», linha a linha. */
+  .g3ref .fu-registro {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 8px 0; border-bottom: 1px solid var(--g3ref-regua); font-size: 14px;
+  }
+  .g3ref .fu-registro-dir { display: flex; align-items: center; gap: 14px; }
+  .g3ref .fu-registro-val { color: var(--g3ref-apagado); }
+  .g3ref .fu-vazio { font-size: 13px; color: var(--g3ref-apagado); }
+  .g3ref .fu-registro + .pergunta, .g3ref .fu-cartao > .pergunta { margin-top: 8px; }
+
+  /* ------------------------------------------- a conferência dos dados */
+  .g3ref .fu-cabeca { display: flex; align-items: baseline; justify-content: space-between; gap: 4px 16px; flex-wrap: wrap; margin-bottom: 6px; }
+  .g3ref .fu-titulo {
+    margin: 0; font-family: var(--fonte-cond); font-size: 22px; font-weight: 600; line-height: normal;
+    letter-spacing: normal; text-transform: none; color: var(--g3ref-tinta);
+  }
+  .g3ref .fu-cabeca-sub { font-size: 13px; color: var(--g3ref-apagado); }
+  .g3ref .fu-secao { margin-top: 22px; }
+  .g3ref .fu-secao-tit {
+    margin: 0; font-family: var(--fonte-cond); text-transform: uppercase; letter-spacing: .14em; font-size: 12px;
+    font-weight: 400; line-height: normal; color: var(--g3ref-laranja);
+    padding-bottom: 8px; border-bottom: 1px solid var(--g3ref-regua);
+  }
+  .g3ref .fu-campos3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 14px; }
+  /* A legenda que quebra em duas linhas («Consumo não compensado (kWh)», numa
+     coluna mais estreita que a da referência) não desalinha a fileira: o campo
+     assenta no pé da célula. */
+  .g3ref .fu-campos3 > div { display: flex; flex-direction: column; justify-content: flex-end; min-width: 0; }
+  @container fatura (max-width: 620px) { .g3ref .fu-campos3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @container fatura (max-width: 420px) {
+    .g3ref .fu-campos3, .g3ref .fu-par { grid-template-columns: minmax(0, 1fr); }
+    .g3ref .fu-painel-total { font-size: 44px; }
+  }
+  .g3ref .fu-titulo:focus { outline: none; }
+
+  /* O HISTÓRICO EDITÁVEL: régua em cima, fichas em "flex-wrap" — 54px para o mês,
+     62px para o número. É o campo que o extrator mais erra. */
+  .g3ref .fu-hist { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--g3ref-regua); }
+  .g3ref .fu-hist > .fu-secao-tit { padding-bottom: 0; border-bottom: 0; margin-bottom: 12px; }
+  .g3ref .fu-hist-edit { display: flex; flex-wrap: wrap; gap: 10px; }
+  .g3ref .fu-hist-item {
+    display: flex; align-items: center; gap: 6px;
+    border: 1px solid var(--g3ref-borda-campo); background: var(--g3ref-campo); padding: 6px 8px;
+  }
+  .g3ref .fu-hist-mes { font-size: 12px; color: var(--g3ref-apagado); width: 54px; flex: none; }
+  .g3ref .fu-hist-kwh {
+    width: 62px; flex: none; border: none; border-radius: 0; background: transparent; padding: 0;
+    font-size: 15px; line-height: normal; color: var(--g3ref-tinta); text-align: right;
+  }
+  .g3ref .fu-hist-un { font-size: 12px; color: var(--g3ref-apagado); flex: none; }
+  .g3ref .fu-acoes-pe { display: flex; gap: 12px; margin-top: 26px; flex-wrap: wrap; }
+
+  /* ------------------------------------------------------------ a aba 2
+     A barra tem a LARGURA DA FOLHA (210mm) e fica solta sobre o creme — o que
+     precisa de moldura ali embaixo é o papel. */
+  .g3ref .fu-barra {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap;
+    max-width: 210mm; margin: 22px auto 14px;
+  }
+  .g3ref .fu-barra-txt { font-size: 14px; color: var(--g3ref-apagado); overflow-wrap: anywhere; }
+  .g3ref .fu-barra-acoes { display: flex; gap: 10px; flex-wrap: wrap; }
+  .g3ref .fu-barra-aviso { max-width: 210mm; margin: 0 auto 14px; }
+
+  /* ------------------------------------------- o mês, embaixo da grade
+     A fila do lote, «Faltam N contas» e as registradas do mês com «Gerar N
+     cobranças»: o que a referência não tem e o passo 2 do mês precisa. São as
+     tabelas da casa, com as regras logo abaixo. */
+  .g3ref .fu-mes { margin-top: 40px; display: flex; flex-direction: column; gap: 28px; }
+  .g3ref .fu-mes > .aviso, .g3ref .fu-mes > .recolhido { margin: 0; }
+
+  /* ===== O QUE VEM DE 30/09 E CONTINUA: as tabelas do lote e das registradas,
+     e o cadastro (aba 3), que usam as peças da casa dentro de ".g3ref". */
   .g3ref .fu-bloco-topo {
     display: flex; align-items: flex-end; justify-content: space-between;
     gap: 10px 20px; flex-wrap: wrap; margin-bottom: 12px;
@@ -1976,17 +2166,6 @@ const ESTILO_BASE = `
      titulo parece um campo. O leitor de tela anuncia do mesmo jeito. */
   .g3ref [tabindex="-1"]:focus { outline: none; }
 
-  /* A CONTA EM EDICAO, com a gaveta fechada: uma linha, e nao um cartao — ela
-     aponta para o trabalho, nao e o trabalho. */
-  .g3ref .fu-emedicao {
-    display: flex; align-items: center; justify-content: space-between; gap: 8px 16px;
-    flex-wrap: wrap; padding: 10px 12px 10px 14px; font-size: var(--t-ui);
-    background: var(--fundo2); border: 1px solid var(--borda);
-  }
-
-  /* A NOTA MIUDA sob um grupo — a origem do desconto, a economia da unidade. */
-  .g3ref .fu-nota { margin: 10px 0 0; font-size: var(--t-meta); line-height: 1.5; color: var(--fraco); max-width: 80ch; }
-
   /* ----------------------------------------------------------- o cartão
      Superfície, linha e canto são os do cartão geral desde 30/09. O que fica
      aqui é o RESPIRO da referência: 22px na esquerda, 26px na direita — a coluna
@@ -2001,160 +2180,6 @@ const ESTILO_BASE = `
      geral ela viraria corpo de 15px com 22px de ar embaixo, e o cartao de
      parametros cresceria um terco. */
   .g3ref .cartao .sub { font-size: var(--t-meta); line-height: 1.5; margin: 10px 0 0; }
-
-  /* ---------------------------------------------------- o rótulo em caixa alta
-     Tamanho, peso, caixa, tracking e família saem do token geral (".rot-alta" e
-     irmãos, lá em cima). Aqui fica só o que é desta tela: a distância até o
-     conteúdo e a tinta do painel navy. */
-  .g3ref .fu-rotulo { color: var(--fraco); margin-bottom: 14px; }
-
-  /* A LEGENDA MIÚDA — "Instruções do boleto", "Linha digitável", "PIX copia e
-     cola". Na referência elas NÃO são rótulo em caixa alta: são texto corrido
-     apagado, com margem "14px 0 3px". O trecho complementar (" · uma por
-     linha") era a linha forte como TINTA — 1,79:1 no branco; passou ao --fraco,
-     e o ponto do meio é o que o separa. */
-  .g3ref .fu-legenda {
-    font-size: var(--t-meta); font-weight: 400;
-    text-transform: none; letter-spacing: normal;
-    color: var(--fraco); margin: 14px 0 3px;
-  }
-
-  /* ------------------------------------------------------- a área de envio
-     "<label>" e não "<div onClick>": o input de arquivo mora dentro dela, então
-     clicar na área é clicar no input, sem uma linha de JavaScript no meio.
-
-     A BORDA É 1px TRACEJADO, o da referência, na linha forte do sistema. O que
-     segura a área não é a borda: são os 19px do título e o anel de foco. */
-  .g3ref .fu-solta {
-    display: block; border: 1px dashed var(--borda-forte); border-radius: var(--raio);
-    background: var(--fundo); padding: 24px 18px; text-align: center; cursor: pointer;
-    transition: border-color .15s ease, background .15s ease;
-  }
-  /* A da fatura tem 24px de padding e título 19px; a do boleto, 20px e 18px. São
-     os dois valores da referência — o envio da fatura é o primeiro ato da tela e
-     é maior de propósito. */
-  .g3ref .fu-solta.curta { padding: 20px 18px; }
-  /*
-   * O INPUT DE ARQUIVO É INVISÍVEL E FOCÁVEL, e "display: none" não serve: sai
-   * da ordem de tabulação E da árvore de acessibilidade, e o "<label>" também
-   * não é focável — as duas áreas de envio ficariam inalcançáveis sem mouse, e a
-   * regra ":focus-within" abaixo nunca dispararia.
-   */
-  .g3ref .fu-solta input[type="file"] {
-    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
-    overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
-  }
-  .g3ref .fu-solta:hover { border-color: var(--acento); background: var(--fundo-hover); }
-  .g3ref .fu-solta:focus-within { border-color: var(--acento); outline: 2px solid var(--foco); outline-offset: 0; }
-  .g3ref .fu-solta-titulo { font-family: var(--fonte-cond); font-size: 19px; font-weight: 600; }
-  .g3ref .fu-solta.curta .fu-solta-titulo { font-size: 18px; }
-  .g3ref .fu-solta-sub { font-size: var(--t-meta); color: var(--fraco); margin-top: 4px; }
-  .g3ref .fu-solta-titulo, .g3ref .fu-solta-sub { display: block; }
-  /* A area e um "<label>", e o rotulo geral de campo e miudo, apagado e com
-     margem embaixo — a tinta do titulo vinha dele. */
-  .g3ref .fu-solta { margin: 0; color: var(--texto); font-weight: 400; }
-
-  /* [30/09] O ENVIO DAS CONTAS E UMA FAIXA, e nao um cartao de 380px: a area de
-     soltar ocupa a largura e o caminho sem arquivo fica ao lado, dito como
-     alternativa. A area ganha o branco do cartao — sobre o creme da pagina, o
-     creme dela sumiria e o tracejado seria a unica borda. */
-  .g3ref .fu-envio { display: flex; align-items: stretch; gap: 12px 20px; }
-  .g3ref .fu-envio .fu-solta { flex: 1; text-align: left; background: var(--fundo2); padding: 18px 20px; }
-  .g3ref .fu-envio .fu-solta:hover { background: var(--fundo-hover); }
-  .g3ref .fu-envio .fu-solta-titulo { display: flex; align-items: center; gap: 8px; }
-  .g3ref .fu-envio-lado {
-    flex: none; display: flex; flex-direction: column; justify-content: center;
-    align-items: flex-start; gap: 6px; font-size: var(--t-meta);
-  }
-  @media (max-width: 720px) {
-    .g3ref .fu-envio { flex-direction: column; }
-  }
-
-  /* ------------------------------------------------------------- o status
-     Texto apagado miúdo, como na referência. O ÍCONE FICA — ver a nota 1 do
-     cabeçalho desta seção. As três margens são as dela: 12px depois do envio da
-     fatura, 10px no caso geral, 6px colado no campo que acabou de ser digitado. */
-  .g3ref .fu-status {
-    display: flex; align-items: flex-start; gap: 6px;
-    font-size: var(--t-meta); color: var(--fraco); margin-top: 10px; line-height: 1.45;
-  }
-  .g3ref .fu-status > .ic { margin-top: 2px; }
-  .g3ref .fu-status.solto { margin-top: 12px; }
-  .g3ref .fu-status.rente { margin-top: 6px; }
-  .g3ref .fu-status.ok { color: var(--ok); }
-  .g3ref .fu-status.alerta { color: var(--alerta); }
-
-  /* ------------------------------------------------------ o painel navy
-     O único bloco de fundo cheio da tela, e o motivo é de uso: quem opera
-     precisa deste número para digitar no internet banking.
-
-     [30/09, etapa 1] ELE MORA NO PÉ DA GAVETA, e só existe com uma conta
-     aberta. Na coluna de 380px ele era o maior peso da aba 1 em qualquer
-     estado — inclusive dizendo «—» para uma fila de sete contas. No pé, fixo, o
-     valor fica à vista enquanto se corrige qualquer campo da gaveta, e muda na
-     hora: é o sinal de que a correção pegou. Os 52px da referência viraram 40:
-     é um rodapé, e a gaveta precisa da altura para os campos. (O cabeçalho do
-     cartão grande, ".fu-cabeca", saiu junto: o título agora é o da gaveta.)
-
-     É A SUPERFÍCIE DOMINANTE DO SISTEMA, a mesma da faixa do topo ("--topo"), e
-     por isso sobrevive ao tema escuro sem par próprio. A legenda e o subtítulo
-     são a tinta apagada que pousa nela ("--topo-fraco", 5,89:1), e o rótulo é o
-     laranja sobre o navy — o mesmo par da aba ativa, 5,93:1. */
-  .g3ref .fu-painel {
-    background: var(--topo); color: var(--topo-texto); border-radius: var(--raio);
-    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: end;
-    gap: 12px 28px; padding: 16px 22px 18px;
-  }
-  .g3ref .fu-painel-rot { color: var(--acento); margin-bottom: 0; }
-  .g3ref .fu-painel-total {
-    font-family: var(--fonte-cond); font-size: 40px; font-weight: 700;
-    line-height: 1.05; margin-top: 4px;
-  }
-  .g3ref .fu-painel-sub { font-size: var(--t-meta); color: var(--topo-fraco); margin-top: 3px; }
-  .g3ref .fu-painel-par {
-    display: flex; gap: 6px 24px; flex-wrap: wrap; margin: 0; padding: 0 0 2px;
-    font-size: var(--t-meta);
-  }
-  .g3ref .fu-painel-par dd { margin: 0; }
-  .g3ref .fu-painel-cap { color: var(--topo-fraco); }
-  .g3ref .fu-painel-val { font-size: 17px; font-weight: 600; }
-  .g3ref .fu-painel-acoes { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
-  /* O RESULTADO DO REGISTRO FALA NO PRÓPRIO PÉ, onde o botão foi apertado. A
-     tinta é a do navy e o ícone é o laranja — sucesso e falha se separam pelo
-     DESENHO do ícone e pela frase, nunca por um verde ou vermelho sobre o navy,
-     que ninguém mediu. */
-  .g3ref .fu-painel-status {
-    display: flex; align-items: flex-start; gap: 6px; margin: 0; max-width: 42ch;
-    font-size: var(--t-meta); line-height: 1.45; color: var(--topo-texto);
-  }
-  .g3ref .fu-painel-status .ic { color: var(--acento); margin-top: 1px; }
-  /* NO CELULAR O PE ENCOLHE PARA O ESSENCIAL — o valor e os dois atos —, e a
-     gaveta fica com a altura para os campos. O vencimento e a unidade estao nos
-     campos logo acima; a divisao energia/repasses esta na folha. */
-  @media (max-width: 720px) {
-    .g3ref .fu-painel { grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 10px 16px 12px; }
-    .g3ref .fu-painel-total { font-size: 28px; margin-top: 2px; }
-    .g3ref .fu-painel-sub, .g3ref .fu-painel-par { display: none; }
-    .g3ref .fu-painel-acoes { align-items: stretch; }
-    .g3ref .fu-painel-acoes .fu-acoes > button { flex: 1; padding: 9px 8px; font-size: var(--t-meta); }
-  }
-
-  /* ------------------------------------------------------------ as seções
-     DUAS FORMAS, e a referência usa as duas em lugares diferentes. No cartão da
-     direita a seção se anuncia por um título LARANJA com régua EMBAIXO; no
-     cartão do boleto ela se separa por uma régua EM CIMA e o título é apagado.
-
-     O LARANJA DO TÍTULO É O DE TEXTO ("--acento-forte", 5,60:1 no branco) e não
-     o cru da referência (2,69:1): é texto de 12px, e o critério é o de texto. */
-  .g3ref .fu-secao { margin-top: 22px; padding-top: 0; border-top: 0; }
-  .g3ref .fu-secao-tit {
-    color: var(--acento-forte);
-    padding-bottom: 8px; border-bottom: 1px solid var(--borda-suave); margin-bottom: 0;
-  }
-  .g3ref .fu-secao.com-regua {
-    margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--borda-suave);
-  }
-  .g3ref .fu-secao.com-regua > .fu-rotulo { margin-bottom: 8px; }
 
   /* -------------------------------------------------------- os formulários
      TRÊS COLUNAS FIXAS no cartão da direita, "1fr 1fr" no par do boleto e nos
@@ -2184,25 +2209,6 @@ const ESTILO_BASE = `
      vezes mais caracteres e ela abriu mão de um ponto para ele caber. É dado
      para copiar, não texto para ler. */
   .g3ref .fu-area.mono.miudo { font-size: 12px; }
-
-  /* ------------------------------------------------------ o histórico editável
-     É o campo que o extrator mais erra: a tabela lateral da Equatorial é
-     desenhada em cinza claro, treze linhas altas. Na referência são fichas em
-     "flex-wrap" com largura de conteúdo — 54px para o mês, 62px para o número. */
-  .g3ref .fu-hist-edit { display: flex; flex-wrap: wrap; gap: 10px; }
-  .g3ref .fu-hist-item {
-    display: flex; align-items: center; gap: 6px;
-    border: 1px solid var(--borda); background: var(--campo); padding: 6px 8px;
-  }
-  .g3ref .fu-hist-mes {
-    font-size: var(--rotulo-tamanho); color: var(--fraco); width: 54px; flex: none;
-    text-transform: uppercase;
-  }
-  .g3ref .fu-hist-kwh {
-    width: 62px; flex: none; border: none; background: transparent; padding: 0;
-    font-size: var(--t-corpo); color: var(--texto); text-align: right;
-  }
-  .g3ref .fu-hist-un { font-size: var(--rotulo-tamanho); color: var(--fraco); flex: none; }
 
   /* ------------------------------------------ as duas tabelas do lote
      [30/09, etapa 1] A FILA E AS REGISTRADAS SAO TABELAS DA CASA ("Tabela" do
@@ -2367,110 +2373,11 @@ const ESTILO_BASE = `
     .g3ref .fu-tabela tr.fu-confirma .pergunta { border-width: 1px; }
   }
 
-  /* ------------------------------------------------------------- a gaveta
-     [30/09, etapa 1] A CONTA ABERTA EM «CONFERIR». Ela entra pela direita por
-     cima da fila, que continua a vista a esquerda com a linha aberta marcada.
-     Tres faixas: o topo (titulo, onde se esta na fila, Anterior/Proxima,
-     fechar), o corpo que rola (os campos) e o pe fixo (o painel navy e os
-     atos). SEM SOMBRA: o veu Navy e a linha de 1px ja dizem "isto esta por
-     cima" — o g3ref separa por linha, nunca por volume (I8c2). O veu e o da
-     central de ajuda, pelo mesmo motivo escrito la. */
-  .g3ref .fu-veu {
-    position: fixed; inset: 0; z-index: 40;
-    background: color-mix(in srgb, var(--topo) 55%, transparent);
-    animation: surgir .14s ease-out;
-  }
-  .g3ref .fu-gaveta {
-    position: fixed; top: 0; right: 0; bottom: 0; z-index: 41;
-    width: min(880px, 100vw); display: flex; flex-direction: column;
-    background: var(--fundo2); border-left: 1px solid var(--borda);
-    animation: entrar-da-direita .18s ease-out;
-  }
-  .g3ref .fu-gaveta-topo {
-    display: grid; grid-template-columns: minmax(0, 1fr) auto auto;
-    grid-template-areas: "cab nav x"; align-items: start; gap: 8px 16px;
-    padding: 16px 22px 14px; border-bottom: 1px solid var(--borda);
-  }
-  .g3ref .fu-gaveta-cabeca { grid-area: cab; min-width: 0; }
-  .g3ref .fu-gaveta-cabeca h2 { margin: 0; }
-  .g3ref .fu-gaveta-sub { margin-top: 3px; font-size: var(--t-meta); line-height: 1.45; color: var(--fraco); overflow-wrap: anywhere; }
-  .g3ref .fu-gaveta-nav { grid-area: nav; display: flex; align-items: center; gap: 8px; }
-  .g3ref .fu-gaveta-pos { font-size: var(--t-meta); color: var(--fraco); margin-right: 4px; white-space: nowrap; }
-  .g3ref .fu-gaveta-x { grid-area: x; }
-  .g3ref .fu-gaveta-corpo { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 22px 28px; }
-  .g3ref .fu-gaveta-pe { flex: none; }
-  .g3ref .fu-gaveta-corpo > .aviso { margin: 16px 0 0; }
-  @media (max-width: 720px) {
-    .g3ref .fu-gaveta-topo { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "cab x" "nav nav"; padding: 10px 16px; }
-    .g3ref .fu-gaveta-nav { flex-wrap: wrap; }
-    .g3ref .fu-gaveta-nav button { padding: 6px 12px; }
-    .g3ref .fu-gaveta-pos { margin-right: auto; }
-    /* A frase do topo em duas linhas no maximo: ela diz de onde a conta veio, e
-       a gaveta inteira ainda esta por baixo dela. */
-    .g3ref .fu-gaveta-sub {
-      display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
-    }
-    .g3ref .fu-gaveta-corpo { padding: 0 16px 24px; }
-  }
-
-  /* A SERIE DA UNIDADE, no alto da gaveta: uma faixa recuada, nao um aviso —
-     e informacao para decidir, nao alerta. */
-  .g3ref .fu-serie {
-    display: flex; align-items: baseline; justify-content: space-between; gap: 4px 14px; flex-wrap: wrap;
-    margin: 16px 0 0; padding: 10px 12px; background: var(--fundo-recuo); font-size: var(--t-ui); line-height: 1.5;
-  }
-  .g3ref .fu-serie p { margin: 0; flex: 1 1 360px; }
-
-  /* O BOLETO DOBRADO. O resumo diz o estado; o "descer" gira quando abre. O
-     titulo de secao perde a regua dele aqui — a regua e a do proprio resumo. */
-  .g3ref .fu-detalhe { margin-top: 22px; border-top: 1px solid var(--borda-suave); }
-  .g3ref .fu-detalhe > summary {
-    display: flex; align-items: baseline; gap: 4px 12px; flex-wrap: wrap;
-    padding: 12px 0 10px; cursor: pointer; list-style: none;
-  }
-  .g3ref .fu-detalhe > summary::-webkit-details-marker { display: none; }
-  .g3ref .fu-detalhe > summary .ic { align-self: center; color: var(--fraco); transition: transform .16s ease; }
-  .g3ref .fu-detalhe[open] > summary .ic { transform: rotate(180deg); }
-  .g3ref .fu-detalhe > summary .fu-secao-tit { border: 0; padding: 0; }
-  .g3ref .fu-detalhe-estado { font-size: var(--t-meta); color: var(--fraco); }
-
-  /* ------------------------------------------------------------- os botões
-     Primário, comum e discreto são os gerais desde 30/09 — inclusive o "Nova
-     fatura" e o "Conferir" das linhas, que eram "fu-acao" (contorno navy em
-     caixa alta) e passaram a ser o botão comum da casa. [30/09, etapa 1] Os
-     dois de largura cheia do cartão da esquerda ("fu-largo", "fu-contorno") e o
-     pé do cartão da direita ("fu-pe") saíram com a grade: «Registrar este mês»
-     é o primário do pé da gaveta. Fica aqui o de imprimir, na barra da aba 2. */
-
   /* ----------------------------------------------------------- o aviso
      Fundo, contorno, ícone e tinta são os do aviso geral desde 30/09 — o filete
      de 3px da referência saiu junto com o de 4px da casa. Fica a margem da
      referência: dentro do cartão o aviso encosta no que vem depois. */
   .g3ref .aviso { margin: 0 0 8px; }
-
-  /* ------------------------------------------------------------ a barra da aba 2
-     Na referência ela tem a LARGURA DA FOLHA (210mm) e fica solta sobre o creme —
-     sem cartão, sem borda —, porque o que precisa de moldura ali embaixo é o
-     papel. */
-  .g3ref .fu-barra {
-    display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    max-width: 210mm; margin: 22px auto 14px; padding: 0;
-    background: none; border: 0; border-radius: var(--raio);
-  }
-  .g3ref .fu-barra .fraco { font-size: var(--t-ui); }
-  /* "Voltar ao painel" ganha a altura do botão de imprimir ao lado. */
-  .g3ref .fu-barra button { padding: 11px 18px; }
-  /* IMPRIMIR É O BLOCO NAVY, a superfície dominante como botão: é o último ato
-     da aba e não compete com o laranja de nenhuma outra. O hover clareia o navy
-     misturando a própria tinta dele, e isso vale igual nos dois temas. */
-  .g3ref button.fu-imprimir {
-    background: var(--topo); color: var(--topo-texto); border-color: var(--topo);
-    padding: 11px 22px; letter-spacing: .06em; text-transform: uppercase;
-  }
-  .g3ref button.fu-imprimir:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--topo) 86%, var(--topo-texto));
-    border-color: color-mix(in srgb, var(--topo) 86%, var(--topo-texto)); color: var(--topo-texto);
-  }
 
   /* ------------------------------------------- o que a aba 3 (Cadastro) herda
      O cadastro é markup da casa — ".cartao.secao", "h2", "h3", ".sub", tabela.

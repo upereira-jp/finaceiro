@@ -30,6 +30,7 @@
 // E A ABA 2 MUDOU DE NOME. Ela se chamava «2 · Emissão», e e so a folha que o
 // cliente recebe, para conferir e imprimir — quem lia "Emissão" procurava ali o
 // passo 3 do mes, que e a tela «Emissão e cobrança». Agora ela diz o que mostra.
+// [14/10/2026] Voltou a ser «2 · Emissão», como na referencia — ver o rotulo.
 
 export type AbaDaFatura = 'leitura' | 'emissao' | 'cadastro';
 
@@ -54,13 +55,25 @@ export type AbaDaFatura = 'leitura' | 'emissao' | 'cadastro';
  *
  *   «LEITURA E CALCULO» e «FOLHA DO CLIENTE» ficam: dizem o que mostram.
  *
- * Os textos que mandam para uma aba citam o nome dela letra por letra — inclusive
- * tres mensagens do SERVIDOR (`src/repos/documento.ts`, `src/repos/prontidao.ts`,
- * `src/dominio/fatura-do-registro.ts`), atualizadas no mesmo dia.
+ * [14/10/2026] O NUMERO E A «EMISSÃO» VOLTARAM, a pedido do dono: *"na aba
+ * Contas de luz, restaure o design e funções para como existe em
+ * g3-fatura-unificada.vercel.app"*. A referencia escreve «1 · Leitura e cálculo»
+ * e «2 · Emissão», e e isso que a barra navy diz de novo. As duas razoes de
+ * 01/10 pesaram menos que o pedido, e uma delas caiu sozinha: a colisao de
+ * «Emissão» era com a tela «Emissão e cobrança», que desde 30/09 se chama
+ * «Cobranças». A terceira aba nao existe na referencia, e ela NAO e um passo:
+ * e o cadastro do emissor. Por isso fica sem numero e separada das duas por uma
+ * divisa na barra — e cabe na mesma linha da barra, que com «3 · …» quebrava.
+ *
+ * Os textos que mandam para uma aba citam o nome dela SEM o numero («Leitura e
+ * cálculo», «Emissão», «Dados de quem cobra») — inclusive tres mensagens do
+ * SERVIDOR (`src/repos/documento.ts`, `src/repos/prontidao.ts`,
+ * `src/dominio/fatura-do-registro.ts`) —, e o nome continua letra por letra
+ * dentro do rotulo.
  */
 export const ROTULO_DA_ABA: Record<AbaDaFatura, string> = {
-  leitura: 'Leitura e cálculo',
-  emissao: 'Folha do cliente',
+  leitura: '1 · Leitura e cálculo',
+  emissao: '2 · Emissão',
   cadastro: 'Dados de quem cobra',
 };
 

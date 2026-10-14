@@ -304,7 +304,7 @@ O escuro parte do navy como superfície (`navy` → `cartao-escuro` → `hover-e
 
 **The In-Flight Is Neutral Rule.** O que está em curso sem você é neutro: a cobrança emitida, o boleto a caminho, a linha na vez. Um sexto tom «em curso» foi considerado e recusado em 01/10/2026: numa tela de trabalho a cor se gasta com o que pede alguém. O que separa a emitida da cancelada, as duas cinza, é o desenho, a palavra e o lugar na lista.
 
-**The One Orange Rule.** Um botão laranja por contexto (a página, a gaveta, a revisão em série, a pergunta na tela). O segundo ato da mesma área é o botão comum, de contorno. Seleção não é ato: a aba ativa de Contas de luz é a tinta forte com o sublinhado de 2px (era o bloco laranja cheio, até 01/10/2026). A ajuda também não é laranja: até 01/10/2026 ela era o quadrado laranja fixo no canto de baixo — o segundo laranja de toda tela, e cobria a última coluna das tabelas —; hoje é um item comum do pé do menu. O realce do passo em destaque no funil e o item ativo do menu lateral continuam laranja — são lugar, não botão, e não disputam com o ato da página.
+**The One Orange Rule.** Um botão laranja por contexto (a página, a revisão em série, a pergunta na tela). O segundo ato da mesma área é o botão comum, de contorno. Seleção não é ato. A exceção declarada é Contas de luz, que desde 14/10/2026 é a referência letra por letra: lá a aba ativa é o bloco laranja cheio, e «Ler boleto com IA» e «Ver a fatura do cliente» são laranjas em cartões diferentes, como na referência. A ajuda também não é laranja: até 01/10/2026 ela era o quadrado laranja fixo no canto de baixo — o segundo laranja de toda tela, e cobria a última coluna das tabelas —; hoje é um item comum do pé do menu. O realce do passo em destaque no funil e o item ativo do menu lateral continuam laranja — são lugar, não botão, e não disputam com o ato da página.
 
 **The AA Floor Rule.** Texto ≥ 4,5:1 em toda superfície dos dois temas; ≥ 3:1 só para o anel de foco e a borda de controle. Cor nova entra com o par medido escrito ao lado do token em `tema.ts`.
 
@@ -427,9 +427,13 @@ Desde 01/10/2026 (etapa 8) o Rateio tem **um mês só**, escolhido uma vez e vá
 - O «Como fazer» do passo é um `Recolhido` leve e lembrado: nasce aberto na primeira visita deste computador e, fechado uma vez, fica fechado.
 - Nas conferências do mês, cada linha em aberto mostra à vista a frase simples e a consequência (curtas, de `VERBETE_DA_CAMADA`); só a explicação do servidor, a nota do mapa, o comando e a chave ficam atrás de «ver detalhe técnico».
 
-### As abas de Contas de luz (`Abas`, em `fatura-unificada.tsx`)
-- **Sem número:** «Leitura e cálculo», «Folha do cliente», «Dados de quem cobra». A tela já numera os passos do mês (1 e 2), e uma segunda numeração nas abas não casava com a primeira. A terceira guarda quem cobra — razão social, CNPJ, contato, logo, chave Pix, modelo e campos da folha —, e por isso não se chama mais «Cadastro da fatura».
-- **A ativa** é a tinta forte com o sublinhado de 2px na mesma tinta; a inativa, a tinta apagada com a borda reservada. No celular, as três numa fileira, a ativa contornada na tinta forte.
+### Contas de luz é a referência (`fatura-unificada.tsx`), desde 14/10/2026
+- **A aba inteira é a do `g3-fatura-unificada.vercel.app`** (commit `a43b1f3`), a pedido do dono: «restaure o design e funções». O desenho de 30/09–14/10 (lote em largura total, conta numa gaveta, abas sem número) está na tag `design-contas-de-luz-2026-10-14`.
+- **A barra navy** da referência: a marca e «Emissão de faturas» à esquerda, as abas à direita — «1 · Leitura e cálculo» —— «2 · Emissão», e, depois de uma divisa, «Dados de quem cobra» (sem número: não é passo, é o cadastro de quem cobra). A ativa é o bloco laranja cheio com a tinta branca, como lá.
+- **A aba 1** é a grade «380px 1fr»: à esquerda, a conta da Equatorial, o painel navy «Boleto a gerar no banco» (52px), o «Boleto Sicoob» lido em dois tempos («Ler boleto com IA»), os «Parâmetros» e as «Faturas registradas nesta UC» com «Registrar este mês»; à direita, a «Conferência dos dados». Embaixo da grade, o que a referência não tem e o mês precisa: a fila de várias contas, «Faltam N contas» e as contas registradas do mês com «Gerar N cobranças» — nas tabelas da casa.
+- **A aba 2** é a barra da largura da folha («Fatura nº · mês», «Voltar ao painel», «Imprimir fatura») e as duas folhas. Sem conta, a barra fica e a folha não.
+- **A paleta é a medida na referência** (`--g3ref-*`, só no escopo `.g3ref`): o Gray `#8F939D`, o laranja como tinta e o branco sobre o laranja voltam a reprovar AA *dentro desta aba* — é a mesma troca que o dono fez em 14/08 («Exato»). Fora dela, nada muda. O anel de foco continua `--foco`, e as linhas de sucesso e falha continuam com ícone. No escuro, cada token aponta para o equivalente da casa.
+- **A prova** é de navegador: o estilo calculado da referência no ar e o desta aba, propriedade a propriedade (302 de 302 em 14/10).
 
 ### A folha impressa (`Folha`, em `fatura-unificada.tsx`)
 - O documento do cliente: duas páginas de **altura fixa**, com degraus de compactação (`aperto-*`) em vez de corte. É a ilha onde a referência vale letra por letra.
@@ -440,7 +444,7 @@ Desde 01/10/2026 (etapa 8) o Rateio tem **um mês só**, escolhido uma vez e vá
 - **conta de luz** é o que entra, da distribuidora; **cobrança** é o que a G3 cobra do cliente (a tabela `fatura` no banco); **boleto** é o título dela no banco; **pagamento** (a baixa) é o que o cliente pagou.
 - **Fatura unificada** é SÓ o nome da folha impressa que o cliente recebe. «Fatura» em qualquer outro sentido na tela é defeito.
 - **Quem trouxe o cliente** é a pessoa da comissão — nunca «originador», «quem traz clientes» ou «quem indicou». O cadastro dessas pessoas é o «Cadastro de quem trouxe o cliente».
-- O botão diz o que faz: «Descartar e começar outra conta» (era «Nova fatura», que não criava fatura nenhuma).
+- O botão diz o que faz. A exceção é Contas de luz, que desde 14/10/2026 fala com as palavras da referência («Nova fatura», «Faturas registradas nesta UC», «Ver a fatura do cliente», «Emissão de faturas») — listadas uma a uma na varredura (`PALAVRAS_DA_REFERENCIA`), e só naquele arquivo.
 - O nome de código não muda (regra 7 do `CLAUDE.md`): `fatura`, `originador_id`. Só o texto. As exceções da varredura (`vocabulario-das-telas.ts`, T9 e T10) estão declaradas lá, com o motivo de cada uma.
 - Os números de uma frase dizem a MESMA população em todo lugar, ou dizem qual contam: «Endereço do pagador (4 unidades)» no Mês, «4 das 35 com contrato ativo» em Unidades e o recorte com as 4.
 

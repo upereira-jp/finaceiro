@@ -328,41 +328,4 @@ export function corrigirItem(i: ItemDoLote, campos: CamposDaFatura): ItemDoLote 
   return { ...i, campos, estado: 'lido', erro: null };
 }
 
-/** O que a gaveta precisa para andar pela fila sem fechar. */
-export type VizinhosNaFila = {
-  anterior: string | null;
-  proxima: string | null;
-  /** 1-based dentro das que ainda esperam registro; `null` quando a aberta nao
-   *  esta entre elas (acabou de ser registrada, ou nao veio da fila). */
-  posicao: number | null;
-  /** Quantas linhas ainda esperam registro. */
-  total: number;
-};
-
-/**
- * A ANTERIOR E A PROXIMA, na MESMA ordem que a tabela mostra (`ordemDaFila`).
- *
- * SO ANDA PELO QUE FALTA: linhas lidas (conferidas ou com pendencia) e as que o
- * servidor recusou. A ja registrada nao e trabalho, e a que ainda esta lendo nao
- * tem o que conferir.
- *
- * QUEM ACABOU DE SER REGISTRADA SAI DA LISTA, e ai «Proxima» leva a primeira
- * que falta — que e o que se quer depois de registrar: continuar de onde o
- * trabalho esta, e nao de onde a linha estava.
- */
-export function vizinhosNaFila(
-  itens: readonly ItemDoLote[], ucs: ReadonlySet<string>, id: string | null,
-): VizinhosNaFila {
-  const abertas = ordemDaFila(itens, ucs)
-    .filter((i) => i.campos !== null && (i.estado === 'lido' || i.estado === 'falhou'));
-  const k = id ? abertas.findIndex((i) => i.id === id) : -1;
-  if (k < 0) {
-    return { anterior: null, proxima: abertas[0]?.id ?? null, posicao: null, total: abertas.length };
-  }
-  return {
-    anterior: abertas[k - 1]?.id ?? null,
-    proxima: abertas[k + 1]?.id ?? null,
-    posicao: k + 1,
-    total: abertas.length,
-  };
-}
+/* `vizinhosNaFila` («Anterior»/«Próxima» da gaveta) saiu com a gaveta em 14/10/2026. */
